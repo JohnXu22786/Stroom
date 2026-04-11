@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- External storage at the root of the external storage -->
+    <external-path
+        name="external_storage_root"
+        path="." />
+    <!-- Internal storage files directory -->
+    <files-path
+        name="internal_files"
+        path="." />
+    <!-- Internal storage cache directory -->
+    <cache-path
+        name="internal_cache"
+        path="." />
+    <!-- External storage app-specific files directory -->
+    <external-files-path
+        name="external_app_files"
+        path="." />
+    <!-- External storage app-specific cache directory -->
+    <external-cache-path
+        name="external_app_cache"
+        path="." />
+    <!-- External storage public pictures directory for saving photos -->
+    <external-path
+        name="external_pictures"
+        path="Pictures/Stroom" />
+</paths>
