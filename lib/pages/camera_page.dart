@@ -72,9 +72,11 @@ class _CameraPageState extends ConsumerState<CameraPage>
       _controller!.dispose();
       _controller = null;
     }
-    setState(() {
-      _isCameraInitialized = false;
-    });
+    if (mounted) {
+      setState(() {
+        _isCameraInitialized = false;
+      });
+    }
   }
 
   Future<void> _reinitializeCameraIfNeeded() async {
@@ -84,6 +86,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   }
 
   Future<void> _initializeCamera() async {
+    if (!mounted) return;
     try {
       _cameras = await availableCameras();
       if (_cameras == null || _cameras!.isEmpty) {
