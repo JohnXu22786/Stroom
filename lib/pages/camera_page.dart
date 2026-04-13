@@ -136,8 +136,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
       // 拍照
       final image = await _controller!.takePicture();
 
-      // 保存图片到应用目录
-      final appDir = await getApplicationDocumentsDirectory();
+      // 保存图片到应用支持目录（系统默认的应用数据存储路径）
+      final appDir = await getApplicationSupportDirectory();
       final picturesDir = Directory(path.join(appDir.path, 'pictures'));
       if (!await picturesDir.exists()) {
         await picturesDir.create(recursive: true);
@@ -175,8 +175,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
       );
 
       if (pickedFile != null) {
-        // 保存图片到应用目录
-        final appDir = await getApplicationDocumentsDirectory();
+        // 保存图片到应用支持目录（系统默认的应用数据存储路径）
+        final appDir = await getApplicationSupportDirectory();
         final picturesDir = Directory(path.join(appDir.path, 'pictures'));
         if (!await picturesDir.exists()) {
           await picturesDir.create(recursive: true);
