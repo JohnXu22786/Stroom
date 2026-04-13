@@ -1,27 +1,60 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- External storage at the root of the external storage -->
+    <!--
+    FileProvider configuration for Stroom camera app.
+    This file defines the directories that can be accessed via FileProvider.
+    -->
+
+    <!-- External storage: root of external storage -->
     <external-path
         name="external_storage_root"
         path="." />
-    <!-- Internal storage files directory -->
+
+    <!-- External storage: DCIM directory for camera photos -->
+    <external-path
+        name="external_dcim"
+        path="DCIM/" />
+
+    <!-- External storage: Pictures directory -->
+    <external-path
+        name="external_pictures"
+        path="Pictures/" />
+
+    <!-- External storage: Pictures/Stroom directory for app photos -->
+    <external-path
+        name="external_pictures_stroom"
+        path="Pictures/Stroom/" />
+
+    <!-- External files directory: app's private external storage -->
+    <external-files-path
+        name="external_files"
+        path="." />
+
+    <!-- External files directory: for camera images -->
+    <external-files-path
+        name="external_files_images"
+        path="Images/" />
+
+    <!-- Internal files directory -->
     <files-path
         name="internal_files"
         path="." />
-    <!-- Internal storage cache directory -->
+
+    <!-- Internal cache directory -->
     <cache-path
         name="internal_cache"
         path="." />
-    <!-- External storage app-specific files directory -->
-    <external-files-path
-        name="external_app_files"
-        path="." />
-    <!-- External storage app-specific cache directory -->
+
+    <!-- External cache directory -->
     <external-cache-path
-        name="external_app_cache"
+        name="external_cache"
         path="." />
-    <!-- External storage public pictures directory for saving photos -->
-    <external-path
-        name="external_pictures"
-        path="Pictures/Stroom" />
+
+    <!-- Root of external media (for media files) -->
+    <external-media-path
+        name="external_media"
+        path="." />
+
+    <!-- For Android 11+ scoped storage compatibility -->
+    <!-- Use MediaStore for public directories -->
 </paths>
