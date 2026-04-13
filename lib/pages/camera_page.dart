@@ -18,25 +18,41 @@ class CameraPage extends ConsumerStatefulWidget {
 }
 
 class _CameraPageState extends ConsumerState<CameraPage>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, AutomaticKeepAliveClientMixin {
   CameraController? _controller;
   bool _isCameraInitialized = false;
   bool _isFrontCamera = false;
   double _zoomLevel = 1.0;
   FlashMode _flashMode = FlashMode.off;
   List<CameraDescription>? _cameras;
+  bool _isPageVisible = true;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initializeCamera();
+    // 延迟初始化，确保页面已构建
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeCamera();
+    });
+  }
+
+  @override
+  void didUpdateWidget(CameraPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 当widget更新时，如果相机未初始化则重新初始化
+    if (!_isCameraInitialized) {
+      _initializeCamera();
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _controller?.dispose();
+    _disposeCamera();
     super.dispose();
   }
 
@@ -44,12 +60,26 @@ class _CameraPageState extends ConsumerState<CameraPage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       // 应用恢复时重新初始化相机
-      if (_controller != null && !_controller!.value.isInitialized) {
-        _initializeCamera();
-      }
+      _reinitializeCameraIfNeeded();
     } else if (state == AppLifecycleState.paused) {
       // 应用暂停时释放相机
-      _controller?.dispose();
+      _disposeCamera();
+    }
+  }
+
+  void _disposeCamera() {
+    if (_controller != null) {
+      _controller!.dispose();
+      _controller = null;
+    }
+    setState(() {
+      _isCameraInitialized = false;
+    });
+  }
+
+  Future<void> _reinitializeCameraIfNeeded() async {
+    if (_controller == null || !_controller!.value.isInitialized) {
+      await _initializeCamera();
     }
   }
 
@@ -291,6 +321,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // 必须调用父类的build方法
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(

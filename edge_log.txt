@@ -1,0 +1,4 @@
+Launching lib\main.dart on Edge in debug mode...
+Waiting for connection from debug service on Edge...               52.7s
+Failed to launch browser after 3 tries. Command used to launch it: C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe --user-data-dir=C:\Users\22786\AppData\Local\Temp\flutter_tools.d322093b\flutter_tools_chrome_device.b67bb9bd --remote-debugging-port=2554 --disable-background-timer-throttling --disable-extensions --disable-popup-blocking --bwsi --no-first-run --no-default-browser-check --disable-default-apps --disable-translate --disable-search-engine-choice-screen http://localhost:8080
+Failed to launch browser. Make sure you are using an up-to-date Chrome or Edge. Otherwise, consider using -d web-server instead and filing an issue at https://github.com/flutter/flutter/issues.
