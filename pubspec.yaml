@@ -25,6 +25,11 @@ dependencies:
   path_provider: ^2.1.0
   path: ^1.8.3
 
+  # Audio Recording/Playback Dependencies
+  just_audio: ^0.10.5
+  audio_session: ^0.1.15
+  flutter_tts: ^3.8.4
+
   # UI and Utilities
   cupertino_icons: ^1.0.6
   material_color_utilities: ^0.13.0
