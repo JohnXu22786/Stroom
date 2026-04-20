@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
@@ -18,9 +19,9 @@ class TTSService {
       await _tts.setSpeechRate(0.5);
 
       _isInitialized = true;
-      print('TTS服务初始化成功');
+      debugPrint('TTS服务初始化成功');
     } catch (e) {
-      print('TTS服务初始化失败: $e');
+      debugPrint('TTS服务初始化失败: $e');
       _isInitialized = false;
       rethrow;
     }
@@ -46,7 +47,7 @@ class TTSService {
     try {
       return await _tts.getVoices;
     } catch (e) {
-      print('获取语音列表失败: $e');
+      debugPrint('获取语音列表失败: $e');
       return [];
     }
   }
@@ -59,7 +60,7 @@ class TTSService {
     try {
       return await _tts.getLanguages;
     } catch (e) {
-      print('获取语言列表失败: $e');
+      debugPrint('获取语言列表失败: $e');
       return [];
     }
   }
@@ -86,7 +87,7 @@ class TTSService {
 
       // TODO: 实现实际的TTS合成和保存
       // 由于API暂时不编写，这里返回模拟文件路径
-      print('模拟生成音频文件: $filePath for text: $text');
+      debugPrint('模拟生成音频文件: $filePath for text: $text');
 
       // 模拟生成一个空的音频文件（实际使用时应调用TTS引擎）
       final file = File(filePath);
@@ -94,7 +95,7 @@ class TTSService {
 
       return filePath;
     } catch (e) {
-      print('TTS合成失败: $e');
+      debugPrint('TTS合成失败: $e');
       return null;
     }
   }
@@ -108,7 +109,7 @@ class TTSService {
     try {
       await _tts.speak(text);
     } catch (e) {
-      print('播放语音失败: $e');
+      debugPrint('播放语音失败: $e');
     }
   }
 
@@ -117,7 +118,7 @@ class TTSService {
     try {
       await _tts.stop();
     } catch (e) {
-      print('停止播放失败: $e');
+      debugPrint('停止播放失败: $e');
     }
   }
 
@@ -130,7 +131,7 @@ class TTSService {
     try {
       await _tts.setLanguage(languageCode);
     } catch (e) {
-      print('设置语言失败: $e');
+      debugPrint('设置语言失败: $e');
     }
   }
 
@@ -143,7 +144,7 @@ class TTSService {
     try {
       await _tts.setSpeechRate(rate);
     } catch (e) {
-      print('设置语速失败: $e');
+      debugPrint('设置语速失败: $e');
     }
   }
 
@@ -156,7 +157,7 @@ class TTSService {
     try {
       await _tts.setPitch(pitch);
     } catch (e) {
-      print('设置音调失败: $e');
+      debugPrint('设置音调失败: $e');
     }
   }
 
@@ -169,7 +170,7 @@ class TTSService {
     try {
       await _tts.setVolume(volume);
     } catch (e) {
-      print('设置音量失败: $e');
+      debugPrint('设置音量失败: $e');
     }
   }
 

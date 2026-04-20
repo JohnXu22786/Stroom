@@ -6,6 +6,10 @@
     <!-- Camera permission -->
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <!-- Internet permission for TTS API calls -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+
     <!-- Storage permissions for reading and writing images -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
