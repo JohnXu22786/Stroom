@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'dart:io';
@@ -185,7 +184,7 @@ class AudioNotifier extends StateNotifier<AudioState> {
       }
     } catch (e) {
       // 如果加载失败，保持空列表
-      debugPrint('加载录音元数据失败: $e');
+      print('加载录音元数据失败: $e');
     }
   }
 
@@ -201,7 +200,7 @@ class AudioNotifier extends StateNotifier<AudioState> {
 
       await metadataFile.writeAsString(jsonEncode(jsonData));
     } catch (e) {
-      debugPrint('保存录音元数据失败: $e');
+      print('保存录音元数据失败: $e');
       state = state.copyWith(error: '保存录音元数据失败');
     }
   }
@@ -252,7 +251,7 @@ class AudioNotifier extends StateNotifier<AudioState> {
         await audioFile.delete();
       }
     } catch (e) {
-      debugPrint('删除音频文件失败: $e');
+      print('删除音频文件失败: $e');
     }
 
     final newRecordings = List<Recording>.from(state.recordings);
@@ -286,7 +285,7 @@ class AudioNotifier extends StateNotifier<AudioState> {
           await audioFile.delete();
         }
       } catch (e) {
-        debugPrint('删除音频文件失败: $e');
+        print('删除音频文件失败: $e');
       }
     }
 
@@ -298,7 +297,7 @@ class AudioNotifier extends StateNotifier<AudioState> {
         await metadataFile.delete();
       }
     } catch (e) {
-      debugPrint('删除元数据文件失败: $e');
+      print('删除元数据文件失败: $e');
     }
 
     state = const AudioState();

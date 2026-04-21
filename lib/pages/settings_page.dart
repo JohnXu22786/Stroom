@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import 'package:dynamic_color/dynamic_color.dart';
 
 import '../providers/theme_provider.dart';
 
@@ -12,6 +12,7 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
+  bool _notificationsEnabled = true;
   bool _saveToGallery = true;
   bool _highQuality = false;
   double _compressionQuality = 0.85;
@@ -76,9 +77,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: '浅色模式',
               trailing: Radio<ThemeMode>(
                 value: ThemeMode.light,
-                // ignore: deprecated_member_use
                 groupValue: themeMode,
-                // ignore: deprecated_member_use
                 onChanged: (value) {
                   themeNotifier.setLight();
                 },
@@ -93,9 +92,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: '深色模式',
               trailing: Radio<ThemeMode>(
                 value: ThemeMode.dark,
-                // ignore: deprecated_member_use
                 groupValue: themeMode,
-                // ignore: deprecated_member_use
                 onChanged: (value) {
                   themeNotifier.setDark();
                 },
@@ -110,9 +107,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: '跟随系统',
               trailing: Radio<ThemeMode>(
                 value: ThemeMode.system,
-                // ignore: deprecated_member_use
                 groupValue: themeMode,
-                // ignore: deprecated_member_use
                 onChanged: (value) {
                   themeNotifier.setSystem();
                 },

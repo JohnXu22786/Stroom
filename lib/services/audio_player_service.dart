@@ -34,7 +34,7 @@ class AudioPlayerService {
 
     // Configure audio session for speech playback
     final session = await AudioSession.instance;
-    await session.configure(const AudioSessionConfiguration.speech());
+    await session.configure(AudioSessionConfiguration.speech());
 
     _isInitialized = true;
   }
