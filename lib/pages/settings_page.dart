@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 
 import '../providers/theme_provider.dart';
+import '../providers/tts_state_provider.dart';
+import '../providers/tts_config.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -16,6 +18,42 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   bool _saveToGallery = true;
   bool _highQuality = false;
   double _compressionQuality = 0.85;
+
+  // TTS配置相关变量
+  TTSProvider? _selectedTTSProvider;
+  String _ttsApiKey = '';
+  String _ttsModel = '';
+  String _ttsVoice = '';
+  String _ttsBaseUrl = '';
+
+  @override
+  void initState() {
+    super.initState();
+    // 加载TTS配置
+    _loadTTSConfig();
+  }
+
+  Future<void> _loadTTSConfig() async {
+    final config = ref.read(ttsConfigProvider);
+    setState(() {
+      _selectedTTSProvider = config.selectedProvider;
+      _ttsApiKey = config.apiKey ?? '';
+      _ttsModel = config.model ?? '';
+      _ttsVoice = config.voice ?? '';
+      _ttsBaseUrl = config.baseUrl ?? '';
+    });
+  }
+
+  Future<void> _saveTTSConfig() async {
+    final notifier = ref.read(ttsConfigProvider.notifier);
+    await notifier.saveConfig(TTSConfigState(
+      selectedProvider: _selectedTTSProvider,
+      apiKey: _ttsApiKey.isNotEmpty ? _ttsApiKey : null,
+      model: _ttsModel.isNotEmpty ? _ttsModel : null,
+      voice: _ttsVoice.isNotEmpty ? _ttsVoice : null,
+      baseUrl: _ttsBaseUrl.isNotEmpty ? _ttsBaseUrl : null,
+    ));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +77,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           // 相机设置部分
           _buildSectionHeader('相机设置'),
           _buildCameraSettings(),
+
+          const SizedBox(height: 24),
+
+          // TTS配置部分
+          _buildSectionHeader('语音合成设置'),
+          _buildTTSSettings(),
 
           const SizedBox(height: 24),
 
@@ -197,6 +241,159 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     },
                   ),
                 ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTTSSettings() {
+    // 获取支持的供应商列表
+    final providerOptions = TTSProvider.values;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          children: [
+            // 供应商选择
+            _buildListTile(
+              leading: const Icon(Icons.business, color: Colors.purple),
+              title: '供应商',
+              subtitle: _selectedTTSProvider?.value ?? '未选择',
+              trailing: DropdownButton<TTSProvider>(
+                value: _selectedTTSProvider,
+                onChanged: (TTSProvider? newValue) {
+                  setState(() {
+                    _selectedTTSProvider = newValue;
+                    // 当供应商改变时，重置模型和音色
+                    if (newValue != null) {
+                      final voices = TTSConfig.getSupportedVoices(newValue);
+                      if (voices.isNotEmpty) {
+                        _ttsVoice = voices.first;
+                      }
+                      // 重置API密钥和模型为默认值
+                      final defaultConfig = TTSConfig.getDefaultParams(newValue);
+                      _ttsApiKey = defaultConfig.apiKey ?? '';
+                      _ttsModel = defaultConfig.model ?? '';
+                      _ttsBaseUrl = defaultConfig.baseUrl ?? '';
+                    }
+                    _saveTTSConfig();
+                  });
+                },
+                items: providerOptions.map((TTSProvider provider) {
+                  return DropdownMenuItem<TTSProvider>(
+                    value: provider,
+                    child: Text(provider.value),
+                  );
+                }).toList(),
+              ),
+              onTap: () {},
+            ),
+            const Divider(height: 1),
+
+            // API密钥输入
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: TextField(
+                decoration: const InputDecoration(
+                  labelText: 'API密钥',
+                  hintText: '输入供应商API密钥',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.key, color: Colors.amber),
+                ),
+                obscureText: true,
+                controller: TextEditingController(text: _ttsApiKey),
+                onChanged: (value) {
+                  setState(() {
+                    _ttsApiKey = value;
+                  });
+                  _saveTTSConfig();
+                },
+              ),
+            ),
+
+            // 模型输入（仅AIHUBMIX需要）
+            if (_selectedTTSProvider == TTSProvider.aihubmixTts)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: TextField(
+                  decoration: const InputDecoration(
+                    labelText: '模型',
+                    hintText: '例如: gpt-4o-mini-tts',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.model_training, color: Colors.green),
+                  ),
+                  controller: TextEditingController(text: _ttsModel),
+                  onChanged: (value) {
+                    setState(() {
+                      _ttsModel = value;
+                    });
+                    _saveTTSConfig();
+                  },
+                ),
+              ),
+
+            // 音色选择
+            if (_selectedTTSProvider != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(
+                    labelText: '音色',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.record_voice_over, color: Colors.blue),
+                  ),
+                  value: _ttsVoice.isNotEmpty ? _ttsVoice : null,
+                  onChanged: (String? newValue) {
+                    setState(() {
+                      _ttsVoice = newValue ?? '';
+                    });
+                    _saveTTSConfig();
+                  },
+                  items: TTSConfig.getSupportedVoices(_selectedTTSProvider!)
+                      .map((String voice) {
+                    return DropdownMenuItem<String>(
+                      value: voice,
+                      child: Text(voice),
+                    );
+                  }).toList(),
+                ),
+              ),
+
+            // 基础URL（仅AIHUBMIX需要）
+            if (_selectedTTSProvider == TTSProvider.aihubmixTts)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: TextField(
+                  decoration: const InputDecoration(
+                    labelText: 'API基础URL',
+                    hintText: 'https://aihubmix.com/v1',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.link, color: Colors.orange),
+                  ),
+                  controller: TextEditingController(text: _ttsBaseUrl),
+                  onChanged: (value) {
+                    setState(() {
+                      _ttsBaseUrl = value;
+                    });
+                    _saveTTSConfig();
+                  },
+                ),
+              ),
+
+            // 保存按钮
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: ElevatedButton.icon(
+                onPressed: _saveTTSConfig,
+                icon: const Icon(Icons.save),
+                label: const Text('保存配置'),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 48),
+                ),
               ),
             ),
           ],
