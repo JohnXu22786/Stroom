@@ -25,6 +25,18 @@ dependencies:
   path_provider: ^2.1.0
   path: ^1.8.3
 
+  # TTS Functionality Dependencies
+  dio: ^5.4.0+1
+  shared_preferences: ^2.2.2
+  file_picker: ^11.0.2
+  permission_handler: ^12.0.1
+  audio_session: ^0.1.12
+  just_audio: ^0.9.36
+  uuid: ^4.3.0
+  mime: ^1.0.4
+  file: ^6.1.4
+  share_plus: ^7.2.0
+
   # UI and Utilities
   cupertino_icons: ^1.0.6
   material_color_utilities: ^0.13.0
