@@ -98,9 +98,9 @@ class TTSConfigPanel extends ConsumerWidget {
               child: Text(provider.displayName),
             );
           }).toList(),
-          onChanged: (value) {
-            if (value != null) {
-              notifier.updateProviderType(value);
+          onChanged: (provider) {
+            if (provider != null) {
+              notifier.updateProviderType(provider);
             }
           },
         ),
@@ -108,262 +108,60 @@ class TTSConfigPanel extends ConsumerWidget {
     );
   }
 
-  /// 构建API密钥输入字段（增强版）
+  /// 构建API密钥输入字段
   Widget _buildApiKeyField(TTSConfigState config, TTSConfigNotifier notifier, BuildContext context) {
-    final hasApiKey = notifier.hasApiKey();
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            const Text(
-              'API密钥',
-              style: TextStyle(fontWeight: FontWeight.w500),
-            ),
-            const Spacer(),
-            if (hasApiKey)
-              Text(
-                '已配置',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.green.shade700,
-                ),
-              ),
-          ],
+        const Text(
+          'API密钥',
+          style: TextStyle(fontWeight: FontWeight.w500),
         ),
         const SizedBox(height: 8),
         Row(
           children: [
             Expanded(
               child: TextFormField(
-                initialValue: notifier.getDisplayApiKey(),
+                initialValue: config.apiKey,
+                obscureText: config.isApiKeyObscured,
                 decoration: InputDecoration(
+                  hintText: '输入API密钥...',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  hintText: '输入API密钥...',
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   suffixIcon: IconButton(
                     icon: Icon(
-                      config.isApiKeyObscured
-                          ? Icons.visibility_off
-                          : Icons.visibility,
+                      config.isApiKeyObscured ? Icons.visibility_off : Icons.visibility,
                       size: 20,
                     ),
-                    onPressed: notifier.toggleApiKeyObscured,
+                    onPressed: () {
+                      notifier.toggleApiKeyObscured();
+                    },
+                    tooltip: config.isApiKeyObscured ? '显示密钥' : '隐藏密钥',
                   ),
                 ),
                 onChanged: (value) {
-                  // 如果API密钥被隐藏，只有在显示时才更新
-                  if (!config.isApiKeyObscured || value == notifier.getDisplayApiKey()) {
-                    notifier.updateApiKey(value);
-                  }
+                  notifier.updateApiKey(value);
                 },
-                obscureText: config.isApiKeyObscured,
               ),
             ),
           ],
         ),
         const SizedBox(height: 8),
         Text(
-          'API密钥用于访问TTS服务，请从供应商处获取',
+          'API密钥仅保存在本地，请确保安全',
           style: TextStyle(
             fontSize: 12,
-            color: Colors.grey.shade600,
+            color: Colors.grey[600],
           ),
         ),
-
-        // API密钥缺失警告区域
-        if (!hasApiKey) ...[
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.amber.shade50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.amber.shade200),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.warning_amber, color: Colors.amber.shade700, size: 18),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'API密钥未配置',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                        color: Colors.amber,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  '当前TTS功能可能受限，部分功能无法使用。',
-                  style: TextStyle(fontSize: 12),
-                ),
-                const SizedBox(height: 8),
-                _buildApiKeyInstructions(config.providerType),
-                const SizedBox(height: 12),
-                ElevatedButton(
-                  onPressed: () {
-                    _showApiKeyHelpDialog(context, config.providerType);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.amber.shade100,
-                    foregroundColor: Colors.amber.shade800,
-                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                    minimumSize: const Size(0, 36),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.help_outline, size: 16),
-                      SizedBox(width: 6),
-                      Text('如何获取API密钥？'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ],
-    );
-  }
-
-  /// 构建API密钥获取说明
-  Widget _buildApiKeyInstructions(TTSProviderType providerType) {
-    switch (providerType) {
-      case TTSProviderType.glmTTS:
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '• 访问智谱AI开放平台注册账号',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-            ),
-            Text(
-              '• 创建应用并获取API Key',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-            ),
-            Text(
-              '• 将API Key复制到上方输入框',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-            ),
-          ],
-        );
-      case TTSProviderType.aihubmixTTS:
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '• 访问AIHUBMIX平台获取API密钥',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-            ),
-            Text(
-              '• 支持OpenAI兼容API',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-            ),
-            Text(
-              '• 将API Key复制到上方输入框',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-            ),
-          ],
-        );
-
-    }
-  }
-
-  /// 显示API密钥帮助对话框
-  void _showApiKeyHelpDialog(BuildContext context, TTSProviderType providerType) {
-    String providerName = providerType.displayName;
-    String helpUrl = '';
-    String helpDescription = '';
-
-    switch (providerType) {
-      case TTSProviderType.glmTTS:
-        helpUrl = 'https://open.bigmodel.cn/';
-        helpDescription = '智谱AI开放平台提供全面的AI能力，包括TTS语音合成服务。';
-        break;
-      case TTSProviderType.aihubmixTTS:
-        helpUrl = 'https://aihubmix.com/';
-        helpDescription = 'AIHUBMIX提供OpenAI兼容的API服务，包括TTS功能。';
-        break;
-
-    }
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.vpn_key, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(width: 8),
-            Text('$providerName - API密钥获取指南'),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(helpDescription),
-              const SizedBox(height: 16),
-              const Text(
-                '获取步骤：',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 8),
-              Text('1. 访问供应商平台: $helpUrl'),
-              const Text('2. 注册账号并完成认证'),
-              const Text('3. 创建应用或获取API密钥'),
-              const Text('4. 复制API密钥到本应用'),
-              const SizedBox(height: 16),
-              const Text(
-                '注意：',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 8),
-              const Text('• API密钥是访问TTS服务的凭证，请妥善保管'),
-              const Text('• 不要将API密钥分享给他人'),
-              const Text('• 定期检查API密钥使用情况'),
-              const Text('• 旧版TTS服务仍可作为后备选项'),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('关闭'),
-          ),
-          if (helpUrl.isNotEmpty)
-            ElevatedButton(
-              onPressed: () {
-                // 在真实应用中这里应该打开浏览器
-                // 这里只关闭对话框并提示
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('请访问: $helpUrl'),
-                    duration: const Duration(seconds: 3),
-                  ),
-                );
-              },
-              child: const Text('访问网站'),
-            ),
-        ],
-      ),
     );
   }
 
   /// 构建音色选择器
   Widget _buildVoiceSelector(TTSConfigState config, TTSConfigNotifier notifier) {
-    final supportedVoices = config.getSupportedVoices();
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -380,15 +178,15 @@ class TTSConfigPanel extends ConsumerWidget {
             ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           ),
-          items: supportedVoices.map((voice) {
+          items: config.getSupportedVoices().map((voice) {
             return DropdownMenuItem<String>(
               value: voice,
               child: Text(voice),
             );
           }).toList(),
-          onChanged: (value) {
-            if (value != null) {
-              notifier.updateVoice(value);
+          onChanged: (voice) {
+            if (voice != null) {
+              notifier.updateVoice(voice);
             }
           },
         ),
@@ -398,34 +196,35 @@ class TTSConfigPanel extends ConsumerWidget {
 
   /// 构建语速滑块
   Widget _buildSpeedSlider(TTSConfigState config, TTSConfigNotifier notifier) {
-    final ranges = config.getParamRanges();
-    final speedRange = ranges['speed'] as Map<String, dynamic>?;
-    final min = speedRange?['min'] as double? ?? 0.25;
-    final max = speedRange?['max'] as double? ?? 4.0;
+    final paramRanges = config.getParamRanges();
+    final minSpeed = paramRanges['speed']?['min'] as double? ?? 0.5;
+    final maxSpeed = paramRanges['speed']?['max'] as double? ?? 2.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text(
               '语速',
               style: TextStyle(fontWeight: FontWeight.w500),
             ),
-            const Spacer(),
             Text(
-              '${config.speed.toStringAsFixed(1)}x',
-              style: const TextStyle(fontSize: 14, color: Colors.grey),
+              config.speed.toStringAsFixed(1),
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
             ),
           ],
         ),
         const SizedBox(height: 8),
         Slider(
           value: config.speed,
-          min: min,
-          max: max,
-          divisions: ((max - min) / 0.25).round(),
-          label: '${config.speed.toStringAsFixed(1)}x',
+          min: minSpeed,
+          max: maxSpeed,
+          divisions: 15,
           onChanged: (value) {
             notifier.updateSpeed(value);
           },
@@ -434,12 +233,18 @@ class TTSConfigPanel extends ConsumerWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              '${min}x',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              '慢',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
             ),
             Text(
-              '${max}x',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              '快',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
             ),
           ],
         ),
@@ -449,34 +254,35 @@ class TTSConfigPanel extends ConsumerWidget {
 
   /// 构建音量滑块
   Widget _buildVolumeSlider(TTSConfigState config, TTSConfigNotifier notifier) {
-    final ranges = config.getParamRanges();
-    final volumeRange = ranges['volume'] as Map<String, dynamic>?;
-    final min = volumeRange?['min'] as double? ?? 0.0;
-    final max = volumeRange?['max'] as double? ?? 2.0;
+    final paramRanges = config.getParamRanges();
+    final minVolume = paramRanges['volume']?['min'] as double? ?? 0.0;
+    final maxVolume = paramRanges['volume']?['max'] as double? ?? 2.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text(
               '音量',
               style: TextStyle(fontWeight: FontWeight.w500),
             ),
-            const Spacer(),
             Text(
-              '${(config.volume * 100).toInt()}%',
-              style: const TextStyle(fontSize: 14, color: Colors.grey),
+              config.volume.toStringAsFixed(1),
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
             ),
           ],
         ),
         const SizedBox(height: 8),
         Slider(
           value: config.volume,
-          min: min,
-          max: max,
-          divisions: ((max - min) / 0.1).round(),
-          label: '${(config.volume * 100).toInt()}%',
+          min: minVolume,
+          max: maxVolume,
+          divisions: 20,
           onChanged: (value) {
             notifier.updateVolume(value);
           },
@@ -485,12 +291,18 @@ class TTSConfigPanel extends ConsumerWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              '${(min * 100).toInt()}%',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              '小',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
             ),
             Text(
-              '${(max * 100).toInt()}%',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              '大',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
             ),
           ],
         ),
@@ -500,71 +312,80 @@ class TTSConfigPanel extends ConsumerWidget {
 
   /// 构建高级设置
   Widget _buildAdvancedSettings(TTSConfigState config, TTSConfigNotifier notifier) {
-    return ExpansionTile(
-      tilePadding: EdgeInsets.zero,
-      title: const Text(
-        '高级设置',
-        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const Text(
+          '高级设置',
+          style: TextStyle(fontWeight: FontWeight.w500),
+        ),
         const SizedBox(height: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        Row(
           children: [
-            // 音频格式选择
-            const Text(
-              '音频格式',
-              style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
-            ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              initialValue: config.format,
-              decoration: InputDecoration(
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                isDense: true,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '音频格式',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 4),
+                  DropdownButtonFormField<String>(
+                    initialValue: config.format,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    items: ['wav', 'mp3', 'ogg'].map((format) {
+                      return DropdownMenuItem<String>(
+                        value: format,
+                        child: Text(format),
+                      );
+                    }).toList(),
+                    onChanged: (format) {
+                      if (format != null) {
+                        notifier.updateFormat(format);
+                      }
+                    },
+                  ),
+                ],
               ),
-              items: TTSProviderConfig.supportedFormats.map((format) {
-                return DropdownMenuItem<String>(
-                  value: format,
-                  child: Text(format.toUpperCase()),
-                );
-              }).toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  notifier.updateFormat(value);
-                }
-              },
             ),
-            const SizedBox(height: 16),
-            // 采样率选择
-            const Text(
-              '采样率',
-              style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
-            ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<int>(
-              initialValue: config.sampleRate,
-              decoration: InputDecoration(
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                isDense: true,
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '采样率',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 4),
+                  DropdownButtonFormField<int>(
+                    initialValue: config.sampleRate,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    items: [16000, 24000, 44100, 48000].map((rate) {
+                      return DropdownMenuItem<int>(
+                        value: rate,
+                        child: Text('$rate Hz'),
+                      );
+                    }).toList(),
+                    onChanged: (rate) {
+                      if (rate != null) {
+                        notifier.updateSampleRate(rate);
+                      }
+                    },
+                  ),
+                ],
               ),
-              items: [8000, 16000, 24000, 32000, 44100, 48000].map((rate) {
-                return DropdownMenuItem<int>(
-                  value: rate,
-                  child: Text('$rate Hz'),
-                );
-              }).toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  notifier.updateSampleRate(value);
-                }
-              },
             ),
           ],
         ),
@@ -573,47 +394,38 @@ class TTSConfigPanel extends ConsumerWidget {
   }
 
   /// 构建操作按钮
-  Widget _buildActionButtons(
-    TTSConfigState config,
-    TTSConfigNotifier notifier,
-    BuildContext context,
-  ) {
+  Widget _buildActionButtons(TTSConfigState config, TTSConfigNotifier notifier, BuildContext context) {
     return Row(
       children: [
         Expanded(
           child: OutlinedButton.icon(
-            icon: const Icon(Icons.restart_alt, size: 18),
-            label: const Text('重置为默认'),
             onPressed: () {
               notifier.resetToDefaults();
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('配置已重置为默认值'),
+                  content: Text('已重置为默认配置'),
                   duration: Duration(seconds: 2),
                 ),
               );
             },
+            icon: const Icon(Icons.restore, size: 18),
+            label: const Text('恢复默认'),
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: ElevatedButton.icon(
-            icon: const Icon(Icons.save, size: 18),
-            label: const Text('保存配置'),
             onPressed: () {
-              if (onConfigSaved != null) {
-                onConfigSaved!();
-              }
-
+              onConfigSaved?.call();
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'TTS配置已保存 - ${config.providerDisplayName}',
-                  ),
-                  duration: const Duration(seconds: 2),
+                const SnackBar(
+                  content: Text('配置已保存'),
+                  duration: Duration(seconds: 2),
                 ),
               );
             },
+            icon: const Icon(Icons.save, size: 18),
+            label: const Text('保存配置'),
           ),
         ),
       ],
@@ -624,11 +436,59 @@ class TTSConfigPanel extends ConsumerWidget {
 /// TTS配置对话框
 ///
 /// 独立对话框版本的TTS配置界面
-class TTSConfigDialog extends ConsumerWidget {
+class TTSConfigDialog extends ConsumerStatefulWidget {
   const TTSConfigDialog({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TTSConfigDialog> createState() => _TTSConfigDialogState();
+}
+
+class _TTSConfigDialogState extends ConsumerState<TTSConfigDialog> {
+  TTSConfigState? _initialConfig;
+  TTSConfigState? _currentConfig;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialConfig = ref.read(ttsConfigProvider);
+    _currentConfig = _initialConfig;
+  }
+
+  void _applyChanges() {
+    if (_currentConfig != null) {
+      final notifier = ref.read(ttsConfigProvider.notifier);
+      notifier.updateProviderType(_currentConfig!.providerType);
+      if (_currentConfig!.apiKey != null) {
+        notifier.updateApiKey(_currentConfig!.apiKey!);
+      }
+      notifier.updateVoice(_currentConfig!.voice);
+      notifier.updateSpeed(_currentConfig!.speed);
+      notifier.updateVolume(_currentConfig!.volume);
+      notifier.updateFormat(_currentConfig!.format);
+      notifier.updateSampleRate(_currentConfig!.sampleRate);
+    }
+    Navigator.of(context).pop();
+  }
+
+  void _cancelChanges() {
+    // 恢复到初始配置
+    if (_initialConfig != null) {
+      final notifier = ref.read(ttsConfigProvider.notifier);
+      notifier.updateProviderType(_initialConfig!.providerType);
+      if (_initialConfig!.apiKey != null) {
+        notifier.updateApiKey(_initialConfig!.apiKey!);
+      }
+      notifier.updateVoice(_initialConfig!.voice);
+      notifier.updateSpeed(_initialConfig!.speed);
+      notifier.updateVolume(_initialConfig!.volume);
+      notifier.updateFormat(_initialConfig!.format);
+      notifier.updateSampleRate(_initialConfig!.sampleRate);
+    }
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('TTS供应商配置'),
       content: SingleChildScrollView(
@@ -642,7 +502,7 @@ class TTSConfigDialog extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                '配置将自动保存，下次生成语音时生效',
+                '点击"保存"应用配置，点击"取消"恢复原设置',
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.grey.shade600,
@@ -655,18 +515,14 @@ class TTSConfigDialog extends ConsumerWidget {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('关闭'),
+          onPressed: _cancelChanges,
+          child: const Text('取消'),
+        ),
+        ElevatedButton(
+          onPressed: _applyChanges,
+          child: const Text('保存'),
         ),
       ],
-    );
-  }
-
-  /// 显示配置对话框
-  static void show(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => const TTSConfigDialog(),
     );
   }
 }

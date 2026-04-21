@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-
 import '../providers/audio_provider.dart';
 import '../providers/tts_config_provider.dart';
 import '../services/tts_service.dart';
@@ -55,10 +54,20 @@ class _AudioPageState extends ConsumerState<AudioPage>
 
   bool _isGenerating = false;
   bool _newTtsAvailable = false;
-  bool _oldTtsAvailable = true;
   String? _errorMessage;
   StreamSubscription? _positionSubscription;
   StreamSubscription? _stateSubscription;
+
+  // 临时配置状态
+  bool _useTempConfigForSession = true; // true: 本次应用期间, false: 本次音频
+  Map<String, dynamic> _tempTTSConfig = {
+    'voice': 'female',
+    'speed': 1.0,
+    'volume': 1.0,
+    'format': 'wav',
+    'sampleRate': 24000,
+  };
+  bool _showTempConfigPanel = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -96,16 +105,6 @@ class _AudioPageState extends ConsumerState<AudioPage>
         debugPrint('新TTS服务初始化失败: $errorMessage, 使用旧TTS服务作为后备');
       }
 
-      // 始终初始化旧TTS服务作为后备
-      try {
-        await _ttsService.initialize();
-        _oldTtsAvailable = true;
-        debugPrint('旧TTS服务初始化成功');
-      } catch (e) {
-        _oldTtsAvailable = false;
-        debugPrint('旧TTS服务初始化失败: $e');
-      }
-
       // 初始化音频播放器
       try {
         await _audioPlayerService.initialize();
@@ -114,8 +113,8 @@ class _AudioPageState extends ConsumerState<AudioPage>
         // 音频播放器失败不影响主要功能，继续
       }
 
-      // 只有两个服务都失败时才显示错误
-      if (!_newTtsAvailable && !_oldTtsAvailable) {
+      // 只有新TTS服务失败时才显示错误
+      if (!_newTtsAvailable) {
         if (mounted) {
           setState(() {
             _errorMessage = 'TTS服务初始化失败，语音功能可能不可用';
@@ -125,6 +124,11 @@ class _AudioPageState extends ConsumerState<AudioPage>
 
       // 检查API密钥状态
       _checkApiKeyStatus();
+
+      // 从全局配置初始化临时配置
+      _initTempConfigFromGlobal();
+
+
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -137,7 +141,6 @@ class _AudioPageState extends ConsumerState<AudioPage>
   /// 检查API密钥状态并显示相应提示
   void _checkApiKeyStatus() {
     if (!mounted) return;
-
 
     final notifier = ref.read(ttsConfigProvider.notifier);
     final hasApiKey = notifier.hasApiKey();
@@ -152,19 +155,8 @@ class _AudioPageState extends ConsumerState<AudioPage>
                 children: [
                   const Icon(Icons.info, color: Colors.blue, size: 20),
                   const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('TTS服务已就绪，但需要配置API密钥以获得完整功能'),
-                        const SizedBox(height: 4),
-                        Text(
-                          '当前使用模拟模式，音频质量有限',
-                          style: TextStyle(fontSize: 12, color: Colors.blue[700]),
-                        ),
-                      ],
-                    ),
+                  const Expanded(
+                    child: Text('API密钥未配置，TTS功能可能受限'),
                   ),
                 ],
               ),
@@ -194,6 +186,19 @@ class _AudioPageState extends ConsumerState<AudioPage>
 
     if (_isGenerating) return;
 
+    // 检查新TTS服务是否可用
+    if (!_newTtsAvailable) {
+      _showErrorSnackBar('TTS服务不可用，请检查配置');
+      return;
+    }
+
+    // 检查API密钥是否配置
+    final hasApiKey = ref.read(ttsConfigProvider.notifier).hasApiKey();
+    if (!hasApiKey) {
+      _showApiKeyMissingDialog();
+      return;
+    }
+
     setState(() {
       _isGenerating = true;
       _errorMessage = null;
@@ -207,44 +212,27 @@ class _AudioPageState extends ConsumerState<AudioPage>
       // 优先使用新TTS服务，如果可用
       if (_newTtsAvailable) {
         try {
-          // 获取TTS配置
+          // 获取TTS配置，使用临时配置覆盖
           final config = ref.read(ttsConfigProvider);
           final ttsParams = new_tts.TTSParams(
             text: text,
             provider: config.providerType,
             apiKey: config.apiKey,
-            voice: config.voice,
-            speed: config.speed,
-            volume: config.volume,
-            format: config.format,
-            sampleRate: config.sampleRate,
+            voice: _tempTTSConfig['voice'] as String,
+            speed: _tempTTSConfig['speed'] as double,
+            volume: _tempTTSConfig['volume'] as double,
+            format: _tempTTSConfig['format'] as String,
+            sampleRate: _tempTTSConfig['sampleRate'] as int,
           );
 
           filePath = await _newTtsService.synthesizeToFile(text, params: ttsParams);
           debugPrint('新TTS服务合成成功: $filePath');
         } catch (e) {
           final errorInfo = _classifyTtsError(e);
-          debugPrint('新TTS服务合成失败: $errorInfo, 使用旧TTS服务作为后备');
+          debugPrint('新TTS服务合成失败: $errorInfo');
 
-          // 如果是API密钥缺失错误，显示引导信息
-          if (_isApiKeyMissingError(e)) {
-            _showApiKeyMissingWarning();
-            // 仍然尝试使用旧TTS服务作为后备
-          }
-
-          // 标记新TTS服务为不可用，下次尝试使用旧服务
-          _newTtsAvailable = false;
-        }
-      }
-
-      // 如果新TTS服务失败或不可用，使用旧TTS服务
-      if (filePath == null && _oldTtsAvailable) {
-        try {
-          filePath = await _ttsService.synthesizeToFile(text);
-          debugPrint('旧TTS服务合成成功: $filePath');
-        } catch (e) {
-          debugPrint('旧TTS服务合成失败: $e');
-          throw Exception('所有TTS服务都不可用: $e');
+          // 重新抛出错误，不再尝试后备服务
+          rethrow;
         }
       }
 
@@ -286,12 +274,7 @@ class _AudioPageState extends ConsumerState<AudioPage>
     }
   }
 
-  /// 生成测试音频录音
-  Future<void> _generateTestAudio() async {
-    const testText = '这是一个测试录音，用于验证TTS服务功能是否正常工作。';
-    _textEditingController.text = testText;
-    await _generateAudio();
-  }
+
 
   /// 分类TTS错误，提供友好的错误信息
   TtsErrorInfo _classifyTtsError(dynamic error) {
@@ -367,33 +350,7 @@ class _AudioPageState extends ConsumerState<AudioPage>
     return errorInfo.type == TtsErrorType.apiKeyMissing;
   }
 
-  /// 显示API密钥缺失警告
-  void _showApiKeyMissingWarning() {
-    if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Row(
-          children: [
-            Icon(Icons.warning, color: Colors.amber, size: 20),
-            SizedBox(width: 8),
-            Expanded(
-              child: Text('API密钥未配置，TTS功能可能受限'),
-            ),
-          ],
-        ),
-        backgroundColor: Colors.amber[50],
-        duration: const Duration(seconds: 5),
-        action: SnackBarAction(
-          label: '去配置',
-          textColor: Theme.of(context).colorScheme.primary,
-          onPressed: () {
-            _showApiKeyMissingDialog();
-          },
-        ),
-      ),
-    );
-  }
 
   /// 显示API密钥缺失对话框
   void _showApiKeyMissingDialog() {
@@ -433,12 +390,20 @@ class _AudioPageState extends ConsumerState<AudioPage>
           ElevatedButton(
             onPressed: () {
               Navigator.of(context).pop();
-              TTSConfigDialog.show(context);
+              _showTTSConfigDialog(context);
             },
             child: const Text('去配置'),
           ),
         ],
       ),
+    );
+  }
+
+  /// 显示TTS配置对话框
+  void _showTTSConfigDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => const TTSConfigDialog(),
     );
   }
 
@@ -536,7 +501,7 @@ class _AudioPageState extends ConsumerState<AudioPage>
                   const SizedBox(width: 8),
                   IconButton(
                     icon: const Icon(Icons.settings, size: 20),
-                    onPressed: () => TTSConfigDialog.show(context),
+                    onPressed: () => _showTTSConfigDialog(context),
                     tooltip: 'TTS供应商配置',
                   ),
                 ],
@@ -575,213 +540,6 @@ class _AudioPageState extends ConsumerState<AudioPage>
                 ),
               ),
 
-            // TTS Configuration panel
-            Padding(
-              padding: const EdgeInsets.only(left: 16, right: 16, top: 16),
-              child: TTSConfigPanel(
-                initiallyExpanded: true,
-                onConfigSaved: () {
-                  // 配置保存后重新初始化服务
-                  _initializeServices();
-                },
-              ),
-            ),
-
-            // TTS服务状态显示
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'TTS服务状态',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          // 新TTS服务状态
-                          Expanded(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: _newTtsAvailable ? Colors.green.shade50 : Colors.orange.shade50,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: _newTtsAvailable ? Colors.green.shade200 : Colors.orange.shade200,
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        _newTtsAvailable ? Icons.check_circle : Icons.warning,
-                                        size: 16,
-                                        color: _newTtsAvailable ? Colors.green.shade700 : Colors.orange.shade700,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        '新TTS服务',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
-                                          color: _newTtsAvailable ? Colors.green.shade800 : Colors.orange.shade800,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _newTtsAvailable ? '已启用' : '未配置',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: _newTtsAvailable ? Colors.green.shade600 : Colors.orange.shade600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          // 旧TTS服务状态
-                          Expanded(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: _oldTtsAvailable ? Colors.green.shade50 : Colors.red.shade50,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: _oldTtsAvailable ? Colors.green.shade200 : Colors.red.shade200,
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        _oldTtsAvailable ? Icons.check_circle : Icons.error,
-                                        size: 16,
-                                        color: _oldTtsAvailable ? Colors.green.shade700 : Colors.red.shade700,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        '旧TTS服务',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
-                                          color: _oldTtsAvailable ? Colors.green.shade800 : Colors.red.shade800,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _oldTtsAvailable ? '已启用' : '不可用',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: _oldTtsAvailable ? Colors.green.shade600 : Colors.red.shade600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      // API密钥状态
-                      Consumer(
-                        builder: (context, ref, child) {
-                          final config = ref.watch(ttsConfigProvider);
-                          final hasApiKey = config.apiKey != null && config.apiKey!.isNotEmpty;
-                          return Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: hasApiKey ? Colors.blue.shade50 : Colors.amber.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: hasApiKey ? Colors.blue.shade200 : Colors.amber.shade200,
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      hasApiKey ? Icons.key : Icons.key_off,
-                                      size: 16,
-                                      color: hasApiKey ? Colors.blue.shade700 : Colors.amber.shade700,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'API密钥',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                        color: hasApiKey ? Colors.blue.shade800 : Colors.amber.shade800,
-                                      ),
-                                    ),
-                                    const Spacer(),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: hasApiKey ? Colors.blue.shade100 : Colors.amber.shade100,
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        config.providerDisplayName,
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w500,
-                                          color: hasApiKey ? Colors.blue.shade600 : Colors.amber.shade600,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  hasApiKey ? '已配置' : '未配置',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: hasApiKey ? Colors.blue.shade600 : Colors.amber.shade600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // 测试按钮
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: ElevatedButton.icon(
-                onPressed: _isGenerating ? null : _generateTestAudio,
-                icon: const Icon(Icons.play_arrow, size: 18),
-                label: const Text('测试TTS服务'),
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(44),
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                ),
-              ),
-            ),
-
             // Text input section
             Padding(
               padding: const EdgeInsets.all(16),
@@ -791,12 +549,31 @@ class _AudioPageState extends ConsumerState<AudioPage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(
-                        '生成录音',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '生成录音',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(_showTempConfigPanel ? Icons.expand_less : Icons.settings),
+                            onPressed: () {
+                              setState(() {
+                                _showTempConfigPanel = !_showTempConfigPanel;
+                              });
+                            },
+                            tooltip: '临时配置',
+                          ),
+                        ],
                       ),
+                      if (_showTempConfigPanel) ...[
+                        const SizedBox(height: 12),
+                        _buildTempConfigPanel(context),
+                        const SizedBox(height: 12),
+                      ],
                       const SizedBox(height: 12),
                       TextField(
                         controller: _textEditingController,
@@ -1061,4 +838,204 @@ class _AudioPageState extends ConsumerState<AudioPage>
       _showSuccessSnackBar('录音已删除');
     }
   }
+
+  /// 构建临时配置面板
+  Widget _buildTempConfigPanel(BuildContext context) {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '临时配置',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                Switch(
+                  value: _useTempConfigForSession,
+                  onChanged: (value) {
+                    setState(() {
+                      _useTempConfigForSession = value;
+                    });
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _useTempConfigForSession ? '本次应用期间' : '仅本次音频',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 12),
+            _buildTempConfigSlider(
+              label: '语速',
+              value: _tempTTSConfig['speed'] as double,
+              min: 0.5,
+              max: 2.0,
+              divisions: 15,
+              onChanged: (value) {
+                setState(() {
+                  _tempTTSConfig['speed'] = value;
+                });
+              },
+            ),
+            const SizedBox(height: 12),
+            _buildTempConfigSlider(
+              label: '音量',
+              value: _tempTTSConfig['volume'] as double,
+              min: 0.0,
+              max: 2.0,
+              divisions: 20,
+              onChanged: (value) {
+                setState(() {
+                  _tempTTSConfig['volume'] = value;
+                });
+              },
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '音色',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      DropdownButton<String>(
+                        value: _tempTTSConfig['voice'] as String,
+                        isExpanded: true,
+                        items: ['female', 'male', 'neutral']
+                            .map((voice) => DropdownMenuItem<String>(
+                                  value: voice,
+                                  child: Text(voice),
+                                ))
+                            .toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() {
+                              _tempTTSConfig['voice'] = value;
+                            });
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '采样率',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      DropdownButton<int>(
+                        value: _tempTTSConfig['sampleRate'] as int,
+                        isExpanded: true,
+                        items: [16000, 24000, 44100, 48000]
+                            .map((rate) => DropdownMenuItem<int>(
+                                  value: rate,
+                                  child: Text('$rate Hz'),
+                                ))
+                            .toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() {
+                              _tempTTSConfig['sampleRate'] = value;
+                            });
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 构建临时配置滑块
+  Widget _buildTempConfigSlider({
+    required String label,
+    required double value,
+    required double min,
+    required double max,
+    required int divisions,
+    required ValueChanged<double> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            Text(
+              value.toStringAsFixed(1),
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Slider(
+          value: value,
+          min: min,
+          max: max,
+          divisions: divisions,
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
+
+  /// 从全局配置初始化临时配置
+  void _initTempConfigFromGlobal() {
+    final config = ref.read(ttsConfigProvider);
+    setState(() {
+      _tempTTSConfig = {
+        'voice': config.voice,
+        'speed': config.speed,
+        'volume': config.volume,
+        'format': config.format,
+        'sampleRate': config.sampleRate,
+      };
+    });
+  }
+
+
+
+
 }
