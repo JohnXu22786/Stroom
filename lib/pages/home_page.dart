@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'camera_page.dart';
 import 'gallery_page.dart';
 import 'settings_page.dart';
-import 'audio_page.dart';
 
 /// 页面枚举，定义应用中的主要页面
 enum AppPage {
@@ -13,7 +12,6 @@ enum AppPage {
   camera,
   gallery,
   settings,
-  audio,
 }
 
 /// 当前选中页面的状态提供器
@@ -61,8 +59,6 @@ class _HomePageState extends ConsumerState<HomePage> {
         return Icons.photo_library;
       case AppPage.settings:
         return Icons.settings;
-      case AppPage.audio:
-        return Icons.audiotrack;
     }
   }
 
@@ -77,8 +73,6 @@ class _HomePageState extends ConsumerState<HomePage> {
         return '相册';
       case AppPage.settings:
         return '设置';
-      case AppPage.audio:
-        return '录音';
     }
   }
 
@@ -152,8 +146,6 @@ class _HomePageState extends ConsumerState<HomePage> {
         return const GalleryPage();
       case AppPage.settings:
         return const SettingsPage();
-      case AppPage.audio:
-        return const AudioPage();
     }
   }
 
