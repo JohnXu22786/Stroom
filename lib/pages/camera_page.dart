@@ -25,7 +25,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   double _zoomLevel = 1.0;
   FlashMode _flashMode = FlashMode.off;
   List<CameraDescription>? _cameras;
-
+  bool _isPageVisible = true;
 
   @override
   bool get wantKeepAlive => true;
@@ -314,6 +314,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
         icon = Icons.highlight;
         color = Colors.yellow;
         break;
+      default:
+        icon = Icons.flash_off;
+        color = Colors.white;
     }
 
     return Icon(icon, color: color, size: 28);

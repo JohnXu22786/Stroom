@@ -30,9 +30,6 @@ dependencies:
   audio_session: ^0.1.15
   flutter_tts: ^3.8.4
 
-  # Network/API Dependencies
-  http: ^1.2.0
-
   # UI and Utilities
   cupertino_icons: ^1.0.6
   material_color_utilities: ^0.13.0

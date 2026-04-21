@@ -8,6 +8,7 @@ import 'pages/camera_page.dart';
 import 'pages/gallery_page.dart';
 import 'pages/settings_page.dart';
 import 'providers/theme_provider.dart';
+import 'providers/camera_provider.dart';
 
 class Application extends ConsumerWidget {
   const Application({super.key});
