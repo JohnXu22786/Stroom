@@ -1,9 +1,14 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
+import 'package:dio/dio.dart';
+import 'tts_config.dart';
+import '../utils/audio_trim.dart';
+import '../utils/audio_utils.dart';
 
 /// TTS供应商抽象基类
 /// 采用策略模式，为不同的语音合成服务提供统一的调用接口
-abstract class TTSProvider {
+abstract class BaseTTSProvider {
   /// 供应商名称
   String get name;
 
@@ -41,19 +46,27 @@ abstract class TTSProvider {
 }
 
 /// GLM-TTS供应商实现
-class GLMTTSProvider extends TTSProvider {
+class GLMTTSProvider extends BaseTTSProvider {
   final String? _apiKey;
   final bool _forceTrim;
-  late final dynamic _client; // 实际应为GLM客户端实例
+  late final Dio _dio;
 
   /// 初始化GLM TTS供应商
   /// [apiKey] GLM API密钥
   /// [forceTrim] 是否强制修剪音频（GLM特有：用于移除初始蜂鸣声）
-  GLMTTSProvider({String? apiKey, bool forceTrim = false})
+  GLMTTSProvider({String? apiKey, String? baseUrl, bool forceTrim = false})
       : _apiKey = apiKey,
         _forceTrim = forceTrim {
-    // TODO: 初始化GLM客户端
-    // _client = GLMClient(apiKey: apiKey);
+    final base = baseUrl ?? 'https://open.bigmodel.cn/api/paas/v4';
+    _dio = Dio(BaseOptions(
+      baseUrl: base,
+      headers: {
+        'Content-Type': 'application/json',
+        if (_apiKey != null) 'Authorization': 'Bearer $_apiKey',
+      },
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 30),
+    ));
   }
 
   @override
@@ -65,13 +78,13 @@ class GLMTTSProvider extends TTSProvider {
   @override
   Map<String, dynamic> get defaultParams {
     return {
-      'voice': 'female', // GLM-TTS默认音色
-      'speed': 1.0, // 正常速度
-      'volume': 1.0, // 正常音量
-      'format': 'wav', // 默认音频格式
-      'sample_rate': 24000, // 默认采样率
-      'response_format': 'wav', // 响应格式
-      'stream': false, // 非流式
+      'voice': 'female',
+      'speed': 1.0,
+      'volume': 1.0,
+      'format': 'wav',
+      'sample_rate': 24000,
+      'response_format': 'wav',
+      'stream': false,
     };
   }
 
@@ -80,29 +93,39 @@ class GLMTTSProvider extends TTSProvider {
     final params = Map<String, dynamic>.from(defaultParams);
     params.addAll(userParams);
 
-    // GLM-TTS特定参数验证
     // 语速范围验证：0.5 - 2.0
     if (params.containsKey('speed')) {
       final speed = (params['speed'] as num).toDouble();
-      if (speed < 0.5 || speed > 2.0) {
-        throw ArgumentError('语速必须在0.5到2.0之间');
+      if (!TTSConfig.validateSpeed(TTSProvider.glmTts, speed)) {
+        final range = TTSConfig.getSpeedRange(TTSProvider.glmTts);
+        throw ArgumentError('语速必须在${range['min']}到${range['max']}之间');
       }
     }
 
     // 音量范围验证：0.0 - 2.0
     if (params.containsKey('volume')) {
       final volume = (params['volume'] as num).toDouble();
-      if (volume < 0.0 || volume > 2.0) {
-        throw ArgumentError('音量必须在0.0到2.0之间');
+      if (!TTSConfig.validateVolume(TTSProvider.glmTts, volume)) {
+        final range = TTSConfig.getVolumeRange(TTSProvider.glmTts);
+        throw ArgumentError('音量必须在${range['min']}到${range['max']}之间');
       }
     }
 
     // 音频格式验证
     if (params.containsKey('format')) {
       final format = params['format'] as String;
-      const supportedFormats = ['wav', 'mp3', 'pcm', 'flac'];
-      if (!supportedFormats.contains(format.toLowerCase())) {
-        throw ArgumentError('不支持的音频格式: $format');
+      final supported = TTSConfig.getSupportedFormats(TTSProvider.glmTts);
+      if (!supported.contains(format.toLowerCase())) {
+        throw ArgumentError('不支持的音频格式: $format，支持: $supported');
+      }
+    }
+
+    // 音色验证
+    if (params.containsKey('voice')) {
+      final voice = params['voice'] as String;
+      final voices = TTSConfig.getSupportedVoices(TTSProvider.glmTts);
+      if (!voices.contains(voice)) {
+        print('警告: 音色 "$voice" 可能不受GLM-TTS支持，支持的音色: $voices');
       }
     }
 
@@ -114,20 +137,74 @@ class GLMTTSProvider extends TTSProvider {
     String text, {
     Map<String, dynamic>? params,
   }) async {
-    // 验证参数
+    if (_apiKey == null || _apiKey!.isEmpty) {
+      throw Exception('GLM API密钥未配置，请在设置页面配置API密钥');
+    }
+
     final validatedParams = validateParams(params ?? {});
+    final format = (validatedParams['format'] as String?)?.toLowerCase() ?? 'wav';
+    final responseFormat = (validatedParams['response_format'] as String?)?.toLowerCase() ?? format;
 
-    // TODO: 实现GLM-TTS API调用
-    // final response = await _client.synthesize(text, **validatedParams);
+    print('GLMTTSProvider: 开始非流式合成 - 文本长度: ${text.length} 字符');
 
-    // TODO: 音频修剪处理（GLM特有）
-    // if (_forceTrim || needsTrimming) {
-    //   response = _trimAudio(response, validatedParams['sample_rate']);
-    // }
+    try {
+      final startTime = DateTime.now();
+      final response = await _dio.post(
+        '/audio/speech',
+        options: Options(
+          responseType: ResponseType.bytes,
+        ),
+        data: {
+          'model': 'glm-tts',
+          'input': text,
+          'voice': validatedParams['voice'],
+          'speed': validatedParams['speed'],
+          'response_format': responseFormat,
+        },
+      );
 
-    // 模拟返回
-    await Future.delayed(const Duration(milliseconds: 500));
-    return Uint8List(0);
+      final audioData = Uint8List.fromList(response.data);
+      final elapsed = DateTime.now().difference(startTime).inMilliseconds;
+
+      print('GLMTTSProvider: 合成成功 - 音频大小: ${audioData.length} 字节, 耗时: ${elapsed}ms');
+
+      if (audioData.isEmpty) {
+        throw Exception('GLM-TTS返回了空的音频数据');
+      }
+
+      // 应用音频修剪（GLM特有）
+      Uint8List result = audioData;
+      if (_forceTrim && result.isNotEmpty) {
+        try {
+          final sampleRate = (validatedParams['sample_rate'] as num?)?.toInt() ?? 24000;
+          print('GLMTTSProvider: 应用音频修剪...');
+          result = trimGlmAudio(result, sampleRate: sampleRate, force: true);
+          print('GLMTTSProvider: 修剪完成 - 修剪后大小: ${result.length} 字节');
+        } catch (e) {
+          print('GLMTTSProvider: 音频修剪失败: $e，返回原始音频');
+        }
+      }
+
+      // 如果请求的格式是wav但返回的是pcm，进行转换
+      if (responseFormat == 'pcm' && format == 'wav') {
+        try {
+          final sampleRate = (validatedParams['sample_rate'] as num?)?.toInt() ?? 24000;
+          result = pcmToWav(result, sampleRate: sampleRate);
+          print('GLMTTSProvider: PCM→WAV转换完成');
+        } catch (e) {
+          print('GLMTTSProvider: PCM→WAV转换失败: $e');
+        }
+      }
+
+      return result;
+    } on DioException catch (e) {
+      final errorMsg = _parseDioError(e);
+      print('GLMTTSProvider: API请求失败 - $errorMsg');
+      throw Exception('GLM-TTS合成失败: $errorMsg');
+    } catch (e) {
+      print('GLMTTSProvider: 合成异常: $e');
+      rethrow;
+    }
   }
 
   @override
@@ -135,52 +212,180 @@ class GLMTTSProvider extends TTSProvider {
     String text, {
     Map<String, dynamic>? params,
   }) async* {
-    // 验证参数
+    if (_apiKey == null || _apiKey!.isEmpty) {
+      throw Exception('GLM API密钥未配置');
+    }
+
     final validatedParams = validateParams(params ?? {});
+    final requestedFormat = (validatedParams['format'] as String?)?.toLowerCase() ?? 'wav';
 
     // 流式模式下强制使用pcm格式（GLM-TTS API限制）
-    final requestedFormat = validatedParams['format'] as String?;
-    if (requestedFormat != null && requestedFormat.toLowerCase() != 'pcm') {
-      validatedParams['format'] = 'pcm';
+    if (requestedFormat != 'pcm') {
+      print('GLMTTSProvider: 流式合成不支持直接输出"$requestedFormat"格式，已强制使用"pcm"格式');
+      validatedParams['response_format'] = 'pcm';
     }
 
-    // TODO: 实现GLM-TTS流式API调用
-    // final stream = _client.streamSynthesize(text, **validatedParams);
+    final sampleRate = (validatedParams['sample_rate'] as num?)?.toInt() ?? 24000;
+    final convertToTarget = requestedFormat != 'pcm';
 
-    // TODO: 应用流式修剪（GLM特有）
-    // if (_forceTrim) {
-    //   stream = _wrapStreamWithTrimming(stream);
-    // }
+    print('GLMTTSProvider: 开始流式合成 - 文本长度: ${text.length} 字符');
 
-    // 模拟流式返回
-    for (int i = 0; i < 10; i++) {
-      await Future.delayed(const Duration(milliseconds: 100));
-      yield Uint8List(1024); // 模拟音频数据块
+    try {
+      final response = await _dio.post(
+        '/audio/speech',
+        options: Options(
+          responseType: ResponseType.stream,
+        ),
+        data: {
+          'model': 'glm-tts',
+          'input': text,
+          'voice': validatedParams['voice'],
+          'speed': validatedParams['speed'],
+          'response_format': 'pcm',
+          'stream': true,
+        },
+      );
+
+      final stream = response.data.stream as Stream<Uint8List>;
+
+      // 应用流式修剪（GLM特有）
+      Stream<Uint8List> audioStream = stream;
+      if (_forceTrim) {
+        audioStream = createStreamTrimmingWrapper(
+          audioStream,
+          sampleRate: sampleRate,
+          bytesPerSample: 2,
+        );
+      }
+
+      // 跟踪流处理
+      var chunkCount = 0;
+      var totalSize = 0;
+      final pcmChunks = <Uint8List>[];
+      final streamStartTime = DateTime.now();
+
+      await for (final chunk in audioStream) {
+        if (chunk.isEmpty) continue;
+
+        chunkCount++;
+        totalSize += chunk.length;
+
+        // 检查数据块对齐（16位PCM需要2字节对齐）
+        var alignedChunk = chunk;
+        if (chunk.length % 2 != 0) {
+          print('GLMTTSProvider: 数据块 #$chunkCount 大小不对齐: ${chunk.length} 字节，已添加填充字节');
+          alignedChunk = Uint8List.fromList([...chunk, 0x00]);
+        }
+
+        if (convertToTarget) {
+          pcmChunks.add(alignedChunk);
+        }
+
+        yield alignedChunk;
+
+        // 每5个数据块记录一次进度
+        if (chunkCount % 5 == 0) {
+          final elapsed = DateTime.now().difference(streamStartTime).inMilliseconds;
+          final throughput = elapsed > 0 ? (totalSize / elapsed * 1000) : 0.0;
+          print('GLMTTSProvider: 流式进度 - 数据块: $chunkCount, 总大小: $totalSize 字节, '
+              '耗时: ${elapsed}ms, 吞吐量: ${throughput.toStringAsFixed(1)} B/s');
+        }
+      }
+
+      // 如果请求非PCM格式，进行格式转换
+      if (convertToTarget && pcmChunks.isNotEmpty) {
+        try {
+          final pcmData = Uint8List(pcmChunks.fold<int>(0, (sum, c) => sum + c.length));
+          var offset = 0;
+          for (final chunk in pcmChunks) {
+            pcmData.setRange(offset, offset + chunk.length, chunk);
+            offset += chunk.length;
+          }
+
+          Uint8List convertedData;
+          if (requestedFormat == 'wav') {
+            convertedData = pcmToWav(pcmData, sampleRate: sampleRate);
+          } else {
+            // 其他格式暂不支持转换，返回原始PCM
+            print('GLMTTSProvider: 格式"$requestedFormat"转换暂不支持，返回原始PCM数据');
+            convertedData = pcmData;
+          }
+
+          yield convertedData;
+        } catch (e) {
+          print('GLMTTSProvider: 格式转换失败: $e，返回原始PCM数据');
+          for (final chunk in pcmChunks) {
+            yield chunk;
+          }
+        }
+      }
+
+      final totalTime = DateTime.now().difference(streamStartTime).inMilliseconds;
+      print('GLMTTSProvider: 流式合成完成 - 数据块: $chunkCount, 总大小: $totalSize 字节, '
+          '总耗时: ${totalTime}ms');
+    } on DioException catch (e) {
+      final errorMsg = _parseDioError(e);
+      print('GLMTTSProvider: 流式合成失败 - $errorMsg');
+      throw Exception('GLM-TTS流式合成失败: $errorMsg');
+    } catch (e) {
+      print('GLMTTSProvider: 流式合成异常: $e');
+      rethrow;
     }
   }
 
-  /// 音频修剪方法（GLM特有）
-  Uint8List _trimAudio(Uint8List audioBytes, int sampleRate) {
-    // TODO: 实现音频修剪逻辑
-    // GLM-TTS音频开头有约0.629秒的蜂鸣声需要移除
-    return audioBytes;
+  /// 解析Dio错误为可读消息
+  String _parseDioError(DioException e) {
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+        return '连接超时，请检查网络';
+      case DioExceptionType.receiveTimeout:
+        return '接收超时，服务器响应过慢';
+      case DioExceptionType.badResponse:
+        final statusCode = e.response?.statusCode;
+        final body = e.response?.data;
+        // 尝试将字节数组解码为字符串
+        String bodyStr;
+        if (body is List<int>) {
+          try {
+            bodyStr = utf8.decode(body);
+          } catch (_) {
+            bodyStr = body.toString();
+          }
+        } else {
+          bodyStr = body?.toString() ?? '无响应体';
+        }
+        if (statusCode == 401 || statusCode == 403) {
+          return 'API密钥无效或权限不足 (HTTP $statusCode): $bodyStr';
+        } else if (statusCode == 429) {
+          return '请求过于频繁，请稍后重试 (HTTP $statusCode)';
+        } else if (statusCode == 500) {
+          return '服务器内部错误 (HTTP $statusCode): $bodyStr';
+        } else if (statusCode == 404) {
+          return 'API端点不存在 (HTTP 404): $bodyStr\n请检查API基础URL设置是否正确';
+        }
+        return '服务器返回错误 (HTTP $statusCode): $bodyStr';
+      case DioExceptionType.cancel:
+        return '请求已取消';
+      default:
+        return '网络错误: ${e.message}';
+    }
   }
 
-  /// 获取底层客户端实例（用于调试或扩展）
-  dynamic get client => _client;
+  /// 获取底层Dio实例（用于调试或扩展）
+  Dio get client => _dio;
 }
 
 /// AIHUBMIX-TTS供应商实现（OpenAI兼容API）
-class AIHUBMIXTTSProvider extends TTSProvider {
+class AIHUBMIXTTSProvider extends BaseTTSProvider {
   final String? _apiKey;
   final String? _baseUrl;
   final String? _model;
-  late final dynamic _client; // 实际应为OpenAI兼容客户端实例
+  late final Dio _dio;
 
   /// 初始化AIHUBMIX TTS供应商
   /// [apiKey] AIHUBMIX API密钥
-  /// [baseUrl] API基础URL（可选）
-  /// [model] 模型名称（可选）
+  /// [baseUrl] API基础URL（可选，默认 https://aihubmix.com/v1）
+  /// [model] 模型名称（可选，默认 gpt-4o-mini-tts）
   AIHUBMIXTTSProvider({
     String? apiKey,
     String? baseUrl,
@@ -188,8 +393,16 @@ class AIHUBMIXTTSProvider extends TTSProvider {
   })  : _apiKey = apiKey,
         _baseUrl = baseUrl,
         _model = model {
-    // TODO: 初始化OpenAI兼容客户端
-    // _client = OpenAIClient(apiKey: apiKey, baseUrl: baseUrl);
+    final base = baseUrl ?? 'https://aihubmix.com/v1';
+    _dio = Dio(BaseOptions(
+      baseUrl: base,
+      headers: {
+        'Content-Type': 'application/json',
+        if (_apiKey != null) 'Authorization': 'Bearer $_apiKey',
+      },
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 30),
+    ));
   }
 
   @override
@@ -205,16 +418,14 @@ class AIHUBMIXTTSProvider extends TTSProvider {
   @override
   Map<String, dynamic> get defaultParams {
     return {
-      'voice': 'alloy', // AIHUBMIX-TTS默认音色
-      'model': _model ?? 'gpt-4o-mini-tts', // 默认模型
-      'speed': 1.0, // 正常速度
-      'volume': 1.0, // 正常音量
-      'format': 'mp3', // 默认音频格式
-      'sample_rate': 24000, // 默认采样率
-      'response_format': 'mp3', // 响应格式
-      'stream': false, // 非流式
-      'base_url': _baseUrl ?? 'https://aihubmix.com/v1',
-      'api_key': _apiKey,
+      'voice': 'alloy',
+      'model': _model ?? 'gpt-4o-mini-tts',
+      'speed': 1.0,
+      'volume': 1.0,
+      'format': 'mp3',
+      'sample_rate': 24000,
+      'response_format': 'mp3',
+      'stream': false,
     };
   }
 
@@ -223,29 +434,30 @@ class AIHUBMIXTTSProvider extends TTSProvider {
     final params = Map<String, dynamic>.from(defaultParams);
     params.addAll(userParams);
 
-    // AIHUBMIX-TTS特定参数验证
     // 语速范围验证：0.25 - 4.0
     if (params.containsKey('speed')) {
       final speed = (params['speed'] as num).toDouble();
-      if (speed < 0.25 || speed > 4.0) {
-        throw ArgumentError('语速必须在0.25到4.0之间');
+      if (!TTSConfig.validateSpeed(TTSProvider.aihubmixTts, speed)) {
+        final range = TTSConfig.getSpeedRange(TTSProvider.aihubmixTts);
+        throw ArgumentError('语速必须在${range['min']}到${range['max']}之间');
       }
     }
 
     // 音量范围验证：0.0 - 2.0
     if (params.containsKey('volume')) {
       final volume = (params['volume'] as num).toDouble();
-      if (volume < 0.0 || volume > 2.0) {
-        throw ArgumentError('音量必须在0.0到2.0之间');
+      if (!TTSConfig.validateVolume(TTSProvider.aihubmixTts, volume)) {
+        final range = TTSConfig.getVolumeRange(TTSProvider.aihubmixTts);
+        throw ArgumentError('音量必须在${range['min']}到${range['max']}之间');
       }
     }
 
     // 音频格式验证
     if (params.containsKey('format')) {
       final format = params['format'] as String;
-      const supportedFormats = ['mp3', 'wav', 'pcm', 'flac'];
-      if (!supportedFormats.contains(format.toLowerCase())) {
-        throw ArgumentError('不支持的音频格式: $format');
+      final supported = TTSConfig.getSupportedFormats(TTSProvider.aihubmixTts);
+      if (!supported.contains(format.toLowerCase())) {
+        throw ArgumentError('不支持的音频格式: $format，支持: $supported');
       }
     }
 
@@ -253,7 +465,16 @@ class AIHUBMIXTTSProvider extends TTSProvider {
     if (params.containsKey('model')) {
       final model = params['model'] as String;
       if (!supportedModels.contains(model)) {
-        throw ArgumentError('不支持的模型: $model');
+        throw ArgumentError('不支持的模型: $model，支持: $supportedModels');
+      }
+    }
+
+    // 音色验证
+    if (params.containsKey('voice')) {
+      final voice = params['voice'] as String;
+      final voices = TTSConfig.getSupportedVoices(TTSProvider.aihubmixTts);
+      if (!voices.contains(voice)) {
+        print('警告: 音色 "$voice" 可能不受AIHUBMIX-TTS支持，支持的音色: $voices');
       }
     }
 
@@ -265,17 +486,50 @@ class AIHUBMIXTTSProvider extends TTSProvider {
     String text, {
     Map<String, dynamic>? params,
   }) async {
-    // 验证参数
+    if (_apiKey == null || _apiKey!.isEmpty) {
+      throw Exception('AIHUBMIX API密钥未配置，请在设置页面配置API密钥');
+    }
+
     final validatedParams = validateParams(params ?? {});
+    final responseFormat =
+        (validatedParams['response_format'] as String?)?.toLowerCase() ?? 'mp3';
 
-    // TODO: 实现AIHUBMIX-TTS API调用
-    // final response = await _client.synthesize(text, **validatedParams);
+    print('AIHUBMIXTTSProvider: 开始非流式合成 - 文本长度: ${text.length} 字符');
 
-    // AIHUBMIX-TTS不需要音频修剪
+    try {
+      final startTime = DateTime.now();
+      final response = await _dio.post(
+        '/audio/speech',
+        options: Options(
+          responseType: ResponseType.bytes,
+        ),
+        data: {
+          'model': validatedParams['model'],
+          'input': text,
+          'voice': validatedParams['voice'],
+          'speed': validatedParams['speed'],
+          'response_format': responseFormat,
+        },
+      );
 
-    // 模拟返回
-    await Future.delayed(const Duration(milliseconds: 500));
-    return Uint8List(0);
+      final audioData = Uint8List.fromList(response.data);
+      final elapsed = DateTime.now().difference(startTime).inMilliseconds;
+
+      print('AIHUBMIXTTSProvider: 合成成功 - 音频大小: ${audioData.length} 字节, 耗时: ${elapsed}ms');
+
+      if (audioData.isEmpty) {
+        throw Exception('AIHUBMIX-TTS返回了空的音频数据');
+      }
+
+      return audioData;
+    } on DioException catch (e) {
+      final errorMsg = _parseDioError(e);
+      print('AIHUBMIXTTSProvider: API请求失败 - $errorMsg');
+      throw Exception('AIHUBMIX-TTS合成失败: $errorMsg');
+    } catch (e) {
+      print('AIHUBMIXTTSProvider: 合成异常: $e');
+      rethrow;
+    }
   }
 
   @override
@@ -283,25 +537,154 @@ class AIHUBMIXTTSProvider extends TTSProvider {
     String text, {
     Map<String, dynamic>? params,
   }) async* {
-    // 验证参数
+    if (_apiKey == null || _apiKey!.isEmpty) {
+      throw Exception('AIHUBMIX API密钥未配置');
+    }
+
     final validatedParams = validateParams(params ?? {});
+    final requestedFormat =
+        (validatedParams['response_format'] as String?)?.toLowerCase() ?? 'mp3';
 
-    // TODO: 实现AIHUBMIX-TTS流式API调用
-    // final stream = _client.streamSynthesize(text, **validatedParams);
+    // 流式模式下强制使用pcm格式
+    if (requestedFormat != 'pcm') {
+      print('AIHUBMIXTTSProvider: 流式合成不支持直接输出"$requestedFormat"格式，已强制使用"pcm"格式');
+    }
 
-    // 模拟流式返回
-    for (int i = 0; i < 10; i++) {
-      await Future.delayed(const Duration(milliseconds: 100));
-      yield Uint8List(1024); // 模拟音频数据块
+    final sampleRate = (validatedParams['sample_rate'] as num?)?.toInt() ?? 24000;
+    final convertToTarget = requestedFormat != 'pcm';
+
+    print('AIHUBMIXTTSProvider: 开始流式合成 - 文本长度: ${text.length} 字符');
+
+    try {
+      final response = await _dio.post(
+        '/audio/speech',
+        options: Options(
+          responseType: ResponseType.stream,
+        ),
+        data: {
+          'model': validatedParams['model'],
+          'input': text,
+          'voice': validatedParams['voice'],
+          'speed': validatedParams['speed'],
+          'response_format': 'pcm',
+          'stream': true,
+        },
+      );
+
+      final stream = response.data.stream as Stream<Uint8List>;
+
+      // 跟踪流处理
+      var chunkCount = 0;
+      var totalSize = 0;
+      final pcmChunks = <Uint8List>[];
+      final streamStartTime = DateTime.now();
+
+      await for (final chunk in stream) {
+        if (chunk.isEmpty) continue;
+
+        chunkCount++;
+        totalSize += chunk.length;
+
+        // 检查数据块对齐
+        var alignedChunk = chunk;
+        if (chunk.length % 2 != 0) {
+          print('AIHUBMIXTTSProvider: 数据块 #$chunkCount 对齐修复');
+          alignedChunk = Uint8List.fromList([...chunk, 0x00]);
+        }
+
+        if (convertToTarget) {
+          pcmChunks.add(alignedChunk);
+        }
+
+        yield alignedChunk;
+
+        if (chunkCount % 5 == 0) {
+          final elapsed = DateTime.now().difference(streamStartTime).inMilliseconds;
+          final throughput = elapsed > 0 ? (totalSize / elapsed * 1000) : 0.0;
+          print('AIHUBMIXTTSProvider: 流式进度 - 数据块: $chunkCount, 总大小: $totalSize 字节, '
+              '耗时: ${elapsed}ms, 吞吐量: ${throughput.toStringAsFixed(1)} B/s');
+        }
+      }
+
+      if (convertToTarget && pcmChunks.isNotEmpty) {
+        try {
+          final pcmData = Uint8List(pcmChunks.fold<int>(0, (sum, c) => sum + c.length));
+          var offset = 0;
+          for (final chunk in pcmChunks) {
+            pcmData.setRange(offset, offset + chunk.length, chunk);
+            offset += chunk.length;
+          }
+
+          Uint8List convertedData;
+          if (requestedFormat == 'wav') {
+            convertedData = pcmToWav(pcmData, sampleRate: sampleRate);
+          } else {
+            convertedData = pcmData;
+          }
+
+          yield convertedData;
+        } catch (e) {
+          print('AIHUBMIXTTSProvider: 格式转换失败: $e');
+          for (final chunk in pcmChunks) {
+            yield chunk;
+          }
+        }
+      }
+
+      final totalTime = DateTime.now().difference(streamStartTime).inMilliseconds;
+      print('AIHUBMIXTTSProvider: 流式合成完成 - 数据块: $chunkCount, 总大小: $totalSize 字节, '
+          '总耗时: ${totalTime}ms');
+    } on DioException catch (e) {
+      final errorMsg = _parseDioError(e);
+      print('AIHUBMIXTTSProvider: 流式合成失败 - $errorMsg');
+      throw Exception('AIHUBMIX-TTS流式合成失败: $errorMsg');
+    } catch (e) {
+      print('AIHUBMIXTTSProvider: 流式合成异常: $e');
+      rethrow;
     }
   }
 
-  /// 获取底层客户端实例（用于调试或扩展）
-  dynamic get client => _client;
+  /// 解析Dio错误为可读消息
+  String _parseDioError(DioException e) {
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+        return '连接超时，请检查网络';
+      case DioExceptionType.receiveTimeout:
+        return '接收超时，服务器响应过慢';
+      case DioExceptionType.badResponse:
+        final statusCode = e.response?.statusCode;
+        final body = e.response?.data;
+        // 尝试将字节数组解码为字符串
+        String bodyStr;
+        if (body is List<int>) {
+          try {
+            bodyStr = utf8.decode(body);
+          } catch (_) {
+            bodyStr = body.toString();
+          }
+        } else {
+          bodyStr = body?.toString() ?? '无响应体';
+        }
+        if (statusCode == 401 || statusCode == 403) {
+          return 'API密钥无效或权限不足 (HTTP $statusCode): $bodyStr';
+        } else if (statusCode == 429) {
+          return '请求过于频繁，请稍后重试 (HTTP $statusCode)';
+        } else if (statusCode == 500) {
+          return '服务器内部错误 (HTTP $statusCode): $bodyStr';
+        } else if (statusCode == 404) {
+          return 'API端点不存在 (HTTP 404): $bodyStr\n请检查API基础URL设置是否正确';
+        }
+        return '服务器返回错误 (HTTP $statusCode): $bodyStr';
+      case DioExceptionType.cancel:
+        return '请求已取消';
+      default:
+        return '网络错误: ${e.message}';
+    }
+  }
 }
 
 /// 工厂函数：根据供应商名称创建TTSProvider实例
-TTSProvider getTTSProvider({
+BaseTTSProvider getTTSProvider({
   required String providerName,
   String? apiKey,
   Map<String, dynamic>? options,
@@ -310,6 +693,7 @@ TTSProvider getTTSProvider({
     case 'glm_tts':
       return GLMTTSProvider(
         apiKey: apiKey,
+        baseUrl: options?['base_url'] as String?,
         forceTrim: options?['force_trim'] as bool? ?? false,
       );
     case 'aihubmix_tts':
@@ -324,16 +708,12 @@ TTSProvider getTTSProvider({
 }
 
 /// 带缓存的工厂函数：减少重复初始化开销
-TTSProvider getCachedTTSProvider({
+BaseTTSProvider getCachedTTSProvider({
   required String providerName,
   String? apiKey,
   Map<String, dynamic>? options,
 }) {
-  // 基于供应商名称和API密钥的缓存键
-  final cacheKey = '${providerName}_${apiKey ?? "default"}';
-
   // TODO: 实现实例缓存
-  // 目前直接创建新实例，实际应用中应使用缓存
   return getTTSProvider(
     providerName: providerName,
     apiKey: apiKey,

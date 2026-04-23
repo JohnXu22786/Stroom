@@ -105,14 +105,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         _lastGeneratedFilePath = audioFile.path;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('语音生成成功'),
-            action: SnackBarAction(
-              label: '播放',
-              onPressed: () {
-                // TODO: 实现音频播放
-                // _playAudio(audioFile.path);
-              },
-            ),
+            content: const Text('语音生成成功，可前往"录音"页面播放'),
             duration: const Duration(seconds: 3),
           ),
         );

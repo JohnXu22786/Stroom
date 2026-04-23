@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../providers/tts_state_provider.dart';
 import '../providers/tts_config.dart';
+import '../utils/audio_playback.dart';
+import '../utils/audio_utils.dart';
+import '../utils/storage_service.dart';
+import 'dart:typed_data';
 import 'tts_create_page.dart';
 
 class TtsPage extends ConsumerStatefulWidget {
@@ -180,14 +185,44 @@ class _TtsPageState extends ConsumerState<TtsPage> {
 
   /// 播放音频文件
   Future<void> _playAudio(String filePath) async {
-    // TODO: 实现音频播放功能
-    // 使用just_audio或audioplayers包
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('播放: ${path.basename(filePath)}'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('正在加载音频: ${path.basename(filePath)}'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+
+      if (kIsWeb) {
+        // Web: 从内存存储读取音频数据
+        final data = await StorageService.readFile(filePath);
+        if (data == null || data.isEmpty) {
+          throw Exception('音频数据为空或不存在');
+        }
+        final format = path.extension(filePath).replaceAll('.', '');
+        final mimeType = getMimeType(format);
+        playAudioBytes(data, mimeType);
+      } else {
+        // Native: 使用文件路径播放
+        // TODO: 使用 just_audio 播放本地文件
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Native播放尚未实现: ${path.basename(filePath)}'),
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('播放失败: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   /// 分享音频文件
