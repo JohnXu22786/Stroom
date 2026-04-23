@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -9,6 +10,7 @@ import 'package:uuid/uuid.dart';
 
 import 'tts_config.dart' as tts_config;
 import 'tts_provider.dart' as tts_provider_base;
+import '../utils/storage_service.dart';
 
 /// TTS供应商配置状态
 class TTSConfigState {
@@ -69,7 +71,11 @@ class TTSConfigState {
 
 /// TTS供应商配置提供器
 final ttsConfigProvider = StateNotifierProvider<TTSConfigNotifier, TTSConfigState>(
-  (ref) => TTSConfigNotifier(),
+  (ref) {
+    final notifier = TTSConfigNotifier();
+    notifier.loadConfig();
+    return notifier;
+  },
 );
 
 class TTSConfigNotifier extends StateNotifier<TTSConfigState> {
@@ -244,7 +250,11 @@ class SynthesisConfig {
 
 /// 合成配置提供器（支持持久化）
 final synthesisConfigProvider = StateNotifierProvider<SynthesisConfigNotifier, SynthesisConfig>(
-  (ref) => SynthesisConfigNotifier(),
+  (ref) {
+    final notifier = SynthesisConfigNotifier();
+    notifier.loadConfig();
+    return notifier;
+  },
 );
 
 class SynthesisConfigNotifier extends StateNotifier<SynthesisConfig> {
@@ -468,24 +478,32 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
     final fileName = 'tts_${timestamp}_${id.substring(0, 8)}.$format';
     final name = '录音_${DateTime.now().toString().substring(0, 10)}';
 
-    // 获取应用文档目录
-    final appDocDir = await getApplicationDocumentsDirectory();
-    final ttsDir = Directory(path.join(appDocDir.path, 'tts_audio'));
+    String filePath;
+    int fileSize = audioData.length;
 
-    if (!await ttsDir.exists()) {
-      await ttsDir.create(recursive: true);
+    if (kIsWeb) {
+      // Web: 使用内存存储
+      filePath = await StorageService.writeFile(fileName, audioData);
+    } else {
+      // Native: 使用文件系统
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final ttsDir = Directory(path.join(appDocDir.path, 'tts_audio'));
+
+      if (!await ttsDir.exists()) {
+        await ttsDir.create(recursive: true);
+      }
+
+      filePath = path.join(ttsDir.path, fileName);
+      final file = File(filePath);
+      await file.writeAsBytes(audioData);
     }
-
-    final filePath = path.join(ttsDir.path, fileName);
-    final file = File(filePath);
-    await file.writeAsBytes(audioData);
 
     return AudioFile(
       id: id,
       name: name,
       path: filePath,
       createdAt: DateTime.now(),
-      size: audioData.length,
+      size: fileSize,
       format: format,
     );
   }
@@ -501,6 +519,30 @@ class AudioFilesNotifier extends StateNotifier<List<AudioFile>> {
 
   Future<void> loadAudioFiles() async {
     try {
+      if (kIsWeb) {
+        // Web: 从内存存储加载
+        final files = await StorageService.listFiles();
+        final audioFiles = files.map((f) {
+          final parts = f.name.replaceFirst('tts_', '').split('_');
+          final timestamp = int.tryParse(parts.isNotEmpty ? parts[0] : '');
+          final idPart = parts.length > 1 ? parts[1].split('.').first : '';
+
+          return AudioFile(
+            id: '${timestamp ?? DateTime.now().millisecondsSinceEpoch}_$idPart',
+            name: _generateNameFromTimestamp(timestamp),
+            path: f.path,
+            createdAt: f.modifiedAt,
+            size: f.size,
+            format: f.extension,
+          );
+        }).toList();
+
+        audioFiles.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        state = audioFiles;
+        return;
+      }
+
+      // Native: 使用文件系统
       final appDocDir = await getApplicationDocumentsDirectory();
       final ttsDir = Directory(path.join(appDocDir.path, 'tts_audio'));
 
@@ -518,7 +560,6 @@ class AudioFilesNotifier extends StateNotifier<List<AudioFile>> {
           final fileName = path.basename(fileEntity.path);
           final format = path.extension(fileName).replaceAll('.', '');
 
-          // 从文件名提取ID和时间戳
           final parts = fileName.replaceFirst('tts_', '').split('_');
           if (parts.length >= 2) {
             final timestamp = int.tryParse(parts[0]);
@@ -540,7 +581,6 @@ class AudioFilesNotifier extends StateNotifier<List<AudioFile>> {
         }
       }
 
-      // 按创建时间排序（最新的在前）
       audioFiles.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       state = audioFiles;
     } catch (e) {
@@ -560,10 +600,14 @@ class AudioFilesNotifier extends StateNotifier<List<AudioFile>> {
   Future<void> deleteAudioFile(String id) async {
     try {
       final file = state.firstWhere((f) => f.id == id);
-      final fileObj = File(file.path);
 
-      if (await fileObj.exists()) {
-        await fileObj.delete();
+      if (kIsWeb) {
+        await StorageService.deleteFile(file.path);
+      } else {
+        final fileObj = File(file.path);
+        if (await fileObj.exists()) {
+          await fileObj.delete();
+        }
       }
 
       state = List.from(state)..removeWhere((f) => f.id == id);
@@ -595,7 +639,10 @@ class AudioFilesNotifier extends StateNotifier<List<AudioFile>> {
   }
 
   Future<void> createFolder(String folderName) async {
-    // 对于文件夹管理，可以创建子目录
+    if (kIsWeb) {
+      // Web: 内存存储无需创建目录
+      return;
+    }
     try {
       final appDocDir = await getApplicationDocumentsDirectory();
       final folderPath = path.join(appDocDir.path, 'tts_audio', folderName);
@@ -612,23 +659,46 @@ class AudioFilesNotifier extends StateNotifier<List<AudioFile>> {
   Future<void> moveAudioFile(String id, String targetFolder) async {
     try {
       final file = state.firstWhere((f) => f.id == id);
+
+      if (kIsWeb) {
+        // Web: 移动即重命名内存key
+        final fileName = file.path.split('/').last;
+        final newPath = '/tts_audio/$targetFolder/$fileName';
+        final data = await StorageService.readFile(file.path);
+        if (data != null) {
+          await StorageService.deleteFile(file.path);
+          await StorageService.writeFile('$targetFolder/$fileName', data);
+
+          final index = state.indexWhere((f) => f.id == id);
+          if (index != -1) {
+            final newFile = AudioFile(
+              id: file.id,
+              name: file.name,
+              path: newPath,
+              createdAt: file.createdAt,
+              size: file.size,
+              format: file.format,
+              duration: file.duration,
+            );
+            state = List.from(state)..[index] = newFile;
+          }
+        }
+        return;
+      }
+
+      // Native
       final appDocDir = await getApplicationDocumentsDirectory();
       final targetPath = path.join(appDocDir.path, 'tts_audio', targetFolder, path.basename(file.path));
 
       final sourceFile = File(file.path);
-      final targetFile = File(targetPath);
-
       if (await sourceFile.exists()) {
-        // 确保目标文件夹存在
         final targetDir = Directory(path.dirname(targetPath));
         if (!await targetDir.exists()) {
           await targetDir.create(recursive: true);
         }
-
         await sourceFile.copy(targetPath);
         await sourceFile.delete();
 
-        // 更新状态
         final index = state.indexWhere((f) => f.id == id);
         if (index != -1) {
           final newFile = AudioFile(
@@ -640,7 +710,6 @@ class AudioFilesNotifier extends StateNotifier<List<AudioFile>> {
             format: file.format,
             duration: file.duration,
           );
-
           state = List.from(state)..[index] = newFile;
         }
       }
@@ -656,6 +725,24 @@ class AudioFilesNotifier extends StateNotifier<List<AudioFile>> {
       final newId = uuid.v4();
       final newFileName = 'tts_${DateTime.now().millisecondsSinceEpoch}_${newId.substring(0, 8)}.${file.format}';
 
+      if (kIsWeb) {
+        final newPath = await StorageService.copyFile(file.path, newFileName);
+        if (newPath != null) {
+          final copiedFile = AudioFile(
+            id: newId,
+            name: '${file.name}_副本',
+            path: newPath,
+            createdAt: DateTime.now(),
+            size: file.size,
+            format: file.format,
+            duration: file.duration,
+          );
+          state = [copiedFile, ...state];
+        }
+        return;
+      }
+
+      // Native
       final appDocDir = await getApplicationDocumentsDirectory();
       final newFilePath = path.join(appDocDir.path, 'tts_audio', newFileName);
 

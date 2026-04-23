@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dynamic_color/dynamic_color.dart';
 
 import '../providers/theme_provider.dart';
 import '../providers/tts_state_provider.dart';
@@ -26,15 +25,36 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   String _ttsVoice = '';
   String _ttsBaseUrl = '';
 
+  // TextEditingController — 在initState创建，dispose销毁，避免build中反复创建
+  late final TextEditingController _apiKeyController;
+  late final TextEditingController _modelController;
+  late final TextEditingController _baseUrlController;
+
   @override
   void initState() {
     super.initState();
-    // 加载TTS配置
+    _apiKeyController = TextEditingController();
+    _modelController = TextEditingController();
+    _baseUrlController = TextEditingController();
+
+    // 从provider加载配置
     _loadTTSConfig();
+  }
+
+  @override
+  void dispose() {
+    _apiKeyController.dispose();
+    _modelController.dispose();
+    _baseUrlController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadTTSConfig() async {
     final config = ref.read(ttsConfigProvider);
+    _applyConfig(config);
+  }
+
+  void _applyConfig(TTSConfigState config) {
     setState(() {
       _selectedTTSProvider = config.selectedProvider;
       _ttsApiKey = config.apiKey ?? '';
@@ -42,17 +62,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       _ttsVoice = config.voice ?? '';
       _ttsBaseUrl = config.baseUrl ?? '';
     });
+    // 同步更新controller的文本，不触发onChanged
+    _apiKeyController.text = config.apiKey ?? '';
+    _modelController.text = config.model ?? '';
+    _baseUrlController.text = config.baseUrl ?? '';
   }
 
-  Future<void> _saveTTSConfig() async {
+  Future<bool> _saveTTSConfig() async {
     final notifier = ref.read(ttsConfigProvider.notifier);
-    await notifier.saveConfig(TTSConfigState(
-      selectedProvider: _selectedTTSProvider,
-      apiKey: _ttsApiKey.isNotEmpty ? _ttsApiKey : null,
-      model: _ttsModel.isNotEmpty ? _ttsModel : null,
-      voice: _ttsVoice.isNotEmpty ? _ttsVoice : null,
-      baseUrl: _ttsBaseUrl.isNotEmpty ? _ttsBaseUrl : null,
-    ));
+    try {
+      await notifier.saveConfig(TTSConfigState(
+        selectedProvider: _selectedTTSProvider,
+        apiKey: _ttsApiKey.isNotEmpty ? _ttsApiKey : null,
+        model: _ttsModel.isNotEmpty ? _ttsModel : null,
+        voice: _ttsVoice.isNotEmpty ? _ttsVoice : null,
+        baseUrl: _ttsBaseUrl.isNotEmpty ? _ttsBaseUrl : null,
+      ));
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   @override
@@ -68,25 +97,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // 主题设置部分
           _buildSectionHeader('主题'),
           _buildThemeSettings(themeMode, themeNotifier),
 
           const SizedBox(height: 24),
 
-          // 相机设置部分
           _buildSectionHeader('相机设置'),
           _buildCameraSettings(),
 
           const SizedBox(height: 24),
 
-          // TTS配置部分
           _buildSectionHeader('语音合成设置'),
           _buildTTSSettings(),
 
           const SizedBox(height: 24),
 
-          // 应用信息部分
           _buildSectionHeader('关于'),
           _buildAboutSection(),
 
@@ -122,13 +147,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               trailing: Radio<ThemeMode>(
                 value: ThemeMode.light,
                 groupValue: themeMode,
-                onChanged: (value) {
-                  themeNotifier.setLight();
-                },
+                onChanged: (value) => themeNotifier.setLight(),
               ),
-              onTap: () {
-                themeNotifier.setLight();
-              },
+              onTap: () => themeNotifier.setLight(),
             ),
             const Divider(height: 1),
             _buildListTile(
@@ -137,13 +158,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               trailing: Radio<ThemeMode>(
                 value: ThemeMode.dark,
                 groupValue: themeMode,
-                onChanged: (value) {
-                  themeNotifier.setDark();
-                },
+                onChanged: (value) => themeNotifier.setDark(),
               ),
-              onTap: () {
-                themeNotifier.setDark();
-              },
+              onTap: () => themeNotifier.setDark(),
             ),
             const Divider(height: 1),
             _buildListTile(
@@ -152,13 +169,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               trailing: Radio<ThemeMode>(
                 value: ThemeMode.system,
                 groupValue: themeMode,
-                onChanged: (value) {
-                  themeNotifier.setSystem();
-                },
+                onChanged: (value) => themeNotifier.setSystem(),
               ),
-              onTap: () {
-                themeNotifier.setSystem();
-              },
+              onTap: () => themeNotifier.setSystem(),
             ),
           ],
         ),
@@ -178,17 +191,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               subtitle: '自动将拍摄的照片保存到设备相册',
               trailing: Switch(
                 value: _saveToGallery,
-                onChanged: (value) {
-                  setState(() {
-                    _saveToGallery = value;
-                  });
-                },
+                onChanged: (value) => setState(() => _saveToGallery = value),
               ),
-              onTap: () {
-                setState(() {
-                  _saveToGallery = !_saveToGallery;
-                });
-              },
+              onTap: () => setState(() => _saveToGallery = !_saveToGallery),
             ),
             const Divider(height: 1),
             _buildListTile(
@@ -197,17 +202,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               subtitle: '使用更高的分辨率拍摄照片',
               trailing: Switch(
                 value: _highQuality,
-                onChanged: (value) {
-                  setState(() {
-                    _highQuality = value;
-                  });
-                },
+                onChanged: (value) => setState(() => _highQuality = value),
               ),
-              onTap: () {
-                setState(() {
-                  _highQuality = !_highQuality;
-                });
-              },
+              onTap: () => setState(() => _highQuality = !_highQuality),
             ),
             const Divider(height: 1),
             Padding(
@@ -218,13 +215,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        '压缩质量',
-                        style: TextStyle(fontSize: 16),
-                      ),
+                      const Text('压缩质量', style: TextStyle(fontSize: 16)),
                       Text(
                         '${(_compressionQuality * 100).toInt()}%',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ],
                   ),
@@ -234,11 +231,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     max: 1.0,
                     divisions: 9,
                     label: '${(_compressionQuality * 100).toInt()}%',
-                    onChanged: (value) {
-                      setState(() {
-                        _compressionQuality = value;
-                      });
-                    },
+                    onChanged: (value) =>
+                        setState(() => _compressionQuality = value),
                   ),
                 ],
               ),
@@ -250,7 +244,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Widget _buildTTSSettings() {
-    // 获取支持的供应商列表
     final providerOptions = TTSProvider.values;
 
     return Card(
@@ -268,20 +261,24 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 onChanged: (TTSProvider? newValue) {
                   setState(() {
                     _selectedTTSProvider = newValue;
-                    // 当供应商改变时，重置模型和音色
                     if (newValue != null) {
                       final voices = TTSConfig.getSupportedVoices(newValue);
                       if (voices.isNotEmpty) {
                         _ttsVoice = voices.first;
                       }
-                      // 重置API密钥和模型为默认值
-                      final defaultConfig = TTSConfig.getDefaultParams(newValue);
+                      final defaultConfig =
+                          TTSConfig.getDefaultParams(newValue);
                       _ttsApiKey = defaultConfig.apiKey ?? '';
                       _ttsModel = defaultConfig.model ?? '';
                       _ttsBaseUrl = defaultConfig.baseUrl ?? '';
+                      // 同步更新controller
+                      _apiKeyController.text = _ttsApiKey;
+                      _modelController.text = _ttsModel;
+                      _baseUrlController.text = _ttsBaseUrl;
                     }
-                    _saveTTSConfig();
                   });
+                  // 自动保存供应商切换
+                  _saveTTSConfig();
                 },
                 items: providerOptions.map((TTSProvider provider) {
                   return DropdownMenuItem<TTSProvider>(
@@ -298,6 +295,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: TextField(
+                controller: _apiKeyController,
                 decoration: const InputDecoration(
                   labelText: 'API密钥',
                   hintText: '输入供应商API密钥',
@@ -305,13 +303,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   prefixIcon: Icon(Icons.key, color: Colors.amber),
                 ),
                 obscureText: true,
-                controller: TextEditingController(text: _ttsApiKey),
-                onChanged: (value) {
-                  setState(() {
-                    _ttsApiKey = value;
-                  });
-                  _saveTTSConfig();
-                },
+                onChanged: (value) => _ttsApiKey = value,
               ),
             ),
 
@@ -320,19 +312,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               Padding(
                 padding: const EdgeInsets.only(top: 12),
                 child: TextField(
+                  controller: _modelController,
                   decoration: const InputDecoration(
                     labelText: '模型',
                     hintText: '例如: gpt-4o-mini-tts',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.model_training, color: Colors.green),
                   ),
-                  controller: TextEditingController(text: _ttsModel),
-                  onChanged: (value) {
-                    setState(() {
-                      _ttsModel = value;
-                    });
-                    _saveTTSConfig();
-                  },
+                  onChanged: (value) => _ttsModel = value,
                 ),
               ),
 
@@ -344,14 +331,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   decoration: const InputDecoration(
                     labelText: '音色',
                     border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.record_voice_over, color: Colors.blue),
+                    prefixIcon:
+                        Icon(Icons.record_voice_over, color: Colors.blue),
                   ),
                   value: _ttsVoice.isNotEmpty ? _ttsVoice : null,
                   onChanged: (String? newValue) {
-                    setState(() {
-                      _ttsVoice = newValue ?? '';
-                    });
-                    _saveTTSConfig();
+                    setState(() => _ttsVoice = newValue ?? '');
                   },
                   items: TTSConfig.getSupportedVoices(_selectedTTSProvider!)
                       .map((String voice) {
@@ -368,27 +353,36 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               Padding(
                 padding: const EdgeInsets.only(top: 12),
                 child: TextField(
+                  controller: _baseUrlController,
                   decoration: const InputDecoration(
                     labelText: 'API基础URL',
                     hintText: 'https://aihubmix.com/v1',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.link, color: Colors.orange),
                   ),
-                  controller: TextEditingController(text: _ttsBaseUrl),
-                  onChanged: (value) {
-                    setState(() {
-                      _ttsBaseUrl = value;
-                    });
-                    _saveTTSConfig();
-                  },
+                  onChanged: (value) => _ttsBaseUrl = value,
                 ),
               ),
 
-            // 保存按钮
+            // 保存按钮 — 唯一触发持久化的入口
             Padding(
               padding: const EdgeInsets.only(top: 16),
               child: ElevatedButton.icon(
-                onPressed: _saveTTSConfig,
+                onPressed: () async {
+                  // 从controller同步最新值（尤其是用户最后修改但onChanged未触发的场景）
+                  _ttsApiKey = _apiKeyController.text;
+                  _ttsModel = _modelController.text;
+                  _ttsBaseUrl = _baseUrlController.text;
+
+                  final ok = await _saveTTSConfig();
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(ok ? '配置已保存' : '保存失败'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
                 icon: const Icon(Icons.save),
                 label: const Text('保存配置'),
                 style: ElevatedButton.styleFrom(
@@ -420,18 +414,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               leading: const Icon(Icons.code, color: Colors.orange),
               title: '开源许可',
               trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                _showLicenseDialog();
-              },
+              onTap: () => _showLicenseDialog(),
             ),
             const Divider(height: 1),
             _buildListTile(
               leading: const Icon(Icons.privacy_tip, color: Colors.red),
               title: '隐私政策',
               trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                _showPrivacyDialog();
-              },
+              onTap: () => _showPrivacyDialog(),
             ),
           ],
         ),
@@ -483,9 +473,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+              onPressed: () => Navigator.of(context).pop(),
               child: const Text('关闭'),
             ),
           ],
