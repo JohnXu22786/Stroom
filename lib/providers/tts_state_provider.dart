@@ -128,7 +128,7 @@ class TTSConfigNotifier extends StateNotifier<TTSConfigState> {
 }
 
 /// TTS提供者实例提供器
-final ttsProviderProvider = Provider<tts_provider_base.TTSProvider?>((ref) {
+final ttsProviderProvider = Provider<tts_provider_base.BaseTTSProvider?>((ref) {
   final config = ref.watch(ttsConfigProvider);
 
   if (!config.isConfigured) {
@@ -140,7 +140,10 @@ final ttsProviderProvider = Provider<tts_provider_base.TTSProvider?>((ref) {
 
     switch (provider) {
       case tts_config.TTSProvider.glmTts:
-        return tts_provider_base.GLMTTSProvider(apiKey: config.apiKey);
+        return tts_provider_base.GLMTTSProvider(
+          apiKey: config.apiKey,
+          baseUrl: config.baseUrl,
+        );
       case tts_config.TTSProvider.aihubmixTts:
         return tts_provider_base.AIHUBMIXTTSProvider(
           apiKey: config.apiKey,
