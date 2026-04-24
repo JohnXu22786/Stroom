@@ -96,8 +96,8 @@ class GLMTTSProvider extends BaseTTSProvider {
     // 语速范围验证：0.5 - 2.0
     if (params.containsKey('speed')) {
       final speed = (params['speed'] as num).toDouble();
-      if (!TTSConfig.validateSpeed(TTSProvider.glmTts, speed)) {
-        final range = TTSConfig.getSpeedRange(TTSProvider.glmTts);
+      if (!validateSpeed(TTSProvider.glmTts, speed)) {
+        final range = getSpeedRange(TTSProvider.glmTts);
         throw ArgumentError('语速必须在${range['min']}到${range['max']}之间');
       }
     }
@@ -105,8 +105,8 @@ class GLMTTSProvider extends BaseTTSProvider {
     // 音量范围验证：0.0 - 2.0
     if (params.containsKey('volume')) {
       final volume = (params['volume'] as num).toDouble();
-      if (!TTSConfig.validateVolume(TTSProvider.glmTts, volume)) {
-        final range = TTSConfig.getVolumeRange(TTSProvider.glmTts);
+      if (!validateVolume(TTSProvider.glmTts, volume)) {
+        final range = getVolumeRange(TTSProvider.glmTts);
         throw ArgumentError('音量必须在${range['min']}到${range['max']}之间');
       }
     }
@@ -114,7 +114,7 @@ class GLMTTSProvider extends BaseTTSProvider {
     // 音频格式验证
     if (params.containsKey('format')) {
       final format = params['format'] as String;
-      final supported = TTSConfig.getSupportedFormats(TTSProvider.glmTts);
+      final supported = getSupportedFormats(TTSProvider.glmTts);
       if (!supported.contains(format.toLowerCase())) {
         throw ArgumentError('不支持的音频格式: $format，支持: $supported');
       }
@@ -123,7 +123,7 @@ class GLMTTSProvider extends BaseTTSProvider {
     // 音色验证
     if (params.containsKey('voice')) {
       final voice = params['voice'] as String;
-      final voices = TTSConfig.getSupportedVoices(TTSProvider.glmTts);
+      final voices = getSupportedVoices(TTSProvider.glmTts);
       if (!voices.contains(voice)) {
         print('警告: 音色 "$voice" 可能不受GLM-TTS支持，支持的音色: $voices');
       }
@@ -172,13 +172,15 @@ class GLMTTSProvider extends BaseTTSProvider {
         throw Exception('GLM-TTS返回了空的音频数据');
       }
 
-      // 应用音频修剪（GLM特有）
+      // 应用音频修剪（GLM特有：移除开头蜂鸣声）
+      // trimGlmAudio 内置音频检测逻辑，非 GLM 音频不会误切
+      // force=true 时跳过检测直接修剪
       Uint8List result = audioData;
-      if (_forceTrim && result.isNotEmpty) {
+      if (result.isNotEmpty) {
         try {
           final sampleRate = (validatedParams['sample_rate'] as num?)?.toInt() ?? 24000;
           print('GLMTTSProvider: 应用音频修剪...');
-          result = trimGlmAudio(result, sampleRate: sampleRate, force: true);
+          result = trimGlmAudio(result, sampleRate: sampleRate, force: _forceTrim);
           print('GLMTTSProvider: 修剪完成 - 修剪后大小: ${result.length} 字节');
         } catch (e) {
           print('GLMTTSProvider: 音频修剪失败: $e，返回原始音频');
@@ -248,15 +250,12 @@ class GLMTTSProvider extends BaseTTSProvider {
 
       final stream = response.data.stream as Stream<Uint8List>;
 
-      // 应用流式修剪（GLM特有）
-      Stream<Uint8List> audioStream = stream;
-      if (_forceTrim) {
-        audioStream = createStreamTrimmingWrapper(
-          audioStream,
-          sampleRate: sampleRate,
-          bytesPerSample: 2,
-        );
-      }
+      // 应用流式修剪（GLM特有：移除开头蜂鸣声）
+      final Stream<Uint8List> audioStream = createStreamTrimmingWrapper(
+        stream,
+        sampleRate: sampleRate,
+        bytesPerSample: 2,
+      );
 
       // 跟踪流处理
       var chunkCount = 0;
@@ -437,8 +436,8 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
     // 语速范围验证：0.25 - 4.0
     if (params.containsKey('speed')) {
       final speed = (params['speed'] as num).toDouble();
-      if (!TTSConfig.validateSpeed(TTSProvider.aihubmixTts, speed)) {
-        final range = TTSConfig.getSpeedRange(TTSProvider.aihubmixTts);
+      if (!validateSpeed(TTSProvider.aihubmixTts, speed)) {
+        final range = getSpeedRange(TTSProvider.aihubmixTts);
         throw ArgumentError('语速必须在${range['min']}到${range['max']}之间');
       }
     }
@@ -446,8 +445,8 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
     // 音量范围验证：0.0 - 2.0
     if (params.containsKey('volume')) {
       final volume = (params['volume'] as num).toDouble();
-      if (!TTSConfig.validateVolume(TTSProvider.aihubmixTts, volume)) {
-        final range = TTSConfig.getVolumeRange(TTSProvider.aihubmixTts);
+      if (!validateVolume(TTSProvider.aihubmixTts, volume)) {
+        final range = getVolumeRange(TTSProvider.aihubmixTts);
         throw ArgumentError('音量必须在${range['min']}到${range['max']}之间');
       }
     }
@@ -455,7 +454,7 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
     // 音频格式验证
     if (params.containsKey('format')) {
       final format = params['format'] as String;
-      final supported = TTSConfig.getSupportedFormats(TTSProvider.aihubmixTts);
+      final supported = getSupportedFormats(TTSProvider.aihubmixTts);
       if (!supported.contains(format.toLowerCase())) {
         throw ArgumentError('不支持的音频格式: $format，支持: $supported');
       }
@@ -472,7 +471,7 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
     // 音色验证
     if (params.containsKey('voice')) {
       final voice = params['voice'] as String;
-      final voices = TTSConfig.getSupportedVoices(TTSProvider.aihubmixTts);
+      final voices = getSupportedVoices(TTSProvider.aihubmixTts);
       if (!voices.contains(voice)) {
         print('警告: 音色 "$voice" 可能不受AIHUBMIX-TTS支持，支持的音色: $voices');
       }

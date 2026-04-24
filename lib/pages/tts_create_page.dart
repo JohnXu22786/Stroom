@@ -143,15 +143,15 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
     // 获取当前供应商支持的音色
     final supportedVoices = config.selectedProvider != null
-        ? TTSConfig.getSupportedVoices(config.selectedProvider!)
+        ?  getSupportedVoices(config.selectedProvider!)
         : <String>[];
 
     // 获取当前供应商的语速和音量范围
     final speedRange = config.selectedProvider != null
-        ? TTSConfig.getSpeedRange(config.selectedProvider!)
+        ?  getSpeedRange(config.selectedProvider!)
         : {'min': 0.5, 'max': 2.0};
     final volumeRange = config.selectedProvider != null
-        ? TTSConfig.getVolumeRange(config.selectedProvider!)
+        ?  getVolumeRange(config.selectedProvider!)
         : {'min': 0.0, 'max': 10.0};
 
     return Scaffold(
