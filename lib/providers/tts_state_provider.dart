@@ -11,6 +11,7 @@ import 'package:uuid/uuid.dart';
 import 'tts_config.dart' as cfg;
 import 'tts_provider.dart' as tts_provider_base;
 import '../utils/storage_service.dart';
+import '../utils/audio_trim.dart';
 
 /// TTS 供应商配置状态
 ///
@@ -194,7 +195,6 @@ final ttsProviderProvider =
         return tts_provider_base.GLMTTSProvider(
           apiKey: glm.apiKey,
           baseUrl: glm.baseUrl,
-          forceTrim: glm.forceTrim,
         );
       case cfg.TTSProvider.aihubmixTts:
         final aihubmix = config.aihubmixConfig!;
@@ -443,13 +443,27 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
           'speed': config.speed,
           'volume': config.volume,
           'format': config.format,
+          'response_format': config.format,
         },
       );
 
       state = state.copyWith(progress: 0.7);
 
+      // 仅 GLM 需要裁切头部蜂鸣声
+      Uint8List trimmed = audioData;
+      if (provider.name == 'glm_tts') {
+        final ttsConfig = ref.read(ttsConfigProvider);
+        final glmCfg = ttsConfig.glmConfig;
+        if (glmCfg != null && glmCfg.trimMode != cfg.GlmTrimMode.none) {
+          final sampleRate = cfg.glmDefaultSampleRate;
+          print('TTSStateNotifier: 应用GLM音频裁切...');
+          trimmed = trimGlmAudio(trimmed, sampleRate: sampleRate, trimMode: glmCfg.trimMode, force: true);
+          print('TTSStateNotifier: 裁切完成 - 大小: ${trimmed.length} 字节');
+        }
+      }
+
       // 保存音频文件
-      final audioFile = await _saveAudioFile(audioData, config.format, text);
+      final audioFile = await _saveAudioFile(trimmed, config.format, text);
 
       state = state.copyWith(
         isSynthesizing: false,
@@ -497,6 +511,7 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
           'speed': config.speed,
           'volume': config.volume,
           'format': config.format,
+          'response_format': config.format,
         },
       );
 

@@ -1,9 +1,12 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/theme_provider.dart';
 import '../providers/tts_state_provider.dart';
 import '../providers/tts_config.dart';
+import '../utils/audio_playback.dart';
+import '../utils/audio_trim.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -17,6 +20,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   bool _saveToGallery = true;
   bool _highQuality = false;
   double _compressionQuality = 0.85;
+  bool _isTesting = false;
 
   // ===== TTS 配置（每个供应商完全独立） =====
   TTSProvider? _selectedTTSProvider;
@@ -89,7 +93,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         baseUrl: _glmBaseUrlController.text.isNotEmpty
             ? _glmBaseUrlController.text
             : null,
-        forceTrim: _glmConfig.forceTrim,
+        trimMode: _glmConfig.trimMode,
       );
       await notifier.saveGlmConfig(glm);
       return true;
@@ -414,25 +418,43 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ),
           const SizedBox(height: 12),
 
-          // 音频修剪开关
-          SwitchListTile(
+          // 音频头部裁切模式选择
+          const Text(
+            '音频头部裁切',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 8),
+          ...GlmTrimMode.values.map((mode) => RadioListTile<GlmTrimMode>(
             contentPadding: EdgeInsets.zero,
-            title: const Text('移除音频开头蜂鸣声'),
-            subtitle: Text(
-              _glmConfig.forceTrim ? '已启用（推荐）' : '已禁用',
-              style: TextStyle(
-                fontSize: 12,
-                color: _glmConfig.forceTrim
-                    ? Colors.green
-                    : Colors.grey,
-              ),
-            ),
-            value: _glmConfig.forceTrim,
+            title: Text(mode.label),
+            value: mode,
+            groupValue: _glmConfig.trimMode,
             onChanged: (v) {
+              if (v == null) return;
               setState(() {
-                _glmConfig = _glmConfig.copyWith(forceTrim: v);
+                _glmConfig = _glmConfig.copyWith(trimMode: v);
               });
             },
+          )),
+          const SizedBox(height: 8),
+
+          // 测试播放按钮
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _isTesting ? null : _playTestAudio,
+              icon: _isTesting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.play_arrow),
+              label: const Text('播放测试 "这是一段测试音频"'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 44),
+              ),
+            ),
           ),
 
           const SizedBox(height: 16),
@@ -598,6 +620,63 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         await _saveGlmConfig();
       case TTSProvider.aihubmixTts:
         await _saveAihubmixConfig();
+    }
+  }
+
+  /// 播放测试音频
+  Future<void> _playTestAudio() async {
+    final config = ref.read(ttsConfigProvider);
+    if (!config.isConfigured) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('请先配置TTS供应商'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isTesting = true);
+
+    try {
+      final provider = ref.read(ttsProviderProvider);
+      if (provider == null) {
+        throw Exception('TTS供应商未初始化');
+      }
+
+      final synthesisConfig = ref.read(synthesisConfigProvider);
+      final audioData = await provider.synthesize(
+        '这是一段测试音频',
+        params: {
+          'voice': synthesisConfig.voice,
+          'speed': synthesisConfig.speed,
+          'volume': synthesisConfig.volume,
+          'format': 'wav',
+          'response_format': 'wav',
+        },
+      );
+
+      // GLM 测试预览时应用裁切，让用户听到裁切效果
+      Uint8List playData = audioData;
+      if (provider.name == 'glm_tts' && _glmConfig.trimMode != GlmTrimMode.none) {
+        playData = trimGlmAudio(playData, sampleRate: 24000, trimMode: _glmConfig.trimMode, force: true);
+      }
+      if (playData.isNotEmpty) {
+        playAudioBytes(playData, 'audio/wav');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('播放测试失败: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isTesting = false);
+      }
     }
   }
 

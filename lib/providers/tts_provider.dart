@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'tts_config.dart';
-import '../utils/audio_trim.dart';
+
 import '../utils/audio_utils.dart';
 
 /// TTS供应商抽象基类
@@ -48,15 +48,10 @@ abstract class BaseTTSProvider {
 /// GLM-TTS供应商实现
 class GLMTTSProvider extends BaseTTSProvider {
   final String? _apiKey;
-  final bool _forceTrim;
   late final Dio _dio;
 
-  /// 初始化GLM TTS供应商
-  /// [apiKey] GLM API密钥
-  /// [forceTrim] 是否强制修剪音频（GLM特有：用于移除初始蜂鸣声）
-  GLMTTSProvider({String? apiKey, String? baseUrl, bool forceTrim = false})
-      : _apiKey = apiKey,
-        _forceTrim = forceTrim {
+  GLMTTSProvider({String? apiKey, String? baseUrl})
+      : _apiKey = apiKey {
     final base = baseUrl ?? 'https://open.bigmodel.cn/api/paas/v4';
     _dio = Dio(BaseOptions(
       baseUrl: base,
@@ -172,31 +167,12 @@ class GLMTTSProvider extends BaseTTSProvider {
         throw Exception('GLM-TTS返回了空的音频数据');
       }
 
-      // 应用音频修剪（GLM特有：移除开头蜂鸣声）
-      // trimGlmAudio 内置音频检测逻辑，非 GLM 音频不会误切
-      // force=true 时跳过检测直接修剪
-      Uint8List result = audioData;
-      if (result.isNotEmpty) {
-        try {
-          final sampleRate = (validatedParams['sample_rate'] as num?)?.toInt() ?? 24000;
-          print('GLMTTSProvider: 应用音频修剪...');
-          result = trimGlmAudio(result, sampleRate: sampleRate, force: _forceTrim);
-          print('GLMTTSProvider: 修剪完成 - 修剪后大小: ${result.length} 字节');
-        } catch (e) {
-          print('GLMTTSProvider: 音频修剪失败: $e，返回原始音频');
-        }
-      }
-
-      // 如果请求的格式是wav但返回的是pcm，进行转换
-      if (responseFormat == 'pcm' && format == 'wav') {
-        try {
-          final sampleRate = (validatedParams['sample_rate'] as num?)?.toInt() ?? 24000;
-          result = pcmToWav(result, sampleRate: sampleRate);
-          print('GLMTTSProvider: PCM→WAV转换完成');
-        } catch (e) {
-          print('GLMTTSProvider: PCM→WAV转换失败: $e');
-        }
-      }
+      // 通用格式校验：API返回的实际数据可能不含有效头（如裸 PCM），自动修复
+      final result = ensureValidAudioFormat(
+        audioData,
+        requestedFormat: format,
+        sampleRate: (validatedParams['sample_rate'] as num?)?.toInt() ?? 24000,
+      ).$1;
 
       return result;
     } on DioException catch (e) {
@@ -248,14 +224,7 @@ class GLMTTSProvider extends BaseTTSProvider {
         },
       );
 
-      final stream = response.data.stream as Stream<Uint8List>;
-
-      // 应用流式修剪（GLM特有：移除开头蜂鸣声）
-      final Stream<Uint8List> audioStream = createStreamTrimmingWrapper(
-        stream,
-        sampleRate: sampleRate,
-        bytesPerSample: 2,
-      );
+      final audioStream = response.data.stream as Stream<Uint8List>;
 
       // 跟踪流处理
       var chunkCount = 0;
@@ -693,7 +662,6 @@ BaseTTSProvider getTTSProvider({
       return GLMTTSProvider(
         apiKey: apiKey,
         baseUrl: options?['base_url'] as String?,
-        forceTrim: options?['force_trim'] as bool? ?? false,
       );
     case 'aihubmix_tts':
       return AIHUBMIXTTSProvider(

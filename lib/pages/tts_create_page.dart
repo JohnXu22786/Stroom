@@ -282,9 +282,6 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
             // 音量控制
             _buildVolumeSlider(config, volumeRange),
             const SizedBox(height: 16),
-
-            // 格式选择
-            _buildFormatSelector(config),
           ],
         ),
       ),
@@ -420,44 +417,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     );
   }
 
-  Widget _buildFormatSelector(SynthesisConfig config) {
-    const supportedFormats = ['mp3', 'wav', 'pcm'];
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          '保存音频格式',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          children: supportedFormats.map((format) {
-            final isSelected = config.format == format;
-            return ChoiceChip(
-              label: Text(format.toUpperCase()),
-              selected: isSelected,
-              onSelected: (selected) {
-                if (selected) {
-                  ref.read(synthesisConfigProvider.notifier).updateFormat(format);
-                }
-              },
-              selectedColor: Theme.of(context).colorScheme.primary,
-              labelStyle: TextStyle(
-                color: isSelected ? Colors.white : null,
-              ),
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          '应用将自动转换音频格式',
-          style: TextStyle(fontSize: 12, color: Colors.grey),
-        ),
-      ],
-    );
-  }
 
   Widget _buildGenerateButton() {
     return SizedBox(
