@@ -1,129 +1,265 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
+import 'package:idb_shim/idb.dart' as idb;
+import 'package:idb_shim/idb_browser.dart' as idb_browser;
 
 /// 跨平台文件存储服务
-/// - Native (Android/iOS/Windows/macOS/Linux): 使用 dart:io 的 File/Directory
-/// - Web: 使用内存 Map 模拟文件系统
+/// - Web: 使用 IndexedDB
+/// - Native: 使用 dart:io + path_provider
 class StorageService {
-  // 内存存储（Web 使用）
-  static final Map<String, Uint8List> _memoryStorage = {};
-  static const String _memoryPrefix = 'memory://';
+  // =========================================================================
+  // Web: IndexedDB
+  // =========================================================================
+  static idb.Database? _webDb;
 
-  /// TTS 音频目录路径
-  static String get _ttsDirKey => '$_memoryPrefix/tts_audio';
-
-  /// 生成内存中的存储 key
-  static String _memoryKey(String fileName) =>
-      '$_ttsDirKey/$fileName';
-
-  /// 从 path 中提取文件名
-  static String _fileNameFromPath(String filePath) {
-    if (filePath.startsWith(_memoryPrefix)) {
-      return filePath.split('/').last;
-    }
-    // 兼容 native 路径
-    return filePath.split(RegExp(r'[/\\]')).last;
+  static Future<idb.Database> _getWebDb() async {
+    if (_webDb != null) return _webDb!;
+    _webDb = await idb_browser.idbFactory.openDatabase(
+      'stroom_audio',
+      version: 1,
+      onUpgradeNeeded: (event) {
+        event.database.createObjectStore('audio_files', keyPath: 'name');
+      },
+    );
+    return _webDb!;
   }
 
-  /// TTS 音频目录是否存在
+  static const String _storeName = 'audio_files';
+
+  // =========================================================================
+  // Native
+  // =========================================================================
+  static String? _nativeBasePath;
+
+  static Future<String> get _nativeTtsDir async {
+    if (_nativeBasePath == null) {
+      final dir = await getApplicationDocumentsDirectory();
+      _nativeBasePath = dir.path;
+    }
+    final ttsDir = path.join(_nativeBasePath!, 'tts_audio');
+    final d = Directory(ttsDir);
+    if (!await d.exists()) {
+      await d.create(recursive: true);
+    }
+    return ttsDir;
+  }
+
+  // =========================================================================
+  // 公共 API
+  // =========================================================================
+
   static Future<bool> ttsDirExists() async {
     if (kIsWeb) {
-      return _memoryStorage.keys.any((k) => k.startsWith(_ttsDirKey));
+      try {
+        final db = await _getWebDb();
+        final count = await db.getObjectStore(_storeName).count();
+        return count > 0;
+      } catch (_) {
+        return false;
+      }
     }
-    // 在 native 上通过调用方处理，避免引入 dart:io
-    return false;
+    final dir = Directory(await _nativeTtsDir);
+    return await dir.exists();
   }
 
-  /// 列出 TTS 音频目录下所有文件
   static Future<List<StorageFileInfo>> listFiles() async {
     if (kIsWeb) {
-      final entries = _memoryStorage.entries
-          .where((e) => e.key.startsWith(_ttsDirKey))
-          .toList();
-      return entries.map((e) {
-        final name = e.key.split('/').last;
-        return StorageFileInfo(
-          name: name,
-          path: e.key,
-          data: e.value,
-          size: e.value.lengthInBytes,
-          modifiedAt: DateTime.now(),
-        );
-      }).toList();
+      try {
+        final db = await _getWebDb();
+        final all = await db.getObjectStore(_storeName).getAll();
+        return all.map<StorageFileInfo>((record) {
+          final r = record as Map;
+          final name = r['name'] as String;
+          final data = r['data'] as Uint8List;
+          return StorageFileInfo(
+            name: name,
+            path: name,
+            data: data,
+            size: data.lengthInBytes,
+            modifiedAt: DateTime.now(),
+          );
+        }).toList();
+      } catch (_) {
+        return [];
+      }
     }
-    return [];
+
+    final ttsDir = await _nativeTtsDir;
+    final dir = Directory(ttsDir);
+    if (!await dir.exists()) return [];
+
+    final files = <StorageFileInfo>[];
+    await for (final entity in dir.list()) {
+      if (entity is File) {
+        final stat = await entity.stat();
+        files.add(StorageFileInfo(
+          name: path.basename(entity.path),
+          path: entity.path,
+          size: await entity.length(),
+          modifiedAt: stat.modified,
+        ));
+      }
+    }
+    files.sort((a, b) => b.modifiedAt.compareTo(a.modifiedAt));
+    return files;
   }
 
-  /// 写入文件
   static Future<String> writeFile(String fileName, Uint8List data) async {
     if (kIsWeb) {
-      final key = _memoryKey(fileName);
-      _memoryStorage[key] = data;
-      return key;
+      final db = await _getWebDb();
+      final tx = db.transactionStore(_storeName, 'readwrite');
+      await tx.put({'name': fileName, 'data': data}, fileName);
+      await tx.completed;
+      return fileName;
     }
-    // native 上返回空，由调用方使用 path_provider + dart:io
-    return '';
+
+    final ttsDir = await _nativeTtsDir;
+    final filePath = path.join(ttsDir, fileName);
+    await File(filePath).writeAsBytes(data);
+    return filePath;
   }
 
-  /// 读取文件
   static Future<Uint8List?> readFile(String filePath) async {
     if (kIsWeb) {
-      return _memoryStorage[filePath];
+      try {
+        final db = await _getWebDb();
+        final record = await db.getObjectStore(_storeName).getObject(filePath);
+        if (record == null) return null;
+        return (record as Map)['data'] as Uint8List?;
+      } catch (_) {
+        return null;
+      }
     }
-    return null;
+
+    try {
+      final file = File(filePath);
+      if (await file.exists()) {
+        return await file.readAsBytes();
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 
-  /// 删除文件
   static Future<bool> deleteFile(String filePath) async {
     if (kIsWeb) {
-      return _memoryStorage.remove(filePath) != null;
+      try {
+        final db = await _getWebDb();
+        final tx = db.transactionStore(_storeName, 'readwrite');
+        await tx.delete(filePath);
+        await tx.completed;
+        return true;
+      } catch (_) {
+        return false;
+      }
     }
-    return false;
+
+    try {
+      final file = File(filePath);
+      if (await file.exists()) {
+        await file.delete();
+        return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
   }
 
-  /// 复制文件
   static Future<String?> copyFile(String sourcePath, String destFileName) async {
-    final data = await readFile(sourcePath);
-    if (data == null) return null;
-
     if (kIsWeb) {
-      final destKey = _memoryKey(destFileName);
-      _memoryStorage[destKey] = Uint8List.fromList(data);
-      return destKey;
+      try {
+        final db = await _getWebDb();
+        final store = db.getObjectStore(_storeName);
+        final record = await store.getObject(sourcePath);
+        if (record == null) return null;
+        final r = record as Map;
+        final data = r['data'] as Uint8List;
+        final tx = db.transactionStore(_storeName, 'readwrite');
+        await tx.put({'name': destFileName, 'data': Uint8List.fromList(data)}, destFileName);
+        await tx.completed;
+        return destFileName;
+      } catch (_) {
+        return null;
+      }
     }
-    return null;
+
+    try {
+      final source = File(sourcePath);
+      if (!await source.exists()) return null;
+      final ttsDir = await _nativeTtsDir;
+      final destPath = path.join(ttsDir, destFileName);
+      await source.copy(destPath);
+      return destPath;
+    } catch (_) {
+      return null;
+    }
   }
 
-  /// 文件是否存在
   static Future<bool> fileExists(String filePath) async {
     if (kIsWeb) {
-      return _memoryStorage.containsKey(filePath);
+      try {
+        final db = await _getWebDb();
+        final record = await db.getObjectStore(_storeName).getObject(filePath);
+        return record != null;
+      } catch (_) {
+        return false;
+      }
     }
-    return false;
+
+    try {
+      return await File(filePath).exists();
+    } catch (_) {
+      return false;
+    }
   }
 
-  /// 创建目录
   static Future<void> createDir(String dirPath) async {
-    if (kIsWeb) {
-      // 内存存储不需要显式创建目录，写入时自动存在
-      return;
-    }
+    if (kIsWeb) return;
+    await Directory(dirPath).create(recursive: true);
   }
 
-  /// 获取文件大小
   static Future<int> fileSize(String filePath) async {
     if (kIsWeb) {
-      final data = _memoryStorage[filePath];
-      return data?.lengthInBytes ?? 0;
+      try {
+        final db = await _getWebDb();
+        final record = await db.getObjectStore(_storeName).getObject(filePath);
+        if (record == null) return 0;
+        final data = (record as Map)['data'] as Uint8List?;
+        return data?.lengthInBytes ?? 0;
+      } catch (_) {
+        return 0;
+      }
     }
-    return 0;
+
+    try {
+      final file = File(filePath);
+      if (await file.exists()) {
+        return await file.length();
+      }
+      return 0;
+    } catch (_) {
+      return 0;
+    }
   }
 
-  /// 判断是否 Web 平台（静态访问器）
   static bool get isWeb => kIsWeb;
+
+  static Future<void> clearWebStorage() async {
+    if (!kIsWeb) return;
+    try {
+      final db = await _getWebDb();
+      final tx = db.transactionStore(_storeName, 'readwrite');
+      await tx.clear();
+      await tx.completed;
+    } catch (_) {}
+  }
 }
 
-/// 文件信息
 class StorageFileInfo {
   final String name;
   final String path;

@@ -43,7 +43,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   /// 检查TTS供应商是否已配置
   bool _isTTSConfigured() {
     final config = ref.read(ttsConfigProvider);
-    return config.selectedProvider != null &&
+    return config.selectedProviderId != null &&
            config.apiKey?.isNotEmpty == true;
   }
 
@@ -142,16 +142,16 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     final config = ref.watch(ttsConfigProvider);
 
     // 获取当前供应商支持的音色
-    final supportedVoices = config.selectedProvider != null
-        ?  getSupportedVoices(config.selectedProvider!)
+    final supportedVoices = config.selectedProviderId != null
+        ?  getSupportedVoices(config.selectedProviderId!)
         : <String>[];
 
     // 获取当前供应商的语速和音量范围
-    final speedRange = config.selectedProvider != null
-        ?  getSpeedRange(config.selectedProvider!)
+    final speedRange = config.selectedProviderId != null
+        ?  getSpeedRange(config.selectedProviderId!)
         : {'min': 0.5, 'max': 2.0};
-    final volumeRange = config.selectedProvider != null
-        ?  getVolumeRange(config.selectedProvider!)
+    final volumeRange = config.selectedProviderId != null
+        ?  getVolumeRange(config.selectedProviderId!)
         : {'min': 0.0, 'max': 10.0};
 
     return Scaffold(

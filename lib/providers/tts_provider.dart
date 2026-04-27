@@ -91,8 +91,8 @@ class GLMTTSProvider extends BaseTTSProvider {
     // 语速范围验证：0.5 - 2.0
     if (params.containsKey('speed')) {
       final speed = (params['speed'] as num).toDouble();
-      if (!validateSpeed(TTSProvider.glmTts, speed)) {
-        final range = getSpeedRange(TTSProvider.glmTts);
+      if (!validateSpeed('glm_tts', speed)) {
+        final range = getSpeedRange('glm_tts');
         throw ArgumentError('语速必须在${range['min']}到${range['max']}之间');
       }
     }
@@ -100,8 +100,8 @@ class GLMTTSProvider extends BaseTTSProvider {
     // 音量范围验证：0.0 - 2.0
     if (params.containsKey('volume')) {
       final volume = (params['volume'] as num).toDouble();
-      if (!validateVolume(TTSProvider.glmTts, volume)) {
-        final range = getVolumeRange(TTSProvider.glmTts);
+      if (!validateVolume('glm_tts', volume)) {
+        final range = getVolumeRange('glm_tts');
         throw ArgumentError('音量必须在${range['min']}到${range['max']}之间');
       }
     }
@@ -109,7 +109,7 @@ class GLMTTSProvider extends BaseTTSProvider {
     // 音频格式验证
     if (params.containsKey('format')) {
       final format = params['format'] as String;
-      final supported = getSupportedFormats(TTSProvider.glmTts);
+      final supported = getSupportedFormats('glm_tts');
       if (!supported.contains(format.toLowerCase())) {
         throw ArgumentError('不支持的音频格式: $format，支持: $supported');
       }
@@ -118,7 +118,7 @@ class GLMTTSProvider extends BaseTTSProvider {
     // 音色验证
     if (params.containsKey('voice')) {
       final voice = params['voice'] as String;
-      final voices = getSupportedVoices(TTSProvider.glmTts);
+      final voices = getSupportedVoices('glm_tts');
       if (!voices.contains(voice)) {
         print('警告: 音色 "$voice" 可能不受GLM-TTS支持，支持的音色: $voices');
       }
@@ -346,7 +346,6 @@ class GLMTTSProvider extends BaseTTSProvider {
 /// AIHUBMIX-TTS供应商实现（OpenAI兼容API）
 class AIHUBMIXTTSProvider extends BaseTTSProvider {
   final String? _apiKey;
-  final String? _baseUrl;
   final String? _model;
   late final Dio _dio;
 
@@ -359,7 +358,6 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
     String? baseUrl,
     String? model,
   })  : _apiKey = apiKey,
-        _baseUrl = baseUrl,
         _model = model {
     final base = baseUrl ?? 'https://aihubmix.com/v1';
     _dio = Dio(BaseOptions(
@@ -405,8 +403,8 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
     // 语速范围验证：0.25 - 4.0
     if (params.containsKey('speed')) {
       final speed = (params['speed'] as num).toDouble();
-      if (!validateSpeed(TTSProvider.aihubmixTts, speed)) {
-        final range = getSpeedRange(TTSProvider.aihubmixTts);
+      if (!validateSpeed('aihubmix_tts', speed)) {
+        final range = getSpeedRange('aihubmix_tts');
         throw ArgumentError('语速必须在${range['min']}到${range['max']}之间');
       }
     }
@@ -414,8 +412,8 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
     // 音量范围验证：0.0 - 2.0
     if (params.containsKey('volume')) {
       final volume = (params['volume'] as num).toDouble();
-      if (!validateVolume(TTSProvider.aihubmixTts, volume)) {
-        final range = getVolumeRange(TTSProvider.aihubmixTts);
+      if (!validateVolume('aihubmix_tts', volume)) {
+        final range = getVolumeRange('aihubmix_tts');
         throw ArgumentError('音量必须在${range['min']}到${range['max']}之间');
       }
     }
@@ -423,7 +421,7 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
     // 音频格式验证
     if (params.containsKey('format')) {
       final format = params['format'] as String;
-      final supported = getSupportedFormats(TTSProvider.aihubmixTts);
+      final supported = getSupportedFormats('aihubmix_tts');
       if (!supported.contains(format.toLowerCase())) {
         throw ArgumentError('不支持的音频格式: $format，支持: $supported');
       }
@@ -440,7 +438,7 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
     // 音色验证
     if (params.containsKey('voice')) {
       final voice = params['voice'] as String;
-      final voices = getSupportedVoices(TTSProvider.aihubmixTts);
+      final voices = getSupportedVoices('aihubmix_tts');
       if (!voices.contains(voice)) {
         print('警告: 音色 "$voice" 可能不受AIHUBMIX-TTS支持，支持的音色: $voices');
       }

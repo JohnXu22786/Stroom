@@ -11,6 +11,7 @@ import '../utils/audio_utils.dart';
 import '../utils/storage_service.dart';
 import 'dart:typed_data';
 import 'tts_create_page.dart';
+import 'audio_player_page.dart';
 
 class TtsPage extends ConsumerStatefulWidget {
   const TtsPage({super.key});
@@ -183,43 +184,75 @@ class _TtsPageState extends ConsumerState<TtsPage> {
     }
   }
 
-  /// 播放音频文件
-  Future<void> _playAudio(String filePath) async {
-    try {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('正在加载音频: ${path.basename(filePath)}'),
-          duration: const Duration(seconds: 1),
+  /// 播放音频文件 - 导航到播放器页面
+  Future<void> _playAudio(String filePath, String? displayName) async {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AudioPlayerPage(
+          filePath: filePath,
+          displayName: displayName,
         ),
+      ),
+    );
+  }
+
+  /// 导出音频文件到本地
+  Future<void> _exportFile(String fileId) async {
+    try {
+      final audioFiles = ref.read(audioFilesProvider);
+      final file = audioFiles.firstWhere((f) => f.id == fileId);
+
+      var data = await StorageService.readFile(file.path);
+      if (data == null || data.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('文件数据读取失败')),
+          );
+        }
+        return;
+      }
+
+      // 通用格式校验：检测数据魔数，裸 PCM 自动补 WAV 头
+      var exportFormat = file.format;
+      final fixed = ensureValidAudioFormat(
+        data,
+        requestedFormat: exportFormat,
+        sampleRate: 24000,
       );
+      data = fixed.$1;
+      exportFormat = fixed.$2;
+
+      final mimeType = getMimeType(exportFormat);
+      final exportName = '${file.name}.$exportFormat';
 
       if (kIsWeb) {
-        // Web: 从内存存储读取音频数据
-        final data = await StorageService.readFile(filePath);
-        if (data == null || data.isEmpty) {
-          throw Exception('音频数据为空或不存在');
+        // Web: 浏览器下载
+        downloadAudioFile(data, exportName, mimeType);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('"$exportName" 已开始下载')),
+          );
         }
-        final format = path.extension(filePath).replaceAll('.', '');
-        final mimeType = getMimeType(format);
-        playAudioBytes(data, mimeType);
       } else {
-        // Native: 使用文件路径播放
-        // TODO: 使用 just_audio 播放本地文件
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Native播放尚未实现: ${path.basename(filePath)}'),
-            duration: const Duration(seconds: 1),
-          ),
+        // Native: 使用 file_picker 选目录后写入（直接传 bytes，saveFile 自动写文件）
+        final outputPath = await FilePicker.saveFile(
+          dialogTitle: '导出音频文件',
+          fileName: exportName,
+          type: FileType.custom,
+          allowedExtensions: [exportFormat],
+          bytes: data,
         );
+        if (outputPath != null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('已导出到: $outputPath')),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('播放失败: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
+          SnackBar(content: Text('导出失败: $e')),
         );
       }
     }
@@ -412,7 +445,7 @@ class _TtsPageState extends ConsumerState<TtsPage> {
                             onSelected: (value) {
                               switch (value) {
                                 case 'play':
-                                  _playAudio(file.path);
+                                  _playAudio(file.path, file.name);
                                   break;
                                 case 'rename':
                                   _renameFile(file.id, file.name);
@@ -425,6 +458,9 @@ class _TtsPageState extends ConsumerState<TtsPage> {
                                   break;
                                 case 'share':
                                   _shareAudio(file.path);
+                                  break;
+                                case 'export':
+                                  _exportFile(file.id);
                                   break;
                                 case 'delete':
                                   _deleteFile(file.id);
@@ -483,6 +519,16 @@ class _TtsPageState extends ConsumerState<TtsPage> {
                                 ),
                               ),
                               const PopupMenuItem(
+                                value: 'export',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.file_download, size: 20),
+                                    SizedBox(width: 8),
+                                    Text('导出到本地'),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
                                 value: 'delete',
                                 child: Row(
                                   children: [
@@ -494,7 +540,17 @@ class _TtsPageState extends ConsumerState<TtsPage> {
                               ),
                             ],
                           ),
-                          onTap: () => _playAudio(file.path),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => AudioPlayerPage(
+                                  filePath: file.path,
+                                  displayName: file.name,
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       );
                     },
