@@ -8,7 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
-import 'tts_config.dart' as cfg;
+import 'tts_config.dart';
 import 'tts_provider.dart' as tts_provider_base;
 import '../utils/storage_service.dart';
 import '../utils/audio_trim.dart';
@@ -17,98 +17,59 @@ import '../utils/audio_trim.dart';
 ///
 /// 每个供应商拥有独立配置（API密钥、模型、音色等），互不共用。
 class TTSConfigState {
-  /// 当前选中的供应商
-  final cfg.TTSProvider? selectedProvider;
+  /// 当前选中的供应商 ID
+  final String? selectedProviderId;
 
-  /// GLM-TTS 独立配置
-  final cfg.GlmConfig? glmConfig;
-
-  /// AIHUBMIX-TTS 独立配置
-  final cfg.AihubmixConfig? aihubmixConfig;
+  /// 所有供应商的配置 Map：providerId → config Map
+  final Map<String, Map<String, dynamic>> providerConfigs;
 
   const TTSConfigState({
-    this.selectedProvider,
-    this.glmConfig,
-    this.aihubmixConfig,
+    this.selectedProviderId,
+    this.providerConfigs = const {},
   });
 
-  /// 当前选中供应商的配置是否已配好
+  /// 当前选中供应商的配置 Map
+  Map<String, dynamic>? get selectedConfig =>
+      selectedProviderId != null ? providerConfigs[selectedProviderId] : null;
+
   bool get isConfigured {
-    if (selectedProvider == null) return false;
-    switch (selectedProvider!) {
-      case cfg.TTSProvider.glmTts:
-        return glmConfig?.isConfigured == true;
-      case cfg.TTSProvider.aihubmixTts:
-        return aihubmixConfig?.isConfigured == true;
-    }
+    if (selectedProviderId == null) return false;
+    final cfg = selectedConfig;
+    return cfg != null && (cfg['apiKey'] as String?)?.isNotEmpty == true;
   }
 
-  /// 当前选中供应商的 API 密钥
-  String? get apiKey {
-    if (selectedProvider == null) return null;
-    switch (selectedProvider!) {
-      case cfg.TTSProvider.glmTts:
-        return glmConfig?.apiKey;
-      case cfg.TTSProvider.aihubmixTts:
-        return aihubmixConfig?.apiKey;
-    }
-  }
+  String? get apiKey => selectedConfig?['apiKey'] as String?;
+  String? get baseUrl => selectedConfig?['baseUrl'] as String?;
 
-  /// 当前选中供应商的 baseUrl
-  String? get baseUrl {
-    if (selectedProvider == null) return null;
-    switch (selectedProvider!) {
-      case cfg.TTSProvider.glmTts:
-        return glmConfig?.baseUrl;
-      case cfg.TTSProvider.aihubmixTts:
-        return aihubmixConfig?.baseUrl;
-    }
-  }
-
-  /// 当前选中供应商的 model（仅 AIHUBMIX 使用）
-  String? get model {
-    if (selectedProvider == null) return null;
-    switch (selectedProvider!) {
-      case cfg.TTSProvider.glmTts:
-        return null;
-      case cfg.TTSProvider.aihubmixTts:
-        return aihubmixConfig?.model;
-    }
-  }
+  // Provider-specific config convenience getters
+  GlmConfig get glmConfig => GlmConfig.fromMap(
+      providerConfigs['glm_tts'] ?? <String, dynamic>{});
+  AihubmixConfig get aihubmixConfig => AihubmixConfig.fromMap(
+      providerConfigs['aihubmix_tts'] ?? <String, dynamic>{});
 
   TTSConfigState copyWith({
-    cfg.TTSProvider? selectedProvider,
-    cfg.GlmConfig? glmConfig,
-    cfg.AihubmixConfig? aihubmixConfig,
+    String? selectedProviderId,
+    Map<String, Map<String, dynamic>>? providerConfigs,
   }) {
     return TTSConfigState(
-      selectedProvider: selectedProvider ?? this.selectedProvider,
-      glmConfig: glmConfig ?? this.glmConfig,
-      aihubmixConfig: aihubmixConfig ?? this.aihubmixConfig,
+      selectedProviderId: selectedProviderId ?? this.selectedProviderId,
+      providerConfigs: providerConfigs ?? this.providerConfigs,
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-      'selectedProvider': selectedProvider?.value,
-      'glmConfig': glmConfig?.toMap(),
-      'aihubmixConfig': aihubmixConfig?.toMap(),
+      'selectedProviderId': selectedProviderId,
+      'providerConfigs': providerConfigs,
     };
   }
 
   factory TTSConfigState.fromMap(Map<String, dynamic> map) {
+    final configs = map['providerConfigs'] as Map<String, dynamic>? ?? {};
     return TTSConfigState(
-      selectedProvider: map['selectedProvider'] != null
-          ? cfg.TTSProvider.fromValue(map['selectedProvider'] as String)
-          : null,
-      glmConfig: map['glmConfig'] != null
-          ? cfg.GlmConfig.fromMap(
-              Map<String, dynamic>.from(map['glmConfig'] as Map))
-          : null,
-      aihubmixConfig: map['aihubmixConfig'] != null
-          ? cfg.AihubmixConfig.fromMap(
-              Map<String, dynamic>.from(map['aihubmixConfig'] as Map))
-          : null,
+      selectedProviderId: map['selectedProviderId'] as String?,
+      providerConfigs: configs.map((k, v) =>
+          MapEntry(k, Map<String, dynamic>.from(v as Map))),
     );
   }
 }
@@ -149,60 +110,77 @@ class TTSConfigNotifier extends StateNotifier<TTSConfigState> {
     }
   }
 
-  /// 切换/保存选中的供应商
-  Future<void> selectProvider(cfg.TTSProvider provider) async {
-    final config = state.copyWith(selectedProvider: provider);
+  Future<void> selectProvider(String providerId) async {
+    var configs = Map<String, Map<String, dynamic>>.from(state.providerConfigs);
     // 如果该供应商还没有配置，给一个默认值
-    config._ensureDefaults();
-    await _persist(config);
+    if (!configs.containsKey(providerId)) {
+      final def = TTSProviderRegistry.get(providerId);
+      configs[providerId] = Map<String, dynamic>.from(def?.defaultConfig ?? {});
+    }
+    await _persist(TTSConfigState(
+      selectedProviderId: providerId,
+      providerConfigs: configs,
+    ));
   }
 
-  /// 保存 GLM-TTS 的独立配置
-  Future<void> saveGlmConfig(cfg.GlmConfig glmConfig) async {
-    final config = state.copyWith(glmConfig: glmConfig);
-    await _persist(config);
+  Future<void> saveGlmConfig(GlmConfig glmConfig) async {
+    var configs = Map<String, Map<String, dynamic>>.from(state.providerConfigs);
+    configs['glm_tts'] = glmConfig.toMap();
+    await _persist(TTSConfigState(
+      selectedProviderId: state.selectedProviderId,
+      providerConfigs: configs,
+    ));
   }
 
-  /// 保存 AIHUBMIX-TTS 的独立配置
-  Future<void> saveAihubmixConfig(cfg.AihubmixConfig aihubmixConfig) async {
-    final config = state.copyWith(aihubmixConfig: aihubmixConfig);
-    await _persist(config);
+  Future<void> saveAihubmixConfig(AihubmixConfig aihubmixConfig) async {
+    var configs = Map<String, Map<String, dynamic>>.from(state.providerConfigs);
+    configs['aihubmix_tts'] = aihubmixConfig.toMap();
+    await _persist(TTSConfigState(
+      selectedProviderId: state.selectedProviderId,
+      providerConfigs: configs,
+    ));
+  }
+
+  /// 通用保存：更新某供应商的配置 Map
+  Future<void> saveProviderConfig(String providerId, Map<String, dynamic> config) async {
+    var configs = Map<String, Map<String, dynamic>>.from(state.providerConfigs);
+    configs[providerId] = config;
+    await _persist(TTSConfigState(
+      selectedProviderId: state.selectedProviderId,
+      providerConfigs: configs,
+    ));
   }
 }
 
-/// 确保每个已选供应商至少有一个默认空配置，防止 null 访问
-extension _ConfigDefaults on TTSConfigState {
-  void _ensureDefaults() {
-    // 此方法仅在构造时使用，实际状态通过 Notifier 更新
-  }
-}
+
 
 /// TTS 提供者实例提供器 —— 从当前选中的供应商配置创建 provider 实例
 final ttsProviderProvider =
     Provider<tts_provider_base.BaseTTSProvider?>((ref) {
   final config = ref.watch(ttsConfigProvider);
+  final providerId = config.selectedProviderId;
 
-  if (!config.isConfigured) {
+  if (providerId == null || !config.isConfigured) {
     return null;
   }
 
   try {
-    final provider = config.selectedProvider!;
-
-    switch (provider) {
-      case cfg.TTSProvider.glmTts:
-        final glm = config.glmConfig!;
+    switch (providerId) {
+      case 'glm_tts':
         return tts_provider_base.GLMTTSProvider(
-          apiKey: glm.apiKey,
-          baseUrl: glm.baseUrl,
+          apiKey: config.glmConfig.apiKey,
+          baseUrl: config.glmConfig.baseUrl,
         );
-      case cfg.TTSProvider.aihubmixTts:
-        final aihubmix = config.aihubmixConfig!;
+      case 'aihubmix_tts':
+        final aihubmix = config.aihubmixConfig;
         return tts_provider_base.AIHUBMIXTTSProvider(
           apiKey: aihubmix.apiKey,
           baseUrl: aihubmix.baseUrl,
           model: aihubmix.model ?? aihubmix.defaultModel,
         );
+      default:
+        print('Unknown provider: $providerId');
+        return null;
     }
   } catch (e) {
     print('Failed to create TTS provider: $e');
@@ -272,7 +250,7 @@ class SynthesisConfig {
     this.voice = 'female',
     this.speed = 1.0,
     this.volume = 1.0,
-    this.format = 'mp3',
+    this.format = 'wav',
   });
 
   SynthesisConfig copyWith({
@@ -303,7 +281,7 @@ class SynthesisConfig {
       voice: map['voice'] ?? 'female',
       speed: (map['speed'] ?? 1.0).toDouble(),
       volume: (map['volume'] ?? 1.0).toDouble(),
-      format: map['format'] ?? 'mp3',
+      format: map['format'] ?? 'wav',
     );
   }
 }
@@ -454,8 +432,9 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
       if (provider.name == 'glm_tts') {
         final ttsConfig = ref.read(ttsConfigProvider);
         final glmCfg = ttsConfig.glmConfig;
-        if (glmCfg != null && glmCfg.trimMode != cfg.GlmTrimMode.none) {
-          final sampleRate = cfg.glmDefaultSampleRate;
+        if (glmCfg.trimMode != GlmTrimMode.none) {
+          final def = TTSProviderRegistry.get('glm_tts');
+          final sampleRate = def?.defaultSampleRate ?? 24000;
           print('TTSStateNotifier: 应用GLM音频裁切...');
           trimmed = trimGlmAudio(trimmed, sampleRate: sampleRate, trimMode: glmCfg.trimMode, force: true);
           print('TTSStateNotifier: 裁切完成 - 大小: ${trimmed.length} 字节');
@@ -550,20 +529,7 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
     String filePath;
     final fileSize = audioData.length;
 
-    if (kIsWeb) {
-      filePath = await StorageService.writeFile(fileName, audioData);
-    } else {
-      final appDocDir = await getApplicationDocumentsDirectory();
-      final ttsDir = Directory(path.join(appDocDir.path, 'tts_audio'));
-
-      if (!await ttsDir.exists()) {
-        await ttsDir.create(recursive: true);
-      }
-
-      filePath = path.join(ttsDir.path, fileName);
-      final file = File(filePath);
-      await file.writeAsBytes(audioData);
-    }
+    filePath = await StorageService.writeFile(fileName, audioData);
 
     return AudioFile(
       id: id,

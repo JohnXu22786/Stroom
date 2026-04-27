@@ -23,7 +23,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   bool _isTesting = false;
 
   // ===== TTS 配置（每个供应商完全独立） =====
-  TTSProvider? _selectedTTSProvider;
+  String? _selectedProviderId;
 
   // GLM-TTS 独立配置
   late GlmConfig _glmConfig;
@@ -68,10 +68,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   void _applyConfig(TTSConfigState config) {
     setState(() {
-      _selectedTTSProvider = config.selectedProvider;
-      _glmConfig = config.glmConfig ?? const GlmConfig();
-      _aihubmixConfig =
-          config.aihubmixConfig ?? const AihubmixConfig();
+      _selectedProviderId = config.selectedProviderId;
+      _glmConfig = config.glmConfig;
+      _aihubmixConfig = config.aihubmixConfig;
     });
     // 同步各个 Controller 的文本（不触发 onChanged）
     _glmApiKeyController.text = _glmConfig.apiKey ?? '';
@@ -297,7 +296,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   // ================================================================
 
   Widget _buildTTSSettings() {
-    final providerOptions = TTSProvider.values;
+    final providerOptions = TTSProviderRegistry.getAll();
 
     return Card(
       child: Padding(
@@ -309,30 +308,35 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             _buildListTile(
               leading: const Icon(Icons.business, color: Colors.purple),
               title: '供应商',
-              subtitle: _selectedTTSProvider?.value ?? '未选择',
-              trailing: DropdownButton<TTSProvider>(
-                value: _selectedTTSProvider,
-                onChanged: (TTSProvider? newValue) async {
+              subtitle: _selectedProviderId != null
+                  ? (TTSProviderRegistry.get(_selectedProviderId!)?.label ??
+                      '未选择')
+                  : '未选择',
+              trailing: DropdownButton<TTSProviderDefinition>(
+                value: _selectedProviderId != null
+                    ? TTSProviderRegistry.get(_selectedProviderId!)
+                    : null,
+                onChanged: (TTSProviderDefinition? newValue) async {
                   if (newValue == null) return;
                   // 先保存当前选中的配置
-                  if (_selectedTTSProvider != null) {
+                  if (_selectedProviderId != null) {
                     await _saveCurrentProviderConfig();
                   }
                   // 切换供应商
                   setState(() {
-                    _selectedTTSProvider = newValue;
+                    _selectedProviderId = newValue.id;
                   });
                   // 通知 provider 更新选中状态
                   await ref
                       .read(ttsConfigProvider.notifier)
-                      .selectProvider(newValue);
+                      .selectProvider(newValue.id);
                   // 重新加载 UI
                   _loadTTSConfig();
                 },
-                items: providerOptions.map((TTSProvider p) {
-                  return DropdownMenuItem<TTSProvider>(
-                    value: p,
-                    child: Text(p.value),
+                items: providerOptions.map((TTSProviderDefinition def) {
+                  return DropdownMenuItem<TTSProviderDefinition>(
+                    value: def,
+                    child: Text(def.label),
                   );
                 }).toList(),
               ),
@@ -342,9 +346,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             const Divider(height: 1),
 
             // ---- 按当前选中的供应商显示其独立配置区 ----
-            if (_selectedTTSProvider == TTSProvider.glmTts)
+            if (_selectedProviderId == 'glm_tts')
               _buildGlmConfigSection()
-            else if (_selectedTTSProvider == TTSProvider.aihubmixTts)
+            else if (_selectedProviderId == 'aihubmix_tts')
               _buildAihubmixConfigSection()
             else
               const Padding(
@@ -575,7 +579,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     _aihubmixConfig.copyWith(voice: newVoice);
               });
             },
-            items: aihubmixSupportedVoices.map((String v) {
+            items: AihubmixConfig.supportedVoices.map((String v) {
               return DropdownMenuItem<String>(
                 value: v,
                 child: Text(v),
@@ -614,12 +618,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   /// 保存当前选中供应商的配置（切换供应商时自动调用）
   Future<void> _saveCurrentProviderConfig() async {
-    if (_selectedTTSProvider == null) return;
-    switch (_selectedTTSProvider!) {
-      case TTSProvider.glmTts:
-        await _saveGlmConfig();
-      case TTSProvider.aihubmixTts:
-        await _saveAihubmixConfig();
+    if (_selectedProviderId == null) return;
+    if (_selectedProviderId == 'glm_tts') {
+      await _saveGlmConfig();
+    } else if (_selectedProviderId == 'aihubmix_tts') {
+      await _saveAihubmixConfig();
     }
   }
 

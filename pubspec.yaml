@@ -40,6 +40,7 @@ dependencies:
   # UI and Utilities
   cupertino_icons: ^1.0.6
   material_color_utilities: ^0.13.0
+  idb_shim: ^2.9.0
 
 dev_dependencies:
   flutter_test:
