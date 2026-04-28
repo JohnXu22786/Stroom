@@ -1,33 +1,52 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
-import 'package:idb_shim/idb.dart' as idb;
-import 'package:idb_shim/idb_browser.dart' as idb_browser;
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// 跨平台文件存储服务
-/// - Web: 使用 IndexedDB
+/// - Web: 使用 SharedPreferences 持久化的内存 Map
 /// - Native: 使用 dart:io + path_provider
 class StorageService {
   // =========================================================================
-  // Web: IndexedDB
+  // Web: In-memory store backed by SharedPreferences
   // =========================================================================
-  static idb.Database? _webDb;
+  static Map<String, Uint8List>? _webStore;
 
-  static Future<idb.Database> _getWebDb() async {
-    if (_webDb != null) return _webDb!;
-    _webDb = await idb_browser.idbFactory.openDatabase(
-      'stroom_audio',
-      version: 1,
-      onUpgradeNeeded: (event) {
-        event.database.createObjectStore('audio_files', keyPath: 'name');
-      },
-    );
-    return _webDb!;
+  static Future<Map<String, Uint8List>> _ensureWebStore() async {
+    if (_webStore != null) return _webStore!;
+    _webStore = {};
+    // Try to restore from SharedPreferences (metadata only)
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getStringList('web_audio_keys');
+      if (keys != null) {
+        for (final key in keys) {
+          final base64 = prefs.getString('web_audio_$key');
+          if (base64 != null) {
+            _webStore![key] = base64Decode(base64);
+          }
+        }
+      }
+    } catch (_) {}
+    return _webStore!;
   }
 
-  static const String _storeName = 'audio_files';
+  static Future<void> _persistWebStore() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keys = _webStore?.keys.toList() ?? [];
+      await prefs.setStringList('web_audio_keys', keys);
+      for (final key in keys) {
+        final data = _webStore![key];
+        if (data != null) {
+          await prefs.setString('web_audio_$key', base64Encode(data));
+        }
+      }
+    } catch (_) {}
+  }
 
   // =========================================================================
   // Native
@@ -54,9 +73,8 @@ class StorageService {
   static Future<bool> ttsDirExists() async {
     if (kIsWeb) {
       try {
-        final db = await _getWebDb();
-        final count = await db.getObjectStore(_storeName).count();
-        return count > 0;
+        final store = await _ensureWebStore();
+        return store.isNotEmpty;
       } catch (_) {
         return false;
       }
@@ -68,17 +86,13 @@ class StorageService {
   static Future<List<StorageFileInfo>> listFiles() async {
     if (kIsWeb) {
       try {
-        final db = await _getWebDb();
-        final all = await db.getObjectStore(_storeName).getAll();
-        return all.map<StorageFileInfo>((record) {
-          final r = record as Map;
-          final name = r['name'] as String;
-          final data = r['data'] as Uint8List;
+        final store = await _ensureWebStore();
+        return store.entries.map<StorageFileInfo>((e) {
           return StorageFileInfo(
-            name: name,
-            path: name,
-            data: data,
-            size: data.lengthInBytes,
+            name: e.key,
+            path: e.key,
+            data: e.value,
+            size: e.value.lengthInBytes,
             modifiedAt: DateTime.now(),
           );
         }).toList();
@@ -109,10 +123,9 @@ class StorageService {
 
   static Future<String> writeFile(String fileName, Uint8List data) async {
     if (kIsWeb) {
-      final db = await _getWebDb();
-      final tx = db.transactionStore(_storeName, 'readwrite');
-      await tx.put({'name': fileName, 'data': data}, fileName);
-      await tx.completed;
+      final store = await _ensureWebStore();
+      store[fileName] = data;
+      await _persistWebStore();
       return fileName;
     }
 
@@ -125,10 +138,8 @@ class StorageService {
   static Future<Uint8List?> readFile(String filePath) async {
     if (kIsWeb) {
       try {
-        final db = await _getWebDb();
-        final record = await db.getObjectStore(_storeName).getObject(filePath);
-        if (record == null) return null;
-        return (record as Map)['data'] as Uint8List?;
+        final store = await _ensureWebStore();
+        return store[filePath];
       } catch (_) {
         return null;
       }
@@ -148,10 +159,9 @@ class StorageService {
   static Future<bool> deleteFile(String filePath) async {
     if (kIsWeb) {
       try {
-        final db = await _getWebDb();
-        final tx = db.transactionStore(_storeName, 'readwrite');
-        await tx.delete(filePath);
-        await tx.completed;
+        final store = await _ensureWebStore();
+        store.remove(filePath);
+        await _persistWebStore();
         return true;
       } catch (_) {
         return false;
@@ -173,15 +183,11 @@ class StorageService {
   static Future<String?> copyFile(String sourcePath, String destFileName) async {
     if (kIsWeb) {
       try {
-        final db = await _getWebDb();
-        final store = db.getObjectStore(_storeName);
-        final record = await store.getObject(sourcePath);
-        if (record == null) return null;
-        final r = record as Map;
-        final data = r['data'] as Uint8List;
-        final tx = db.transactionStore(_storeName, 'readwrite');
-        await tx.put({'name': destFileName, 'data': Uint8List.fromList(data)}, destFileName);
-        await tx.completed;
+        final store = await _ensureWebStore();
+        final data = store[sourcePath];
+        if (data == null) return null;
+        store[destFileName] = Uint8List.fromList(data);
+        await _persistWebStore();
         return destFileName;
       } catch (_) {
         return null;
@@ -203,9 +209,8 @@ class StorageService {
   static Future<bool> fileExists(String filePath) async {
     if (kIsWeb) {
       try {
-        final db = await _getWebDb();
-        final record = await db.getObjectStore(_storeName).getObject(filePath);
-        return record != null;
+        final store = await _ensureWebStore();
+        return store.containsKey(filePath);
       } catch (_) {
         return false;
       }
@@ -226,10 +231,8 @@ class StorageService {
   static Future<int> fileSize(String filePath) async {
     if (kIsWeb) {
       try {
-        final db = await _getWebDb();
-        final record = await db.getObjectStore(_storeName).getObject(filePath);
-        if (record == null) return 0;
-        final data = (record as Map)['data'] as Uint8List?;
+        final store = await _ensureWebStore();
+        final data = store[filePath];
         return data?.lengthInBytes ?? 0;
       } catch (_) {
         return 0;
@@ -252,10 +255,16 @@ class StorageService {
   static Future<void> clearWebStorage() async {
     if (!kIsWeb) return;
     try {
-      final db = await _getWebDb();
-      final tx = db.transactionStore(_storeName, 'readwrite');
-      await tx.clear();
-      await tx.completed;
+      final store = await _ensureWebStore();
+      store.clear();
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getStringList('web_audio_keys');
+      if (keys != null) {
+        for (final key in keys) {
+          await prefs.remove('web_audio_$key');
+        }
+      }
+      await prefs.remove('web_audio_keys');
     } catch (_) {}
   }
 }

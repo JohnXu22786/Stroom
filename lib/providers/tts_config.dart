@@ -29,6 +29,38 @@ class TTSProviderDefinition {
     this.defaultSampleRate = 24000,
     this.defaultConfig = const {},
   });
+
+  /// 转 Map（用于持久化）
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'label': label,
+        'defaultBaseUrl': defaultBaseUrl,
+        'supportedVoices': supportedVoices,
+        'supportedFormats': supportedFormats,
+        'speedMin': speedMin,
+        'speedMax': speedMax,
+        'volumeMin': volumeMin,
+        'volumeMax': volumeMax,
+        'defaultSampleRate': defaultSampleRate,
+        'defaultConfig': defaultConfig,
+      };
+
+  /// 从 Map 构造
+  factory TTSProviderDefinition.fromMap(Map<String, dynamic> map) {
+    return TTSProviderDefinition(
+      id: map['id'] as String,
+      label: map['label'] as String,
+      defaultBaseUrl: map['defaultBaseUrl'] as String?,
+      supportedVoices: (map['supportedVoices'] as List?)?.cast<String>() ?? [],
+      supportedFormats: (map['supportedFormats'] as List?)?.cast<String>() ?? ['wav', 'mp3', 'pcm'],
+      speedMin: (map['speedMin'] as num?)?.toDouble() ?? 0.5,
+      speedMax: (map['speedMax'] as num?)?.toDouble() ?? 2.0,
+      volumeMin: (map['volumeMin'] as num?)?.toDouble() ?? 0.0,
+      volumeMax: (map['volumeMax'] as num?)?.toDouble() ?? 2.0,
+      defaultSampleRate: (map['defaultSampleRate'] as num?)?.toInt() ?? 24000,
+      defaultConfig: Map<String, dynamic>.from(map['defaultConfig'] as Map? ?? {}),
+    );
+  }
 }
 
 /// 供应商注册表
@@ -52,6 +84,83 @@ class TTSProviderRegistry {
 
   /// 注销（用于测试）
   static void unregister(String id) => _registry.remove(id);
+}
+
+// ============================================================================
+// 自定义供应商定义（用户自定义）
+// ============================================================================
+
+/// 用户自定义供应商的完整定义（持久化用）
+///
+/// 通用 HTTP 壳子 — 用户只需配置 URL 和可选的模型名称，
+/// 应用会自动构建请求体发送到该端点。
+class CustomProviderDefinition {
+  final String id;
+  final String label;
+  final String baseUrl; // API 端点 URL，不含占位符
+  final String model; // 模型名称（可选），如 'tts-1', 'glm-tts'。空字符串表示不指定模型
+  final List<String> voices;
+  final double speedMin;
+  final double speedMax;
+  final double volumeMin;
+  final double volumeMax;
+
+  const CustomProviderDefinition({
+    required this.id,
+    required this.label,
+    required this.baseUrl,
+    this.model = '',
+    this.voices = const [],
+    this.speedMin = 0.25,
+    this.speedMax = 4.0,
+    this.volumeMin = 0.0,
+    this.volumeMax = 2.0,
+  });
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'label': label,
+        'baseUrl': baseUrl,
+        'model': model,
+        'voices': voices,
+        'speedMin': speedMin,
+        'speedMax': speedMax,
+        'volumeMin': volumeMin,
+        'volumeMax': volumeMax,
+      };
+
+  factory CustomProviderDefinition.fromMap(Map<String, dynamic> map) {
+    return CustomProviderDefinition(
+      id: map['id'] as String,
+      label: map['label'] as String,
+      baseUrl: map['baseUrl'] as String? ?? '',
+      model: map['model'] as String? ?? '',
+      voices: (map['voices'] as List?)?.cast<String>() ?? [],
+      speedMin: (map['speedMin'] as num?)?.toDouble() ?? 0.25,
+      speedMax: (map['speedMax'] as num?)?.toDouble() ?? 4.0,
+      volumeMin: (map['volumeMin'] as num?)?.toDouble() ?? 0.0,
+      volumeMax: (map['volumeMax'] as num?)?.toDouble() ?? 2.0,
+    );
+  }
+
+  /// 注册到全局注册表
+  void register() {
+    TTSProviderRegistry.register(TTSProviderDefinition(
+      id: id,
+      label: label,
+      defaultBaseUrl: baseUrl,
+      supportedVoices: voices,
+      supportedFormats: const ['wav', 'mp3', 'pcm', 'flac'],
+      speedMin: speedMin,
+      speedMax: speedMax,
+      volumeMin: volumeMin,
+      volumeMax: volumeMax,
+      defaultSampleRate: 24000,
+      defaultConfig: {
+        'model': model,
+      },
+    ));
+  }
 }
 
 // ============================================================================
@@ -157,6 +266,7 @@ bool isProviderSupported(String providerId) {
   return TTSProviderRegistry.isRegistered(providerId);
 }
 
+
 // ============================================================================
 // GLM-TTS 特有类型
 // ============================================================================
@@ -184,6 +294,8 @@ enum GlmTrimMode {
 //
 // Config 类既可以从 Map 构造（用于通用存储），也支持 toMap() 序列化。
 // 新增供应商只需在下方添加对应的 Config 类，TTSConfigState 本身不感知。
+//
+// 自定义供应商直接用 Map 存储，无需类型化 Config 类。
 // ============================================================================
 
 /// 默认配置键名（所有供应商共用）

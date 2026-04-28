@@ -152,6 +152,71 @@ class TTSConfigNotifier extends StateNotifier<TTSConfigState> {
   }
 }
 
+// ============================================================================
+// 自定义供应商管理
+// ============================================================================
+
+/// 自定义供应商列表提供器（持久化）
+final customProvidersProvider =
+    StateNotifierProvider<CustomProvidersNotifier, List<CustomProviderDefinition>>(
+  (ref) => CustomProvidersNotifier(),
+);
+
+class CustomProvidersNotifier extends StateNotifier<List<CustomProviderDefinition>> {
+  CustomProvidersNotifier() : super([]);
+
+  Future<void> loadCustomProviders() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final json = prefs.getString('custom_tts_providers');
+      if (json != null) {
+        final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
+        final defs = list.map((m) => CustomProviderDefinition.fromMap(m)).toList();
+        // 注册到全局注册表
+        for (final def in defs) {
+          def.register();
+        }
+        state = defs;
+      } else {
+        state = [];
+      }
+    } catch (e) {
+      print('Failed to load custom providers: $e');
+      state = [];
+    }
+  }
+
+  Future<void> _persist() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final json = jsonEncode(state.map((d) => d.toMap()).toList());
+      await prefs.setString('custom_tts_providers', json);
+    } catch (e) {
+      print('Failed to persist custom providers: $e');
+    }
+  }
+
+  /// 添加自定义供应商
+  Future<void> add(CustomProviderDefinition def) async {
+    state = [...state, def];
+    def.register();
+    await _persist();
+  }
+
+  /// 删除自定义供应商
+  Future<void> remove(String id) async {
+    state = state.where((d) => d.id != id).toList();
+    TTSProviderRegistry.unregister(id);
+    await _persist();
+  }
+
+  /// 更新自定义供应商
+  Future<void> update(String id, CustomProviderDefinition updated) async {
+    state = state.map((d) => d.id == id ? updated : d).toList();
+    updated.register();
+    await _persist();
+  }
+}
 
 
 /// TTS 提供者实例提供器 —— 从当前选中的供应商配置创建 provider 实例
@@ -179,6 +244,15 @@ final ttsProviderProvider =
           model: aihubmix.model ?? aihubmix.defaultModel,
         );
       default:
+        // 尝试作为自定义供应商创建
+        final customDefs = ref.read(customProvidersProvider);
+        final customDef = customDefs.where((d) => d.id == providerId).firstOrNull;
+        if (customDef != null) {
+          return tts_provider_base.CustomTTSProvider(
+            def: customDef,
+            apiKey: config.selectedConfig?['apiKey'] as String? ?? '',
+          );
+        }
         print('Unknown provider: $providerId');
         return null;
     }
