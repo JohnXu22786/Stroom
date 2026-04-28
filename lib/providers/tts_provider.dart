@@ -649,6 +649,143 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
   }
 }
 
+/// 自定义 TTS 供应商 — 通用 HTTP 壳子
+///
+/// POST 到配置的 baseUrl，自动构建请求体，
+/// 并将完整 HTTP 响应体作为原始音频数据返回。
+class CustomTTSProvider extends BaseTTSProvider {
+  final String _apiKey;
+  final Dio _dio;
+  final CustomProviderDefinition _def;
+
+  CustomTTSProvider({
+    required CustomProviderDefinition def,
+    String apiKey = '',
+  }) : _def = def,
+       _apiKey = apiKey,
+       _dio = Dio(BaseOptions(
+         baseUrl: '',
+         headers: {
+           'Content-Type': 'application/json',
+           if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
+         },
+         connectTimeout: const Duration(seconds: 10),
+         receiveTimeout: const Duration(seconds: 30),
+       ));
+
+
+
+  @override
+  String get name => _def.id;
+
+  @override
+  List<String> get supportedModels => [];
+
+  Map<String, dynamic> _buildBody(String input, Map<String, dynamic> params) {
+    final body = <String, dynamic>{
+      'input': input,
+      'voice': params['voice'],
+      'speed': params['speed'],
+    };
+    if (_def.model.isNotEmpty) {
+      body['model'] = _def.model;
+    }
+    return body;
+  }
+
+  @override
+  Map<String, dynamic> get defaultParams => {
+    'voice': _def.voices.isNotEmpty ? _def.voices.first : 'alloy',
+    'speed': 1.0,
+    'volume': 1.0,
+    'format': 'wav',
+    'sample_rate': 24000,
+    'response_format': 'wav',
+  };
+
+  @override
+  Map<String, dynamic> validateParams(Map<String, dynamic> userParams) {
+    final params = Map<String, dynamic>.from(defaultParams);
+    params.addAll(userParams);
+    if (params.containsKey('speed')) {
+      final speed = (params['speed'] as num).toDouble();
+      if (speed < _def.speedMin || speed > _def.speedMax) {
+        throw ArgumentError('语速必须在 ${_def.speedMin} 到 ${_def.speedMax} 之间');
+      }
+    }
+    return params;
+  }
+
+  @override
+  Future<Uint8List> synthesize(String text, {Map<String, dynamic>? params}) async {
+    if (_apiKey.isEmpty) throw Exception('API 密钥未配置');
+    final validated = validateParams(params ?? {});
+    final body = _buildBody(text, validated);
+
+    print('CustomTTSProvider: POST $_def.baseUrl - 文本长度: ${text.length}');
+    try {
+      final response = await _dio.post(
+        _def.baseUrl,
+        options: Options(responseType: ResponseType.bytes),
+        data: body,
+      );
+      final data = Uint8List.fromList(response.data);
+      if (data.isEmpty) throw Exception('供应商返回了空的音频数据');
+      return data;
+    } on DioException catch (e) {
+      throw Exception('合成失败: ${_parseDioError(e)}');
+    }
+  }
+
+  @override
+  Stream<Uint8List> streamSynthesize(String text, {Map<String, dynamic>? params}) async* {
+    if (_apiKey.isEmpty) throw Exception('API 密钥未配置');
+    final validated = validateParams(params ?? {});
+    final body = _buildBody(text, validated);
+    body['stream'] = true;
+
+    try {
+      final response = await _dio.post(
+        _def.baseUrl,
+        options: Options(responseType: ResponseType.stream),
+        data: body,
+      );
+      final stream = response.data.stream as Stream<Uint8List>;
+      await for (final chunk in stream) {
+        if (chunk.isNotEmpty) yield chunk;
+      }
+    } on DioException catch (e) {
+      print('CustomTTSProvider: 流式失败，回退到非流式: ${_parseDioError(e)}');
+      yield await synthesize(text, params: params);
+    }
+  }
+
+  String _parseDioError(DioException e) {
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+        return '连接超时，请检查网络';
+      case DioExceptionType.receiveTimeout:
+        return '接收超时，服务器响应过慢';
+      case DioExceptionType.badResponse:
+        final statusCode = e.response?.statusCode;
+        final body = e.response?.data;
+        String bodyStr;
+        if (body is List<int>) {
+          try { bodyStr = utf8.decode(body); } catch (_) { bodyStr = body.toString(); }
+        } else { bodyStr = body?.toString() ?? '无响应体'; }
+        if (statusCode == 401 || statusCode == 403) return 'API密钥无效或权限不足 (HTTP $statusCode): $bodyStr';
+        if (statusCode == 429) return '请求过于频繁，请稍后重试 (HTTP $statusCode)';
+        if (statusCode == 404) return 'API端点不存在 (HTTP 404): $bodyStr\n请检查API基础URL设置是否正确';
+        if (statusCode == 500) return '服务器内部错误 (HTTP $statusCode): $bodyStr';
+        return '服务器返回错误 (HTTP $statusCode): $bodyStr';
+      case DioExceptionType.cancel:
+        return '请求已取消';
+      default:
+        return '网络错误: ${e.message}';
+    }
+  }
+}
+
 /// 工厂函数：根据供应商名称创建TTSProvider实例
 BaseTTSProvider getTTSProvider({
   required String providerName,
@@ -668,7 +805,21 @@ BaseTTSProvider getTTSProvider({
         model: options?['model'] as String?,
       );
     default:
-      throw ArgumentError('不支持的供应商: $providerName');
+      // 自定义供应商：从 options 中获取定义
+      final baseUrl = options?['base_url'] as String?;
+      if (baseUrl == null || baseUrl.isEmpty) {
+        throw ArgumentError('不支持的供应商: $providerName');
+      }
+      return CustomTTSProvider(
+        def: CustomProviderDefinition(
+          id: providerName,
+          label: options?['label'] as String? ?? providerName,
+          baseUrl: baseUrl,
+          model: options?['model'] as String? ?? '',
+          voices: (options?['voices'] as List?)?.cast<String>() ?? [],
+        ),
+        apiKey: apiKey ?? '',
+      );
   }
 }
 

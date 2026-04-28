@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../providers/theme_provider.dart';
 import '../providers/tts_state_provider.dart';
@@ -39,6 +40,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   late final TextEditingController _aihubmixModelController;
   late final TextEditingController _aihubmixBaseUrlController;
 
+  // 自定义供应商
+  late final TextEditingController _customApiKeyController;
+
   @override
   void initState() {
     super.initState();
@@ -47,6 +51,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     _aihubmixApiKeyController = TextEditingController();
     _aihubmixModelController = TextEditingController();
     _aihubmixBaseUrlController = TextEditingController();
+    _customApiKeyController = TextEditingController();
 
     _loadTTSConfig();
   }
@@ -58,6 +63,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     _aihubmixApiKeyController.dispose();
     _aihubmixModelController.dispose();
     _aihubmixBaseUrlController.dispose();
+    _customApiKeyController.dispose();
     super.dispose();
   }
 
@@ -79,6 +85,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     _aihubmixModelController.text =
         _aihubmixConfig.model ?? _aihubmixConfig.defaultModel;
     _aihubmixBaseUrlController.text = _aihubmixConfig.baseUrl ?? '';
+
+    // 自定义供应商：读取通用配置中的 apiKey
+    final customConfig =
+        config.providerConfigs[_selectedProviderId];
+    _customApiKeyController.text =
+        (customConfig?['apiKey'] as String?) ?? '';
   }
 
   /// 保存 GLM-TTS 独立配置
@@ -350,6 +362,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               _buildGlmConfigSection()
             else if (_selectedProviderId == 'aihubmix_tts')
               _buildAihubmixConfigSection()
+            else if (_selectedProviderId != null &&
+                TTSProviderRegistry.isRegistered(_selectedProviderId!))
+              _buildCustomProviderConfigSection()
             else
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
@@ -358,6 +373,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       style: TextStyle(color: Colors.grey)),
                 ),
               ),
+
+            // ---- 管理自定义供应商 ----
+            const Divider(height: 1),
+            _buildListTile(
+              leading: const Icon(Icons.add_business, color: Colors.teal),
+              title: '管理自定义供应商',
+              subtitle: '添加/编辑/删除自定义 TTS 供应商',
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _showCustomProviderManagementDialog(),
+            ),
           ],
         ),
       ),
@@ -616,6 +641,144 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
+  // ----------------------------------------------------------------
+  // 自定义供应商配置区（通用配置 UI）
+  // ----------------------------------------------------------------
+  Widget _buildCustomProviderConfigSection() {
+    final def = TTSProviderRegistry.get(_selectedProviderId!);
+    final label = def?.label ?? _selectedProviderId!;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 区域标题
+          Row(
+            children: [
+              Icon(Icons.settings, size: 18, color: Colors.teal[700]),
+              const SizedBox(width: 6),
+              Text(
+                '$label 配置',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.teal[700],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '此配置仅作用于 $label。',
+            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          ),
+          const SizedBox(height: 12),
+
+          // API 密钥
+          TextField(
+            controller: _customApiKeyController,
+            decoration: const InputDecoration(
+              labelText: 'API 密钥',
+              hintText: '输入 API 密钥',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.key, color: Colors.amber),
+            ),
+            obscureText: true,
+          ),
+          const SizedBox(height: 12),
+
+          // Base URL（只读）
+          TextField(
+            decoration: InputDecoration(
+              labelText: 'API 基础 URL',
+              hintText: def?.defaultBaseUrl ?? '',
+              border: const OutlineInputBorder(),
+              prefixIcon: const Icon(Icons.link, color: Colors.orange),
+            ),
+            readOnly: true,
+            controller: TextEditingController(text: def?.defaultBaseUrl ?? ''),
+          ),
+          const SizedBox(height: 12),
+
+          // 模型名（只读）
+          TextField(
+            decoration: InputDecoration(
+              labelText: '模型名',
+              hintText: '无',
+              border: const OutlineInputBorder(),
+              prefixIcon: const Icon(Icons.model_training, color: Colors.green),
+            ),
+            readOnly: true,
+            controller: TextEditingController(
+              text: (def?.defaultConfig['model'] as String?)?.isNotEmpty == true
+                  ? (def?.defaultConfig['model'] as String)!
+                  : '无',
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // 音色列表（只读）
+          TextField(
+            decoration: InputDecoration(
+              labelText: '音色列表',
+              hintText: '无',
+              border: const OutlineInputBorder(),
+              prefixIcon: const Icon(Icons.record_voice_over, color: Colors.blue),
+            ),
+            readOnly: true,
+            controller: TextEditingController(
+              text: def?.supportedVoices != null && def!.supportedVoices.isNotEmpty
+                  ? def.supportedVoices.join(', ')
+                  : '无',
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 保存按钮
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                final ok = await _saveCustomProviderConfig();
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(ok ? '$label 配置已保存' : '保存失败'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              },
+              icon: const Icon(Icons.save),
+              label: const Text('保存配置'),
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 48),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 保存自定义供应商通用配置
+  Future<bool> _saveCustomProviderConfig() async {
+    if (_selectedProviderId == null) return false;
+    final notifier = ref.read(ttsConfigProvider.notifier);
+    try {
+      final configMap = <String, dynamic>{
+        'apiKey': _customApiKeyController.text.isNotEmpty
+            ? _customApiKeyController.text
+            : null,
+        'baseUrl': TTSProviderRegistry.get(_selectedProviderId!)?.defaultBaseUrl,
+      };
+      await notifier.saveProviderConfig(_selectedProviderId!, configMap);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   /// 保存当前选中供应商的配置（切换供应商时自动调用）
   Future<void> _saveCurrentProviderConfig() async {
     if (_selectedProviderId == null) return;
@@ -623,8 +786,329 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       await _saveGlmConfig();
     } else if (_selectedProviderId == 'aihubmix_tts') {
       await _saveAihubmixConfig();
+    } else if (TTSProviderRegistry.isRegistered(_selectedProviderId!)) {
+      await _saveCustomProviderConfig();
     }
   }
+
+  /// 显示自定义供应商管理对话框
+  Future<void> _showCustomProviderManagementDialog() async {
+    final customDefs = ref.read(customProvidersProvider);
+    final notifier = ref.read(customProvidersProvider.notifier);
+
+    return showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('管理自定义供应商'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: customDefs.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: Center(
+                          child: Text('暂无自定义供应商',
+                              style: TextStyle(color: Colors.grey)),
+                        ),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: customDefs.length,
+                        itemBuilder: (context, index) {
+                          final def = customDefs[index];
+                          return ListTile(
+                            leading: const Icon(Icons.business,
+                                color: Colors.teal),
+                            title: Text(def.label),
+                            subtitle: Text(def.baseUrl),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit,
+                                      color: Colors.blue),
+                                  onPressed: () {
+                                    Navigator.of(context).pop();
+                                    _showCustomProviderEditDialog(
+                                        existing: def);
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete,
+                                      color: Colors.red),
+                                  onPressed: () async {
+                                    await notifier.remove(def.id);
+                                    if (!context.mounted) return;
+                                    setDialogState(() {});
+                                  },
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _showCustomProviderEditDialog();
+                  },
+                  child: const Text('添加新供应商'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('关闭'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// 显示添加/编辑自定义供应商对话框
+  Future<void> _showCustomProviderEditDialog({
+    CustomProviderDefinition? existing,
+  }) async {
+    final isEditing = existing != null;
+    final labelController =
+        TextEditingController(text: existing?.label ?? '');
+    final baseUrlController =
+        TextEditingController(text: existing?.baseUrl ?? '');
+    final voicesController = TextEditingController(
+        text: existing?.voices.join(', ') ?? '');
+    final speedMinController = TextEditingController(
+        text: existing?.speedMin.toString() ?? '0.25');
+    final speedMaxController = TextEditingController(
+        text: existing?.speedMax.toString() ?? '4.0');
+    final volumeMinController = TextEditingController(
+        text: existing?.volumeMin.toString() ?? '0.0');
+    final volumeMaxController = TextEditingController(
+        text: existing?.volumeMax.toString() ?? '2.0');
+
+    final modelController =
+        TextEditingController(text: existing?.model ?? '');
+
+    final formKey = GlobalKey<FormState>();
+
+    return showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text(isEditing ? '编辑供应商' : '添加新供应商'),
+              content: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // ---- 基本信息 ----
+                      TextField(
+                        controller: labelController,
+                        decoration: const InputDecoration(
+                          labelText: '供应商名称',
+                          hintText: '例如: 我的TTS服务',
+                          border: OutlineInputBorder(),
+                          prefixIcon:
+                              Icon(Icons.label, color: Colors.teal),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: baseUrlController,
+                        decoration: const InputDecoration(
+                          labelText: 'API 基础 URL *',
+                          hintText: 'https://api.example.com/tts',
+                          border: OutlineInputBorder(),
+                          prefixIcon:
+                              Icon(Icons.link, color: Colors.orange),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // ---- 模型名 ----
+                      TextField(
+                        controller: modelController,
+                        decoration: const InputDecoration(
+                          labelText: '模型名（可选）',
+                          hintText: '例如: tts-1',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.model_training, color: Colors.green),
+                          helperText: '部分 API 需要指定模型名',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // ---- 音色列表 ----
+                      TextField(
+                        controller: voicesController,
+                        decoration: const InputDecoration(
+                          labelText: '音色列表',
+                          hintText: '用逗号分隔，例如: alloy,echo,fable',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.record_voice_over,
+                              color: Colors.blue),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // ---- 语速范围 ----
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: speedMinController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: '最小语速',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: speedMaxController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: '最大语速',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // ---- 音量范围 ----
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: volumeMinController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: '最小音量',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: volumeMaxController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: '最大音量',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('取消'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final label = labelController.text.trim();
+                    final baseUrl = baseUrlController.text.trim();
+                    if (label.isEmpty || baseUrl.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('请填写供应商名称和 API 基础 URL'),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                      return;
+                    }
+
+
+
+                    final model = modelController.text.trim();
+
+                    final voices = voicesController.text
+                        .split(',')
+                        .map((s) => s.trim())
+                        .where((s) => s.isNotEmpty)
+                        .toList();
+                    final speedMin =
+                        double.tryParse(speedMinController.text) ?? 0.25;
+                    final speedMax =
+                        double.tryParse(speedMaxController.text) ?? 4.0;
+                    final volumeMin =
+                        double.tryParse(volumeMinController.text) ?? 0.0;
+                    final volumeMax =
+                        double.tryParse(volumeMaxController.text) ?? 2.0;
+
+                    final def = CustomProviderDefinition(
+                      id: isEditing
+                          ? existing!.id
+                          : 'custom_${const Uuid().v4()}',
+                      label: label,
+                      baseUrl: baseUrl,
+                      model: model,
+                      voices: voices,
+                      speedMin: speedMin,
+                      speedMax: speedMax,
+                      volumeMin: volumeMin,
+                      volumeMax: volumeMax,
+                    );
+
+                    final notifier =
+                        ref.read(customProvidersProvider.notifier);
+                    if (isEditing) {
+                      await notifier.update(existing!.id, def);
+                    } else {
+                      await notifier.add(def);
+                    }
+
+                    if (!context.mounted) return;
+                    Navigator.of(context).pop();
+
+                    // 立即切换到新添加/编辑的供应商
+                    await _saveCurrentProviderConfig();
+                    setState(() {
+                      _selectedProviderId = def.id;
+                    });
+                    await ref
+                        .read(ttsConfigProvider.notifier)
+                        .selectProvider(def.id);
+                    _loadTTSConfig();
+
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(this.context).showSnackBar(
+                      SnackBar(
+                        content: Text(isEditing
+                            ? '供应商已更新'
+                            : '供应商已添加'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                  child: Text(isEditing ? '保存' : '添加'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+
 
   /// 播放测试音频
   Future<void> _playTestAudio() async {
