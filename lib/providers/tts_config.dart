@@ -2,6 +2,43 @@
 // 供应商注册表 — 支持动态注册，替换旧的 TTSProvider 枚举
 // ============================================================================
 
+/// 模型定义：描述一个 TTS 模型的信息
+class ModelInfo {
+  final String name;
+  final List<String> voices;
+  final double speedMin;
+  final double speedMax;
+  final double volumeMin;
+  final double volumeMax;
+
+  const ModelInfo({
+    required this.name,
+    this.voices = const [],
+    this.speedMin = 0.5,
+    this.speedMax = 2.0,
+    this.volumeMin = 0.0,
+    this.volumeMax = 2.0,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'name': name,
+    'voices': voices,
+    'speedMin': speedMin,
+    'speedMax': speedMax,
+    'volumeMin': volumeMin,
+    'volumeMax': volumeMax,
+  };
+
+  factory ModelInfo.fromMap(Map<String, dynamic> map) => ModelInfo(
+    name: map['name'] as String,
+    voices: (map['voices'] as List?)?.cast<String>() ?? [],
+    speedMin: (map['speedMin'] as num?)?.toDouble() ?? 0.5,
+    speedMax: (map['speedMax'] as num?)?.toDouble() ?? 2.0,
+    volumeMin: (map['volumeMin'] as num?)?.toDouble() ?? 0.0,
+    volumeMax: (map['volumeMax'] as num?)?.toDouble() ?? 2.0,
+  );
+}
+
 /// 供应商定义：描述一个 TTS 供应商的全部元信息
 class TTSProviderDefinition {
   final String id; // 唯一标识，如 'glm_tts'
@@ -9,6 +46,7 @@ class TTSProviderDefinition {
   final String? defaultBaseUrl;
   final List<String> supportedVoices;
   final List<String> supportedFormats;
+  final List<ModelInfo> supportedModels;
   final double speedMin;
   final double speedMax;
   final double volumeMin;
@@ -22,6 +60,7 @@ class TTSProviderDefinition {
     this.defaultBaseUrl,
     this.supportedVoices = const [],
     this.supportedFormats = const ['wav', 'mp3', 'pcm'],
+    this.supportedModels = const [],
     this.speedMin = 0.5,
     this.speedMax = 2.0,
     this.volumeMin = 0.0,
@@ -37,6 +76,7 @@ class TTSProviderDefinition {
         'defaultBaseUrl': defaultBaseUrl,
         'supportedVoices': supportedVoices,
         'supportedFormats': supportedFormats,
+        'supportedModels': supportedModels.map((m) => m.toMap()).toList(),
         'speedMin': speedMin,
         'speedMax': speedMax,
         'volumeMin': volumeMin,
@@ -53,6 +93,9 @@ class TTSProviderDefinition {
       defaultBaseUrl: map['defaultBaseUrl'] as String?,
       supportedVoices: (map['supportedVoices'] as List?)?.cast<String>() ?? [],
       supportedFormats: (map['supportedFormats'] as List?)?.cast<String>() ?? ['wav', 'mp3', 'pcm'],
+      supportedModels: map['supportedModels'] is List
+          ? (map['supportedModels'] as List).map((m) => ModelInfo.fromMap(Map<String, dynamic>.from(m as Map))).toList()
+          : [],
       speedMin: (map['speedMin'] as num?)?.toDouble() ?? 0.5,
       speedMax: (map['speedMax'] as num?)?.toDouble() ?? 2.0,
       volumeMin: (map['volumeMin'] as num?)?.toDouble() ?? 0.0,
@@ -92,41 +135,23 @@ class TTSProviderRegistry {
 
 /// 用户自定义供应商的完整定义（持久化用）
 ///
-/// 通用 HTTP 壳子 — 用户只需配置 URL 和可选的模型名称，
-/// 应用会自动构建请求体发送到该端点。
+/// 仅包含供应商级信息（标识、名称、端点 URL）。
+/// 模型信息在供应商配置页面中单独管理。
 class CustomProviderDefinition {
   final String id;
   final String label;
-  final String baseUrl; // API 端点 URL，不含占位符
-  final String model; // 模型名称（可选），如 'tts-1', 'glm-tts'。空字符串表示不指定模型
-  final List<String> voices;
-  final double speedMin;
-  final double speedMax;
-  final double volumeMin;
-  final double volumeMax;
+  final String baseUrl;
 
   const CustomProviderDefinition({
     required this.id,
     required this.label,
     required this.baseUrl,
-    this.model = '',
-    this.voices = const [],
-    this.speedMin = 0.25,
-    this.speedMax = 4.0,
-    this.volumeMin = 0.0,
-    this.volumeMax = 2.0,
   });
 
   Map<String, dynamic> toMap() => {
         'id': id,
         'label': label,
         'baseUrl': baseUrl,
-        'model': model,
-        'voices': voices,
-        'speedMin': speedMin,
-        'speedMax': speedMax,
-        'volumeMin': volumeMin,
-        'volumeMax': volumeMax,
       };
 
   factory CustomProviderDefinition.fromMap(Map<String, dynamic> map) {
@@ -134,31 +159,21 @@ class CustomProviderDefinition {
       id: map['id'] as String,
       label: map['label'] as String,
       baseUrl: map['baseUrl'] as String? ?? '',
-      model: map['model'] as String? ?? '',
-      voices: (map['voices'] as List?)?.cast<String>() ?? [],
-      speedMin: (map['speedMin'] as num?)?.toDouble() ?? 0.25,
-      speedMax: (map['speedMax'] as num?)?.toDouble() ?? 4.0,
-      volumeMin: (map['volumeMin'] as num?)?.toDouble() ?? 0.0,
-      volumeMax: (map['volumeMax'] as num?)?.toDouble() ?? 2.0,
     );
   }
 
   /// 注册到全局注册表
+  ///
+  /// 模型信息在供应商配置页面中单独管理，
+  /// 此处仅注册供应商级信息。
   void register() {
     TTSProviderRegistry.register(TTSProviderDefinition(
       id: id,
       label: label,
       defaultBaseUrl: baseUrl,
-      supportedVoices: voices,
-      supportedFormats: const ['wav', 'mp3', 'pcm', 'flac'],
-      speedMin: speedMin,
-      speedMax: speedMax,
-      volumeMin: volumeMin,
-      volumeMax: volumeMax,
-      defaultSampleRate: 24000,
-      defaultConfig: {
-        'model': model,
-      },
+      supportedVoices: [],
+      supportedModels: [],
+      defaultConfig: {},
     ));
   }
 }
@@ -184,6 +199,13 @@ void registerBuiltinProviders() {
       'luodo',
     ],
     supportedFormats: ['wav', 'mp3', 'pcm', 'flac'],
+    supportedModels: [
+      ModelInfo(
+        name: 'glm-tts',
+        voices: ['female', 'tongtong', 'xiaochen', 'chuichui', 'jam', 'kazi', 'douji', 'luodo'],
+        speedMin: 0.5, speedMax: 2.0, volumeMin: 0.0, volumeMax: 2.0,
+      ),
+    ],
     speedMin: 0.5,
     speedMax: 2.0,
     volumeMin: 0.0,
@@ -207,6 +229,11 @@ void registerBuiltinProviders() {
       'shimmer',
     ],
     supportedFormats: ['mp3', 'wav', 'pcm', 'flac'],
+    supportedModels: [
+      ModelInfo(name: 'gpt-4o-mini-tts', voices: ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'], speedMin: 0.25, speedMax: 4.0),
+      ModelInfo(name: 'tts-1', voices: ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'], speedMin: 0.25, speedMax: 4.0),
+      ModelInfo(name: 'gemini-2.5-flash-preview-tts', voices: ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'], speedMin: 0.25, speedMax: 4.0),
+    ],
     speedMin: 0.25,
     speedMax: 4.0,
     volumeMin: 0.0,
