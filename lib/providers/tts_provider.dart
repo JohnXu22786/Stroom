@@ -687,15 +687,16 @@ class CustomTTSProvider extends BaseTTSProvider {
       'voice': params['voice'],
       'speed': params['speed'],
     };
-    if (_def.model.isNotEmpty) {
-      body['model'] = _def.model;
+    // 模型从 params 中传递（由 provider config 页面管理）
+    if (params.containsKey('model') && (params['model'] as String?)?.isNotEmpty == true) {
+      body['model'] = params['model'];
     }
     return body;
   }
 
   @override
   Map<String, dynamic> get defaultParams => {
-    'voice': _def.voices.isNotEmpty ? _def.voices.first : 'alloy',
+    'voice': 'alloy',
     'speed': 1.0,
     'volume': 1.0,
     'format': 'wav',
@@ -707,12 +708,7 @@ class CustomTTSProvider extends BaseTTSProvider {
   Map<String, dynamic> validateParams(Map<String, dynamic> userParams) {
     final params = Map<String, dynamic>.from(defaultParams);
     params.addAll(userParams);
-    if (params.containsKey('speed')) {
-      final speed = (params['speed'] as num).toDouble();
-      if (speed < _def.speedMin || speed > _def.speedMax) {
-        throw ArgumentError('语速必须在 ${_def.speedMin} 到 ${_def.speedMax} 之间');
-      }
-    }
+    // 语速/音量范围由模型配置管理，此处不做 provider 级校验
     return params;
   }
 
@@ -815,8 +811,6 @@ BaseTTSProvider getTTSProvider({
           id: providerName,
           label: options?['label'] as String? ?? providerName,
           baseUrl: baseUrl,
-          model: options?['model'] as String? ?? '',
-          voices: (options?['voices'] as List?)?.cast<String>() ?? [],
         ),
         apiKey: apiKey ?? '',
       );
