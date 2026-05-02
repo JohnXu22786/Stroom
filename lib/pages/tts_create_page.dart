@@ -52,7 +52,12 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   @override
   void initState() {
     super.initState();
-    // 在 build 中通过 ref.watch 响应式加载，这里不需要操作
+    // 进入页面时清除上次残留的合成错误，避免旧错误持续显示
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(ttsStateProvider.notifier).clearError();
+      }
+    });
   }
 
   /// 根据最新的 providerEntriesState 刷新可用模型列表
@@ -134,6 +139,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
   @override
   void dispose() {
+    // 退出页面时清除合成错误
+    ref.read(ttsStateProvider.notifier).clearError();
     _textController.dispose();
     _focusNode.dispose();
     for (final c in _customParamControllers.values) {
@@ -187,6 +194,9 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     }
 
     _focusNode.unfocus();
+
+    // 清除上次的合成错误
+    ref.read(ttsStateProvider.notifier).clearError();
 
     setState(() {
       _isGenerating = true;
@@ -713,6 +723,12 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
             const SizedBox(width: 12),
             Expanded(
               child: Text(error, style: const TextStyle(color: Colors.red)),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 18, color: Colors.red),
+              onPressed: () {
+                ref.read(ttsStateProvider.notifier).clearError();
+              },
             ),
           ],
         ),
