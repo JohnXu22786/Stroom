@@ -1,3 +1,9 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+
+import 'provider_config.dart';
+
 // ============================================================================
 // 供应商注册表 — 支持动态注册，替换旧的 TTSProvider 枚举
 // ============================================================================
@@ -183,67 +189,9 @@ class CustomProviderDefinition {
 // ============================================================================
 
 /// 在模块加载时注册所有内置供应商
+/// 当前不内置任何供应商，所有供应商由用户在配置页面添加
 void registerBuiltinProviders() {
-  TTSProviderRegistry.register(TTSProviderDefinition(
-    id: 'glm_tts',
-    label: 'GLM-TTS',
-    defaultBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-    supportedVoices: [
-      'female',
-      'tongtong',
-      'xiaochen',
-      'chuichui',
-      'jam',
-      'kazi',
-      'douji',
-      'luodo',
-    ],
-    supportedFormats: ['wav', 'mp3', 'pcm', 'flac'],
-    supportedModels: [
-      ModelInfo(
-        name: 'glm-tts',
-        voices: ['female', 'tongtong', 'xiaochen', 'chuichui', 'jam', 'kazi', 'douji', 'luodo'],
-        speedMin: 0.5, speedMax: 2.0, volumeMin: 0.0, volumeMax: 2.0,
-      ),
-    ],
-    speedMin: 0.5,
-    speedMax: 2.0,
-    volumeMin: 0.0,
-    volumeMax: 2.0,
-    defaultSampleRate: 24000,
-    defaultConfig: {
-      'trimMode': 'beep',
-    },
-  ));
-
-  TTSProviderRegistry.register(TTSProviderDefinition(
-    id: 'aihubmix_tts',
-    label: 'AIHUBMIX-TTS',
-    defaultBaseUrl: 'https://aihubmix.com/v1',
-    supportedVoices: [
-      'alloy',
-      'echo',
-      'fable',
-      'onyx',
-      'nova',
-      'shimmer',
-    ],
-    supportedFormats: ['mp3', 'wav', 'pcm', 'flac'],
-    supportedModels: [
-      ModelInfo(name: 'gpt-4o-mini-tts', voices: ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'], speedMin: 0.25, speedMax: 4.0),
-      ModelInfo(name: 'tts-1', voices: ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'], speedMin: 0.25, speedMax: 4.0),
-      ModelInfo(name: 'gemini-2.5-flash-preview-tts', voices: ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'], speedMin: 0.25, speedMax: 4.0),
-    ],
-    speedMin: 0.25,
-    speedMax: 4.0,
-    volumeMin: 0.0,
-    volumeMax: 2.0,
-    defaultSampleRate: 24000,
-    defaultConfig: {
-      'model': 'gpt-4o-mini-tts',
-      'voice': 'alloy',
-    },
-  ));
+  // 不注册任何内置供应商
 }
 
 // ============================================================================
@@ -295,145 +243,132 @@ bool isProviderSupported(String providerId) {
 
 
 // ============================================================================
-// GLM-TTS 特有类型
+// 裁切预设系统
 // ============================================================================
 
-/// GLM-TTS 音频头部裁切模式
-enum GlmTrimMode {
-  none('none', '不裁切'),
-  beep('beep', '滴滴声 (0.630s)'),
-  buzzer('buzzer', '嘟嘟声 (1.830s)');
-
-  const GlmTrimMode(this.value, this.label);
-  final String value;
-  final String label;
-
-  static GlmTrimMode? fromValue(String? value) {
-    for (final mode in GlmTrimMode.values) {
-      if (mode.value == value) return mode;
-    }
-    return null;
-  }
+/// 内置裁切预设 ID 常量
+class BuiltinTrimPresetIds {
+  static const String none = 'builtin_none';
+  static const String beep = 'builtin_beep';
+  static const String buzzer = 'builtin_buzzer';
 }
 
-// ============================================================================
-// 供应商配置（Map → 类型化包装器）
-//
-// Config 类既可以从 Map 构造（用于通用存储），也支持 toMap() 序列化。
-// 新增供应商只需在下方添加对应的 Config 类，TTSConfigState 本身不感知。
-//
-// 自定义供应商直接用 Map 存储，无需类型化 Config 类。
-// ============================================================================
-
-/// 默认配置键名（所有供应商共用）
-const _kApiKey = 'apiKey';
-const _kBaseUrl = 'baseUrl';
-
-// --------------------------------------------------------------------------
-// GLM-TTS 配置
-// --------------------------------------------------------------------------
-
-class GlmConfig {
-  final String? apiKey;
-  final String? baseUrl;
-  final GlmTrimMode trimMode;
-
-  const GlmConfig({
-    this.apiKey,
-    this.baseUrl,
-    this.trimMode = GlmTrimMode.beep,
-  });
-
-  /// 从通用 Map 构造
-  factory GlmConfig.fromMap(Map<String, dynamic> map) {
-    return GlmConfig(
-      apiKey: map[_kApiKey] as String?,
-      baseUrl: map[_kBaseUrl] as String?,
-      trimMode:
-          GlmTrimMode.fromValue(map['trimMode'] as String?) ?? GlmTrimMode.beep,
-    );
-  }
-
-  Map<String, dynamic> toMap() => {
-        _kApiKey: apiKey,
-        _kBaseUrl: baseUrl,
-        'trimMode': trimMode.value,
-      };
-
-  GlmConfig copyWith({
-    String? apiKey,
-    String? baseUrl,
-    GlmTrimMode? trimMode,
-  }) =>
-      GlmConfig(
-        apiKey: apiKey ?? this.apiKey,
-        baseUrl: baseUrl ?? this.baseUrl,
-        trimMode: trimMode ?? this.trimMode,
-      );
-
-  bool get isConfigured => apiKey?.isNotEmpty == true;
-
-  @override
-  String toString() =>
-      'GlmConfig(apiKey: ${apiKey != null ? "***" : null}, baseUrl: $baseUrl, trimMode: $trimMode)';
-}
-
-// --------------------------------------------------------------------------
-// AIHUBMIX-TTS 配置
-// --------------------------------------------------------------------------
-
-class AihubmixConfig {
-  final String? apiKey;
-  final String? baseUrl;
-  final String? model;
-  final String? voice;
-
-  const AihubmixConfig({
-    this.apiKey,
-    this.baseUrl,
-    this.model,
-    this.voice,
-  });
-
-  factory AihubmixConfig.fromMap(Map<String, dynamic> map) {
-    return AihubmixConfig(
-      apiKey: map[_kApiKey] as String?,
-      baseUrl: map[_kBaseUrl] as String?,
-      model: map['model'] as String?,
-      voice: map['voice'] as String?,
-    );
-  }
-
-  Map<String, dynamic> toMap() => {
-        _kApiKey: apiKey,
-        _kBaseUrl: baseUrl,
-        'model': model,
-        'voice': voice,
-      };
-
-  AihubmixConfig copyWith({
-    String? apiKey,
-    String? baseUrl,
-    String? model,
-    String? voice,
-  }) =>
-      AihubmixConfig(
-        apiKey: apiKey ?? this.apiKey,
-        baseUrl: baseUrl ?? this.baseUrl,
-        model: model ?? this.model,
-        voice: voice ?? this.voice,
-      );
-
-  String get defaultVoice =>
-      supportedVoices.isNotEmpty ? supportedVoices.first : 'alloy';
-  String get defaultModel => 'gpt-4o-mini-tts';
-  bool get isConfigured => apiKey?.isNotEmpty == true;
-
-  static const supportedVoices = [
-    'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer',
+/// 获取内置裁切预设列表
+List<Map<String, dynamic>> getBuiltinTrimPresets() {
+  return [
+    {
+      'id': BuiltinTrimPresetIds.none,
+      'name': '不裁切',
+      'durationSeconds': 0.0,
+      'direction': 'head',
+    },
+    {
+      'id': BuiltinTrimPresetIds.beep,
+      'name': '滴滴声 (0.630s)',
+      'durationSeconds': 0.63,
+      'direction': 'head',
+    },
+    {
+      'id': BuiltinTrimPresetIds.buzzer,
+      'name': '嘟嘟声 (1.830s)',
+      'durationSeconds': 1.83,
+      'direction': 'head',
+    },
   ];
+}
 
-  @override
-  String toString() =>
-      'AihubmixConfig(apiKey: ${apiKey != null ? "***" : null}, baseUrl: $baseUrl, model: $model, voice: $voice)';
+// ============================================================================
+// 自定义裁切预设全局状态
+// ============================================================================
+
+/// 自定义裁切预设列表提供器（持久化）
+final customTrimPresetsProvider =
+    StateNotifierProvider<CustomTrimPresetsNotifier, List<TrimPreset>>((ref) {
+  final notifier = CustomTrimPresetsNotifier();
+  notifier.load();
+  return notifier;
+});
+
+class CustomTrimPresetsNotifier extends StateNotifier<List<TrimPreset>> {
+  CustomTrimPresetsNotifier() : super([]);
+
+  Future<void> load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final json = prefs.getString('custom_trim_presets');
+      if (json != null) {
+        final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
+        state = list.map((m) => TrimPreset.fromMap(m)).toList();
+        return;
+      }
+    } catch (e) {
+      print('Failed to load custom trim presets: $e');
+    }
+    state = [];
+  }
+
+  Future<void> _persist() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final json = jsonEncode(state.map((e) => e.toMap()).toList());
+      await prefs.setString('custom_trim_presets', json);
+    } catch (e) {
+      print('Failed to persist custom trim presets: $e');
+    }
+  }
+
+  /// 添加一个自定义裁切预设
+  Future<void> add(TrimPreset preset) async {
+    state = [...state, preset];
+    await _persist();
+  }
+
+  /// 更新一个自定义裁切预设
+  Future<void> update(String id, TrimPreset updated) async {
+    state = state.map((e) => e.id == id ? updated : e).toList();
+    await _persist();
+  }
+
+  /// 删除一个自定义裁切预设
+  Future<void> remove(String id) async {
+    state = state.where((e) => e.id != id).toList();
+    await _persist();
+  }
+}
+
+/// 获取所有裁切预设（内置+自定义），返回 Map，key 为 preset ID
+List<Map<String, dynamic>> getAllTrimPresets(List<TrimPreset> customPresets) {
+  final builtin = getBuiltinTrimPresets();
+  final all = <Map<String, dynamic>>[...builtin];
+  for (final cp in customPresets) {
+    all.add({
+      'id': cp.id,
+      'name': cp.name,
+      'durationSeconds': cp.durationSeconds,
+      'direction': cp.direction,
+      'isCustom': true,
+    });
+  }
+  return all;
+}
+
+/// 根据 ID 获取裁切预设详情（内置+自定义）
+Map<String, dynamic>? getTrimPresetById(String id, List<TrimPreset> customPresets) {
+  // 在内置中查找
+  for (final builtin in getBuiltinTrimPresets()) {
+    if (builtin['id'] == id) return builtin;
+  }
+  // 在自定义中查找
+  for (final cp in customPresets) {
+    if (cp.id == id) {
+      return {
+        'id': cp.id,
+        'name': cp.name,
+        'durationSeconds': cp.durationSeconds,
+        'direction': cp.direction,
+        'isCustom': true,
+      };
+    }
+  }
+  return null;
 }

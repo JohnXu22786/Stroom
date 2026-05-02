@@ -48,13 +48,14 @@ abstract class BaseTTSProvider {
 /// GLM-TTS供应商实现
 class GLMTTSProvider extends BaseTTSProvider {
   final String? _apiKey;
+  final String _baseUrl;
   late final Dio _dio;
 
   GLMTTSProvider({String? apiKey, String? baseUrl})
-      : _apiKey = apiKey {
-    final base = baseUrl ?? 'https://open.bigmodel.cn/api/paas/v4';
+      : _apiKey = apiKey,
+        _baseUrl = baseUrl ?? 'https://open.bigmodel.cn/api/paas/v4/audio/speech' {
     _dio = Dio(BaseOptions(
-      baseUrl: base,
+      baseUrl: '',
       headers: {
         'Content-Type': 'application/json',
         if (_apiKey != null) 'Authorization': 'Bearer $_apiKey',
@@ -145,7 +146,7 @@ class GLMTTSProvider extends BaseTTSProvider {
     try {
       final startTime = DateTime.now();
       final response = await _dio.post(
-        '/audio/speech',
+        _baseUrl,
         options: Options(
           responseType: ResponseType.bytes,
         ),
@@ -210,7 +211,7 @@ class GLMTTSProvider extends BaseTTSProvider {
 
     try {
       final response = await _dio.post(
-        '/audio/speech',
+        _baseUrl,
         options: Options(
           responseType: ResponseType.stream,
         ),
@@ -346,22 +347,23 @@ class GLMTTSProvider extends BaseTTSProvider {
 /// AIHUBMIX-TTS供应商实现（OpenAI兼容API）
 class AIHUBMIXTTSProvider extends BaseTTSProvider {
   final String? _apiKey;
+  final String _baseUrl;
   final String? _model;
   late final Dio _dio;
 
   /// 初始化AIHUBMIX TTS供应商
   /// [apiKey] AIHUBMIX API密钥
-  /// [baseUrl] API基础URL（可选，默认 https://aihubmix.com/v1）
+  /// [baseUrl] API基础URL（可选，默认 https://aihubmix.com/v1/audio/speech）
   /// [model] 模型名称（可选，默认 gpt-4o-mini-tts）
   AIHUBMIXTTSProvider({
     String? apiKey,
     String? baseUrl,
     String? model,
   })  : _apiKey = apiKey,
+        _baseUrl = baseUrl ?? 'https://aihubmix.com/v1/audio/speech',
         _model = model {
-    final base = baseUrl ?? 'https://aihubmix.com/v1';
     _dio = Dio(BaseOptions(
-      baseUrl: base,
+      baseUrl: '',
       headers: {
         'Content-Type': 'application/json',
         if (_apiKey != null) 'Authorization': 'Bearer $_apiKey',
@@ -465,7 +467,7 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
     try {
       final startTime = DateTime.now();
       final response = await _dio.post(
-        '/audio/speech',
+        _baseUrl,
         options: Options(
           responseType: ResponseType.bytes,
         ),
@@ -523,7 +525,7 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
 
     try {
       final response = await _dio.post(
-        '/audio/speech',
+        _baseUrl,
         options: Options(
           responseType: ResponseType.stream,
         ),
@@ -655,14 +657,17 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
 /// 并将完整 HTTP 响应体作为原始音频数据返回。
 class CustomTTSProvider extends BaseTTSProvider {
   final String _apiKey;
+  final String _baseUrl;
+  final String _name;
   final Dio _dio;
-  final CustomProviderDefinition _def;
 
   CustomTTSProvider({
-    required CustomProviderDefinition def,
+    required String baseUrl,
     String apiKey = '',
-  }) : _def = def,
+    String name = 'custom',
+  }) : _baseUrl = baseUrl,
        _apiKey = apiKey,
+       _name = name,
        _dio = Dio(BaseOptions(
          baseUrl: '',
          headers: {
@@ -676,20 +681,29 @@ class CustomTTSProvider extends BaseTTSProvider {
 
 
   @override
-  String get name => _def.id;
+  String get name => _name;
 
   @override
   List<String> get supportedModels => [];
 
+  /// 内部参数名列表（这些不会发送到 API）
+  static const _internalParamKeys = {
+    'format',
+    'response_format',
+    'sample_rate',
+    'stream',
+    'volume',
+  };
+
   Map<String, dynamic> _buildBody(String input, Map<String, dynamic> params) {
-    final body = <String, dynamic>{
-      'input': input,
-      'voice': params['voice'],
-      'speed': params['speed'],
-    };
-    // 模型从 params 中传递（由 provider config 页面管理）
-    if (params.containsKey('model') && (params['model'] as String?)?.isNotEmpty == true) {
-      body['model'] = params['model'];
+    final body = <String, dynamic>{};
+    // 始终包含 input
+    body['input'] = input;
+    // 将 params 中所有非内部参数传递给 API
+    for (final entry in params.entries) {
+      if (!_internalParamKeys.contains(entry.key)) {
+        body[entry.key] = entry.value;
+      }
     }
     return body;
   }
@@ -718,10 +732,10 @@ class CustomTTSProvider extends BaseTTSProvider {
     final validated = validateParams(params ?? {});
     final body = _buildBody(text, validated);
 
-    print('CustomTTSProvider: POST $_def.baseUrl - 文本长度: ${text.length}');
+    print('CustomTTSProvider: POST $_baseUrl - 文本长度: ${text.length}');
     try {
       final response = await _dio.post(
-        _def.baseUrl,
+        _baseUrl,
         options: Options(responseType: ResponseType.bytes),
         data: body,
       );
@@ -742,7 +756,7 @@ class CustomTTSProvider extends BaseTTSProvider {
 
     try {
       final response = await _dio.post(
-        _def.baseUrl,
+        _baseUrl,
         options: Options(responseType: ResponseType.stream),
         data: body,
       );
@@ -807,12 +821,9 @@ BaseTTSProvider getTTSProvider({
         throw ArgumentError('不支持的供应商: $providerName');
       }
       return CustomTTSProvider(
-        def: CustomProviderDefinition(
-          id: providerName,
-          label: options?['label'] as String? ?? providerName,
-          baseUrl: baseUrl,
-        ),
+        baseUrl: baseUrl,
         apiKey: apiKey ?? '',
+        name: providerName,
       );
   }
 }
