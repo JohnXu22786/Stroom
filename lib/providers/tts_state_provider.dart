@@ -12,6 +12,7 @@ import 'provider_config.dart';
 import 'tts_config.dart';
 import 'tts_provider.dart' as tts_provider_base;
 import '../utils/audio_trim.dart';
+import '../utils/audio_utils.dart';
 import '../utils/storage_service.dart';
 
 // ============================================================================
@@ -160,7 +161,10 @@ class SynthesisConfigNotifier extends StateNotifier<SynthesisConfig> {
         final configMap = Map<String, dynamic>.from(
           (jsonDecode(configJson) as Map).cast<String, dynamic>(),
         );
-        state = SynthesisConfig.fromMap(configMap);
+        var config = SynthesisConfig.fromMap(configMap);
+        // 统一强制为 wav 格式，忽略旧数据中的 mp3
+        config = config.copyWith(format: 'wav');
+        state = config;
       }
     } catch (e) {
       print('Failed to load synthesis config: $e');
@@ -301,6 +305,16 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
       );
 
       state = state.copyWith(progress: 0.7);
+
+      // 格式校验：确保音频数据含有效文件头，裸 PCM 自动补 WAV 头
+      if (audioData.isNotEmpty) {
+        final fixed = ensureValidAudioFormat(
+          audioData,
+          requestedFormat: synthConfig.format,
+          sampleRate: 24000,
+        );
+        audioData = fixed.$1;
+      }
 
       // 如果指定了裁切预设，应用裁切
       if (trimPreset != null && audioData.isNotEmpty) {

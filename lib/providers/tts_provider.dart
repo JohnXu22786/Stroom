@@ -513,7 +513,6 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
     final requestedFormat =
         (validatedParams['response_format'] as String?)?.toLowerCase() ?? 'mp3';
 
-    // 流式模式下强制使用pcm格式
     if (requestedFormat != 'pcm') {
       print('AIHUBMIXTTSProvider: 流式合成不支持直接输出"$requestedFormat"格式，已强制使用"pcm"格式');
     }
@@ -739,8 +738,17 @@ class CustomTTSProvider extends BaseTTSProvider {
         options: Options(responseType: ResponseType.bytes),
         data: body,
       );
-      final data = Uint8List.fromList(response.data);
+      var data = Uint8List.fromList(response.data);
       if (data.isEmpty) throw Exception('供应商返回了空的音频数据');
+      // 将 API 返回的 PCM 转为 WAV
+      if (data.isNotEmpty) {
+        final fixed = ensureValidAudioFormat(
+          data,
+          requestedFormat: 'wav',
+          sampleRate: (validated['sample_rate'] as num?)?.toInt() ?? 24000,
+        );
+        data = fixed.$1;
+      }
       return data;
     } on DioException catch (e) {
       throw Exception('合成失败: ${_parseDioError(e)}');

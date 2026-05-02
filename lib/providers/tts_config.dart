@@ -65,7 +65,7 @@ class TTSProviderDefinition {
     required this.label,
     this.defaultBaseUrl,
     this.supportedVoices = const [],
-    this.supportedFormats = const ['wav', 'mp3', 'pcm'],
+    this.supportedFormats = const ['wav', 'pcm'],
     this.supportedModels = const [],
     this.speedMin = 0.5,
     this.speedMax = 2.0,
@@ -98,7 +98,7 @@ class TTSProviderDefinition {
       label: map['label'] as String,
       defaultBaseUrl: map['defaultBaseUrl'] as String?,
       supportedVoices: (map['supportedVoices'] as List?)?.cast<String>() ?? [],
-      supportedFormats: (map['supportedFormats'] as List?)?.cast<String>() ?? ['wav', 'mp3', 'pcm'],
+      supportedFormats: (map['supportedFormats'] as List?)?.cast<String>() ?? ['wav', 'pcm'],
       supportedModels: map['supportedModels'] is List
           ? (map['supportedModels'] as List).map((m) => ModelInfo.fromMap(Map<String, dynamic>.from(m as Map))).toList()
           : [],
