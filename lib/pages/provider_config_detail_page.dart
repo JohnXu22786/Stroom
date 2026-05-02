@@ -25,6 +25,7 @@ class _ProviderConfigDetailPageState
   final _keyController = TextEditingController();
 
   bool _isSaving = false;
+  bool _obscureKey = true;
   bool get _isEditing => widget.configIndex >= 0;
 
   ProviderEntry? get _entry {
@@ -277,12 +278,17 @@ class _ProviderConfigDetailPageState
       appBar: AppBar(
         title: Text(title),
         actions: [
-          if (_isEditing)
-            IconButton(
-              icon: const Icon(Icons.delete),
-              tooltip: '删除配置',
-              onPressed: _delete,
-            ),
+          TextButton.icon(
+            onPressed: _isSaving ? null : _save,
+            icon: _isSaving
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.save, size: 20),
+            label: Text(_isSaving ? '保存中...' : '保存'),
+          ),
         ],
       ),
       body: ListView(
@@ -316,35 +322,22 @@ class _ProviderConfigDetailPageState
           const SizedBox(height: 12),
           TextField(
             controller: _keyController,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Key',
               hintText: '输入 API 密钥',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.key, color: Colors.amber),
-            ),
-            obscureText: true,
-          ),
-          const SizedBox(height: 16),
-
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _isSaving ? null : _save,
-              icon: _isSaving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.save),
-              label: const Text('保存配置'),
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 48),
+              border: const OutlineInputBorder(),
+              prefixIcon: const Icon(Icons.key, color: Colors.amber),
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _obscureKey ? Icons.visibility_off : Icons.visibility,
+                  color: Colors.grey,
+                ),
+                onPressed: () => setState(() => _obscureKey = !_obscureKey),
               ),
             ),
+            obscureText: _obscureKey,
           ),
-
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
 
           // ==========================================================
           // 模型列表

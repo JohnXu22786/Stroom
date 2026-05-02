@@ -5,7 +5,7 @@ import 'package:path/path.dart' as path;
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../providers/tts_state_provider.dart';
-import '../providers/tts_config.dart';
+
 import '../utils/audio_playback.dart';
 import '../utils/audio_utils.dart';
 import '../utils/storage_service.dart';

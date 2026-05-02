@@ -3,8 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
 import '../providers/tts_state_provider.dart';
-import '../providers/tts_config.dart';
 import '../providers/provider_config.dart';
+import '../providers/tts_config.dart';
+import 'provider_config_page.dart';
+
+/// 模型选项：模型配置 + 所属供应商配置（含 host/key）
+class _ModelOption {
+  final ModelConfig config;
+  final ProviderConfigItem providerConfig;
+
+  const _ModelOption(this.config, this.providerConfig);
+}
 
 /// TTS创建页面 - 用于文本转语音转换
 class TTSCreatePage extends ConsumerStatefulWidget {
@@ -20,8 +29,17 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   bool _isGenerating = false;
   String? _lastGeneratedFilePath;
 
-  // 当前选中的模型配置（取 TTS 供应商第一个模型）
+  // 当前选中的模型配置
   ModelConfig? _modelConfig;
+
+  // 当前选中的模型索引（null 表示未选择）
+  int? _selectedModelIndex;
+
+  // TTS 条目 ID（用于导航到配置页面）
+  String? _ttsEntryId;
+
+  // 当前 TTS 供应商下所有可用的模型列表（含所属供应商名称）
+  List<_ModelOption> _availableModels = [];
 
   // 自定义参数值覆盖
   final Map<String, TextEditingController> _customParamControllers = {};
@@ -34,59 +52,84 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadModelConfig();
+    // 在 build 中通过 ref.watch 响应式加载，这里不需要操作
+  }
+
+  /// 根据最新的 providerEntriesState 刷新可用模型列表
+  void _refreshModels(ProviderEntriesState entriesState) {
+    final ttsEntry = entriesState.entries.where((e) => e.name == 'TTS供应商').firstOrNull;
+
+    // 未找到 TTS 条目时不做任何事（UI 会显示未配置提示）
+    if (ttsEntry == null) {
+      setState(() {
+        _ttsEntryId = null;
+        _modelConfig = null;
+        _selectedModelIndex = null;
+        _availableModels = [];
+      });
+      return;
+    }
+
+    // 聚合所有配置项中的模型
+    final allModels = <_ModelOption>[];
+    for (final configItem in ttsEntry.configs) {
+      if (configItem.models.isEmpty) continue;
+      for (final model in configItem.models) {
+        allModels.add(_ModelOption(model, configItem));
+      }
+    }
+
+    // 如果数据没变化就不触发重建
+    final oldIds = _availableModels.map((e) => e.config.modelId).toList();
+    final newIds = allModels.map((e) => e.config.modelId).toList();
+    if (_listEquals(oldIds, newIds) && _ttsEntryId == ttsEntry.id) return;
+
+    setState(() {
+      _ttsEntryId = ttsEntry.id;
+      if (allModels.isEmpty) {
+        // 模型列表变空 → 清空当前选择
+        _modelConfig = null;
+        _selectedModelIndex = null;
+        _availableModels = [];
+        _customParamControllers.clear();
+      } else {
+        // 如果之前选的模型在列表中，保留选择
+        final prevModelId = _modelConfig?.modelId;
+        final stillExists = prevModelId != null && allModels.any((o) => o.config.modelId == prevModelId);
+        if (!stillExists) {
+          _modelConfig = null;
+          _selectedModelIndex = null;
+        } else {
+          _selectedModelIndex = allModels.indexWhere((o) => o.config.modelId == prevModelId);
+        }
+        _availableModels = allModels;
+        // 清理多余的 controller
+        final keptKeys = _modelConfig?.customParams.map((p) => p.paramName).toSet() ?? {};
+        _customParamControllers.removeWhere((k, _) => !keptKeys.contains(k));
+      }
     });
   }
 
-  void _loadModelConfig() {
-    final entriesState = ref.read(providerEntriesProvider);
-    // 找 TTS 供应商条目
-    final ttsEntry = entriesState.entries.where((e) => e.name == 'TTS供应商').firstOrNull;
-    if (ttsEntry == null || ttsEntry.configs.isEmpty || ttsEntry.configs.first.models.isEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _showNotConfiguredWarning();
-        }
-      });
-      return;
+  bool _listEquals(List a, List b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
     }
+    return true;
+  }
 
-    final configItem = ttsEntry.configs.first;
-    // 检查 host 和 key 是否已填写
-    if (configItem.host.trim().isEmpty || configItem.key.trim().isEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('供应商配置不完整'),
-              content: const Text('TTS供应商的 Host 和 Key 未填写完整，请在设置页面中补充配置后再使用语音生成功能。'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('知道了'),
-                ),
-              ],
-            ),
-          );
-        }
-      });
-      return;
+  /// 跳转到 TTS 供应商配置页
+  void _navigateToProviderConfig() {
+    if (_ttsEntryId != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ProviderConfigPage(entryId: _ttsEntryId!),
+        ),
+      );
+    } else {
+      Navigator.pushNamed(context, '/settings');
     }
-
-    final model = ttsEntry.configs.first.models.first;
-    setState(() {
-      _modelConfig = model;
-      if (model.voices.isNotEmpty) {
-        _selectedVoice = model.voices.first.name;
-      }
-      // 初始化自定义参数控制器
-      _customParamControllers.clear();
-      for (final p in model.customParams) {
-        _customParamControllers[p.paramName] = TextEditingController(text: p.defaultValue);
-      }
-    });
   }
 
   @override
@@ -117,7 +160,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              Navigator.pushNamed(context, '/settings');
+              _navigateToProviderConfig();
             },
             child: const Text('去配置'),
           ),
@@ -158,7 +201,32 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
       await synthNotifier.updateSpeed(_speed);
       await synthNotifier.updateVolume(_volume);
 
-      final audioFile = await ref.read(ttsStateProvider.notifier).synthesize(text);
+      // 查找裁切预设
+      Map<String, dynamic>? trimPreset;
+      if (_modelConfig!.selectedTrimPresetId != null) {
+        final customPresets = ref.read(customTrimPresetsProvider);
+        trimPreset = getTrimPresetById(
+            _modelConfig!.selectedTrimPresetId!, customPresets);
+      }
+
+      // 获取选中的供应商配置
+      final modelOption = _availableModels[_selectedModelIndex!];
+
+      // 收集自定义参数值
+      final customParams = <String, String>{};
+      for (final entry in _customParamControllers.entries) {
+        customParams[entry.key] = entry.value.text;
+      }
+
+      final audioFile = await ref
+          .read(ttsStateProvider.notifier)
+          .synthesize(
+            text,
+            providerConfig: modelOption.providerConfig,
+            modelConfig: modelOption.config,
+            customParams: customParams,
+            trimPreset: trimPreset,
+          );
 
       if (audioFile != null) {
         _lastGeneratedFilePath = audioFile.path;
@@ -185,8 +253,11 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
   @override
   Widget build(BuildContext context) {
+    final entriesState = ref.watch(providerEntriesProvider);
     final ttsState = ref.watch(ttsStateProvider);
-    final model = _modelConfig;
+
+    // 响应式刷新模型列表（每次 provider 数据变化时自动重建）
+    _refreshModels(entriesState);
 
     return Scaffold(
       appBar: AppBar(
@@ -202,18 +273,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
             _buildTextInputSection(),
             const SizedBox(height: 24),
 
-            // 配置区域（按模型配置条件显示）
-            if (model != null) _buildConfigSection(model),
-            if (model == null)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Center(
-                    child: Text('请先在设置中配置 TTS 供应商和模型',
-                        style: TextStyle(color: Colors.grey[600])),
-                  ),
-                ),
-              ),
+            // 配置区域
+            _buildConfigSection(),
 
             const SizedBox(height: 24),
 
@@ -280,20 +341,35 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     );
   }
 
-  Widget _buildConfigSection(ModelConfig model) {
-    final hasVoices = model.voices.isNotEmpty;
-    final hasSpeed = model.hasSpeed;
-    final hasVolume = model.hasVolume;
-    final hasCustomParams = model.customParams.isNotEmpty;
+  Widget _buildConfigSection() {
+    final model = _modelConfig;
 
-    // 如果什么都没配置，就不显示配置卡片
-    if (!hasVoices && !hasSpeed && !hasVolume && !hasCustomParams) {
+    // 没有可用模型 → 显示引导卡片
+    if (_availableModels.isEmpty) {
       return Card(
         child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Center(
-            child: Text('请在设置页面配置模型参数',
-                style: TextStyle(color: Colors.grey[600])),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              const Icon(Icons.warning_amber_rounded, size: 48, color: Colors.orange),
+              const SizedBox(height: 16),
+              const Text(
+                '未检测到可用模型',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '请先在供应商设置中添加模型，然后再返回此处选择。',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: _navigateToProviderConfig,
+                icon: const Icon(Icons.settings),
+                label: const Text('去配置供应商'),
+              ),
+            ],
           ),
         ),
       );
@@ -311,39 +387,114 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
             ),
             const SizedBox(height: 16),
 
-            // 音色选择（有条件）
-            if (hasVoices) ...[
-              _buildVoiceSelector(model),
-              const SizedBox(height: 16),
-            ],
+            // 模型选择下拉列表
+            _buildModelSelector(),
+            const SizedBox(height: 16),
 
-            // 语速控制（有条件）
-            if (hasSpeed) ...[
-              _buildSpeedSlider(model),
-              const SizedBox(height: 16),
-            ],
+            // 选择了模型后才显示该模型的参数
+            if (model != null) ...[
+              // 音色选择（有条件）
+              if (model.voices.isNotEmpty) ...[
+                _buildVoiceSelector(model),
+                const SizedBox(height: 16),
+              ],
 
-            // 音量控制（有条件）
-            if (hasVolume) ...[
-              _buildVolumeSlider(model),
-              const SizedBox(height: 16),
-            ],
+              // 语速控制（有条件）
+              if (model.hasSpeed) ...[
+                _buildSpeedSlider(model),
+                const SizedBox(height: 16),
+              ],
 
-            // 自定义参数（有条件）
-            if (hasCustomParams) ...[
-              _buildCustomParamsSection(model),
-              const SizedBox(height: 16),
-            ],
+              // 音量控制（有条件）
+              if (model.hasVolume) ...[
+                _buildVolumeSlider(model),
+                const SizedBox(height: 16),
+              ],
 
-            // 底部提示
-            Text(
-              '在TTS供应商设置页面设置更多参数',
-              style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-            ),
+              // 自定义参数（有条件）
+              if (model.customParams.isNotEmpty) ...[
+                _buildCustomParamsSection(model),
+                const SizedBox(height: 16),
+              ],
+
+              // 跳转到供应商配置页面
+              Row(
+                children: [
+                  Text(
+                    '在TTS供应商设置页面设置更多参数',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                  ),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: _navigateToProviderConfig,
+                    icon: const Icon(Icons.settings, size: 16),
+                    label: const Text('跳转', style: TextStyle(fontSize: 12)),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildModelSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '选择模型',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<int>(
+          value: _selectedModelIndex,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            hintText: '请选择一个模型',
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+          items: List.generate(_availableModels.length, (i) {
+            final opt = _availableModels[i];
+            final label = opt.providerConfig.providerName.isNotEmpty
+                ? opt.providerConfig.providerName
+                : '供应商';
+            return DropdownMenuItem<int>(
+              value: i,
+              child: Text('${opt.config.name} | $label'),
+            );
+          }),
+          onChanged: (index) {
+            if (index != null) {
+              _onModelSelected(index);
+            }
+          },
+        ),
+      ],
+    );
+  }
+
+  void _onModelSelected(int index) {
+    final opt = _availableModels[index];
+    final model = opt.config;
+    setState(() {
+      _selectedModelIndex = index;
+      _modelConfig = model;
+      if (model.voices.isNotEmpty) {
+        _selectedVoice = model.voices.first.name;
+      }
+      // 初始化自定义参数控制器
+      _customParamControllers.clear();
+      for (final p in model.customParams) {
+        _customParamControllers[p.paramName] = TextEditingController(text: p.defaultValue);
+      }
+    });
   }
 
   Widget _buildVoiceSelector(ModelConfig model) {

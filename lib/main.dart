@@ -10,11 +10,6 @@ Future<void> main() async {
     WidgetsFlutterBinding.ensureInitialized();
     registerBuiltinProviders();
 
-    // 加载用户自定义供应商
-    final container = ProviderContainer();
-    await container.read(customProvidersProvider.notifier).loadCustomProviders();
-    container.dispose();
-
     runApp(
       const ProviderScope(
         child: Application(),

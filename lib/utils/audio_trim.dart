@@ -1,12 +1,4 @@
 import 'dart:typed_data';
-import 'dart:math' show sqrt;
-import '../providers/tts_config.dart';
-
-/// GLM-TTS固定修剪点（单位：秒）
-const double glmCutPoint = 0.629333;
-
-/// GLM-TTS蜂鸣声结束后的额外修剪点（单位：秒）
-const double glmBuzzerCutPoint = 1.829333;
 
 /// 默认采样率
 const int defaultSampleRate = 24000;
@@ -129,79 +121,23 @@ Uint8List _pcmToWav(Uint8List pcmData, int sampleRate) {
   return writer.toBytes();
 }
 
-/// 需要丢弃的字节数（基于默认采样率和16位PCM）
-int get bytesToDiscard =>
-    (glmCutPoint * defaultSampleRate).round() * 2; // 16位PCM = 2字节/样本
-
-/// 检测音频是否来自GLM-TTS（通过分析开头是否有蜂鸣声）
-///
-/// [audioBytes] 音频数据字节
-/// [sampleRate] 采样率，默认24000Hz
-bool isGlmAudio(Uint8List audioBytes, {int sampleRate = defaultSampleRate}) {
-  // 需要至少0.5秒的数据进行分析
-  final minSamples = (sampleRate * 0.5).round();
-  final bytesPerSample = 2; // 16位PCM
-
-  if (audioBytes.length < minSamples * bytesPerSample) {
-    return false;
-  }
-
-  // 如果数据有 WAV 头，先剥离
-  final pcm = _detectFormat(audioBytes) == 'wav'
-      ? _extractPcmFromWav(audioBytes)
-      : audioBytes;
-  if (pcm.length < minSamples * bytesPerSample) {
-    return false;
-  }
-
-  // 分析前0.5秒的能量变化
-  // GLM-TTS蜂鸣声具有脉冲特性，能量方差较大
-  final sampleCount = minSamples;
-  final samples = Int16List.view(pcm.buffer, 0, sampleCount);
-
-  // 计算均方根（RMS）能量
-  double sumSquares = 0;
-  for (int i = 0; i < sampleCount; i++) {
-    sumSquares += samples[i] * samples[i];
-  }
-  final rms = sqrt(sumSquares / sampleCount);
-
-  // 计算零交叉率（蜂鸣声具有规律性）
-  int zeroCrossings = 0;
-  for (int i = 1; i < sampleCount; i++) {
-    if ((samples[i - 1] >= 0 && samples[i] < 0) ||
-        (samples[i - 1] < 0 && samples[i] >= 0)) {
-      zeroCrossings++;
-    }
-  }
-  final zcr = zeroCrossings / sampleCount;
-
-  // GLM-TTS蜂鸣声特征：较高的RMS和规律性的零交叉率
-  // 阈值基于经验值
-  return rms > 500 && zcr > 0.05 && zcr < 0.3;
-}
-
-/// 从GLM-TTS音频中修剪开头固定时长。
-///
-/// 自动检测音频格式（WAV / PCM / MP3 / FLAC）：
-/// - PCM：直接按字节裁切
-/// - WAV：剥离 RIFF 头 → 裁切 PCM → 重写 WAV 头
-/// - MP3 / FLAC：跳过裁切（压缩格式无法安全裁切）
+/// 从音频中裁切指定长度的头部或尾部
 ///
 /// [audioBytes] 原始音频数据
+/// [preset] 裁切预设，包含: durationSeconds(裁切时长), direction('head'/'tail')
 /// [sampleRate] 采样率，仅 WAV 重建时使用，默认 24000
-/// [trimMode] 裁切模式
-/// [force] 是否跳过 isGlmAudio 检测（已确认为 GLM 音频时设为 true）
-Uint8List trimGlmAudio(
+Uint8List trimAudio(
   Uint8List audioBytes, {
+  required Map<String, dynamic> preset,
   int sampleRate = defaultSampleRate,
-  GlmTrimMode trimMode = GlmTrimMode.beep,
-  bool force = false,
 }) {
   if (audioBytes.isEmpty) return audioBytes;
 
-  // none模式跳过修剪
-  if (trimMode == GlmTrimMode.none) {
+  final durationSeconds = (preset['durationSeconds'] as num).toDouble();
+  final direction = preset['direction'] as String? ?? 'head';
+
+  // 时长为 0 或负数，不裁切
+  if (durationSeconds <= 0) {
     return audioBytes;
   }
 
@@ -213,27 +149,23 @@ Uint8List trimGlmAudio(
     return audioBytes;
   }
 
-  // 选择修剪点
-  final cutPoint =
-      trimMode == GlmTrimMode.buzzer ? glmBuzzerCutPoint : glmCutPoint;
+  // 计算需要裁切的字节数 (16位PCM = 2字节/样本)
+  final samplesToDiscard = (durationSeconds * sampleRate).round();
+  final trimBytes = samplesToDiscard * 2;
 
-  // 安全检查：跳过非GLM音频（除非强制裁切）
-  if (!force && cutPoint > 0 && !isGlmAudio(audioBytes, sampleRate: sampleRate)) {
-    return audioBytes;
-  }
-
-  // 计算需要修剪的样本数和字节数
-  final samplesToDiscard = (cutPoint * sampleRate).round();
-  final trimBytes = samplesToDiscard * 2; // 16位PCM = 2字节/样本
+  if (trimBytes <= 0) return audioBytes;
 
   // ----- 根据格式执行裁切 -----
 
   if (fmt == 'pcm') {
     // 裸 PCM：直接 sublist
-    if (trimBytes >= audioBytes.length) {
-      return audioBytes;
+    if (trimBytes >= audioBytes.length) return audioBytes;
+    if (direction == 'head') {
+      return audioBytes.sublist(trimBytes);
+    } else {
+      // tail: 保留开头到结尾减去 trimBytes
+      return audioBytes.sublist(0, audioBytes.length - trimBytes);
     }
-    return audioBytes.sublist(trimBytes);
   }
 
   // fmt == 'wav'：剥离头 → 裁切 PCM → 重建 WAV 头
@@ -244,56 +176,75 @@ Uint8List trimGlmAudio(
     return audioBytes;
   }
 
-  final trimmedPcm = pcmData.sublist(trimBytes);
+  Uint8List trimmedPcm;
+  if (direction == 'head') {
+    trimmedPcm = pcmData.sublist(trimBytes);
+  } else {
+    trimmedPcm = pcmData.sublist(0, pcmData.length - trimBytes);
+  }
+
   return _pcmToWav(trimmedPcm, sampleRate);
 }
 
-/// 创建包装流并修剪初始GLM-TTS蜂鸣声的生成器
+/// 创建包装流并裁切音频头部/尾部的生成器
 ///
 /// [stream] 原始音频数据块流
+/// [preset] 裁切预设
 /// [sampleRate] 采样率
 /// [bytesPerSample] 每个样本的字节数（16位PCM为2）
-/// [trimMode] 修剪模式
 Stream<Uint8List> createStreamTrimmingWrapper(
   Stream<Uint8List> stream, {
+  required Map<String, dynamic> preset,
   int sampleRate = defaultSampleRate,
   int bytesPerSample = 2,
-  GlmTrimMode trimMode = GlmTrimMode.beep,
 }) async* {
-  // none模式直接透传
-  if (trimMode == GlmTrimMode.none) {
+  final durationSeconds = (preset['durationSeconds'] as num).toDouble();
+  final direction = preset['direction'] as String? ?? 'head';
+
+  // 时长为 0，直接透传
+  if (durationSeconds <= 0) {
     yield* stream;
     return;
   }
 
-  final cutPoint =
-      trimMode == GlmTrimMode.buzzer ? glmBuzzerCutPoint : glmCutPoint;
-  final trimBytes = (cutPoint * sampleRate).round() * bytesPerSample;
+  final trimBytes = (durationSeconds * sampleRate).round() * bytesPerSample;
   var buffer = <int>[];
   var totalBuffered = 0;
   var trimmingDone = false;
 
-  await for (final chunk in stream) {
-    if (!trimmingDone) {
-      buffer.addAll(chunk);
-      totalBuffered += chunk.length;
+  if (direction == 'head') {
+    await for (final chunk in stream) {
+      if (!trimmingDone) {
+        buffer.addAll(chunk);
+        totalBuffered += chunk.length;
 
-      if (totalBuffered > trimBytes) {
-        // 丢弃初始字节，输出剩余部分
-        final trimmed = Uint8List.fromList(buffer.sublist(trimBytes));
-        trimmingDone = true;
-        buffer.clear();
-        if (trimmed.isNotEmpty) {
-          yield trimmed;
+        if (totalBuffered > trimBytes) {
+          final trimmed = Uint8List.fromList(buffer.sublist(trimBytes));
+          trimmingDone = true;
+          buffer.clear();
+          if (trimmed.isNotEmpty) {
+            yield trimmed;
+          }
         }
+      } else {
+        yield chunk;
       }
-    } else {
-      yield chunk;
     }
-  }
 
-  // 如果流结束但修剪未完成，输出剩余缓冲区（未修剪）
-  if (!trimmingDone && buffer.isNotEmpty) {
-    yield Uint8List.fromList(buffer);
+    // 如果流结束但修剪未完成，输出剩余缓冲区（未修剪）
+    if (!trimmingDone && buffer.isNotEmpty) {
+      yield Uint8List.fromList(buffer);
+    }
+  } else {
+    // tail 模式：缓冲所有数据，最后裁掉尾部
+    await for (final chunk in stream) {
+      buffer.addAll(chunk);
+    }
+
+    if (buffer.length > trimBytes) {
+      yield Uint8List.fromList(buffer.sublist(0, buffer.length - trimBytes));
+    } else {
+      yield Uint8List.fromList(buffer);
+    }
   }
 }

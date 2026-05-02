@@ -7,28 +7,135 @@ import 'package:uuid/uuid.dart';
 // 自定义参数
 // ============================================================================
 
+/// 参数类型枚举
+class ParamType {
+  final String value;
+  final String label;
+
+  const ParamType._(this.value, this.label);
+
+  static const string = ParamType._('string', '字符串');
+  static const number = ParamType._('number', '数字');
+  static const boolean = ParamType._('boolean', '布尔');
+
+  static const List<ParamType> values = [string, number, boolean];
+
+  static ParamType fromValue(String? value) {
+    return values.firstWhere(
+      (t) => t.value == value,
+      orElse: () => string,
+    );
+  }
+
+  /// 在 JSON 模板中是否需要用引号包裹
+  bool get needsQuotes => this == string;
+
+  /// 默认值示例
+  String get defaultValueHint {
+    switch (this) {
+      case _: // string
+        return '例如: cheerful';
+      case _: // number
+        return '例如: 0.8';
+      case _: // boolean
+        return '例如: true';
+    }
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is ParamType && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+}
+
 class CustomParam {
   String paramName;
   String defaultValue;
+  String type; // 'string', 'number', 'boolean'
 
   CustomParam({
     required this.paramName,
     this.defaultValue = '',
+    this.type = 'string',
   });
+
+  ParamType get paramType => ParamType.fromValue(type);
 
   Map<String, dynamic> toMap() => {
         'paramName': paramName,
         'defaultValue': defaultValue,
+        'type': type,
       };
 
   factory CustomParam.fromMap(Map<String, dynamic> map) => CustomParam(
         paramName: map['paramName'] as String? ?? '',
         defaultValue: map['defaultValue'] as String? ?? '',
+        type: map['type'] as String? ?? 'string',
       );
 
   CustomParam copy() => CustomParam(
         paramName: paramName,
         defaultValue: defaultValue,
+        type: type,
+      );
+}
+
+// ============================================================================
+// 裁切预设
+// ============================================================================
+
+/// 裁切方向
+enum TrimDirection {
+  head('head', '裁切开头'),
+  tail('tail', '裁切结尾');
+
+  final String value;
+  final String label;
+  const TrimDirection(this.value, this.label);
+
+  static TrimDirection fromValue(String? value) {
+    return TrimDirection.values.firstWhere(
+      (d) => d.value == value,
+      orElse: () => TrimDirection.head,
+    );
+  }
+}
+
+/// 裁切预设（全局共享）
+class TrimPreset {
+  String id;
+  String name;          // 切割方式名称
+  double durationSeconds; // 切割时长（秒）
+  String direction;     // 'head' 或 'tail'
+
+  TrimPreset({
+    String? id,
+    required this.name,
+    required this.durationSeconds,
+    this.direction = 'head',
+  }) : id = id ?? 'trim_${const Uuid().v4()}';
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'name': name,
+        'durationSeconds': durationSeconds,
+        'direction': direction,
+      };
+
+  factory TrimPreset.fromMap(Map<String, dynamic> map) => TrimPreset(
+        id: map['id'] as String?,
+        name: map['name'] as String? ?? '',
+        durationSeconds: (map['durationSeconds'] as num?)?.toDouble() ?? 0,
+        direction: map['direction'] as String? ?? 'head',
+      );
+
+  TrimPreset copy() => TrimPreset(
+        id: id,
+        name: name,
+        durationSeconds: durationSeconds,
+        direction: direction,
       );
 }
 
@@ -74,7 +181,7 @@ class ModelConfig {
   bool hasSpeed; // 是否设置了语速范围
   List<CustomParam> customParams; // 自定义参数列表
   bool supportStream; // 是否支持流式输出
-  String streamUrl; // 流式接口地址（完整URL，如 https://api.example.com/v1/chat/completions）
+  String? selectedTrimPresetId; // 当前选中的裁切预设ID
 
   ModelConfig({
     required this.name,
@@ -88,7 +195,7 @@ class ModelConfig {
     this.hasSpeed = false,
     List<CustomParam>? customParams,
     this.supportStream = false,
-    this.streamUrl = '',
+    this.selectedTrimPresetId,
   })  : voices = voices ?? [],
         customParams = customParams ?? [];
 
@@ -104,7 +211,7 @@ class ModelConfig {
         'hasSpeed': hasSpeed,
         'customParams': customParams.map((p) => p.toMap()).toList(),
         'supportStream': supportStream,
-        'streamUrl': streamUrl,
+        'selectedTrimPresetId': selectedTrimPresetId,
       };
 
   factory ModelConfig.fromMap(Map<String, dynamic> map) => ModelConfig(
@@ -125,7 +232,7 @@ class ModelConfig {
                 .toList() ??
             [],
         supportStream: map['supportStream'] as bool? ?? false,
-        streamUrl: map['streamUrl'] as String? ?? '',
+        selectedTrimPresetId: map['selectedTrimPresetId'] as String?,
       );
 
   ModelConfig copy() => ModelConfig(
@@ -140,7 +247,7 @@ class ModelConfig {
         hasSpeed: hasSpeed,
         customParams: customParams.map((p) => p.copy()).toList(),
         supportStream: supportStream,
-        streamUrl: streamUrl,
+        selectedTrimPresetId: selectedTrimPresetId,
       );
 }
 
@@ -149,6 +256,8 @@ class ModelConfig {
 // ============================================================================
 
 class ProviderConfigItem {
+
+
   String providerName;
   String host;
   String key;

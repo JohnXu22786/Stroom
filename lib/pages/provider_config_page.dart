@@ -50,6 +50,27 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     setState(() {});
   }
 
+  Future<void> _reorderConfigs(int oldIndex, int newIndex) async {
+    final entry = _entry;
+    if (entry == null) return;
+
+    if (oldIndex < newIndex) newIndex -= 1;
+
+    var configs = entry.configs.map((c) => c.copy()).toList();
+    final item = configs.removeAt(oldIndex);
+    configs.insert(newIndex, item);
+
+    final updated = ProviderEntry(
+      id: entry.id,
+      name: entry.name,
+      configs: configs,
+    );
+
+    await ref.read(providerEntriesProvider.notifier).update(entry.id, updated);
+    if (!mounted) return;
+    setState(() {});
+  }
+
   Future<void> _deleteConfig(int configIndex) async {
     final entry = _entry;
     if (entry == null) return;
@@ -104,76 +125,113 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         title: Text(entry.name),
         centerTitle: true,
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // 供应商配置列表
-          Row(
-            children: [
-              Text(
-                '供应商配置',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.primary,
+      body: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.all(16),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                // 供应商配置列表
+                Row(
+                  children: [
+                    Text(
+                      '供应商配置',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    const Spacer(),
+                    TextButton.icon(
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('添加'),
+                      onPressed: _addConfig,
+                    ),
+                  ],
                 ),
-              ),
-              const Spacer(),
-              TextButton.icon(
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('添加'),
-                onPressed: _addConfig,
-              ),
-            ],
+                const SizedBox(height: 8),
+              ]),
+            ),
           ),
-          const SizedBox(height: 8),
 
           if (entry.configs.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 32),
-              child: Center(
-                child: Text('暂无供应商配置，请点击"添加"创建',
-                    style: TextStyle(color: Colors.grey)),
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 32),
+                child: Center(
+                  child: Text('暂无供应商配置，请点击"添加"创建',
+                      style: TextStyle(color: Colors.grey)),
+                ),
               ),
             )
           else
-            ...List.generate(entry.configs.length, (i) {
-              final config = entry.configs[i];
-              final providerName = config.providerName.isNotEmpty
-                  ? config.providerName
-                  : '（未命名）';
-              final hostPreview = config.host.isNotEmpty
-                  ? config.host
-                  : '(未设置 Host)';
-
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  leading: const Icon(Icons.dns, color: Colors.teal),
-                  title: Text(providerName,
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: Text(hostPreview,
-                      style:
-                          TextStyle(fontSize: 12, color: Colors.grey[600])),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => _deleteConfig(i),
-                        tooltip: '删除配置',
-                      ),
-                      const Icon(Icons.chevron_right),
-                    ],
-                  ),
-                  contentPadding:
-                      const EdgeInsets.only(left: 16, right: 4),
-                  onTap: () => _editConfig(i),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverReorderableList(
+                itemCount: entry.configs.length,
+                onReorder: _reorderConfigs,
+                proxyDecorator: (child, index, animation) => Material(
+                  elevation: 2,
+                  borderRadius: BorderRadius.circular(12),
+                  child: child,
                 ),
-              );
-            }),
+                itemBuilder: (context, i) {
+                  final config = entry.configs[i];
+                  final providerName = config.providerName.isNotEmpty
+                      ? config.providerName
+                      : '（未命名）';
+                  final hostPreview = config.host.isNotEmpty
+                      ? config.host
+                      : '(未设置 Host)';
 
-          const SizedBox(height: 16),
+                  return Card(
+                    key: ValueKey('config_${widget.entryId}_$i'),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      leading: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ReorderableDragStartListener(
+                            index: i,
+                            child: const Icon(Icons.drag_handle,
+                                color: Colors.grey),
+                          ),
+                          const SizedBox(width: 8),
+                          const Icon(Icons.dns, color: Colors.teal),
+                        ],
+                      ),
+                      title: Text(providerName,
+                          style:
+                              const TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text(hostPreview,
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey[600])),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon:
+                                const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () => _deleteConfig(i),
+                            tooltip: '删除配置',
+                          ),
+                          const Icon(Icons.chevron_right),
+                        ],
+                      ),
+                      contentPadding:
+                          const EdgeInsets.only(left: 8, right: 4),
+                      onTap: () => _editConfig(i),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+          const SliverPadding(
+            padding: EdgeInsets.all(16),
+          ),
         ],
       ),
     );
