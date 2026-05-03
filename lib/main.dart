@@ -3,8 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'application.dart';
 import 'providers/tts_config.dart';
-import 'providers/tts_state_provider.dart';
-
 Future<void> main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();

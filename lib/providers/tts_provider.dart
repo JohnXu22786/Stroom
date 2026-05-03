@@ -156,6 +156,8 @@ class GLMTTSProvider extends BaseTTSProvider {
           'voice': validatedParams['voice'],
           'speed': validatedParams['speed'],
           'response_format': responseFormat,
+          if (validatedParams.containsKey('instructions') && (validatedParams['instructions'] as String).isNotEmpty)
+            'instructions': validatedParams['instructions'],
         },
       );
 
@@ -222,6 +224,8 @@ class GLMTTSProvider extends BaseTTSProvider {
           'speed': validatedParams['speed'],
           'response_format': 'pcm',
           'stream': true,
+          if (validatedParams.containsKey('instructions') && (validatedParams['instructions'] as String).isNotEmpty)
+            'instructions': validatedParams['instructions'],
         },
       );
 
@@ -477,6 +481,8 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
           'voice': validatedParams['voice'],
           'speed': validatedParams['speed'],
           'response_format': responseFormat,
+          if (validatedParams.containsKey('instructions') && (validatedParams['instructions'] as String).isNotEmpty)
+            'instructions': validatedParams['instructions'],
         },
       );
 
@@ -535,6 +541,8 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
           'speed': validatedParams['speed'],
           'response_format': 'pcm',
           'stream': true,
+          if (validatedParams.containsKey('instructions') && (validatedParams['instructions'] as String).isNotEmpty)
+            'instructions': validatedParams['instructions'],
         },
       );
 

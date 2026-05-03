@@ -33,12 +33,14 @@ class ParamType {
   /// 默认值示例
   String get defaultValueHint {
     switch (this) {
-      case _: // string
+      case ParamType.string:
         return '例如: cheerful';
-      case _: // number
+      case ParamType.number:
         return '例如: 0.8';
-      case _: // boolean
+      case ParamType.boolean:
         return '例如: true';
+      default:
+        return '';
     }
   }
 
@@ -180,7 +182,9 @@ class ModelConfig {
   bool hasVolume; // 是否设置了音量范围
   bool hasSpeed; // 是否设置了语速范围
   List<CustomParam> customParams; // 自定义参数列表
+  int maxWordsPerRequest; // 单次最长音频字数
   bool supportStream; // 是否支持流式输出
+  bool supportInstruction; // 是否支持 instruction 参数
   String? selectedTrimPresetId; // 当前选中的裁切预设ID
 
   ModelConfig({
@@ -194,7 +198,9 @@ class ModelConfig {
     this.hasVolume = false,
     this.hasSpeed = false,
     List<CustomParam>? customParams,
+    this.maxWordsPerRequest = 0,
     this.supportStream = false,
+    this.supportInstruction = false,
     this.selectedTrimPresetId,
   })  : voices = voices ?? [],
         customParams = customParams ?? [];
@@ -210,7 +216,9 @@ class ModelConfig {
         'hasVolume': hasVolume,
         'hasSpeed': hasSpeed,
         'customParams': customParams.map((p) => p.toMap()).toList(),
+        'maxWordsPerRequest': maxWordsPerRequest,
         'supportStream': supportStream,
+        'supportInstruction': supportInstruction,
         'selectedTrimPresetId': selectedTrimPresetId,
       };
 
@@ -231,7 +239,9 @@ class ModelConfig {
                 ?.map((e) => CustomParam.fromMap(Map<String, dynamic>.from(e as Map)))
                 .toList() ??
             [],
+        maxWordsPerRequest: (map['maxWordsPerRequest'] as num?)?.toInt() ?? 0,
         supportStream: map['supportStream'] as bool? ?? false,
+        supportInstruction: map['supportInstruction'] == true,
         selectedTrimPresetId: map['selectedTrimPresetId'] as String?,
       );
 
@@ -246,7 +256,9 @@ class ModelConfig {
         hasVolume: hasVolume,
         hasSpeed: hasSpeed,
         customParams: customParams.map((p) => p.copy()).toList(),
+        maxWordsPerRequest: maxWordsPerRequest,
         supportStream: supportStream,
+        supportInstruction: supportInstruction,
         selectedTrimPresetId: selectedTrimPresetId,
       );
 }

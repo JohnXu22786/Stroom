@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-import 'dart:math';
 
 /// WAV字节写入器（小端序）
 class _WavWriter {

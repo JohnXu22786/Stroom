@@ -13,7 +13,6 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
-  bool _notificationsEnabled = true;
   bool _saveToGallery = true;
   bool _highQuality = false;
   double _compressionQuality = 0.85;

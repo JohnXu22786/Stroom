@@ -159,7 +159,6 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedPage = ref.watch(selectedPageProvider);
     final isMobile = _isMobile(context);
 
     return Scaffold(

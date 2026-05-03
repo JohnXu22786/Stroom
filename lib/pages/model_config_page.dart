@@ -26,6 +26,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   final _volumeMaxController = TextEditingController();
   final _speedMinController = TextEditingController();
   final _speedMaxController = TextEditingController();
+  final _maxWordsController = TextEditingController();
 
 
   List<VoiceEntry> _voices = [];
@@ -38,11 +39,14 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   String _initialVolumeMax = '';
   String _initialSpeedMin = '';
   String _initialSpeedMax = '';
+  String _initialMaxWords = '';
   bool _initialSupportStream = false;
+  bool _initialSupportInstruction = false;
   String? _initialTrimPresetId;
 
   bool _isSaving = false;
   bool _supportStream = false;
+  bool _supportInstruction = false;
   String? _selectedTrimPresetId;
   bool get _isEditing => widget.modelIndex >= 0;
 
@@ -53,7 +57,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     if (_volumeMaxController.text.trim() != _initialVolumeMax) return true;
     if (_speedMinController.text.trim() != _initialSpeedMin) return true;
     if (_speedMaxController.text.trim() != _initialSpeedMax) return true;
+    if (_maxWordsController.text.trim() != _initialMaxWords) return true;
     if (_supportStream != _initialSupportStream) return true;
+    if (_supportInstruction != _initialSupportInstruction) return true;
     if (_selectedTrimPresetId != _initialTrimPresetId) return true;
     if (_voices.length != _initialVoices.length) return true;
     for (int i = 0; i < _voices.length; i++) {
@@ -104,13 +110,16 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       _volumeMaxController.text = model.hasVolume ? model.volumeMax.toString() : '';
       _speedMinController.text = model.hasSpeed ? model.speedMin.toString() : '';
       _speedMaxController.text = model.hasSpeed ? model.speedMax.toString() : '';
+      _maxWordsController.text = model.maxWordsPerRequest > 0 ? model.maxWordsPerRequest.toString() : '';
       _customParams = model.customParams.map((p) => p.copy()).toList();
       _supportStream = model.supportStream;
+      _supportInstruction = model.supportInstruction;
       _selectedTrimPresetId = model.selectedTrimPresetId;
     } else {
       _voices = [];
       _customParams = [];
       _supportStream = false;
+      _supportInstruction = false;
       _selectedTrimPresetId = null;
     }
     _initialVoices = _voices.map((v) => v.copy()).toList();
@@ -121,7 +130,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     _initialVolumeMax = _volumeMaxController.text.trim();
     _initialSpeedMin = _speedMinController.text.trim();
     _initialSpeedMax = _speedMaxController.text.trim();
+    _initialMaxWords = _maxWordsController.text.trim();
     _initialSupportStream = _supportStream;
+    _initialSupportInstruction = _supportInstruction;
     _initialTrimPresetId = _selectedTrimPresetId;
   }
 
@@ -133,6 +144,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     _volumeMaxController.dispose();
     _speedMinController.dispose();
     _speedMaxController.dispose();
+    _maxWordsController.dispose();
 
     super.dispose();
   }
@@ -567,6 +579,19 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       return;
     }
 
+    // 验证单次最长音频字数必填
+    final maxWordsText = _maxWordsController.text.trim();
+    final maxWords = int.tryParse(maxWordsText);
+    if (maxWordsText.isEmpty || maxWords == null || maxWords <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('单次最长音频字数为必填项，请输入大于0的整数'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     // 验证自定义参数：每个参数都必须有参数名和默认值，且参数名不能重复
     final seenNames = <String>{};
     for (int i = 0; i < _customParams.length; i++) {
@@ -643,8 +668,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       speedMax: double.tryParse(_speedMaxController.text) ?? 2.0,
       hasVolume: hasVolume,
       hasSpeed: hasSpeed,
+      maxWordsPerRequest: maxWords,
       customParams: _customParams.map((p) => p.copy()).toList(),
       supportStream: _supportStream,
+      supportInstruction: _supportInstruction,
       selectedTrimPresetId: _selectedTrimPresetId,
     );
 
@@ -680,57 +707,6 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         behavior: SnackBarBehavior.floating,
       ),
     );
-    Navigator.pop(context, true);
-  }
-
-  Future<void> _delete() async {
-    if (!_isEditing) return;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('删除模型'),
-        content: const Text('确定要删除此模型吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    final entry = _entry;
-    if (entry == null) return;
-
-    var configs = entry.configs.map((c) => c.copy()).toList();
-    if (widget.configIndex < 0 || widget.configIndex >= configs.length) return;
-    var models = List<ModelConfig>.from(configs[widget.configIndex].models);
-    if (widget.modelIndex >= 0 && widget.modelIndex < models.length) {
-      models.removeAt(widget.modelIndex);
-    }
-    configs[widget.configIndex] = ProviderConfigItem(
-      providerName: configs[widget.configIndex].providerName,
-      host: configs[widget.configIndex].host,
-      key: configs[widget.configIndex].key,
-      models: models,
-    );
-
-    final updated = ProviderEntry(
-      id: entry.id,
-      name: entry.name,
-      configs: configs,
-    );
-
-    await ref.read(providerEntriesProvider.notifier).update(entry.id, updated);
-    if (!mounted) return;
     Navigator.pop(context, true);
   }
 
@@ -907,6 +883,20 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 24),
+
+          // ==========================================================
+          // 单次最长音频字数
+          // ==========================================================
+          TextField(
+            controller: _maxWordsController,
+            decoration: const InputDecoration(
+              labelText: '单次最长音频字数 *',
+              hintText: '例如: 1000',
+              border: OutlineInputBorder(),
+            ),
+            keyboardType: TextInputType.number,
           ),
           const SizedBox(height: 24),
 
@@ -1145,6 +1135,40 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           const SizedBox(height: 16),
 
           // ==========================================================
+          // instruction 参数开关
+          // ==========================================================
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const Icon(Icons.description, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('模型是否支持 instruction 参数'),
+                        Text(
+                          '开启后可在TTS请求中附加指令描述语气、情绪、语速等',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  _buildToggleButton('是', true, _supportInstruction, (v) => setState(() => _supportInstruction = v)),
+                  const SizedBox(width: 8),
+                  _buildToggleButton('否', false, _supportInstruction, (v) => setState(() => _supportInstruction = v)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // ==========================================================
           // 流式输出开关
           // ==========================================================
           Card(
@@ -1169,9 +1193,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  _buildToggleButton('是', true),
+                  _buildToggleButton('是', true, _supportStream, (v) => setState(() => _supportStream = v)),
                   const SizedBox(width: 8),
-                  _buildToggleButton('否', false),
+                  _buildToggleButton('否', false, _supportStream, (v) => setState(() => _supportStream = v)),
                 ],
               ),
             ),
@@ -1344,10 +1368,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     );
   }
 
-  Widget _buildToggleButton(String label, bool value) {
-    final isSelected = _supportStream == value;
+  Widget _buildToggleButton(String label, bool value, bool currentValue, ValueChanged<bool> onChanged) {
+    final isSelected = currentValue == value;
     return GestureDetector(
-      onTap: () => setState(() => _supportStream = value),
+      onTap: () => onChanged(value),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
         decoration: BoxDecoration(

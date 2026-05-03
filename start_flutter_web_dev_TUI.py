@@ -187,7 +187,25 @@ def stop_old():
 # ---------------------------------------------------------------------------
 
 
+def _detect_dark_mode():
+    """Detect Windows dark/light mode. Returns True for dark, False for light."""
+    if platform.system() == "Windows":
+        try:
+            import winreg
+            k = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+            )
+            v, _ = winreg.QueryValueEx(k, "AppsUseLightTheme")
+            winreg.CloseKey(k)
+            return v == 0
+        except Exception:
+            pass
+    return True
+
+
 class FlutterTUI(App):
+    dark = _detect_dark_mode()
     """Textual TUI for Flutter web dev with selectable output."""
 
     TITLE = "Flutter Web Dev"

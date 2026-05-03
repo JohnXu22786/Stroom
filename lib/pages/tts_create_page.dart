@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
 
 import '../providers/tts_state_provider.dart';
 import '../providers/provider_config.dart';
@@ -17,7 +17,9 @@ class _ModelOption {
 
 /// TTS创建页面 - 用于文本转语音转换
 class TTSCreatePage extends ConsumerStatefulWidget {
-  const TTSCreatePage({super.key});
+  final String? initialText;
+
+  const TTSCreatePage({super.key, this.initialText});
 
   @override
   ConsumerState<TTSCreatePage> createState() => _TTSCreatePageState();
@@ -25,6 +27,7 @@ class TTSCreatePage extends ConsumerStatefulWidget {
 
 class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   final _textController = TextEditingController();
+  final _titleController = TextEditingController();
   final _focusNode = FocusNode();
   bool _isGenerating = false;
   String? _lastGeneratedFilePath;
@@ -41,6 +44,9 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   // 当前 TTS 供应商下所有可用的模型列表（含所属供应商名称）
   List<_ModelOption> _availableModels = [];
 
+  // instruction 参数控制器
+  final _instructionController = TextEditingController();
+
   // 自定义参数值覆盖
   final Map<String, TextEditingController> _customParamControllers = {};
 
@@ -49,15 +55,29 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   double _speed = 1.0;
   double _volume = 1.0;
 
+  // 当前模型的最大字数限制（0 表示未设置）
+  int _maxWordsLimit = 0;
+
   @override
   void initState() {
     super.initState();
+    // 如果传入了初始文本，填充到文本输入框
+    if (widget.initialText != null && widget.initialText!.isNotEmpty) {
+      _textController.text = widget.initialText!;
+    }
+    // 监听文本变化以刷新字数提示
+    _textController.addListener(_onTextChanged);
     // 进入页面时清除上次残留的合成错误，避免旧错误持续显示
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         ref.read(ttsStateProvider.notifier).clearError();
       }
     });
+  }
+
+  void _onTextChanged() {
+    // 触发 UI 刷新字数统计
+    setState(() {});
   }
 
   /// 根据最新的 providerEntriesState 刷新可用模型列表
@@ -111,6 +131,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         // 清理多余的 controller
         final keptKeys = _modelConfig?.customParams.map((p) => p.paramName).toSet() ?? {};
         _customParamControllers.removeWhere((k, _) => !keptKeys.contains(k));
+        // 如果切换了模型，清空 instruction 输入
+        _instructionController.clear();
       }
     });
   }
@@ -141,8 +163,11 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   void dispose() {
     // 退出页面时清除合成错误
     ref.read(ttsStateProvider.notifier).clearError();
+    _textController.removeListener(_onTextChanged);
     _textController.dispose();
+    _titleController.dispose();
     _focusNode.dispose();
+    _instructionController.dispose();
     for (final c in _customParamControllers.values) {
       c.dispose();
     }
@@ -227,6 +252,13 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
       for (final entry in _customParamControllers.entries) {
         customParams[entry.key] = entry.value.text;
       }
+      // instruction 参数
+      final instruction = _instructionController.text.trim();
+      if (instruction.isNotEmpty) {
+        customParams['instructions'] = instruction;
+      }
+
+      final title = _titleController.text.trim();
 
       final audioFile = await ref
           .read(ttsStateProvider.notifier)
@@ -236,10 +268,11 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
             modelConfig: modelOption.config,
             customParams: customParams,
             trimPreset: trimPreset,
+            title: title,
           );
 
       if (audioFile != null) {
-        _lastGeneratedFilePath = audioFile.path;
+        _lastGeneratedFilePath = audioFile.storagePath;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('语音生成成功，可前往"录音"页面播放'),
@@ -279,8 +312,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 文本输入区域
-            _buildTextInputSection(),
+            // 标题 + 文本输入区域（合并）
+            _buildCombinedInputSection(),
             const SizedBox(height: 24),
 
             // 配置区域
@@ -301,7 +334,11 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     );
   }
 
-  Widget _buildTextInputSection() {
+  Widget _buildCombinedInputSection() {
+    final limit = _maxWordsLimit;
+    final textLen = _textController.text.length;
+    final isOverLimit = limit > 0 && textLen > limit;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -309,10 +346,25 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
+              '录音标题',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _titleController,
+              decoration: const InputDecoration(
+                hintText: '输入录音标题（可选）',
+                border: OutlineInputBorder(),
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+            ),
+            const Divider(height: 24),
+            const Text(
               '转换文本',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             TextField(
               controller: _textController,
               focusNode: _focusNode,
@@ -321,26 +373,53 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
               decoration: InputDecoration(
                 hintText: '请输入要转换为语音的文本...',
                 border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.clear),
-                  onPressed: () => _textController.clear(),
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.fullscreen, size: 20),
+                      tooltip: '全屏编辑',
+                      onPressed: _showFullscreenEditor,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () => _textController.clear(),
+                    ),
+                  ],
                 ),
+                suffixIconConstraints: const BoxConstraints(minWidth: 72, minHeight: 0),
               ),
-              inputFormatters: [
-                LengthLimitingTextInputFormatter(1000),
-              ],
             ),
             const SizedBox(height: 8),
+            // 字数统计与超出警告
             Row(
-              mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                if (isOverLimit)
+                  Expanded(
+                    child: Row(
+                      children: [
+                        const Icon(Icons.warning_amber_rounded,
+                            size: 14, color: Colors.red),
+                        const SizedBox(width: 4),
+                        Text(
+                          '文字超出限制（最多 $limit 字）',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.red,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  const Spacer(),
                 Text(
-                  '${_textController.text.length}/1000',
+                  limit > 0
+                      ? '$textLen/$limit'
+                      : textLen.toString(),
                   style: TextStyle(
                     fontSize: 12,
-                    color: _textController.text.length > 1000
-                        ? Colors.red
-                        : Colors.grey,
+                    color: isOverLimit ? Colors.red : Colors.grey,
                   ),
                 ),
               ],
@@ -421,6 +500,12 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                 const SizedBox(height: 16),
               ],
 
+              // instruction 参数（有条件）
+              if (model.supportInstruction) ...[
+                _buildInstructionField(),
+                const SizedBox(height: 16),
+              ],
+
               // 自定义参数（有条件）
               if (model.customParams.isNotEmpty) ...[
                 _buildCustomParamsSection(model),
@@ -429,20 +514,24 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
               // 跳转到供应商配置页面
               Row(
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Text(
-                    '在TTS供应商设置页面设置更多参数',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-                  ),
-                  const Spacer(),
-                  TextButton.icon(
-                    onPressed: _navigateToProviderConfig,
-                    icon: const Icon(Icons.settings, size: 16),
-                    label: const Text('跳转', style: TextStyle(fontSize: 12)),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  RichText(
+                    text: TextSpan(
+                      style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                      children: [
+                        const TextSpan(text: '在'),
+                        TextSpan(
+                          text: 'TTS供应商设置',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            decoration: TextDecoration.underline,
+                          ),
+                          recognizer: (TapGestureRecognizer()
+                            ..onTap = _navigateToProviderConfig),
+                        ),
+                        const TextSpan(text: '页面设置更多参数'),
+                      ],
                     ),
                   ),
                 ],
@@ -490,12 +579,58 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     );
   }
 
+  /// 打开全屏文本编辑对话框
+  void _showFullscreenEditor() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(8),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const Text(
+                    '编辑文本',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(ctx),
+                    tooltip: '关闭',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: TextField(
+                  controller: _textController,
+                  maxLines: null,
+                  expands: true,
+                  textAlignVertical: TextAlignVertical.top,
+                  decoration: const InputDecoration(
+                    hintText: '请输入要转换为语音的文本...',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.all(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _onModelSelected(int index) {
     final opt = _availableModels[index];
     final model = opt.config;
     setState(() {
       _selectedModelIndex = index;
       _modelConfig = model;
+      _maxWordsLimit = model.maxWordsPerRequest;
       if (model.voices.isNotEmpty) {
         _selectedVoice = model.voices.first.name;
       }
@@ -622,6 +757,35 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
             const Text('正常'),
             Text(model.volumeMax.toStringAsFixed(1)),
           ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInstructionField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '语气指令（instruction）',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _instructionController,
+          maxLines: 3,
+          minLines: 2,
+          decoration: const InputDecoration(
+            hintText: '例如: Speak in a cheerful and excited tone',
+            border: OutlineInputBorder(),
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '通过自然语言描述语气、情绪、语速、口音等，模型将据此调整合成语音的风格',
+          style: TextStyle(fontSize: 12, color: Colors.grey[400]),
         ),
       ],
     );
