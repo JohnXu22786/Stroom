@@ -968,7 +968,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                         child: Row(
                           children: [
                             Text(v.name,
-                                style: const TextStyle(fontSize: 13)),
+                                  style: const TextStyle(fontSize: 14)),
                             if (v.id.isNotEmpty) ...[
                               const SizedBox(width: 6),
                               Text(v.id,

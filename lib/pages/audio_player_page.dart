@@ -668,8 +668,8 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(_formatDuration(_position), style: const TextStyle(fontSize: 11)),
-                Text(_formatDuration(_duration), style: const TextStyle(fontSize: 11)),
+                Text(_formatDuration(_position), style: const TextStyle(fontSize: 12)),
+                Text(_formatDuration(_duration), style: const TextStyle(fontSize: 12)),
               ],
             ),
           ),

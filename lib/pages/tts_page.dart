@@ -730,23 +730,23 @@ class _TtsPageState extends ConsumerState<TtsPage> {
             padding: const EdgeInsets.all(16),
             child: SizedBox(
               width: double.infinity,
-              height: 60,
+              height: 52,
               child: ElevatedButton(
-                onPressed: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const TTSCreatePage()));
-                },
-                style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.add_circle_outline, size: 24),
-                    SizedBox(width: 12),
-                    Text('制作录音', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ),
+                    onPressed: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const TTSCreatePage()));
+                    },
+                    style: ElevatedButton.styleFrom(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.add_circle_outline, size: 22),
+                        SizedBox(width: 10),
+                        Text('制作录音', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
             ),
           ),
 
@@ -862,7 +862,7 @@ class _TtsPageState extends ConsumerState<TtsPage> {
                         if (file.folder.isNotEmpty) ...[
                           Icon(Icons.folder, size: 12, color: Colors.grey[400]),
                           const SizedBox(width: 3),
-                          Text(file.folder, style: TextStyle(fontSize: 11, color: Colors.grey[400])),
+                          Text(file.folder, style: TextStyle(fontSize: 12, color: Colors.grey[400])),
                           const SizedBox(width: 6),
                           Container(width: 3, height: 3, decoration: BoxDecoration(color: Colors.grey[400]!, shape: BoxShape.circle)),
                           const SizedBox(width: 6),
@@ -949,13 +949,13 @@ class _TtsPageState extends ConsumerState<TtsPage> {
           children: [
             Icon(
               isInFolder ? Icons.folder_open_outlined : Icons.audio_file_outlined,
-              size: 64,
+              size: 48,
               color: Colors.grey,
             ),
             const SizedBox(height: 16),
             Text(
               isInFolder ? '此文件夹为空' : '暂无录音文件',
-              style: const TextStyle(fontSize: 18, color: Colors.grey),
+              style: const TextStyle(fontSize: 16, color: Colors.grey),
             ),
             if (!isInFolder)
               const Padding(

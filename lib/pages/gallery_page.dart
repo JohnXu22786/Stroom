@@ -34,18 +34,18 @@ class GalleryPage extends ConsumerWidget {
                 children: [
                   Icon(
                     Icons.photo_library_outlined,
-                    size: 64,
+                    size: 48,
                     color: Colors.grey,
                   ),
                   SizedBox(height: 16),
                   Text(
                     '暂无图片',
-                    style: TextStyle(fontSize: 18, color: Colors.grey),
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
                   ),
                   SizedBox(height: 8),
                   Text(
                     '使用相机拍摄或从相册导入图片',
-                    style: TextStyle(color: Colors.grey),
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
                   ),
                 ],
               ),

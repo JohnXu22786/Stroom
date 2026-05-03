@@ -687,10 +687,10 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
             ),
             Text(
               '${_speed.toStringAsFixed(1)}x',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.blue,
+                color: Theme.of(context).colorScheme.primary,
               ),
             ),
           ],
@@ -731,10 +731,10 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
             ),
             Text(
               '${_volume.toStringAsFixed(1)}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.blue,
+                color: Theme.of(context).colorScheme.primary,
               ),
             ),
           ],
@@ -869,7 +869,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                 children: [
                   Icon(Icons.audio_file),
                   SizedBox(width: 12),
-                  Text('制作录音', style: TextStyle(fontSize: 18)),
+                  Text('制作录音', style: TextStyle(fontSize: 16)),
                 ],
               ),
       ),
