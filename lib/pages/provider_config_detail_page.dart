@@ -217,49 +217,6 @@ class _ProviderConfigDetailPageState
     Navigator.pop(context, true);
   }
 
-  Future<void> _delete() async {
-    if (!_isEditing) return;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('删除配置'),
-        content: const Text('确定要删除此供应商配置及其所有模型吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    final entry = _entry;
-    if (entry == null) return;
-
-    var configs = entry.configs.map((c) => c.copy()).toList();
-    if (widget.configIndex >= 0 && widget.configIndex < configs.length) {
-      configs.removeAt(widget.configIndex);
-    }
-
-    final updated = ProviderEntry(
-      id: entry.id,
-      name: entry.name,
-      configs: configs,
-    );
-
-    await ref.read(providerEntriesProvider.notifier).update(entry.id, updated);
-    if (!mounted) return;
-    Navigator.pop(context, true);
-  }
-
   // ----------------------------------------------------------------
   // Build
   // ----------------------------------------------------------------
