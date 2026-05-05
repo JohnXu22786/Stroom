@@ -82,6 +82,11 @@ class AudioPlayerAdapter {
     _stateCtrl.add(null);
   }
 
+  /// 设置播放速度
+  void setPlaybackSpeed(double speed) {
+    _player?.setSpeed(speed);
+  }
+
   /// 释放资源
   void dispose() {
     _disposePlayer();
