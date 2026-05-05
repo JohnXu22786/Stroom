@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -34,13 +35,18 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   bool _isInitialized = false;
   bool _hasError = false;
   String _errorMessage = '';
+  String _diagnosticInfo = '';
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
+  bool _isPlaying = false;
 
   // 源文本
   String _sourceText = '';
   bool _textLoading = true;
   final _textController = TextEditingController();
+  double _fontSize = 14;
+  static const double _minFontSize = 10;
+  static const double _maxFontSize = 28;
 
   // 哈希校验
   String _expectedHash = '';
@@ -59,6 +65,18 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
   /// 文本区的底部内边距（给播放器面板+间距让位）
   double get _textBottomPadding => _playerCurrentH + _playerMargin + 8;
+
+  void _decreaseFontSize() {
+    setState(() {
+      _fontSize = (_fontSize - 2).clamp(_minFontSize, _maxFontSize);
+    });
+  }
+
+  void _increaseFontSize() {
+    setState(() {
+      _fontSize = (_fontSize + 2).clamp(_minFontSize, _maxFontSize);
+    });
+  }
 
   void _togglePlayer() {
     setState(() {
@@ -86,7 +104,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
       final textData = await FileManifest.readFile(textFilePath);
       if (textData != null && textData.isNotEmpty) {
-        _sourceText = String.fromCharCodes(textData);
+        _sourceText = utf8.decode(textData);
       }
     } catch (_) {
       // 老录音可能没有 companion text，忽略
@@ -138,9 +156,16 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       }
     } catch (e) {
       if (mounted) {
+        final ext = path.extension(widget.filePath).replaceAll('.', '').toLowerCase();
+        final diag = '文件: ${path.basename(widget.filePath)} | '
+            '扩展名: $ext | '
+            '数据大小: ${_rawAudioData?.length ?? 0} bytes | '
+            '源错: $e';
+        print('AudioPlayerPage 错误: $diag');
         setState(() {
           _hasError = true;
           _errorMessage = e.toString();
+          _diagnosticInfo = diag;
         });
       }
     }
@@ -402,6 +427,36 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                               color: Colors.grey[400],
                             ),
                           ),
+                        if (_sourceText.isNotEmpty)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '${_fontSize.toInt()}',
+                                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                              ),
+                              const SizedBox(width: 6),
+                              InkWell(
+                                onTap: _fontSize > _minFontSize ? _decreaseFontSize : null,
+                                child: Icon(Icons.text_decrease,
+                                  size: 20,
+                                  color: _fontSize > _minFontSize
+                                      ? Colors.grey[700]
+                                      : Colors.grey[300],
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              InkWell(
+                                onTap: _fontSize < _maxFontSize ? _increaseFontSize : null,
+                                child: Icon(Icons.text_increase,
+                                  size: 20,
+                                  color: _fontSize < _maxFontSize
+                                      ? Colors.grey[700]
+                                      : Colors.grey[300],
+                                ),
+                              ),
+                            ],
+                          ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -416,8 +471,8 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                 border: OutlineInputBorder(),
                                 contentPadding: EdgeInsets.all(12),
                               ),
-                              style: const TextStyle(
-                                fontSize: 14,
+                              style: TextStyle(
+                                fontSize: _fontSize,
                                 height: 1.5,
                               ),
                             )
@@ -772,12 +827,28 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
               style: const TextStyle(color: Colors.grey),
             ),
           ),
+          if (_diagnosticInfo.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: SelectableText(
+                _diagnosticInfo,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey[500],
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: () {
               setState(() {
                 _hasError = false;
                 _errorMessage = '';
+                _diagnosticInfo = '';
               });
               _initPlayer();
             },

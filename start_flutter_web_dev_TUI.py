@@ -413,6 +413,15 @@ class FlutterTUI(App):
 
     async def _cleanup_flutter(self):
         """Try to stop flutter gracefully, then force-kill if needed."""
+        # Cancel reader task first to avoid pipe I/O after process death
+        if self._reader_task and not self._reader_task.done():
+            self._reader_task.cancel()
+            try:
+                await self._reader_task
+            except asyncio.CancelledError:
+                pass
+            self._reader_task = None
+
         if self.flutter_proc and self.flutter_proc.returncode is None:
             try:
                 self.flutter_proc.stdin.write(b"q\n")
@@ -424,8 +433,10 @@ class FlutterTUI(App):
             except (asyncio.TimeoutError, Exception):
                 try:
                     self.flutter_proc.kill()
+                    await self.flutter_proc.wait()
                 except Exception:
                     pass
+            self.flutter_proc = None
         pid_file = os.path.join(ROOT, ".flutter_pid")
         try:
             os.remove(pid_file)

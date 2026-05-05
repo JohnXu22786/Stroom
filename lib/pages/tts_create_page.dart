@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import '../providers/tts_state_provider.dart';
 import '../providers/provider_config.dart';
 import '../providers/tts_config.dart';
+import '../providers/task_provider.dart';
 import 'provider_config_page.dart';
 
 /// 模型选项：模型配置 + 所属供应商配置（含 host/key）
@@ -18,8 +19,10 @@ class _ModelOption {
 /// TTS创建页面 - 用于文本转语音转换
 class TTSCreatePage extends ConsumerStatefulWidget {
   final String? initialText;
+  final bool isOverwrite;
+  final String? originalTitle;
 
-  const TTSCreatePage({super.key, this.initialText});
+  const TTSCreatePage({super.key, this.initialText, this.isOverwrite = false, this.originalTitle});
 
   @override
   ConsumerState<TTSCreatePage> createState() => _TTSCreatePageState();
@@ -29,8 +32,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   final _textController = TextEditingController();
   final _titleController = TextEditingController();
   final _focusNode = FocusNode();
-  bool _isGenerating = false;
-  String? _lastGeneratedFilePath;
+
 
   // 当前选中的模型配置
   ModelConfig? _modelConfig;
@@ -58,12 +60,19 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   // 当前模型的最大字数限制（0 表示未设置）
   int _maxWordsLimit = 0;
 
+  // 覆盖生成时是否使用原标题
+  bool _useOriginalTitle = true;
+
   @override
   void initState() {
     super.initState();
     // 如果传入了初始文本，填充到文本输入框
     if (widget.initialText != null && widget.initialText!.isNotEmpty) {
       _textController.text = widget.initialText!;
+    }
+    // 如果传入了原标题且默认勾选，填充标题
+    if (widget.originalTitle != null && widget.originalTitle!.isNotEmpty && _useOriginalTitle) {
+      _titleController.text = widget.originalTitle!;
     }
     // 监听文本变化以刷新字数提示
     _textController.addListener(_onTextChanged);
@@ -201,7 +210,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     );
   }
 
-  Future<void> _generateSpeech() async {
+  void _generateSpeech() {
     if (!_isTTSConfigured()) {
       _showNotConfiguredWarning();
       return;
@@ -220,84 +229,63 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
     _focusNode.unfocus();
 
-    // 清除上次的合成错误
-    ref.read(ttsStateProvider.notifier).clearError();
-
-    setState(() {
-      _isGenerating = true;
-    });
-
-    try {
-      // 更新 synthesisConfig 以使用当前值
-      final synthNotifier = ref.read(synthesisConfigProvider.notifier);
-      if (_modelConfig!.voices.isNotEmpty) {
-        await synthNotifier.updateVoice(_selectedVoice);
-      }
-      await synthNotifier.updateSpeed(_speed);
-      await synthNotifier.updateVolume(_volume);
-
-      // 查找裁切预设
-      Map<String, dynamic>? trimPreset;
-      if (_modelConfig!.selectedTrimPresetId != null) {
-        final customPresets = ref.read(customTrimPresetsProvider);
-        trimPreset = getTrimPresetById(
-            _modelConfig!.selectedTrimPresetId!, customPresets);
-      }
-
-      // 获取选中的供应商配置
-      final modelOption = _availableModels[_selectedModelIndex!];
-
-      // 收集自定义参数值
-      final customParams = <String, String>{};
-      for (final entry in _customParamControllers.entries) {
-        customParams[entry.key] = entry.value.text;
-      }
-      // instruction 参数
-      final instruction = _instructionController.text.trim();
-      if (instruction.isNotEmpty) {
-        customParams['instructions'] = instruction;
-      }
-
-      final title = _titleController.text.trim();
-
-      final audioFile = await ref
-          .read(ttsStateProvider.notifier)
-          .synthesize(
-            text,
-            providerConfig: modelOption.providerConfig,
-            modelConfig: modelOption.config,
-            customParams: customParams,
-            trimPreset: trimPreset,
-            title: title,
-          );
-
-      if (audioFile != null) {
-        _lastGeneratedFilePath = audioFile.storagePath;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('语音生成成功，可前往"录音"页面播放'),
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('生成失败: $e'),
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    } finally {
-      setState(() {
-        _isGenerating = false;
-      });
+    // 保存当前配置
+    final synthNotifier = ref.read(synthesisConfigProvider.notifier);
+    if (_modelConfig!.voices.isNotEmpty) {
+      // 异步保存，不等待
+      synthNotifier.updateVoice(_selectedVoice);
     }
+    synthNotifier.updateSpeed(_speed);
+    synthNotifier.updateVolume(_volume);
+
+    // 查找裁切预设
+    Map<String, dynamic>? trimPreset;
+    if (_modelConfig!.selectedTrimPresetId != null) {
+      final customPresets = ref.read(customTrimPresetsProvider);
+      trimPreset = getTrimPresetById(
+          _modelConfig!.selectedTrimPresetId!, customPresets);
+    }
+
+    // 获取选中的供应商配置
+    final modelOption = _availableModels[_selectedModelIndex!];
+
+    // 收集自定义参数值
+    final customParams = <String, String>{};
+    for (final entry in _customParamControllers.entries) {
+      customParams[entry.key] = entry.value.text;
+    }
+    // instruction 参数
+    final instruction = _instructionController.text.trim();
+    if (instruction.isNotEmpty) {
+      customParams['instructions'] = instruction;
+    }
+
+    final title = _titleController.text.trim();
+
+    // 添加到任务列表，在后台执行合成
+    ref.read(taskListProvider.notifier).addTask(
+      title: title.isNotEmpty ? title : (text.length > 20 ? text.substring(0, 20) : text),
+      text: text,
+      providerConfig: modelOption.providerConfig,
+      modelConfig: modelOption.config,
+      customParams: customParams,
+      trimPreset: trimPreset,
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('已添加到任务列表，后台生成中…'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    // 返回上一页（录音文件页面）
+    Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
     final entriesState = ref.watch(providerEntriesProvider);
-    final ttsState = ref.watch(ttsStateProvider);
 
     // 响应式刷新模型列表（每次 provider 数据变化时自动重建）
     _refreshModels(entriesState);
@@ -312,6 +300,10 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 覆盖提示横幅
+            if (widget.isOverwrite) _buildOverwriteBanner(),
+            if (widget.isOverwrite) const SizedBox(height: 16),
+
             // 标题 + 文本输入区域（合并）
             _buildCombinedInputSection(),
             const SizedBox(height: 24),
@@ -324,12 +316,35 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
             // 生成按钮
             _buildGenerateButton(),
             const SizedBox(height: 16),
-
-            // 状态显示
-            if (ttsState.error != null) _buildErrorSection(ttsState.error!),
-            if (_lastGeneratedFilePath != null) _buildSuccessSection(),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildOverwriteBanner() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.1),
+        border: Border.all(color: Colors.orange.shade300),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, size: 20, color: Colors.orange[700]),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '将覆盖原音频文件。生成完成后，原录音将被替换。',
+              style: TextStyle(
+                color: Colors.orange[800],
+                fontWeight: FontWeight.w500,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -345,9 +360,57 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              '录音标题',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            Row(
+              children: [
+                const Text(
+                  '录音标题',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                if (widget.originalTitle != null)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        height: 24,
+                        child: Checkbox(
+                          value: _useOriginalTitle,
+                          onChanged: (v) {
+                            setState(() {
+                              _useOriginalTitle = v ?? true;
+                              if (_useOriginalTitle) {
+                                _titleController.text = widget.originalTitle!;
+                              } else {
+                                _titleController.clear();
+                              }
+                            });
+                          },
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _useOriginalTitle = !_useOriginalTitle;
+                            if (_useOriginalTitle) {
+                              _titleController.text = widget.originalTitle!;
+                            } else {
+                              _titleController.clear();
+                            }
+                          });
+                        },
+                        child: Text(
+                          '使用原标题',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
             ),
             const SizedBox(height: 8),
             TextField(
@@ -841,30 +904,14 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
-        onPressed: _isGenerating ? null : _generateSpeech,
+        onPressed: _generateSpeech,
         style: ElevatedButton.styleFrom(
           padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
         ),
-        child: _isGenerating
-            ? const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  Text('生成中...'),
-                ],
-              )
-            : const Row(
+        child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.audio_file),
@@ -876,57 +923,4 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     );
   }
 
-  Widget _buildErrorSection(String error) {
-    return Card(
-      color: Colors.red[50],
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            const Icon(Icons.error_outline, color: Colors.red),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(error, style: const TextStyle(color: Colors.red)),
-            ),
-            IconButton(
-              icon: const Icon(Icons.close, size: 18, color: Colors.red),
-              onPressed: () {
-                ref.read(ttsStateProvider.notifier).clearError();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSuccessSection() {
-    return Card(
-      color: Colors.green[50],
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.green),
-                const SizedBox(width: 12),
-                const Text(
-                  '语音生成成功',
-                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '文件已保存: $_lastGeneratedFilePath',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

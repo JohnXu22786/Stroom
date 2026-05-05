@@ -4,10 +4,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../providers/tts_state_provider.dart';
+import '../providers/task_provider.dart';
 import '../utils/file_manifest.dart';
 import '../utils/audio_playback.dart';
 import '../utils/audio_utils.dart';
 import 'tts_create_page.dart';
+import 'task_list_page.dart';
 import 'audio_player_page.dart';
 
 class TtsPage extends ConsumerStatefulWidget {
@@ -17,7 +19,7 @@ class TtsPage extends ConsumerStatefulWidget {
   ConsumerState<TtsPage> createState() => _TtsPageState();
 }
 
-class _TtsPageState extends ConsumerState<TtsPage> {
+class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
   final _folderNameController = TextEditingController();
   final _renameController = TextEditingController();
   String? _selectedFileId;
@@ -32,6 +34,7 @@ class _TtsPageState extends ConsumerState<TtsPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(audioRecordsProvider.notifier).loadRecords();
       ref.read(folderListProvider.notifier).loadFolders();
@@ -40,9 +43,29 @@ class _TtsPageState extends ConsumerState<TtsPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _folderNameController.dispose();
     _renameController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // 应用进入后台/被挂起/即将退出时，标记运行中的任务为失败
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      final runningTasks = ref.read(taskListProvider)
+          .where((t) => t.status == TaskStatus.running)
+          .toList();
+      if (runningTasks.isNotEmpty) {
+        final errorMsg = state == AppLifecycleState.detached
+            ? '应用已退出，合成中断'
+            : '应用进入后台，合成中断';
+        ref.read(taskListProvider.notifier)
+            .failAllRunningTasks(error: errorMsg);
+      }
+    }
   }
 
   void _exitSelectionMode() {
@@ -264,6 +287,66 @@ class _TtsPageState extends ConsumerState<TtsPage> {
       await ref.read(folderListProvider.notifier).loadFolders();
       _exitSelectionMode();
     }
+  }
+
+  Future<void> _regenerateFile(AudioRecord file) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('确认重新生成'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('确定要重新生成音频 "${file.name}" 吗？'),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded, size: 18, color: Colors.orange),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '重新生成后将覆盖原音频文件。',
+                    style: TextStyle(color: Colors.orange[700], fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('确认重新生成'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    // 保存原始文本和标题，用于传递
+    final sourceText = file.sourceText;
+    final originalName = file.name;
+
+    // 删除原记录（实现覆盖效果）
+    if (!mounted) return;
+    await ref.read(audioRecordsProvider.notifier).deleteRecord(file.id);
+
+    if (!mounted) return;
+    // 导航到生成页面，自动填入原始文本和标题
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TTSCreatePage(
+          initialText: sourceText.isNotEmpty ? sourceText : null,
+          isOverwrite: true,
+          originalTitle: originalName,
+        ),
+      ),
+    );
   }
 
   Future<void> _playAudio(String filePath, String? displayName) async {
@@ -678,7 +761,6 @@ class _TtsPageState extends ConsumerState<TtsPage> {
   @override
   Widget build(BuildContext context) {
     final records = ref.watch(audioRecordsProvider);
-    final ttsState = ref.watch(ttsStateProvider);
 
     // Group records by folder
     final grouped = <String, List<AudioRecord>>{};
@@ -710,6 +792,23 @@ class _TtsPageState extends ConsumerState<TtsPage> {
                 : null),
         actions: [
           if (!_selectionMode) ...[
+            IconButton(
+              icon: Badge(
+                isLabelVisible: ref.watch(taskListProvider).where((t) => t.status == TaskStatus.running).isNotEmpty,
+                label: Text(
+                  '${ref.watch(taskListProvider).where((t) => t.status == TaskStatus.running).length}',
+                  style: const TextStyle(fontSize: 10),
+                ),
+                child: const Icon(Icons.swap_vert),
+              ),
+              tooltip: '任务列表',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const TaskListPage()),
+                );
+              },
+            ),
             IconButton(
               icon: const Icon(Icons.create_new_folder),
               tooltip: '创建文件夹',
@@ -749,17 +848,6 @@ class _TtsPageState extends ConsumerState<TtsPage> {
                   ),
             ),
           ),
-
-          // 合成进度
-          if (ttsState.isSynthesizing)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: LinearProgressIndicator(
-                value: ttsState.progress,
-                backgroundColor: Colors.grey[200],
-                valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.primary),
-              ),
-            ),
 
           // 文件列表 — 类文件管理器视图
           Expanded(
@@ -884,6 +972,7 @@ class _TtsPageState extends ConsumerState<TtsPage> {
                   onSelected: (value) {
                     switch (value) {
                       case 'play': _playAudio(file.storagePath, file.name);
+                      case 'regenerate': _regenerateFile(file);
                       case 'rename': _renameFile(file.id, file.name);
                       case 'move': _moveFile(file.id);
                       case 'copy': _copyFile(file.id);
@@ -894,6 +983,7 @@ class _TtsPageState extends ConsumerState<TtsPage> {
                   },
                   itemBuilder: (_) => [
                     const PopupMenuItem(value: 'play', child: ListTile(leading: Icon(Icons.play_arrow, size: 20), title: Text('播放'), dense: true, contentPadding: EdgeInsets.zero)),
+                    const PopupMenuItem(value: 'regenerate', child: ListTile(leading: Icon(Icons.refresh, size: 20), title: Text('重新生成'), dense: true, contentPadding: EdgeInsets.zero)),
                     const PopupMenuItem(value: 'rename', child: ListTile(leading: Icon(Icons.edit, size: 20), title: Text('重命名'), dense: true, contentPadding: EdgeInsets.zero)),
                     const PopupMenuItem(value: 'move', child: ListTile(leading: Icon(Icons.drive_file_move, size: 20), title: Text('移动'), dense: true, contentPadding: EdgeInsets.zero)),
                     const PopupMenuItem(value: 'copy', child: ListTile(leading: Icon(Icons.copy, size: 20), title: Text('复制'), dense: true, contentPadding: EdgeInsets.zero)),

@@ -1,8 +1,14 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
 
 import '../providers/provider_config.dart';
 import '../providers/tts_config.dart';
+import '../utils/audio_playback.dart';
+import '../utils/audio_trim.dart';
+import '../utils/audio_utils.dart';
 
 class ModelConfigPage extends ConsumerStatefulWidget {
   final String entryId;
@@ -49,6 +55,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   bool _supportInstruction = false;
   String? _selectedTrimPresetId;
   bool get _isEditing => widget.modelIndex >= 0;
+
+  bool _isTestingAudio = false;
+  String? _testAudioError;
+  AudioPlayerAdapter? _audioPlayer;
 
   bool get _hasUnsavedChanges {
     if (_nameController.text.trim() != _initialName) return true;
@@ -145,6 +155,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     _speedMinController.dispose();
     _speedMaxController.dispose();
     _maxWordsController.dispose();
+    _audioPlayer?.dispose();
 
     super.dispose();
   }
@@ -542,6 +553,167 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     }
   }
 
+  Future<void> _playTestAudio() async {
+    final entry = _entry;
+    if (entry == null) return;
+    if (widget.configIndex < 0 || widget.configIndex >= entry.configs.length) return;
+
+    setState(() {
+      _isTestingAudio = true;
+      _testAudioError = null;
+    });
+
+    try {
+      final config = entry.configs[widget.configIndex];
+      final host = config.host.trim();
+      final key = config.key.trim();
+
+      if (host.isEmpty) {
+        setState(() {
+          _testAudioError = 'Host 未配置';
+          _isTestingAudio = false;
+        });
+        return;
+      }
+      if (key.isEmpty) {
+        setState(() {
+          _testAudioError = 'Key 未配置';
+          _isTestingAudio = false;
+        });
+        return;
+      }
+
+      // 只传输文本（input）、model（必填）、key（放 Header）、host（作 URL）、音色的第一个（如果用户填写）
+      final body = <String, dynamic>{
+        'input': '这是一段测试音频',
+        'model': _modelIdController.text.trim(),
+      };
+      if (_voices.isNotEmpty) {
+        body['voice'] = _voices.first.id;
+      }
+
+      final dio = Dio(BaseOptions(
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $key',
+        },
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 30),
+      ));
+
+      final response = await dio.post(
+        host,
+        data: body,
+        options: Options(responseType: ResponseType.bytes),
+      );
+
+      // 检查响应 Content-Type，若不是音频则按错误处理
+      // 同时检查响应体是否以 { 或 [ 开头（JSON 错误响应）
+      final contentType = response.headers.value('content-type') ?? '';
+      final isJsonBody = response.data.isNotEmpty &&
+          (response.data[0] == 0x7b || response.data[0] == 0x5b);
+
+      if (isJsonBody || (contentType.isNotEmpty &&
+          !contentType.startsWith('audio/'))) {
+        String errorBody;
+        try {
+          errorBody = utf8.decode(response.data);
+        } catch (_) {
+          errorBody = '响应 Content-Type 为 $contentType，非音频数据';
+        }
+        setState(() {
+          _testAudioError = errorBody;
+          _isTestingAudio = false;
+        });
+        return;
+      }
+
+      final audioData = Uint8List.fromList(response.data);
+      if (audioData.isEmpty) {
+        setState(() {
+          _testAudioError = '服务器返回了空的音频数据';
+          _isTestingAudio = false;
+        });
+        return;
+      }
+
+      // 先裁切（对原始数据操作），再转换格式
+      var trimmedData = audioData;
+      if (_selectedTrimPresetId != null &&
+          _selectedTrimPresetId != BuiltinTrimPresetIds.none) {
+        final customPresets = ref.read(customTrimPresetsProvider);
+        final preset = getTrimPresetById(_selectedTrimPresetId!, customPresets);
+        if (preset != null) {
+          try {
+            trimmedData = trimAudio(trimmedData, preset: preset);
+          } catch (e) {
+            print('裁切失败: $e');
+          }
+        }
+      }
+
+      // 检测格式并转换（PCM→WAV 等），确保浏览器可播放
+      final (playbackData, actualFormat) = ensureValidAudioFormat(
+        trimmedData,
+        requestedFormat: 'wav',
+      );
+      final mimeType = getMimeType(actualFormat);
+
+      // 播放音频
+      _audioPlayer?.dispose();
+      _audioPlayer = AudioPlayerAdapter();
+      final audioUrl = createAudioUrl(playbackData, mimeType);
+      await _audioPlayer!.load(audioUrl);
+      await _audioPlayer!.play();
+
+      if (mounted) {
+        setState(() => _isTestingAudio = false);
+      }
+    } on DioException catch (e) {
+      String errorMsg;
+      switch (e.type) {
+        case DioExceptionType.connectionTimeout:
+          errorMsg = '连接超时，请检查网络';
+          break;
+        case DioExceptionType.receiveTimeout:
+          errorMsg = '接收超时，服务器响应过慢';
+          break;
+        case DioExceptionType.badResponse:
+          final statusCode = e.response?.statusCode;
+          final body = e.response?.data;
+          String bodyStr;
+          if (body is List<int>) {
+            try {
+              bodyStr = utf8.decode(body);
+            } catch (_) {
+              bodyStr = body.toString();
+            }
+          } else {
+            bodyStr = body?.toString() ?? '无响应体';
+          }
+          errorMsg = 'HTTP $statusCode: $bodyStr';
+          break;
+        case DioExceptionType.cancel:
+          errorMsg = '请求已取消';
+          break;
+        default:
+          errorMsg = '网络错误: ${e.message}';
+      }
+      if (mounted) {
+        setState(() {
+          _testAudioError = errorMsg;
+          _isTestingAudio = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _testAudioError = e.toString();
+          _isTestingAudio = false;
+        });
+      }
+    }
+  }
 
   void _showInfoDialog(String title, String message) {
     showDialog(
@@ -1362,6 +1534,32 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                 onPressed: _showAddTrimPresetDialog,
               ),
             ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: _isTestingAudio
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.play_arrow, size: 18),
+                label: Text(_isTestingAudio ? '播放中...' : '播放测试音频'),
+                onPressed: _isTestingAudio ? null : _playTestAudio,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+            if (_testAudioError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _testAudioError!,
+                  style: const TextStyle(color: Colors.red, fontSize: 12),
+                ),
+              ),
           ],
         ),
       ),
