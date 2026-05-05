@@ -153,6 +153,13 @@ class AudioPlayerAdapter {
     _stateCtrl.add(null);
   }
 
+  /// 设置播放速度
+  void setPlaybackSpeed(double speed) {
+    if (_audio == null) return;
+    _audio!.playbackRate = speed.clamp(0.25, 4.0);
+    _stateCtrl.add(null);
+  }
+
   /// 释放资源
   void dispose() {
     _audio?.pause();
