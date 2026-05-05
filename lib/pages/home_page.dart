@@ -6,7 +6,6 @@ import 'camera_page.dart';
 import 'gallery_page.dart';
 import 'settings_page.dart';
 import 'tts_page.dart';
-
 /// 页面枚举，定义应用中的主要页面
 enum AppPage {
   home,

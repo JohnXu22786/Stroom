@@ -18,9 +18,11 @@ abstract class BaseTTSProvider {
   /// 合成语音，返回完整的音频数据
   /// [text] 要合成的文本
   /// [params] 合成参数（语音、速度、音量、格式等）
+  /// [cancelToken] 可选的取消令牌
   Future<Uint8List> synthesize(
     String text, {
     Map<String, dynamic>? params,
+    CancelToken? cancelToken,
   });
 
   /// 流式合成语音，返回音频数据流
@@ -132,6 +134,7 @@ class GLMTTSProvider extends BaseTTSProvider {
   Future<Uint8List> synthesize(
     String text, {
     Map<String, dynamic>? params,
+    CancelToken? cancelToken,
   }) async {
     if (_apiKey == null || _apiKey!.isEmpty) {
       throw Exception('GLM API密钥未配置，请在设置页面配置API密钥');
@@ -150,6 +153,7 @@ class GLMTTSProvider extends BaseTTSProvider {
         options: Options(
           responseType: ResponseType.bytes,
         ),
+        cancelToken: cancelToken,
         data: {
           'model': 'glm-tts',
           'input': text,
@@ -457,6 +461,7 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
   Future<Uint8List> synthesize(
     String text, {
     Map<String, dynamic>? params,
+    CancelToken? cancelToken,
   }) async {
     if (_apiKey == null || _apiKey!.isEmpty) {
       throw Exception('AIHUBMIX API密钥未配置，请在设置页面配置API密钥');
@@ -475,6 +480,7 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
         options: Options(
           responseType: ResponseType.bytes,
         ),
+        cancelToken: cancelToken,
         data: {
           'model': validatedParams['model'],
           'input': text,
@@ -734,7 +740,7 @@ class CustomTTSProvider extends BaseTTSProvider {
   }
 
   @override
-  Future<Uint8List> synthesize(String text, {Map<String, dynamic>? params}) async {
+  Future<Uint8List> synthesize(String text, {Map<String, dynamic>? params, CancelToken? cancelToken}) async {
     if (_apiKey.isEmpty) throw Exception('API 密钥未配置');
     final validated = validateParams(params ?? {});
     final body = _buildBody(text, validated);
@@ -744,6 +750,7 @@ class CustomTTSProvider extends BaseTTSProvider {
       final response = await _dio.post(
         _baseUrl,
         options: Options(responseType: ResponseType.bytes),
+        cancelToken: cancelToken,
         data: body,
       );
       var data = Uint8List.fromList(response.data);

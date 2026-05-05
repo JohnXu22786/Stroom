@@ -178,8 +178,8 @@ String detectAudioFormat(Uint8List data) {
     return (data, fmt);
   }
 
-  // 情况 3: 魔数是别的有效格式（如请求 wav 但数据实际是 mp3）
-  // 不擅自篡改，原样交给播放器
-  print('ensureValidAudioFormat: 数据为$detected格式，请求为$fmt，不转换');
-  return (data, fmt);
+  // 情况 3: 魔数是别的有效格式（如请求 pcm 但数据实际是 wav）
+  // 使用实际检测到的格式，确保 MIME 类型与数据内容一致
+  print('ensureValidAudioFormat: 数据为$detected格式，请求为$fmt，使用实际格式');
+  return (data, detected);
 }

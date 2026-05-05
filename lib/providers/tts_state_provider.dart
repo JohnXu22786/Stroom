@@ -454,6 +454,7 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
       state = state.copyWith(progress: 0.7);
 
       // 格式校验：确保音频数据含有效文件头，裸 PCM 自动补 WAV 头
+      var actualFormat = synthConfig.format;
       if (audioData.isNotEmpty) {
         final fixed = ensureValidAudioFormat(
           audioData,
@@ -461,6 +462,7 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
           sampleRate: 24000,
         );
         audioData = fixed.$1;
+        actualFormat = fixed.$2;
       }
 
       // 如果指定了裁切预设，应用裁切
@@ -472,8 +474,8 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
         }
       }
 
-      // 保存音频文件
-      final audioFile = await _saveAudioFile(audioData, synthConfig.format, text, name: title);
+      // 保存音频文件（使用 actualFormat 确保扩展名与数据格式一致）
+      final audioFile = await _saveAudioFile(audioData, actualFormat, text, name: title);
 
       state = state.copyWith(
         isSynthesizing: false,
@@ -579,7 +581,7 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
 
     // Save source text companion file
     if (text.isNotEmpty) {
-      final textBytes = Uint8List.fromList(text.codeUnits);
+      final textBytes = Uint8List.fromList(utf8.encode(text));
       await FileManifest.writeFile('$hash.txt', textBytes);
     }
 

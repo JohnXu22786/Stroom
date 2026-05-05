@@ -63,6 +63,7 @@ class AudioPlayerAdapter {
       if (!completer.isCompleted) {
         final mediaError = _audio?.error;
         final errorCode = mediaError?.code ?? -1;
+        final errorMsg = mediaError?.message ?? '';
         String detail;
         switch (errorCode) {
           case 1:
@@ -80,8 +81,9 @@ class AudioPlayerAdapter {
           default:
             detail = '未知错误';
         }
+        final fullMsg = errorMsg.isNotEmpty ? '$detail（$errorMsg）' : detail;
         completer.completeError(
-          Exception('加载音频失败：$detail'),
+          Exception('加载音频失败：$fullMsg'),
         );
       }
     }
