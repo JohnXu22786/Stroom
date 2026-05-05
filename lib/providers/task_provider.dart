@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:dio/dio.dart';
@@ -9,19 +10,6 @@ import 'tts_provider.dart' as tts_provider_base;
 import '../utils/audio_trim.dart';
 import '../utils/audio_utils.dart';
 import '../utils/file_manifest.dart';
-
-// ============================================================================
-// TTS Provider 工厂
-// ============================================================================
-
-tts_provider_base.BaseTTSProvider _createProviderFromConfig(
-    ProviderConfigItem config) {
-  return tts_provider_base.CustomTTSProvider(
-    baseUrl: config.host,
-    apiKey: config.key,
-    name: config.providerName,
-  );
-}
 
 // ============================================================================
 // 任务状态枚举
@@ -137,7 +125,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     try {
       final synthConfig = ref.read(synthesisConfigProvider);
 
-      final provider = _createProviderFromConfig(task.providerConfig);
+      final provider = tts_provider_base.createProviderFromConfig(task.providerConfig);
 
       // 构建参数
       final params = <String, dynamic>{
@@ -179,7 +167,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
         try {
           audioData = trimAudio(audioData, preset: task.trimPreset!);
         } catch (e) {
-          print('Failed to trim audio: $e');
+          debugPrint('Failed to trim audio: $e');
         }
       }
 
@@ -328,6 +316,9 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
 
   /// 删除单个任务
   void removeTask(String taskId) {
+    // 取消正在进行的 HTTP 请求
+    final token = _cancelTokens.remove(taskId);
+    token?.cancel();
     state = state.where((t) => t.id != taskId).toList();
   }
 

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
@@ -29,11 +30,8 @@ class CameraState {
 /// 相机状态通知器，管理图像路径
 class CameraNotifier extends StateNotifier<CameraState> {
   CameraNotifier() : super(const CameraState()) {
-    _init();
-  }
-
-  Future<void> _init() async {
-    await loadSavedImages();
+    // 延迟初始化，确保 StateNotifier 已注册
+    Future.microtask(() => loadSavedImages());
   }
 
   /// 添加新图像路径
@@ -53,7 +51,7 @@ class CameraNotifier extends StateNotifier<CameraState> {
         }
       } catch (e) {
         // 忽略文件删除错误，继续移除列表项
-        print('删除文件失败: $e');
+        debugPrint('删除文件失败: $e');
       }
 
       final newImagePaths = List<String>.from(state.imagePaths);
@@ -73,7 +71,7 @@ class CameraNotifier extends StateNotifier<CameraState> {
         }
       } catch (e) {
         // 忽略文件删除错误，继续删除其他文件
-        print('删除文件失败: $e');
+        debugPrint('删除文件失败: $e');
       }
     }
     state = const CameraState();
@@ -105,7 +103,7 @@ class CameraNotifier extends StateNotifier<CameraState> {
       }
     } catch (e) {
       // 忽略扫描错误，保持空列表
-      print('扫描图片目录失败: $e');
+      debugPrint('扫描图片目录失败: $e');
     }
   }
 }

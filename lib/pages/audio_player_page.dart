@@ -38,7 +38,6 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   String _diagnosticInfo = '';
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
-  bool _isPlaying = false;
 
   // 源文本
   String _sourceText = '';
@@ -161,7 +160,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
             '扩展名: $ext | '
             '数据大小: ${_rawAudioData?.length ?? 0} bytes | '
             '源错: $e';
-        print('AudioPlayerPage 错误: $diag');
+        debugPrint('AudioPlayerPage 错误: $diag');
         setState(() {
           _hasError = true;
           _errorMessage = e.toString();
@@ -574,7 +573,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.18),
+            color: Colors.black.withValues(alpha: 0.18),
             blurRadius: 16,
             offset: const Offset(0, -4),
           ),
@@ -606,7 +605,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withOpacity(0.1),
+                color: theme.colorScheme.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(Icons.audio_file, size: 18, color: theme.colorScheme.primary),
@@ -660,7 +659,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
               children: [
                 const Spacer(),
                 IconButton(
-                  icon: Icon(Icons.keyboard_arrow_down, size: 28),
+                  icon: const Icon(Icons.keyboard_arrow_down, size: 28),
                   onPressed: _togglePlayer,
                 ),
               ],
@@ -707,7 +706,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                 ),
               ),
               IconButton(
-                icon: Icon(Icons.keyboard_arrow_down, size: 28),
+                icon: const Icon(Icons.keyboard_arrow_down, size: 28),
                 onPressed: _togglePlayer,
               ),
             ],

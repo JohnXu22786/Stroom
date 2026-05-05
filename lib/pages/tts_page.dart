@@ -216,7 +216,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('复制失败: $e'), duration: Duration(seconds: 2)),
+          SnackBar(content: Text('复制失败: $e'), duration: const Duration(seconds: 2)),
         );
       }
     }
@@ -586,9 +586,9 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
                       children: [
                         // 根目录标识
                         if (pickerCurrentPath.isEmpty)
-                          ListTile(
-                            leading: const Icon(Icons.home_outlined),
-                            title: const Text('（根目录）'),
+                          const ListTile(
+                            leading: Icon(Icons.home_outlined),
+                            title: Text('（根目录）'),
                             dense: true,
                             selected: true,
                           ),
@@ -923,7 +923,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
                 height: 44,
                 margin: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Center(
@@ -955,7 +955,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
                           Container(width: 3, height: 3, decoration: BoxDecoration(color: Colors.grey[400]!, shape: BoxShape.circle)),
                           const SizedBox(width: 6),
                         ],
-                        Text('$dateStr', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                        Text(dateStr, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
                         const SizedBox(width: 6),
                         Container(width: 3, height: 3, decoration: BoxDecoration(color: Colors.grey[400]!, shape: BoxShape.circle)),
                         const SizedBox(width: 6),
@@ -1128,7 +1128,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
                 height: 44,
                 margin: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.amber.withOpacity(0.15),
+                  color: Colors.amber.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Center(

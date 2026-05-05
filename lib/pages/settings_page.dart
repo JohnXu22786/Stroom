@@ -93,7 +93,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: '浅色模式',
               trailing: Radio<ThemeMode>(
                 value: ThemeMode.light,
+                // ignore: deprecated_member_use
                 groupValue: themeMode,
+                // ignore: deprecated_member_use
                 onChanged: (_) => themeNotifier.setLight(),
               ),
               onTap: () => themeNotifier.setLight(),
@@ -104,7 +106,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: '深色模式',
               trailing: Radio<ThemeMode>(
                 value: ThemeMode.dark,
+                // ignore: deprecated_member_use
                 groupValue: themeMode,
+                // ignore: deprecated_member_use
                 onChanged: (_) => themeNotifier.setDark(),
               ),
               onTap: () => themeNotifier.setDark(),
@@ -115,7 +119,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: '跟随系统',
               trailing: Radio<ThemeMode>(
                 value: ThemeMode.system,
+                // ignore: deprecated_member_use
                 groupValue: themeMode,
+                // ignore: deprecated_member_use
                 onChanged: (_) => themeNotifier.setSystem(),
               ),
               onTap: () => themeNotifier.setSystem(),

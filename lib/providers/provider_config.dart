@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
@@ -399,7 +400,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         return;
       }
     } catch (e) {
-      print('Failed to load provider entries: $e');
+      debugPrint('Failed to load provider entries: $e');
     }
 
     // 默认预置 TTS供应商
@@ -417,7 +418,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       final json = jsonEncode(state.entries.map((e) => e.toMap()).toList());
       await prefs.setString('provider_entries', json);
     } catch (e) {
-      print('Failed to persist provider entries: $e');
+      debugPrint('Failed to persist provider entries: $e');
     }
   }
 

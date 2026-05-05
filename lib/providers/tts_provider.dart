@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
+import 'provider_config.dart';
 import 'tts_config.dart';
 
 import '../utils/audio_utils.dart';
@@ -123,7 +123,7 @@ class GLMTTSProvider extends BaseTTSProvider {
       final voice = params['voice'] as String;
       final voices = getSupportedVoices('glm_tts');
       if (!voices.contains(voice)) {
-        print('警告: 音色 "$voice" 可能不受GLM-TTS支持，支持的音色: $voices');
+        debugPrint('警告: 音色 "$voice" 可能不受GLM-TTS支持，支持的音色: $voices');
       }
     }
 
@@ -144,7 +144,7 @@ class GLMTTSProvider extends BaseTTSProvider {
     final format = (validatedParams['format'] as String?)?.toLowerCase() ?? 'wav';
     final responseFormat = (validatedParams['response_format'] as String?)?.toLowerCase() ?? format;
 
-    print('GLMTTSProvider: 开始非流式合成 - 文本长度: ${text.length} 字符');
+    debugPrint('GLMTTSProvider: 开始非流式合成 - 文本长度: ${text.length} 字符');
 
     try {
       final startTime = DateTime.now();
@@ -168,7 +168,7 @@ class GLMTTSProvider extends BaseTTSProvider {
       final audioData = Uint8List.fromList(response.data);
       final elapsed = DateTime.now().difference(startTime).inMilliseconds;
 
-      print('GLMTTSProvider: 合成成功 - 音频大小: ${audioData.length} 字节, 耗时: ${elapsed}ms');
+      debugPrint('GLMTTSProvider: 合成成功 - 音频大小: ${audioData.length} 字节, 耗时: ${elapsed}ms');
 
       if (audioData.isEmpty) {
         throw Exception('GLM-TTS返回了空的音频数据');
@@ -184,10 +184,10 @@ class GLMTTSProvider extends BaseTTSProvider {
       return result;
     } on DioException catch (e) {
       final errorMsg = _parseDioError(e);
-      print('GLMTTSProvider: API请求失败 - $errorMsg');
+      debugPrint('GLMTTSProvider: API请求失败 - $errorMsg');
       throw Exception('GLM-TTS合成失败: $errorMsg');
     } catch (e) {
-      print('GLMTTSProvider: 合成异常: $e');
+      debugPrint('GLMTTSProvider: 合成异常: $e');
       rethrow;
     }
   }
@@ -206,14 +206,14 @@ class GLMTTSProvider extends BaseTTSProvider {
 
     // 流式模式下强制使用pcm格式（GLM-TTS API限制）
     if (requestedFormat != 'pcm') {
-      print('GLMTTSProvider: 流式合成不支持直接输出"$requestedFormat"格式，已强制使用"pcm"格式');
+      debugPrint('GLMTTSProvider: 流式合成不支持直接输出"$requestedFormat"格式，已强制使用"pcm"格式');
       validatedParams['response_format'] = 'pcm';
     }
 
     final sampleRate = (validatedParams['sample_rate'] as num?)?.toInt() ?? 24000;
     final convertToTarget = requestedFormat != 'pcm';
 
-    print('GLMTTSProvider: 开始流式合成 - 文本长度: ${text.length} 字符');
+    debugPrint('GLMTTSProvider: 开始流式合成 - 文本长度: ${text.length} 字符');
 
     try {
       final response = await _dio.post(
@@ -250,7 +250,7 @@ class GLMTTSProvider extends BaseTTSProvider {
         // 检查数据块对齐（16位PCM需要2字节对齐）
         var alignedChunk = chunk;
         if (chunk.length % 2 != 0) {
-          print('GLMTTSProvider: 数据块 #$chunkCount 大小不对齐: ${chunk.length} 字节，已添加填充字节');
+          debugPrint('GLMTTSProvider: 数据块 #$chunkCount 大小不对齐: ${chunk.length} 字节，已添加填充字节');
           alignedChunk = Uint8List.fromList([...chunk, 0x00]);
         }
 
@@ -264,7 +264,7 @@ class GLMTTSProvider extends BaseTTSProvider {
         if (chunkCount % 5 == 0) {
           final elapsed = DateTime.now().difference(streamStartTime).inMilliseconds;
           final throughput = elapsed > 0 ? (totalSize / elapsed * 1000) : 0.0;
-          print('GLMTTSProvider: 流式进度 - 数据块: $chunkCount, 总大小: $totalSize 字节, '
+          debugPrint('GLMTTSProvider: 流式进度 - 数据块: $chunkCount, 总大小: $totalSize 字节, '
               '耗时: ${elapsed}ms, 吞吐量: ${throughput.toStringAsFixed(1)} B/s');
         }
       }
@@ -284,13 +284,13 @@ class GLMTTSProvider extends BaseTTSProvider {
             convertedData = pcmToWav(pcmData, sampleRate: sampleRate);
           } else {
             // 其他格式暂不支持转换，返回原始PCM
-            print('GLMTTSProvider: 格式"$requestedFormat"转换暂不支持，返回原始PCM数据');
+            debugPrint('GLMTTSProvider: 格式"$requestedFormat"转换暂不支持，返回原始PCM数据');
             convertedData = pcmData;
           }
 
           yield convertedData;
         } catch (e) {
-          print('GLMTTSProvider: 格式转换失败: $e，返回原始PCM数据');
+          debugPrint('GLMTTSProvider: 格式转换失败: $e，返回原始PCM数据');
           for (final chunk in pcmChunks) {
             yield chunk;
           }
@@ -298,14 +298,14 @@ class GLMTTSProvider extends BaseTTSProvider {
       }
 
       final totalTime = DateTime.now().difference(streamStartTime).inMilliseconds;
-      print('GLMTTSProvider: 流式合成完成 - 数据块: $chunkCount, 总大小: $totalSize 字节, '
+      debugPrint('GLMTTSProvider: 流式合成完成 - 数据块: $chunkCount, 总大小: $totalSize 字节, '
           '总耗时: ${totalTime}ms');
     } on DioException catch (e) {
       final errorMsg = _parseDioError(e);
-      print('GLMTTSProvider: 流式合成失败 - $errorMsg');
+      debugPrint('GLMTTSProvider: 流式合成失败 - $errorMsg');
       throw Exception('GLM-TTS流式合成失败: $errorMsg');
     } catch (e) {
-      print('GLMTTSProvider: 流式合成异常: $e');
+      debugPrint('GLMTTSProvider: 流式合成异常: $e');
       rethrow;
     }
   }
@@ -450,7 +450,7 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
       final voice = params['voice'] as String;
       final voices = getSupportedVoices('aihubmix_tts');
       if (!voices.contains(voice)) {
-        print('警告: 音色 "$voice" 可能不受AIHUBMIX-TTS支持，支持的音色: $voices');
+        debugPrint('警告: 音色 "$voice" 可能不受AIHUBMIX-TTS支持，支持的音色: $voices');
       }
     }
 
@@ -471,7 +471,7 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
     final responseFormat =
         (validatedParams['response_format'] as String?)?.toLowerCase() ?? 'mp3';
 
-    print('AIHUBMIXTTSProvider: 开始非流式合成 - 文本长度: ${text.length} 字符');
+    debugPrint('AIHUBMIXTTSProvider: 开始非流式合成 - 文本长度: ${text.length} 字符');
 
     try {
       final startTime = DateTime.now();
@@ -495,7 +495,7 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
       final audioData = Uint8List.fromList(response.data);
       final elapsed = DateTime.now().difference(startTime).inMilliseconds;
 
-      print('AIHUBMIXTTSProvider: 合成成功 - 音频大小: ${audioData.length} 字节, 耗时: ${elapsed}ms');
+      debugPrint('AIHUBMIXTTSProvider: 合成成功 - 音频大小: ${audioData.length} 字节, 耗时: ${elapsed}ms');
 
       if (audioData.isEmpty) {
         throw Exception('AIHUBMIX-TTS返回了空的音频数据');
@@ -504,10 +504,10 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
       return audioData;
     } on DioException catch (e) {
       final errorMsg = _parseDioError(e);
-      print('AIHUBMIXTTSProvider: API请求失败 - $errorMsg');
+      debugPrint('AIHUBMIXTTSProvider: API请求失败 - $errorMsg');
       throw Exception('AIHUBMIX-TTS合成失败: $errorMsg');
     } catch (e) {
-      print('AIHUBMIXTTSProvider: 合成异常: $e');
+      debugPrint('AIHUBMIXTTSProvider: 合成异常: $e');
       rethrow;
     }
   }
@@ -526,13 +526,13 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
         (validatedParams['response_format'] as String?)?.toLowerCase() ?? 'mp3';
 
     if (requestedFormat != 'pcm') {
-      print('AIHUBMIXTTSProvider: 流式合成不支持直接输出"$requestedFormat"格式，已强制使用"pcm"格式');
+      debugPrint('AIHUBMIXTTSProvider: 流式合成不支持直接输出"$requestedFormat"格式，已强制使用"pcm"格式');
     }
 
     final sampleRate = (validatedParams['sample_rate'] as num?)?.toInt() ?? 24000;
     final convertToTarget = requestedFormat != 'pcm';
 
-    print('AIHUBMIXTTSProvider: 开始流式合成 - 文本长度: ${text.length} 字符');
+    debugPrint('AIHUBMIXTTSProvider: 开始流式合成 - 文本长度: ${text.length} 字符');
 
     try {
       final response = await _dio.post(
@@ -569,7 +569,7 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
         // 检查数据块对齐
         var alignedChunk = chunk;
         if (chunk.length % 2 != 0) {
-          print('AIHUBMIXTTSProvider: 数据块 #$chunkCount 对齐修复');
+          debugPrint('AIHUBMIXTTSProvider: 数据块 #$chunkCount 对齐修复');
           alignedChunk = Uint8List.fromList([...chunk, 0x00]);
         }
 
@@ -582,7 +582,7 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
         if (chunkCount % 5 == 0) {
           final elapsed = DateTime.now().difference(streamStartTime).inMilliseconds;
           final throughput = elapsed > 0 ? (totalSize / elapsed * 1000) : 0.0;
-          print('AIHUBMIXTTSProvider: 流式进度 - 数据块: $chunkCount, 总大小: $totalSize 字节, '
+          debugPrint('AIHUBMIXTTSProvider: 流式进度 - 数据块: $chunkCount, 总大小: $totalSize 字节, '
               '耗时: ${elapsed}ms, 吞吐量: ${throughput.toStringAsFixed(1)} B/s');
         }
       }
@@ -605,7 +605,7 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
 
           yield convertedData;
         } catch (e) {
-          print('AIHUBMIXTTSProvider: 格式转换失败: $e');
+          debugPrint('AIHUBMIXTTSProvider: 格式转换失败: $e');
           for (final chunk in pcmChunks) {
             yield chunk;
           }
@@ -613,14 +613,14 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
       }
 
       final totalTime = DateTime.now().difference(streamStartTime).inMilliseconds;
-      print('AIHUBMIXTTSProvider: 流式合成完成 - 数据块: $chunkCount, 总大小: $totalSize 字节, '
+      debugPrint('AIHUBMIXTTSProvider: 流式合成完成 - 数据块: $chunkCount, 总大小: $totalSize 字节, '
           '总耗时: ${totalTime}ms');
     } on DioException catch (e) {
       final errorMsg = _parseDioError(e);
-      print('AIHUBMIXTTSProvider: 流式合成失败 - $errorMsg');
+      debugPrint('AIHUBMIXTTSProvider: 流式合成失败 - $errorMsg');
       throw Exception('AIHUBMIX-TTS流式合成失败: $errorMsg');
     } catch (e) {
-      print('AIHUBMIXTTSProvider: 流式合成异常: $e');
+      debugPrint('AIHUBMIXTTSProvider: 流式合成异常: $e');
       rethrow;
     }
   }
@@ -662,6 +662,17 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
         return '网络错误: ${e.message}';
     }
   }
+}
+
+/// 根据 ProviderConfigItem 创建 TTS provider 实例
+///
+/// 所有供应商统一走 CustomTTSProvider，不依赖字符串猜测类型。
+BaseTTSProvider createProviderFromConfig(ProviderConfigItem config) {
+  return CustomTTSProvider(
+    baseUrl: config.host,
+    apiKey: config.key,
+    name: config.providerName,
+  );
 }
 
 /// 自定义 TTS 供应商 — 通用 HTTP 壳子
@@ -745,7 +756,7 @@ class CustomTTSProvider extends BaseTTSProvider {
     final validated = validateParams(params ?? {});
     final body = _buildBody(text, validated);
 
-    print('CustomTTSProvider: POST $_baseUrl - 文本长度: ${text.length}');
+    debugPrint('CustomTTSProvider: POST $_baseUrl - 文本长度: ${text.length}');
     try {
       final response = await _dio.post(
         _baseUrl,
@@ -788,8 +799,13 @@ class CustomTTSProvider extends BaseTTSProvider {
         if (chunk.isNotEmpty) yield chunk;
       }
     } on DioException catch (e) {
-      print('CustomTTSProvider: 流式失败，回退到非流式: ${_parseDioError(e)}');
-      yield await synthesize(text, params: params);
+      debugPrint('CustomTTSProvider: 流式失败，回退到非流式: ${_parseDioError(e)}');
+      // 移除 stream 参数，避免非流式请求中包含 stream: true
+      final sanitizedParams = params != null
+          ? Map<String, dynamic>.from(params)
+          : <String, dynamic>{};
+      sanitizedParams.remove('stream');
+      yield await synthesize(text, params: sanitizedParams);
     }
   }
 

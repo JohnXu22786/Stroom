@@ -502,7 +502,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         final dirLabel = direction == 'head' ? '开头' : '结尾';
         final name = p['name'] as String;
         final duration = p['durationSeconds'] as double;
-        return '$name（${dirLabel}，${duration.toStringAsFixed(3)}s）';
+        return '$name（$dirLabel，${duration.toStringAsFixed(3)}s）';
       }
     }
     return '不裁切';
@@ -647,7 +647,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           try {
             trimmedData = trimAudio(trimmedData, preset: preset);
           } catch (e) {
-            print('裁切失败: $e');
+            debugPrint('裁切失败: $e');
           }
         }
       }
@@ -1224,7 +1224,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                                   initialValue: param.paramName,
                                   decoration: InputDecoration(
                                     labelText: '参数名',
-                                    border: OutlineInputBorder(),
+                                    border: const OutlineInputBorder(),
                                     isDense: true,
                                     errorText: isDuplicate ? '已存在该参数' : null,
                                     errorStyle: const TextStyle(fontSize: 11),
@@ -1279,7 +1279,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                         decoration: InputDecoration(
                           labelText: '默认参数值',
                           hintText: param.paramType.defaultValueHint,
-                          border: OutlineInputBorder(),
+                          border: const OutlineInputBorder(),
                           isDense: true,
                         ),
                         onChanged: (v) => param.defaultValue = v,
@@ -1439,8 +1439,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                   style: const TextStyle(fontSize: 12),
                 ),
                 value: preset['id'] as String,
+                // ignore: deprecated_member_use
                 groupValue:
                     _selectedTrimPresetId ?? BuiltinTrimPresetIds.none,
+                // ignore: deprecated_member_use
                 onChanged: (v) => setState(() => _selectedTrimPresetId = v),
                 dense: true,
                 contentPadding: EdgeInsets.zero,
@@ -1460,7 +1462,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                   contentPadding: EdgeInsets.zero,
                   leading: Radio<String?>(
                     value: preset.id,
+                    // ignore: deprecated_member_use
                     groupValue: _selectedTrimPresetId ?? BuiltinTrimPresetIds.none,
+                    // ignore: deprecated_member_use
                     onChanged: (v) =>
                         setState(() => _selectedTrimPresetId = v),
                   ),
