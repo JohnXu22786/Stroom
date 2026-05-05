@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
@@ -302,7 +303,7 @@ class CustomTrimPresetsNotifier extends StateNotifier<List<TrimPreset>> {
         return;
       }
     } catch (e) {
-      print('Failed to load custom trim presets: $e');
+      debugPrint('Failed to load custom trim presets: $e');
     }
     state = [];
   }
@@ -313,7 +314,7 @@ class CustomTrimPresetsNotifier extends StateNotifier<List<TrimPreset>> {
       final json = jsonEncode(state.map((e) => e.toMap()).toList());
       await prefs.setString('custom_trim_presets', json);
     } catch (e) {
-      print('Failed to persist custom trim presets: $e');
+      debugPrint('Failed to persist custom trim presets: $e');
     }
   }
 

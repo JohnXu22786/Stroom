@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -8,22 +9,6 @@ import 'provider_config.dart';
 import 'tts_provider.dart' as tts_provider_base;
 import '../utils/audio_trim.dart';
 import '../utils/audio_utils.dart';
-
-// ============================================================================
-// TTS 提供者实例提供器 —— 从统一供应商配置创建 provider 实例
-// ============================================================================
-
-/// 根据 ProviderConfigItem 创建 TTS provider 实例
-///
-/// 所有供应商统一走 CustomTTSProvider，不依赖字符串猜测类型。
-tts_provider_base.BaseTTSProvider _createProviderFromConfig(
-    ProviderConfigItem config) {
-  return tts_provider_base.CustomTTSProvider(
-    baseUrl: config.host,
-    apiKey: config.key,
-    name: config.providerName,
-  );
-}
 
 /// @deprecated 不再使用，保留以备外部引用。
 /// 如需合成，请使用 [TTSStateNotifier.synthesize] 并传入 config。
@@ -35,7 +20,7 @@ final ttsProviderProvider =
   if (ttsEntry == null || ttsEntry.configs.isEmpty) return null;
   final config = ttsEntry.configs.first;
   if (config.host.isEmpty || config.key.isEmpty) return null;
-  return _createProviderFromConfig(config);
+  return tts_provider_base.createProviderFromConfig(config);
 });
 
 /// 合成配置状态
@@ -110,7 +95,7 @@ class SynthesisConfigNotifier extends StateNotifier<SynthesisConfig> {
         state = config;
       }
     } catch (e) {
-      print('Failed to load synthesis config: $e');
+      debugPrint('Failed to load synthesis config: $e');
     }
   }
 
@@ -120,7 +105,7 @@ class SynthesisConfigNotifier extends StateNotifier<SynthesisConfig> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('synthesis_config', jsonEncode(config.toMap()));
     } catch (e) {
-      print('Failed to save synthesis config: $e');
+      debugPrint('Failed to save synthesis config: $e');
     }
   }
 
@@ -419,7 +404,7 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
       return null;
     }
 
-    final provider = _createProviderFromConfig(providerConfig);
+    final provider = tts_provider_base.createProviderFromConfig(providerConfig);
     final synthConfig = ref.read(synthesisConfigProvider);
 
     try {
@@ -470,7 +455,7 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
         try {
           audioData = trimAudio(audioData, preset: trimPreset);
         } catch (e) {
-          print('Failed to trim audio: $e');
+          debugPrint('Failed to trim audio: $e');
         }
       }
 
@@ -511,7 +496,7 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
       return;
     }
 
-    final provider = _createProviderFromConfig(providerConfig);
+    final provider = tts_provider_base.createProviderFromConfig(providerConfig);
     final synthConfig = ref.read(synthesisConfigProvider);
 
     try {

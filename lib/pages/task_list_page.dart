@@ -320,7 +320,7 @@ class _TaskCard extends ConsumerWidget {
   Widget _buildStatusIcon() {
     switch (task.status) {
       case TaskStatus.running:
-        return SizedBox(
+        return const SizedBox(
           width: 24,
           height: 24,
           child: CircularProgressIndicator(
@@ -404,11 +404,11 @@ class _TaskCard extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Row(
+        title: const Row(
           children: [
-            const Icon(Icons.error_outline, color: Colors.red, size: 20),
-            const SizedBox(width: 8),
-            const Text('合成错误详情'),
+            Icon(Icons.error_outline, color: Colors.red, size: 20),
+            SizedBox(width: 8),
+            Text('合成错误详情'),
           ],
         ),
         content: SingleChildScrollView(

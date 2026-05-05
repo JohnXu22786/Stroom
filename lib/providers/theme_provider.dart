@@ -2,13 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// 应用主题模式枚举
-enum AppThemeMode {
-  light,   // 浅色模式
-  dark,    // 深色模式
-  system,  // 跟随系统
-}
-
 /// 主题提供器，管理应用主题模式
 final themeProvider = StateNotifierProvider<ThemeNotifier, ThemeMode>(
   (ref) => ThemeNotifier(),
@@ -45,29 +38,5 @@ class ThemeNotifier extends StateNotifier<ThemeMode> {
         state = ThemeMode.light;
         break;
     }
-  }
-}
-
-/// 辅助函数：将AppThemeMode转换为ThemeMode
-ThemeMode appThemeModeToThemeMode(AppThemeMode appThemeMode) {
-  switch (appThemeMode) {
-    case AppThemeMode.light:
-      return ThemeMode.light;
-    case AppThemeMode.dark:
-      return ThemeMode.dark;
-    case AppThemeMode.system:
-      return ThemeMode.system;
-  }
-}
-
-/// 辅助函数：将ThemeMode转换为AppThemeMode
-AppThemeMode themeModeToAppThemeMode(ThemeMode themeMode) {
-  switch (themeMode) {
-    case ThemeMode.light:
-      return AppThemeMode.light;
-    case ThemeMode.dark:
-      return AppThemeMode.dark;
-    case ThemeMode.system:
-      return AppThemeMode.system;
   }
 }

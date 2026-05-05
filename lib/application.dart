@@ -36,7 +36,7 @@ class Application extends ConsumerWidget {
             ? lightColorScheme
             : themeMode == ThemeMode.dark
                 ? darkColorScheme
-                : Theme.of(context).brightness == Brightness.light
+                : MediaQuery.platformBrightnessOf(context) == Brightness.light
                     ? lightColorScheme
                     : darkColorScheme;
 

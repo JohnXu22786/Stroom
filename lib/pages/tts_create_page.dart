@@ -616,7 +616,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<int>(
-          value: _selectedModelIndex,
+          initialValue: _selectedModelIndex,
+          key: ValueKey('model_$_selectedModelIndex'),
           decoration: const InputDecoration(
             border: OutlineInputBorder(),
             hintText: '请选择一个模型',
@@ -715,7 +716,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          value: model.voices.any((v) => v.name == _selectedVoice) ? _selectedVoice : model.voices.first.name,
+          initialValue: model.voices.any((v) => v.name == _selectedVoice) ? _selectedVoice : model.voices.first.name,
+          key: ValueKey('voice_$_selectedVoice'),
           decoration: const InputDecoration(
             border: OutlineInputBorder(),
             hintText: '选择音色',
@@ -793,7 +795,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
             Text(
-              '${_volume.toStringAsFixed(1)}',
+              _volume.toStringAsFixed(1),
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,

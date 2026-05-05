@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -120,7 +120,7 @@ class FileManifest {
         _cache = [];
       }
     } catch (e) {
-      print('Failed to load manifest: $e');
+      debugPrint('Failed to load manifest: $e');
       _cache = [];
     }
     _dirty = false;
@@ -130,7 +130,7 @@ class FileManifest {
   /// 持久化 manifest（全平台统一用 SharedPreferences）
   static Future<void> _persist() async {
     if (_cache == null) {
-      print('WARNING: _persist called with null cache, reloading first');
+      debugPrint('WARNING: _persist called with null cache, reloading first');
       await loadRecords();
     }
     try {
@@ -143,7 +143,7 @@ class FileManifest {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_manifestKey, json);
     } catch (e) {
-      print('Failed to persist manifest: $e');
+      debugPrint('Failed to persist manifest: $e');
     }
   }
 

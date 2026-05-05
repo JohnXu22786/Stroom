@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'dart:typed_data';
 
 /// WAV字节写入器（小端序）
@@ -91,9 +92,9 @@ String getMimeType(String format) {
 /// WAV:  "RIFF"
 /// MP3:  "ID3" 或 0xFFFx (MPEG sync)
 /// FLAC: "fLaC"
-const _MAGIC_WAV = [0x52, 0x49, 0x46, 0x46];
-const _MAGIC_MP3_ID3 = [0x49, 0x44, 0x33];
-const _MAGIC_FLAC = [0x66, 0x4C, 0x61, 0x43];
+const _magicWav = [0x52, 0x49, 0x46, 0x46];
+const _magicMp3Id3 = [0x49, 0x44, 0x33];
+const _magicFlac = [0x66, 0x4C, 0x61, 0x43];
 
 /// 检测音频数据的实际格式（基于文件头魔数）。
 ///
@@ -102,17 +103,17 @@ String detectAudioFormat(Uint8List data) {
   if (data.length < 4) return 'pcm';
 
   // WAV: "RIFF"
-  if (data[0] == _MAGIC_WAV[0] &&
-      data[1] == _MAGIC_WAV[1] &&
-      data[2] == _MAGIC_WAV[2] &&
-      data[3] == _MAGIC_WAV[3]) {
+  if (data[0] == _magicWav[0] &&
+      data[1] == _magicWav[1] &&
+      data[2] == _magicWav[2] &&
+      data[3] == _magicWav[3]) {
     return 'wav';
   }
 
   // MP3: "ID3" tag
-  if (data[0] == _MAGIC_MP3_ID3[0] &&
-      data[1] == _MAGIC_MP3_ID3[1] &&
-      data[2] == _MAGIC_MP3_ID3[2]) {
+  if (data[0] == _magicMp3Id3[0] &&
+      data[1] == _magicMp3Id3[1] &&
+      data[2] == _magicMp3Id3[2]) {
     return 'mp3';
   }
 
@@ -122,10 +123,10 @@ String detectAudioFormat(Uint8List data) {
   }
 
   // FLAC: "fLaC"
-  if (data[0] == _MAGIC_FLAC[0] &&
-      data[1] == _MAGIC_FLAC[1] &&
-      data[2] == _MAGIC_FLAC[2] &&
-      data[3] == _MAGIC_FLAC[3]) {
+  if (data[0] == _magicFlac[0] &&
+      data[1] == _magicFlac[1] &&
+      data[2] == _magicFlac[2] &&
+      data[3] == _magicFlac[3]) {
     return 'flac';
   }
 
@@ -160,7 +161,7 @@ String detectAudioFormat(Uint8List data) {
   if (detected == fmt) {
     // 但 PCM 是裸数据无法播放，强制转为 WAV
     if (fmt == 'pcm') {
-      print('ensureValidAudioFormat: PCM→WAV 转换');
+      debugPrint('ensureValidAudioFormat: PCM→WAV 转换');
       return (pcmToWav(data, sampleRate: sampleRate), 'wav');
     }
     return (data, fmt);
@@ -170,16 +171,16 @@ String detectAudioFormat(Uint8List data) {
   if (detected == 'pcm') {
     // 请求格式是 WAV 或 PCM → 可以直接补头
     if (fmt == 'wav' || fmt == 'pcm') {
-      print('ensureValidAudioFormat: 裸PCM→WAV 转换（请求格式=$fmt）');
+      debugPrint('ensureValidAudioFormat: 裸PCM→WAV 转换（请求格式=$fmt）');
       return (pcmToWav(data, sampleRate: sampleRate), 'wav');
     }
     // 请求 MP3/FLAC 等压缩格式 → 无法无损转换
-    print('ensureValidAudioFormat: 警告 - 无法将裸PCM转为$fmt，返回原始数据');
+    debugPrint('ensureValidAudioFormat: 警告 - 无法将裸PCM转为$fmt，返回原始数据');
     return (data, fmt);
   }
 
   // 情况 3: 魔数是别的有效格式（如请求 pcm 但数据实际是 wav）
   // 使用实际检测到的格式，确保 MIME 类型与数据内容一致
-  print('ensureValidAudioFormat: 数据为$detected格式，请求为$fmt，使用实际格式');
+  debugPrint('ensureValidAudioFormat: 数据为$detected格式，请求为$fmt，使用实际格式');
   return (data, detected);
 }

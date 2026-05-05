@@ -151,8 +151,6 @@ void stopAudio() {
 AudioPlayer? _globalPlayer;
 
 AudioPlayer _getOrCreatePlayer() {
-  if (_globalPlayer == null) {
-    _globalPlayer = AudioPlayer();
-  }
+  _globalPlayer ??= AudioPlayer();
   return _globalPlayer!;
 }
