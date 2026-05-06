@@ -8,8 +8,6 @@ import 'pages/camera_page.dart';
 import 'pages/gallery_page.dart';
 import 'pages/settings_page.dart';
 import 'providers/theme_provider.dart';
-import 'providers/camera_provider.dart';
-
 class Application extends ConsumerWidget {
   const Application({super.key});
 
@@ -38,7 +36,7 @@ class Application extends ConsumerWidget {
             ? lightColorScheme
             : themeMode == ThemeMode.dark
                 ? darkColorScheme
-                : Theme.of(context).brightness == Brightness.light
+                : MediaQuery.platformBrightnessOf(context) == Brightness.light
                     ? lightColorScheme
                     : darkColorScheme;
 

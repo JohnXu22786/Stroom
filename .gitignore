@@ -5,6 +5,8 @@
 .pub-cache/
 .pub/
 build/
+.flutter_pid
+.pub_hash
 flutter_*.png
 *.iml
 *.ipr
