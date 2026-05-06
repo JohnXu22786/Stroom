@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
-import 'package:crypto/crypto.dart';
 
 import '../providers/provider_config.dart';
 import '../providers/tts_state_provider.dart';
@@ -47,11 +45,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   static const double _minFontSize = 10;
   static const double _maxFontSize = 28;
 
-  // 哈希校验
-  String _expectedHash = '';
-  Uint8List? _rawAudioData;
-  bool _hashVerified = true;
-  bool _hashCheckDone = false;
+  // 播放速度
+  double _playbackSpeed = 1.0;
+
+  // 音量（记住用户设置）
+  final double _volume = 1.0;
 
   // 播放器折叠状态
   bool _playerExpanded = true;
@@ -87,6 +85,21 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   StreamSubscription<Duration?>? _durSub;
   StreamSubscription<void>? _stateSub;
 
+  /// 清理播放器资源（取消订阅 + dispose），避免重试时泄漏
+  void _disposePlayer() {
+    _posSub?.cancel();
+    _posSub = null;
+    _durSub?.cancel();
+    _durSub = null;
+    _stateSub?.cancel();
+    _stateSub = null;
+    _player?.dispose();
+    _player = null;
+    _isInitialized = false;
+    _position = Duration.zero;
+    _duration = Duration.zero;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -119,6 +132,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   Future<void> _initPlayer() async {
     try {
       _player = AudioPlayerAdapter();
+      // 恢复音量 & 速度
+      _player!.setVolume(_volume);
+      _player!.setPlaybackSpeed(_playbackSpeed);
 
       // 监听进度
       _posSub = _player!.positionStream.listen((position) {
@@ -155,10 +171,10 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       }
     } catch (e) {
       if (mounted) {
+        _disposePlayer();
         final ext = path.extension(widget.filePath).replaceAll('.', '').toLowerCase();
         final diag = '文件: ${path.basename(widget.filePath)} | '
             '扩展名: $ext | '
-            '数据大小: ${_rawAudioData?.length ?? 0} bytes | '
             '源错: $e';
         debugPrint('AudioPlayerPage 错误: $diag');
         setState(() {
@@ -173,17 +189,15 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   Future<void> _loadAudio() async {
     final extension =
         path.extension(widget.filePath).replaceAll('.', '').toLowerCase();
-    var mimeType = _getMimeType(extension);
 
-    // 从文件路径中提取哈希值（文件名不含扩展名即为哈希）
-    _expectedHash = path.basenameWithoutExtension(widget.filePath);
+    final readResult = await FileManifest.readFile(widget.filePath);
+    final readStatus = readResult == null
+        ? 'null (文件不存在或读取失败)'
+        : '${readResult.length} 字节';
 
-    var data = await FileManifest.readFile(widget.filePath);
-
+    var data = readResult;
     if (data != null && data.isNotEmpty) {
-      // 保存原始数据用于哈希校验
-      _rawAudioData = Uint8List.fromList(data);
-
+      debugPrint('_loadAudio: ${widget.filePath} → $readStatus');
       // 通用格式校验：确保音频数据含有效文件头，浏览器才可播放
       final result = ensureValidAudioFormat(
         data,
@@ -191,28 +205,13 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
         sampleRate: 24000,
       );
       data = result.$1;
-      mimeType = getMimeType(result.$2);
+      final mimeType = getMimeType(result.$2);
 
       // 跨平台：Web → Blob URL, Native → data URI
       final audioUrl = createAudioUrl(data, mimeType);
       await _player!.load(audioUrl);
     } else {
-      throw Exception('无法加载音频数据');
-    }
-  }
-
-  String _getMimeType(String extension) {
-    switch (extension) {
-      case 'mp3':
-        return 'audio/mpeg';
-      case 'wav':
-        return 'audio/wav';
-      case 'pcm':
-        return 'audio/L16;rate=24000;channels=1';
-      case 'flac':
-        return 'audio/flac';
-      default:
-        return 'audio/wav';
+      throw Exception('无法加载音频数据 (readFile 返回: $readStatus)');
     }
   }
 
@@ -230,33 +229,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       return;
     }
 
-    // 首次播放前进行哈希校验
-    if (!_hashCheckDone && _rawAudioData != null && _expectedHash.isNotEmpty) {
-      final actualHash = md5.convert(_rawAudioData!).toString();
-      _hashCheckDone = true;
-
-      if (actualHash != _expectedHash) {
-        setState(() {
-          _hashVerified = false;
-        });
-        return; // 不播放，显示错误信息
-      } else {
-        setState(() {
-          _hashVerified = true;
-        });
-      }
-    }
-
     await _player!.play();
-  }
-
-  void _stop() {
-    _player?.stop();
-    if (mounted) {
-      setState(() {
-        _position = Duration.zero;
-      });
-    }
   }
 
   void _seek(Duration position) {
@@ -561,13 +534,10 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   Widget _buildPlayerPanel() {
     final theme = Theme.of(context);
 
-    // 哈希校验失败时展开显示错误（强制展开）
-    final forceExpanded = _hashCheckDone && !_hashVerified;
-
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
-      height: (forceExpanded || _playerExpanded) ? _playerExpandedH : _playerCollapsedH,
+      height: _playerExpanded ? _playerExpandedH : _playerCollapsedH,
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
@@ -583,7 +553,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(16),
         clipBehavior: Clip.antiAlias,
-        child: forceExpanded || _playerExpanded
+        child: _playerExpanded
             ? _buildExpandedContent()
             : _buildCollapsedContent(),
       ),
@@ -648,45 +618,6 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   Widget _buildExpandedContent() {
     final theme = Theme.of(context);
 
-    // 哈希校验失败
-    if (_hashCheckDone && !_hashVerified) {
-      return Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.keyboard_arrow_down, size: 28),
-                  onPressed: _togglePlayer,
-                ),
-              ],
-            ),
-            const Icon(Icons.error_outline, size: 36, color: Colors.red),
-            const SizedBox(height: 8),
-            const Text(
-              '文件已损坏或不一致',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.red),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '哈希值与记录不匹配，可能已被修改或损坏。',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: _onRegenerate,
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('重新生成', style: TextStyle(fontSize: 14)),
-            ),
-          ],
-        ),
-      );
-    }
-
     return SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -731,13 +662,27 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              IconButton(
-                icon: const Icon(Icons.stop),
-                iconSize: 28,
-                color: Colors.red,
-                onPressed: _stop,
+              // 倍速显示按钮（左侧）
+              GestureDetector(
+                onTap: _showSpeedPopup,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '${_playbackSpeed.toStringAsFixed(1)}x',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(width: 16),
+              // 播放/暂停
               FloatingActionButton.small(
                 onPressed: _togglePlayPause,
                 child: Icon(
@@ -745,20 +690,8 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                   size: 24,
                 ),
               ),
+              // 右侧预留空位
               const SizedBox(width: 16),
-              IconButton(
-                icon: Icon(
-                  _player?.volume == 0 ? Icons.volume_off : Icons.volume_up,
-                ),
-                iconSize: 28,
-                onPressed: () {
-                  if (_player?.volume == 0) {
-                    _player?.setVolume(1.0);
-                  } else {
-                    _player?.setVolume(0.0);
-                  }
-                },
-              ),
             ],
           ),
           const SizedBox(height: 4),
@@ -776,11 +709,58 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   }
 
   /// 重新生成按钮：跳转到制作录音页面，预填源文本
+  // ignore: unused_element
   void _onRegenerate() {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => TTSCreatePage(initialText: _sourceText.isNotEmpty ? _sourceText : null),
+      ),
+    );
+  }
+
+  /// 倍速调节弹窗（数字在上，滑块在下）
+  void _showSpeedPopup() {
+    double temp = _playbackSpeed;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('播放速度'),
+          content: SizedBox(
+            width: 260,
+            height: 80,
+            child: Column(
+              children: [
+                Text(
+                  '${temp.toStringAsFixed(1)}x',
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+                Expanded(
+                  child: Slider(
+                    value: temp,
+                    min: 0.5,
+                    max: 3.0,
+                    divisions: 25,
+                    label: '${temp.toStringAsFixed(1)}x',
+                    onChanged: (v) {
+                      temp = (v * 10).roundToDouble() / 10;
+                      setDialogState(() {});
+                      setState(() => _playbackSpeed = temp);
+                      _player?.setPlaybackSpeed(temp);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -844,6 +824,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: () {
+              _disposePlayer();
               setState(() {
                 _hasError = false;
                 _errorMessage = '';
@@ -860,10 +841,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
   @override
   void dispose() {
-    _posSub?.cancel();
-    _durSub?.cancel();
-    _stateSub?.cancel();
-    _player?.dispose();
+    _disposePlayer();
     _textController.dispose();
     super.dispose();
   }
