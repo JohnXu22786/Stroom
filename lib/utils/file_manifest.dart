@@ -266,7 +266,13 @@ class FileManifest {
   /// 读取文件
   static Future<Uint8List?> readFile(String fileName) async {
     if (kIsWeb) {
-      return await WebFileStore.read(fileName);
+      final result = await WebFileStore.read(fileName);
+      if (result == null) {
+        debugPrint('FileManifest.readFile: $fileName → null');
+      } else if (result.isEmpty) {
+        debugPrint('FileManifest.readFile: $fileName → 空数据 (0 字节)');
+      }
+      return result;
     }
     final appDocDir = await getApplicationDocumentsDirectory();
     final ttsDir = path.join(appDocDir.path, 'tts_audio');

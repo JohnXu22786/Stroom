@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -347,6 +348,15 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     final displayName = name.isNotEmpty
         ? name
         : (text.length > 20 ? text.substring(0, 20) : text);
+
+    // 写入音频实体文件
+    await FileManifest.writeFile('$hash.$format', audioData);
+
+    // 写入源文本文件
+    if (text.isNotEmpty) {
+      final textBytes = Uint8List.fromList(utf8.encode(text));
+      await FileManifest.writeFile('$hash.txt', textBytes);
+    }
 
     final record = AudioRecord(
       name: displayName,

@@ -19,7 +19,7 @@ PORT = 7397
 HOST = "localhost"
 DEVICE = "chrome"
 ROOT = os.path.dirname(os.path.abspath(__file__))
-MAX_PORT = 7410
+
 
 C_INFO = "\033[96m"
 C_OK = "\033[92m"
@@ -145,13 +145,9 @@ def port_in_use(p):
 
 
 def find_port():
-    p = PORT
-    while p <= MAX_PORT:
-        if not port_in_use(p):
-            return p
-        pport("Port " + str(p) + " in use, trying next...")
-        p += 1
-    err("No available port in " + str(PORT) + "-" + str(MAX_PORT))
+    if not port_in_use(PORT):
+        return PORT
+    err("Port " + str(PORT) + " is in use")
     return None
 
 
@@ -473,10 +469,7 @@ def main():
         input("Press Enter to exit...")
         sys.exit(1)
 
-    if port != PORT:
-        pport(f"Using port: {port} (original in use)")
-    else:
-        pport(f"Using port: {port}")
+    pport(f"Using port: {port}")
 
     # Launch Textual TUI
     app = FlutterTUI(port=port, device=DEVICE)
