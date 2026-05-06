@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dynamic_color/dynamic_color.dart';
 
 import '../providers/theme_provider.dart';
+import '../providers/provider_config.dart';
+import 'provider_config_page.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -12,10 +13,19 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
-  bool _notificationsEnabled = true;
   bool _saveToGallery = true;
   bool _highQuality = false;
   double _compressionQuality = 0.85;
+
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,19 +40,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // 主题设置部分
           _buildSectionHeader('主题'),
           _buildThemeSettings(themeMode, themeNotifier),
 
           const SizedBox(height: 24),
 
-          // 相机设置部分
           _buildSectionHeader('相机设置'),
           _buildCameraSettings(),
 
           const SizedBox(height: 24),
 
-          // 应用信息部分
+          _buildSectionHeader('供应商设置'),
+          _buildProviderSettings(),
+
+          const SizedBox(height: 24),
+
           _buildSectionHeader('关于'),
           _buildAboutSection(),
 
@@ -66,6 +78,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
+  // ================================================================
+  // 主题设置
+  // ================================================================
+
   Widget _buildThemeSettings(ThemeMode themeMode, ThemeNotifier themeNotifier) {
     return Card(
       child: Padding(
@@ -77,14 +93,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: '浅色模式',
               trailing: Radio<ThemeMode>(
                 value: ThemeMode.light,
+                // ignore: deprecated_member_use
                 groupValue: themeMode,
-                onChanged: (value) {
-                  themeNotifier.setLight();
-                },
+                // ignore: deprecated_member_use
+                onChanged: (_) => themeNotifier.setLight(),
               ),
-              onTap: () {
-                themeNotifier.setLight();
-              },
+              onTap: () => themeNotifier.setLight(),
             ),
             const Divider(height: 1),
             _buildListTile(
@@ -92,14 +106,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: '深色模式',
               trailing: Radio<ThemeMode>(
                 value: ThemeMode.dark,
+                // ignore: deprecated_member_use
                 groupValue: themeMode,
-                onChanged: (value) {
-                  themeNotifier.setDark();
-                },
+                // ignore: deprecated_member_use
+                onChanged: (_) => themeNotifier.setDark(),
               ),
-              onTap: () {
-                themeNotifier.setDark();
-              },
+              onTap: () => themeNotifier.setDark(),
             ),
             const Divider(height: 1),
             _buildListTile(
@@ -107,20 +119,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: '跟随系统',
               trailing: Radio<ThemeMode>(
                 value: ThemeMode.system,
+                // ignore: deprecated_member_use
                 groupValue: themeMode,
-                onChanged: (value) {
-                  themeNotifier.setSystem();
-                },
+                // ignore: deprecated_member_use
+                onChanged: (_) => themeNotifier.setSystem(),
               ),
-              onTap: () {
-                themeNotifier.setSystem();
-              },
+              onTap: () => themeNotifier.setSystem(),
             ),
           ],
         ),
       ),
     );
   }
+
+  // ================================================================
+  // 相机设置
+  // ================================================================
 
   Widget _buildCameraSettings() {
     return Card(
@@ -134,17 +148,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               subtitle: '自动将拍摄的照片保存到设备相册',
               trailing: Switch(
                 value: _saveToGallery,
-                onChanged: (value) {
-                  setState(() {
-                    _saveToGallery = value;
-                  });
-                },
+                onChanged: (v) => setState(() => _saveToGallery = v),
               ),
-              onTap: () {
-                setState(() {
-                  _saveToGallery = !_saveToGallery;
-                });
-              },
+              onTap: () =>
+                  setState(() => _saveToGallery = !_saveToGallery),
             ),
             const Divider(height: 1),
             _buildListTile(
@@ -153,17 +160,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               subtitle: '使用更高的分辨率拍摄照片',
               trailing: Switch(
                 value: _highQuality,
-                onChanged: (value) {
-                  setState(() {
-                    _highQuality = value;
-                  });
-                },
+                onChanged: (v) => setState(() => _highQuality = v),
               ),
-              onTap: () {
-                setState(() {
-                  _highQuality = !_highQuality;
-                });
-              },
+              onTap: () => setState(() => _highQuality = !_highQuality),
             ),
             const Divider(height: 1),
             Padding(
@@ -174,13 +173,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        '压缩质量',
-                        style: TextStyle(fontSize: 16),
-                      ),
+                      const Text('压缩质量',
+                          style: TextStyle(fontSize: 16)),
                       Text(
                         '${(_compressionQuality * 100).toInt()}%',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -190,11 +188,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     max: 1.0,
                     divisions: 9,
                     label: '${(_compressionQuality * 100).toInt()}%',
-                    onChanged: (value) {
-                      setState(() {
-                        _compressionQuality = value;
-                      });
-                    },
+                    onChanged: (v) =>
+                        setState(() => _compressionQuality = v),
                   ),
                 ],
               ),
@@ -205,6 +200,54 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
+  // ================================================================
+  // 供应商设置
+  // ================================================================
+
+  Widget _buildProviderSettings() {
+    final entriesState = ref.watch(providerEntriesProvider);
+    final entries = entriesState.entries;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ...entries.map((entry) => _buildProviderEntryTile(entry)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProviderEntryTile(ProviderEntry entry) {
+    return ListTile(
+      leading: Icon(
+        Icons.business,
+        color: Theme.of(context).colorScheme.primary,
+      ),
+      title: Text(entry.name),
+      trailing: const Icon(Icons.chevron_right),
+      contentPadding: EdgeInsets.zero,
+      onTap: () => _openProviderConfig(entry.id),
+    );
+  }
+
+
+  void _openProviderConfig(String entryId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProviderConfigPage(entryId: entryId),
+      ),
+    );
+  }
+
+  // ================================================================
+  // 关于
+  // ================================================================
+
   Widget _buildAboutSection() {
     return Card(
       child: Padding(
@@ -212,7 +255,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         child: Column(
           children: [
             _buildListTile(
-              leading: const Icon(Icons.info_outline, color: Colors.blue),
+              leading:
+                  const Icon(Icons.info_outline, color: Colors.blue),
               title: '应用版本',
               subtitle: '1.0.0',
               trailing: null,
@@ -223,18 +267,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               leading: const Icon(Icons.code, color: Colors.orange),
               title: '开源许可',
               trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                _showLicenseDialog();
-              },
+              onTap: () => _showLicenseDialog(),
             ),
             const Divider(height: 1),
             _buildListTile(
               leading: const Icon(Icons.privacy_tip, color: Colors.red),
               title: '隐私政策',
               trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                _showPrivacyDialog();
-              },
+              onTap: () => _showPrivacyDialog(),
             ),
           ],
         ),
@@ -286,9 +326,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+              onPressed: () => Navigator.of(context).pop(),
               child: const Text('关闭'),
             ),
           ],

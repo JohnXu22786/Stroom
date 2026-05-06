@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'application.dart';
-
+import 'providers/tts_config.dart';
 Future<void> main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
+    registerBuiltinProviders();
+
     runApp(
       const ProviderScope(
         child: Application(),
