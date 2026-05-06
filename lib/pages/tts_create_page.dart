@@ -498,30 +498,33 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
     // 没有可用模型 → 显示引导卡片
     if (_availableModels.isEmpty) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              const Icon(Icons.warning_amber_rounded, size: 48, color: Colors.orange),
-              const SizedBox(height: 16),
-              const Text(
-                '未检测到可用模型',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                '请先在供应商设置中添加模型，然后再返回此处选择。',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: _navigateToProviderConfig,
-                icon: const Icon(Icons.settings),
-                label: const Text('去配置供应商'),
-              ),
-            ],
+      return SizedBox(
+        width: double.infinity,
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                const Icon(Icons.warning_amber_rounded, size: 48, color: Colors.orange),
+                const SizedBox(height: 16),
+                const Text(
+                  '未检测到可用模型',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '请先在供应商设置中添加模型，然后再返回此处选择。',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton.icon(
+                  onPressed: _navigateToProviderConfig,
+                  icon: const Icon(Icons.settings),
+                  label: const Text('去配置供应商'),
+                ),
+              ],
+            ),
           ),
         ),
       );
