@@ -64,10 +64,13 @@ class _ProviderConfigDetailPageState
       _keyController.text = config.key;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && (_hostController.text.trim().isEmpty || _keyController.text.trim().isEmpty)) {
+      if (mounted &&
+          (_providerNameController.text.trim().isEmpty ||
+              _hostController.text.trim().isEmpty ||
+              _keyController.text.trim().isEmpty)) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('请填写完整的供应商配置信息（Host 和 Key），否则该供应商不可在生成录音中使用'),
+            content: Text('请填写完整的供应商配置信息（名称、Host 和 Key），否则该供应商不可在生成录音中使用'),
             behavior: SnackBarBehavior.floating,
             duration: Duration(seconds: 5),
           ),
@@ -171,12 +174,13 @@ class _ProviderConfigDetailPageState
   // ----------------------------------------------------------------
 
   Future<void> _save() async {
+    final providerName = _providerNameController.text.trim();
     final host = _hostController.text.trim();
     final key = _keyController.text.trim();
-    if (host.isEmpty || key.isEmpty) {
+    if (providerName.isEmpty || host.isEmpty || key.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Host 和 Key 均为必填项'),
+          content: Text('供应商名称、Host 和 Key 均为必填项'),
           behavior: SnackBarBehavior.floating,
         ),
       );
