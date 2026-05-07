@@ -9,6 +9,7 @@ import '../providers/tts_config.dart';
 import '../utils/audio_playback.dart';
 import '../utils/audio_trim.dart';
 import '../utils/audio_utils.dart';
+import 'voice_editor_page.dart';
 
 class ModelConfigPage extends ConsumerStatefulWidget {
   final String entryId;
@@ -161,135 +162,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   }
 
   // ----------------------------------------------------------------
-  // 音色管理
+  // 音色管理（已迁移到 VoiceEditorPage）
   // ----------------------------------------------------------------
-
-  void _showAddVoiceDialog() {
-    final nameCtrl = TextEditingController();
-    final idCtrl = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('添加音色'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(
-                labelText: '音色名称（选填）',
-                hintText: '例如: 标准女生，不填则使用ID',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: idCtrl,
-              decoration: const InputDecoration(
-                labelText: '音色ID *',
-                hintText: '例如: female',
-                border: OutlineInputBorder(),
-              ),
-              autofocus: true,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final id = idCtrl.text.trim();
-              if (id.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('音色ID为必填项'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-                return;
-              }
-              final name = nameCtrl.text.trim();
-              setState(() {
-                _voices.add(VoiceEntry(
-                  name: name.isNotEmpty ? name : id,
-                  id: id,
-                ));
-              });
-              Navigator.pop(ctx);
-            },
-            child: const Text('添加'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showEditVoiceDialog(int index) {
-    final entry = _voices[index];
-    final nameCtrl = TextEditingController(text: entry.name);
-    final idCtrl = TextEditingController(text: entry.id);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('编辑音色'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(
-                labelText: '音色名称（选填）',
-                hintText: '例如: 标准女生，不填则使用ID',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: idCtrl,
-              decoration: const InputDecoration(
-                labelText: '音色ID *',
-                hintText: '例如: female',
-                border: OutlineInputBorder(),
-              ),
-              autofocus: true,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final id = idCtrl.text.trim();
-              if (id.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('音色ID为必填项'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-                return;
-              }
-              final name = nameCtrl.text.trim();
-              setState(() {
-                _voices[index] = VoiceEntry(
-                  name: name.isNotEmpty ? name : id,
-                  id: id,
-                );
-              });
-              Navigator.pop(ctx);
-            },
-            child: const Text('保存'),
-          ),
-        ],
-      ),
-    );
-  }
 
   // ----------------------------------------------------------------
   // 裁切预设管理
@@ -525,33 +399,6 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   }
 
   // ----------------------------------------------------------------
-  // 音色管理工具
-  // ----------------------------------------------------------------
-
-  Future<void> _confirmDeleteVoice(int index) async {
-    final voice = _voices[index];
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('删除音色'),
-        content: Text('确定要删除音色"${voice.name}"吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
-    );
-    if (confirm == true) {
-      setState(() => _voices.removeAt(index));
-    }
-  }
 
   Future<void> _playTestAudio() async {
     final entry = _entry;
@@ -1073,109 +920,36 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           const SizedBox(height: 24),
 
           // ==========================================================
-          // 音色列表
+          // 音色列表 → 入口卡片，跳转到独立编辑大面板
           // ==========================================================
-          Row(
-            children: [
-              const Text('音色', style: TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(width: 4),
-              IconButton(
-                icon: const Icon(Icons.info_outline, size: 18),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                onPressed: () => _showInfoDialog(
-                  '音色',
-                  '音色名称是给用户看的人名，如"标准女生"。\n\n音色ID是调用API时使用的标识符，如"female"。\n\n添加音色时两项都需要填写。',
-                ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.record_voice_over, size: 24),
+              title: Text('音色 (${_voices.length})'),
+              subtitle: Text(
+                _voices.isEmpty
+                    ? '暂无音色，点击进入编辑'
+                    : _voices.take(3).map((v) => v.name).join('、') +
+                        (_voices.length > 3 ? '…' : ''),
+                style: const TextStyle(fontSize: 12),
               ),
-              const Spacer(),
-              TextButton.icon(
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('添加音色'),
-                onPressed: _showAddVoiceDialog,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-
-          if (_voices.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Text('暂无音色',
-                  style: TextStyle(color: Colors.grey)),
-            )
-          else
-            ReorderableListView(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              buildDefaultDragHandles: false,
-              onReorder: (oldIndex, newIndex) {
-                if (oldIndex < newIndex) newIndex -= 1;
-                setState(() {
-                  final item = _voices.removeAt(oldIndex);
-                  _voices.insert(newIndex, item);
-                });
-              },
-              proxyDecorator: (child, index, animation) => Material(
-                elevation: 2,
-                borderRadius: BorderRadius.circular(8),
-                child: child,
-              ),
-              children: List.generate(_voices.length, (i) {
-                final v = _voices[i];
-                return Padding(
-                  key: ValueKey('voice_$i'),
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Row(
-                    children: [
-                      ReorderableDragStartListener(
-                        index: i,
-                        child: const Padding(
-                          padding: EdgeInsets.only(right: 4),
-                          child: Icon(Icons.drag_indicator,
-                              color: Colors.grey, size: 22),
-                        ),
-                      ),
-                      Expanded(
-                        child: Row(
-                          children: [
-                            Text(v.name,
-                                  style: const TextStyle(fontSize: 14)),
-                            if (v.id.isNotEmpty) ...[
-                              const SizedBox(width: 6),
-                              Text(v.id,
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey[600])),
-                            ],
-                          ],
-                        ),
-                      ),
-                      // 编辑按钮
-                      IconButton(
-                        icon: const Icon(Icons.edit, size: 18),
-                        constraints: const BoxConstraints(
-                            minWidth: 32, minHeight: 32),
-                        padding: EdgeInsets.zero,
-                        onPressed: () => _showEditVoiceDialog(i),
-                        tooltip: '编辑音色',
-                      ),
-                      // 删除按钮
-                      IconButton(
-                        icon: const Icon(Icons.close,
-                            size: 18, color: Colors.red),
-                        constraints: const BoxConstraints(
-                            minWidth: 32, minHeight: 32),
-                        padding: EdgeInsets.zero,
-                        onPressed: () => _confirmDeleteVoice(i),
-                        tooltip: '删除音色',
-                      ),
-                    ],
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () async {
+                final result = await Navigator.push<List<VoiceEntry>>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => VoiceEditorPage(
+                      initialVoices: _voices.map((v) => v.copy()).toList(),
+                    ),
                   ),
                 );
-              }),
+                if (result != null) {
+                  setState(() => _voices = result);
+                }
+              },
             ),
-          const SizedBox(height: 16),
+          ),
+          const SizedBox(height: 8),
 
           // ==========================================================
           // 自定义参数
