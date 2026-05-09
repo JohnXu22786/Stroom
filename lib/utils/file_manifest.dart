@@ -8,15 +8,22 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
 import 'web_file_store.dart';
+import 'file_record.dart';
 
 /// 音频文件记录（manifest 中的一条记录）
-class AudioRecord {
+class AudioRecord implements FileRecord {
+  @override
   final String id;
+  @override
   final String name;          // 用户设置的文件名
   final String hash;          // 音频数据的 MD5 哈希值
+  @override
   final String format;        // 文件格式（wav, mp3 等）
+  @override
   final DateTime createdAt;
+  @override
   final int size;             // 文件大小（字节）
+  @override
   final String folder;        // 文件夹路径（空字符串表示根目录）
   final String sourceText;    // 源文本
 
