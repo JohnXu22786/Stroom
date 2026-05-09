@@ -166,7 +166,7 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
   Future<void> loadRecords() async {
     final records = await FileManifest.loadRecords();
     records.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    state = records;
+    state = List<AudioRecord>.from(records);
   }
 
   Future<void> addRecord(AudioRecord record) async {
