@@ -1,13 +1,12 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'file_record.dart';
 import 'web_file_store.dart';
 import 'folder_path_utils.dart';
+import '../services/manifest_database.dart';
 
 // ---- Access helpers (records always use these mixins) -------------------
 
@@ -37,12 +36,20 @@ class ManifestOperations<T extends FileRecord> {
   /// Optional extra cleanup when entity files are deleted (e.g. .txt sidecar).
   final Future<void> Function(T record)? onExtraDelete;
 
+  /// SQLite 表名（如 'image_records' 或 'audio_records'）
+  final String tableName;
+
+  /// record → Map<String, dynamic> 转换函数
+  final Map<String, dynamic> Function(T record) toMap;
+
   ManifestOperations({
     required this.manifestKey,
     required this.storageDirName,
     this.useAppSupportDir = false,
     required this.fromMap,
     this.onExtraDelete,
+    required this.tableName,
+    required this.toMap,
   });
 
   // ---- Per-type cache ---------------------------------------------------
@@ -50,6 +57,49 @@ class ManifestOperations<T extends FileRecord> {
   List<T>? _cache;
   bool _dirty = false;
   List<String> _folderCache = [];
+
+  // ---- 判断当前操作哪张表 ------------------------------------------------
+
+  bool get _isImageTable => tableName == ManifestTables.imageRecords;
+
+  // ---- 数据库代理方法（根据 tableName 路由到正确的表操作） ---------------
+
+  Future<List<Map<String, dynamic>>> _dbGetAllRecords() async {
+    if (_isImageTable) return ManifestDatabase.getAllImageRecords();
+    return ManifestDatabase.getAllAudioRecords();
+  }
+
+  Future<void> _dbInsertRecord(Map<String, dynamic> record) async {
+    if (_isImageTable) {
+      await ManifestDatabase.insertImageRecord(record);
+    } else {
+      await ManifestDatabase.insertAudioRecord(record);
+    }
+  }
+
+  Future<void> _dbUpdateRecord(String id, Map<String, dynamic> updates) async {
+    if (_isImageTable) {
+      await ManifestDatabase.updateImageRecord(id, updates);
+    } else {
+      await ManifestDatabase.updateAudioRecord(id, updates);
+    }
+  }
+
+  Future<void> _dbDeleteRecord(String id) async {
+    if (_isImageTable) {
+      await ManifestDatabase.deleteImageRecord(id);
+    } else {
+      await ManifestDatabase.deleteAudioRecord(id);
+    }
+  }
+
+  Future<void> _dbDeleteRecords(List<String> ids) async {
+    if (_isImageTable) {
+      await ManifestDatabase.deleteImageRecords(ids);
+    } else {
+      await ManifestDatabase.deleteAudioRecords(ids);
+    }
+  }
 
   // ---- Storage directory ------------------------------------------------
 
@@ -76,47 +126,16 @@ class ManifestOperations<T extends FileRecord> {
     if (_cache != null && !_dirty) return _cache!;
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final json = prefs.getString(manifestKey);
-      if (json != null && json.isNotEmpty) {
-        final data = jsonDecode(json);
-        if (data is List) {
-          _cache =
-              data.cast<Map<String, dynamic>>().map((m) => fromMap(m)).toList();
-          _folderCache = [];
-        } else if (data is Map) {
-          final list =
-              (data['records'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-          _cache = list.map((m) => fromMap(m)).toList();
-          _folderCache = (data['folders'] as List?)?.cast<String>() ?? [];
-        }
-      } else {
-        _cache = [];
-      }
+      final rows = await _dbGetAllRecords();
+      _cache = rows.map((m) => fromMap(m)).toList();
+      _folderCache = await ManifestDatabase.getAllFolders();
     } catch (e) {
       debugPrint('ManifestOperations($manifestKey).loadRecords error: $e');
       _cache = [];
+      _folderCache = [];
     }
     _dirty = false;
     return _cache!;
-  }
-
-  Future<void> _persist() async {
-    if (_cache == null) {
-      await loadRecords();
-    }
-    try {
-      final data = {
-        'records': (_cache ?? [])
-            .map((r) => (r as dynamic).toMap() as Map<String, dynamic>)
-            .toList(),
-        'folders': _folderCache,
-      };
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(manifestKey, jsonEncode(data));
-    } catch (e) {
-      debugPrint('ManifestOperations($manifestKey)._persist error: $e');
-    }
   }
 
   // ---- CRUD -------------------------------------------------------------
@@ -124,7 +143,7 @@ class ManifestOperations<T extends FileRecord> {
   Future<void> addRecord(T record) async {
     await loadRecords();
     _cache!.add(record);
-    await _persist();
+    await _dbInsertRecord(toMap(record));
   }
 
   Future<void> _deleteEntityFiles(T record) async {
@@ -149,7 +168,7 @@ class ManifestOperations<T extends FileRecord> {
     final record = _cache![index];
     await _deleteEntityFiles(record);
     _cache!.removeAt(index);
-    await _persist();
+    await _dbDeleteRecord(id);
   }
 
   /// Batch delete: partition list, delete files, then replace cache.
@@ -184,7 +203,7 @@ class ManifestOperations<T extends FileRecord> {
       }
     }
     _cache = remaining;
-    await _persist();
+    await _dbDeleteRecords(ids);
   }
 
   Future<void> updateRecord(T updated) async {
@@ -192,7 +211,7 @@ class ManifestOperations<T extends FileRecord> {
     final index = _cache!.indexWhere((r) => r.id == updated.id);
     if (index != -1) {
       _cache![index] = updated;
-      await _persist();
+      await _dbUpdateRecord(updated.id, toMap(updated));
     }
   }
 
@@ -201,7 +220,7 @@ class ManifestOperations<T extends FileRecord> {
     final index = _cache!.indexWhere((r) => r.id == id);
     if (index != -1) {
       _cache![index] = _copyName(_cache![index], newName);
-      await _persist();
+      await _dbUpdateRecord(id, toMap(_cache![index]));
     }
   }
 
@@ -210,7 +229,7 @@ class ManifestOperations<T extends FileRecord> {
     final index = _cache!.indexWhere((r) => r.id == id);
     if (index != -1) {
       _cache![index] = _copyFolder(_cache![index], targetFolder);
-      await _persist();
+      await _dbUpdateRecord(id, toMap(_cache![index]));
     }
   }
 
@@ -301,7 +320,7 @@ class ManifestOperations<T extends FileRecord> {
     if (err != null) return;
     if (!_folderCache.contains(name)) {
       _folderCache.add(name);
-      await _persist();
+      await ManifestDatabase.insertFolder(name);
     }
   }
 
@@ -309,7 +328,7 @@ class ManifestOperations<T extends FileRecord> {
     await loadRecords();
     if (!_folderCache.contains(folderPath)) {
       _folderCache.add(folderPath);
-      await _persist();
+      await ManifestDatabase.insertFolder(folderPath);
     }
   }
 
@@ -324,24 +343,34 @@ class ManifestOperations<T extends FileRecord> {
     final descendants =
         FolderPathUtils.getAllDescendantFolderPaths(folderName, allPaths);
 
+    // 收集所有需要从 DB 删除的记录 ID
+    final idsToDelete = <String>[];
+
     for (final child in descendants) {
       _folderCache.remove(child);
       final childRecords = _cache!.where((r) => _folderOf(r) == child).toList();
       for (final record in childRecords) {
+        idsToDelete.add(record.id);
         await _deleteEntityFiles(record);
         _cache!.remove(record);
       }
+      await ManifestDatabase.deleteFolder(child);
     }
 
     _folderCache.remove(folderName);
 
     final toRemove = _cache!.where((r) => _folderOf(r) == folderName).toList();
     for (final record in toRemove) {
+      idsToDelete.add(record.id);
       await _deleteEntityFiles(record);
       _cache!.remove(record);
     }
+    await ManifestDatabase.deleteFolder(folderName);
 
-    await _persist();
+    // 从 DB 删除受影响的记录
+    if (idsToDelete.isNotEmpty) {
+      await _dbDeleteRecords(idsToDelete);
+    }
   }
 
   Future<Set<String>> getAllFolders() async {
@@ -366,8 +395,8 @@ class ManifestOperations<T extends FileRecord> {
     }
     for (final f in toRemove) {
       _folderCache.remove(f);
+      await ManifestDatabase.deleteFolder(f);
     }
-    await _persist();
   }
 
   void invalidateCache() {

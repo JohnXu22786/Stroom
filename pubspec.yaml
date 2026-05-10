@@ -37,6 +37,7 @@ dependencies:
   mime: ^1.0.4
   file: ^6.1.4
   share_plus: ^7.2.0
+  sqflite: ^2.3.0
 
   # UI and Utilities
   cupertino_icons: ^1.0.6

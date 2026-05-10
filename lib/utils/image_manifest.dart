@@ -120,6 +120,8 @@ class ImageManifest {
     storageDirName: 'pictures',
     useAppSupportDir: false,
     fromMap: ImageRecord.fromMap,
+    tableName: 'image_records',
+    toMap: (r) => r.toMap(),
   );
 
   static Future<List<ImageRecord>> loadRecords() => _ops.loadRecords();

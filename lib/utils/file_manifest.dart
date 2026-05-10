@@ -137,6 +137,8 @@ class FileManifest {
     manifestKey: 'audio_manifest',
     storageDirName: 'tts_audio',
     fromMap: AudioRecord.fromMap,
+    tableName: 'audio_records',
+    toMap: (r) => r.toMap(),
     onExtraDelete: (r) async {
       // Also delete the .txt sidecar file (same prefix convention)
       if (kIsWeb) {
@@ -176,6 +178,8 @@ class FileManifest {
       _ops.writeFile(fileName, data);
   static Future<Uint8List?> readFile(String fileName) =>
       _ops.readFile(fileName);
+  static Future<String?> readFilePath(String fileName) =>
+      _ops.readFilePath(fileName);
   static Future<bool> fileExists(String fileName) => _ops.fileExists(fileName);
   static Future<bool> deleteFile(String fileName) => _ops.deleteFile(fileName);
   static Future<String> get ttsAudioDir => _ops.storageDirPath;

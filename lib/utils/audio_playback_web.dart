@@ -20,8 +20,7 @@ class AudioPlayerAdapter {
       StreamController<Duration>.broadcast();
   final StreamController<Duration?> _durationCtrl =
       StreamController<Duration?>.broadcast();
-  final StreamController<void> _stateCtrl =
-      StreamController<void>.broadcast();
+  final StreamController<void> _stateCtrl = StreamController<void>.broadcast();
 
   /// 当前播放状态
   bool get playing => _playing;
@@ -37,6 +36,12 @@ class AudioPlayerAdapter {
 
   /// 状态变化触发流（用于 setState）
   Stream<void> get stateStream => _stateCtrl.stream;
+
+  /// Native 端通过文件路径加载（Web 端不使用，留空）
+  Future<void> loadFile(String filePath) async {
+    // Web 端不支持直接加载文件路径，抛出错误
+    throw UnsupportedError('Web 不支持直接加载文件路径');
+  }
 
   /// 从 URL 加载音频
   Future<void> load(String url) async {
@@ -93,8 +98,8 @@ class AudioPlayerAdapter {
     canPlaySub = _audio!.onCanPlay.listen((_) => onLoad());
     metaSub = _audio!.onLoadedMetadata.listen((_) => onLoad());
 
-    await completer.future.timeout(const Duration(seconds: 30),
-        onTimeout: onLoad);
+    await completer.future
+        .timeout(const Duration(seconds: 30), onTimeout: onLoad);
 
     // 通知时长
     final seconds = _audio!.duration;

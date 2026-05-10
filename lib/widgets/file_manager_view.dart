@@ -476,14 +476,27 @@ class _FileManagerViewState<T extends FileRecord>
       );
     }
 
-    return ListView(
+    final allItems = <dynamic>[
+      if (isInFolder) 'back',
+      for (final f in subFolders) f,
+      ...currentFiles,
+    ];
+
+    return ListView.builder(
       padding: const EdgeInsets.only(bottom: 80),
-      children: [
-        if (isInFolder) _buildBackItem(),
-        for (final folderName in subFolders)
-          _buildFolderItem(folderName, grouped[folderName]?.length ?? 0),
-        ...currentFiles.map((r) => _buildFileItem(r)),
-      ],
+      itemCount: allItems.length,
+      itemBuilder: (context, index) {
+        final item = allItems[index];
+        if (item is String && item == 'back') {
+          return _buildBackItem();
+        } else if (item is String) {
+          // folder name
+          return _buildFolderItem(item, grouped[item]?.length ?? 0);
+        } else {
+          // file record
+          return _buildFileItem(item as T);
+        }
+      },
     );
   }
 
@@ -561,23 +574,31 @@ class _FileManagerViewState<T extends FileRecord>
       );
     }
 
-    final items = <Widget>[];
-    if (isInFolder) items.add(_buildGridBackItem());
-    for (final folderName in subFolders) {
-      items.add(
-          _buildGridFolderItem(folderName, grouped[folderName]?.length ?? 0));
-    }
-    for (final file in currentFiles) {
-      items.add(_buildGridFileItem(file));
-    }
+    final allItems = <dynamic>[
+      if (isInFolder) 'back',
+      for (final f in subFolders) f,
+      ...currentFiles,
+    ];
 
-    return GridView.extent(
+    return GridView.builder(
       padding: const EdgeInsets.all(8),
-      maxCrossAxisExtent: 130,
-      mainAxisSpacing: 4,
-      crossAxisSpacing: 4,
-      childAspectRatio: 1.0,
-      children: items,
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 130,
+        mainAxisSpacing: 4,
+        crossAxisSpacing: 4,
+        childAspectRatio: 1.0,
+      ),
+      itemCount: allItems.length,
+      itemBuilder: (context, index) {
+        final item = allItems[index];
+        if (item is String && item == 'back') {
+          return _buildGridBackItem();
+        } else if (item is String) {
+          return _buildGridFolderItem(item, grouped[item]?.length ?? 0);
+        } else {
+          return _buildGridFileItem(item as T);
+        }
+      },
     );
   }
 
