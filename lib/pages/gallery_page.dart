@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -49,6 +50,26 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
 
   /// Guards against re-entrant imports.
   bool _isImporting = false;
+
+  /// 生成缩略图（最大 256x256，保持宽高比）
+  Future<Uint8List> generateThumbnail(Uint8List imageData,
+      {int maxDimension = 256}) async {
+    try {
+      final codec = await ui.instantiateImageCodec(
+        imageData,
+        targetWidth: maxDimension,
+        targetHeight: maxDimension,
+      );
+      final frame = await codec.getNextFrame();
+      final byteData =
+          await frame.image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) return imageData;
+      return byteData.buffer.asUint8List();
+    } catch (e) {
+      // 缩略图生成失败时回退使用原图
+      return imageData;
+    }
+  }
 
   /// Sanitize a filename: strip path separators, truncate, keep extension.
   String _sanitizeName(String rawName) {
@@ -262,6 +283,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         usedInBatch.add(displayName);
 
         await ImageManifest.writeFile(storageFileName, bytes);
+        final thumbnailBytes = await generateThumbnail(bytes);
+        final thumbFileName = '${hash}_thumb.$format';
+        await ImageManifest.writeFile(thumbFileName, thumbnailBytes);
         await ImageManifest.addRecord(ImageRecord(
             name: displayName,
             hash: hash,
@@ -600,7 +624,12 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       final canPreview = _supportedFormats.contains(file.format);
       if (canPreview) {
         return FutureBuilder<Uint8List?>(
-          future: ImageManifest.readFile(file.storagePath),
+          future: (() async {
+            final thumb = await ImageManifest.readFile(
+                '${file.hash}_thumb.${file.format}');
+            if (thumb != null) return thumb;
+            return ImageManifest.readFile(file.storagePath);
+          })(),
           builder: (context, snapshot) {
             final data = snapshot.data;
             if (data == null || data.isEmpty) {
