@@ -52,7 +52,7 @@ class AudioPlayerAdapter {
     _setupListeners();
 
     try {
-      await _player!.setAudioSource(AudioSource.uri(Uri.parse(url)));
+      await _player!.setAudioSource(AudioSource.uri(Uri.file(url)));
       _stateCtrl.add(null);
     } catch (e) {
       // just_audio 会把 error 通过 stateStream 广播，我们在这里也抛一下

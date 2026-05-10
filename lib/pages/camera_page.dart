@@ -1,9 +1,13 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import '../utils/image_manifest.dart';
 
 class CameraPage extends StatefulWidget {
-  const CameraPage({super.key});
+  final String folder;
+  const CameraPage({super.key, this.folder = ''});
 
   @override
   State<CameraPage> createState() => _CameraPageState();
@@ -57,7 +61,8 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
               orElse: () => _cameras!.first,
             );
 
-      _controller = CameraController(camera, ResolutionPreset.high, enableAudio: false);
+      _controller =
+          CameraController(camera, ResolutionPreset.high, enableAudio: false);
       await _controller!.initialize();
       if (mounted) setState(() => _isInitialized = true);
     } catch (_) {}
@@ -74,7 +79,12 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
 
   void _toggleFlash() {
     if (_controller == null || !_isInitialized) return;
-    const modes = [FlashMode.off, FlashMode.auto, FlashMode.always, FlashMode.torch];
+    const modes = [
+      FlashMode.off,
+      FlashMode.auto,
+      FlashMode.always,
+      FlashMode.torch
+    ];
     final idx = (modes.indexOf(_flashMode) + 1) % modes.length;
     setState(() => _flashMode = modes[idx]);
     _controller!.setFlashMode(_flashMode);
@@ -103,6 +113,11 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
 
       await ImageManifest.writeFile(fileName, bytes);
 
+      // Generate and save thumbnail
+      final thumbnailBytes = await _generateThumbnail(bytes);
+      final thumbFileName = '${hash}_thumb.png';
+      await ImageManifest.writeFile(thumbFileName, thumbnailBytes);
+
       final now = DateTime.now();
       final timestamp =
           '${now.year}${_pad(now.month)}${_pad(now.day)}_${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}';
@@ -112,6 +127,7 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
         format: format,
         createdAt: DateTime.now(),
         size: bytes.length,
+        folder: widget.folder,
       );
       await ImageManifest.addRecord(record);
 
@@ -123,6 +139,24 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
           SnackBar(content: Text('拍照失败: $e'), backgroundColor: Colors.red),
         );
       }
+    }
+  }
+
+  Future<Uint8List> _generateThumbnail(Uint8List imageData,
+      {int maxDimension = 256}) async {
+    try {
+      final codec = await ui.instantiateImageCodec(
+        imageData,
+        targetWidth: maxDimension,
+        targetHeight: maxDimension,
+      );
+      final frame = await codec.getNextFrame();
+      final byteData =
+          await frame.image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) return imageData;
+      return byteData.buffer.asUint8List();
+    } catch (e) {
+      return imageData;
     }
   }
 
@@ -171,21 +205,24 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
                 icon: const Icon(Icons.close, color: Colors.white, size: 28),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.black54,
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
                   '${_zoomLevel.toStringAsFixed(1)}x',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold),
                 ),
               ),
               IconButton(
                 onPressed: _toggleFlash,
                 icon: Icon(
                   _flashIcon(),
-                  color: _flashMode == FlashMode.off ? Colors.white : Colors.amber,
+                  color:
+                      _flashMode == FlashMode.off ? Colors.white : Colors.amber,
                   size: 28,
                 ),
               ),
@@ -217,7 +254,8 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
                 children: [
                   IconButton(
                     onPressed: _toggleCamera,
-                    icon: const Icon(Icons.flip_camera_ios, color: Colors.white, size: 28),
+                    icon: const Icon(Icons.flip_camera_ios,
+                        color: Colors.white, size: 28),
                   ),
                   const SizedBox(width: 32),
                   // Shutter button
@@ -230,7 +268,8 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
                         color: Colors.white,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.camera_alt, color: Colors.black, size: 36),
+                      child: const Icon(Icons.camera_alt,
+                          color: Colors.black, size: 36),
                     ),
                   ),
                   const SizedBox(width: 80), // balance layout
@@ -245,7 +284,8 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
 
   Widget _overlayButton(IconData icon, VoidCallback onTap) {
     return Container(
-      decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.black45),
+      decoration:
+          const BoxDecoration(shape: BoxShape.circle, color: Colors.black45),
       child: IconButton(
         onPressed: onTap,
         icon: Icon(icon, color: Colors.white, size: 22),

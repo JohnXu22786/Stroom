@@ -634,7 +634,7 @@ class _FileManagerViewState<T extends FileRecord>
   Widget _buildGridFolderItem(String folderName, int fileCount) {
     final isSelected = _selectedIds.contains(folderName);
     return GestureDetector(
-      key: Key('fm_grid_folder_${folderName.hashCode}'),
+      key: Key('fm_grid_folder_$folderName'),
       onTap: () {
         if (_selectionMode) {
           _toggleFolderSelection(folderName);
@@ -776,7 +776,7 @@ class _FileManagerViewState<T extends FileRecord>
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
       child: Card(
-        key: Key('fm_folder_${folderName.hashCode}'),
+        key: Key('fm_folder_$folderName'),
         margin: EdgeInsets.zero,
         child: InkWell(
           onTap: () {
@@ -833,7 +833,7 @@ class _FileManagerViewState<T extends FileRecord>
                 // Popup menu
                 if (!_selectionMode)
                   PopupMenuButton<String>(
-                    key: Key('fm_folder_popup_${folderName.hashCode}'),
+                    key: Key('fm_folder_popup_$folderName'),
                     icon: const Icon(Icons.more_vert, size: 20),
                     onSelected: (value) {
                       switch (value) {
@@ -1295,6 +1295,17 @@ class _FileManagerViewState<T extends FileRecord>
     }
   }
 
+  List<String> _fileIdsExcludingFolderFiles(
+      List<String> fileIds, List<String> folderNames) {
+    return fileIds.where((id) {
+      final matches = widget.sortedRecords.where((r) => r.id == id);
+      if (matches.isEmpty) return true;
+      final file = matches.first;
+      return !folderNames
+          .any((fn) => file.folder == fn || file.folder.startsWith('$fn/'));
+    }).toList();
+  }
+
   Future<void> _deleteSelected() async {
     if (_selectedIds.isEmpty) return;
     final confirmed = await showDialog<bool>(
@@ -1329,8 +1340,10 @@ class _FileManagerViewState<T extends FileRecord>
           fileIds.add(id);
         }
       }
-      if (fileIds.isNotEmpty) {
-        await widget.onDeleteFiles(fileIds);
+      final adjustedFileIds =
+          _fileIdsExcludingFolderFiles(fileIds, folderNames);
+      if (adjustedFileIds.isNotEmpty) {
+        await widget.onDeleteFiles(adjustedFileIds);
       }
       for (final name in folderNames) {
         await widget.onDeleteFolder(name);
@@ -1355,9 +1368,11 @@ class _FileManagerViewState<T extends FileRecord>
       }
     }
 
+    final adjustedFileIds = _fileIdsExcludingFolderFiles(fileIds, folderNames);
+
     // Export files
-    if (fileIds.isNotEmpty && widget.onExportFiles != null) {
-      await widget.onExportFiles!(fileIds, '');
+    if (adjustedFileIds.isNotEmpty && widget.onExportFiles != null) {
+      await widget.onExportFiles!(adjustedFileIds, '');
     }
 
     // Export folders
@@ -1396,12 +1411,13 @@ class _FileManagerViewState<T extends FileRecord>
           fileIds.add(id);
         }
       }
-      if (fileIds.isNotEmpty) {
-        await widget.onMoveFiles(fileIds, selectedFolder);
+      final adjustedFileIds =
+          _fileIdsExcludingFolderFiles(fileIds, folderNames);
+      if (adjustedFileIds.isNotEmpty) {
+        await widget.onMoveFiles(adjustedFileIds, selectedFolder);
       }
-      for (final name in folderNames) {
-        await widget.onMoveFolder(name, selectedFolder);
-      }
+      await Future.wait(
+          folderNames.map((name) => widget.onMoveFolder(name, selectedFolder)));
       _exitSelectionMode();
     }
     if (mounted) setState(() {});
@@ -1430,12 +1446,11 @@ class _FileManagerViewState<T extends FileRecord>
         fileIds.add(id);
       }
     }
-    for (final id in fileIds) {
-      await widget.onCopyFile(id, selectedFolder);
-    }
-    for (final name in folderNames) {
-      await widget.onCopyFolder(name, selectedFolder);
-    }
+    final adjustedFileIds = _fileIdsExcludingFolderFiles(fileIds, folderNames);
+    await Future.wait(
+        adjustedFileIds.map((id) => widget.onCopyFile(id, selectedFolder)));
+    await Future.wait(
+        folderNames.map((name) => widget.onCopyFolder(name, selectedFolder)));
     _exitSelectionMode();
     if (mounted) setState(() {});
   }

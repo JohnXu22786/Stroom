@@ -80,7 +80,12 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     if (extIdx > 100) {
       clean = '${clean.substring(0, 100)}.${clean.substring(extIdx + 1)}';
     } else if (clean.length > 110) {
-      clean = clean.substring(0, 110);
+      if (extIdx == -1) {
+        clean = clean.substring(0, 110);
+      } else {
+        final ext = clean.substring(extIdx); // includes the dot
+        clean = '${clean.substring(0, 110 - ext.length)}$ext';
+      }
     }
     return clean;
   }
@@ -221,7 +226,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   Future<void> _takePhoto() async {
     final result = await Navigator.push<String>(
       context,
-      MaterialPageRoute(builder: (_) => const CameraPage()),
+      MaterialPageRoute(builder: (_) => CameraPage(folder: _currentFolder)),
     );
 
     await ref.read(imageRecordsProvider.notifier).loadRecords();
@@ -247,7 +252,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     try {
       final picker = ImagePicker();
       final pickedFiles = await picker.pickMultiImage();
-      if (pickedFiles.isEmpty) return;
+      if (pickedFiles.isEmpty) {
+        _isImporting = false;
+        return;
+      }
 
       if (!mounted) return;
       // Loading indicator
@@ -274,6 +282,14 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         final rawName = _sanitizeName(pickedFile.name);
         final ext = p.extension(rawName).replaceAll('.', '').toLowerCase();
         final format = ext.isNotEmpty ? ext : 'jpg';
+        if (!_supportedFormats.contains(format)) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('跳过不支持格式: $format')),
+            );
+          }
+          continue;
+        }
         final storageFileName = '$hash.$format';
         final displayName = _uniqueImageName(
           p.basenameWithoutExtension(rawName),
@@ -284,7 +300,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
 
         await ImageManifest.writeFile(storageFileName, bytes);
         final thumbnailBytes = await generateThumbnail(bytes);
-        final thumbFileName = '${hash}_thumb.$format';
+        final thumbFileName = '${hash}_thumb.png';
         await ImageManifest.writeFile(thumbFileName, thumbnailBytes);
         await ImageManifest.addRecord(ImageRecord(
             name: displayName,
@@ -625,8 +641,8 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       if (canPreview) {
         return FutureBuilder<Uint8List?>(
           future: (() async {
-            final thumb = await ImageManifest.readFile(
-                '${file.hash}_thumb.${file.format}');
+            final thumb =
+                await ImageManifest.readFile('${file.hash}_thumb.png');
             if (thumb != null) return thumb;
             return ImageManifest.readFile(file.storagePath);
           })(),

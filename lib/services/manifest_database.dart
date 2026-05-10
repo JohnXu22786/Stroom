@@ -33,6 +33,20 @@ class ManifestDatabase {
 
   static Database? _database;
 
+  /// Test mode: use JSON/in-memory storage instead of SQLite.
+  /// Enables unit testing without sqflite native bindings.
+  static bool _useInMemoryStorage = false;
+
+  /// Enable test mode — all operations use in-memory JSON storage
+  /// (same code path as web), avoiding sqflite native dependencies.
+  static void enableTestMode() {
+    _useInMemoryStorage = true;
+    _webData = null;
+  }
+
+  /// Whether to use JSON-based storage (web or test mode)
+  static bool get _useJsonStore => kIsWeb || _useInMemoryStorage;
+
   /// Web 端数据缓存（全量 JSON）
   static Map<String, dynamic>? _webData;
 
@@ -45,6 +59,9 @@ class ManifestDatabase {
 
   /// 获取数据库实例（Native 端）
   static Future<Database> get database async {
+    if (_useJsonStore) {
+      throw StateError('database getter should not be called in web/test mode');
+    }
     if (_database != null) return _database!;
     _database = await _initDatabase();
     return _database!;
@@ -182,7 +199,7 @@ class ManifestDatabase {
 
   /// 获取所有图片记录
   static Future<List<Map<String, dynamic>>> getAllImageRecords() async {
-    if (kIsWeb) {
+    if (_useJsonStore) {
       final data = await _loadWebData();
       final list = data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
       return list.cast<Map<String, dynamic>>();
@@ -194,7 +211,7 @@ class ManifestDatabase {
 
   /// 插入一条图片记录
   static Future<void> insertImageRecord(Map<String, dynamic> record) async {
-    if (kIsWeb) {
+    if (_useJsonStore) {
       final data = await _loadWebData();
       final list = data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
       list.add(record);
@@ -212,7 +229,7 @@ class ManifestDatabase {
   /// 更新一条图片记录
   static Future<void> updateImageRecord(
       String id, Map<String, dynamic> updates) async {
-    if (kIsWeb) {
+    if (_useJsonStore) {
       final data = await _loadWebData();
       final list = data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
       final index = list.indexWhere((r) => (r as Map)['id'] == id);
@@ -233,7 +250,7 @@ class ManifestDatabase {
 
   /// 删除一条图片记录
   static Future<void> deleteImageRecord(String id) async {
-    if (kIsWeb) {
+    if (_useJsonStore) {
       final data = await _loadWebData();
       final list = data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
       list.removeWhere((r) => (r as Map)['id'] == id);
@@ -250,7 +267,7 @@ class ManifestDatabase {
 
   /// 批量删除图片记录
   static Future<void> deleteImageRecords(List<String> ids) async {
-    if (kIsWeb) {
+    if (_useJsonStore) {
       final data = await _loadWebData();
       final list = data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
       final idSet = ids.toSet();
@@ -273,7 +290,7 @@ class ManifestDatabase {
 
   /// 获取所有音频记录
   static Future<List<Map<String, dynamic>>> getAllAudioRecords() async {
-    if (kIsWeb) {
+    if (_useJsonStore) {
       final data = await _loadWebData();
       final list = data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
       return list.cast<Map<String, dynamic>>();
@@ -285,7 +302,7 @@ class ManifestDatabase {
 
   /// 插入一条音频记录
   static Future<void> insertAudioRecord(Map<String, dynamic> record) async {
-    if (kIsWeb) {
+    if (_useJsonStore) {
       final data = await _loadWebData();
       final list = data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
       list.add(record);
@@ -303,7 +320,7 @@ class ManifestDatabase {
   /// 更新一条音频记录
   static Future<void> updateAudioRecord(
       String id, Map<String, dynamic> updates) async {
-    if (kIsWeb) {
+    if (_useJsonStore) {
       final data = await _loadWebData();
       final list = data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
       final index = list.indexWhere((r) => (r as Map)['id'] == id);
@@ -324,7 +341,7 @@ class ManifestDatabase {
 
   /// 删除一条音频记录
   static Future<void> deleteAudioRecord(String id) async {
-    if (kIsWeb) {
+    if (_useJsonStore) {
       final data = await _loadWebData();
       final list = data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
       list.removeWhere((r) => (r as Map)['id'] == id);
@@ -341,7 +358,7 @@ class ManifestDatabase {
 
   /// 批量删除音频记录
   static Future<void> deleteAudioRecords(List<String> ids) async {
-    if (kIsWeb) {
+    if (_useJsonStore) {
       final data = await _loadWebData();
       final list = data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
       final idSet = ids.toSet();
@@ -360,7 +377,7 @@ class ManifestDatabase {
 
   /// 获取单条音频记录
   static Future<Map<String, dynamic>?> getAudioRecord(String id) async {
-    if (kIsWeb) {
+    if (_useJsonStore) {
       final data = await _loadWebData();
       final list = data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
       for (final r in list) {
@@ -386,7 +403,7 @@ class ManifestDatabase {
 
   /// 获取所有文件夹路径
   static Future<List<String>> getAllFolders() async {
-    if (kIsWeb) {
+    if (_useJsonStore) {
       final data = await _loadWebData();
       final list = data[ManifestTables.folders] as List<dynamic>? ?? [];
       return list.cast<String>();
@@ -398,7 +415,7 @@ class ManifestDatabase {
 
   /// 插入一个文件夹路径
   static Future<void> insertFolder(String path) async {
-    if (kIsWeb) {
+    if (_useJsonStore) {
       final data = await _loadWebData();
       final list = data[ManifestTables.folders] as List<dynamic>? ?? [];
       if (!list.contains(path)) {
@@ -417,7 +434,7 @@ class ManifestDatabase {
 
   /// 删除一个文件夹路径
   static Future<void> deleteFolder(String path) async {
-    if (kIsWeb) {
+    if (_useJsonStore) {
       final data = await _loadWebData();
       final list = data[ManifestTables.folders] as List<dynamic>? ?? [];
       list.remove(path);
@@ -434,7 +451,7 @@ class ManifestDatabase {
 
   /// 检查文件夹路径是否存在
   static Future<bool> folderExists(String path) async {
-    if (kIsWeb) {
+    if (_useJsonStore) {
       final data = await _loadWebData();
       final list = data[ManifestTables.folders] as List<dynamic>? ?? [];
       return list.contains(path);

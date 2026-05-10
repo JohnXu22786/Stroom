@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 
 import '../providers/provider_config.dart';
 import '../providers/tts_state_provider.dart';
@@ -37,6 +39,8 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   String _diagnosticInfo = '';
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
+
+  String? _tempFilePath;
 
   // 源文本
   String _sourceText = '';
@@ -193,12 +197,22 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
         path.extension(widget.filePath).replaceAll('.', '').toLowerCase();
 
     if (!kIsWeb) {
-      // Native: 直接使用文件路径，不读入内存
-      final filePath = await FileManifest.readFilePath(widget.filePath);
-      if (filePath == null) {
+      // Native: read into memory, validate/convert format, play from temp
+      final data = await FileManifest.readFile(widget.filePath);
+      if (data == null || data.isEmpty) {
         throw Exception('无法找到音频文件: ${widget.filePath}');
       }
-      await _player!.load(filePath);
+      final fixed = ensureValidAudioFormat(
+        data,
+        requestedFormat: extension,
+        sampleRate: 24000,
+      );
+      final tempDir = await getTemporaryDirectory();
+      final tempPath =
+          '${tempDir.path}/${DateTime.now().millisecondsSinceEpoch}.${fixed.$2}';
+      await File(tempPath).writeAsBytes(fixed.$1);
+      _tempFilePath = tempPath;
+      await _player!.load(tempPath);
     } else {
       // Web: 读取文件并创建 Blob URL
       final data = await FileManifest.readFile(widget.filePath);
@@ -847,6 +861,12 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: () {
+              if (_tempFilePath != null) {
+                try {
+                  File(_tempFilePath!).delete();
+                } catch (_) {}
+                _tempFilePath = null;
+              }
               _disposePlayer();
               setState(() {
                 _hasError = false;
@@ -864,6 +884,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
   @override
   void dispose() {
+    if (_tempFilePath != null) {
+      try {
+        File(_tempFilePath!).delete();
+      } catch (_) {}
+    }
     _disposePlayer();
     _textController.dispose();
     super.dispose();
