@@ -58,8 +58,11 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
   final Future<void> Function(String id, String selectedFolder) onCopyFile;
   final Future<void> Function(String id) onDeleteFile;
   final Future<void> Function(List<String> ids) onDeleteFiles;
+  final Future<void> Function(List<String> names) onDeleteFolders;
   final Future<void> Function(List<String> ids, String targetFolder)
       onMoveFiles;
+  final Future<void> Function(List<String> names, String targetFolder)
+      onMoveFolders;
   final Future<void> Function(String id) onExportFile;
   final Future<void> Function(String oldName, String newName) onRenameFolder;
   final Future<void> Function(String name, String targetParent) onMoveFolder;
@@ -88,7 +91,9 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
     required this.onCopyFile,
     required this.onDeleteFile,
     required this.onDeleteFiles,
+    required this.onDeleteFolders,
     required this.onMoveFiles,
+    required this.onMoveFolders,
     required this.onExportFile,
     required this.onRenameFolder,
     required this.onMoveFolder,
@@ -147,7 +152,6 @@ class _FileManagerViewState<T extends FileRecord>
     setState(() {
       if (_selectedIds.contains(id)) {
         _selectedIds.remove(id);
-        if (_selectedIds.isEmpty) _selectionMode = false;
       } else {
         _selectedIds.add(id);
       }
@@ -158,6 +162,45 @@ class _FileManagerViewState<T extends FileRecord>
     setState(() {
       _selectionMode = true;
       _selectedIds.add(id);
+    });
+  }
+
+  void _toggleFolderSelection(String folderPath) {
+    setState(() {
+      if (_selectedIds.contains(folderPath)) {
+        _selectedIds.remove(folderPath);
+      } else {
+        _selectedIds.add(folderPath);
+      }
+    });
+  }
+
+  /// Subfolder paths visible in the current folder
+  List<String> _currentFolderSubfolders() {
+    return _getDirectSubFolders(_currentFolder, widget.folders);
+  }
+
+  /// All visible items in the current folder (files + subfolder paths combined)
+  Set<String> _allVisibleItemIds() {
+    final isInFolder = _currentFolder.isNotEmpty;
+    final fileIds = widget.sortedRecords
+        .where(
+            (r) => isInFolder ? r.folder == _currentFolder : r.folder.isEmpty)
+        .map((r) => r.id)
+        .toSet();
+    final folderPaths = _currentFolderSubfolders().toSet();
+    return {...fileIds, ...folderPaths};
+  }
+
+  void _selectAll() {
+    setState(() {
+      _selectedIds.addAll(_allVisibleItemIds());
+    });
+  }
+
+  void _deselectAll() {
+    setState(() {
+      _selectedIds.clear();
     });
   }
 
@@ -207,12 +250,10 @@ class _FileManagerViewState<T extends FileRecord>
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        key: const Key('fm_selection_delete_btn'),
-                        onPressed: _deleteSelected,
-                        icon: const Icon(Icons.delete_outline,
-                            color: Colors.red, size: 20),
-                        label: const Text('删除',
-                            style: TextStyle(color: Colors.red)),
+                        key: const Key('fm_selection_copy_btn'),
+                        onPressed: _copySelected,
+                        icon: const Icon(Icons.copy, size: 20),
+                        label: const Text('复制'),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -223,6 +264,17 @@ class _FileManagerViewState<T extends FileRecord>
                         icon:
                             const Icon(Icons.drive_file_move_outline, size: 20),
                         label: const Text('移动'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        key: const Key('fm_selection_delete_btn'),
+                        onPressed: _deleteSelected,
+                        icon: const Icon(Icons.delete_outline,
+                            color: Colors.red, size: 20),
+                        label: const Text('删除',
+                            style: TextStyle(color: Colors.red)),
                       ),
                     ),
                   ],
@@ -260,7 +312,22 @@ class _FileManagerViewState<T extends FileRecord>
                 )
               : null),
       actions: [
-        if (!_selectionMode) ...[
+        if (_selectionMode) ...[
+          IconButton(
+            key: const Key('fm_select_all_btn'),
+            icon: const Icon(Icons.select_all),
+            tooltip: '全选',
+            onPressed: () {
+              final allVisible = _allVisibleItemIds();
+              if (_selectedIds.length >= allVisible.length &&
+                  allVisible.isNotEmpty) {
+                _deselectAll();
+              } else {
+                _selectAll();
+              }
+            },
+          ),
+        ] else ...[
           // Extra app bar actions (e.g. task list button)
           if (widget.config.extraAppBarActions != null)
             ...widget.config.extraAppBarActions!(),
@@ -332,7 +399,8 @@ class _FileManagerViewState<T extends FileRecord>
   Widget _buildFileListView(Map<String, List<T>> grouped) {
     final isInFolder = _currentFolder.isNotEmpty;
 
-    final subFolders = widget.getChildFolderPaths(_currentFolder);
+    // 使用 widget.folders（来自 provider 的全量合并集）而非 getChildFolderPaths（只读 _folderCache）
+    final subFolders = _getDirectSubFolders(_currentFolder, widget.folders);
     subFolders.sort((a, b) {
       final nameA = widget.getFolderBaseName(a).toLowerCase();
       final nameB = widget.getFolderBaseName(b).toLowerCase();
@@ -415,7 +483,8 @@ class _FileManagerViewState<T extends FileRecord>
   Widget _buildGridView(Map<String, List<T>> grouped) {
     final isInFolder = _currentFolder.isNotEmpty;
 
-    final subFolders = widget.getChildFolderPaths(_currentFolder);
+    // 使用 widget.folders（来自 provider 的全量合并集）
+    final subFolders = _getDirectSubFolders(_currentFolder, widget.folders);
     subFolders.sort((a, b) {
       final nameA = widget.getFolderBaseName(a).toLowerCase();
       final nameB = widget.getFolderBaseName(b).toLowerCase();
@@ -498,38 +567,71 @@ class _FileManagerViewState<T extends FileRecord>
   }
 
   Widget _buildGridFolderItem(String folderName, int fileCount) {
+    final isSelected = _selectedIds.contains(folderName);
     return GestureDetector(
       key: Key('fm_grid_folder_${folderName.hashCode}'),
-      onTap: () => _setCurrentFolder(folderName),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.amber.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.amber.withValues(alpha: 0.2)),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.folder_outlined, size: 40, color: Colors.amber),
-            const SizedBox(height: 4),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Text(
-                widget.getFolderBaseName(folderName),
-                style:
-                    const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+      onTap: () {
+        if (_selectionMode) {
+          _toggleFolderSelection(folderName);
+        } else {
+          _setCurrentFolder(folderName);
+        }
+      },
+      child: Stack(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? Colors.blue.withValues(alpha: 0.15)
+                  : Colors.amber.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isSelected
+                    ? Colors.blue
+                    : Colors.amber.withValues(alpha: 0.2),
+                width: isSelected ? 2 : 1,
               ),
             ),
-            if (fileCount > 0)
-              Text(
-                '$fileCount',
-                style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.folder_outlined,
+                    size: 40, color: Colors.amber),
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    widget.getFolderBaseName(folderName),
+                    style: const TextStyle(
+                        fontSize: 11, fontWeight: FontWeight.w500),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (fileCount > 0)
+                  Text(
+                    '$fileCount',
+                    style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                  ),
+              ],
+            ),
+          ),
+          if (_selectionMode)
+            Positioned(
+              top: 2,
+              right: 2,
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: Checkbox(
+                  value: isSelected,
+                  onChanged: (_) => _toggleFolderSelection(folderName),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
@@ -612,110 +714,147 @@ class _FileManagerViewState<T extends FileRecord>
   // ====================================================================
 
   Widget _buildFolderItem(String folderName, int fileCount) {
-    return Card(
-      key: Key('fm_folder_${folderName.hashCode}'),
+    final isSelected = _selectedIds.contains(folderName);
+    return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
-      child: InkWell(
-        onTap: () => _setCurrentFolder(folderName),
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-          child: Row(
-            children: [
-              // Folder icon
-              Container(
-                width: 44,
-                height: 44,
-                margin: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.amber.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: isSelected ? Border.all(color: Colors.blue, width: 2) : null,
+      ),
+      child: Card(
+        key: Key('fm_folder_${folderName.hashCode}'),
+        margin: EdgeInsets.zero,
+        child: InkWell(
+          onTap: () {
+            if (_selectionMode) {
+              _toggleFolderSelection(folderName);
+            } else {
+              _setCurrentFolder(folderName);
+            }
+          },
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            child: Row(
+              children: [
+                if (_selectionMode)
+                  Checkbox(
+                    value: isSelected,
+                    onChanged: (_) => _toggleFolderSelection(folderName),
+                  ),
+                // Folder icon
+                Container(
+                  width: 44,
+                  height: 44,
+                  margin: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Center(
+                    child: Icon(Icons.folder_outlined,
+                        size: 22, color: Colors.amber),
+                  ),
                 ),
-                child: const Center(
-                  child: Icon(Icons.folder_outlined,
-                      size: 22, color: Colors.amber),
+                // Folder info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.getFolderBaseName(folderName),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w500, fontSize: 15),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _folderDetailText(folderName, fileCount),
+                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              // Folder info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.getFolderBaseName(folderName),
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w500, fontSize: 15),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _folderDetailText(folderName, fileCount),
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                    ),
-                  ],
-                ),
-              ),
-              // Popup menu
-              PopupMenuButton<String>(
-                key: Key('fm_folder_popup_${folderName.hashCode}'),
-                icon: const Icon(Icons.more_vert, size: 20),
-                onSelected: (value) {
-                  switch (value) {
-                    case 'rename':
-                      _renameFolder(folderName);
-                    case 'move':
-                      _moveFolder(folderName);
-                    case 'copy':
-                      _copyFolder(folderName);
-                    case 'delete':
-                      _deleteFolder(folderName);
-                  }
-                },
-                itemBuilder: (_) => [
-                  const PopupMenuItem(
-                    value: 'rename',
-                    child: ListTile(
-                      key: Key('fm_folder_menu_rename'),
-                      leading: Icon(Icons.edit, size: 20),
-                      title: Text('重命名'),
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                    ),
+                // Popup menu
+                if (!_selectionMode)
+                  PopupMenuButton<String>(
+                    key: Key('fm_folder_popup_${folderName.hashCode}'),
+                    icon: const Icon(Icons.more_vert, size: 20),
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'multiSelect':
+                          _toggleFolderSelection(folderName);
+                          if (!_selectionMode) {
+                            setState(() => _selectionMode = true);
+                          }
+                        case 'rename':
+                          _renameFolder(folderName);
+                        case 'move':
+                          _moveFolder(folderName);
+                        case 'copy':
+                          _copyFolder(folderName);
+                        case 'delete':
+                          _deleteFolder(folderName);
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(
+                        value: 'multiSelect',
+                        child: ListTile(
+                          key: Key('fm_folder_menu_multi_select'),
+                          leading: Icon(Icons.checklist, size: 20),
+                          title: Text('多选'),
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'rename',
+                        child: ListTile(
+                          key: Key('fm_folder_menu_rename'),
+                          leading: Icon(Icons.edit, size: 20),
+                          title: Text('重命名'),
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'move',
+                        child: ListTile(
+                          key: Key('fm_folder_menu_move'),
+                          leading: Icon(Icons.drive_file_move, size: 20),
+                          title: Text('移动'),
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'copy',
+                        child: ListTile(
+                          key: Key('fm_folder_menu_copy'),
+                          leading: Icon(Icons.copy, size: 20),
+                          title: Text('复制'),
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: ListTile(
+                          key: Key('fm_folder_menu_delete'),
+                          leading:
+                              Icon(Icons.delete, size: 20, color: Colors.red),
+                          title:
+                              Text('删除', style: TextStyle(color: Colors.red)),
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ],
                   ),
-                  const PopupMenuItem(
-                    value: 'move',
-                    child: ListTile(
-                      key: Key('fm_folder_menu_move'),
-                      leading: Icon(Icons.drive_file_move, size: 20),
-                      title: Text('移动'),
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'copy',
-                    child: ListTile(
-                      key: Key('fm_folder_menu_copy'),
-                      leading: Icon(Icons.copy, size: 20),
-                      title: Text('复制'),
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'delete',
-                    child: ListTile(
-                      key: Key('fm_folder_menu_delete'),
-                      leading: Icon(Icons.delete, size: 20, color: Colors.red),
-                      title: Text('删除', style: TextStyle(color: Colors.red)),
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -723,7 +862,9 @@ class _FileManagerViewState<T extends FileRecord>
   }
 
   String _folderDetailText(String folderName, int fileCount) {
-    final subFolderCount = widget.getChildFolderPaths(folderName).length;
+    // 使用 widget.folders（全量合并集）而非 getChildFolderPaths（只读 _folderCache）
+    final subFolderCount =
+        _getDirectSubFolders(folderName, widget.folders).length;
     if (subFolderCount > 0 && fileCount > 0) {
       return '$fileCount 个文件, $subFolderCount 个子文件夹';
     } else if (subFolderCount > 0) {
@@ -854,6 +995,16 @@ class _FileManagerViewState<T extends FileRecord>
   List<PopupMenuEntry<String>> _buildFilePopupMenu(T file) {
     final items = <PopupMenuEntry<String>>[
       const PopupMenuItem(
+        value: 'multiSelect',
+        child: ListTile(
+          key: Key('fm_file_menu_multi_select'),
+          leading: Icon(Icons.checklist, size: 20),
+          title: Text('多选'),
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+      const PopupMenuItem(
         value: 'preview',
         child: ListTile(
           key: Key('fm_file_menu_preview'),
@@ -916,6 +1067,8 @@ class _FileManagerViewState<T extends FileRecord>
 
   void _onFilePopupAction(String value, T file) {
     switch (value) {
+      case 'multiSelect':
+        _enterSelectionMode(file.id);
       case 'preview':
         widget.config.onFileTap(file);
       case 'rename':
@@ -1011,6 +1164,7 @@ class _FileManagerViewState<T extends FileRecord>
       if (!mounted) return;
       await widget.onMoveFile(fileId, selectedFolder);
     }
+    if (mounted) setState(() {});
   }
 
   Future<void> _copyFile(String fileId) async {
@@ -1018,9 +1172,13 @@ class _FileManagerViewState<T extends FileRecord>
       widget.folders,
       title: '选择复制到的目标文件夹',
     );
-    if (selectedFolder == null) return;
+    if (selectedFolder == null) {
+      if (mounted) setState(() {});
+      return;
+    }
     if (!mounted) return;
     await widget.onCopyFile(fileId, selectedFolder);
+    if (mounted) setState(() {});
   }
 
   Future<void> _deleteFile(String fileId) async {
@@ -1077,7 +1235,21 @@ class _FileManagerViewState<T extends FileRecord>
 
     if (confirmed == true) {
       if (!mounted) return;
-      await widget.onDeleteFiles(_selectedIds.toList());
+      final fileIds = <String>[];
+      final folderNames = <String>[];
+      for (final id in _selectedIds) {
+        if (widget.folders.contains(id)) {
+          folderNames.add(id);
+        } else {
+          fileIds.add(id);
+        }
+      }
+      if (fileIds.isNotEmpty) {
+        await widget.onDeleteFiles(fileIds);
+      }
+      for (final name in folderNames) {
+        await widget.onDeleteFolder(name);
+      }
       _exitSelectionMode();
     }
   }
@@ -1092,9 +1264,57 @@ class _FileManagerViewState<T extends FileRecord>
 
     if (selectedFolder != null) {
       if (!mounted) return;
-      await widget.onMoveFiles(_selectedIds.toList(), selectedFolder);
+      final fileIds = <String>[];
+      final folderNames = <String>[];
+      for (final id in _selectedIds) {
+        if (widget.folders.contains(id)) {
+          folderNames.add(id);
+        } else {
+          fileIds.add(id);
+        }
+      }
+      if (fileIds.isNotEmpty) {
+        await widget.onMoveFiles(fileIds, selectedFolder);
+      }
+      for (final name in folderNames) {
+        await widget.onMoveFolder(name, selectedFolder);
+      }
       _exitSelectionMode();
     }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _copySelected() async {
+    if (_selectedIds.isEmpty) return;
+
+    final selectedFolder = await _showFolderPickerDialog(
+      widget.folders,
+      title: '选择目标文件夹',
+    );
+
+    if (selectedFolder == null) {
+      if (mounted) setState(() {});
+      return;
+    }
+
+    if (!mounted) return;
+    final fileIds = <String>[];
+    final folderNames = <String>[];
+    for (final id in _selectedIds) {
+      if (widget.folders.contains(id)) {
+        folderNames.add(id);
+      } else {
+        fileIds.add(id);
+      }
+    }
+    for (final id in fileIds) {
+      await widget.onCopyFile(id, selectedFolder);
+    }
+    for (final name in folderNames) {
+      await widget.onCopyFolder(name, selectedFolder);
+    }
+    _exitSelectionMode();
+    if (mounted) setState(() {});
   }
 
   // ====================================================================
@@ -1240,7 +1460,10 @@ class _FileManagerViewState<T extends FileRecord>
       targetFolders,
       title: '移动文件夹到…',
     );
-    if (selectedFolder == null) return;
+    if (selectedFolder == null) {
+      if (mounted) setState(() {});
+      return;
+    }
 
     if (!mounted) return;
     await widget.onMoveFolder(folderName, selectedFolder);
@@ -1260,7 +1483,10 @@ class _FileManagerViewState<T extends FileRecord>
       targetFolders,
       title: '复制文件夹到…',
     );
-    if (selectedFolder == null) return;
+    if (selectedFolder == null) {
+      if (mounted) setState(() {});
+      return;
+    }
 
     if (!mounted) return;
     await widget.onCopyFolder(folderName, selectedFolder);
@@ -1595,13 +1821,15 @@ class _FileManagerViewState<T extends FileRecord>
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final diff = now.difference(date);
+    final time =
+        '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
     if (diff.inDays == 0) {
-      return '今天 ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+      return '今天 $time';
     }
     if (diff.inDays == 1) {
-      return '昨天 ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+      return '昨天 $time';
     }
-    if (diff.inDays < 7) return '${diff.inDays}天前';
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    if (diff.inDays < 7) return '${diff.inDays}天前 $time';
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} $time';
   }
 }

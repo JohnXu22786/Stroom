@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-// Import the pages (we'll create them next)
-import 'camera_page.dart';
 import 'gallery_page.dart';
 import 'settings_page.dart';
 import 'tts_page.dart';
+
 /// 页面枚举，定义应用中的主要页面
 enum AppPage {
   home,
-  camera,
   gallery,
   tts,
   settings,
@@ -54,8 +52,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     switch (page) {
       case AppPage.home:
         return Icons.home;
-      case AppPage.camera:
-        return Icons.camera_alt;
+
       case AppPage.gallery:
         return Icons.photo_library;
       case AppPage.tts:
@@ -70,8 +67,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     switch (page) {
       case AppPage.home:
         return '主页';
-      case AppPage.camera:
-        return '相机';
+
       case AppPage.gallery:
         return '相册';
       case AppPage.tts:
@@ -145,8 +141,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             ],
           ),
         );
-      case AppPage.camera:
-        return const CameraPage();
+
       case AppPage.gallery:
         return const GalleryPage();
       case AppPage.tts:

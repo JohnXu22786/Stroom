@@ -15,17 +15,17 @@ class AudioRecord implements FileRecord {
   @override
   final String id;
   @override
-  final String name;          // 用户设置的文件名
-  final String hash;          // 音频数据的 MD5 哈希值
+  final String name; // 用户设置的文件名
+  final String hash; // 音频数据的 MD5 哈希值
   @override
-  final String format;        // 文件格式（wav, mp3 等）
+  final String format; // 文件格式（wav, mp3 等）
   @override
   final DateTime createdAt;
   @override
-  final int size;             // 文件大小（字节）
+  final int size; // 文件大小（字节）
   @override
-  final String folder;        // 文件夹路径（空字符串表示根目录）
-  final String sourceText;    // 源文本
+  final String folder; // 文件夹路径（空字符串表示根目录）
+  final String sourceText; // 源文本
 
   AudioRecord({
     String? id,
@@ -48,42 +48,45 @@ class AudioRecord implements FileRecord {
   String get textStoragePath => '$hash.txt';
 
   Map<String, dynamic> toMap() => {
-    'id': id,
-    'name': name,
-    'hash': hash,
-    'format': format,
-    'createdAt': createdAt.toIso8601String(),
-    'size': size,
-    'folder': folder,
-    'sourceText': sourceText,
-  };
+        'id': id,
+        'name': name,
+        'hash': hash,
+        'format': format,
+        'createdAt': createdAt.toIso8601String(),
+        'size': size,
+        'folder': folder,
+        'sourceText': sourceText,
+      };
 
   factory AudioRecord.fromMap(Map<String, dynamic> map) => AudioRecord(
-    id: (map['id'] as String?) ?? 'rec_${const Uuid().v4()}',
-    name: map['name'] as String? ?? '',
-    hash: map['hash'] as String? ?? '',
-    format: map['format'] as String? ?? 'wav',
-    createdAt: map['createdAt'] != null ? DateTime.parse(map['createdAt'] as String) : DateTime.now(),
-    size: (map['size'] as num?)?.toInt() ?? 0,
-    folder: map['folder'] as String? ?? '',
-    sourceText: map['sourceText'] as String? ?? '',
-  );
+        id: (map['id'] as String?) ?? 'rec_${const Uuid().v4()}',
+        name: map['name'] as String? ?? '',
+        hash: map['hash'] as String? ?? '',
+        format: map['format'] as String? ?? 'wav',
+        createdAt: map['createdAt'] != null
+            ? DateTime.parse(map['createdAt'] as String)
+            : DateTime.now(),
+        size: (map['size'] as num?)?.toInt() ?? 0,
+        folder: map['folder'] as String? ?? '',
+        sourceText: map['sourceText'] as String? ?? '',
+      );
 
   AudioRecord copyWith({
     String? name,
     String? folder,
     String? sourceText,
     int? size,
-  }) => AudioRecord(
-    id: id,
-    name: name ?? this.name,
-    hash: hash,
-    format: format,
-    createdAt: createdAt,
-    size: size ?? this.size,
-    folder: folder ?? this.folder,
-    sourceText: sourceText ?? this.sourceText,
-  );
+  }) =>
+      AudioRecord(
+        id: id,
+        name: name ?? this.name,
+        hash: hash,
+        format: format,
+        createdAt: createdAt,
+        size: size ?? this.size,
+        folder: folder ?? this.folder,
+        sourceText: sourceText ?? this.sourceText,
+      );
 }
 
 /// 计算音频数据的 MD5 哈希值
@@ -119,7 +122,8 @@ class FileManifest {
         } else {
           // 新格式：{ records: [...], folders: [...] }
           final map = decoded as Map<String, dynamic>;
-          final list = (map['records'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+          final list =
+              (map['records'] as List?)?.cast<Map<String, dynamic>>() ?? [];
           _cache = list.map((m) => AudioRecord.fromMap(m)).toList();
           _folderCache = (map['folders'] as List?)?.cast<String>() ?? [];
         }
@@ -332,12 +336,15 @@ class FileManifest {
     return List.unmodifiable(_folderCache);
   }
 
-  /// 添加文件夹
+  /// 添加文件夹（支持层级路径如 "parent/sub"）
   static Future<void> addFolder(String folderName) async {
     await loadRecords();
     final name = folderName.trim();
-    final validationError = validateFolderName(name);
-    if (validationError != null) return;  // silently ignore invalid names
+    if (name.isEmpty) return;
+    // 只校验末级名称，不校验完整层级路径（允许斜杠表示嵌套）
+    final baseName = getFolderBaseName(name);
+    final validationError = validateFolderName(baseName);
+    if (validationError != null) return;
     if (!_folderCache.contains(name)) {
       _folderCache.add(name);
       await _persist();
@@ -419,7 +426,8 @@ class FileManifest {
   }
 
   /// 获取指定父路径下的直接子文件夹路径列表
-  static List<String> getChildFolderPaths(String parentPath, [List<String>? allPaths]) {
+  static List<String> getChildFolderPaths(String parentPath,
+      [List<String>? allPaths]) {
     final paths = allPaths ?? _folderCache;
     final prefix = parentPath.isEmpty ? '' : '$parentPath/';
     final result = <String>[];
@@ -465,6 +473,23 @@ class FileManifest {
       }
     }
     return result.toList();
+  }
+
+  /// 从文件夹缓存中移除一个路径及其所有子路径，但不删除记录。
+  /// 在 moveFolder 后调用，避免空文件夹残留在缓存中。
+  static Future<void> removeFolderFromCache(String folderPath) async {
+    await loadRecords();
+    final prefix = folderPath.isEmpty ? '' : '$folderPath/';
+    final toRemove = <String>[];
+    for (final f in _folderCache) {
+      if (f == folderPath || f.startsWith(prefix)) {
+        toRemove.add(f);
+      }
+    }
+    for (final f in toRemove) {
+      _folderCache.remove(f);
+    }
+    await _persist();
   }
 
   /// 清除缓存（用于刷新）

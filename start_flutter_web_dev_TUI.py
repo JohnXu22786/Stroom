@@ -5,6 +5,7 @@ import hashlib
 import os
 import platform
 import re
+import signal
 import socket
 import subprocess
 import sys
@@ -17,7 +18,6 @@ from textual.widgets import Button, TextArea
 
 PORT = 7397
 HOST = "localhost"
-DEVICE = "chrome"
 ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -56,7 +56,7 @@ def run_flutter(args, cwd=None, capture=True):
     else:
         cmd = ["flutter"] + args
     if capture:
-        return subprocess.run(cmd, cwd=path, capture_output=True, text=True, timeout=60)
+        return subprocess.run(cmd, cwd=path, capture_output=True, text=True)
     else:
         return subprocess.Popen(cmd, cwd=path)
 
@@ -86,30 +86,6 @@ def check_project():
             return False
     ok("Project: " + os.path.basename(ROOT))
     return True
-
-
-def check_chrome():
-    global DEVICE
-    if platform.system() == "Windows":
-        paths = [
-            os.path.join(
-                os.environ.get("ProgramFiles", ""),
-                "Google",
-                "Chrome",
-                "Application",
-                "chrome.exe",
-            ),
-            os.path.join(
-                os.environ.get("ProgramFiles(x86)", ""),
-                "Google",
-                "Chrome",
-                "Application",
-                "chrome.exe",
-            ),
-        ]
-        if not any(os.path.exists(p) for p in paths):
-            warn("Chrome not found, using edge")
-            DEVICE = "edge"
 
 
 def check_deps():
@@ -239,10 +215,12 @@ class FlutterTUI(App):
         Binding("d", "send_cmd('d')", "Detach", show=True),
     ]
 
-    def __init__(self, port: int, device: str):
+    def __init__(self, port: int):
         super().__init__()
         self.port = port
-        self.device = device
+        self.devices = ["chrome", "edge"]
+        self.device_idx = 0
+        self._quitting = False
         self.flutter_proc: asyncio.subprocess.Process | None = None
         self._reader_task: asyncio.Task | None = None
         self._auto_scroll = True
@@ -298,9 +276,13 @@ class FlutterTUI(App):
         elif not at_bottom and self._auto_scroll:
             self._auto_scroll = False
 
+    @property
+    def device(self):
+        return self.devices[self.device_idx]
+
     # ---- lifecycle ----
 
-    async def on_mount(self):
+    async def _start_flutter(self):
         cmd = [
             "flutter",
             "run",
@@ -316,7 +298,7 @@ class FlutterTUI(App):
         if platform.system() == "Windows":
             cmd[0] = "flutter.bat"
 
-        self._writelog(f"[bold]Starting:[/bold] {' '.join(cmd)}")
+        self._writelog(f"[bold]Starting with {self.device}:[/bold] {' '.join(cmd)}")
         self._writelog(f"[dim]Log also saved to: {self._log_path}[/dim]")
 
         try:
@@ -331,7 +313,6 @@ class FlutterTUI(App):
             self._writelog(f"[red]Failed to start flutter: {e}[/red]")
             return
 
-        # Save PID for external cleanup
         pid_file = os.path.join(ROOT, ".flutter_pid")
         try:
             with open(pid_file, "w") as f:
@@ -342,6 +323,13 @@ class FlutterTUI(App):
         self._reader_task = asyncio.create_task(self._reader())
         self.set_interval(2.0, self._check_alive)
         self.set_interval(0.3, self._check_scroll_pos)
+
+    async def on_mount(self):
+        await self._start_flutter()
+
+    async def _restart(self):
+        await self._cleanup_flutter()
+        await self._start_flutter()
 
     async def on_unmount(self):
         """Cleanup when TUI closes."""
@@ -354,20 +342,33 @@ class FlutterTUI(App):
     # ---- flutter reader ----
 
     async def _reader(self):
-        while self.flutter_proc and self.flutter_proc.stdout:
-            try:
-                line = await self.flutter_proc.stdout.readline()
-                if not line:
+        try:
+            while self.flutter_proc and self.flutter_proc.stdout:
+                try:
+                    line = await self.flutter_proc.stdout.readline()
+                    if not line:
+                        break
+                    text = line.decode("utf-8", errors="replace").rstrip()
+                    self._writelog(text)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
                     break
-                text = line.decode("utf-8", errors="replace").rstrip()
-                self._writelog(text)
-            except Exception:
-                break
-        self._writelog("[red]Flutter process ended.[/red]")
+        finally:
+            self._writelog("[red]Flutter process ended.[/red]")
 
     def _check_alive(self):
+        if self._quitting:
+            return
         if self.flutter_proc and self.flutter_proc.returncode is not None:
-            self._writelog("[red]Flutter process has exited.[/red]")
+            if self.device_idx < len(self.devices) - 1:
+                self.device_idx += 1
+                self._writelog(
+                    f"[yellow]{self.devices[self.device_idx-1]} failed, retrying with {self.device}...[/yellow]"
+                )
+                asyncio.create_task(self._restart())
+            else:
+                self._writelog("[red]All devices failed. Flutter process has exited.[/red]")
 
     # ---- actions ----
 
@@ -390,6 +391,7 @@ class FlutterTUI(App):
 
     async def action_do_quit(self):
         """Gracefully quit flutter and close the TUI."""
+        self._quitting = True
         self._writelog("[yellow]Shutting down...[/yellow]")
         await self._cleanup_flutter()
         self.exit(0)
@@ -458,7 +460,6 @@ def main():
     if not check_project():
         input("Press Enter to exit...")
         sys.exit(1)
-    check_chrome()
     stop_old()
     if not check_deps():
         input("Press Enter to exit...")
@@ -472,7 +473,7 @@ def main():
     pport(f"Using port: {port}")
 
     # Launch Textual TUI
-    app = FlutterTUI(port=port, device=DEVICE)
+    app = FlutterTUI(port=port)
     app.run()
 
 

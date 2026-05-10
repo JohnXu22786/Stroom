@@ -523,11 +523,25 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         await ref.read(imageRecordsProvider.notifier).deleteRecords(ids);
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
+      onDeleteFolders: (names) async {
+        for (final name in names) {
+          await ref.read(imageRecordsProvider.notifier).deleteFolder(name);
+        }
+        await ref.read(imageFolderListProvider.notifier).loadFolders();
+      },
       onMoveFiles: (ids, targetFolder) async {
         for (final id in ids) {
           await ref
               .read(imageRecordsProvider.notifier)
               .moveRecord(id, targetFolder);
+        }
+        await ref.read(imageFolderListProvider.notifier).loadFolders();
+      },
+      onMoveFolders: (names, targetFolder) async {
+        for (final name in names) {
+          await ref
+              .read(imageRecordsProvider.notifier)
+              .moveFolder(name, targetFolder);
         }
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },

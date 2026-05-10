@@ -541,11 +541,25 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         await ref.read(audioRecordsProvider.notifier).deleteRecords(ids);
         await ref.read(folderListProvider.notifier).loadFolders();
       },
+      onDeleteFolders: (names) async {
+        for (final name in names) {
+          await ref.read(audioRecordsProvider.notifier).deleteFolder(name);
+        }
+        await ref.read(folderListProvider.notifier).loadFolders();
+      },
       onMoveFiles: (ids, targetFolder) async {
         for (final id in ids) {
           await ref
               .read(audioRecordsProvider.notifier)
               .moveRecord(id, targetFolder);
+        }
+        await ref.read(folderListProvider.notifier).loadFolders();
+      },
+      onMoveFolders: (names, targetFolder) async {
+        for (final name in names) {
+          await ref
+              .read(audioRecordsProvider.notifier)
+              .moveFolder(name, targetFolder);
         }
         await ref.read(folderListProvider.notifier).loadFolders();
       },

@@ -85,7 +85,9 @@ Widget buildFileManagerView({
   Future<void> Function(String, String)? onCopyFile,
   Future<void> Function(String)? onDeleteFile,
   Future<void> Function(List<String>)? onDeleteFiles,
+  Future<void> Function(List<String>)? onDeleteFolders,
   Future<void> Function(List<String>, String)? onMoveFiles,
+  Future<void> Function(List<String>, String)? onMoveFolders,
   Future<void> Function(String)? onExportFile,
   Future<void> Function(String, String)? onRenameFolder,
   Future<void> Function(String, String)? onMoveFolder,
@@ -114,7 +116,9 @@ Widget buildFileManagerView({
         onCopyFile: onCopyFile ?? (_, __) async {},
         onDeleteFile: onDeleteFile ?? (_) async {},
         onDeleteFiles: onDeleteFiles ?? (_) async {},
+        onDeleteFolders: onDeleteFolders ?? (_) async {},
         onMoveFiles: onMoveFiles ?? (_, __) async {},
+        onMoveFolders: onMoveFolders ?? (_, __) async {},
         onExportFile: onExportFile ?? (_) async {},
         onRenameFolder: onRenameFolder ?? (_, __) async {},
         onMoveFolder: onMoveFolder ?? (_, __) async {},
@@ -748,11 +752,14 @@ void main() {
       await tester.tap(find.text('sel.txt'));
       await tester.pumpAndSettle();
 
-      // Should exit selection mode since no items selected
-      expect(find.text('Test Files'), findsOneWidget);
+      // Should still be in selection mode (doesn't auto-exit)
+      expect(find.text('已选择 0 项'), findsOneWidget);
+
+      // Close button still visible
+      expect(find.byKey(const Key('fm_close_selection_btn')), findsOneWidget);
     });
 
-    testWidgets('Bottom bar shows delete and move in selection mode',
+    testWidgets('Bottom bar shows copy, move and delete in selection mode',
         (tester) async {
       final records = [TestRecord(name: 'f', format: 'txt')];
 
@@ -765,13 +772,15 @@ void main() {
       await tester.longPress(find.text('f.txt'));
       await tester.pumpAndSettle();
 
-      // Bottom bar buttons
-      expect(find.text('删除'), findsOneWidget);
+      // Bottom bar buttons (left to right)
+      expect(find.text('复制'), findsOneWidget);
       expect(find.text('移动'), findsOneWidget);
+      expect(find.text('删除'), findsOneWidget);
 
       // Check the icons
-      expect(find.byIcon(Icons.delete_outline), findsOneWidget);
+      expect(find.byIcon(Icons.copy), findsOneWidget);
       expect(find.byIcon(Icons.drive_file_move_outline), findsOneWidget);
+      expect(find.byIcon(Icons.delete_outline), findsOneWidget);
     });
   });
 
@@ -2054,6 +2063,146 @@ void main() {
   // ==================================================================
   // NEW: Grid view selection tests
   // ==================================================================
+
+  // ==================================================================
+  // NEW: Picker dialog folder creation visibility tests
+  // ==================================================================
+
+  group('Picker dialog folder creation', () {
+    testWidgets(
+        'Folder created in picker dialog persists data correctly via onCreateFolder callback',
+        (tester) async {
+      String? createdPath;
+
+      await tester.pumpWidget(buildFileManagerView(
+        records: [TestRecord(name: 'f', format: 'txt')],
+        folders: {'existing'},
+        onCreateFolder: (name) async {
+          createdPath = name;
+        },
+        onMoveFile: (id, target) async {},
+      ));
+      await tester.pumpAndSettle();
+
+      // Open popup and select move
+      await tester.tap(find.byIcon(Icons.more_vert).last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('移动'));
+      await tester.pumpAndSettle();
+
+      // Create a new folder in the picker
+      await tester.tap(find.text('新建文件夹'));
+      await tester.pumpAndSettle();
+
+      final textField = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(textField, 'targetfolder');
+      await tester.tap(find.byIcon(Icons.check_circle_outline));
+      await tester.pumpAndSettle();
+
+      // Verify the correct full path was passed to onCreateFolder
+      expect(createdPath, 'targetfolder');
+
+      // The new folder should be visible in the picker
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('targetfolder'),
+        ),
+        findsOneWidget,
+      );
+
+      // Cancel the dialog
+      await tester.tap(find.text('取消').last);
+      await tester.pumpAndSettle();
+
+      // After dialog closes, rebuild widget with the folder data updated
+      // (simulating what the provider refresh does in production)
+      await tester.pumpWidget(buildFileManagerView(
+        records: [TestRecord(name: 'f', format: 'txt')],
+        folders: {'existing', 'targetfolder'},
+        onCreateFolder: (name) async {
+          createdPath = name;
+        },
+        onMoveFile: (id, target) async {},
+      ));
+      await tester.pumpAndSettle();
+
+      // The new folder should now be visible in the main view
+      expect(find.text('targetfolder'), findsOneWidget);
+      // Both folders show '空文件夹' since they have no files
+      expect(find.text('existing'), findsOneWidget);
+      // The new empty-folder detail should appear (2 folders × 空文件夹 each)
+      expect(find.text('空文件夹'), findsAtLeast(1));
+    });
+
+    testWidgets(
+        'Folder created in picker dialog is selectable and move completes successfully',
+        (tester) async {
+      String? createdPath;
+      String? movedId;
+      var foldersSet = <String>{};
+
+      Widget buildView(Set<String> f) => buildFileManagerView(
+            records: [TestRecord(name: 'f', format: 'txt')],
+            folders: f,
+            onCreateFolder: (name) async {
+              createdPath = name;
+              foldersSet = {...foldersSet, name};
+            },
+            onMoveFile: (id, target) async {
+              movedId = id;
+            },
+          );
+
+      await tester.pumpWidget(buildView(foldersSet));
+      await tester.pumpAndSettle();
+
+      // Open popup and select move
+      await tester.tap(find.byIcon(Icons.more_vert).last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('移动'));
+      await tester.pumpAndSettle();
+
+      // Create a new folder in the picker
+      await tester.tap(find.text('新建文件夹'));
+      await tester.pumpAndSettle();
+
+      final textField = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(textField, 'targetfolder');
+      await tester.tap(find.byIcon(Icons.check_circle_outline));
+      await tester.pumpAndSettle();
+
+      expect(createdPath, 'targetfolder');
+
+      // The new folder should be visible in the picker
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('targetfolder'),
+        ),
+        findsOneWidget,
+      );
+
+      // Select the new folder
+      await tester.tap(find.text('targetfolder').last);
+      await tester.pumpAndSettle();
+
+      // Click '选择此文件夹'
+      await tester.tap(find.text('选择此文件夹'));
+      await tester.pumpAndSettle();
+
+      // Move should have been called
+      expect(movedId, isNotNull);
+    });
+  });
 
   group('Grid view selection', () {
     testWidgets('Grid view long press enters selection mode', (tester) async {

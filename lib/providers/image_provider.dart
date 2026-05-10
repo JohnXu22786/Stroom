@@ -167,8 +167,7 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
   Future<void> moveFolder(String sourceName, String targetParent) async {
     ImageManifest.invalidateCache();
     final baseName = ImageManifest.getFolderBaseName(sourceName);
-    final newPath =
-        targetParent.isEmpty ? baseName : '$targetParent/$baseName';
+    final newPath = targetParent.isEmpty ? baseName : '$targetParent/$baseName';
 
     final records = await ImageManifest.loadRecords();
 
@@ -191,7 +190,13 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
       }
     }
 
-    // 更新文件夹缓存
+    // 清理旧文件夹缓存（不删除记录）
+    await ImageManifest.removeFolderFromCache(sourceName);
+    for (final desc in descendants) {
+      await ImageManifest.removeFolderFromCache(desc);
+    }
+
+    // 添加新文件夹缓存
     await ImageManifest.addFolder(newPath);
     if (targetParent.isNotEmpty) {
       await ImageManifest.addFolder(targetParent);
@@ -203,8 +208,7 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
   /// 复制文件夹（保持层级结构，整体复制到目标文件夹）
   Future<void> copyFolder(String sourceName, String targetParent) async {
     final baseName = ImageManifest.getFolderBaseName(sourceName);
-    final newPath =
-        targetParent.isEmpty ? baseName : '$targetParent/$baseName';
+    final newPath = targetParent.isEmpty ? baseName : '$targetParent/$baseName';
 
     final records = await ImageManifest.loadRecords();
 
