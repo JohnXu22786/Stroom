@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
@@ -357,6 +359,194 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _exportFiles(List<String> ids, String targetDirectory) async {
+    try {
+      String? outputDir;
+      if (kIsWeb) {
+        outputDir = '';
+      } else {
+        outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
+        if (outputDir == null) {
+          outputDir = await FilePicker.getDirectoryPath(
+            dialogTitle: '选择导出目录',
+          );
+          if (outputDir == null) return;
+        }
+      }
+
+      if (!mounted) return;
+
+      final records = ref.read(audioRecordsProvider);
+      var exportedCount = 0;
+
+      for (final id in ids) {
+        final file = records.firstWhere((r) => r.id == id);
+
+        var data = await FileManifest.readFile(file.storagePath);
+        if (data == null || data.isEmpty) continue;
+
+        var exportFormat = file.format;
+        final fixed = ensureValidAudioFormat(data,
+            requestedFormat: exportFormat, sampleRate: 24000);
+        data = fixed.$1;
+        exportFormat = fixed.$2;
+
+        final exportName = '${file.name}.$exportFormat';
+
+        if (kIsWeb) {
+          final mimeType = getMimeType(exportFormat);
+          downloadAudioFile(data, exportName, mimeType);
+        } else {
+          final outputPath = p.join(outputDir, exportName);
+          await File(outputPath).writeAsBytes(data);
+        }
+        exportedCount++;
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('已导出 $exportedCount 个文件'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('导出失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportFolders(
+      List<String> names, String targetDirectory) async {
+    try {
+      if (kIsWeb) {
+        if (!mounted) return;
+        final action = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('文件夹导出'),
+            content:
+                const Text('浏览器暂不支持选择导出目录，你可以逐个导出文件夹内的文件，或使用 App 以获得完整体验。'),
+            actions: [
+              TextButton(
+                key: const Key('fm_web_export_cancel_btn'),
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('取消'),
+              ),
+              ElevatedButton(
+                key: const Key('fm_web_export_individual_btn'),
+                onPressed: () => Navigator.pop(ctx, 'exportFiles'),
+                child: const Text('逐个导出文件'),
+              ),
+            ],
+          ),
+        );
+
+        if (action != 'exportFiles' || !mounted) return;
+
+        // Export all files in the folders one by one via download
+        final records = ref.read(audioRecordsProvider);
+        var exportedCount = 0;
+        for (final folderName in names) {
+          final folderFiles =
+              records.where((r) => r.folder == folderName).toList();
+          for (final file in folderFiles) {
+            var data = await FileManifest.readFile(file.storagePath);
+            if (data == null || data.isEmpty) continue;
+
+            var exportFormat = file.format;
+            final fixed = ensureValidAudioFormat(data,
+                requestedFormat: exportFormat, sampleRate: 24000);
+            data = fixed.$1;
+            exportFormat = fixed.$2;
+
+            final exportName = '${file.name}.$exportFormat';
+            final mimeType = getMimeType(exportFormat);
+            downloadAudioFile(data, exportName, mimeType);
+            exportedCount++;
+          }
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('已导出 $exportedCount 个文件'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+
+      String? outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
+      if (outputDir == null) {
+        outputDir = await FilePicker.getDirectoryPath(
+          dialogTitle: '选择导出目录',
+        );
+        if (outputDir == null) return;
+      }
+
+      if (!mounted) return;
+
+      final records = ref.read(audioRecordsProvider);
+      var exportedCount = 0;
+
+      for (final folderName in names) {
+        final folderFiles =
+            records.where((r) => r.folder == folderName).toList();
+        if (folderFiles.isEmpty) continue;
+
+        // Create folder in output directory (recreate folder hierarchy)
+        final folderOutputDir = p.join(outputDir, folderName);
+        await Directory(folderOutputDir).create(recursive: true);
+
+        for (final file in folderFiles) {
+          var data = await FileManifest.readFile(file.storagePath);
+          if (data == null || data.isEmpty) continue;
+
+          var exportFormat = file.format;
+          final fixed = ensureValidAudioFormat(data,
+              requestedFormat: exportFormat, sampleRate: 24000);
+          data = fixed.$1;
+          exportFormat = fixed.$2;
+
+          final exportName = '${file.name}.$exportFormat';
+          final outputPath = p.join(folderOutputDir, exportName);
+          await File(outputPath).writeAsBytes(data);
+          exportedCount++;
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('已导出 $exportedCount 个文件'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('导出失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportFolder(String folderName) async {
+    await _exportFolders([folderName], '');
+  }
+
   @override
   Widget build(BuildContext context) {
     final records = ref.watch(audioRecordsProvider);
@@ -564,6 +754,15 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         await ref.read(folderListProvider.notifier).loadFolders();
       },
       onExportFile: _exportFile,
+      onExportFiles: (ids, targetDir) async {
+        await _exportFiles(ids, targetDir);
+      },
+      onExportFolders: (names, targetDir) async {
+        await _exportFolders(names, targetDir);
+      },
+      onExportFolder: (name) async {
+        await _exportFolder(name);
+      },
       onRenameFolder: (oldName, newName) async {
         await ref
             .read(audioRecordsProvider.notifier)
