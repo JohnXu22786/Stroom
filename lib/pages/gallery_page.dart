@@ -10,6 +10,8 @@ import 'package:path/path.dart' as p;
 
 import '../providers/image_provider.dart';
 import '../utils/image_manifest.dart';
+import '../utils/manifest_bridge.dart';
+import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
 import '../widgets/file_manager_view.dart';
 import 'camera_page.dart';
@@ -524,27 +526,6 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   }
 
   // ====================================================================
-  // Folder helpers
-  // ====================================================================
-
-  /// Recursively collect all descendant folder paths (used by [FileManagerView]).
-  List<String> _getAllDescendantFolderPaths(
-      String parentPath, Set<String> allPaths) {
-    final result = <String>{};
-    final prefix = parentPath.isEmpty ? '' : '$parentPath/';
-    for (final p in allPaths) {
-      if (p == parentPath) continue;
-      if (parentPath.isEmpty) {
-        if (!p.contains('/')) continue;
-        result.add(p);
-      } else {
-        if (p.startsWith(prefix)) result.add(p);
-      }
-    }
-    return result.toList();
-  }
-
-  // ====================================================================
   // Build
   // ====================================================================
 
@@ -770,11 +751,15 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       onToggleSort: (field) {
         ref.read(imageSortConfigProvider.notifier).toggle(field);
       },
-      getFolderBaseName: ImageManifest.getFolderBaseName,
-      getParentFolderPath: ImageManifest.getParentFolderPath,
-      getChildFolderPaths: (s) => ImageManifest.getChildFolderPaths(s),
-      validateFolderName: ImageManifest.validateFolderName,
-      getAllDescendantFolderPaths: _getAllDescendantFolderPaths,
+      manifestBridge: ManifestBridge(
+        getFolderBaseName: ImageManifest.getFolderBaseName,
+        getParentFolderPath: ImageManifest.getParentFolderPath,
+        getChildFolderPaths: (parent, allPaths) =>
+            ImageManifest.getChildFolderPaths(parent, allPaths.toList()),
+        validateFolderName: ImageManifest.validateFolderName,
+        getAllDescendantFolderPaths:
+            FolderPathUtils.getAllDescendantFolderPaths,
+      ),
     );
   }
 }

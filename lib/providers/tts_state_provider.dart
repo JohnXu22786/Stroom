@@ -12,8 +12,7 @@ import '../utils/audio_utils.dart';
 
 /// @deprecated 不再使用，保留以备外部引用。
 /// 如需合成，请使用 [TTSStateNotifier.synthesize] 并传入 config。
-final ttsProviderProvider =
-    Provider<tts_provider_base.BaseTTSProvider?>((ref) {
+final ttsProviderProvider = Provider<tts_provider_base.BaseTTSProvider?>((ref) {
   final entriesState = ref.watch(providerEntriesProvider);
   final ttsEntry =
       entriesState.entries.where((e) => e.name == 'TTS供应商').firstOrNull;
@@ -131,12 +130,14 @@ class SynthesisConfigNotifier extends StateNotifier<SynthesisConfig> {
 }
 
 /// 音频文件记录列表提供器（基于 manifest）
-final audioRecordsProvider = StateNotifierProvider<AudioRecordsNotifier, List<AudioRecord>>(
+final audioRecordsProvider =
+    StateNotifierProvider<AudioRecordsNotifier, List<AudioRecord>>(
   (ref) => AudioRecordsNotifier(),
 );
 
 /// 文件夹列表提供器
-final folderListProvider = StateNotifierProvider<FolderListNotifier, Set<String>>(
+final folderListProvider =
+    StateNotifierProvider<FolderListNotifier, Set<String>>(
   (ref) => FolderListNotifier(),
 );
 
@@ -231,7 +232,8 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
     }
 
     // 更新所有后代文件夹的记录
-    final oldDescendants = FileManifest.getAllDescendantFolderPaths(oldName);
+    final oldDescendants =
+        await FileManifest.getAllDescendantFolderPaths(oldName);
     for (final desc in oldDescendants) {
       final suffix = desc.substring(oldName.length); // e.g., "/sub"
       final newDescPath = '$newPath$suffix';
@@ -263,7 +265,8 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
     }
 
     // 移动所有后代文件夹的记录
-    final oldDescendants = FileManifest.getAllDescendantFolderPaths(oldName);
+    final oldDescendants =
+        await FileManifest.getAllDescendantFolderPaths(oldName);
     for (final desc in oldDescendants) {
       final suffix = desc.substring(oldName.length); // e.g., "/sub"
       final newDescPath = '$newPath$suffix';
@@ -306,7 +309,8 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
     }
 
     // 复制所有后代文件夹的记录
-    final descendants = FileManifest.getAllDescendantFolderPaths(sourceFolder);
+    final descendants =
+        await FileManifest.getAllDescendantFolderPaths(sourceFolder);
     for (final desc in descendants) {
       final suffix = desc.substring(sourceFolder.length);
       final newDescPath = '$newPath$suffix';
@@ -460,7 +464,8 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
       }
 
       // 保存音频文件（使用 actualFormat 确保扩展名与数据格式一致）
-      final audioFile = await _saveAudioFile(audioData, actualFormat, text, name: title);
+      final audioFile =
+          await _saveAudioFile(audioData, actualFormat, text, name: title);
 
       state = state.copyWith(
         isSynthesizing: false,
