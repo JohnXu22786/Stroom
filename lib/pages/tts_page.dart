@@ -124,7 +124,10 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         final hash = computeAudioHash(bytes);
         final rawName = _sanitizeName(file.name);
         final ext = p.extension(rawName).replaceAll('.', '').toLowerCase();
-        final format = ext.isNotEmpty ? ext : 'wav';
+        final detectedFormat = detectAudioFormat(bytes);
+        final format = detectedFormat != 'pcm'
+            ? detectedFormat
+            : (ext.isNotEmpty ? ext : 'wav');
         final displayName = _uniqueAudioName(
           p.basenameWithoutExtension(rawName),
           records,
@@ -155,9 +158,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
               duration: const Duration(seconds: 2)),
         );
       }
-      _isImporting = false;
     } catch (e) {
-      _isImporting = false;
       if (mounted) {
         try {
           Navigator.of(context, rootNavigator: true).pop();
@@ -169,6 +170,8 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
               duration: const Duration(seconds: 3)),
         );
       }
+    } finally {
+      _isImporting = false;
     }
   }
 

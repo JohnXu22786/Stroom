@@ -116,7 +116,7 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
   }
 
   /// 获取某个文件夹的所有后代文件夹路径
-  List<String> _getDescendantFolders(String folderPath) {
+  Future<List<String>> _getDescendantFolders(String folderPath) async {
     final prefix = folderPath.isEmpty ? '' : '$folderPath/';
     final seen = <String>{};
     final result = <String>[];
@@ -125,6 +125,13 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
         if (seen.add(r.folder)) {
           result.add(r.folder);
         }
+      }
+    }
+    // Also include empty folders from cache
+    final allFolders = await ImageManifest.getAllFolders();
+    for (final f in allFolders) {
+      if (f.startsWith(prefix) && f != folderPath) {
+        if (seen.add(f)) result.add(f);
       }
     }
     return result;
@@ -146,7 +153,7 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
     }
 
     // 更新所有后代文件夹的记录
-    final descendants = _getDescendantFolders(oldName);
+    final descendants = await _getDescendantFolders(oldName);
     for (final desc in descendants) {
       final suffix = desc.substring(oldName.length);
       final newDescPath = '$newPath$suffix';
@@ -159,6 +166,9 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
 
     // 将新路径加入文件夹缓存
     await ImageManifest.addFolder(newPath);
+
+    // 移除旧路径的文件夹缓存
+    await ImageManifest.removeFolderFromCache(oldName);
 
     await loadRecords();
   }
@@ -179,7 +189,7 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
     }
 
     // 移动所有后代文件夹的记录
-    final descendants = _getDescendantFolders(sourceName);
+    final descendants = await _getDescendantFolders(sourceName);
     for (final desc in descendants) {
       final suffix = desc.substring(sourceName.length);
       final newDescPath = '$newPath$suffix';
@@ -227,7 +237,7 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
     }
 
     // 复制所有后代文件夹的记录
-    final descendants = _getDescendantFolders(sourceName);
+    final descendants = await _getDescendantFolders(sourceName);
     for (final desc in descendants) {
       final suffix = desc.substring(sourceName.length);
       final newDescPath = '$newPath$suffix';

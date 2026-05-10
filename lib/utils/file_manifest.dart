@@ -33,6 +33,7 @@ class AudioRecord
   @override
   final String folder; // 文件夹路径（空字符串表示根目录）
   final String sourceText; // 源文本
+  final int duration; // 时长（秒）
 
   AudioRecord({
     String? id,
@@ -43,6 +44,7 @@ class AudioRecord
     required this.size,
     this.folder = '',
     this.sourceText = '',
+    this.duration = 0,
   }) : id = id ?? 'rec_${const Uuid().v4()}';
 
   /// 音频文件的存储文件名（基于哈希）
@@ -64,6 +66,7 @@ class AudioRecord
         'size': size,
         'folder': folder,
         'sourceText': sourceText,
+        'duration': duration,
       };
 
   factory AudioRecord.fromMap(Map<String, dynamic> map) => AudioRecord(
@@ -77,6 +80,7 @@ class AudioRecord
         size: (map['size'] as num?)?.toInt() ?? 0,
         folder: map['folder'] as String? ?? '',
         sourceText: map['sourceText'] as String? ?? '',
+        duration: (map['duration'] as num?)?.toInt() ?? 0,
       );
 
   @override
@@ -89,6 +93,7 @@ class AudioRecord
         size: size,
         folder: folder,
         sourceText: sourceText,
+        duration: duration,
       );
 
   @override
@@ -101,6 +106,7 @@ class AudioRecord
         size: size,
         folder: folder,
         sourceText: sourceText,
+        duration: duration,
       );
 
   AudioRecord copyWith({
@@ -108,6 +114,7 @@ class AudioRecord
     String? folder,
     String? sourceText,
     int? size,
+    int? duration,
   }) =>
       AudioRecord(
         id: id,
@@ -116,6 +123,7 @@ class AudioRecord
         format: format,
         createdAt: createdAt,
         size: size ?? this.size,
+        duration: duration ?? this.duration,
         folder: folder ?? this.folder,
         sourceText: sourceText ?? this.sourceText,
       );

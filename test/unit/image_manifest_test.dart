@@ -1,13 +1,19 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/image_manifest.dart';
 import 'package:uuid/uuid.dart';
 
 void main() {
   group('ImageManifest', () {
     setUp(() async {
+      // Use in-memory JSON storage to avoid sqflite / path_provider issues in unit tests
+      ManifestDatabase.enableTestMode();
       ImageManifest.invalidateCache();
-      // Force loadRecords to initialize the cache (will fail SharedPrefs gracefully)
       await ImageManifest.loadRecords();
+    });
+
+    tearDown(() async {
+      await ManifestDatabase.close();
     });
 
     test('removeFolderFromCache removes folder and descendants from cache',
