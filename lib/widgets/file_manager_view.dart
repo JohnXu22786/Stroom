@@ -64,6 +64,11 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
   final Future<void> Function(List<String> names, String targetFolder)
       onMoveFolders;
   final Future<void> Function(String id) onExportFile;
+  final Future<void> Function(List<String> ids, String targetDirectory)?
+      onExportFiles;
+  final Future<void> Function(List<String> names, String targetDirectory)?
+      onExportFolders;
+  final Future<void> Function(String name)? onExportFolder;
   final Future<void> Function(String oldName, String newName) onRenameFolder;
   final Future<void> Function(String name, String targetParent) onMoveFolder;
   final Future<void> Function(String name, String targetParent) onCopyFolder;
@@ -95,6 +100,9 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
     required this.onMoveFiles,
     required this.onMoveFolders,
     required this.onExportFile,
+    this.onExportFiles,
+    this.onExportFolders,
+    this.onExportFolder,
     required this.onRenameFolder,
     required this.onMoveFolder,
     required this.onCopyFolder,
@@ -281,6 +289,16 @@ class _FileManagerViewState<T extends FileRecord>
                         icon:
                             const Icon(Icons.drive_file_move_outline, size: 20),
                         label: const Text('移动'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        key: const Key('fm_selection_export_btn'),
+                        onPressed: _exportSelected,
+                        icon:
+                            const Icon(Icons.file_download_outlined, size: 20),
+                        label: const Text('导出'),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -796,6 +814,8 @@ class _FileManagerViewState<T extends FileRecord>
                           if (!_selectionMode) {
                             setState(() => _selectionMode = true);
                           }
+                        case 'open':
+                          _setCurrentFolder(folderName);
                         case 'rename':
                           _renameFolder(folderName);
                         case 'move':
@@ -804,6 +824,8 @@ class _FileManagerViewState<T extends FileRecord>
                           _copyFolder(folderName);
                         case 'delete':
                           _deleteFolder(folderName);
+                        case 'export':
+                          _exportFolder(folderName);
                       }
                     },
                     itemBuilder: (_) => [
@@ -813,6 +835,16 @@ class _FileManagerViewState<T extends FileRecord>
                           key: Key('fm_folder_menu_multi_select'),
                           leading: Icon(Icons.checklist, size: 20),
                           title: Text('多选'),
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'open',
+                        child: ListTile(
+                          key: Key('fm_folder_menu_open'),
+                          leading: Icon(Icons.folder_open, size: 20),
+                          title: Text('打开'),
                           dense: true,
                           contentPadding: EdgeInsets.zero,
                         ),
@@ -843,6 +875,16 @@ class _FileManagerViewState<T extends FileRecord>
                           key: Key('fm_folder_menu_copy'),
                           leading: Icon(Icons.copy, size: 20),
                           title: Text('复制'),
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'export',
+                        child: ListTile(
+                          key: Key('fm_folder_menu_export'),
+                          leading: Icon(Icons.file_download_outlined, size: 20),
+                          title: Text('导出'),
                           dense: true,
                           contentPadding: EdgeInsets.zero,
                         ),
@@ -1268,6 +1310,44 @@ class _FileManagerViewState<T extends FileRecord>
         await widget.onDeleteFolder(name);
       }
       _exitSelectionMode();
+    }
+  }
+
+  Future<void> _exportSelected() async {
+    if (_selectedIds.isEmpty) return;
+
+    if (!mounted) return;
+
+    // Separate files and folders
+    final fileIds = <String>[];
+    final folderNames = <String>[];
+    for (final id in _selectedIds) {
+      if (widget.folders.contains(id)) {
+        folderNames.add(id);
+      } else {
+        fileIds.add(id);
+      }
+    }
+
+    // Export files
+    if (fileIds.isNotEmpty && widget.onExportFiles != null) {
+      await widget.onExportFiles!(fileIds, '');
+    }
+
+    // Export folders
+    for (final name in folderNames) {
+      if (widget.onExportFolder != null) {
+        await widget.onExportFolder!(name);
+      }
+    }
+
+    _exitSelectionMode();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _exportFolder(String folderName) async {
+    if (widget.onExportFolder != null) {
+      await widget.onExportFolder!(folderName);
     }
   }
 

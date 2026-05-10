@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
@@ -337,6 +339,190 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     }
   }
 
+  Future<void> _exportFiles(List<String> ids, String targetDirectory) async {
+    try {
+      // If no directory specified, let user pick a directory
+      String? outputDir;
+      if (kIsWeb) {
+        // Web: no directory picker, save files one by one
+        outputDir = ''; // placeholder, not used on web
+      } else {
+        outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
+        if (outputDir == null) {
+          outputDir = await FilePicker.getDirectoryPath(
+            dialogTitle: '选择导出目录',
+          );
+          if (outputDir == null) return;
+        }
+      }
+
+      if (!mounted) return;
+
+      final records = ref.read(imageRecordsProvider);
+      var exportedCount = 0;
+
+      for (final id in ids) {
+        final file = records.firstWhere((r) => r.id == id);
+        final data = await ImageManifest.readFile(file.storagePath);
+        if (data == null || data.isEmpty) continue;
+
+        final exportName = '${file.name}.${file.format}';
+        final outputPath = p.join(outputDir, exportName);
+
+        if (kIsWeb) {
+          // On web, we save individually
+          await FilePicker.saveFile(
+            dialogTitle: '导出图片',
+            fileName: exportName,
+            type: FileType.custom,
+            allowedExtensions: [file.format],
+            bytes: data,
+          );
+        } else {
+          // Native: write directly to the selected directory
+          await File(outputPath).writeAsBytes(data);
+        }
+        exportedCount++;
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('已导出 $exportedCount 个文件'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('导出失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportFolders(
+      List<String> names, String targetDirectory) async {
+    // For each folder, export all files within preserving folder structure
+    try {
+      if (kIsWeb) {
+        if (!mounted) return;
+        final action = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('文件夹导出'),
+            content:
+                const Text('浏览器暂不支持选择导出目录，你可以逐个导出文件夹内的文件，或使用 App 以获得完整体验。'),
+            actions: [
+              TextButton(
+                key: const Key('fm_web_export_cancel_btn'),
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('取消'),
+              ),
+              ElevatedButton(
+                key: const Key('fm_web_export_individual_btn'),
+                onPressed: () => Navigator.pop(ctx, 'exportFiles'),
+                child: const Text('逐个导出文件'),
+              ),
+            ],
+          ),
+        );
+
+        if (action != 'exportFiles' || !mounted) return;
+
+        // Export all files in the folders one by one via save-file dialog
+        final records = ref.read(imageRecordsProvider);
+        var exportedCount = 0;
+        for (final folderName in names) {
+          final folderFiles =
+              records.where((r) => r.folder == folderName).toList();
+          for (final file in folderFiles) {
+            final data = await ImageManifest.readFile(file.storagePath);
+            if (data == null || data.isEmpty) continue;
+            final exportName = '${file.name}.${file.format}';
+            await FilePicker.saveFile(
+              dialogTitle: '导出图片',
+              fileName: exportName,
+              type: FileType.custom,
+              allowedExtensions: [file.format],
+              bytes: data,
+            );
+            exportedCount++;
+          }
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('已导出 $exportedCount 个文件'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+
+      String? outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
+      if (outputDir == null) {
+        outputDir = await FilePicker.getDirectoryPath(
+          dialogTitle: '选择导出目录',
+        );
+        if (outputDir == null) return;
+      }
+
+      if (!mounted) return;
+
+      final records = ref.read(imageRecordsProvider);
+      var exportedCount = 0;
+
+      for (final folderName in names) {
+        final folderFiles =
+            records.where((r) => r.folder == folderName).toList();
+        if (folderFiles.isEmpty) continue;
+
+        // Create folder in output directory (recreate folder hierarchy)
+        final folderOutputDir = p.join(outputDir, folderName);
+        await Directory(folderOutputDir).create(recursive: true);
+
+        for (final file in folderFiles) {
+          final data = await ImageManifest.readFile(file.storagePath);
+          if (data == null || data.isEmpty) continue;
+
+          final exportName = '${file.name}.${file.format}';
+          final outputPath = p.join(folderOutputDir, exportName);
+          await File(outputPath).writeAsBytes(data);
+          exportedCount++;
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('已导出 $exportedCount 个文件'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('导出失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportFolder(String folderName) async {
+    // Same behavior as _exportFolders but for a single folder
+    await _exportFolders([folderName], '');
+  }
+
   // ====================================================================
   // Folder helpers
   // ====================================================================
@@ -546,6 +732,15 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
       onExportFile: _exportFile,
+      onExportFiles: (ids, targetDir) async {
+        await _exportFiles(ids, targetDir);
+      },
+      onExportFolders: (names, targetDir) async {
+        await _exportFolders(names, targetDir);
+      },
+      onExportFolder: (name) async {
+        await _exportFolder(name);
+      },
       onRenameFolder: (oldName, newName) async {
         await ref
             .read(imageRecordsProvider.notifier)
