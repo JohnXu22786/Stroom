@@ -124,6 +124,9 @@ class _FileManagerViewState<T extends FileRecord>
   String _currentFolder = '';
   bool _showGridView = false;
 
+  /// 缓存缩略图 Widget，避免勾选等操作触发 setState 时重新从磁盘读取
+  final Map<String, Widget> _thumbnailCache = {};
+
   @override
   void initState() {
     super.initState();
@@ -131,10 +134,24 @@ class _FileManagerViewState<T extends FileRecord>
   }
 
   @override
+  void didUpdateWidget(covariant FileManagerView<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 数据记录引用变化时清空缩略图缓存
+    if (oldWidget.sortedRecords != widget.sortedRecords) {
+      _thumbnailCache.clear();
+    }
+  }
+
+  @override
   void dispose() {
     _folderNameController.dispose();
     _renameController.dispose();
     super.dispose();
+  }
+
+  /// 通知缩略图缓存失效（在数据刷新后调用）
+  void _invalidateThumbnailCache() {
+    _thumbnailCache.clear();
   }
 
   // ====================================================================
@@ -581,15 +598,10 @@ class _FileManagerViewState<T extends FileRecord>
         children: [
           Container(
             decoration: BoxDecoration(
-              color: isSelected
-                  ? Colors.blue.withValues(alpha: 0.15)
-                  : Colors.amber.withValues(alpha: 0.08),
+              color: Colors.amber.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: isSelected
-                    ? Colors.blue
-                    : Colors.amber.withValues(alpha: 0.2),
-                width: isSelected ? 2 : 1,
+                color: Colors.amber.withValues(alpha: 0.2),
               ),
             ),
             child: Column(
@@ -638,6 +650,7 @@ class _FileManagerViewState<T extends FileRecord>
 
   Widget _buildGridFileItem(T file) {
     final isSelected = _selectedIds.contains(file.id);
+    final hasThumbnailBuilder = widget.config.fileThumbnailBuilder != null;
     return GestureDetector(
       key: Key('fm_grid_file_${file.id}'),
       onTap: () {
@@ -656,10 +669,7 @@ class _FileManagerViewState<T extends FileRecord>
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected ? Colors.blue : Colors.grey[300]!,
-            width: isSelected ? 2 : 1,
-          ),
+          border: Border.all(color: Colors.grey[300]!),
         ),
         child: Column(
           children: [
@@ -668,17 +678,19 @@ class _FileManagerViewState<T extends FileRecord>
               child: ClipRRect(
                 borderRadius:
                     const BorderRadius.vertical(top: Radius.circular(7)),
-                child: widget.config.fileThumbnailBuilder?.call(file) ??
-                    widget.config.fileIconBuilder(file),
+                child: hasThumbnailBuilder
+                    ? _thumbnailCache.putIfAbsent(
+                        file.id,
+                        () => widget.config.fileThumbnailBuilder!.call(file),
+                      )
+                    : widget.config.fileIconBuilder(file),
               ),
             ),
             // Name + checkbox
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              decoration: BoxDecoration(
-                color: isSelected ? Colors.blue.withValues(alpha: 0.08) : null,
-                borderRadius:
-                    const BorderRadius.vertical(bottom: Radius.circular(7)),
+              decoration: const BoxDecoration(
+                borderRadius: BorderRadius.vertical(bottom: Radius.circular(7)),
               ),
               child: Row(
                 children: [
@@ -717,10 +729,6 @@ class _FileManagerViewState<T extends FileRecord>
     final isSelected = _selectedIds.contains(folderName);
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: isSelected ? Border.all(color: Colors.blue, width: 2) : null,
-      ),
       child: Card(
         key: Key('fm_folder_${folderName.hashCode}'),
         margin: EdgeInsets.zero,
@@ -884,6 +892,7 @@ class _FileManagerViewState<T extends FileRecord>
     final isSelected = _selectedIds.contains(file.id);
     final fileSizeStr = _formatFileSize(file.size);
     final dateStr = _formatDate(file.createdAt);
+    final hasThumbnailBuilder = widget.config.fileThumbnailBuilder != null;
 
     return Card(
       key: Key('fm_file_${file.id}'),
@@ -911,19 +920,27 @@ class _FileManagerViewState<T extends FileRecord>
                   value: isSelected,
                   onChanged: (_) => _toggleSelection(file.id),
                 ),
-              // File icon
+              // File icon / thumbnail (cached)
               Container(
                 width: 44,
                 height: 44,
                 margin: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .primary
-                      .withValues(alpha: 0.1),
+                  color: hasThumbnailBuilder
+                      ? null
+                      : Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: widget.config.fileIconBuilder(file),
+                clipBehavior: hasThumbnailBuilder ? Clip.antiAlias : Clip.none,
+                child: hasThumbnailBuilder
+                    ? _thumbnailCache.putIfAbsent(
+                        file.id,
+                        () => widget.config.fileThumbnailBuilder!.call(file),
+                      )
+                    : widget.config.fileIconBuilder(file),
               ),
               // File info
               Expanded(
@@ -1539,6 +1556,7 @@ class _FileManagerViewState<T extends FileRecord>
 
   Future<void> _refreshFileList() async {
     await widget.onRefresh();
+    _invalidateThumbnailCache();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1820,16 +1838,19 @@ class _FileManagerViewState<T extends FileRecord>
 
   String _formatDate(DateTime date) {
     final now = DateTime.now();
-    final diff = now.difference(date);
+    // 使用日历日比较而非墙钟时间差，避免跨午夜时日期偏差
+    final today = DateTime(now.year, now.month, now.day);
+    final fileDay = DateTime(date.year, date.month, date.day);
+    final diffDays = today.difference(fileDay).inDays;
     final time =
         '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-    if (diff.inDays == 0) {
+    if (diffDays == 0) {
       return '今天 $time';
     }
-    if (diff.inDays == 1) {
+    if (diffDays == 1) {
       return '昨天 $time';
     }
-    if (diff.inDays < 7) return '${diff.inDays}天前 $time';
+    if (diffDays < 7) return '$diffDays天前 $time';
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} $time';
   }
 }
