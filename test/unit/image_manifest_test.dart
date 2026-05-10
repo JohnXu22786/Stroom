@@ -3,6 +3,40 @@ import 'package:stroom/utils/image_manifest.dart';
 import 'package:uuid/uuid.dart';
 
 void main() {
+  group('ImageManifest', () {
+    setUp(() async {
+      ImageManifest.invalidateCache();
+      // Force loadRecords to initialize the cache (will fail SharedPrefs gracefully)
+      await ImageManifest.loadRecords();
+    });
+
+    test('removeFolderFromCache removes folder and descendants from cache',
+        () async {
+      // Add folders
+      await ImageManifest.addFolder('photos');
+      await ImageManifest.addFolder('photos/vacation');
+      await ImageManifest.addFolder('photos/vacation/beach');
+      await ImageManifest.addFolder('documents');
+
+      // Verify folders exist
+      final before = await ImageManifest.getAllFolders();
+      expect(before.contains('photos'), isTrue);
+      expect(before.contains('photos/vacation'), isTrue);
+      expect(before.contains('photos/vacation/beach'), isTrue);
+      expect(before.contains('documents'), isTrue);
+
+      // Remove 'photos' folder from cache
+      await ImageManifest.removeFolderFromCache('photos');
+
+      // Verify 'photos' and its descendants are gone, but 'documents' remains
+      final after = await ImageManifest.getAllFolders();
+      expect(after.contains('photos'), isFalse);
+      expect(after.contains('photos/vacation'), isFalse);
+      expect(after.contains('photos/vacation/beach'), isFalse);
+      expect(after.contains('documents'), isTrue);
+    });
+  });
+
   group('ImageRecord', () {
     const testName = 'test_image';
     const testHash = 'a1b2c3d4e5f6';

@@ -15,16 +15,16 @@ class ImageRecord implements FileRecord {
   @override
   final String id;
   @override
-  final String name;          // 用户设置的文件名（不含扩展名）
-  final String hash;          // 图片数据的 MD5 哈希值
+  final String name; // 用户设置的文件名（不含扩展名）
+  final String hash; // 图片数据的 MD5 哈希值
   @override
-  final String format;        // 文件格式（jpg, png 等）
+  final String format; // 文件格式（jpg, png 等）
   @override
   final DateTime createdAt;
   @override
-  final int size;             // 文件大小（字节）
+  final int size; // 文件大小（字节）
   @override
-  final String folder;        // 文件夹路径（空字符串表示根目录）
+  final String folder; // 文件夹路径（空字符串表示根目录）
 
   ImageRecord({
     String? id,
@@ -41,40 +41,41 @@ class ImageRecord implements FileRecord {
   String get storagePath => '$hash.$format';
 
   Map<String, dynamic> toMap() => {
-    'id': id,
-    'name': name,
-    'hash': hash,
-    'format': format,
-    'createdAt': createdAt.toIso8601String(),
-    'size': size,
-    'folder': folder,
-  };
+        'id': id,
+        'name': name,
+        'hash': hash,
+        'format': format,
+        'createdAt': createdAt.toIso8601String(),
+        'size': size,
+        'folder': folder,
+      };
 
   factory ImageRecord.fromMap(Map<String, dynamic> map) => ImageRecord(
-    id: map['id'] as String?,
-    name: map['name'] as String? ?? '',
-    hash: map['hash'] as String? ?? '',
-    format: map['format'] as String? ?? 'jpg',
-    createdAt: map['createdAt'] != null
-        ? DateTime.parse(map['createdAt'] as String)
-        : DateTime.now(),
-    size: (map['size'] as num?)?.toInt() ?? 0,
-    folder: map['folder'] as String? ?? '',
-  );
+        id: map['id'] as String?,
+        name: map['name'] as String? ?? '',
+        hash: map['hash'] as String? ?? '',
+        format: map['format'] as String? ?? 'jpg',
+        createdAt: map['createdAt'] != null
+            ? DateTime.parse(map['createdAt'] as String)
+            : DateTime.now(),
+        size: (map['size'] as num?)?.toInt() ?? 0,
+        folder: map['folder'] as String? ?? '',
+      );
 
   ImageRecord copyWith({
     String? name,
     String? folder,
     int? size,
-  }) => ImageRecord(
-    id: id,
-    name: name ?? this.name,
-    hash: hash,
-    format: format,
-    createdAt: createdAt,
-    size: size ?? this.size,
-    folder: folder ?? this.folder,
-  );
+  }) =>
+      ImageRecord(
+        id: id,
+        name: name ?? this.name,
+        hash: hash,
+        format: format,
+        createdAt: createdAt,
+        size: size ?? this.size,
+        folder: folder ?? this.folder,
+      );
 }
 
 /// 计算图片数据的 MD5 哈希值
@@ -106,12 +107,14 @@ class ImageManifest {
       if (json != null && json.isNotEmpty) {
         final data = jsonDecode(json);
         if (data is List) {
-          _cache = data.cast<Map<String, dynamic>>()
+          _cache = data
+              .cast<Map<String, dynamic>>()
               .map((m) => ImageRecord.fromMap(m))
               .toList();
           _folderCache = [];
         } else if (data is Map) {
-          final list = (data['records'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+          final list =
+              (data['records'] as List?)?.cast<Map<String, dynamic>>() ?? [];
           _cache = list.map((m) => ImageRecord.fromMap(m)).toList();
           _folderCache = (data['folders'] as List?)?.cast<String>() ?? [];
         }
@@ -271,7 +274,11 @@ class ImageManifest {
   static Future<void> addFolder(String folderName) async {
     await loadRecords();
     final name = folderName.trim();
-    if (name.isEmpty || name.contains('/')) return;
+    if (name.isEmpty) return;
+    // 只校验末级名称，不校验完整层级路径（允许斜杠表示嵌套）
+    final baseName = getFolderBaseName(name);
+    final err = validateFolderName(baseName);
+    if (err != null) return;
     if (!_folderCache.contains(name)) {
       _folderCache.add(name);
       await _persist();
@@ -347,7 +354,8 @@ class ImageManifest {
     return idx == -1 ? '' : folderPath.substring(0, idx);
   }
 
-  static List<String> getChildFolderPaths(String parentPath, [List<String>? allPaths]) {
+  static List<String> getChildFolderPaths(String parentPath,
+      [List<String>? allPaths]) {
     final paths = allPaths ?? _folderCache;
     final prefix = parentPath.isEmpty ? '' : '$parentPath/';
     final result = <String>[];
@@ -363,6 +371,23 @@ class ImageManifest {
       }
     }
     return result;
+  }
+
+  /// 从文件夹缓存中移除一个路径及其所有子路径，但不删除记录。
+  /// 在 moveFolder 后调用，避免空文件夹残留在缓存中。
+  static Future<void> removeFolderFromCache(String folderPath) async {
+    await loadRecords();
+    final prefix = folderPath.isEmpty ? '' : '$folderPath/';
+    final toRemove = <String>[];
+    for (final f in _folderCache) {
+      if (f == folderPath || f.startsWith(prefix)) {
+        toRemove.add(f);
+      }
+    }
+    for (final f in toRemove) {
+      _folderCache.remove(f);
+    }
+    await _persist();
   }
 
   static void invalidateCache() {
