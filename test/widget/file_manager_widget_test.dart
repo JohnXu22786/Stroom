@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/file_record.dart';
 import 'package:stroom/utils/sort_config.dart';
 import 'package:stroom/widgets/file_manager_view.dart';
+import 'package:stroom/utils/manifest_bridge.dart';
 
 // ====================================================================
 // Test record — minimal FileRecord implementation
@@ -126,11 +127,13 @@ Widget buildFileManagerView({
         onDeleteFolder: onDeleteFolder ?? (_) async {},
         onCreateFolder: onCreateFolder ?? (_) async {},
         onToggleSort: onToggleSort ?? (_) {},
-        getFolderBaseName: _folderBaseName,
-        getParentFolderPath: _parentFolderPath,
-        getChildFolderPaths: (p) => _childFolderPaths(p, folders),
-        validateFolderName: (_) => null,
-        getAllDescendantFolderPaths: (f, a) => _allDescendantFolderPaths(f, a),
+        manifestBridge: ManifestBridge(
+          getFolderBaseName: _folderBaseName,
+          getParentFolderPath: _parentFolderPath,
+          getChildFolderPaths: _childFolderPaths,
+          validateFolderName: (_) => null,
+          getAllDescendantFolderPaths: _allDescendantFolderPaths,
+        ),
       ),
     ),
   );

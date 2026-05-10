@@ -9,6 +9,8 @@ import 'package:path/path.dart' as p;
 import '../providers/tts_state_provider.dart';
 import '../providers/task_provider.dart';
 import '../utils/file_manifest.dart';
+import '../utils/manifest_bridge.dart';
+import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
 import '../utils/audio_playback.dart';
 import '../utils/audio_utils.dart';
@@ -309,19 +311,6 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
             content: Text('文件列表已刷新'), duration: Duration(seconds: 2)),
       );
     }
-  }
-
-  /// 递归获取某路径下的所有子文件夹（基于 folderListProvider 的状态）
-  List<String> _getAllDescendantFolderPaths(
-      String parentPath, Set<String> folders) {
-    final result = <String>{};
-    final prefix = parentPath.isEmpty ? '' : '$parentPath/';
-    for (final f in folders) {
-      if (f.startsWith(prefix) && f != parentPath) {
-        result.add(f);
-      }
-    }
-    return result.toList()..sort();
   }
 
   // ====================================================================
@@ -792,11 +781,15 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       onToggleSort: (field) {
         ref.read(audioSortConfigProvider.notifier).toggle(field);
       },
-      getFolderBaseName: FileManifest.getFolderBaseName,
-      getParentFolderPath: FileManifest.getParentFolderPath,
-      getChildFolderPaths: (s) => FileManifest.getChildFolderPaths(s),
-      validateFolderName: FileManifest.validateFolderName,
-      getAllDescendantFolderPaths: _getAllDescendantFolderPaths,
+      manifestBridge: ManifestBridge(
+        getFolderBaseName: FileManifest.getFolderBaseName,
+        getParentFolderPath: FileManifest.getParentFolderPath,
+        getChildFolderPaths: (parent, allPaths) =>
+            FileManifest.getChildFolderPaths(parent, allPaths.toList()),
+        validateFolderName: FileManifest.validateFolderName,
+        getAllDescendantFolderPaths:
+            FolderPathUtils.getAllDescendantFolderPaths,
+      ),
     );
   }
 }

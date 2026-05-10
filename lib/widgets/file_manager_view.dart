@@ -1,6 +1,9 @@
+import 'dart:collection';
+
 import 'package:flutter/material.dart';
 
 import '../utils/file_record.dart';
+import '../utils/manifest_bridge.dart';
 import '../utils/sort_config.dart';
 
 // ====================================================================
@@ -78,11 +81,7 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
   final Future<void> Function()? onImport;
 
   // Manifest helper statics
-  final String Function(String) getFolderBaseName;
-  final String Function(String) getParentFolderPath;
-  final List<String> Function(String) getChildFolderPaths;
-  final String? Function(String) validateFolderName;
-  final List<String> Function(String, Set<String>) getAllDescendantFolderPaths;
+  final ManifestBridge manifestBridge;
 
   const FileManagerView({
     super.key,
@@ -110,11 +109,7 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
     required this.onCreateFolder,
     required this.onToggleSort,
     this.onImport,
-    required this.getFolderBaseName,
-    required this.getParentFolderPath,
-    required this.getChildFolderPaths,
-    required this.validateFolderName,
-    required this.getAllDescendantFolderPaths,
+    required this.manifestBridge,
   });
 
   @override
@@ -133,7 +128,8 @@ class _FileManagerViewState<T extends FileRecord>
   bool _showGridView = false;
 
   /// 缓存缩略图 Widget，避免勾选等操作触发 setState 时重新从磁盘读取
-  final Map<String, Widget> _thumbnailCache = {};
+  static const int _maxThumbnailCache = 200;
+  final LinkedHashMap<String, Widget> _thumbnailCache = LinkedHashMap();
 
   @override
   void initState() {
@@ -160,6 +156,17 @@ class _FileManagerViewState<T extends FileRecord>
   /// 通知缩略图缓存失效（在数据刷新后调用）
   void _invalidateThumbnailCache() {
     _thumbnailCache.clear();
+  }
+
+  /// 向缩略图缓存中添加条目，达到 [_maxThumbnailCache] 上限时淘汰最旧的条目。
+  Widget _putThumbnailCache(String key, Widget Function() builder) {
+    if (_thumbnailCache.containsKey(key)) {
+      return _thumbnailCache[key]!;
+    }
+    if (_thumbnailCache.length >= _maxThumbnailCache) {
+      _thumbnailCache.remove(_thumbnailCache.keys.first);
+    }
+    return _thumbnailCache.putIfAbsent(key, builder);
   }
 
   // ====================================================================
@@ -341,8 +348,8 @@ class _FileManagerViewState<T extends FileRecord>
                   key: const Key('fm_back_btn'),
                   icon: const Icon(Icons.arrow_back),
                   onPressed: () {
-                    _setCurrentFolder(
-                        widget.getParentFolderPath(_currentFolder));
+                    _setCurrentFolder(widget.manifestBridge
+                        .getParentFolderPath(_currentFolder));
                   },
                 )
               : null),
@@ -437,8 +444,8 @@ class _FileManagerViewState<T extends FileRecord>
     // 使用 widget.folders（来自 provider 的全量合并集）而非 getChildFolderPaths（只读 _folderCache）
     final subFolders = _getDirectSubFolders(_currentFolder, widget.folders);
     subFolders.sort((a, b) {
-      final nameA = widget.getFolderBaseName(a).toLowerCase();
-      final nameB = widget.getFolderBaseName(b).toLowerCase();
+      final nameA = widget.manifestBridge.getFolderBaseName(a).toLowerCase();
+      final nameB = widget.manifestBridge.getFolderBaseName(b).toLowerCase();
       return widget.sortConfig.order == SortOrder.descending
           ? nameB.compareTo(nameA)
           : nameA.compareTo(nameB);
@@ -481,7 +488,8 @@ class _FileManagerViewState<T extends FileRecord>
   }
 
   Widget _buildBackItem() {
-    final parentFolder = widget.getParentFolderPath(_currentFolder);
+    final parentFolder =
+        widget.manifestBridge.getParentFolderPath(_currentFolder);
     return Card(
       key: const Key('fm_back_item'),
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
@@ -496,12 +504,12 @@ class _FileManagerViewState<T extends FileRecord>
               Text(
                 parentFolder.isEmpty
                     ? '返回根目录'
-                    : '返回: ${widget.getFolderBaseName(parentFolder)}',
+                    : '返回: ${widget.manifestBridge.getFolderBaseName(parentFolder)}',
                 style: TextStyle(fontSize: 15, color: Colors.blue[700]),
               ),
               const Spacer(),
               Text(
-                widget.getFolderBaseName(_currentFolder),
+                widget.manifestBridge.getFolderBaseName(_currentFolder),
                 style: TextStyle(fontSize: 13, color: Colors.grey[500]),
               ),
             ],
@@ -521,8 +529,8 @@ class _FileManagerViewState<T extends FileRecord>
     // 使用 widget.folders（来自 provider 的全量合并集）
     final subFolders = _getDirectSubFolders(_currentFolder, widget.folders);
     subFolders.sort((a, b) {
-      final nameA = widget.getFolderBaseName(a).toLowerCase();
-      final nameB = widget.getFolderBaseName(b).toLowerCase();
+      final nameA = widget.manifestBridge.getFolderBaseName(a).toLowerCase();
+      final nameB = widget.manifestBridge.getFolderBaseName(b).toLowerCase();
       return widget.sortConfig.order == SortOrder.descending
           ? nameB.compareTo(nameA)
           : nameA.compareTo(nameB);
@@ -574,7 +582,8 @@ class _FileManagerViewState<T extends FileRecord>
   }
 
   Widget _buildGridBackItem() {
-    final parentFolder = widget.getParentFolderPath(_currentFolder);
+    final parentFolder =
+        widget.manifestBridge.getParentFolderPath(_currentFolder);
     return GestureDetector(
       key: const Key('fm_grid_back_item'),
       onTap: () => _setCurrentFolder(parentFolder),
@@ -631,7 +640,7 @@ class _FileManagerViewState<T extends FileRecord>
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Text(
-                    widget.getFolderBaseName(folderName),
+                    widget.manifestBridge.getFolderBaseName(folderName),
                     style: const TextStyle(
                         fontSize: 11, fontWeight: FontWeight.w500),
                     textAlign: TextAlign.center,
@@ -697,10 +706,8 @@ class _FileManagerViewState<T extends FileRecord>
                 borderRadius:
                     const BorderRadius.vertical(top: Radius.circular(7)),
                 child: hasThumbnailBuilder
-                    ? _thumbnailCache.putIfAbsent(
-                        file.id,
-                        () => widget.config.fileThumbnailBuilder!.call(file),
-                      )
+                    ? _putThumbnailCache(file.id,
+                        () => widget.config.fileThumbnailBuilder!.call(file))
                     : widget.config.fileIconBuilder(file),
               ),
             ),
@@ -788,7 +795,7 @@ class _FileManagerViewState<T extends FileRecord>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        widget.getFolderBaseName(folderName),
+                        widget.manifestBridge.getFolderBaseName(folderName),
                         style: const TextStyle(
                             fontWeight: FontWeight.w500, fontSize: 15),
                         maxLines: 1,
@@ -978,10 +985,8 @@ class _FileManagerViewState<T extends FileRecord>
                 ),
                 clipBehavior: hasThumbnailBuilder ? Clip.antiAlias : Clip.none,
                 child: hasThumbnailBuilder
-                    ? _thumbnailCache.putIfAbsent(
-                        file.id,
-                        () => widget.config.fileThumbnailBuilder!.call(file),
-                      )
+                    ? _putThumbnailCache(file.id,
+                        () => widget.config.fileThumbnailBuilder!.call(file))
                     : widget.config.fileIconBuilder(file),
               ),
               // File info
@@ -1442,7 +1447,8 @@ class _FileManagerViewState<T extends FileRecord>
             key: const Key('fm_create_folder_confirm_btn'),
             onPressed: () {
               final name = _folderNameController.text.trim();
-              if (name.isNotEmpty && widget.validateFolderName(name) == null) {
+              if (name.isNotEmpty &&
+                  widget.manifestBridge.validateFolderName(name) == null) {
                 Navigator.pop(ctx, name);
               }
             },
@@ -1453,7 +1459,7 @@ class _FileManagerViewState<T extends FileRecord>
     );
 
     if (result != null && result.isNotEmpty) {
-      final error = widget.validateFolderName(result);
+      final error = widget.manifestBridge.validateFolderName(result);
       if (error != null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1508,7 +1514,8 @@ class _FileManagerViewState<T extends FileRecord>
             key: const Key('fm_rename_folder_confirm_btn'),
             onPressed: () {
               final name = _renameController.text.trim();
-              if (name.isNotEmpty && widget.validateFolderName(name) == null) {
+              if (name.isNotEmpty &&
+                  widget.manifestBridge.validateFolderName(name) == null) {
                 Navigator.pop(ctx, name);
               }
             },
@@ -1520,7 +1527,7 @@ class _FileManagerViewState<T extends FileRecord>
     _renameController.clear();
 
     if (result != null && result.isNotEmpty && result != folderName) {
-      final error = widget.validateFolderName(result);
+      final error = widget.manifestBridge.validateFolderName(result);
       if (error != null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1534,7 +1541,8 @@ class _FileManagerViewState<T extends FileRecord>
       await widget.onRenameFolder(folderName, result);
       if (_currentFolder == folderName ||
           _currentFolder.startsWith('$folderName/')) {
-        final parentPath = widget.getParentFolderPath(folderName);
+        final parentPath =
+            widget.manifestBridge.getParentFolderPath(folderName);
         final newFullPath = parentPath.isEmpty ? result : '$parentPath/$result';
         if (_currentFolder == folderName) {
           _setCurrentFolder(newFullPath);
@@ -1547,8 +1555,8 @@ class _FileManagerViewState<T extends FileRecord>
   }
 
   Future<void> _moveFolder(String folderName) async {
-    final descendants =
-        widget.getAllDescendantFolderPaths(folderName, widget.folders);
+    final descendants = widget.manifestBridge
+        .getAllDescendantFolderPaths(folderName, widget.folders);
     final excluded = {folderName, ...descendants};
     final targetFolders =
         widget.folders.where((f) => !excluded.contains(f)).toSet();
@@ -1565,13 +1573,13 @@ class _FileManagerViewState<T extends FileRecord>
     if (!mounted) return;
     await widget.onMoveFolder(folderName, selectedFolder);
     if (_currentFolder == folderName) {
-      _setCurrentFolder(widget.getParentFolderPath(folderName));
+      _setCurrentFolder(widget.manifestBridge.getParentFolderPath(folderName));
     }
   }
 
   Future<void> _copyFolder(String folderName) async {
-    final descendants =
-        widget.getAllDescendantFolderPaths(folderName, widget.folders);
+    final descendants = widget.manifestBridge
+        .getAllDescendantFolderPaths(folderName, widget.folders);
     final excluded = {folderName, ...descendants};
     final targetFolders =
         widget.folders.where((f) => !excluded.contains(f)).toSet();
@@ -1592,8 +1600,8 @@ class _FileManagerViewState<T extends FileRecord>
   Future<void> _deleteFolder(String folderName) async {
     final directCount =
         widget.sortedRecords.where((r) => r.folder == folderName).length;
-    final descendants =
-        widget.getAllDescendantFolderPaths(folderName, widget.folders);
+    final descendants = widget.manifestBridge
+        .getAllDescendantFolderPaths(folderName, widget.folders);
     int subFileCount = 0;
     for (final desc in descendants) {
       subFileCount +=
@@ -1629,7 +1637,8 @@ class _FileManagerViewState<T extends FileRecord>
       if (!mounted) return;
       await widget.onDeleteFolder(folderName);
       if (_currentFolder == folderName) {
-        _setCurrentFolder(widget.getParentFolderPath(folderName));
+        _setCurrentFolder(
+            widget.manifestBridge.getParentFolderPath(folderName));
       }
     }
   }
@@ -1676,8 +1685,8 @@ class _FileManagerViewState<T extends FileRecord>
                   // Path bar + back button
                   _buildPickerPathBar(pickerCurrentPath, () {
                     setDialogState(() {
-                      pickerCurrentPath =
-                          widget.getParentFolderPath(pickerCurrentPath);
+                      pickerCurrentPath = widget.manifestBridge
+                          .getParentFolderPath(pickerCurrentPath);
                     });
                   }),
                   const Divider(height: 1),
@@ -1703,7 +1712,8 @@ class _FileManagerViewState<T extends FileRecord>
                           ),
                         ...subFolders.map((f) => ListTile(
                               leading: const Icon(Icons.folder_outlined),
-                              title: Text(widget.getFolderBaseName(f)),
+                              title: Text(
+                                  widget.manifestBridge.getFolderBaseName(f)),
                               dense: true,
                               onTap: () {
                                 setDialogState(() {
@@ -1734,8 +1744,8 @@ class _FileManagerViewState<T extends FileRecord>
                                     onSubmitted: (value) async {
                                       final name = value.trim();
                                       if (name.isEmpty) return;
-                                      final err =
-                                          widget.validateFolderName(name);
+                                      final err = widget.manifestBridge
+                                          .validateFolderName(name);
                                       if (err != null) {
                                         if (ctx.mounted) {
                                           ScaffoldMessenger.of(ctx)
@@ -1777,7 +1787,8 @@ class _FileManagerViewState<T extends FileRecord>
                                   onPressed: () async {
                                     final name = nameController.text.trim();
                                     if (name.isEmpty) return;
-                                    final err = widget.validateFolderName(name);
+                                    final err = widget.manifestBridge
+                                        .validateFolderName(name);
                                     if (err != null) {
                                       if (ctx.mounted) {
                                         ScaffoldMessenger.of(ctx).showSnackBar(
