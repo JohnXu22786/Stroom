@@ -66,6 +66,10 @@ class ManifestOperations<T extends FileRecord> {
     return dir;
   }
 
+  /// Web 上用 "storageDirName/fileName" 做前缀，与 Native 目录结构保持一致。
+  /// Native 上 tts_audio/<hash>.wav  ↔  Web 上 key = "tts_audio/<hash>.wav"
+  String _webKey(String fileName) => '$storageDirName/$fileName';
+
   // ---- Load / Persist ---------------------------------------------------
 
   Future<List<T>> loadRecords() async {
@@ -126,11 +130,12 @@ class ManifestOperations<T extends FileRecord> {
   Future<void> _deleteEntityFiles(T record) async {
     final refCount = _cache!.where((r) => _hashOf(r) == _hashOf(record)).length;
     if (refCount <= 1) {
+      final name = _storageNameOf(record);
       if (kIsWeb) {
-        await WebFileStore.delete(_storageNameOf(record));
+        await WebFileStore.delete(_webKey(name));
       } else {
         final dir = await _storageDir;
-        final file = File(p.join(dir, _storageNameOf(record)));
+        final file = File(p.join(dir, name));
         if (await file.exists()) await file.delete();
       }
       await onExtraDelete?.call(record);
@@ -167,11 +172,12 @@ class ManifestOperations<T extends FileRecord> {
       final allRecords = [...remaining, ...toDelete];
       final refCount = allRecords.where((x) => _hashOf(x) == _hashOf(r)).length;
       if (refCount <= 1) {
+        final name = _storageNameOf(r);
         if (kIsWeb) {
-          await WebFileStore.delete(_storageNameOf(r));
+          await WebFileStore.delete(_webKey(name));
         } else {
           final dir = await _storageDir;
-          final file = File(p.join(dir, _storageNameOf(r)));
+          final file = File(p.join(dir, name));
           if (await file.exists()) await file.delete();
         }
         await onExtraDelete?.call(r);
@@ -221,7 +227,7 @@ class ManifestOperations<T extends FileRecord> {
 
   Future<String> writeFile(String fileName, Uint8List data) async {
     if (kIsWeb) {
-      await WebFileStore.write(fileName, data);
+      await WebFileStore.write(_webKey(fileName), data);
       return fileName;
     }
     final dir = await _storageDir;
@@ -232,7 +238,7 @@ class ManifestOperations<T extends FileRecord> {
 
   Future<Uint8List?> readFile(String fileName) async {
     if (kIsWeb) {
-      return WebFileStore.read(fileName);
+      return WebFileStore.read(_webKey(fileName));
     }
     final dir = await _storageDir;
     final filePath = p.join(dir, fileName);
@@ -242,14 +248,14 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   Future<bool> fileExists(String fileName) async {
-    if (kIsWeb) return WebFileStore.exists(fileName);
+    if (kIsWeb) return WebFileStore.exists(_webKey(fileName));
     final dir = await _storageDir;
     return await File(p.join(dir, fileName)).exists();
   }
 
   Future<bool> deleteFile(String fileName) async {
     if (kIsWeb) {
-      await WebFileStore.delete(fileName);
+      await WebFileStore.delete(_webKey(fileName));
       return true;
     }
     final dir = await _storageDir;
@@ -270,8 +276,8 @@ class ManifestOperations<T extends FileRecord> {
   /// Get a file's absolute path on disk (Native only).
   Future<String?> readFilePath(String fileName) async {
     if (kIsWeb) {
-      final exists = await fileExists(fileName);
-      return exists ? fileName : null;
+      final exists = await WebFileStore.exists(_webKey(fileName));
+      return exists ? _webKey(fileName) : null;
     }
     final dir = await _storageDir;
     final filePath = p.join(dir, fileName);
