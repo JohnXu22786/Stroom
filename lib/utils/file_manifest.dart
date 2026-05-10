@@ -138,9 +138,9 @@ class FileManifest {
     storageDirName: 'tts_audio',
     fromMap: AudioRecord.fromMap,
     onExtraDelete: (r) async {
-      // Also delete the .txt sidecar file
+      // Also delete the .txt sidecar file (same prefix convention)
       if (kIsWeb) {
-        await WebFileStore.delete(r.textStoragePath);
+        await WebFileStore.delete('tts_audio/${r.textStoragePath}');
       } else {
         final appDocDir = await getApplicationDocumentsDirectory();
         final txtFile =
