@@ -118,7 +118,7 @@ class ImageManifest {
   static final _ops = ManifestOperations<ImageRecord>(
     manifestKey: 'image_manifest',
     storageDirName: 'pictures',
-    useAppSupportDir: true,
+    useAppSupportDir: false,
     fromMap: ImageRecord.fromMap,
   );
 
