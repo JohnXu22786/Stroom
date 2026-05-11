@@ -5,9 +5,11 @@ import 'package:dynamic_color/dynamic_color.dart';
 
 import 'pages/home_page.dart';
 import 'pages/camera_page.dart';
-import 'pages/gallery_page.dart';
+import 'pages/chat_page.dart';
+import 'pages/files_page.dart';
 import 'pages/settings_page.dart';
 import 'providers/theme_provider.dart';
+
 class Application extends ConsumerWidget {
   const Application({super.key});
 
@@ -77,7 +79,8 @@ class Application extends ConsumerWidget {
           routes: {
             '/home': (context) => const HomePage(),
             '/camera': (context) => const CameraPage(),
-            '/gallery': (context) => const GalleryPage(),
+            '/chat': (context) => const ChatPage(),
+            '/files': (context) => const FilesPage(),
             '/settings': (context) => const SettingsPage(),
           },
           debugShowCheckedModeBanner: false,

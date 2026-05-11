@@ -1,41 +1,34 @@
-import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
-import 'web_file_store.dart';
 import 'file_record.dart';
 import 'manifest_operations.dart';
 import 'folder_path_utils.dart';
 
 // ====================================================================
-// AudioRecord
+// ImageRecord
 // ====================================================================
 
-/// 音频文件记录（manifest 中的一条记录）
-class AudioRecord
-    with Hashable, Storable, Renamable<AudioRecord>, Movable<AudioRecord>
+/// 图片文件记录（manifest 中的一条记录）
+class ImageRecord
+    with Hashable, Storable, Renamable<ImageRecord>, Movable<ImageRecord>
     implements FileRecord {
   @override
   final String id;
   @override
-  final String name; // 用户设置的文件名
+  final String name; // 用户设置的文件名（不含扩展名）
   @override
-  final String hash; // 音频数据的 MD5 哈希值
+  final String hash; // 图片数据的 MD5 哈希值
   @override
-  final String format; // 文件格式（wav, mp3 等）
+  final String format; // 文件格式（jpg, png 等）
   @override
   final DateTime createdAt;
   @override
   final int size; // 文件大小（字节）
   @override
   final String folder; // 文件夹路径（空字符串表示根目录）
-  final String sourceText; // 源文本
-  final int duration; // 时长（秒）
 
-  AudioRecord({
+  ImageRecord({
     String? id,
     required this.name,
     required this.hash,
@@ -43,19 +36,12 @@ class AudioRecord
     required this.createdAt,
     required this.size,
     this.folder = '',
-    this.sourceText = '',
-    this.duration = 0,
-  }) : id = id ?? 'rec_${const Uuid().v4()}';
+  }) : id = id ?? 'img_${const Uuid().v4()}';
 
-  /// 音频文件的存储文件名（基于哈希）
+  /// 实体文件存储名
   String get storageFileName => '$hash.$format';
-
-  /// 音频文件的实际存储路径（相对于 tts_audio 目录）
   @override
   String get storagePath => '$hash.$format';
-
-  /// 文本文件的存储路径
-  String get textStoragePath => '$hash.txt';
 
   Map<String, dynamic> toMap() => {
         'id': id,
@@ -65,26 +51,22 @@ class AudioRecord
         'createdAt': createdAt.toIso8601String(),
         'size': size,
         'folder': folder,
-        'sourceText': sourceText,
-        'duration': duration,
       };
 
-  factory AudioRecord.fromMap(Map<String, dynamic> map) => AudioRecord(
-        id: (map['id'] as String?) ?? 'rec_${const Uuid().v4()}',
+  factory ImageRecord.fromMap(Map<String, dynamic> map) => ImageRecord(
+        id: map['id'] as String?,
         name: map['name'] as String? ?? '',
         hash: map['hash'] as String? ?? '',
-        format: map['format'] as String? ?? 'wav',
+        format: map['format'] as String? ?? 'jpg',
         createdAt: map['createdAt'] != null
             ? DateTime.parse(map['createdAt'] as String)
             : DateTime.now(),
         size: (map['size'] as num?)?.toInt() ?? 0,
         folder: map['folder'] as String? ?? '',
-        sourceText: map['sourceText'] as String? ?? '',
-        duration: (map['duration'] as num?)?.toInt() ?? 0,
       );
 
   @override
-  AudioRecord copyWithName(String name) => AudioRecord(
+  ImageRecord copyWithName(String name) => ImageRecord(
         id: id,
         name: name,
         hash: hash,
@@ -92,12 +74,10 @@ class AudioRecord
         createdAt: createdAt,
         size: size,
         folder: folder,
-        sourceText: sourceText,
-        duration: duration,
       );
 
   @override
-  AudioRecord copyWithFolder(String folder) => AudioRecord(
+  ImageRecord copyWithFolder(String folder) => ImageRecord(
         id: id,
         name: name,
         hash: hash,
@@ -105,82 +85,56 @@ class AudioRecord
         createdAt: createdAt,
         size: size,
         folder: folder,
-        sourceText: sourceText,
-        duration: duration,
       );
 
-  AudioRecord copyWith({
+  ImageRecord copyWith({
     String? name,
     String? folder,
-    String? sourceText,
     int? size,
-    int? duration,
   }) =>
-      AudioRecord(
+      ImageRecord(
         id: id,
         name: name ?? this.name,
         hash: hash,
         format: format,
         createdAt: createdAt,
         size: size ?? this.size,
-        duration: duration ?? this.duration,
         folder: folder ?? this.folder,
-        sourceText: sourceText ?? this.sourceText,
       );
 }
 
-/// 计算音频数据的 MD5 哈希值
-String computeAudioHash(Uint8List data) {
+/// 计算图片数据的 MD5 哈希值
+String computeImageHash(Uint8List data) {
   final digest = md5.convert(data);
   return digest.toString();
 }
 
 // ====================================================================
-// FileManifest — thin wrapper around ManifestOperations
+// ImageManifest — thin wrapper around ManifestOperations
 // ====================================================================
 
-/// Audio file manifest — delegates to [ManifestOperations].
-class FileManifest {
-  static final _ops = ManifestOperations<AudioRecord>(
-    manifestKey: 'audio_manifest',
-    storageDirName: 'tts_audio',
-    fromMap: AudioRecord.fromMap,
-    tableName: 'audio_records',
+/// Image file manifest — delegates to [ManifestOperations].
+class ImageManifest {
+  static final _ops = ManifestOperations<ImageRecord>(
+    manifestKey: 'image_manifest',
+    storageDirName: 'pictures',
+    useAppSupportDir: false,
+    fromMap: ImageRecord.fromMap,
+    tableName: 'image_records',
     toMap: (r) => r.toMap(),
-    onExtraDelete: (r) async {
-      // Also delete the .txt sidecar file (same prefix convention)
-      if (kIsWeb) {
-        await WebFileStore.delete('tts_audio/${r.textStoragePath}');
-      } else {
-        final appDocDir = await getApplicationDocumentsDirectory();
-        final txtFile =
-            File(path.join(appDocDir.path, 'tts_audio', r.textStoragePath));
-        if (await txtFile.exists()) await txtFile.delete();
-      }
-    },
   );
 
-  static Future<List<AudioRecord>> loadRecords() => _ops.loadRecords();
-  static Future<void> addRecord(AudioRecord record) => _ops.addRecord(record);
+  static Future<List<ImageRecord>> loadRecords() => _ops.loadRecords();
+  static Future<void> addRecord(ImageRecord record) => _ops.addRecord(record);
   static Future<void> deleteRecord(String id) => _ops.deleteRecord(id);
   static Future<void> deleteRecords(List<String> ids) =>
       _ops.deleteRecords(ids);
-  static Future<void> updateRecord(AudioRecord updated) =>
+  static Future<void> updateRecord(ImageRecord updated) =>
       _ops.updateRecord(updated);
   static Future<void> renameRecord(String id, String newName) =>
       _ops.renameRecord(id, newName);
   static Future<void> moveRecord(String id, String targetFolder) =>
       _ops.moveRecord(id, targetFolder);
-  static Future<AudioRecord?> getRecord(String id) => _ops.getRecord(id);
-
-  static Future<AudioRecord?> getRecordByHash(String hash) async {
-    final records = await _ops.loadRecords();
-    try {
-      return records.firstWhere((r) => r.hash == hash);
-    } catch (_) {
-      return null;
-    }
-  }
 
   static Future<String> writeFile(String fileName, Uint8List data) =>
       _ops.writeFile(fileName, data);
@@ -188,17 +142,11 @@ class FileManifest {
       _ops.readFile(fileName);
   static Future<String?> readFilePath(String fileName) =>
       _ops.readFilePath(fileName);
-  static Future<bool> fileExists(String fileName) => _ops.fileExists(fileName);
-  static Future<bool> deleteFile(String fileName) => _ops.deleteFile(fileName);
-  static Future<String> get ttsAudioDir => _ops.storageDirPath;
 
   // Folder management
-  static Future<List<String>> loadFolders() => _ops.loadFolders();
-  static Future<void> addFolder(String name) => _ops.addFolder(name);
-  static Future<void> addFolderPath(String pathName) =>
-      _ops.addFolderPath(pathName);
-  static Future<void> removeFolder(String name) => _ops.removeFolder(name);
   static Future<Set<String>> getAllFolders() => _ops.getAllFolders();
+  static Future<void> addFolder(String name) => _ops.addFolder(name);
+  static Future<void> removeFolder(String name) => _ops.removeFolder(name);
   static Future<void> removeFolderFromCache(String folderPath) =>
       _ops.removeFolderFromCache(folderPath);
   static void invalidateCache() => _ops.invalidateCache();
