@@ -77,6 +77,14 @@ String getMimeType(String format) {
       return 'audio/mpeg';
     case 'flac':
       return 'audio/flac';
+    case 'ogg':
+      return 'audio/ogg';
+    case 'aac':
+      return 'audio/aac';
+    case 'm4a':
+      return 'audio/mp4';
+    case 'wma':
+      return 'audio/x-ms-wma';
     case 'pcm':
       return 'audio/L16;rate=24000;channels=1';
     default:
@@ -95,6 +103,7 @@ String getMimeType(String format) {
 const _magicWav = [0x52, 0x49, 0x46, 0x46];
 const _magicMp3Id3 = [0x49, 0x44, 0x33];
 const _magicFlac = [0x66, 0x4C, 0x61, 0x43];
+const _magicOgg = [0x4F, 0x67, 0x67, 0x53];
 
 /// 检测音频数据的实际格式（基于文件头魔数）。
 ///
@@ -128,6 +137,15 @@ String detectAudioFormat(Uint8List data) {
       data[2] == _magicFlac[2] &&
       data[3] == _magicFlac[3]) {
     return 'flac';
+  }
+
+  // OGG: "OggS"
+  if (data.length >= 4 &&
+      data[0] == _magicOgg[0] &&
+      data[1] == _magicOgg[1] &&
+      data[2] == _magicOgg[2] &&
+      data[3] == _magicOgg[3]) {
+    return 'ogg';
   }
 
   // 无匹配 → 裸数据

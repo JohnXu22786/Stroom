@@ -17,8 +17,7 @@ class AudioPlayerAdapter {
       StreamController<Duration>.broadcast();
   final StreamController<Duration?> _durationCtrl =
       StreamController<Duration?>.broadcast();
-  final StreamController<void> _stateCtrl =
-      StreamController<void>.broadcast();
+  final StreamController<void> _stateCtrl = StreamController<void>.broadcast();
 
   StreamSubscription<Duration>? _posSub;
   StreamSubscription<Duration?>? _durSub;
@@ -39,6 +38,13 @@ class AudioPlayerAdapter {
   /// 状态变化触发流（用于 setState）
   Stream<void> get stateStream => _stateCtrl.stream;
 
+  /// Native 端通过文件路径加载
+  Future<void> loadFile(String filePath) async {
+    // 实际由 just_audio 的 AudioSource.file 实现
+    // 这里 stub 不需要实际实现
+    throw UnimplementedError('Stub should not be used directly');
+  }
+
   /// 从 URL 加载音频（data URI 或网络 URL）
   Future<void> load(String url) async {
     _disposePlayer();
@@ -46,7 +52,7 @@ class AudioPlayerAdapter {
     _setupListeners();
 
     try {
-      await _player!.setAudioSource(AudioSource.uri(Uri.parse(url)));
+      await _player!.setAudioSource(AudioSource.uri(Uri.file(url)));
       _stateCtrl.add(null);
     } catch (e) {
       // just_audio 会把 error 通过 stateStream 广播，我们在这里也抛一下
