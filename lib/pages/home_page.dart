@@ -8,6 +8,7 @@ import 'files_page.dart';
 import 'settings_page.dart';
 import 'camera_page.dart';
 import 'tts_create_page.dart';
+import 'video_capture_page.dart';
 
 /// 页面枚举，定义应用中的主要页面（不含加号按钮）
 enum AppPage {
@@ -128,6 +129,15 @@ class _HomePageState extends ConsumerState<HomePage>
             contentPadding: EdgeInsets.zero,
           ),
         ),
+        const PopupMenuItem(
+          value: 'capture_video',
+          child: ListTile(
+            leading: Icon(Icons.videocam, color: Colors.red),
+            title: Text('录像'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
       ],
     ).then((value) {
       if (!mounted) return;
@@ -144,6 +154,11 @@ class _HomePageState extends ConsumerState<HomePage>
         case 'capture':
           navigator.push(
             MaterialPageRoute(builder: (_) => const CameraPage()),
+          );
+          break;
+        case 'capture_video':
+          navigator.push(
+            MaterialPageRoute(builder: (_) => const VideoCapturePage()),
           );
           break;
       }
