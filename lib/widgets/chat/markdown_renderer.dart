@@ -31,132 +31,105 @@ class MarkdownRenderer extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final blocks = _parseBlocks(data);
-    final children = <InlineSpan>[];
+    final items = <Widget>[];
 
     for (int i = 0; i < blocks.length; i++) {
       final b = blocks[i];
-      // Add spacing between blocks (except before first)
+      // Add spacing between blocks (except before first and between list items)
       if (i > 0 &&
           b.type != _BlockType.listItem &&
           b.type != _BlockType.orderedItem) {
-        children.add(WidgetSpan(
-          child: SizedBox(
-              height: b.type == _BlockType.heading1
-                  ? 12
-                  : b.type == _BlockType.heading2
-                      ? 8
-                      : 6),
-        ));
+        final h = b.type == _BlockType.heading1
+            ? 12.0
+            : b.type == _BlockType.heading2
+                ? 8.0
+                : 6.0;
+        items.add(SizedBox(height: h));
       }
-      children.add(_buildBlockWidgetSpan(context, cs, b));
+      items.add(_buildBlockWidget(context, cs, b));
     }
 
-    if (children.isEmpty) {
-      return SizedBox.shrink();
-    }
+    if (items.isEmpty) return const SizedBox.shrink();
 
-    final widget = Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        RichText(
-          text: TextSpan(children: children),
-          textScaler: MediaQuery.textScalerOf(context),
-        ),
-      ],
+      children: items,
     );
-
-    return widget;
   }
 
-  WidgetSpan _buildBlockWidgetSpan(
-      BuildContext context, ColorScheme cs, _Block block) {
+  /// Build a single block as an independent widget.
+  /// Each block gets its own identity so Flutter can diff them cleanly
+  /// during streaming updates — no more WidgetSpan-within-RichText.
+  Widget _buildBlockWidget(BuildContext context, ColorScheme cs, _Block block) {
     switch (block.type) {
       case _BlockType.heading1:
-        return WidgetSpan(
-          child: _buildText(
-            context,
-            block,
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            color: cs.onSurface,
-          ),
+        return _buildText(
+          context,
+          block,
+          fontSize: 22,
+          fontWeight: FontWeight.w700,
+          color: cs.onSurface,
         );
       case _BlockType.heading2:
-        return WidgetSpan(
-          child: _buildText(
-            context,
-            block,
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-            color: cs.onSurface,
-          ),
+        return _buildText(
+          context,
+          block,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: cs.onSurface,
         );
       case _BlockType.heading3:
-        return WidgetSpan(
-          child: _buildText(
-            context,
-            block,
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: cs.onSurface,
-          ),
+        return _buildText(
+          context,
+          block,
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+          color: cs.onSurface,
         );
       case _BlockType.heading4:
-        return WidgetSpan(
-          child: _buildText(
-            context,
-            block,
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: cs.onSurface,
-          ),
+        return _buildText(
+          context,
+          block,
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+          color: cs.onSurface,
         );
       case _BlockType.paragraph:
       case _BlockType.listItem:
       case _BlockType.orderedItem:
-        return WidgetSpan(
-          child: _buildText(
-            context,
-            block,
-            fontSize: 14,
-            fontWeight: FontWeight.w400,
-            color: cs.onSurface,
-          ),
+        return _buildText(
+          context,
+          block,
+          fontSize: 14,
+          fontWeight: FontWeight.w400,
+          color: cs.onSurface,
         );
       case _BlockType.blockquote:
-        return WidgetSpan(
-          child: Container(
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            padding: const EdgeInsets.only(left: 16, top: 2, bottom: 2),
-            decoration: BoxDecoration(
-              border: Border(
-                left: BorderSide(color: cs.outlineVariant, width: 4),
-              ),
+        return Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.only(left: 16, top: 2, bottom: 2),
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(color: cs.outlineVariant, width: 4),
             ),
-            child: _buildText(
-              context,
-              block.copyWith(text: block.text),
-              fontSize: 14,
-              fontWeight: FontWeight.w400,
-              color: cs.onSurfaceVariant,
-            ),
+          ),
+          child: _buildText(
+            context,
+            block.copyWith(text: block.text),
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+            color: cs.onSurfaceVariant,
           ),
         );
       case _BlockType.codeBlock:
-        return WidgetSpan(
-          child: _buildCodeBlock(context, cs, block),
-        );
+        return _buildCodeBlock(context, cs, block);
       case _BlockType.horizontalRule:
-        return WidgetSpan(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Divider(color: cs.outlineVariant, height: 1),
-          ),
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Divider(color: cs.outlineVariant, height: 1),
         );
       case _BlockType.table:
-        return WidgetSpan(
-          child: _buildTable(context, cs, block),
-        );
+        return _buildTable(context, cs, block);
     }
   }
 
@@ -466,6 +439,10 @@ class MarkdownRenderer extends StatelessWidget {
   }
 
   /// Parse the markdown string into a list of blocks.
+  ///
+  /// Single newlines (no blank line between) merge consecutive paragraphs
+  /// into one block with `\n` preserved — tighter line spacing.
+  /// Blank lines separate paragraphs — wider spacing.
   List<_Block> _parseBlocks(String md) {
     final blocks = <_Block>[];
     final lines = md.split('\n');
@@ -474,6 +451,10 @@ class MarkdownRenderer extends StatelessWidget {
     final codeLines = <String>[];
     String? currentLanguage;
     int i = 0;
+
+    /// Tracks whether an empty line was seen since the last block.
+    /// When false, consecutive paragraph lines are merged into one block.
+    bool emptyLineSinceLastBlock = false;
 
     while (i < lines.length) {
       final line = lines[i];
@@ -488,6 +469,7 @@ class MarkdownRenderer extends StatelessWidget {
           i++;
           continue;
         } else {
+          emptyLineSinceLastBlock = true;
           blocks.add(_Block(
             type: _BlockType.codeBlock,
             text: codeLines.join('\n'),
@@ -510,6 +492,7 @@ class MarkdownRenderer extends StatelessWidget {
 
       // Empty line
       if (trimmed.isEmpty) {
+        emptyLineSinceLastBlock = true;
         orderedIndex = 0;
         i++;
         continue;
@@ -517,24 +500,28 @@ class MarkdownRenderer extends StatelessWidget {
 
       // Heading
       if (trimmed.startsWith('#### ')) {
+        emptyLineSinceLastBlock = true;
         blocks
             .add(_Block(type: _BlockType.heading4, text: trimmed.substring(5)));
         i++;
         continue;
       }
       if (trimmed.startsWith('### ')) {
+        emptyLineSinceLastBlock = true;
         blocks
             .add(_Block(type: _BlockType.heading3, text: trimmed.substring(4)));
         i++;
         continue;
       }
       if (trimmed.startsWith('## ')) {
+        emptyLineSinceLastBlock = true;
         blocks
             .add(_Block(type: _BlockType.heading2, text: trimmed.substring(3)));
         i++;
         continue;
       }
       if (trimmed.startsWith('# ')) {
+        emptyLineSinceLastBlock = true;
         blocks
             .add(_Block(type: _BlockType.heading1, text: trimmed.substring(2)));
         i++;
@@ -544,6 +531,7 @@ class MarkdownRenderer extends StatelessWidget {
       // Horizontal rule
       if (RegExp(r'^-{3,}$').hasMatch(trimmed) ||
           RegExp(r'^\*{3,}$').hasMatch(trimmed)) {
+        emptyLineSinceLastBlock = true;
         blocks.add(_Block(type: _BlockType.horizontalRule));
         i++;
         continue;
@@ -551,6 +539,7 @@ class MarkdownRenderer extends StatelessWidget {
 
       // Blockquote
       if (trimmed.startsWith('> ')) {
+        emptyLineSinceLastBlock = true;
         blocks.add(
             _Block(type: _BlockType.blockquote, text: trimmed.substring(2)));
         i++;
@@ -559,6 +548,7 @@ class MarkdownRenderer extends StatelessWidget {
 
       // Unordered list
       if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+        emptyLineSinceLastBlock = true;
         blocks
             .add(_Block(type: _BlockType.listItem, text: trimmed.substring(2)));
         orderedIndex = 0;
@@ -569,6 +559,7 @@ class MarkdownRenderer extends StatelessWidget {
       // Ordered list
       final orderedMatch = RegExp(r'^(\d+)\.\s').firstMatch(trimmed);
       if (orderedMatch != null) {
+        emptyLineSinceLastBlock = true;
         orderedIndex++;
         blocks.add(_Block(
           type: _BlockType.orderedItem,
@@ -582,6 +573,7 @@ class MarkdownRenderer extends StatelessWidget {
       // Table
       if (trimmed.contains('|') &&
           trimmed.replaceAll(RegExp(r'[^|]'), '').length >= 2) {
+        emptyLineSinceLastBlock = true;
         final tableLines = <String>[trimmed];
         i++;
         while (i < lines.length) {
@@ -596,7 +588,21 @@ class MarkdownRenderer extends StatelessWidget {
       }
 
       // Paragraph (default)
-      blocks.add(_Block(type: _BlockType.paragraph, text: trimmed));
+      // Merge with previous paragraph if no empty line separated them.
+      // This keeps single-newline-separated lines in the same block
+      // (tighter line-height spacing) vs blank-line-separated paragraphs.
+      if (!emptyLineSinceLastBlock &&
+          blocks.isNotEmpty &&
+          blocks.last.type == _BlockType.paragraph) {
+        final last = blocks.last;
+        blocks[blocks.length - 1] = _Block(
+          type: _BlockType.paragraph,
+          text: '${last.text}\n$trimmed',
+        );
+      } else {
+        blocks.add(_Block(type: _BlockType.paragraph, text: trimmed));
+      }
+      emptyLineSinceLastBlock = false;
       orderedIndex = 0;
       i++;
     }
