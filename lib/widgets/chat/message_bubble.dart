@@ -95,13 +95,14 @@ class MessageBubble extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              // Markdown body — serif font for AI responses
+              // AI response body — serif font, rendered via markdown
+              // (same renderer during streaming and after completion)
               DefaultTextStyle(
                 style: TextStyle(
                   fontFamily: 'serif',
                   fontSize: 14,
                   color: cs.onSurface,
-                  height: 1.6,
+                  height: 1.7,
                 ),
                 child: MarkdownRenderer(
                   data: message.content,
