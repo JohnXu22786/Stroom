@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 /// Bottom input bar inspired by Claude's chat input.
 ///
 /// Claude style:
-/// - Container with rounded-[20px], border, multi-layer shadow
-/// - bg-bg-000 (surface)
+/// - Container with rounded-[20px], multi-layer shadow system
+/// - bg-bg-000 (surfaceContainerLow)
 /// - Inner: TextField with no border, maxLines: null, minLines: 1
-/// - Right side: send button
+/// - Right side: send button (filled circle)
 /// - Placeholder: "输入消息..."
 ///
 /// Behavior:
@@ -32,12 +32,12 @@ class _ChatInputBarState extends State<ChatInputBar> {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   bool _hasText = false;
+  bool _isHovered = false;
 
   @override
   void initState() {
     super.initState();
     _controller.addListener(_onTextChanged);
-    // Auto-focus
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focusNode.requestFocus();
     });
@@ -65,86 +65,139 @@ class _ChatInputBarState extends State<ChatInputBar> {
     _controller.clear();
   }
 
+  /// Build multi-layer shadows matching Claude's approach.
+  ///
+  /// Base state:
+  ///   - 0 0.25rem 1.25rem hsl(black/3.5%)
+  ///   - 0 0 0 0.5px outline
+  /// Hover: intensified shadow + outline
+  /// Focus-within (via isFocused): even stronger shadow
+  List<BoxShadow> _buildShadows(ColorScheme cs, bool isFocused) {
+    if (isFocused) {
+      return [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.08),
+          blurRadius: 28,
+          offset: const Offset(0, 8),
+        ),
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.10),
+          blurRadius: 0,
+          spreadRadius: 1,
+        ),
+      ];
+    }
+
+    if (_isHovered) {
+      return [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.06),
+          blurRadius: 24,
+          offset: const Offset(0, 6),
+        ),
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.08),
+          blurRadius: 0,
+          spreadRadius: 0.75,
+        ),
+      ];
+    }
+
+    return [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.035),
+        blurRadius: 20,
+        offset: const Offset(0, 4),
+      ),
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.05),
+        blurRadius: 0,
+        spreadRadius: 0.5,
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isFocused = _focusNode.hasFocus;
+    final canSend = _hasText && !widget.isLoading;
 
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cs.outlineVariant, width: 0.5),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.035),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+        margin: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: _isHovered || isFocused ? cs.outline : cs.outlineVariant,
+            width: 0.5,
           ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _controller,
-              focusNode: _focusNode,
-              maxLines: null,
-              minLines: 1,
-              textInputAction: TextInputAction.send,
-              keyboardType: TextInputType.multiline,
-              style: TextStyle(
-                fontSize: 14,
-                color: cs.onSurface,
-              ),
-              decoration: InputDecoration(
-                hintText: '输入消息...',
-                hintStyle: TextStyle(
-                  color: cs.onSurfaceVariant,
+          boxShadow: _buildShadows(cs, isFocused),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _controller,
+                focusNode: _focusNode,
+                maxLines: null,
+                minLines: 1,
+                textInputAction: TextInputAction.send,
+                keyboardType: TextInputType.multiline,
+                style: TextStyle(
                   fontSize: 14,
+                  color: cs.onSurface,
                 ),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+                decoration: InputDecoration(
+                  hintText: '输入消息...',
+                  hintStyle: TextStyle(
+                    color: cs.onSurfaceVariant,
+                    fontSize: 14,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  isDense: true,
                 ),
-                isDense: true,
+                onSubmitted: (_) => _send(),
               ),
-              // Enter → 发送（通过 textInputAction.send + onSubmitted）
-              // Shift+Enter → 换行（由 TextField 原生处理）
-              onSubmitted: (_) => _send(),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 8, bottom: 8),
-            child: SizedBox(
-              width: 36,
-              height: 36,
-              child: IconButton(
-                icon: Icon(
-                  Icons.arrow_upward_rounded,
-                  size: 20,
-                ),
-                tooltip: '发送',
-                onPressed: _hasText && !widget.isLoading ? _send : null,
-                style: IconButton.styleFrom(
-                  backgroundColor: _hasText && !widget.isLoading
-                      ? cs.primary
-                      : cs.surfaceContainerHighest,
-                  foregroundColor: _hasText && !widget.isLoading
-                      ? cs.onPrimary
-                      : cs.onSurfaceVariant,
-                  disabledBackgroundColor: cs.surfaceContainerHighest,
-                  disabledForegroundColor: cs.onSurfaceVariant,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
+            Padding(
+              padding: const EdgeInsets.only(right: 8, bottom: 8),
+              child: SizedBox(
+                width: 36,
+                height: 36,
+                child: IconButton(
+                  icon: Icon(
+                    Icons.arrow_upward_rounded,
+                    size: 20,
+                  ),
+                  tooltip: '发送',
+                  onPressed: canSend ? _send : null,
+                  style: IconButton.styleFrom(
+                    backgroundColor:
+                        canSend ? cs.primary : cs.surfaceContainerHighest,
+                    foregroundColor:
+                        canSend ? cs.onPrimary : cs.onSurfaceVariant,
+                    disabledBackgroundColor: cs.surfaceContainerHighest,
+                    disabledForegroundColor: cs.onSurfaceVariant,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

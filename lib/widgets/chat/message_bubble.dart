@@ -6,10 +6,10 @@ import 'markdown_renderer.dart';
 /// Message bubble that handles both user and AI messages.
 ///
 /// **User message** (right-aligned):
-/// Container with bg surfaceContainerHighest, rounded-xl, max-width 85%.
+/// Rounded container with subtle background, max-width 85%.
 ///
 /// **AI message** (left-aligned):
-/// Row: [AvatarWidget('S')] + [header "Stroom" + Markdown body + action buttons]
+/// Row: [AvatarWidget('S')] + [header "Stroom" + Markdown body (serif) + action buttons]
 class MessageBubble extends StatelessWidget {
   final ChatMessage message;
   final VoidCallback? onRetry;
@@ -29,47 +29,42 @@ class MessageBubble extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child:
           _isUser ? _buildUserBubble(context, cs) : _buildAiBubble(context, cs),
     );
   }
 
   // ── User message bubble ──────────────────────────────────────────────
+  // Claude.ai style: no bubble/background, plain right-aligned text
   Widget _buildUserBubble(BuildContext context, ColorScheme cs) {
     return Align(
       alignment: Alignment.centerRight,
-      child: ConstrainedBox(
-        constraints:
-            BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.85),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: cs.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                message.content,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: cs.onSurface,
-                  height: 1.5,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 48, bottom: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SelectableText(
+              message.content,
+              style: TextStyle(
+                fontSize: 14,
+                color: cs.onSurface,
+                height: 1.6,
+              ),
+              textAlign: TextAlign.right,
+            ),
+            if (message.isStreaming)
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               ),
-              if (message.isStreaming)
-                const Padding(
-                  padding: EdgeInsets.only(top: 4),
-                  child: SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-            ],
-          ),
+          ],
         ),
       ),
     );
@@ -81,31 +76,40 @@ class MessageBubble extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: AvatarWidget(name: 'S', size: 32),
+          padding: const EdgeInsets.only(top: 2),
+          child: AvatarWidget(name: 'S', size: 28),
         ),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // "Stroom" label header
+              // "Stroom" label header — smaller and lighter
               Text(
                 'Stroom',
                 style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: cs.onSurfaceVariant,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.65),
+                  letterSpacing: 0.2,
                 ),
               ),
               const SizedBox(height: 4),
-              // Markdown body
-              MarkdownRenderer(
-                data: message.content,
-                selectable: true,
+              // Markdown body — serif font for AI responses
+              DefaultTextStyle(
+                style: TextStyle(
+                  fontFamily: 'serif',
+                  fontSize: 14,
+                  color: cs.onSurface,
+                  height: 1.6,
+                ),
+                child: MarkdownRenderer(
+                  data: message.content,
+                  selectable: true,
+                ),
               ),
+              const SizedBox(height: 6),
               // Action buttons (copy, retry) and streaming indicator
-              const SizedBox(height: 4),
               _buildActionsRow(context, cs),
             ],
           ),
@@ -116,34 +120,58 @@ class MessageBubble extends StatelessWidget {
 
   Widget _buildActionsRow(BuildContext context, ColorScheme cs) {
     if (message.isStreaming) {
-      return Row(
-        children: [
-          _TypingIndicator(color: cs.primary),
-        ],
-      );
+      return _TypingIndicator(color: cs.primary);
     }
 
-    return Row(
-      children: [
-        if (onCopy != null)
-          _ActionButton(
-            icon: Icons.content_copy,
-            tooltip: '复制',
-            onTap: onCopy,
-          ),
-        const SizedBox(width: 4),
-        if (onRetry != null)
-          _ActionButton(
-            icon: Icons.refresh,
-            tooltip: '重试',
-            onTap: onRetry,
-          ),
-      ],
+    return _HoverActions(
+      child: Row(
+        children: [
+          if (onCopy != null)
+            _ActionButton(
+              icon: Icons.content_copy,
+              tooltip: '复制',
+              onTap: onCopy,
+            ),
+          const SizedBox(width: 2),
+          if (onRetry != null)
+            _ActionButton(
+              icon: Icons.refresh,
+              tooltip: '重试',
+              onTap: onRetry,
+            ),
+        ],
+      ),
     );
   }
 }
 
-/// Small icon button used in message action bar.
+/// Wraps a child to only show on hover (Claude.ai style).
+class _HoverActions extends StatefulWidget {
+  final Widget child;
+  const _HoverActions({required this.child});
+
+  @override
+  State<_HoverActions> createState() => _HoverActionsState();
+}
+
+class _HoverActionsState extends State<_HoverActions> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedOpacity(
+        opacity: _hovered ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 150),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+/// Subtle small icon button used in message action bar.
 class _ActionButton extends StatelessWidget {
   final IconData icon;
   final String tooltip;
@@ -159,24 +187,25 @@ class _ActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return SizedBox(
-      width: 28,
-      height: 28,
+      width: 24,
+      height: 24,
       child: IconButton(
-        icon: Icon(icon, size: 16),
+        icon: Icon(icon, size: 14),
         tooltip: tooltip,
         onPressed: onTap,
         padding: EdgeInsets.zero,
-        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+        constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
         style: IconButton.styleFrom(
-          foregroundColor: cs.onSurfaceVariant,
-          disabledForegroundColor: cs.onSurfaceVariant.withValues(alpha: 0.3),
+          foregroundColor: cs.onSurfaceVariant.withValues(alpha: 0.45),
+          disabledForegroundColor: cs.onSurfaceVariant.withValues(alpha: 0.15),
+          visualDensity: VisualDensity.compact,
         ),
       ),
     );
   }
 }
 
-/// Animated typing indicator (three bouncing dots).
+/// Three-dot bouncing typing indicator.
 class _TypingIndicator extends StatefulWidget {
   final Color color;
 
@@ -213,17 +242,21 @@ class _TypingIndicatorState extends State<_TypingIndicator>
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: List.generate(3, (i) {
-            final delay = i * 0.15;
-            final t = (_controller.value - delay).clamp(0.0, 1.0);
-            final size = 6.0 + 4.0 * (t < 0.5 ? t * 2 : (1.0 - t) * 2);
+            // Stagger each dot by 1/3 of the animation cycle
+            final t = (_controller.value + i / 3) % 1.0;
+            // Triangle wave: bounce scale from 0.4 → 1.0 → 0.4
+            final scale = 0.4 + 0.6 * (t < 0.5 ? t * 2 : (1.0 - t) * 2);
             return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Container(
-                width: size,
-                height: size,
-                decoration: BoxDecoration(
-                  color: widget.color,
-                  shape: BoxShape.circle,
+              padding: const EdgeInsets.symmetric(horizontal: 3),
+              child: Transform.scale(
+                scale: scale,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: widget.color.withValues(alpha: 0.7),
+                    shape: BoxShape.circle,
+                  ),
                 ),
               ),
             );

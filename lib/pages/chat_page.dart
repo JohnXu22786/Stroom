@@ -18,11 +18,13 @@ import '../widgets/chat/message_bubble.dart';
 /// │                             │
 /// │    MessageBubble (user)     │
 /// │    MessageBubble (assistant)│
-/// │    ...                      │  ← ListView, 自动滚底
+/// │    ...                      │  ← ListView, 自动滚底, 细滚动条
 /// │                             │
 /// ├─────────────────────────────┤
 /// │       ChatInputBar          │  ← 输入 + 发送
 /// └─────────────────────────────┘
+///
+/// Empty state mimics Claude: heading ("你好！"), subtitle, suggestion chips.
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({super.key});
 
@@ -32,6 +34,13 @@ class ChatPage extends ConsumerStatefulWidget {
 
 class _ChatPageState extends ConsumerState<ChatPage> {
   final ScrollController _scrollController = ScrollController();
+
+  static const List<String> _suggestions = [
+    '写一首诗',
+    '解释量子计算',
+    '帮我调试代码',
+    '写一个故事',
+  ];
 
   @override
   void dispose() {
@@ -152,97 +161,146 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         messages.any((m) => m.role == 'assistant' && m.isStreaming);
 
     return SafeArea(
-      child: Column(
-        children: [
-          // ── 顶部标题栏 ──
-          ChatHeader(
-            title: title,
-            onMenuTap: null,
-            actions: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.add),
-                  tooltip: '新对话',
-                  onPressed: _newConversation,
-                ),
-              ],
+      child: Container(
+        // Page body background: one level below cs.surface → subtle layering
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        child: Column(
+          children: [
+            // ── 顶部标题栏 ──
+            ChatHeader(
+              title: title,
+              onMenuTap: null,
+              actions: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    tooltip: '新对话',
+                    onPressed: _newConversation,
+                  ),
+                ],
+              ),
             ),
-          ),
 
-          // ── 消息列表 ──
-          Expanded(
-            child: messages.isEmpty
-                ? _buildEmptyState(context)
-                : _buildMessageList(messages),
-          ),
+            // ── 消息列表 ──
+            Expanded(
+              child: messages.isEmpty
+                  ? _buildEmptyState(context)
+                  : _buildMessageList(messages),
+            ),
 
-          // ── 底部输入栏 ──
-          ChatInputBar(
-            onSend: _sendMessage,
-            isLoading: isStreaming,
-          ),
-        ],
+            // ── 底部输入栏 ──
+            ChatInputBar(
+              onSend: _sendMessage,
+              isLoading: isStreaming,
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  /// 空状态提示
+  /// Claude-inspired empty state: heading + subtitle + suggestion chips.
   Widget _buildEmptyState(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.chat_bubble_outline_rounded,
-            size: 48,
-            color: cs.onSurfaceVariant.withValues(alpha: 0.4),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            '开始一段新对话',
-            style: TextStyle(
-              fontSize: 16,
-              color: cs.onSurfaceVariant,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 48),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              '你好！',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w600,
+                color: cs.onSurface,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '在下方输入你的问题',
-            style: TextStyle(
-              fontSize: 13,
-              color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+            const SizedBox(height: 12),
+            Text(
+              '有什么我可以帮助你的吗？',
+              style: TextStyle(
+                fontSize: 15,
+                color: cs.onSurfaceVariant,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 40),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              alignment: WrapAlignment.center,
+              children: _suggestions.map((suggestion) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: InkWell(
+                    onTap: () => _sendMessage(suggestion),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: cs.surface,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: cs.outlineVariant,
+                          width: 0.5,
+                        ),
+                      ),
+                      child: Text(
+                        suggestion,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  /// 消息列表
+  /// 消息列表 — thin scrollbar + increased padding.
   Widget _buildMessageList(List<ChatMessage> messages) {
     // 监听消息变化自动滚底
     ref.listen(chatProvider, (_, next) {
       if (next.isNotEmpty) _scrollToBottom();
     });
 
-    return ListView.builder(
+    return RawScrollbar(
       controller: _scrollController,
-      padding: const EdgeInsets.only(top: 8, bottom: 8),
-      itemCount: messages.length,
-      itemBuilder: (context, index) {
-        final msg = messages[index];
-        final isLastAssistant =
-            msg.role == 'assistant' && index == messages.length - 1;
-        return MessageBubble(
-          message: msg,
-          onCopy:
-              msg.content.isNotEmpty ? () => _copyMessage(msg.content) : null,
-          onRetry: isLastAssistant && !msg.isStreaming ? _retryLast : null,
-        );
-      },
+      thumbVisibility: true,
+      thickness: 4,
+      radius: const Radius.circular(2),
+      child: ListView.builder(
+        controller: _scrollController,
+        padding: const EdgeInsets.only(
+          top: 16,
+          bottom: 16,
+          left: 12,
+          right: 12,
+        ),
+        itemCount: messages.length,
+        itemBuilder: (context, index) {
+          final msg = messages[index];
+          final isLastAssistant =
+              msg.role == 'assistant' && index == messages.length - 1;
+          return MessageBubble(
+            message: msg,
+            onCopy:
+                msg.content.isNotEmpty ? () => _copyMessage(msg.content) : null,
+            onRetry: isLastAssistant && !msg.isStreaming ? _retryLast : null,
+          );
+        },
+      ),
     );
   }
 }
