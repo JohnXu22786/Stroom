@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// A simple custom Markdown renderer.
 ///
@@ -59,7 +60,7 @@ class MarkdownRenderer extends StatelessWidget {
       children: [
         RichText(
           text: TextSpan(children: children),
-          textScaleFactor: MediaQuery.textScaleFactorOf(context),
+          textScaler: MediaQuery.textScalerOf(context),
         ),
       ],
     );
@@ -203,23 +204,80 @@ class MarkdownRenderer extends StatelessWidget {
   }
 
   Widget _buildCodeBlock(BuildContext context, ColorScheme cs, _Block block) {
+    final code = block.text;
+    final language = block.language;
+
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.symmetric(vertical: 6),
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: cs.outlineVariant, width: 0.5),
       ),
-      child: SelectableText(
-        block.text,
-        style: TextStyle(
-          fontFamily: 'monospace',
-          fontSize: 13,
-          color: cs.onSurface,
-          height: 1.5,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header bar with language name and copy button
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.8),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(8),
+                topRight: Radius.circular(8),
+              ),
+            ),
+            child: Row(
+              children: [
+                if (language != null && language.isNotEmpty)
+                  Text(
+                    language,
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                const Spacer(),
+                Tooltip(
+                  message: '复制代码',
+                  child: GestureDetector(
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: code));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('已复制'),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                    },
+                    child: Icon(
+                      Icons.copy,
+                      size: 14,
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Code content
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: SelectableText(
+              code,
+              style: TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 13,
+                color: cs.onSurface,
+                height: 1.5,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -414,6 +472,7 @@ class MarkdownRenderer extends StatelessWidget {
     int orderedIndex = 0;
     bool inCodeBlock = false;
     final codeLines = <String>[];
+    String? currentLanguage;
     int i = 0;
 
     while (i < lines.length) {
@@ -424,12 +483,15 @@ class MarkdownRenderer extends StatelessWidget {
         if (!inCodeBlock) {
           inCodeBlock = true;
           codeLines.clear();
+          final tag = line.trimLeft().substring(3).trim();
+          currentLanguage = tag.isEmpty ? null : tag;
           i++;
           continue;
         } else {
           blocks.add(_Block(
             type: _BlockType.codeBlock,
             text: codeLines.join('\n'),
+            language: currentLanguage,
           ));
           inCodeBlock = false;
           codeLines.clear();
@@ -544,6 +606,7 @@ class MarkdownRenderer extends StatelessWidget {
       blocks.add(_Block(
         type: _BlockType.codeBlock,
         text: codeLines.join('\n'),
+        language: currentLanguage,
       ));
     }
 
@@ -569,13 +632,15 @@ class _Block {
   final _BlockType type;
   final String text;
   final int index;
+  final String? language;
 
   const _Block({
     required this.type,
     this.text = '',
     this.index = 0,
+    this.language,
   });
 
-  _Block copyWith({String? text}) =>
-      _Block(type: type, text: text ?? this.text, index: index);
+  _Block copyWith({String? text}) => _Block(
+      type: type, text: text ?? this.text, index: index, language: language);
 }
