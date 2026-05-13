@@ -1,8 +1,6 @@
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path/path.dart' as p;
-import 'package:dio/dio.dart' show CancelToken;
+import 'package:dio/dio.dart';
 import '../config/default_rules.dart';
 import '../models/media_resource.dart';
 import 'm3u8_parser.dart';
@@ -265,20 +263,23 @@ class SniffingEngine {
     String url,
     Map<String, String> headers,
   ) async {
-    final client = HttpClient();
+    final dio = Dio();
     try {
-      final request = await client.headUrl(Uri.parse(url));
-      for (final entry in headers.entries) {
-        request.headers.set(entry.key, entry.value);
-      }
-      final response = await request.close();
+      final response = await dio.head(
+        url,
+        options: Options(
+          headers: headers,
+          receiveTimeout: const Duration(seconds: 10),
+          sendTimeout: const Duration(seconds: 10),
+        ),
+      );
       final contentType = response.headers.value('content-type');
       final contentLengthStr = response.headers.value('content-length');
       final length =
           contentLengthStr != null ? int.tryParse(contentLengthStr) : null;
       return (contentType, length);
     } finally {
-      client.close();
+      dio.close();
     }
   }
 
@@ -287,22 +288,26 @@ class SniffingEngine {
     String url,
     Map<String, String> headers,
   ) async {
-    final client = HttpClient();
+    final dio = Dio();
     try {
-      final request = await client.getUrl(Uri.parse(url));
-      for (final entry in headers.entries) {
-        request.headers.set(entry.key, entry.value);
-      }
-      final response = await request.close();
+      final response = await dio.get(
+        url,
+        options: Options(
+          headers: headers,
+          receiveTimeout: const Duration(seconds: 15),
+          sendTimeout: const Duration(seconds: 15),
+        ),
+      );
       if (response.statusCode != 200) {
-        throw HttpException(
-          'HTTP ${response.statusCode}',
-          uri: Uri.parse(url),
+        throw DioException(
+          requestOptions: response.requestOptions,
+          response: response,
+          message: 'HTTP ${response.statusCode}',
         );
       }
-      return await response.transform(utf8.decoder).join();
+      return response.data is String ? response.data as String : '';
     } finally {
-      client.close();
+      dio.close();
     }
   }
 

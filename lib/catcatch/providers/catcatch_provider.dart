@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+import '../../services/storage_service.dart';
 import 'package:uuid/uuid.dart';
 import 'package:dio/dio.dart' show CancelToken;
 import '../models/catcatch_task.dart';
@@ -449,10 +449,14 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   /// 持久化文件路径
   Future<File> _tasksFile() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final catcatchDir = Directory(p.join(dir.path, 'catcatch'));
-    if (!await catcatchDir.exists()) {
-      await catcatchDir.create(recursive: true);
+    final dirPath = await AppStorage.directory;
+    final catcatchDir = Directory(p.join(dirPath, 'catcatch'));
+    try {
+      if (!await catcatchDir.exists()) {
+        await catcatchDir.create(recursive: true);
+      }
+    } catch (_) {
+      // Directory creation may fail on some platforms (e.g. web)
     }
     return File(p.join(catcatchDir.path, 'tasks.json'));
   }

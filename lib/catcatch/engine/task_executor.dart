@@ -1,15 +1,16 @@
 import 'dart:async';
-import 'dart:convert' show utf8;
 import 'dart:io';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import 'package:dio/dio.dart' show CancelToken;
+import '../../services/storage_service.dart';
+import '../../utils/retry_helper.dart';
+import 'package:dio/dio.dart';
 import '../config/default_rules.dart';
 import '../models/catcatch_task.dart';
 import '../models/media_resource.dart';
 import 'sniffing_engine.dart';
 import 'm3u8_parser.dart';
+import 'webview_sniffer.dart';
 import 'mpd_parser.dart';
 import 'download_manager.dart';
 import 'ffmpeg_converter.dart';
@@ -37,30 +38,54 @@ class TaskExecutor {
     required void Function(CatCatchTask updated) onUpdate,
     CancelToken? cancelToken,
   }) async {
-    final stepIndex = StepType.values.indexOf(fromStep);
-    if (stepIndex < 0) throw ArgumentError('Unknown step type: $fromStep');
-    final newSteps = List<StepStatus>.from(task.steps);
-    for (int i = stepIndex; i < newSteps.length; i++) {
-      newSteps[i] = StepStatus.pending(newSteps[i].type);
+    try {
+      final stepIndex = StepType.values.indexOf(fromStep);
+      if (stepIndex < 0) throw ArgumentError('Unknown step type: $fromStep');
+      final newSteps = List<StepStatus>.from(task.steps);
+      for (int i = stepIndex; i < newSteps.length; i++) {
+        newSteps[i] = StepStatus.pending(newSteps[i].type);
+      }
+      final updatedTask = task.copyWith(
+        status: TaskStatus.running,
+        steps: newSteps,
+        progress: stepIndex > 0
+            ? ((stepIndex * 100 ~/ StepType.values.length).clamp(0, 100))
+            : 0,
+        clearError: true,
+      );
+      onUpdate(updatedTask);
+      return await _executeSteps(
+          task: updatedTask,
+          startFromIndex: stepIndex,
+          onUpdate: onUpdate,
+          cancelToken: cancelToken);
+    } catch (e) {
+      if (e is UnsupportedError) {
+        throw Exception(
+          '此功能需要原生平台支持 (Android/iOS/Windows/Mac/Linux)，Web 平台不可用',
+        );
+      }
+      rethrow;
     }
-    final updatedTask = task.copyWith(
-      status: TaskStatus.running,
-      steps: newSteps,
-      progress: stepIndex > 0
-          ? ((stepIndex * 100 ~/ StepType.values.length).clamp(0, 100))
-          : 0,
-      clearError: true,
-    );
-    onUpdate(updatedTask);
-    return _executeSteps(
-        task: updatedTask,
-        startFromIndex: stepIndex,
-        onUpdate: onUpdate,
-        cancelToken: cancelToken);
   }
 
   /// 从指定索引执行步骤
   static Future<String?> _executeSteps({
+    required CatCatchTask task,
+    required int startFromIndex,
+    required void Function(CatCatchTask updated) onUpdate,
+    CancelToken? cancelToken,
+  }) async {
+    return _executeStepsInternal(
+      task: task,
+      startFromIndex: startFromIndex,
+      onUpdate: onUpdate,
+      cancelToken: cancelToken,
+    );
+  }
+
+  /// 从指定索引执行步骤 (internal)
+  static Future<String?> _executeStepsInternal({
     required CatCatchTask task,
     required int startFromIndex,
     required void Function(CatCatchTask updated) onUpdate,
@@ -181,16 +206,62 @@ class TaskExecutor {
   }
 
   /// Step 0-1: 获取并分析
-  static Future<List<MediaResource>> _executeFetchAndAnalyze(
-      {required CatCatchTask task,
-      required List<StepStatus> steps,
-      required void Function(CatCatchTask) onUpdate,
-      CancelToken? cancelToken}) async {
-    final resources = await SniffingEngine.analyzeUrl(task.url,
+  static Future<List<MediaResource>> _executeFetchAndAnalyze({
+    required CatCatchTask task,
+    required List<StepStatus> steps,
+    required void Function(CatCatchTask) onUpdate,
+    CancelToken? cancelToken,
+  }) async {
+    // Step 1: Direct HTTP sniffing
+    var resources = await SniffingEngine.analyzeUrl(task.url,
         cancelToken: cancelToken, onProgress: (step, progress) {
       _markStep(steps, 0, running: true, progress: progress);
       onUpdate(task.copyWith(steps: steps, progress: (progress * 20 ~/ 100)));
     });
+
+    // Step 2: Only launch WebView if we got 0 resources, or 1 resource that's NOT a playable media
+    final needsWebView = resources.isEmpty ||
+        (resources.length == 1 &&
+            resources.first.ext.isNotEmpty &&
+            !SniffingEngine.isMediaExtension(resources.first.ext));
+    if (needsWebView && !(cancelToken?.isCancelled ?? false)) {
+      _markStep(steps, 0, running: true, progress: 50);
+      onUpdate(task.copyWith(steps: steps, progress: 20));
+
+      debugPrint(
+          '[TaskExecutor] Direct sniffing found only ${resources.length} resource(s), '
+          'launching WebView background sniffer');
+
+      try {
+        final webViewResources = await WebViewSniffer.sniff(
+          url: task.url,
+          timeout: const Duration(seconds: 30),
+          cancelToken: cancelToken,
+          onProgress: (step, progress) {
+            _markStep(steps, 0, running: true, progress: 50 + (progress ~/ 2));
+            onUpdate(task.copyWith(
+                steps: steps, progress: 20 + (progress * 30 ~/ 100)));
+          },
+        );
+
+        // Merge: keep direct sniff results first (usually higher quality), then add new ones
+        final existingUrls = resources.map((r) => r.url).toSet();
+        for (final r in webViewResources) {
+          if (!existingUrls.contains(r.url)) {
+            resources = [...resources, r];
+          }
+        }
+
+        debugPrint(
+            '[TaskExecutor] WebView sniffer found ${webViewResources.length} resource(s), '
+            'total after merge: ${resources.length}');
+      } catch (e) {
+        debugPrint(
+            '[TaskExecutor] WebView sniffing failed, continuing with direct results: $e');
+        // Non-fatal - continue with whatever direct sniffing found
+      }
+    }
+
     _markStep(steps, 0, done: true);
     _markStep(steps, 1, done: true);
     onUpdate(task.copyWith(
@@ -212,20 +283,24 @@ class TaskExecutor {
       return null;
     }
     for (final pl in playlist) {
-      final client = HttpClient();
+      final dio = Dio();
       cancelToken?.whenCancel.then((_) {
-        client.close(force: true);
+        dio.close();
       });
       String content;
       try {
-        final request = await client.getUrl(Uri.parse(pl.url));
-        request.headers.set('User-Agent',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
-        if (pl.initiator != null) request.headers.set('Referer', pl.initiator!);
-        final response = await request.close();
-        content = await response.transform(utf8.decoder).join();
+        final headers = <String, String>{
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        };
+        if (pl.initiator != null) headers['Referer'] = pl.initiator!;
+        final response = await dio.get(
+          pl.url,
+          options: Options(headers: headers),
+        );
+        content = response.data is String ? response.data as String : '';
       } finally {
-        client.close();
+        dio.close();
       }
       List<String> segments;
       if (pl.isM3U8) {
@@ -262,46 +337,58 @@ class TaskExecutor {
     CancelToken? cancelToken,
   }) async {
     if (media == null) throw Exception('没有可下载的媒体资源');
-    final appDir = await getApplicationDocumentsDirectory();
-    final downloadDir = p.join(appDir.path, 'catcatch', 'downloads');
-    if (media.isPlaylist) {
-      final segments = detectedMedia
-          .where((m) => !m.isPlaylist && m.initiator == media.url)
-          .map((m) => m.url)
-          .toList();
-      if (segments.isEmpty) throw Exception('播放列表没有可下载的分段');
-      final mergedPath = await DownloadManager.downloadSegmentsAndMerge(
-        segmentUrls: segments,
-        outputPath: p.join(
-            downloadDir, '${p.basenameWithoutExtension(media.url)}_merged.ts'),
-        concurrency: DefaultRules.maxConcurrency,
-        onProgress: (completed, total, progress) {
-          _markStep(steps, 5, running: true, progress: progress);
+    return RetryHelper.retry(
+      fn: () async {
+        final appDirPath = await AppStorage.directory;
+        final downloadDir = p.join(appDirPath, 'catcatch', 'downloads');
+        if (media.isPlaylist) {
+          final segments = detectedMedia
+              .where((m) => !m.isPlaylist && m.initiator == media.url)
+              .map((m) => m.url)
+              .toList();
+          if (segments.isEmpty) throw Exception('播放列表没有可下载的分段');
+          final mergedPath = await DownloadManager.downloadSegmentsAndMerge(
+            segmentUrls: segments,
+            outputPath: p.join(downloadDir,
+                '${p.basenameWithoutExtension(media.url)}_merged.ts'),
+            concurrency: DefaultRules.maxConcurrency,
+            onProgress: (completed, total, progress) {
+              _markStep(steps, 5, running: true, progress: progress);
+              onUpdate(
+                  task.copyWith(steps: steps, progress: _calcProgress(steps)));
+            },
+            cancelToken: cancelToken,
+            taskId: task.id,
+          );
+          _markStep(steps, 5, done: true);
           onUpdate(task.copyWith(steps: steps, progress: _calcProgress(steps)));
-        },
-        cancelToken: cancelToken,
-        taskId: task.id,
-      );
-      _markStep(steps, 5, done: true);
-      onUpdate(task.copyWith(steps: steps, progress: _calcProgress(steps)));
-      return mergedPath;
-    }
-    final ext = media.ext;
-    final fileName = '${media.name}.$ext';
-    final downloadedFilePath = await DownloadManager.downloadFile(
-      url: media.url,
-      saveDir: downloadDir,
-      fileName: fileName,
-      onProgress: (received, total) {
-        final progress = total > 0 ? (received * 100 ~/ total) : 0;
-        _markStep(steps, 5, running: true, progress: progress.clamp(0, 100));
+          return mergedPath;
+        }
+        final ext = media.ext;
+        final fileName = '${media.name}.$ext';
+        final downloadedFilePath = await DownloadManager.downloadFile(
+          url: media.url,
+          saveDir: downloadDir,
+          fileName: fileName,
+          onProgress: (received, total) {
+            final progress = total > 0 ? (received * 100 ~/ total) : 0;
+            _markStep(steps, 5,
+                running: true, progress: progress.clamp(0, 100));
+            onUpdate(
+                task.copyWith(steps: steps, progress: _calcProgress(steps)));
+          },
+          cancelToken: cancelToken,
+        );
+        _markStep(steps, 5, done: true);
         onUpdate(task.copyWith(steps: steps, progress: _calcProgress(steps)));
+        return downloadedFilePath;
       },
-      cancelToken: cancelToken,
+      maxRetries: 2,
+      retryableCheck: (error) {
+        if (cancelToken?.isCancelled ?? false) return false;
+        return RetryHelper.isRetryableError(error);
+      },
     );
-    _markStep(steps, 5, done: true);
-    onUpdate(task.copyWith(steps: steps, progress: _calcProgress(steps)));
-    return downloadedFilePath;
   }
 
   /// Step 6: 转换
@@ -311,8 +398,8 @@ class TaskExecutor {
       required String inputPath,
       required void Function(CatCatchTask) onUpdate,
       CancelToken? cancelToken}) async {
-    final appDir = await getApplicationDocumentsDirectory();
-    final outputDir = p.join(appDir.path, 'catcatch', 'converted');
+    final appDirPath = await AppStorage.directory;
+    final outputDir = p.join(appDirPath, 'catcatch', 'converted');
     final outputName = '${p.basenameWithoutExtension(inputPath)}.mp4';
     final outputPath = p.join(outputDir, outputName);
     final result = await FFmpegConverter.convertToMp4(
@@ -335,8 +422,8 @@ class TaskExecutor {
       required String? sourcePath,
       required void Function(CatCatchTask) onUpdate}) async {
     if (sourcePath == null) throw Exception('源文件路径为空，无法保存');
-    final appDir = await getApplicationDocumentsDirectory();
-    final saveDir = p.join(appDir.path, 'catcatch', 'completed');
+    final appDirPath = await AppStorage.directory;
+    final saveDir = p.join(appDirPath, 'catcatch', 'completed');
     final saveDirObj = Directory(saveDir);
     if (!await saveDirObj.exists()) await saveDirObj.create(recursive: true);
     final fileName = p.basename(sourcePath);
