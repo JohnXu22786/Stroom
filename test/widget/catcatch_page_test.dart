@@ -22,11 +22,14 @@ void main() {
     // 验证页面标题
     expect(find.text('获取网页视频'), findsOneWidget);
 
-    // 验证 URL 输入框（有两个 TextFormField：URL + 时长）
-    expect(find.byType(TextFormField), findsNWidgets(2));
+    // 验证 URL 输入框（有三个 TextFormField：URL + 分 + 秒）
+    expect(find.byType(TextFormField), findsNWidgets(3));
 
     // 验证"开始分析"按钮
     expect(find.text('开始分析'), findsOneWidget);
+
+    // 验证新标签
+    expect(find.text('视频时长'), findsOneWidget);
   });
 
   // ──────────────────────────────────────────────
@@ -80,10 +83,11 @@ void main() {
       ),
     );
 
-    // 输入合法 URL + 时长
+    // 输入合法 URL + 分 + 秒
     await tester.enterText(
-        find.byType(TextFormField).first, 'https://example.com/video.mp4');
-    await tester.enterText(find.byType(TextFormField).last, '30');
+        find.byType(TextFormField).at(0), 'https://example.com/video.mp4');
+    await tester.enterText(find.byType(TextFormField).at(1), '1');
+    await tester.enterText(find.byType(TextFormField).at(2), '30');
     await tester.tap(find.text('开始分析'));
 
     // 不出现验证错误（表单应通过校验）
@@ -125,7 +129,8 @@ void main() {
 
     // 验证输入框 hint
     expect(find.text('请输入视频/音频网页URL'), findsOneWidget);
-    expect(find.text('期望时长（秒）'), findsOneWidget);
+    expect(find.text('分'), findsOneWidget);
+    expect(find.text('秒'), findsOneWidget);
   });
 
   // ──────────────────────────────────────────────
@@ -142,10 +147,11 @@ void main() {
       ),
     );
 
-    // 输入合法 URL 和时长
+    // 输入合法 URL 和时长（分+秒）
     await tester.enterText(
-        find.byType(TextFormField).first, 'https://example.com/video.mp4');
-    await tester.enterText(find.byType(TextFormField).last, '30');
+        find.byType(TextFormField).at(0), 'https://example.com/video.mp4');
+    await tester.enterText(find.byType(TextFormField).at(1), '1');
+    await tester.enterText(find.byType(TextFormField).at(2), '30');
     await tester.tap(find.text('开始分析'));
     await tester.pump();
 

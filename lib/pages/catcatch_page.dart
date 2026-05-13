@@ -359,13 +359,15 @@ class CatCatchPage extends ConsumerStatefulWidget {
 
 class _CatCatchPageState extends ConsumerState<CatCatchPage> {
   final _urlController = TextEditingController();
-  final _durationController = TextEditingController();
+  final _minController = TextEditingController();
+  final _secController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
   @override
   void dispose() {
     _urlController.dispose();
-    _durationController.dispose();
+    _minController.dispose();
+    _secController.dispose();
     super.dispose();
   }
 
@@ -377,9 +379,31 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
     if (!_formKey.currentState!.validate()) return;
 
     final url = _urlController.text.trim();
-    final durationSec = int.tryParse(_durationController.text.trim()) ?? 0;
+    final min = int.tryParse(_minController.text.trim()) ?? 0;
+    final sec = int.tryParse(_secController.text.trim()) ?? 0;
+    final totalSec = min * 60 + sec;
 
-    ref.read(catcatchTasksProvider.notifier).addTask(url, durationSec);
+    if (totalSec <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('请输入视频时长（分和秒）'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    try {
+      ref.read(catcatchTasksProvider.notifier).addTask(url, totalSec);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('分析失败: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -387,9 +411,6 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
         behavior: SnackBarBehavior.floating,
       ),
     );
-
-    // 清空输入，保留 URL 便于后续操作
-    _durationController.clear();
   }
 
   // ===========================================================================
@@ -476,20 +497,48 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
             // 时长输入 + 按钮
             Row(
               children: [
-                // 时长输入
-                Expanded(
+                // 视频时长 分
+                SizedBox(
+                  width: 60,
                   child: TextFormField(
-                    controller: _durationController,
+                    controller: _minController,
                     decoration: InputDecoration(
-                      hintText: '期望时长（秒）',
-                      prefixIcon: const Icon(Icons.timer_outlined),
+                      hintText: '分',
+                      labelText: '视频时长',
+                      labelStyle: const TextStyle(fontSize: 13),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                       filled: true,
                       fillColor: colorScheme.surface,
                       contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    textInputAction: TextInputAction.next,
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4),
+                  child: Text('分', style: TextStyle(fontSize: 16)),
+                ),
+                // 秒
+                SizedBox(
+                  width: 60,
+                  child: TextFormField(
+                    controller: _secController,
+                    decoration: InputDecoration(
+                      hintText: '秒',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: colorScheme.surface,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
                         vertical: 12,
                       ),
                     ),
@@ -499,7 +548,11 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                     onFieldSubmitted: (_) => _startTask(),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4),
+                  child: Text('秒', style: TextStyle(fontSize: 16)),
+                ),
+                const Spacer(),
 
                 // 开始分析按钮
                 FilledButton.icon(
