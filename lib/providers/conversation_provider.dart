@@ -83,12 +83,33 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       if (json != null) {
         final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
         state = list.map((m) => Conversation.fromMap(m)).toList();
-        return;
+      } else {
+        state = [];
       }
+      // Restore last active conversation
+      final activeId = prefs.getString('active_conversation_id');
+      if (activeId != null && state.any((c) => c.id == activeId)) {
+        _ref.read(activeConversationIdProvider.notifier).state = activeId;
+      }
+      return;
     } catch (e) {
       debugPrint('Failed to load conversations: $e');
     }
     state = [];
+  }
+
+  Future<void> _persistActiveId() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final activeId = _ref.read(activeConversationIdProvider);
+      if (activeId != null) {
+        await prefs.setString('active_conversation_id', activeId);
+      } else {
+        await prefs.remove('active_conversation_id');
+      }
+    } catch (e) {
+      debugPrint('Failed to persist active conversation ID: $e');
+    }
   }
 
   Future<void> _persist() async {
@@ -120,6 +141,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     );
     state = [...state, conv];
     _ref.read(activeConversationIdProvider.notifier).state = conv.id;
+    _persistActiveId();
     return conv.id;
   }
 
@@ -131,11 +153,13 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       _ref.read(activeConversationIdProvider.notifier).state = null;
     }
     await _persist();
+    await _persistActiveId();
   }
 
   /// Selects a conversation by [id], setting it as the active one.
   void selectConversation(String id) {
     _ref.read(activeConversationIdProvider.notifier).state = id;
+    _persistActiveId();
   }
 
   /// Renames a conversation.

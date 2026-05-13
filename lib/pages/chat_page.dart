@@ -93,8 +93,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   /// 新建对话
   void _newConversation() {
-    ref.read(chatProvider.notifier).clearMessages();
+    // 先创建对话（设置新 activeId），再清空消息，
+    // 避免 persistence listener 以旧 ID 保存空列表。
     ref.read(conversationsProvider.notifier).createConversation();
+    ref.read(chatProvider.notifier).clearMessages();
   }
 
   /// 获取当前对话标题
@@ -174,6 +176,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
+                    icon: const Icon(Icons.history),
+                    tooltip: '历史记录',
+                    onPressed: _showHistory,
+                  ),
+                  IconButton(
                     icon: const Icon(Icons.add),
                     tooltip: '新对话',
                     onPressed: _newConversation,
@@ -199,6 +206,188 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       ),
     );
   }
+
+  // ========================================================================
+  // History panel
+  // ========================================================================
+
+  /// Shows the conversation history panel as a modal bottom sheet.
+  void _showHistory() {
+    final conversations = ref.read(conversationsProvider);
+    final activeId = ref.read(activeConversationIdProvider);
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return _buildHistoryPanel(conversations, activeId);
+      },
+    );
+  }
+
+  Widget _buildHistoryPanel(
+      List<Conversation> conversations, String? activeId) {
+    final cs = Theme.of(context).colorScheme;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.3,
+      maxChildSize: 0.85,
+      expand: false,
+      builder: (context, scrollController) {
+        return Column(
+          children: [
+            // Drag handle
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: cs.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            // Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Text(
+                    '历史记录',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${conversations.length} 个对话',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            // List
+            Expanded(
+              child: conversations.isEmpty
+                  ? Center(
+                      child: Text(
+                        '暂无历史记录',
+                        style: TextStyle(color: cs.onSurfaceVariant),
+                      ),
+                    )
+                  : ListView.separated(
+                      controller: scrollController,
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      itemCount: conversations.length,
+                      separatorBuilder: (_, __) => Divider(
+                          height: 1,
+                          indent: 16,
+                          endIndent: 16,
+                          color: cs.outlineVariant.withValues(alpha: 0.5)),
+                      itemBuilder: (context, index) {
+                        final conv = conversations[index];
+                        final isActive = conv.id == activeId;
+                        return _buildConversationItem(conv, isActive);
+                      },
+                    ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildConversationItem(Conversation conv, bool isActive) {
+    final cs = Theme.of(context).colorScheme;
+
+    return ListTile(
+      selected: isActive,
+      selectedTileColor: cs.primaryContainer.withValues(alpha: 0.3),
+      leading: Icon(
+        isActive ? Icons.chat_bubble : Icons.chat_bubble_outline,
+        color: isActive ? cs.primary : cs.onSurfaceVariant,
+        size: 20,
+      ),
+      title: Text(
+        conv.title.isEmpty ? '新对话' : conv.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+          color: cs.onSurface,
+        ),
+      ),
+      subtitle: Text(
+        _formatDate(conv.updatedAt),
+        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+      ),
+      trailing: IconButton(
+        icon: Icon(Icons.delete_outline,
+            size: 18, color: cs.error.withValues(alpha: 0.7)),
+        tooltip: '删除',
+        onPressed: () => _deleteConversation(conv.id),
+      ),
+      onTap: () {
+        if (!isActive) {
+          // 先切换 activeId，再加载目标对话的消息。
+          // 顺序很重要：先切换 ID 可避免 persistence listener 以旧 ID 保存。
+          ref.read(conversationsProvider.notifier).selectConversation(conv.id);
+          ref.read(chatProvider.notifier).loadMessages(conv.messages);
+        }
+        Navigator.of(context).pop();
+      },
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final diff = now.difference(date);
+    if (diff.inMinutes < 1) return '刚刚';
+    if (diff.inHours < 1) return '${diff.inMinutes} 分钟前';
+    if (diff.inDays < 1) return '${diff.inHours} 小时前';
+    if (diff.inDays < 7) return '${diff.inDays} 天前';
+    return '${date.month}/${date.day}';
+  }
+
+  void _deleteConversation(String id) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除对话'),
+        content: const Text('确定要删除这个对话吗？此操作无法撤销。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              final wasActive = ref.read(activeConversationIdProvider) == id;
+              ref.read(conversationsProvider.notifier).deleteConversation(id);
+              if (wasActive) {
+                ref.read(chatProvider.notifier).clearMessages();
+              }
+              Navigator.of(context).pop(); // close dialog
+            },
+            style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ========================================================================
 
   /// Claude-inspired empty state: heading + subtitle + suggestion chips.
   Widget _buildEmptyState(BuildContext context) {
