@@ -194,24 +194,26 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
         // 用户主动暂停，不视为错误
         return;
       }
+      final String origMsg = e.message ?? '';
+      final String extra = origMsg.isNotEmpty ? '\n原始错误: $origMsg' : '';
       String errorMsg;
       switch (e.type) {
         case DioExceptionType.connectionTimeout:
-          errorMsg = '网络连接超时，请检查网络或API地址';
+          errorMsg = '网络连接超时，请检查网络或API地址$extra';
           break;
         case DioExceptionType.receiveTimeout:
-          errorMsg = '服务器响应超时，请稍后重试';
+          errorMsg = '服务器响应超时，请稍后重试$extra';
           break;
         case DioExceptionType.connectionError:
           errorMsg = kIsWeb
-              ? '无法连接到服务器。Web端常见原因：CORS跨域限制或API地址不正确。'
+              ? '无法连接到服务器。Web端常见原因：CORS跨域限制或API地址不正确。$extra'
               : '无法连接到服务器（${e.message ?? "未知网络错误"}）';
           break;
         case DioExceptionType.badResponse:
           final statusCode = e.response?.statusCode ?? 0;
           final body = e.response?.data;
           errorMsg =
-              'API返回错误 (HTTP $statusCode${body != null ? ": $body" : ""})';
+              'API返回错误 (HTTP $statusCode${body != null ? ": $body" : ""})$extra';
           break;
         default:
           errorMsg = '合成失败: ${e.message ?? e.toString()}';

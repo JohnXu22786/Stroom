@@ -326,13 +326,15 @@ class GLMTTSProvider extends BaseTTSProvider {
     }
   }
 
-  /// 解析Dio错误为可读消息
+  /// 解析Dio错误为可读消息，保留原始错误详情
   String _parseDioError(DioException e) {
+    final String origMsg = e.message ?? '';
+    final String extra = origMsg.isNotEmpty ? '\n原始错误: $origMsg' : '';
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
-        return '连接超时，请检查网络';
+        return '连接超时，请检查网络$extra';
       case DioExceptionType.receiveTimeout:
-        return '接收超时，服务器响应过慢';
+        return '接收超时，服务器响应过慢$extra';
       case DioExceptionType.badResponse:
         final statusCode = e.response?.statusCode;
         final body = e.response?.data;
@@ -348,20 +350,20 @@ class GLMTTSProvider extends BaseTTSProvider {
           bodyStr = body?.toString() ?? '无响应体';
         }
         if (statusCode == 401 || statusCode == 403) {
-          return 'API密钥无效或权限不足 (HTTP $statusCode): $bodyStr';
+          return 'API密钥无效或权限不足 (HTTP $statusCode): $bodyStr$extra';
         } else if (statusCode == 429) {
-          return '请求过于频繁，请稍后重试 (HTTP $statusCode)';
+          return '请求过于频繁，请稍后重试 (HTTP $statusCode)$extra';
         } else if (statusCode == 500) {
-          return '服务器内部错误 (HTTP $statusCode): $bodyStr';
+          return '服务器内部错误 (HTTP $statusCode): $bodyStr$extra';
         } else if (statusCode == 404) {
-          return 'API端点不存在 (HTTP 404): $bodyStr\n请检查API基础URL设置是否正确';
+          return 'API端点不存在 (HTTP 404): $bodyStr\n请检查API基础URL设置是否正确$extra';
         }
-        return '服务器返回错误 (HTTP $statusCode): $bodyStr';
+        return '服务器返回错误 (HTTP $statusCode): $bodyStr$extra';
       case DioExceptionType.cancel:
-        return '请求已取消';
+        return '请求已取消$extra';
       default:
         if (e.type == DioExceptionType.connectionError && kIsWeb) {
-          return '无法连接到服务器。Web端常见原因：CORS跨域限制或API地址不正确。请检查：1) 供应商配置中的API地址是否正确 2) 服务器是否允许跨域请求';
+          return '无法连接到服务器。Web端常见原因：CORS跨域限制或API地址不正确。请检查：1) 供应商配置中的API地址是否正确 2) 服务器是否允许跨域请求$extra';
         }
         return '网络错误: ${e.message}';
     }
@@ -656,11 +658,13 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
 
   /// 解析Dio错误为可读消息
   String _parseDioError(DioException e) {
+    final String origMsg = e.message ?? '';
+    final String extra = origMsg.isNotEmpty ? '\n原始错误: $origMsg' : '';
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
-        return '连接超时，请检查网络';
+        return '连接超时，请检查网络$extra';
       case DioExceptionType.receiveTimeout:
-        return '接收超时，服务器响应过慢';
+        return '接收超时，服务器响应过慢$extra';
       case DioExceptionType.badResponse:
         final statusCode = e.response?.statusCode;
         final body = e.response?.data;
@@ -676,20 +680,20 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
           bodyStr = body?.toString() ?? '无响应体';
         }
         if (statusCode == 401 || statusCode == 403) {
-          return 'API密钥无效或权限不足 (HTTP $statusCode): $bodyStr';
+          return 'API密钥无效或权限不足 (HTTP $statusCode): $bodyStr$extra';
         } else if (statusCode == 429) {
-          return '请求过于频繁，请稍后重试 (HTTP $statusCode)';
+          return '请求过于频繁，请稍后重试 (HTTP $statusCode)$extra';
         } else if (statusCode == 500) {
-          return '服务器内部错误 (HTTP $statusCode): $bodyStr';
+          return '服务器内部错误 (HTTP $statusCode): $bodyStr$extra';
         } else if (statusCode == 404) {
-          return 'API端点不存在 (HTTP 404): $bodyStr\n请检查API基础URL设置是否正确';
+          return 'API端点不存在 (HTTP 404): $bodyStr\n请检查API基础URL设置是否正确$extra';
         }
-        return '服务器返回错误 (HTTP $statusCode): $bodyStr';
+        return '服务器返回错误 (HTTP $statusCode): $bodyStr$extra';
       case DioExceptionType.cancel:
-        return '请求已取消';
+        return '请求已取消$extra';
       default:
         if (e.type == DioExceptionType.connectionError && kIsWeb) {
-          return '无法连接到服务器。Web端常见原因：CORS跨域限制或API地址不正确。请检查：1) 供应商配置中的API地址是否正确 2) 服务器是否允许跨域请求';
+          return '无法连接到服务器。Web端常见原因：CORS跨域限制或API地址不正确。请检查：1) 供应商配置中的API地址是否正确 2) 服务器是否允许跨域请求$extra';
         }
         return '网络错误: ${e.message}';
     }
@@ -842,11 +846,13 @@ class CustomTTSProvider extends BaseTTSProvider {
   }
 
   String _parseDioError(DioException e) {
+    final String origMsg = e.message ?? '';
+    final String extra = origMsg.isNotEmpty ? '\n原始错误: $origMsg' : '';
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
-        return '连接超时，请检查网络';
+        return '连接超时，请检查网络$extra';
       case DioExceptionType.receiveTimeout:
-        return '接收超时，服务器响应过慢';
+        return '接收超时，服务器响应过慢$extra';
       case DioExceptionType.badResponse:
         final statusCode = e.response?.statusCode;
         final body = e.response?.data;
@@ -861,17 +867,18 @@ class CustomTTSProvider extends BaseTTSProvider {
           bodyStr = body?.toString() ?? '无响应体';
         }
         if (statusCode == 401 || statusCode == 403)
-          return 'API密钥无效或权限不足 (HTTP $statusCode): $bodyStr';
-        if (statusCode == 429) return '请求过于频繁，请稍后重试 (HTTP $statusCode)';
+          return 'API密钥无效或权限不足 (HTTP $statusCode): $bodyStr$extra';
+        if (statusCode == 429) return '请求过于频繁，请稍后重试 (HTTP $statusCode)$extra';
         if (statusCode == 404)
-          return 'API端点不存在 (HTTP 404): $bodyStr\n请检查API基础URL设置是否正确';
-        if (statusCode == 500) return '服务器内部错误 (HTTP $statusCode): $bodyStr';
-        return '服务器返回错误 (HTTP $statusCode): $bodyStr';
+          return 'API端点不存在 (HTTP 404): $bodyStr\n请检查API基础URL设置是否正确$extra';
+        if (statusCode == 500)
+          return '服务器内部错误 (HTTP $statusCode): $bodyStr$extra';
+        return '服务器返回错误 (HTTP $statusCode): $bodyStr$extra';
       case DioExceptionType.cancel:
-        return '请求已取消';
+        return '请求已取消$extra';
       default:
         if (e.type == DioExceptionType.connectionError && kIsWeb) {
-          return '无法连接到服务器。Web端常见原因：CORS跨域限制或API地址不正确。请检查：1) 供应商配置中的API地址是否正确 2) 服务器是否允许跨域请求';
+          return '无法连接到服务器。Web端常见原因：CORS跨域限制或API地址不正确。请检查：1) 供应商配置中的API地址是否正确 2) 服务器是否允许跨域请求$extra';
         }
         return '网络错误: ${e.message}';
     }
