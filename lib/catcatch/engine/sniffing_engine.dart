@@ -16,6 +16,9 @@ import 'mpd_parser.dart';
 class SniffingEngine {
   SniffingEngine._();
 
+  // Note: Error details are communicated via task-level exception/catch.
+  // We avoid static mutable state here because multiple tasks may sniff concurrently.
+
   /// 分析 URL，返回检测到的媒体资源列表
   ///
   /// [url] 用户输入的 URL
@@ -278,6 +281,10 @@ class SniffingEngine {
       final length =
           contentLengthStr != null ? int.tryParse(contentLengthStr) : null;
       return (contentType, length);
+    } on DioException catch (e) {
+      debugPrint('[SniffingEngine] HEAD request failed: $e');
+      // Return nulls — the caller handles empty resources gracefully.
+      return (null, null);
     } finally {
       dio.close();
     }
@@ -306,6 +313,9 @@ class SniffingEngine {
         );
       }
       return response.data is String ? response.data as String : '';
+    } on DioException catch (e) {
+      debugPrint('[SniffingEngine] GET request failed: $e');
+      rethrow;
     } finally {
       dio.close();
     }

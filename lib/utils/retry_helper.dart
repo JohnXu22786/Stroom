@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/services.dart' show MissingPluginException;
 
 /// Retry helper with exponential backoff and configurable retryable-error
@@ -44,12 +45,29 @@ class RetryHelper {
   /// [SocketException]   | [ArgumentError]
   /// [HttpException] 5xx | [FormatException]
   /// [HttpException] 429 | [HttpException] 4xx
+  /// [DioException] conn | [DioException] badResponse 4xx (non-429)
+  ///   timeout / 5xx/429 | [DioException] cancel / badCertificate / unknown
   /// [MissingPluginException] |
   /// [TimeoutException]  |
   static bool isRetryableError(Object error) {
     if (error is SocketException) return true;
     if (error is TimeoutException) return true;
     if (error is MissingPluginException) return true;
+
+    if (error is DioException) {
+      // Timeout & connection-level errors are usually transient
+      if (error.type == DioExceptionType.connectionTimeout) return true;
+      if (error.type == DioExceptionType.sendTimeout) return true;
+      if (error.type == DioExceptionType.receiveTimeout) return true;
+      if (error.type == DioExceptionType.connectionError) return true;
+      // 5xx and 429 are retryable
+      if (error.type == DioExceptionType.badResponse) {
+        final code = error.response?.statusCode ?? 0;
+        if (code >= 500 && code <= 599) return true;
+        if (code == 429) return true;
+      }
+      return false;
+    }
 
     if (error is ArgumentError) return false;
     if (error is FormatException) return false;
