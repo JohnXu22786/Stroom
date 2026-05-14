@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/catcatch/engine/m3u8_parser.dart';
 import 'package:stroom/catcatch/engine/mpd_parser.dart';
+import 'package:stroom/catcatch/engine/sniffing_engine.dart';
 
 // =============================================================================
 // M3U8 测试数据
@@ -770,6 +771,60 @@ segment.ts
       );
 
       expect(segments.length, equals(3));
+    });
+  });
+
+  // ===========================================================================
+  // SniffingEngine — URL parsing & media extension checks
+  // ===========================================================================
+  group('SniffingEngine', () {
+    // ──────────────────────────────────────────────
+    // parseFileName — Bilibili URLs
+    // ──────────────────────────────────────────────
+    test(
+        'parseFileName extracts correct name and empty ext from Bilibili video URL',
+        () {
+      const url = 'https://www.bilibili.com/video/BV1DA5M6VE39/';
+      final (name, ext) = SniffingEngine.parseFileName(url);
+      expect(name, equals('BV1DA5M6VE39'));
+      expect(ext, isEmpty);
+    });
+
+    test(
+        'parseFileName extracts correct name from Bilibili URL with query params',
+        () {
+      const url = 'https://www.bilibili.com/video/BV1DA5M6VE39/'
+          '?buvid=XU38B3D3A445F9880897DA7B22AB0C497D0D8'
+          '&from_spmid=main.later-watch.0.0';
+      final (name, ext) = SniffingEngine.parseFileName(url);
+      expect(name, equals('BV1DA5M6VE39'));
+      expect(ext, isEmpty);
+    });
+
+    test('parseFileName extracts name and empty ext from short b23.tv URL', () {
+      const url = 'https://b23.tv/MzLhbCL';
+      final (name, ext) = SniffingEngine.parseFileName(url);
+      expect(name, equals('MzLhbCL'));
+      expect(ext, isEmpty);
+    });
+
+    // ──────────────────────────────────────────────
+    // isMediaExtension — empty string edge case
+    // ──────────────────────────────────────────────
+    test('isMediaExtension returns false for empty string', () {
+      expect(SniffingEngine.isMediaExtension(''), isFalse);
+    });
+
+    test('isMediaExtension returns false for non-media extensions', () {
+      expect(SniffingEngine.isMediaExtension('html'), isFalse);
+      expect(SniffingEngine.isMediaExtension('php'), isFalse);
+      expect(SniffingEngine.isMediaExtension('js'), isFalse);
+    });
+
+    test('isMediaExtension returns true for known media extensions', () {
+      expect(SniffingEngine.isMediaExtension('mp4'), isTrue);
+      expect(SniffingEngine.isMediaExtension('m3u8'), isTrue);
+      expect(SniffingEngine.isMediaExtension('mp3'), isTrue);
     });
   });
 }

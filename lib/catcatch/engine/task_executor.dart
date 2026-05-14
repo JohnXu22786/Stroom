@@ -219,10 +219,11 @@ class TaskExecutor {
       onUpdate(task.copyWith(steps: steps, progress: (progress * 20 ~/ 100)));
     });
 
-    // Step 2: Only launch WebView if we got 0 resources, or 1 resource that's NOT a playable media
+    // Step 2: Launch WebView if direct sniffing found nothing useful.
+    // Cases: 0 resources, or 1 resource whose ext is not a known media extension
+    // (e.g. Bilibili page URL → ext="" → isMediaExtension("")=false → WebView launches).
     final needsWebView = resources.isEmpty ||
         (resources.length == 1 &&
-            resources.first.ext.isNotEmpty &&
             !SniffingEngine.isMediaExtension(resources.first.ext));
     if (needsWebView && !(cancelToken?.isCancelled ?? false)) {
       _markStep(steps, 0, running: true, progress: 50);
