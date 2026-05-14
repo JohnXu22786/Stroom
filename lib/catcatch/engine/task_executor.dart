@@ -336,6 +336,13 @@ class TaskExecutor {
   }
 
   /// Step 5: 下载
+  /// Web 端提示信息
+  static const String webDownloadHint = 'Web 端不支持直接下载媒体文件。\n'
+      '请安装浏览器扩展「CatCatch（猫抓）」后再试。\n'
+      '作者：笨笨猫（xifangczy），完全免费开源。\n'
+      '注意：请认准作者，避免下载到付费版/山寨版。\n'
+      'GitHub 地址: https://github.com/xifangczy/cat-catch';
+
   static Future<String?> _executeDownload({
     required CatCatchTask task,
     required List<StepStatus> steps,
@@ -345,6 +352,17 @@ class TaskExecutor {
     CancelToken? cancelToken,
   }) async {
     if (media == null) throw Exception('未能获取到可用媒体资源，请检查URL是否正确以及目标网站是否可达');
+
+    // Web 端无法绕过 CORS 下载，引导用户安装浏览器扩展
+    if (kIsWeb) {
+      throw Exception(webDownloadHint);
+    }
+
+    final referer = media.initiator;
+    final browserHeaders = DefaultRules.buildBrowserHeaders(
+      referer: referer,
+    );
+
     return RetryHelper.retry(
       fn: () async {
         final appDirPath = await AppStorage.directory;
@@ -359,6 +377,7 @@ class TaskExecutor {
             segmentUrls: segments,
             outputPath: p.join(downloadDir,
                 '${p.basenameWithoutExtension(media.url)}_merged.ts'),
+            headers: browserHeaders,
             concurrency: DefaultRules.maxConcurrency,
             onProgress: (completed, total, progress) {
               _markStep(steps, 5, running: true, progress: progress);
@@ -378,6 +397,7 @@ class TaskExecutor {
           url: media.url,
           saveDir: downloadDir,
           fileName: fileName,
+          headers: browserHeaders,
           onProgress: (received, total) {
             final progress = total > 0 ? (received * 100 ~/ total) : 0;
             _markStep(steps, 5,
@@ -522,8 +542,10 @@ class TaskExecutor {
       case DioExceptionType.receiveTimeout:
         return '接收响应超时，服务器响应过慢$extra';
       case DioExceptionType.connectionError:
-        final webHint = kIsWeb ? '（Web端常见原因：CORS跨域限制或URL不可达）' : '';
-        return '无法连接到服务器，请检查URL是否正确$webHint$extra';
+        if (kIsWeb) {
+          return '无法连接到服务器。\n\n$webDownloadHint';
+        }
+        return '无法连接到服务器，请检查URL是否正确$extra';
       case DioExceptionType.badCertificate:
         return '服务器证书验证失败$extra';
       case DioExceptionType.badResponse:
