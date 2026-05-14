@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stroom/pages/catcatch_page.dart';
+import 'package:stroom/catcatch/providers/catcatch_provider.dart';
+import 'package:stroom/catcatch/models/catcatch_task.dart';
 
 void main() {
   // ──────────────────────────────────────────────
@@ -157,5 +159,104 @@ void main() {
 
     // 验证 SnackBar 提示
     expect(find.text('任务已开始，执行过程中请勿退出应用'), findsOneWidget);
+  });
+
+  // ──────────────────────────────────────────────
+  // Bilibili URL input tests
+  // ──────────────────────────────────────────────
+  testWidgets('CatCatchPage accepts full Bilibili URL with 70s duration',
+      (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          theme: ThemeData(splashFactory: InkSplash.splashFactory),
+          home: const CatCatchPage(),
+        ),
+      ),
+    );
+
+    // 输入完整 B 站 URL（含长 query 参数）
+    await tester.enterText(
+      find.byType(TextFormField).at(0),
+      'https://www.bilibili.com/video/BV1DA5M6VE39/'
+      '?buvid=XU38B3D3A445F9880897DA7B22AB0C497D0D8'
+      '&from_spmid=main.later-watch.0.0'
+      '&is_story_h5=false'
+      '&mid=sbsPunnk%2FuOScwI%2BEkBRrg%3D%3D'
+      '&p=1&plat_id=116&share_from=ugc'
+      '&share_medium=android_hd&share_plat=android'
+      '&share_session_id=cc88269c-2902-4a0c-809c-397752ad0dc2'
+      '&share_source=COPY&share_tag=s_i'
+      '&spmid=united.player-video-detail.0.0'
+      '&timestamp=1778651200&unique_k=MzLhbCL&up_id=456664753',
+    );
+
+    // 输入 70 秒 (1分10秒)
+    await tester.enterText(find.byType(TextFormField).at(1), '1');
+    await tester.enterText(find.byType(TextFormField).at(2), '10');
+    await tester.tap(find.text('开始分析'));
+    await tester.pump();
+
+    // 不应有验证错误
+    expect(find.text('请输入URL'), findsNothing);
+    expect(find.text('请输入有效的URL'), findsNothing);
+    expect(find.text('请输入视频时长（分和秒）'), findsNothing);
+
+    // 应有任务开始提示
+    expect(find.text('任务已开始，执行过程中请勿退出应用'), findsOneWidget);
+
+    // 验证 Provider 状态中已创建任务
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(CatCatchPage)),
+    );
+    final tasks = container.read(catcatchTasksProvider);
+    expect(tasks.length, 1);
+    expect(tasks[0].url,
+        startsWith('https://www.bilibili.com/video/BV1DA5M6VE39/'));
+    expect(tasks[0].expectedDurationSec, 70);
+    expect(tasks[0].status, TaskStatus.running);
+  });
+
+  testWidgets(
+      'CatCatchPage accepts short b23.tv Bilibili URL with 70s duration',
+      (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          theme: ThemeData(splashFactory: InkSplash.splashFactory),
+          home: const CatCatchPage(),
+        ),
+      ),
+    );
+
+    // 输入 B 站短链接
+    await tester.enterText(
+      find.byType(TextFormField).at(0),
+      'https://b23.tv/MzLhbCL',
+    );
+
+    // 输入 70 秒
+    await tester.enterText(find.byType(TextFormField).at(1), '1');
+    await tester.enterText(find.byType(TextFormField).at(2), '10');
+    await tester.tap(find.text('开始分析'));
+    await tester.pump();
+
+    // 不应有验证错误
+    expect(find.text('请输入URL'), findsNothing);
+    expect(find.text('请输入有效的URL'), findsNothing);
+    expect(find.text('请输入视频时长（分和秒）'), findsNothing);
+
+    // 应有任务开始提示
+    expect(find.text('任务已开始，执行过程中请勿退出应用'), findsOneWidget);
+
+    // 验证 Provider 状态中已创建任务
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(CatCatchPage)),
+    );
+    final tasks = container.read(catcatchTasksProvider);
+    expect(tasks.length, 1);
+    expect(tasks[0].url, 'https://b23.tv/MzLhbCL');
+    expect(tasks[0].expectedDurationSec, 70);
+    expect(tasks[0].status, TaskStatus.running);
   });
 }
