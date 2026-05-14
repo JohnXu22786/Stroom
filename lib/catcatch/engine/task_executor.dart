@@ -504,20 +504,28 @@ class TaskExecutor {
     return path;
   }
 
-  /// Format DioException into user-friendly Chinese message.
+  /// Format DioException, preserving original error details.
   static String _formatDioError(DioException e) {
+    final String originalMsg = e.message ?? '';
+    String extra;
+    if (originalMsg.isNotEmpty) {
+      extra = '\n原始错误: $originalMsg';
+    } else {
+      extra = '';
+    }
+
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
-        return '连接超时，请检查网络或服务器状态';
+        return '连接超时，请检查网络或服务器状态$extra';
       case DioExceptionType.sendTimeout:
-        return '发送请求超时';
+        return '发送请求超时$extra';
       case DioExceptionType.receiveTimeout:
-        return '接收响应超时，服务器响应过慢';
+        return '接收响应超时，服务器响应过慢$extra';
       case DioExceptionType.connectionError:
         final webHint = kIsWeb ? '（Web端常见原因：CORS跨域限制或URL不可达）' : '';
-        return '无法连接到服务器，请检查URL是否正确$webHint';
+        return '无法连接到服务器，请检查URL是否正确$webHint$extra';
       case DioExceptionType.badCertificate:
-        return '服务器证书验证失败';
+        return '服务器证书验证失败$extra';
       case DioExceptionType.badResponse:
         final code = e.response?.statusCode ?? 0;
         final body = e.response?.data;
@@ -531,9 +539,9 @@ class TaskExecutor {
         } else {
           bodyStr = body?.toString() ?? '';
         }
-        return '服务器返回错误 (HTTP $code)${bodyStr.isNotEmpty ? ": $bodyStr" : ""}';
+        return '服务器返回错误 (HTTP $code)${bodyStr.isNotEmpty ? ": $bodyStr" : ""}$extra';
       case DioExceptionType.cancel:
-        return '请求已取消';
+        return '请求已取消$extra';
       default:
         return '网络错误: ${e.message ?? "未知错误"}';
     }
