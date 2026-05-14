@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:dio/dio.dart';
@@ -126,7 +126,8 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     try {
       final synthConfig = ref.read(synthesisConfigProvider);
 
-      final provider = tts_provider_base.createProviderFromConfig(task.providerConfig);
+      final provider =
+          tts_provider_base.createProviderFromConfig(task.providerConfig);
 
       // 构建参数
       final params = <String, dynamic>{
@@ -202,12 +203,15 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
           errorMsg = '服务器响应超时，请稍后重试';
           break;
         case DioExceptionType.connectionError:
-          errorMsg = '无法连接到服务器（${e.message ?? "未知网络错误"}）';
+          errorMsg = kIsWeb
+              ? '无法连接到服务器。Web端常见原因：CORS跨域限制或API地址不正确。'
+              : '无法连接到服务器（${e.message ?? "未知网络错误"}）';
           break;
         case DioExceptionType.badResponse:
           final statusCode = e.response?.statusCode ?? 0;
           final body = e.response?.data;
-          errorMsg = 'API返回错误 (HTTP $statusCode${body != null ? ": $body" : ""})';
+          errorMsg =
+              'API返回错误 (HTTP $statusCode${body != null ? ": $body" : ""})';
           break;
         default:
           errorMsg = '合成失败: ${e.message ?? e.toString()}';
@@ -329,9 +333,10 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       return t.copyWith(
         status: status,
         error: error,
-        completedAt: status == TaskStatus.completed || status == TaskStatus.failed
-            ? DateTime.now()
-            : null,
+        completedAt:
+            status == TaskStatus.completed || status == TaskStatus.failed
+                ? DateTime.now()
+                : null,
       );
     }).toList();
   }

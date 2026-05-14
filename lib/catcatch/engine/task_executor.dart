@@ -1,6 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as p;
 import '../../services/storage_service.dart';
 import '../../utils/retry_helper.dart';
@@ -142,7 +143,8 @@ class TaskExecutor {
             }
             selectedMedia ??=
                 detectedMedia.isNotEmpty ? detectedMedia.first : null;
-            if (selectedMedia == null) throw Exception('没有找到可下载的媒体资源');
+            if (selectedMedia == null)
+              throw Exception('未能获取到可用媒体资源，请检查URL是否正确以及目标网站是否可达');
             _markStep(steps, i, done: true);
             onUpdate(task.copyWith(
                 steps: steps,
@@ -189,7 +191,12 @@ class TaskExecutor {
     } catch (e, s) {
       if (cancelToken?.isCancelled ?? false) return null;
       debugPrint('[TaskExecutor] Task failed: $e\n$s');
-      taskError = e.toString();
+      // Format DioException with user-friendly Chinese message
+      if (e is DioException) {
+        taskError = _formatDioError(e);
+      } else {
+        taskError = e.toString();
+      }
       for (int i = startFromIndex; i < steps.length; i++) {
         if (steps[i].running) {
           _markStep(steps, i, failed: true, error: taskError);
@@ -337,7 +344,7 @@ class TaskExecutor {
     required void Function(CatCatchTask updated) onUpdate,
     CancelToken? cancelToken,
   }) async {
-    if (media == null) throw Exception('没有可下载的媒体资源');
+    if (media == null) throw Exception('未能获取到可用媒体资源，请检查URL是否正确以及目标网站是否可达');
     return RetryHelper.retry(
       fn: () async {
         final appDirPath = await AppStorage.directory;
@@ -495,5 +502,40 @@ class TaskExecutor {
       if (!await File(newPath).exists()) return newPath;
     }
     return path;
+  }
+
+  /// Format DioException into user-friendly Chinese message.
+  static String _formatDioError(DioException e) {
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+        return '连接超时，请检查网络或服务器状态';
+      case DioExceptionType.sendTimeout:
+        return '发送请求超时';
+      case DioExceptionType.receiveTimeout:
+        return '接收响应超时，服务器响应过慢';
+      case DioExceptionType.connectionError:
+        final webHint = kIsWeb ? '（Web端常见原因：CORS跨域限制或URL不可达）' : '';
+        return '无法连接到服务器，请检查URL是否正确$webHint';
+      case DioExceptionType.badCertificate:
+        return '服务器证书验证失败';
+      case DioExceptionType.badResponse:
+        final code = e.response?.statusCode ?? 0;
+        final body = e.response?.data;
+        String bodyStr;
+        if (body is List<int>) {
+          try {
+            bodyStr = utf8.decode(body);
+          } catch (_) {
+            bodyStr = body.toString();
+          }
+        } else {
+          bodyStr = body?.toString() ?? '';
+        }
+        return '服务器返回错误 (HTTP $code)${bodyStr.isNotEmpty ? ": $bodyStr" : ""}';
+      case DioExceptionType.cancel:
+        return '请求已取消';
+      default:
+        return '网络错误: ${e.message ?? "未知错误"}';
+    }
   }
 }

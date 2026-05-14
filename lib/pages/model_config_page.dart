@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
@@ -34,7 +35,6 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   final _speedMinController = TextEditingController();
   final _speedMaxController = TextEditingController();
   final _maxWordsController = TextEditingController();
-
 
   List<VoiceEntry> _voices = [];
   List<CustomParam> _customParams = [];
@@ -81,8 +81,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     if (_customParams.length != _initialCustomParams.length) return true;
     for (int i = 0; i < _customParams.length; i++) {
       if (i >= _initialCustomParams.length) return true;
-      if (_customParams[i].paramName != _initialCustomParams[i].paramName) return true;
-      if (_customParams[i].defaultValue != _initialCustomParams[i].defaultValue) return true;
+      if (_customParams[i].paramName != _initialCustomParams[i].paramName)
+        return true;
+      if (_customParams[i].defaultValue != _initialCustomParams[i].defaultValue)
+        return true;
     }
     return false;
   }
@@ -112,16 +114,24 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       return;
     }
     final configModels = entry.configs[widget.configIndex].models;
-    if (_isEditing && widget.modelIndex >= 0 && widget.modelIndex < configModels.length) {
+    if (_isEditing &&
+        widget.modelIndex >= 0 &&
+        widget.modelIndex < configModels.length) {
       final model = configModels[widget.modelIndex];
       _nameController.text = model.name;
       _modelIdController.text = model.modelId;
       _voices = model.voices.map((v) => v.copy()).toList();
-      _volumeMinController.text = model.hasVolume ? model.volumeMin.toString() : '';
-      _volumeMaxController.text = model.hasVolume ? model.volumeMax.toString() : '';
-      _speedMinController.text = model.hasSpeed ? model.speedMin.toString() : '';
-      _speedMaxController.text = model.hasSpeed ? model.speedMax.toString() : '';
-      _maxWordsController.text = model.maxWordsPerRequest > 0 ? model.maxWordsPerRequest.toString() : '';
+      _volumeMinController.text =
+          model.hasVolume ? model.volumeMin.toString() : '';
+      _volumeMaxController.text =
+          model.hasVolume ? model.volumeMax.toString() : '';
+      _speedMinController.text =
+          model.hasSpeed ? model.speedMin.toString() : '';
+      _speedMaxController.text =
+          model.hasSpeed ? model.speedMax.toString() : '';
+      _maxWordsController.text = model.maxWordsPerRequest > 0
+          ? model.maxWordsPerRequest.toString()
+          : '';
       _customParams = model.customParams.map((p) => p.copy()).toList();
       _supportStream = model.supportStream;
       _supportInstruction = model.supportInstruction;
@@ -199,7 +209,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                   hintText: '例如: 0.123',
                   border: OutlineInputBorder(),
                 ),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
               ),
               const SizedBox(height: 12),
               Row(
@@ -294,7 +305,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                   labelText: '切割时长（秒） *',
                   border: OutlineInputBorder(),
                 ),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
               ),
               const SizedBox(height: 12),
               Row(
@@ -348,7 +360,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                   durationSeconds: duration,
                   direction: direction,
                 );
-                await ref.read(customTrimPresetsProvider.notifier).update(preset.id, updated);
+                await ref
+                    .read(customTrimPresetsProvider.notifier)
+                    .update(preset.id, updated);
                 if (!ctx.mounted) return;
                 Navigator.pop(ctx);
               },
@@ -403,7 +417,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   Future<void> _playTestAudio() async {
     final entry = _entry;
     if (entry == null) return;
-    if (widget.configIndex < 0 || widget.configIndex >= entry.configs.length) return;
+    if (widget.configIndex < 0 || widget.configIndex >= entry.configs.length)
+      return;
 
     setState(() {
       _isTestingAudio = true;
@@ -460,8 +475,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       final isJsonBody = response.data.isNotEmpty &&
           (response.data[0] == 0x7b || response.data[0] == 0x5b);
 
-      if (isJsonBody || (contentType.isNotEmpty &&
-          !contentType.startsWith('audio/'))) {
+      if (isJsonBody ||
+          (contentType.isNotEmpty && !contentType.startsWith('audio/'))) {
         String errorBody;
         try {
           errorBody = utf8.decode(response.data);
@@ -544,7 +559,12 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           errorMsg = '请求已取消';
           break;
         default:
-          errorMsg = '网络错误: ${e.message}';
+          if (e.type == DioExceptionType.connectionError && kIsWeb) {
+            errorMsg =
+                '无法连接到服务器。Web端常见原因：CORS跨域限制或API地址不正确。请检查：1) 供应商配置中的API地址是否正确 2) 服务器是否允许跨域请求';
+          } else {
+            errorMsg = '网络错误: ${e.message}';
+          }
       }
       if (mounted) {
         setState(() {
@@ -697,7 +717,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     var configs = entry.configs.map((c) => c.copy()).toList();
     var models = List<ModelConfig>.from(configs[widget.configIndex].models);
 
-    if (_isEditing && widget.modelIndex >= 0 && widget.modelIndex < models.length) {
+    if (_isEditing &&
+        widget.modelIndex >= 0 &&
+        widget.modelIndex < models.length) {
       models[widget.modelIndex] = modelConfig;
     } else {
       models.insert(0, modelConfig);
@@ -762,403 +784,417 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         }
       },
       child: Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-        actions: [
-          TextButton.icon(
-            onPressed: _isSaving ? null : _save,
-            icon: _isSaving
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.save, size: 20),
-            label: Text(_isSaving ? '保存中...' : '保存'),
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // ==========================================================
-          // 模型名称
-          // ==========================================================
-          Row(
-            children: [
-              const Text('模型名称', style: TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(width: 4),
-              IconButton(
-                icon: const Icon(Icons.info_outline, size: 18),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                onPressed: () => _showInfoDialog(
-                  '模型名称',
-                  '模型名称是用于显示和识别的友好名称，例如"GPT-4o Mini TTS"。\n\n同一个供应商下多个模型时，通过名称可以快速区分它们。',
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _nameController,
-            decoration: const InputDecoration(
-              hintText: '输入模型名称',
-              border: OutlineInputBorder(),
+        appBar: AppBar(
+          title: Text(title),
+          actions: [
+            TextButton.icon(
+              onPressed: _isSaving ? null : _save,
+              icon: _isSaving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save, size: 20),
+              label: Text(_isSaving ? '保存中...' : '保存'),
             ),
-          ),
-          const SizedBox(height: 16),
-
-          // ==========================================================
-          // 模型ID
-          // ==========================================================
-          Row(
-            children: [
-              const Text('模型ID *', style: TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(width: 4),
-              IconButton(
-                icon: const Icon(Icons.info_outline, size: 18),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                onPressed: () => _showInfoDialog(
-                  '模型ID',
-                  '模型ID是调用API时使用的唯一标识符，例如"gpt-4o-mini-tts"。\n\nAPI请求时以此ID指定要使用的模型，必须与供应商提供的模型ID一致。',
+          ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // ==========================================================
+            // 模型名称
+            // ==========================================================
+            Row(
+              children: [
+                const Text('模型名称',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.info_outline, size: 18),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => _showInfoDialog(
+                    '模型名称',
+                    '模型名称是用于显示和识别的友好名称，例如"GPT-4o Mini TTS"。\n\n同一个供应商下多个模型时，通过名称可以快速区分它们。',
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _modelIdController,
-            decoration: const InputDecoration(
-              hintText: '输入模型ID',
-              border: OutlineInputBorder(),
+              ],
             ),
-          ),
-          const SizedBox(height: 16),
-
-          // ==========================================================
-          // 音量范围
-          // ==========================================================
-          const Text('音量范围', style: TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _volumeMinController,
-                  decoration: const InputDecoration(
-                    labelText: '最小音量',
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                hintText: '输入模型名称',
+                border: OutlineInputBorder(),
               ),
-              const SizedBox(width: 12),
-              const Text('~'),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: _volumeMaxController,
-                  decoration: const InputDecoration(
-                    labelText: '最大音量',
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // ==========================================================
-          // 语速范围
-          // ==========================================================
-          const Text('语速范围', style: TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _speedMinController,
-                  decoration: const InputDecoration(
-                    labelText: '最小语速',
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Text('~'),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: _speedMaxController,
-                  decoration: const InputDecoration(
-                    labelText: '最大语速',
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          // ==========================================================
-          // 单次最长音频字数
-          // ==========================================================
-          TextField(
-            controller: _maxWordsController,
-            decoration: const InputDecoration(
-              labelText: '单次最长音频字数 *',
-              hintText: '例如: 1000',
-              border: OutlineInputBorder(),
             ),
-            keyboardType: TextInputType.number,
-          ),
-          const SizedBox(height: 24),
+            const SizedBox(height: 16),
 
-          // ==========================================================
-          // 音色列表 → 入口卡片，跳转到独立编辑大面板
-          // ==========================================================
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.record_voice_over, size: 24),
-              title: Text('音色 (${_voices.length})'),
-              subtitle: Text(
-                _voices.isEmpty
-                    ? '暂无音色，点击进入编辑'
-                    : _voices.take(3).map((v) => v.name).join('、') +
-                        (_voices.length > 3 ? '…' : ''),
-                style: const TextStyle(fontSize: 12),
+            // ==========================================================
+            // 模型ID
+            // ==========================================================
+            Row(
+              children: [
+                const Text('模型ID *',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.info_outline, size: 18),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => _showInfoDialog(
+                    '模型ID',
+                    '模型ID是调用API时使用的唯一标识符，例如"gpt-4o-mini-tts"。\n\nAPI请求时以此ID指定要使用的模型，必须与供应商提供的模型ID一致。',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _modelIdController,
+              decoration: const InputDecoration(
+                hintText: '输入模型ID',
+                border: OutlineInputBorder(),
               ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () async {
-                final result = await Navigator.push<List<VoiceEntry>>(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => VoiceEditorPage(
-                      initialVoices: _voices.map((v) => v.copy()).toList(),
+            ),
+            const SizedBox(height: 16),
+
+            // ==========================================================
+            // 音量范围
+            // ==========================================================
+            const Text('音量范围', style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _volumeMinController,
+                    decoration: const InputDecoration(
+                      labelText: '最小音量',
+                      border: OutlineInputBorder(),
                     ),
+                    keyboardType: TextInputType.number,
                   ),
-                );
-                if (result != null) {
-                  setState(() => _voices = result);
-                }
-              },
+                ),
+                const SizedBox(width: 12),
+                const Text('~'),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _volumeMaxController,
+                    decoration: const InputDecoration(
+                      labelText: '最大音量',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 8),
+            const SizedBox(height: 16),
 
-          // ==========================================================
-          // 自定义参数
-          // ==========================================================
-          Row(
-            children: [
-              const Text('自定义参数',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
-              const Spacer(),
-              TextButton.icon(
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('添加参数'),
-                onPressed: _addCustomParam,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
+            // ==========================================================
+            // 语速范围
+            // ==========================================================
+            const Text('语速范围', style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _speedMinController,
+                    decoration: const InputDecoration(
+                      labelText: '最小语速',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Text('~'),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _speedMaxController,
+                    decoration: const InputDecoration(
+                      labelText: '最大语速',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
 
-          if (_customParams.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(
-                child: Text('暂无自定义参数',
-                    style: TextStyle(color: Colors.grey)),
+            // ==========================================================
+            // 单次最长音频字数
+            // ==========================================================
+            TextField(
+              controller: _maxWordsController,
+              decoration: const InputDecoration(
+                labelText: '单次最长音频字数 *',
+                hintText: '例如: 1000',
+                border: OutlineInputBorder(),
               ),
-            )
-          else
-            ...List.generate(_customParams.length, (i) {
-              final param = _customParams[i];
-              // 检查当前参数名是否与其他参数重复
-              final name = param.paramName.trim();
-              final isDuplicate = name.isNotEmpty &&
-                  _customParams.indexWhere(
-                          (p) => p.paramName.trim() == name) !=
-                      i;
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextFormField(
-                                  initialValue: param.paramName,
-                                  decoration: InputDecoration(
-                                    labelText: '参数名',
-                                    border: const OutlineInputBorder(),
-                                    isDense: true,
-                                    errorText: isDuplicate ? '已存在该参数' : null,
-                                    errorStyle: const TextStyle(fontSize: 11),
-                                  ),
-                                  onChanged: (v) {
-                                    param.paramName = v;
-                                    setState(() {});
-                                  },
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 24),
+
+            // ==========================================================
+            // 音色列表 → 入口卡片，跳转到独立编辑大面板
+            // ==========================================================
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.record_voice_over, size: 24),
+                title: Text('音色 (${_voices.length})'),
+                subtitle: Text(
+                  _voices.isEmpty
+                      ? '暂无音色，点击进入编辑'
+                      : _voices.take(3).map((v) => v.name).join('、') +
+                          (_voices.length > 3 ? '…' : ''),
+                  style: const TextStyle(fontSize: 12),
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  final result = await Navigator.push<List<VoiceEntry>>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => VoiceEditorPage(
+                        initialVoices: _voices.map((v) => v.copy()).toList(),
+                      ),
+                    ),
+                  );
+                  if (result != null) {
+                    setState(() => _voices = result);
+                  }
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // ==========================================================
+            // 自定义参数
+            // ==========================================================
+            Row(
+              children: [
+                const Text('自定义参数',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                const Spacer(),
+                TextButton.icon(
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('添加参数'),
+                  onPressed: _addCustomParam,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            if (_customParams.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: Text('暂无自定义参数', style: TextStyle(color: Colors.grey)),
+                ),
+              )
+            else
+              ...List.generate(_customParams.length, (i) {
+                final param = _customParams[i];
+                // 检查当前参数名是否与其他参数重复
+                final name = param.paramName.trim();
+                final isDuplicate = name.isNotEmpty &&
+                    _customParams
+                            .indexWhere((p) => p.paramName.trim() == name) !=
+                        i;
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                initialValue: param.paramName,
+                                decoration: InputDecoration(
+                                  labelText: '参数名',
+                                  border: const OutlineInputBorder(),
+                                  isDense: true,
+                                  errorText: isDuplicate ? '已存在该参数' : null,
+                                  errorStyle: const TextStyle(fontSize: 11),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                          // 类型选择
-                          Container(
-                            width: 110,
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey.shade400),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: param.type,
-                                isDense: true,
-                                items: ParamType.values
-                                    .map((t) => DropdownMenuItem(
-                                          value: t.value,
-                                          child: Text(t.label,
-                                              style:
-                                                  const TextStyle(fontSize: 13)),
-                                        ))
-                                    .toList(),
                                 onChanged: (v) {
-                                  if (v != null) {
-                                    setState(() => param.type = v);
-                                  }
+                                  param.paramName = v;
+                                  setState(() {});
                                 },
                               ),
                             ),
+                            const SizedBox(width: 8),
+                            // 类型选择
+                            Container(
+                              width: 110,
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey.shade400),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 8),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  value: param.type,
+                                  isDense: true,
+                                  items: ParamType.values
+                                      .map((t) => DropdownMenuItem(
+                                            value: t.value,
+                                            child: Text(t.label,
+                                                style: const TextStyle(
+                                                    fontSize: 13)),
+                                          ))
+                                      .toList(),
+                                  onChanged: (v) {
+                                    if (v != null) {
+                                      setState(() => param.type = v);
+                                    }
+                                  },
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              icon: const Icon(Icons.delete,
+                                  color: Colors.red, size: 20),
+                              onPressed: () => _removeCustomParam(i),
+                              tooltip: '删除参数',
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          initialValue: param.defaultValue,
+                          decoration: InputDecoration(
+                            labelText: '默认参数值',
+                            hintText: param.paramType.defaultValueHint,
+                            border: const OutlineInputBorder(),
+                            isDense: true,
                           ),
-                          const SizedBox(width: 4),
-                          IconButton(
-                            icon: const Icon(Icons.delete,
-                                color: Colors.red, size: 20),
-                            onPressed: () => _removeCustomParam(i),
-                            tooltip: '删除参数',
+                          onChanged: (v) => param.defaultValue = v,
+                        ),
+                        const SizedBox(height: 4),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            param.paramType.needsQuotes
+                                ? '在请求格式中生成: "{{${param.paramName}}}"'
+                                : '在请求格式中生成: {{${param.paramName}}}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[500],
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+
+            const SizedBox(height: 16),
+
+            // ==========================================================
+            // instruction 参数开关
+            // ==========================================================
+            Card(
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.description, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('模型是否支持 instruction 参数'),
+                          Text(
+                            '开启后可在TTS请求中附加指令描述语气、情绪、语速等',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: Colors.grey),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        initialValue: param.defaultValue,
-                        decoration: InputDecoration(
-                          labelText: '默认参数值',
-                          hintText: param.paramType.defaultValueHint,
-                          border: const OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        onChanged: (v) => param.defaultValue = v,
-                      ),
-                      const SizedBox(height: 4),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          param.paramType.needsQuotes
-                              ? '在请求格式中生成: "{{${param.paramName}}}"'
-                              : '在请求格式中生成: {{${param.paramName}}}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey[500],
-                            fontFamily: 'monospace',
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 12),
+                    _buildToggleButton('是', true, _supportInstruction,
+                        (v) => setState(() => _supportInstruction = v)),
+                    const SizedBox(width: 8),
+                    _buildToggleButton('否', false, _supportInstruction,
+                        (v) => setState(() => _supportInstruction = v)),
+                  ],
                 ),
-              );
-            }),
-
-          const SizedBox(height: 16),
-
-          // ==========================================================
-          // instruction 参数开关
-          // ==========================================================
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  const Icon(Icons.description, size: 20),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('模型是否支持 instruction 参数'),
-                        Text(
-                          '开启后可在TTS请求中附加指令描述语气、情绪、语速等',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  _buildToggleButton('是', true, _supportInstruction, (v) => setState(() => _supportInstruction = v)),
-                  const SizedBox(width: 8),
-                  _buildToggleButton('否', false, _supportInstruction, (v) => setState(() => _supportInstruction = v)),
-                ],
               ),
             ),
-          ),
-          const SizedBox(height: 8),
+            const SizedBox(height: 8),
 
-          // ==========================================================
-          // 流式输出开关
-          // ==========================================================
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  const Icon(Icons.stream, size: 20),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('模型是否支持流式输出'),
-                        Text(
-                          '开启后部分需要流式输出的场景将可以使用该模型，请确认模型支持流式输出再开启',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey),
-                        ),
-                      ],
+            // ==========================================================
+            // 流式输出开关
+            // ==========================================================
+            Card(
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.stream, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('模型是否支持流式输出'),
+                          Text(
+                            '开启后部分需要流式输出的场景将可以使用该模型，请确认模型支持流式输出再开启',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: Colors.grey),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  _buildToggleButton('是', true, _supportStream, (v) => setState(() => _supportStream = v)),
-                  const SizedBox(width: 8),
-                  _buildToggleButton('否', false, _supportStream, (v) => setState(() => _supportStream = v)),
-                ],
+                    const SizedBox(width: 12),
+                    _buildToggleButton('是', true, _supportStream,
+                        (v) => setState(() => _supportStream = v)),
+                    const SizedBox(width: 8),
+                    _buildToggleButton('否', false, _supportStream,
+                        (v) => setState(() => _supportStream = v)),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 8),
+            const SizedBox(height: 8),
 
-          // ==========================================================
-          // 裁切设置
-          // ==========================================================
-          _buildTrimSection(),
-          const SizedBox(height: 8),
+            // ==========================================================
+            // 裁切设置
+            // ==========================================================
+            _buildTrimSection(),
+            const SizedBox(height: 8),
 
-          const SizedBox(height: 16),
-        ],
+            const SizedBox(height: 16),
+          ],
+        ),
       ),
-    ),
-  );
+    );
   }
 
   Widget _buildTrimSection() {
@@ -1175,8 +1211,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                 const Icon(Icons.content_cut, size: 20),
                 const SizedBox(width: 8),
                 const Text('裁切设置',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w600, fontSize: 16)),
+                    style:
+                        TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
                 const Spacer(),
                 if (_selectedTrimPresetId != null &&
                     _selectedTrimPresetId != BuiltinTrimPresetIds.none)
@@ -1188,10 +1224,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      _getTrimPresetLabel(
-                          _selectedTrimPresetId, customPresets),
-                      style: TextStyle(
-                          fontSize: 11, color: Colors.orange[800]),
+                      _getTrimPresetLabel(_selectedTrimPresetId, customPresets),
+                      style: TextStyle(fontSize: 11, color: Colors.orange[800]),
                     ),
                   ),
               ],
@@ -1214,8 +1248,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                 ),
                 value: preset['id'] as String,
                 // ignore: deprecated_member_use
-                groupValue:
-                    _selectedTrimPresetId ?? BuiltinTrimPresetIds.none,
+                groupValue: _selectedTrimPresetId ?? BuiltinTrimPresetIds.none,
                 // ignore: deprecated_member_use
                 onChanged: (v) => setState(() => _selectedTrimPresetId = v),
                 dense: true,
@@ -1237,12 +1270,13 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                   leading: Radio<String?>(
                     value: preset.id,
                     // ignore: deprecated_member_use
-                    groupValue: _selectedTrimPresetId ?? BuiltinTrimPresetIds.none,
+                    groupValue:
+                        _selectedTrimPresetId ?? BuiltinTrimPresetIds.none,
                     // ignore: deprecated_member_use
-                    onChanged: (v) =>
-                        setState(() => _selectedTrimPresetId = v),
+                    onChanged: (v) => setState(() => _selectedTrimPresetId = v),
                   ),
-                  title: Text(preset.name, style: const TextStyle(fontSize: 14)),
+                  title:
+                      Text(preset.name, style: const TextStyle(fontSize: 14)),
                   subtitle: Text(
                     '裁切$dirLabel ${preset.durationSeconds.toStringAsFixed(3)}s',
                     style: const TextStyle(fontSize: 12),
@@ -1255,8 +1289,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                         onPressed: () => _showEditTrimPresetDialog(preset),
                         tooltip: '编辑',
                         padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                            minWidth: 32, minHeight: 32),
+                        constraints:
+                            const BoxConstraints(minWidth: 32, minHeight: 32),
                       ),
                       IconButton(
                         icon: const Icon(Icons.delete,
@@ -1266,8 +1300,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                             context: context,
                             builder: (ctx) => AlertDialog(
                               title: const Text('删除裁切预设'),
-                              content: Text(
-                                  '确定要删除裁切预设"${preset.name}"吗？'),
+                              content: Text('确定要删除裁切预设"${preset.name}"吗？'),
                               actions: [
                                 TextButton(
                                   onPressed: () => Navigator.pop(ctx, false),
@@ -1294,8 +1327,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                         },
                         tooltip: '删除',
                         padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                            minWidth: 32, minHeight: 32),
+                        constraints:
+                            const BoxConstraints(minWidth: 32, minHeight: 32),
                       ),
                     ],
                   ),
@@ -1320,7 +1353,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                     ? const SizedBox(
                         width: 16,
                         height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
                       )
                     : const Icon(Icons.play_arrow, size: 18),
                 label: Text(_isTestingAudio ? '播放中...' : '播放测试音频'),
@@ -1344,14 +1378,17 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     );
   }
 
-  Widget _buildToggleButton(String label, bool value, bool currentValue, ValueChanged<bool> onChanged) {
+  Widget _buildToggleButton(String label, bool value, bool currentValue,
+      ValueChanged<bool> onChanged) {
     final isSelected = currentValue == value;
     return GestureDetector(
       onTap: () => onChanged(value),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? Theme.of(context).colorScheme.primary : Colors.transparent,
+          color: isSelected
+              ? Theme.of(context).colorScheme.primary
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
             color: isSelected
