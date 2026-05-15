@@ -1,9 +1,208 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 import '../models/chat_message.dart';
 import '../services/chat_service.dart';
+import 'chat_api_provider.dart';
+import 'chat_provider_config.dart';
+
+// ============================================================================
+// ChatProviderConfigItem — 用户持久化的聊天供应商配置
+// ============================================================================
+//
+// Represents a single saved chat provider configuration (e.g. a user's
+// OpenAI-compatible endpoint with API key and selected model).
+// This is the persisted user config, NOT the registry definition
+// (ChatProviderDefinition).
+
+class ChatProviderConfigItem {
+  final String id;
+  String
+      providerName; // matches ChatProviderDefinition.id, e.g. 'openai_compatible'
+  String host; // API base URL
+  String key; // API key
+  List<ChatModelConfig> models; // available models
+  String selectedModelId; // currently selected model ID
+
+  ChatProviderConfigItem({
+    String? id,
+    required this.providerName,
+    this.host = 'https://api.openai.com/v1',
+    this.key = '',
+    List<ChatModelConfig>? models,
+    this.selectedModelId = '',
+  })  : id = id ?? const Uuid().v4(),
+        models = models ?? [];
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'providerName': providerName,
+        'host': host,
+        'key': key,
+        'models': models.map((m) => m.toMap()).toList(),
+        'selectedModelId': selectedModelId,
+      };
+
+  factory ChatProviderConfigItem.fromMap(Map<String, dynamic> map) {
+    return ChatProviderConfigItem(
+      id: map['id'] as String?,
+      providerName: map['providerName'] as String,
+      host: map['host'] as String? ?? 'https://api.openai.com/v1',
+      key: map['key'] as String? ?? '',
+      models: map['models'] is List
+          ? (map['models'] as List)
+              .map((m) =>
+                  ChatModelConfig.fromMap(Map<String, dynamic>.from(m as Map)))
+              .toList()
+          : [],
+      selectedModelId: map['selectedModelId'] as String? ?? '',
+    );
+  }
+}
+
+// ============================================================================
+// Persistence providers
+// ============================================================================
+
+/// Persisted list of chat provider configs.
+final chatConfigsProvider =
+    StateNotifierProvider<ChatConfigsNotifier, List<ChatProviderConfigItem>>(
+        (ref) {
+  final notifier = ChatConfigsNotifier();
+  notifier.load().then((savedId) {
+    if (savedId != null) {
+      ref.read(selectedChatConfigIdProvider.notifier).state = savedId;
+    }
+  });
+  return notifier;
+});
+
+/// Currently selected config ID (or null).
+final selectedChatConfigIdProvider = StateProvider<String?>((ref) => null);
+
+class ChatConfigsNotifier extends StateNotifier<List<ChatProviderConfigItem>> {
+  static const String _storageKey = 'chat_configs';
+
+  ChatConfigsNotifier() : super([]);
+
+  /// Load configs from SharedPreferences.
+  /// Returns the saved selected config ID if it exists and is valid.
+  Future<String?> load() async {
+    String? validSavedId;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonStr = prefs.getString(_storageKey);
+      if (jsonStr == null || jsonStr.isEmpty) return null;
+
+      final list = jsonDecode(jsonStr) as List;
+      state = list
+          .map((e) =>
+              ChatProviderConfigItem.fromMap(Map<String, dynamic>.from(e)))
+          .toList();
+
+      // Check saved selected ID against loaded configs
+      final savedId = prefs.getString('chat_selected_config_id');
+      if (savedId != null && state.any((c) => c.id == savedId)) {
+        validSavedId = savedId;
+      }
+    } catch (e) {
+      debugPrint('ChatConfigsNotifier.load: failed to load configs - $e');
+    }
+    return validSavedId;
+  }
+
+  /// Persist current state to SharedPreferences.
+  Future<void> _persist() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonStr = jsonEncode(state.map((c) => c.toMap()).toList());
+      await prefs.setString(_storageKey, jsonStr);
+    } catch (e) {
+      debugPrint(
+          'ChatConfigsNotifier._persist: failed to persist configs - $e');
+    }
+  }
+
+  /// Add a new config.
+  Future<void> add(ChatProviderConfigItem config) async {
+    state = [...state, config];
+    await _persist();
+  }
+
+  /// Update an existing config by ID.
+  Future<void> update(String id, ChatProviderConfigItem config) async {
+    state = state.map((c) => c.id == id ? config : c).toList();
+    await _persist();
+  }
+
+  /// Reorder a config in the list (drag-and-drop rearrangement).
+  Future<void> reorder(int oldIndex, int newIndex) async {
+    final list = [...state];
+    if (oldIndex < newIndex) newIndex -= 1;
+    final item = list.removeAt(oldIndex);
+    list.insert(newIndex, item);
+    state = list;
+    await _persist();
+  }
+
+  /// Remove a config by ID.
+  Future<void> remove(String id) async {
+    state = state.where((c) => c.id != id).toList();
+    await _persist();
+  }
+}
+
+/// Persist the selected chat config ID to SharedPreferences.
+Future<void> persistSelectedChatConfigId(String? id) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    if (id != null) {
+      await prefs.setString('chat_selected_config_id', id);
+    } else {
+      await prefs.remove('chat_selected_config_id');
+    }
+  } catch (e) {
+    debugPrint('Failed to persist selected chat config ID: $e');
+  }
+}
+
+// ============================================================================
+// Derived provider — builds ChatService from the selected config
+// ============================================================================
+
+/// Builds a [ChatService] from the currently selected chat provider config.
+/// Returns null if no config is selected or the config is incomplete.
+final chatServiceProvider = Provider<ChatService?>((ref) {
+  final configs = ref.watch(chatConfigsProvider);
+  final selectedId = ref.watch(selectedChatConfigIdProvider);
+  if (selectedId == null) return null;
+
+  final config = configs.where((c) => c.id == selectedId).firstOrNull;
+  if (config == null || config.host.isEmpty || config.key.isEmpty) return null;
+
+  // Find the selected model config; fall back to first available model.
+  final modelConfig = config.models
+      .where((m) => m.modelId == config.selectedModelId)
+      .firstOrNull;
+  final effectiveModelConfig =
+      modelConfig ?? (config.models.isNotEmpty ? config.models.first : null);
+  if (effectiveModelConfig == null) return null;
+
+  final provider = createChatProviderFromConfig(
+    providerName: config.providerName,
+    baseUrl: config.host,
+    apiKey: config.key,
+  );
+
+  return ChatService(
+    provider: provider,
+    modelConfig: effectiveModelConfig,
+  );
+});
 
 /// ── State ────────────────────────────────────────────────────────────────────
 ///
@@ -23,16 +222,22 @@ class ChatState {
   /// Whether the AI is currently generating a response.
   final bool isAssistantResponding;
 
+  /// Optional error message to display (e.g. "请先配置聊天供应商").
+  final String? error;
+
   const ChatState({
     this.messages = const [],
     this.streamingAssistantContent = '',
     this.isAssistantResponding = false,
+    this.error,
   });
 
   ChatState copyWith({
     List<ChatMessage>? messages,
     String? streamingAssistantContent,
     bool? isAssistantResponding,
+    String? error,
+    bool clearError = false,
   }) {
     return ChatState(
       messages: messages ?? this.messages,
@@ -40,13 +245,15 @@ class ChatState {
           streamingAssistantContent ?? this.streamingAssistantContent,
       isAssistantResponding:
           isAssistantResponding ?? this.isAssistantResponding,
+      error: clearError ? null : (error ?? this.error),
     );
   }
 
   @override
   String toString() => 'ChatState(messages: ${messages.length}, '
       'streamingAssistantContent: "${streamingAssistantContent.length} chars", '
-      'isAssistantResponding: $isAssistantResponding)';
+      'isAssistantResponding: $isAssistantResponding, '
+      'error: ${error?.length ?? 0} chars)';
 }
 
 /// ── Provider ─────────────────────────────────────────────────────────────────
@@ -59,6 +266,15 @@ final chatProvider = StateNotifierProvider<ChatNotifier, ChatState>((ref) {
 /// ── Notifier ─────────────────────────────────────────────────────────────────
 class ChatNotifier extends StateNotifier<ChatState> {
   StreamSubscription<String>? _streamSubscription;
+
+  /// The active chat service to use for real API calls.
+  /// Set externally (e.g. from ChatPage) when the selected config changes.
+  ChatService? _chatService;
+
+  /// Set the active chat service (called when the selected config changes).
+  void setChatService(ChatService? service) {
+    _chatService = service;
+  }
 
   // ── Streaming batching ──────────────────────────────────────────
   //
@@ -181,11 +397,15 @@ class ChatNotifier extends StateNotifier<ChatState> {
 
   // ── Public API ──────────────────────────────────────────────────
 
-  /// Appends a user message, then calls [ChatService.sendStream] to get the AI
-  /// response. Incoming chunks are buffered and flushed to
-  /// [streamingAssistantContent] on a periodic timer. When the stream
-  /// completes, the full content is moved into [messages] as a completed
-  /// assistant message.
+  /// Appends a user message, then gets the AI response.
+  ///
+  /// If [_chatService] is set (real API mode), it builds conversation history
+  /// from [state.messages] and calls the provider. Otherwise it falls back
+  /// to the static mock [ChatService.sendStream].
+  ///
+  /// Incoming chunks are buffered and flushed to [streamingAssistantContent]
+  /// on a periodic timer. When the stream completes, the full content is
+  /// moved into [messages] as a completed assistant message.
   void sendMessage(String text) {
     if (text.trim().isEmpty || _disposed) return;
 
@@ -213,21 +433,36 @@ class ChatNotifier extends StateNotifier<ChatState> {
       _pendingBuffer = '';
     }
 
-    // Obtain the stream first, then update state — if sendStream throws
+    // If no chat service is configured, show error and abort.
+    if (_chatService == null) {
+      state = ChatState(
+        messages: [
+          ...baseMessages,
+          ChatMessage(role: 'user', content: text.trim()),
+        ],
+        error: '请先配置聊天供应商',
+      );
+      return;
+    }
+
+    // Build conversation history for the API call.
+    final history = [...baseMessages];
+
+    // Obtain the stream first, then update state — if the provider throws
     // synchronously, we catch it and set an error message instead of
     // leaving a dangling streaming assistant.
     late final Stream<String> stream;
     try {
-      stream = ChatService.sendStream(text.trim());
+      stream = _chatService!.sendStream(text.trim(), history: history);
     } catch (e) {
-      debugPrint('ChatService.sendStream error: $e');
+      debugPrint('ChatNotifier.sendMessage: provider error - $e');
       state = ChatState(
         messages: [
           ...baseMessages,
           ChatMessage(role: 'user', content: text.trim()),
           ChatMessage(
             role: 'assistant',
-            content: '*Error: $e*',
+            content: '**[错误: $e]**',
             isStreaming: false,
           ),
         ],
@@ -258,7 +493,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
         _flushTimer?.cancel();
         _flushTimer = null;
         if (_disposed) return;
-        debugPrint('ChatService.sendStream error: $error');
+        debugPrint('ChatNotifier.sendMessage: stream error - $error');
 
         // Combine buffered content and error into a single completed message.
         final partialContent = state.streamingAssistantContent + _pendingBuffer;
@@ -269,7 +504,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
             ...state.messages,
             ChatMessage(
               role: 'assistant',
-              content: '$partialContent\n\n*Error: $error*',
+              content: '$partialContent\n\n**[错误: $error]**',
               isStreaming: false,
             ),
           ],
