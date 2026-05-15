@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/theme_provider.dart';
 import '../providers/provider_config.dart';
+import 'chat_provider_config_page.dart';
 import 'provider_config_page.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
@@ -42,22 +43,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         children: [
           _buildSectionHeader('主题'),
           _buildThemeSettings(themeMode, themeNotifier),
-
           const SizedBox(height: 24),
-
           _buildSectionHeader('相机设置'),
           _buildCameraSettings(),
-
           const SizedBox(height: 24),
-
           _buildSectionHeader('供应商设置'),
           _buildProviderSettings(),
-
           const SizedBox(height: 24),
-
+          _buildSectionHeader('聊天设置'),
+          _buildChatSettings(),
+          const SizedBox(height: 24),
           _buildSectionHeader('关于'),
           _buildAboutSection(),
-
           const SizedBox(height: 40),
         ],
       ),
@@ -150,8 +147,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 value: _saveToGallery,
                 onChanged: (v) => setState(() => _saveToGallery = v),
               ),
-              onTap: () =>
-                  setState(() => _saveToGallery = !_saveToGallery),
+              onTap: () => setState(() => _saveToGallery = !_saveToGallery),
             ),
             const Divider(height: 1),
             _buildListTile(
@@ -173,8 +169,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('压缩质量',
-                          style: TextStyle(fontSize: 16)),
+                      const Text('压缩质量', style: TextStyle(fontSize: 16)),
                       Text(
                         '${(_compressionQuality * 100).toInt()}%',
                         style: const TextStyle(
@@ -188,8 +183,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     max: 1.0,
                     divisions: 9,
                     label: '${(_compressionQuality * 100).toInt()}%',
-                    onChanged: (v) =>
-                        setState(() => _compressionQuality = v),
+                    onChanged: (v) => setState(() => _compressionQuality = v),
                   ),
                 ],
               ),
@@ -234,12 +228,41 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-
   void _openProviderConfig(String entryId) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ProviderConfigPage(entryId: entryId),
+      ),
+    );
+  }
+
+  // ================================================================
+  // 聊天供应商设置
+  // ================================================================
+
+  Widget _buildChatSettings() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: ListTile(
+          leading:
+              Icon(Icons.chat, color: Theme.of(context).colorScheme.primary),
+          title: const Text('聊天供应商'),
+          subtitle: const Text('配置AI聊天API供应商和模型'),
+          trailing: const Icon(Icons.chevron_right),
+          contentPadding: EdgeInsets.zero,
+          onTap: () => _openChatProviderConfig(),
+        ),
+      ),
+    );
+  }
+
+  void _openChatProviderConfig() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const ChatProviderConfigPage(),
       ),
     );
   }
@@ -255,8 +278,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         child: Column(
           children: [
             _buildListTile(
-              leading:
-                  const Icon(Icons.info_outline, color: Colors.blue),
+              leading: const Icon(Icons.info_outline, color: Colors.blue),
               title: '应用版本',
               subtitle: '1.0.0',
               trailing: null,

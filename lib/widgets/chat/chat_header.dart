@@ -9,12 +9,14 @@ import 'package:flutter/material.dart';
 /// - Bottom border: border-b-0.5 border-border-300
 class ChatHeader extends StatelessWidget {
   final String title;
+  final String? subtitle;
   final VoidCallback? onMenuTap;
   final Widget? actions;
 
   const ChatHeader({
     super.key,
     required this.title,
+    this.subtitle,
     this.onMenuTap,
     this.actions,
   });
@@ -41,14 +43,29 @@ class ChatHeader extends StatelessWidget {
               tooltip: '菜单',
             ),
           Expanded(
-            child: Text(
-              title,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: cs.onSurface,
-              ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: cs.onSurface,
+                  ),
+                ),
+                if (subtitle != null && subtitle!.isNotEmpty)
+                  Text(
+                    subtitle!,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+              ],
             ),
           ),
           if (actions != null) actions!,

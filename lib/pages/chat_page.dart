@@ -4,7 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/chat_message.dart';
 import '../providers/chat_provider.dart';
+
+import '../services/chat_service.dart' show ChatService;
 import '../providers/conversation_provider.dart';
+import 'chat_provider_config_page.dart';
 import '../widgets/chat/avatar_widget.dart';
 import '../widgets/chat/chat_header.dart';
 import '../widgets/chat/chat_input_bar.dart';
@@ -150,6 +153,20 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final activeId = ref.watch(activeConversationIdProvider);
     final title = _getTitle(conversations, activeId);
 
+    // Build subtitle from selected config
+    String modelSubtitle = '';
+    final configs = ref.watch(chatConfigsProvider);
+    final selectedConfigId = ref.watch(selectedChatConfigIdProvider);
+    if (selectedConfigId != null) {
+      final config = configs.where((c) => c.id == selectedConfigId).firstOrNull;
+      if (config != null) {
+        final modelName = config.selectedModelId.isNotEmpty
+            ? config.selectedModelId
+            : (config.models.isNotEmpty ? config.models.first.modelId : '未选择');
+        modelSubtitle = 'Model: $modelName';
+      }
+    }
+
     // ── 仅在用户消息添加或流式完成时持久化 ──
     ref.listen(chatProvider.select((s) => s.messages),
         (List<ChatMessage>? prev, List<ChatMessage> next) {
@@ -206,6 +223,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       }
     });
 
+    // ── Wire up ChatService when config changes ──
+    final chatService = ref.watch(chatServiceProvider);
+
+    ref.listen<ChatService?>(chatServiceProvider, (prev, next) {
+      ref.read(chatProvider.notifier).setChatService(next);
+    });
+
     return SafeArea(
       child: Container(
         // Page body background: one level below cs.surface → subtle layering
@@ -215,6 +239,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             // ── 顶部标题栏 ──
             ChatHeader(
               title: title,
+              subtitle: modelSubtitle.isNotEmpty ? modelSubtitle : null,
               onMenuTap: null,
               actions: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -233,10 +258,60 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               ),
             ),
 
+            // ── 未配置聊天API提示 ──
+            if (chatService == null)
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                color: Theme.of(context)
+                    .colorScheme
+                    .errorContainer
+                    .withValues(alpha: 0.3),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        size: 16, color: Theme.of(context).colorScheme.error),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '⚠️ 未配置聊天API — 前往设置',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.onErrorContainer,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ChatProviderConfigPage(),
+                          ),
+                        );
+                      },
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text(
+                        '设置',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             // ── 消息列表（流式消息在 ListView 内作为最后一条）──
             Expanded(
               child: messages.isEmpty && !isResponding
-                  ? _buildEmptyState(context)
+                  ? _buildEmptyState(context, chatService: chatService)
                   : _buildMessageList(messages, isResponding: isResponding),
             ),
 
@@ -434,8 +509,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   // ========================================================================
 
   /// Claude-inspired empty state: heading + subtitle + suggestion chips.
-  Widget _buildEmptyState(BuildContext context) {
+  Widget _buildEmptyState(BuildContext context, {ChatService? chatService}) {
     final cs = Theme.of(context).colorScheme;
+    final hasService = chatService != null;
 
     return Center(
       child: SingleChildScrollView(
@@ -443,58 +519,92 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              '你好！',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w600,
-                color: cs.onSurface,
+            if (hasService) ...[
+              Text(
+                '你好！',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface,
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              '有什么我可以帮助你的吗？',
-              style: TextStyle(
-                fontSize: 15,
-                color: cs.onSurfaceVariant,
+              const SizedBox(height: 12),
+              Text(
+                '有什么我可以帮助你的吗？',
+                style: TextStyle(
+                  fontSize: 15,
+                  color: cs.onSurfaceVariant,
+                ),
               ),
-            ),
-            const SizedBox(height: 40),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              alignment: WrapAlignment.center,
-              children: _suggestions.map((suggestion) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: InkWell(
-                    onTap: () => _sendMessage(suggestion),
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: cs.surface,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: cs.outlineVariant,
-                          width: 0.5,
+              const SizedBox(height: 40),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                alignment: WrapAlignment.center,
+                children: _suggestions.map((suggestion) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: InkWell(
+                      onTap: () => _sendMessage(suggestion),
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 10,
                         ),
-                      ),
-                      child: Text(
-                        suggestion,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: cs.onSurfaceVariant,
+                        decoration: BoxDecoration(
+                          color: cs.surface,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: cs.outlineVariant,
+                            width: 0.5,
+                          ),
+                        ),
+                        child: Text(
+                          suggestion,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: cs.onSurfaceVariant,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              }).toList(),
-            ),
+                  );
+                }).toList(),
+              ),
+            ] else ...[
+              Icon(Icons.chat_bubble_outline,
+                  size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+              const SizedBox(height: 16),
+              Text(
+                '请先在设置中配置聊天供应商',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '没有可用的聊天服务，请添加API配置',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                ),
+              ),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ChatProviderConfigPage(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.settings, size: 18),
+                label: const Text('前往设置'),
+              ),
+            ],
           ],
         ),
       ),
