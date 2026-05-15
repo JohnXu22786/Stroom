@@ -3,53 +3,14 @@
 // 遵循与 tts_config.dart 相同的注册表模式
 // ============================================================================
 
-/// Chat 模型配置
-class ChatModelConfig {
-  final String modelId; // 模型 ID，如 'gpt-4o'
-  final int maxTokens; // 最大 Token 数，默认 4096
-  final double temperature; // 温度，默认 0.7
-  final String systemPrompt; // 系统提示词，默认 '你是一个有帮助的助手。'
-  final bool supportStream; // 是否支持流式，默认 true
-
-  const ChatModelConfig({
-    required this.modelId,
-    this.maxTokens = 4096,
-    this.temperature = 0.7,
-    this.systemPrompt = '你是一个有帮助的助手。',
-    this.supportStream = true,
-  });
-
-  Map<String, dynamic> toMap() => {
-        'modelId': modelId,
-        'maxTokens': maxTokens,
-        'temperature': temperature,
-        'systemPrompt': systemPrompt,
-        'supportStream': supportStream,
-      };
-
-  factory ChatModelConfig.fromMap(Map<String, dynamic> map) => ChatModelConfig(
-        modelId: map['modelId'] as String,
-        maxTokens: (map['maxTokens'] as num?)?.toInt() ?? 4096,
-        temperature: (map['temperature'] as num?)?.toDouble() ?? 0.7,
-        systemPrompt: map['systemPrompt'] as String? ?? '你是一个有帮助的助手。',
-        supportStream: map['supportStream'] as bool? ?? true,
-      );
-
-  ChatModelConfig copy() => ChatModelConfig(
-        modelId: modelId,
-        maxTokens: maxTokens,
-        temperature: temperature,
-        systemPrompt: systemPrompt,
-        supportStream: supportStream,
-      );
-}
+import 'provider_config.dart';
 
 /// 聊天供应商定义
 class ChatProviderDefinition {
   final String id; // 唯一标识，如 'openai_compatible'
   final String label; // 显示名称，如 'OpenAI Compatible'
   final String? defaultBaseUrl; // 默认 API 地址
-  final List<ChatModelConfig> defaultModels; // 默认模型列表
+  final List<ModelConfig> defaultModels; // 默认模型列表
   final Map<String, dynamic> defaultConfig; // 供应商专属默认配置
 
   const ChatProviderDefinition({
@@ -78,7 +39,7 @@ class ChatProviderDefinition {
       defaultModels: map['defaultModels'] is List
           ? (map['defaultModels'] as List)
               .map((m) =>
-                  ChatModelConfig.fromMap(Map<String, dynamic>.from(m as Map)))
+                  ModelConfig.fromMap(Map<String, dynamic>.from(m as Map)))
               .toList()
           : [],
       defaultConfig:
@@ -121,17 +82,17 @@ void registerBuiltinChatProviders() {
     label: 'OpenAI Compatible',
     defaultBaseUrl: 'https://api.openai.com/v1',
     defaultModels: [
-      ChatModelConfig(
+      ModelConfig(
+        name: 'GPT-4o',
         modelId: 'gpt-4o',
-        systemPrompt: '你是一个有帮助的助手。',
       ),
-      ChatModelConfig(
+      ModelConfig(
+        name: 'GPT-4o-mini',
         modelId: 'gpt-4o-mini',
-        systemPrompt: '你是一个有帮助的助手。',
       ),
-      ChatModelConfig(
+      ModelConfig(
+        name: 'GPT-4-turbo',
         modelId: 'gpt-4-turbo',
-        systemPrompt: '你是一个有帮助的助手。',
       ),
     ],
   ));
@@ -142,9 +103,9 @@ void registerBuiltinChatProviders() {
 // ============================================================================
 
 /// 获取指定供应商的模型列表
-List<ChatModelConfig> getChatProviderModels(String providerId) {
+List<ModelConfig> getChatProviderModels(String providerId) {
   final def = ChatProviderRegistry.get(providerId);
-  return def != null ? List.from(def.defaultModels) : [];
+  return def != null ? List<ModelConfig>.from(def.defaultModels) : [];
 }
 
 /// 检查供应商是否受支持

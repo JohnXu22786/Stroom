@@ -24,6 +24,7 @@ abstract class BaseChatProvider {
     int? maxTokens,
     double? temperature,
     CancelToken? cancelToken,
+    Map<String, dynamic>? extraParams,
   });
 
   /// 流式对话，逐段 yield 回复文本
@@ -32,6 +33,7 @@ abstract class BaseChatProvider {
     String? model,
     int? maxTokens,
     double? temperature,
+    Map<String, dynamic>? extraParams,
   });
 
   /// 获取默认参数配置
@@ -82,8 +84,12 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     int? maxTokens,
     double? temperature,
     bool stream = false,
+    Map<String, dynamic>? extraParams,
   }) {
     return {
+      // extraParams 放在前面，显式参数放在后面覆盖，防止用户自定义参数
+      // 意外覆盖 model/messages/max_tokens/temperature/stream 等关键字段
+      if (extraParams != null) ...extraParams,
       'model': model ?? defaultParams['model'],
       'messages': messages
           .map((m) => {
@@ -113,11 +119,15 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     int? maxTokens,
     double? temperature,
     CancelToken? cancelToken,
+    Map<String, dynamic>? extraParams,
   }) async {
     if (_apiKey.isEmpty) throw Exception('API 密钥未配置');
 
     final body = _buildBody(messages,
-        model: model, maxTokens: maxTokens, temperature: temperature);
+        model: model,
+        maxTokens: maxTokens,
+        temperature: temperature,
+        extraParams: extraParams);
 
     final url = '$_baseUrl/chat/completions';
     debugPrint(
@@ -152,6 +162,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     String? model,
     int? maxTokens,
     double? temperature,
+    Map<String, dynamic>? extraParams,
   }) async* {
     if (_apiKey.isEmpty) {
       yield '**[错误: API 密钥未配置]**';
@@ -162,7 +173,8 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         model: model,
         maxTokens: maxTokens,
         temperature: temperature,
-        stream: true);
+        stream: true,
+        extraParams: extraParams);
 
     final url = '$_baseUrl/chat/completions';
     debugPrint(

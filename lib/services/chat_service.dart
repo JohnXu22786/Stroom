@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../models/chat_message.dart';
 import '../providers/chat_api_provider.dart';
-import '../providers/chat_provider_config.dart';
+import '../providers/provider_config.dart';
 
 // ====================================================================
 // ChatService — AI 聊天服务抽象层
@@ -23,14 +23,14 @@ import '../providers/chat_provider_config.dart';
 class ChatService {
   // ── Instance fields (used when constructed with a provider) ─────
   final BaseChatProvider? _provider;
-  final ChatModelConfig? _modelConfig;
+  final ModelConfig? _modelConfig;
   StreamSubscription<String>? _streamSubscription;
   StreamController<String>? _controller;
 
   /// Construct an instance backed by a real provider and model config.
   ChatService({
     required BaseChatProvider provider,
-    required ChatModelConfig modelConfig,
+    required ModelConfig modelConfig,
   })  : _provider = provider,
         _modelConfig = modelConfig;
 
@@ -62,12 +62,17 @@ class ChatService {
       ChatMessage(role: 'user', content: userMessage),
     ];
 
+    final extraParams = _buildExtraParams();
+
     _streamSubscription = _provider!
         .chatStream(
       messages,
       model: _modelConfig!.modelId,
-      maxTokens: _modelConfig!.maxTokens,
-      temperature: _modelConfig!.temperature,
+      maxTokens:
+          (_modelConfig!.typeConfig['maxTokens'] as num?)?.toInt() ?? 4096,
+      temperature:
+          (_modelConfig!.typeConfig['temperature'] as num?)?.toDouble() ?? 0.7,
+      extraParams: extraParams,
     )
         .listen(
       (chunk) {
@@ -120,6 +125,23 @@ class ChatService {
     if (_controller?.isClosed ?? true) {
       _controller = null;
     }
+  }
+
+  // ── Extra params helpers ─────────────────────────────────────────
+
+  /// Build extraParams map from customParams for the API call.
+  Map<String, dynamic> _buildExtraParams() {
+    final params = _modelConfig!.customParams;
+    if (params.isEmpty) return {};
+
+    return {
+      for (final cp in params)
+        cp.paramName: switch (cp.type) {
+          'number' => double.tryParse(cp.defaultValue) ?? 0.0,
+          'boolean' => cp.defaultValue.toLowerCase() == 'true',
+          'string' || _ => cp.defaultValue,
+        },
+    };
   }
 
   /// Dispose permanently (no more streams possible after this)

@@ -46,8 +46,7 @@ class ParamType {
   }
 
   @override
-  bool operator ==(Object other) =>
-      other is ParamType && other.value == value;
+  bool operator ==(Object other) => other is ParamType && other.value == value;
 
   @override
   int get hashCode => value.hashCode;
@@ -109,9 +108,9 @@ enum TrimDirection {
 /// 裁切预设（全局共享）
 class TrimPreset {
   String id;
-  String name;          // 切割方式名称
+  String name; // 切割方式名称
   double durationSeconds; // 切割时长（秒）
-  String direction;     // 'head' 或 'tail'
+  String direction; // 'head' 或 'tail'
 
   TrimPreset({
     String? id,
@@ -148,7 +147,7 @@ class TrimPreset {
 
 class VoiceEntry {
   String name; // 音色名称，如 "标准女生"
-  String id;   // 音色ID，如 "female"
+  String id; // 音色ID，如 "female"
 
   VoiceEntry({
     required this.name,
@@ -186,6 +185,7 @@ class ModelConfig {
   int maxWordsPerRequest; // 单次最长音频字数
   bool supportStream; // 是否支持流式输出
   bool supportInstruction; // 是否支持 instruction 参数
+  Map<String, dynamic> typeConfig; // 类型特有参数
   String? selectedTrimPresetId; // 当前选中的裁切预设ID
 
   ModelConfig({
@@ -202,6 +202,7 @@ class ModelConfig {
     this.maxWordsPerRequest = 0,
     this.supportStream = false,
     this.supportInstruction = false,
+    this.typeConfig = const {},
     this.selectedTrimPresetId,
   })  : voices = voices ?? [],
         customParams = customParams ?? [];
@@ -220,6 +221,7 @@ class ModelConfig {
         'maxWordsPerRequest': maxWordsPerRequest,
         'supportStream': supportStream,
         'supportInstruction': supportInstruction,
+        'typeConfig': typeConfig,
         'selectedTrimPresetId': selectedTrimPresetId,
       };
 
@@ -227,7 +229,8 @@ class ModelConfig {
         name: map['name'] as String? ?? '',
         modelId: map['modelId'] as String? ?? '',
         voices: (map['voices'] as List?)
-                ?.map((e) => VoiceEntry.fromMap(Map<String, dynamic>.from(e as Map)))
+                ?.map((e) =>
+                    VoiceEntry.fromMap(Map<String, dynamic>.from(e as Map)))
                 .toList() ??
             [],
         volumeMin: (map['volumeMin'] as num?)?.toDouble() ?? 0.1,
@@ -237,12 +240,14 @@ class ModelConfig {
         hasVolume: map['hasVolume'] as bool? ?? false,
         hasSpeed: map['hasSpeed'] as bool? ?? false,
         customParams: (map['customParams'] as List?)
-                ?.map((e) => CustomParam.fromMap(Map<String, dynamic>.from(e as Map)))
+                ?.map((e) =>
+                    CustomParam.fromMap(Map<String, dynamic>.from(e as Map)))
                 .toList() ??
             [],
         maxWordsPerRequest: (map['maxWordsPerRequest'] as num?)?.toInt() ?? 0,
         supportStream: map['supportStream'] as bool? ?? false,
         supportInstruction: map['supportInstruction'] == true,
+        typeConfig: Map<String, dynamic>.from(map['typeConfig'] as Map? ?? {}),
         selectedTrimPresetId: map['selectedTrimPresetId'] as String?,
       );
 
@@ -261,6 +266,7 @@ class ModelConfig {
         supportStream: supportStream,
         supportInstruction: supportInstruction,
         selectedTrimPresetId: selectedTrimPresetId,
+        typeConfig: Map<String, dynamic>.from(typeConfig),
       );
 }
 
@@ -269,8 +275,6 @@ class ModelConfig {
 // ============================================================================
 
 class ProviderConfigItem {
-
-
   String providerName;
   String host;
   String key;
@@ -316,11 +320,13 @@ class ProviderConfigItem {
 
 class ProviderEntry {
   final String id;
+  String type; // 'tts' | 'llm'
   String name; // 显示名称，如 "TTS供应商"
   List<ProviderConfigItem> configs;
 
   ProviderEntry({
     String? id,
+    this.type = 'tts',
     required this.name,
     List<ProviderConfigItem>? configs,
   })  : id = id ?? 'provider_${const Uuid().v4()}',
@@ -328,6 +334,7 @@ class ProviderEntry {
 
   Map<String, dynamic> toMap() => {
         'id': id,
+        'type': type,
         'name': name,
         'configs': configs.map((c) => c.toMap()).toList(),
       };
@@ -337,6 +344,7 @@ class ProviderEntry {
     if (map.containsKey('configs')) {
       return ProviderEntry(
         id: map['id'] as String,
+        type: map['type'] as String? ?? 'tts',
         name: map['name'] as String? ?? '',
         configs: (map['configs'] as List?)
                 ?.map((e) => ProviderConfigItem.fromMap(
@@ -358,6 +366,7 @@ class ProviderEntry {
     );
     return ProviderEntry(
       id: map['id'] as String,
+      type: map['type'] as String? ?? 'tts',
       name: map['name'] as String? ?? '',
       configs: config.providerName.isEmpty &&
               config.host.isEmpty &&
@@ -403,11 +412,17 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       debugPrint('Failed to load provider entries: $e');
     }
 
-    // 默认预置 TTS供应商
+    // 默认预置
     state = ProviderEntriesState(entries: [
       ProviderEntry(
         id: 'builtin_tts',
+        type: 'tts',
         name: 'TTS供应商',
+      ),
+      ProviderEntry(
+        id: 'builtin_llm',
+        type: 'llm',
+        name: 'LLM供应商',
       ),
     ]);
   }

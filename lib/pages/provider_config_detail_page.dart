@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/provider_config.dart';
+import 'llm_model_config_page.dart';
 import 'model_config_page.dart';
 
 class ProviderConfigDetailPage extends ConsumerStatefulWidget {
@@ -92,33 +93,114 @@ class _ProviderConfigDetailPageState
   // ----------------------------------------------------------------
 
   Future<void> _addModel() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ModelConfigPage(
-          entryId: widget.entryId,
-          configIndex: widget.configIndex >= 0 ? widget.configIndex : 0,
-          modelIndex: -1,
+    final entry = _entry;
+    if (entry == null) return;
+
+    if (entry.type == 'llm') {
+      final result = await Navigator.push<ModelConfig>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const LlmModelConfigPage(),
         ),
-      ),
-    );
-    if (!mounted) return;
-    setState(() {});
+      );
+      if (result != null && mounted) {
+        final currentEntry = _entry;
+        if (currentEntry == null) return;
+        var configs = currentEntry.configs.map((c) => c.copy()).toList();
+        if (widget.configIndex >= 0 && widget.configIndex < configs.length) {
+          configs[widget.configIndex] = ProviderConfigItem(
+            providerName: configs[widget.configIndex].providerName,
+            host: configs[widget.configIndex].host,
+            key: configs[widget.configIndex].key,
+            models: [
+              ...configs[widget.configIndex].models,
+              result,
+            ],
+          );
+          final updated = ProviderEntry(
+            id: currentEntry.id,
+            type: currentEntry.type,
+            name: currentEntry.name,
+            configs: configs,
+          );
+          await ref
+              .read(providerEntriesProvider.notifier)
+              .update(currentEntry.id, updated);
+          if (mounted) setState(() {});
+        }
+      }
+    } else {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ModelConfigPage(
+            entryId: widget.entryId,
+            configIndex: widget.configIndex >= 0 ? widget.configIndex : 0,
+            modelIndex: -1,
+          ),
+        ),
+      );
+      if (mounted) setState(() {});
+    }
   }
 
   Future<void> _editModel(int modelIndex) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ModelConfigPage(
-          entryId: widget.entryId,
-          configIndex: widget.configIndex >= 0 ? widget.configIndex : 0,
-          modelIndex: modelIndex,
+    final entry = _entry;
+    if (entry == null) return;
+
+    if (entry.type == 'llm') {
+      final config = _config;
+      if (config == null ||
+          modelIndex < 0 ||
+          modelIndex >= config.models.length) return;
+
+      final result = await Navigator.push<ModelConfig>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => LlmModelConfigPage(
+            model: config.models[modelIndex].copy(),
+          ),
         ),
-      ),
-    );
-    if (!mounted) return;
-    setState(() {});
+      );
+      if (result != null && mounted) {
+        final currentEntry = _entry;
+        if (currentEntry == null) return;
+        var configs = currentEntry.configs.map((c) => c.copy()).toList();
+        if (widget.configIndex >= 0 && widget.configIndex < configs.length) {
+          final models =
+              List<ModelConfig>.from(configs[widget.configIndex].models);
+          models[modelIndex] = result;
+          configs[widget.configIndex] = ProviderConfigItem(
+            providerName: configs[widget.configIndex].providerName,
+            host: configs[widget.configIndex].host,
+            key: configs[widget.configIndex].key,
+            models: models,
+          );
+          final updated = ProviderEntry(
+            id: currentEntry.id,
+            type: currentEntry.type,
+            name: currentEntry.name,
+            configs: configs,
+          );
+          await ref
+              .read(providerEntriesProvider.notifier)
+              .update(currentEntry.id, updated);
+          if (mounted) setState(() {});
+        }
+      }
+    } else {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ModelConfigPage(
+            entryId: widget.entryId,
+            configIndex: widget.configIndex >= 0 ? widget.configIndex : 0,
+            modelIndex: modelIndex,
+          ),
+        ),
+      );
+      if (mounted) setState(() {});
+    }
   }
 
   Future<void> _deleteModel(int modelIndex) async {
@@ -161,6 +243,7 @@ class _ProviderConfigDetailPageState
 
     final updated = ProviderEntry(
       id: entry.id,
+      type: entry.type,
       name: entry.name,
       configs: configs,
     );
@@ -211,6 +294,7 @@ class _ProviderConfigDetailPageState
 
     final updated = ProviderEntry(
       id: entry.id,
+      type: entry.type,
       name: entry.name,
       configs: configs,
     );
@@ -329,8 +413,7 @@ class _ProviderConfigDetailPageState
               final model = models[i];
               return ListTile(
                 leading: const Icon(Icons.smart_toy),
-                title:
-                    Text(model.name.isNotEmpty ? model.name : '（未命名）'),
+                title: Text(model.name.isNotEmpty ? model.name : '（未命名）'),
                 subtitle: Text('ID: ${model.modelId}'),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
