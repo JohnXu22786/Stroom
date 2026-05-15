@@ -17,7 +17,7 @@ import 'package:flutter/services.dart';
 /// - code (inline): rounded bg, monospace
 /// - pre (block): dark bg with rounded corners and border
 /// - blockquote: left border, padding
-class MarkdownRenderer extends StatelessWidget {
+class MarkdownRenderer extends StatefulWidget {
   final String data;
   final bool selectable;
 
@@ -28,13 +28,85 @@ class MarkdownRenderer extends StatelessWidget {
   });
 
   @override
+  State<MarkdownRenderer> createState() => _MarkdownRendererState();
+}
+
+class _MarkdownRendererState extends State<MarkdownRenderer> {
+  /// Cached block list. Completed blocks are never changed;
+  /// only the **last block** may be extended with new text.
+  List<_Block> _blocks = [];
+
+  /// Raw text that was parsed to produce [_blocks].
+  String _cachedContent = '';
+
+  @override
   Widget build(BuildContext context) {
+    final data = widget.data;
+    if (data != _cachedContent) {
+      _updateCache(data);
+      _cachedContent = data;
+    }
+    return _buildBlocks(context);
+  }
+
+  // --------------------------------------------------------------------------
+  // Cache logic
+  // --------------------------------------------------------------------------
+
+  /// Update [_blocks] incrementally when possible:
+  ///   - First build or non-append change → full re-parse
+  ///   - Delta contains `\n` → block boundary, full re-parse
+  ///   - Otherwise → append [delta] to the last text block (O(1))
+  void _updateCache(String data) {
+    if (_cachedContent.isEmpty || !data.startsWith(_cachedContent)) {
+      _blocks = _parseBlocks(data);
+      return;
+    }
+
+    final delta = data.substring(_cachedContent.length);
+    if (delta.isEmpty) return;
+
+    // Newline → block boundary may have changed → safe fallback
+    if (delta.contains('\n') || _blocks.isEmpty) {
+      _blocks = _parseBlocks(data);
+      return;
+    }
+
+    // Pure text append to the last block
+    final last = _blocks.last;
+    if (_isAppendableBlock(last)) {
+      _blocks[_blocks.length - 1] = last.copyWith(text: last.text + delta);
+    } else {
+      // Last block is non-text (code, table, hr) — start new paragraph
+      _blocks.add(_Block(type: _BlockType.paragraph, text: delta));
+    }
+  }
+
+  /// Blocks whose text content can be safely extended.
+  /// Code blocks, tables, and horizontal rules cannot.
+  static bool _isAppendableBlock(_Block b) {
+    return b.type == _BlockType.paragraph ||
+        b.type == _BlockType.listItem ||
+        b.type == _BlockType.orderedItem ||
+        b.type == _BlockType.blockquote ||
+        b.type == _BlockType.heading1 ||
+        b.type == _BlockType.heading2 ||
+        b.type == _BlockType.heading3 ||
+        b.type == _BlockType.heading4;
+  }
+
+  // --------------------------------------------------------------------------
+  // Widget building
+  // --------------------------------------------------------------------------
+
+  Widget _buildBlocks(BuildContext context) {
+    if (_blocks.isEmpty) return const SizedBox.shrink();
+
     final cs = Theme.of(context).colorScheme;
-    final blocks = _parseBlocks(data);
     final items = <Widget>[];
 
-    for (int i = 0; i < blocks.length; i++) {
-      final b = blocks[i];
+    for (int i = 0; i < _blocks.length; i++) {
+      final b = _blocks[i];
       // Add spacing between blocks (except before first and between list items)
       if (i > 0 &&
           b.type != _BlockType.listItem &&
@@ -46,10 +118,13 @@ class MarkdownRenderer extends StatelessWidget {
                 : 6.0;
         items.add(SizedBox(height: h));
       }
-      items.add(_buildBlockWidget(context, cs, b));
+      items.add(
+        KeyedSubtree(
+          key: ValueKey('block_$i'),
+          child: _buildBlockWidget(context, cs, b),
+        ),
+      );
     }
-
-    if (items.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -147,7 +222,7 @@ class MarkdownRenderer extends StatelessWidget {
             ? '  ${block.index}.  '
             : '';
 
-    if (selectable) {
+    if (widget.selectable) {
       return SelectableText.rich(
         TextSpan(
           text: prefix,
@@ -328,8 +403,13 @@ class MarkdownRenderer extends StatelessWidget {
     );
   }
 
+  // --------------------------------------------------------------------------
+  // Parsing helpers
+  // --------------------------------------------------------------------------
+
   /// Parse inline markdown: **bold**, *italic*, `code`, [text](url)
-  List<InlineSpan> _parseInline(String text, Color color, double fontSize) {
+  static List<InlineSpan> _parseInline(
+      String text, Color color, double fontSize) {
     final spans = <InlineSpan>[];
     int i = 0;
 
@@ -443,7 +523,7 @@ class MarkdownRenderer extends StatelessWidget {
   /// Single newlines (no blank line between) merge consecutive paragraphs
   /// into one block with `\n` preserved — tighter line spacing.
   /// Blank lines separate paragraphs — wider spacing.
-  List<_Block> _parseBlocks(String md) {
+  static List<_Block> _parseBlocks(String md) {
     final blocks = <_Block>[];
     final lines = md.split('\n');
     int orderedIndex = 0;

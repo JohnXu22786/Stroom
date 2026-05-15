@@ -5,15 +5,59 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/chat_message.dart';
 import '../services/chat_service.dart';
 
-/// Manages the current conversation's message list.
+/// ── State ────────────────────────────────────────────────────────────────────
 ///
-/// State: [List<ChatMessage>] for the active conversation.
-final chatProvider =
-    StateNotifierProvider<ChatNotifier, List<ChatMessage>>((ref) {
+/// Separates completed messages from in-progress streaming content so that
+/// widget tree rebuilds during streaming only affect a small widget consuming
+/// [streamingAssistantContent], not the entire message list.
+class ChatState {
+  /// Messages whose content is fully received (including the last user message
+  /// and any previous assistant turns).
+  final List<ChatMessage> messages;
+
+  /// In-progress assistant content that is still being streamed. Updated on
+  /// each flush cycle so a dedicated streaming widget can listen to this field
+  /// without rebuilding the full list.
+  final String streamingAssistantContent;
+
+  /// Whether the AI is currently generating a response.
+  final bool isAssistantResponding;
+
+  const ChatState({
+    this.messages = const [],
+    this.streamingAssistantContent = '',
+    this.isAssistantResponding = false,
+  });
+
+  ChatState copyWith({
+    List<ChatMessage>? messages,
+    String? streamingAssistantContent,
+    bool? isAssistantResponding,
+  }) {
+    return ChatState(
+      messages: messages ?? this.messages,
+      streamingAssistantContent:
+          streamingAssistantContent ?? this.streamingAssistantContent,
+      isAssistantResponding:
+          isAssistantResponding ?? this.isAssistantResponding,
+    );
+  }
+
+  @override
+  String toString() => 'ChatState(messages: ${messages.length}, '
+      'streamingAssistantContent: "${streamingAssistantContent.length} chars", '
+      'isAssistantResponding: $isAssistantResponding)';
+}
+
+/// ── Provider ─────────────────────────────────────────────────────────────────
+///
+/// Manages the current conversation's message list and streaming state.
+final chatProvider = StateNotifierProvider<ChatNotifier, ChatState>((ref) {
   return ChatNotifier();
 });
 
-class ChatNotifier extends StateNotifier<List<ChatMessage>> {
+/// ── Notifier ─────────────────────────────────────────────────────────────────
+class ChatNotifier extends StateNotifier<ChatState> {
   StreamSubscription<String>? _streamSubscription;
 
   // ── Streaming batching ──────────────────────────────────────────
@@ -23,23 +67,25 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
   // state change triggers a full markdown re-parse).
   //
   // Solution: buffer incoming chunks and flush them to state on a
-  // 33ms periodic timer (~30 fps). Chunks arriving within the same
-  // window are coalesced into a single state update; the periodic
-  // timer ensures that even during continuous high-speed streaming
-  // the user sees content at a predictable frame rate.
+  // periodic timer. Chunks arriving within the same window are
+  // coalesced into a single state update; the periodic timer ensures
+  // that even during continuous high-speed streaming the user sees
+  // content at a predictable frame rate.
   //
   // No size threshold — whatever accumulated in one interval window
   // is flushed as a single batch. This avoids both character-by-character
   // overhead and arbitrary size cutoffs.
   // ─────────────────────────────────────────────────────────────────
 
-  /// Interval at which the periodic flush timer fires (~30 fps).
-  static const Duration _batchInterval = Duration(milliseconds: 33);
+  /// Interval at which the periodic flush timer fires (~10 fps).
+  ///
+  /// Made public so other files can reference this value if needed.
+  static const Duration batchInterval = Duration(milliseconds: 100);
 
   /// Accumulated chunks waiting to be flushed to state.
   String _pendingBuffer = '';
 
-  /// Periodic timer that fires every [_batchInterval] to flush the buffer.
+  /// Periodic timer that fires every [batchInterval] to flush the buffer.
   Timer? _flushTimer;
 
   /// Set to true in [dispose]; guards async callbacks from operating on
@@ -52,7 +98,7 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
   /// events from a previous stream cannot corrupt the current one.
   int _generation = 0;
 
-  ChatNotifier() : super([]);
+  ChatNotifier() : super(const ChatState());
 
   @override
   void dispose() {
@@ -66,83 +112,80 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
 
   /// Append [chunk] to the pending buffer and schedule a periodic flush.
   ///
-  /// All chunks received within a single [_batchInterval] window are
+  /// All chunks received within a single [batchInterval] window are
   /// coalesced into one state update, so fast bursts render as a single
   /// batch instead of overwhelming the widget tree chunk by chunk.
   ///
   /// Uses [Timer.periodic] so that even during continuous high-speed
-  /// streaming (chunks arriving every <33ms), content is flushed and
-  /// visible to the user at a predictable frame rate (~30 fps).
+  /// streaming (chunks arriving every <100ms), content is flushed and
+  /// visible to the user at a predictable frame rate (~10 fps).
   void _accumulateChunk(String chunk, int generation) {
     if (_disposed || generation != _generation) return;
     _pendingBuffer += chunk;
 
     // Start a periodic timer on first chunk; it fires every
-    // [_batchInterval] until cancelled, ensuring periodic flush
+    // [batchInterval] until cancelled, ensuring periodic flush
     // even during continuous fast output.
-    _flushTimer ??= Timer.periodic(_batchInterval, (_) => _flushBuffer());
+    _flushTimer ??= Timer.periodic(batchInterval, (_) => _flushBuffer());
   }
 
-  /// Flush the pending buffer into the last assistant message's content.
+  /// Flush the pending buffer into [streamingAssistantContent].
   void _flushBuffer() {
     if (_disposed) return;
     if (_pendingBuffer.isEmpty) return;
-
-    final lastIndex = state.length - 1;
-    if (lastIndex < 0 || !state[lastIndex].isStreaming) {
-      // No valid streaming target — discard orphaned buffer.
+    if (!state.isAssistantResponding) {
+      // No active stream — discard orphaned buffer.
       _pendingBuffer = '';
       return;
     }
-    final last = state[lastIndex];
 
-    state = [
-      ...state.sublist(0, lastIndex),
-      last.copyWith(content: last.content + _pendingBuffer),
-    ];
+    state = state.copyWith(
+      streamingAssistantContent:
+          state.streamingAssistantContent + _pendingBuffer,
+    );
     _pendingBuffer = '';
   }
 
-  /// Flush any remaining buffer, then mark the assistant message as complete.
+  /// Flush any remaining buffer, then move the accumulated streaming content
+  /// into [messages] as a completed assistant message.
   ///
-  /// Performs a single state update (both content flush and the
-  /// isStreaming toggle) to avoid an extra widget rebuild at the end.
+  /// Resets streaming state so that [isAssistantResponding] is false and
+  /// [streamingAssistantContent] is cleared.
   void _finalizeStream() {
     if (_disposed) return;
     _flushTimer?.cancel();
     _flushTimer = null;
 
-    final lastIndex = state.length - 1;
-    if (lastIndex < 0) {
-      _pendingBuffer = '';
-      return;
-    }
-    final last = state[lastIndex];
-
-    // If the message was already finalized (e.g. by onError following by
-    // onDone), skip to avoid a redundant state update + widget rebuild.
-    if (!last.isStreaming) {
+    if (!state.isAssistantResponding) {
+      // Already finalized (e.g. onError followed by onDone) — skip.
       _pendingBuffer = '';
       return;
     }
 
-    // One final flush, merged with the isStreaming toggle.
-    state = [
-      ...state.sublist(0, lastIndex),
-      last.copyWith(
-        content: last.content + _pendingBuffer,
-        isStreaming: false,
-      ),
-    ];
+    final completeContent = state.streamingAssistantContent + _pendingBuffer;
     _pendingBuffer = '';
+
+    state = state.copyWith(
+      messages: [
+        ...state.messages,
+        ChatMessage(
+          role: 'assistant',
+          content: completeContent,
+          isStreaming: false,
+        ),
+      ],
+      streamingAssistantContent: '',
+      isAssistantResponding: false,
+    );
   }
 
   // ── Public API ──────────────────────────────────────────────────
 
   /// Appends a user message, then calls [ChatService.sendStream] to get the AI
-  /// response. Incoming chunks are buffered and flushed to state on a
-  /// 33ms periodic timer (≈30 fps). When the stream completes, the assistant
-  /// message is marked as fully received.
+  /// response. Incoming chunks are buffered and flushed to
+  /// [streamingAssistantContent] on a periodic timer. When the stream
+  /// completes, the full content is moved into [messages] as a completed
+  /// assistant message.
   void sendMessage(String text) {
     if (text.trim().isEmpty || _disposed) return;
 
@@ -152,20 +195,23 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     _flushTimer = null;
 
     // If there's an orphaned streaming assistant (e.g. user sent a new
-    // message before the previous stream finished), flush any pending
-    // content and mark it as complete so it doesn't hang forever with
-    // a loading indicator.
-    final updated = List<ChatMessage>.from(state);
-    if (updated.isNotEmpty) {
-      final last = updated.last;
-      if (last.role == 'assistant' && last.isStreaming) {
-        updated[updated.length - 1] = last.copyWith(
-          content: last.content + _pendingBuffer,
+    // message before the previous stream finished), finalize its partial
+    // content as a completed message so it doesn't hang forever.
+    List<ChatMessage> baseMessages = [...state.messages];
+    if (state.isAssistantResponding) {
+      final orphanContent = state.streamingAssistantContent + _pendingBuffer;
+      _pendingBuffer = '';
+      baseMessages = [
+        ...baseMessages,
+        ChatMessage(
+          role: 'assistant',
+          content: orphanContent,
           isStreaming: false,
-        );
-      }
+        ),
+      ];
+    } else {
+      _pendingBuffer = '';
     }
-    _pendingBuffer = '';
 
     // Obtain the stream first, then update state — if sendStream throws
     // synchronously, we catch it and set an error message instead of
@@ -175,23 +221,28 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
       stream = ChatService.sendStream(text.trim());
     } catch (e) {
       debugPrint('ChatService.sendStream error: $e');
-      state = [
-        ...updated,
-        ChatMessage(role: 'user', content: text.trim()),
-        ChatMessage(
-          role: 'assistant',
-          content: '*Error: $e*',
-          isStreaming: false,
-        ),
-      ];
+      state = ChatState(
+        messages: [
+          ...baseMessages,
+          ChatMessage(role: 'user', content: text.trim()),
+          ChatMessage(
+            role: 'assistant',
+            content: '*Error: $e*',
+            isStreaming: false,
+          ),
+        ],
+      );
       return;
     }
 
-    state = [
-      ...updated,
-      ChatMessage(role: 'user', content: text.trim()),
-      ChatMessage(role: 'assistant', content: '', isStreaming: true),
-    ];
+    state = ChatState(
+      messages: [
+        ...baseMessages,
+        ChatMessage(role: 'user', content: text.trim()),
+      ],
+      streamingAssistantContent: '',
+      isAssistantResponding: true,
+    );
 
     // Subscribe to the AI response stream with batched periodic flush.
     final int gen = ++_generation;
@@ -208,21 +259,23 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
         _flushTimer = null;
         if (_disposed) return;
         debugPrint('ChatService.sendStream error: $error');
-        // Merge buffered content and error into a single state update.
-        final lastIndex = state.length - 1;
-        if (lastIndex < 0) {
-          _pendingBuffer = '';
-          return;
-        }
-        final last = state[lastIndex];
-        state = [
-          ...state.sublist(0, lastIndex),
-          last.copyWith(
-            content: '${last.content}$_pendingBuffer\n\n*Error: $error*',
-            isStreaming: false,
-          ),
-        ];
+
+        // Combine buffered content and error into a single completed message.
+        final partialContent = state.streamingAssistantContent + _pendingBuffer;
         _pendingBuffer = '';
+
+        state = state.copyWith(
+          messages: [
+            ...state.messages,
+            ChatMessage(
+              role: 'assistant',
+              content: '$partialContent\n\n*Error: $error*',
+              isStreaming: false,
+            ),
+          ],
+          streamingAssistantContent: '',
+          isAssistantResponding: false,
+        );
       },
     );
   }
@@ -232,23 +285,24 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
   /// Finds the most recent message with role == 'user', removes it and all
   /// subsequent messages, then calls [sendMessage] with the same content.
   void retryLast() {
-    final userIndex = state.lastIndexWhere((m) => m.role == 'user');
+    if (state.messages.isEmpty) return;
+    final userIndex = state.messages.lastIndexWhere((m) => m.role == 'user');
     if (userIndex == -1) return;
 
-    final lastUserContent = state[userIndex].content;
+    final lastUserContent = state.messages[userIndex].content;
     // Truncate everything from (and including) the last user message onward.
-    state = state.sublist(0, userIndex);
+    state = ChatState(messages: state.messages.sublist(0, userIndex));
     sendMessage(lastUserContent);
   }
 
-  /// Clears all messages from the current conversation.
+  /// Clears all messages and resets streaming state.
   void clearMessages() {
     _streamSubscription?.cancel();
     _flushTimer?.cancel();
     _flushTimer = null;
     _pendingBuffer = '';
     _streamSubscription = null;
-    state = [];
+    state = const ChatState();
   }
 
   /// Replaces the entire message list (e.g. when switching conversations).
@@ -258,6 +312,6 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     _flushTimer = null;
     _pendingBuffer = '';
     _streamSubscription = null;
-    state = [...messages];
+    state = ChatState(messages: [...messages]);
   }
 }

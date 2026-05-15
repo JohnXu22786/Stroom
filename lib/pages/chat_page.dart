@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/chat_message.dart';
 import '../providers/chat_provider.dart';
 import '../providers/conversation_provider.dart';
+import '../widgets/chat/avatar_widget.dart';
 import '../widgets/chat/chat_header.dart';
 import '../widgets/chat/chat_input_bar.dart';
+import '../widgets/chat/markdown_renderer.dart';
 import '../widgets/chat/message_bubble.dart';
 
 /// Claude-style chat page.
@@ -20,6 +22,7 @@ import '../widgets/chat/message_bubble.dart';
 /// │    MessageBubble (assistant)│
 /// │    ...                      │  ← ListView, 自动滚底, 细滚动条
 /// │                             │
+/// │  StreamingAssistantBubble   │  ← 仅流式推送时显示, 独立重建
 /// ├─────────────────────────────┤
 /// │       ChatInputBar          │  ← 输入 + 发送
 /// └─────────────────────────────┘
@@ -34,6 +37,7 @@ class ChatPage extends ConsumerStatefulWidget {
 
 class _ChatPageState extends ConsumerState<ChatPage> {
   final ScrollController _scrollController = ScrollController();
+  bool _userScrolledAway = false;
 
   static const List<String> _suggestions = [
     '写一首诗',
@@ -43,20 +47,45 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+    // Allow 50px threshold for "near bottom"
+    if (currentScroll >= maxScroll - 50) {
+      _userScrolledAway = false;
+    } else {
+      _userScrolledAway = true;
+    }
+  }
+
+  @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
   }
 
-  /// 自动滚到底部
-  void _scrollToBottom() {
+  /// 自动滚到底部 — streaming 中使用 jumpTo, 完成时使用 animateTo
+  void _scrollToBottom({bool instant = false}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-        );
+        if (instant) {
+          _scrollController.jumpTo(
+            _scrollController.position.maxScrollExtent,
+          );
+        } else {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+          );
+        }
       }
     });
   }
@@ -77,7 +106,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   /// 重试最后一条
   void _retryLast() {
     ref.read(chatProvider.notifier).retryLast();
-    _scrollToBottom();
+    _scrollToBottom(instant: true);
   }
 
   /// 复制消息内容
@@ -113,13 +142,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    final messages = ref.watch(chatProvider);
+    // ── 细粒度的 select 监听, 避免整个页面因流式推送而重建 ──
+    final messages = ref.watch(chatProvider.select((s) => s.messages));
+    final isResponding =
+        ref.watch(chatProvider.select((s) => s.isAssistantResponding));
     final conversations = ref.watch(conversationsProvider);
     final activeId = ref.watch(activeConversationIdProvider);
     final title = _getTitle(conversations, activeId);
 
-    // 仅在用户消息添加或流式完成时持久化
-    ref.listen(chatProvider, (List<ChatMessage>? prev, List<ChatMessage> next) {
+    // ── 仅在用户消息添加或流式完成时持久化 ──
+    ref.listen(chatProvider.select((s) => s.messages),
+        (List<ChatMessage>? prev, List<ChatMessage> next) {
       final currentId = ref.read(activeConversationIdProvider);
       if (currentId == null) return;
 
@@ -131,25 +164,22 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         return;
       }
 
-      final last = next.last;
-      final wasStreaming =
-          prev != null && prev.isNotEmpty && prev.last.isStreaming;
-      final nowStreaming = last.isStreaming;
-
-      // 仅在用户发送消息或流式完成时持久化
-      if (last.role == 'user' || (wasStreaming && !nowStreaming)) {
+      // 消息列表增长时持久化（用户发送消息 | 流式完成，新增 assistant 消息）
+      // 注意：新架构中 isStreaming 只在 ChatState 层面跟踪，
+      // messages 中的消息 isStreaming 始终为 false。
+      if (prev != null && next.length > prev.length) {
         ref
             .read(conversationsProvider.notifier)
             .updateMessages(currentId, next);
       }
     });
 
-    // 监听对话切换，加载对应消息
-    // 仅在 chatProvider 为空时才加载（避免新建对话时覆盖刚发送的消息）
+    // ── 监听对话切换，加载对应消息 ──
+    // 仅在 messages 为空时才加载（避免新建对话时覆盖刚发送的消息）
     ref.listen<String?>(activeConversationIdProvider,
         (String? prev, String? next) {
       if (next != null && next != prev) {
-        final currentMessages = ref.read(chatProvider);
+        final currentMessages = ref.read(chatProvider).messages;
         if (currentMessages.isNotEmpty) return;
         final convs = ref.read(conversationsProvider);
         final conv = convs.where((c) => c.id == next).firstOrNull;
@@ -159,8 +189,22 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       }
     });
 
-    final isStreaming =
-        messages.any((m) => m.role == 'assistant' && m.isStreaming);
+    // ── 流式结束: 平滑滚底 ──
+    ref.listen(chatProvider.select((s) => s.isAssistantResponding),
+        (bool? prev, bool next) {
+      if (prev == true && next == false) {
+        _userScrolledAway = false;
+        _scrollToBottom(instant: false);
+      }
+    });
+
+    // ── 流式内容变化: 用户未离开底部时立即跳转 ──
+    ref.listen(chatProvider.select((s) => s.streamingAssistantContent),
+        (String? prev, String next) {
+      if (next.isNotEmpty && !_userScrolledAway) {
+        _scrollToBottom(instant: true);
+      }
+    });
 
     return SafeArea(
       child: Container(
@@ -189,17 +233,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               ),
             ),
 
-            // ── 消息列表 ──
+            // ── 消息列表（流式消息在 ListView 内作为最后一条）──
             Expanded(
-              child: messages.isEmpty
+              child: messages.isEmpty && !isResponding
                   ? _buildEmptyState(context)
-                  : _buildMessageList(messages),
+                  : _buildMessageList(messages, isResponding: isResponding),
             ),
 
             // ── 底部输入栏 ──
             ChatInputBar(
               onSend: _sendMessage,
-              isLoading: isStreaming,
+              isLoading: isResponding,
             ),
           ],
         ),
@@ -458,12 +502,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   /// 消息列表 — thin scrollbar + increased padding.
-  Widget _buildMessageList(List<ChatMessage> messages) {
-    // 监听消息变化自动滚底
-    ref.listen(chatProvider, (_, next) {
-      if (next.isNotEmpty) _scrollToBottom();
-    });
-
+  ///
+  /// [isResponding] 为 true 时在 ListView 末尾附加一个流式消息气泡。
+  /// 该气泡使用 [Consumer] 独立监听 [streamingAssistantContent]，
+  /// 避免列表因流式刷新而整体重建。
+  Widget _buildMessageList(
+    List<ChatMessage> messages, {
+    required bool isResponding,
+  }) {
     return RawScrollbar(
       controller: _scrollController,
       thumbVisibility: true,
@@ -477,8 +523,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           left: 12,
           right: 12,
         ),
-        itemCount: messages.length,
+        itemCount: messages.length + (isResponding ? 1 : 0),
         itemBuilder: (context, index) {
+          // 流式消息气泡 — Consumer 独立监听, 不触发列表重建
+          if (isResponding && index == messages.length) {
+            return Consumer(builder: (context, ref, _) {
+              final content = ref.watch(
+                  chatProvider.select((s) => s.streamingAssistantContent));
+              return _buildStreamingBubble(content);
+            });
+          }
+
           final msg = messages[index];
           final isLastAssistant =
               msg.role == 'assistant' && index == messages.length - 1;
@@ -490,6 +545,122 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           );
         },
       ),
+    );
+  }
+
+  /// 流式推送气泡 — 类似 AI 消息气泡, 无 hover 操作, 始终显示输入指示器
+  Widget _buildStreamingBubble(String content) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: AvatarWidget(name: 'S', size: 28),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Stroom',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.65),
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                // 增量 markdown 渲染（内容为空时隐藏渲染器）
+                if (content.isNotEmpty)
+                  DefaultTextStyle(
+                    style: TextStyle(
+                      fontFamily: 'serif',
+                      fontSize: 14,
+                      color: cs.onSurface,
+                      height: 1.7,
+                    ),
+                    child: MarkdownRenderer(
+                      data: content,
+                      selectable: true,
+                    ),
+                  ),
+                const SizedBox(height: 6),
+                // 始终显示输入指示器（代替 hover 操作按钮）
+                const _StreamingTypingIndicator(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 三跳点弹跳输入指示器
+class _StreamingTypingIndicator extends StatefulWidget {
+  const _StreamingTypingIndicator();
+
+  @override
+  State<_StreamingTypingIndicator> createState() =>
+      _StreamingTypingIndicatorState();
+}
+
+class _StreamingTypingIndicatorState extends State<_StreamingTypingIndicator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.primary;
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(3, (i) {
+            // Stagger each dot by 1/3 of the animation cycle
+            final t = (_controller.value + i / 3) % 1.0;
+            // Triangle wave: bounce scale from 0.4 → 1.0 → 0.4
+            final scale = 0.4 + 0.6 * (t < 0.5 ? t * 2 : (1.0 - t) * 2);
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 3),
+              child: Transform.scale(
+                scale: scale,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.7),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            );
+          }),
+        );
+      },
     );
   }
 }
