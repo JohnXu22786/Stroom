@@ -7,7 +7,8 @@ import '../providers/chat_provider.dart';
 
 import '../services/chat_service.dart' show ChatService;
 import '../providers/conversation_provider.dart';
-import 'chat_provider_config_page.dart';
+import '../providers/provider_config.dart';
+import 'provider_config_page.dart';
 import '../widgets/chat/avatar_widget.dart';
 import '../widgets/chat/chat_header.dart';
 import '../widgets/chat/chat_input_bar.dart';
@@ -143,6 +144,20 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     return conv.title;
   }
 
+  void _navigateToProviderConfig(BuildContext context) {
+    final entriesState = ref.read(providerEntriesProvider);
+    final llmEntry =
+        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
+    if (llmEntry != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ProviderConfigPage(entryId: llmEntry.id),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // ── 细粒度的 select 监听, 避免整个页面因流式推送而重建 ──
@@ -153,18 +168,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final activeId = ref.watch(activeConversationIdProvider);
     final title = _getTitle(conversations, activeId);
 
-    // Build subtitle from selected config
+    // Build subtitle from LLM provider config
     String modelSubtitle = '';
-    final configs = ref.watch(chatConfigsProvider);
-    final selectedConfigId = ref.watch(selectedChatConfigIdProvider);
-    if (selectedConfigId != null) {
-      final config = configs.where((c) => c.id == selectedConfigId).firstOrNull;
-      if (config != null) {
-        final modelName = config.selectedModelId.isNotEmpty
-            ? config.selectedModelId
-            : (config.models.isNotEmpty ? config.models.first.modelId : '未选择');
-        modelSubtitle = 'Model: $modelName';
-      }
+    final entriesState = ref.watch(providerEntriesProvider);
+    final llmEntry =
+        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
+    if (llmEntry != null && llmEntry.configs.isNotEmpty) {
+      final config = llmEntry.configs.first;
+      final modelName =
+          config.models.isNotEmpty ? config.models.first.modelId : '未选择';
+      modelSubtitle = 'Model: $modelName';
     }
 
     // ── 仅在用户消息添加或流式完成时持久化 ──
@@ -284,12 +297,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     ),
                     TextButton(
                       onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const ChatProviderConfigPage(),
-                          ),
-                        );
+                        _navigateToProviderConfig(context);
                       },
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -594,12 +602,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               const SizedBox(height: 24),
               OutlinedButton.icon(
                 onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const ChatProviderConfigPage(),
-                    ),
-                  );
+                  _navigateToProviderConfig(context);
                 },
                 icon: const Icon(Icons.settings, size: 18),
                 label: const Text('前往设置'),

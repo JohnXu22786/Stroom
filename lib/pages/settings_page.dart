@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/theme_provider.dart';
 import '../providers/provider_config.dart';
-import 'chat_provider_config_page.dart';
 import 'provider_config_page.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
@@ -49,9 +48,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           const SizedBox(height: 24),
           _buildSectionHeader('供应商设置'),
           _buildProviderSettings(),
-          const SizedBox(height: 24),
-          _buildSectionHeader('聊天设置'),
-          _buildChatSettings(),
           const SizedBox(height: 24),
           _buildSectionHeader('关于'),
           _buildAboutSection(),
@@ -233,36 +229,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       context,
       MaterialPageRoute(
         builder: (_) => ProviderConfigPage(entryId: entryId),
-      ),
-    );
-  }
-
-  // ================================================================
-  // 聊天供应商设置
-  // ================================================================
-
-  Widget _buildChatSettings() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: ListTile(
-          leading:
-              Icon(Icons.chat, color: Theme.of(context).colorScheme.primary),
-          title: const Text('聊天供应商'),
-          subtitle: const Text('配置AI聊天API供应商和模型'),
-          trailing: const Icon(Icons.chevron_right),
-          contentPadding: EdgeInsets.zero,
-          onTap: () => _openChatProviderConfig(),
-        ),
-      ),
-    );
-  }
-
-  void _openChatProviderConfig() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const ChatProviderConfigPage(),
       ),
     );
   }
