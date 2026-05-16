@@ -72,6 +72,12 @@ class MessageBubble extends StatelessWidget {
 
   // ── AI message bubble ────────────────────────────────────────────────
   Widget _buildAiBubble(BuildContext context, ColorScheme cs) {
+    return _buildAiBubbleContent(context, cs);
+  }
+
+  /// Extracted to allow conditional error styling inside the Column.
+  Widget _buildAiBubbleContent(BuildContext context, ColorScheme cs) {
+    final bool isErrorMessage = message.isError;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -97,18 +103,7 @@ class MessageBubble extends StatelessWidget {
               const SizedBox(height: 4),
               // AI response body — serif font, rendered via markdown
               // (same renderer during streaming and after completion)
-              DefaultTextStyle(
-                style: TextStyle(
-                  fontFamily: 'serif',
-                  fontSize: 14,
-                  color: cs.onSurface,
-                  height: 1.7,
-                ),
-                child: MarkdownRenderer(
-                  data: message.content,
-                  selectable: true,
-                ),
-              ),
+              isErrorMessage ? _buildAiErrorBody(cs) : _buildAiBody(cs),
               const SizedBox(height: 6),
               // Action buttons (copy, retry) and streaming indicator
               _buildActionsRow(context, cs),
@@ -116,6 +111,62 @@ class MessageBubble extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  /// Default AI body — serif font, markdown rendered.
+  Widget _buildAiBody(ColorScheme cs) {
+    return DefaultTextStyle(
+      style: TextStyle(
+        fontFamily: 'serif',
+        fontSize: 14,
+        color: cs.onSurface,
+        height: 1.7,
+      ),
+      child: MarkdownRenderer(
+        data: message.content,
+        selectable: true,
+      ),
+    );
+  }
+
+  /// Error-styled AI body — container with error colors, icon, and markdown.
+  Widget _buildAiErrorBody(ColorScheme cs) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cs.errorContainer.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: cs.error.withValues(alpha: 0.4),
+          width: 0.5,
+        ),
+      ),
+      child: DefaultTextStyle(
+        style: TextStyle(
+          fontFamily: 'serif',
+          fontSize: 14,
+          color: cs.onErrorContainer,
+          height: 1.7,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2, right: 8),
+              child: Icon(Icons.error_outline, size: 16, color: cs.error),
+            ),
+            Expanded(
+              child: MarkdownRenderer(
+                data: message.content,
+                selectable: true,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

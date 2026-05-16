@@ -6,6 +6,7 @@ class ChatMessage {
   final String content;
   final DateTime createdAt;
   final bool isStreaming;
+  final bool isError;
 
   ChatMessage({
     String? id,
@@ -13,6 +14,7 @@ class ChatMessage {
     required this.content,
     DateTime? createdAt,
     this.isStreaming = false,
+    this.isError = false,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
@@ -22,6 +24,7 @@ class ChatMessage {
     String? content,
     DateTime? createdAt,
     bool? isStreaming,
+    bool? isError,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -29,6 +32,7 @@ class ChatMessage {
       content: content ?? this.content,
       createdAt: createdAt ?? this.createdAt,
       isStreaming: isStreaming ?? this.isStreaming,
+      isError: isError ?? this.isError,
     );
   }
 
@@ -38,6 +42,7 @@ class ChatMessage {
         'content': content,
         'createdAt': createdAt.toIso8601String(),
         'isStreaming': isStreaming,
+        'isError': isError,
       };
 
   factory ChatMessage.fromMap(Map<String, dynamic> map) => ChatMessage(
@@ -48,9 +53,10 @@ class ChatMessage {
             ? DateTime.parse(map['createdAt'] as String)
             : DateTime.now(),
         isStreaming: map['isStreaming'] as bool? ?? false,
+        isError: map['isError'] as bool? ?? false,
       );
 
   @override
   String toString() =>
-      'ChatMessage(id: $id, role: $role, isStreaming: $isStreaming)';
+      'ChatMessage(id: $id, role: $role, isStreaming: $isStreaming, isError: $isError)';
 }

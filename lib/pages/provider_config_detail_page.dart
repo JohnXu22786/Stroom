@@ -71,7 +71,7 @@ class _ProviderConfigDetailPageState
               _keyController.text.trim().isEmpty)) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('请填写完整的供应商配置信息（名称、Host 和 Key），否则该供应商不可在生成录音中使用'),
+            content: Text('请填写完整的供应商配置信息（名称、API 地址 和 Key），否则该供应商不可在生成录音中使用'),
             behavior: SnackBarBehavior.floating,
             duration: Duration(seconds: 5),
           ),
@@ -263,7 +263,7 @@ class _ProviderConfigDetailPageState
     if (providerName.isEmpty || host.isEmpty || key.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('供应商名称、Host 和 Key 均为必填项'),
+          content: Text('供应商名称、API 地址 和 Key 均为必填项'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -358,8 +358,9 @@ class _ProviderConfigDetailPageState
           TextField(
             controller: _hostController,
             decoration: const InputDecoration(
-              labelText: 'Host',
-              hintText: 'https://api.example.com',
+              labelText: 'API 地址',
+              hintText: 'https://api.openai.com/v1/chat/completions',
+              helperText: '填写完整 API 端点地址',
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.link, color: Colors.orange),
             ),

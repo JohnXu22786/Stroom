@@ -129,29 +129,24 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         temperature: temperature,
         extraParams: extraParams);
 
-    final url = '$_baseUrl/chat/completions';
     debugPrint(
-        'OpenAICompatibleChatProvider: POST $url - 消息数: ${messages.length}');
+        'OpenAICompatibleChatProvider: POST $_baseUrl - 消息数: ${messages.length}');
 
-    try {
-      final response = await _dio.post(
-        url,
-        cancelToken: cancelToken,
-        data: body,
-      );
+    final response = await _dio.post(
+      _baseUrl,
+      cancelToken: cancelToken,
+      data: body,
+    );
 
-      final choices = response.data['choices'] as List?;
-      if (choices == null || choices.isEmpty) {
-        throw Exception('API 返回了空的 choices 列表');
-      }
-      final content = choices[0]['message']?['content'] as String?;
-      if (content == null) {
-        throw Exception('API 返回内容为空');
-      }
-      return content;
-    } on DioException catch (e) {
-      throw Exception('对话失败: ${_parseDioError(e)}');
+    final choices = response.data['choices'] as List?;
+    if (choices == null || choices.isEmpty) {
+      throw Exception('API 返回了空的 choices 列表');
     }
+    final content = choices[0]['message']?['content'] as String?;
+    if (content == null) {
+      throw Exception('API 返回内容为空');
+    }
+    return content;
   }
 
   // ── 流式对话 ────────────────────────────────────────────────────
@@ -165,7 +160,6 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     Map<String, dynamic>? extraParams,
   }) async* {
     if (_apiKey.isEmpty) {
-      yield '**[错误: API 密钥未配置]**';
       return;
     }
 
@@ -176,90 +170,46 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         stream: true,
         extraParams: extraParams);
 
-    final url = '$_baseUrl/chat/completions';
     debugPrint(
-        'OpenAICompatibleChatProvider: 流式 POST $url - 消息数: ${messages.length}');
+        'OpenAICompatibleChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}');
 
-    try {
-      final response = await _dio.post(
-        url,
-        options: Options(responseType: ResponseType.stream),
-        data: body,
-      );
+    final response = await _dio.post(
+      _baseUrl,
+      options: Options(responseType: ResponseType.stream),
+      data: body,
+    );
 
-      final rawStream = response.data.stream as Stream<Uint8List>;
-      final lineStream = rawStream
-          .cast<List<int>>()
-          .transform(utf8.decoder)
-          .transform(const LineSplitter());
+    final rawStream = response.data.stream as Stream<Uint8List>;
+    final lineStream = rawStream
+        .cast<List<int>>()
+        .transform(utf8.decoder)
+        .transform(const LineSplitter());
 
-      await for (final line in lineStream) {
-        // SSE 格式: "data: {json}"
-        if (line.startsWith('data: ')) {
-          final dataStr = line.substring(6).trim();
+    await for (final line in lineStream) {
+      // SSE 格式: "data: {json}"
+      if (line.startsWith('data: ')) {
+        final dataStr = line.substring(6).trim();
 
-          // 结束信号
-          if (dataStr == '[DONE]') break;
+        // 结束信号
+        if (dataStr == '[DONE]') break;
 
-          try {
-            final data = jsonDecode(dataStr) as Map<String, dynamic>;
-            final choices = data['choices'] as List?;
-            if (choices != null && choices.isNotEmpty) {
-              final delta = choices[0]['delta'] as Map<String, dynamic>?;
-              if (delta != null) {
-                final content = delta['content'] as String?;
-                if (content != null && content.isNotEmpty) {
-                  yield content;
-                }
+        try {
+          final data = jsonDecode(dataStr) as Map<String, dynamic>;
+          final choices = data['choices'] as List?;
+          if (choices != null && choices.isNotEmpty) {
+            final delta = choices[0]['delta'] as Map<String, dynamic>?;
+            if (delta != null) {
+              final content = delta['content'] as String?;
+              if (content != null && content.isNotEmpty) {
+                yield content;
               }
             }
-          } catch (e) {
-            debugPrint('OpenAICompatibleChatProvider: 解析 SSE 数据失败: $e');
-            // 跳过无法解析的行，继续处理后续数据
           }
+        } catch (e) {
+          debugPrint('OpenAICompatibleChatProvider: 解析 SSE 数据失败: $e');
+          // 跳过无法解析的行，继续处理后续数据
         }
       }
-    } on DioException catch (e) {
-      debugPrint('OpenAICompatibleChatProvider: 流式失败: ${_parseDioError(e)}');
-      yield '**[流式响应错误: ${_parseDioError(e)}]**';
-    } catch (e) {
-      debugPrint('OpenAICompatibleChatProvider: 流式异常: $e');
-      yield '**[流式响应错误: $e]**';
-    }
-  }
-
-  // ── Dio 错误解析 ────────────────────────────────────────────────
-
-  String _parseDioError(DioException e) {
-    switch (e.type) {
-      case DioExceptionType.connectionTimeout:
-        return '连接超时';
-      case DioExceptionType.receiveTimeout:
-        return '接收超时，服务器响应过慢';
-      case DioExceptionType.badResponse:
-        final statusCode = e.response?.statusCode;
-        final body = e.response?.data;
-        String bodyStr;
-        if (body is List<int>) {
-          try {
-            bodyStr = utf8.decode(body);
-          } catch (_) {
-            bodyStr = body.toString();
-          }
-        } else {
-          bodyStr = body?.toString() ?? '无响应体';
-        }
-        if (statusCode == 401 || statusCode == 403) {
-          return 'API密钥无效或权限不足';
-        }
-        if (statusCode == 429) return '请求过于频繁';
-        if (statusCode == 404) return 'API端点不存在';
-        if (statusCode == 500) return '服务器内部错误 (HTTP $statusCode): $bodyStr';
-        return '服务器返回错误 (HTTP $statusCode): $bodyStr';
-      case DioExceptionType.cancel:
-        return '请求已取消';
-      default:
-        return '网络错误';
     }
   }
 }
