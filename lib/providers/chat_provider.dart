@@ -289,7 +289,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
     late final Stream<String> stream;
     try {
       stream = _chatService!.sendStream(text.trim(), history: history);
-    } catch (e) {
+    } catch (e, st) {
       debugPrint('ChatNotifier.sendMessage: provider error - $e');
       state = ChatState(
         messages: [
@@ -297,10 +297,12 @@ class ChatNotifier extends StateNotifier<ChatState> {
           ChatMessage(role: 'user', content: text.trim()),
           ChatMessage(
             role: 'assistant',
-            content: '**[错误: $e]**',
+            content: '$e',
             isStreaming: false,
+            isError: true,
           ),
         ],
+        error: '$e\n$st',
       );
       return;
     }
@@ -339,12 +341,14 @@ class ChatNotifier extends StateNotifier<ChatState> {
             ...state.messages,
             ChatMessage(
               role: 'assistant',
-              content: '$partialContent\n\n**[错误: $error]**',
+              content: '$partialContent\n\n$error',
               isStreaming: false,
+              isError: true,
             ),
           ],
           streamingAssistantContent: '',
           isAssistantResponding: false,
+          error: '$error\n$stackTrace',
         );
       },
     );
@@ -373,6 +377,13 @@ class ChatNotifier extends StateNotifier<ChatState> {
     _pendingBuffer = '';
     _streamSubscription = null;
     state = const ChatState();
+  }
+
+  /// Clears the error state (called after the UI has displayed it).
+  void clearError() {
+    if (state.error != null) {
+      state = state.copyWith(clearError: true);
+    }
   }
 
   /// Replaces the entire message list (e.g. when switching conversations).

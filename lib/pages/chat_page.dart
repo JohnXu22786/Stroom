@@ -243,6 +243,44 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       ref.read(chatProvider.notifier).setChatService(next);
     });
 
+    // ── 错误展示 ──
+    ref.listen<String?>(
+      chatProvider.select((s) => s.error),
+      (String? prev, String? next) {
+        if (next != null && next.isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!context.mounted) return;
+
+            final cs = Theme.of(context).colorScheme;
+            ScaffoldMessenger.of(context)
+              ..clearSnackBars()
+              ..showSnackBar(
+                SnackBar(
+                  content: SelectableText(
+                    next,
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  backgroundColor: cs.error,
+                  duration: const Duration(seconds: 8),
+                  behavior: SnackBarBehavior.floating,
+                  action: SnackBarAction(
+                    label: '关闭',
+                    textColor: cs.onError,
+                    onPressed: () {
+                      ref.read(chatProvider.notifier).clearError();
+                    },
+                  ),
+                ),
+              );
+          });
+
+          // 注意：不再在这里调用 clearError()，让错误保留在 state 中
+          // 这样 _buildErrorBanner 的 Consumer 也能看到错误
+          // 错误会在用户点击关闭按钮或发送新消息时被清除
+        }
+      },
+    );
+
     return SafeArea(
       child: Container(
         // Page body background: one level below cs.surface → subtle layering
@@ -315,6 +353,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   ],
                 ),
               ),
+
+            // ── 消息列表（流式消息在 ListView 内作为最后一条）──
+            // ── 错误横幅（在消息列表之外，不会被滚出屏幕）──
+            Consumer(builder: (context, ref, _) {
+              final error = ref.watch(chatProvider.select((s) => s.error));
+              if (error == null || error.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              return _buildErrorBanner(context, error);
+            }),
 
             // ── 消息列表（流式消息在 ListView 内作为最后一条）──
             Expanded(
@@ -610,6 +658,55 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  /// 错误横幅 — 在消息列表上方显示，可关闭
+  ///
+  /// 使用普通的 Container 而非 MaterialBanner（后者需要 Scaffold 父节点），
+  /// 避免因缺少 Scaffold 上下文导致的布局问题。
+  Widget _buildErrorBanner(BuildContext context, String error) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: cs.errorContainer.withValues(alpha: 0.85),
+        border: Border(
+          bottom: BorderSide(
+            color: cs.error.withValues(alpha: 0.3),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline, size: 18, color: cs.onErrorContainer),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SelectableText(
+              error,
+              style: TextStyle(
+                fontSize: 12,
+                color: cs.onErrorContainer,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              ref.read(chatProvider.notifier).clearError();
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: cs.onErrorContainer,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text('关闭', style: TextStyle(fontSize: 12)),
+          ),
+        ],
       ),
     );
   }
