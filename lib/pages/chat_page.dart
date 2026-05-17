@@ -1,37 +1,17 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_chat_core/flutter_chat_core.dart';
+import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:markdown_widget/markdown_widget.dart';
+import 'package:flutter_highlight/themes/dracula.dart';
 
 import '../models/chat_message.dart';
-import '../providers/chat_provider.dart';
-
-import '../services/chat_service.dart' show ChatService;
+import '../services/chat_adapter.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/provider_config.dart';
 import 'provider_config_page.dart';
-import '../widgets/chat/avatar_widget.dart';
-import '../widgets/chat/chat_header.dart';
-import '../widgets/chat/chat_input_bar.dart';
-import '../widgets/chat/markdown_renderer.dart';
-import '../widgets/chat/message_bubble.dart';
 
-/// Claude-style chat page.
-///
-/// Layout:
-/// ┌─────────────────────────────┐
-/// │        ChatHeader            │  ← 对话标题 + 操作
-/// ├─────────────────────────────┤
-/// │                             │
-/// │    MessageBubble (user)     │
-/// │    MessageBubble (assistant)│
-/// │    ...                      │  ← ListView, 自动滚底, 细滚动条
-/// │                             │
-/// │  StreamingAssistantBubble   │  ← 仅流式推送时显示, 独立重建
-/// ├─────────────────────────────┤
-/// │       ChatInputBar          │  ← 输入 + 发送
-/// └─────────────────────────────┘
-///
-/// Empty state mimics Claude: heading ("你好！"), subtitle, suggestion chips.
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({super.key});
 
@@ -40,111 +20,72 @@ class ChatPage extends ConsumerStatefulWidget {
 }
 
 class _ChatPageState extends ConsumerState<ChatPage> {
-  final ScrollController _scrollController = ScrollController();
-  bool _userScrolledAway = false;
-
-  static const List<String> _suggestions = [
-    '写一首诗',
-    '解释量子计算',
-    '帮我调试代码',
-    '写一个故事',
-  ];
+  InMemoryChatController? _controller;
+  late final User _currentUser;
+  late final User _aiUser;
+  late final ChatAdapter _adapter;
+  final List<ChatMessage> _history = [];
+  bool _isStreaming = false;
 
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_onScroll);
-  }
-
-  void _onScroll() {
-    if (!_scrollController.hasClients) return;
-    final maxScroll = _scrollController.position.maxScrollExtent;
-    final currentScroll = _scrollController.position.pixels;
-    // Allow 50px threshold for "near bottom"
-    if (currentScroll >= maxScroll - 50) {
-      _userScrolledAway = false;
-    } else {
-      _userScrolledAway = true;
-    }
+    _currentUser = User(id: 'user1', name: 'You');
+    _aiUser = User(id: 'ai1', name: 'Stroom');
+    _adapter = ChatAdapter();
+    _controller = InMemoryChatController();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initialize());
   }
 
   @override
   void dispose() {
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
+    _saveMessages();
+    _controller?.dispose();
+    _adapter.dispose();
     super.dispose();
   }
 
-  /// 自动滚到底部 — streaming 中使用 jumpTo, 完成时使用 animateTo
-  void _scrollToBottom({bool instant = false}) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        if (instant) {
-          _scrollController.jumpTo(
-            _scrollController.position.maxScrollExtent,
-          );
-        } else {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-          );
-        }
-      }
-    });
+  void _initialize() {
+    _configureAdapter();
+    _loadConversationMessages();
   }
 
-  /// 发送消息
-  void _sendMessage(String text) {
-    final chatNotifier = ref.read(chatProvider.notifier);
-    final convId = ref.read(activeConversationIdProvider);
+  void _configureAdapter() {
+    final entriesState = ref.read(providerEntriesProvider);
+    _adapter.configure(entriesState);
+    if (mounted) setState(() {});
+  }
 
-    // 如果没有对话，先创建一个
-    if (convId == null) {
-      ref.read(conversationsProvider.notifier).createConversation();
+  Future<void> _loadConversationMessages() async {
+    final activeId = ref.read(activeConversationIdProvider);
+    if (activeId == null) return;
+
+    final convs = ref.read(conversationsProvider);
+    final conv = convs.where((c) => c.id == activeId).firstOrNull;
+    if (conv == null || conv.messages.isEmpty) return;
+
+    _history.clear();
+    for (final msg in conv.messages) {
+      _history.add(msg);
+      await _controller?.insertMessage(Message.text(
+        id: msg.id,
+        authorId: msg.role == 'user' ? _currentUser.id : _aiUser.id,
+        text: msg.content,
+        createdAt: msg.createdAt,
+      ));
     }
-
-    chatNotifier.sendMessage(text);
+    if (mounted) setState(() {});
   }
 
-  /// 重试最后一条
-  void _retryLast() {
-    ref.read(chatProvider.notifier).retryLast();
-    _scrollToBottom(instant: true);
+  Future<void> _saveMessages() async {
+    final convId = ref.read(activeConversationIdProvider);
+    if (convId == null) return;
+    await ref
+        .read(conversationsProvider.notifier)
+        .updateMessages(convId, [..._history]);
   }
 
-  /// 复制消息内容
-  void _copyMessage(String content) {
-    Clipboard.setData(ClipboardData(text: content));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('已复制'),
-        duration: Duration(seconds: 1),
-      ),
-    );
-  }
-
-  /// 新建对话
-  void _newConversation() {
-    // 先创建对话（设置新 activeId），再清空消息，
-    // 避免 persistence listener 以旧 ID 保存空列表。
-    ref.read(conversationsProvider.notifier).createConversation();
-    ref.read(chatProvider.notifier).clearMessages();
-  }
-
-  /// 获取当前对话标题
-  String _getTitle(
-    List<Conversation> conversations,
-    String? activeId,
-  ) {
-    if (activeId == null) return '新对话';
-    final conv = conversations.where((c) => c.id == activeId).firstOrNull;
-    if (conv == null) return '新对话';
-    if (conv.title.isEmpty) return '新对话';
-    return conv.title;
-  }
-
-  void _navigateToProviderConfig(BuildContext context) {
+  void _navigateToProviderConfig() {
     final entriesState = ref.read(providerEntriesProvider);
     final llmEntry =
         entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
@@ -154,147 +95,147 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         MaterialPageRoute(
           builder: (_) => ProviderConfigPage(entryId: llmEntry.id),
         ),
+      ).then((_) {
+        if (mounted) _configureAdapter();
+      });
+    }
+  }
+
+  void _newConversation() {
+    _saveMessages().then((_) {
+      ref.read(conversationsProvider.notifier).createConversation();
+      _history.clear();
+      final newCtrl = InMemoryChatController();
+      setState(() => _controller = newCtrl);
+    });
+  }
+
+  void _showHistory() {
+    final conversations = ref.read(conversationsProvider);
+    final activeId = ref.read(activeConversationIdProvider);
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return _buildHistoryPanel(conversations, activeId);
+      },
+    );
+  }
+
+  Future<void> _onMessageSend(String text) async {
+    if (_isStreaming) return;
+    _isStreaming = true;
+
+    // Ensure a conversation exists
+    final convId = ref.read(activeConversationIdProvider);
+    if (convId == null) {
+      ref.read(conversationsProvider.notifier).createConversation();
+    }
+
+    final userMsgId = 'u${DateTime.now().millisecondsSinceEpoch}';
+    final aiMsgId = 'a${DateTime.now().millisecondsSinceEpoch}';
+
+    _history.add(ChatMessage(role: 'user', content: text, id: userMsgId));
+    await _controller?.insertMessage(Message.text(
+      id: userMsgId,
+      authorId: _currentUser.id,
+      text: text,
+      createdAt: DateTime.now(),
+    ));
+
+    final placeholder = Message.textStream(
+      id: aiMsgId,
+      authorId: _aiUser.id,
+      createdAt: DateTime.now(),
+      streamId: aiMsgId,
+    );
+    await _controller?.insertMessage(placeholder);
+
+    String fullReply = '';
+    try {
+      await for (final chunk in _adapter.sendStream(text, history: _history)) {
+        fullReply += chunk;
+        await _controller?.updateMessage(
+          placeholder,
+          Message.text(
+            id: aiMsgId,
+            authorId: _aiUser.id,
+            text: fullReply,
+            createdAt: DateTime.now(),
+          ),
+        );
+      }
+    } catch (e) {
+      fullReply = '错误: $e';
+      await _controller?.updateMessage(
+        placeholder,
+        Message.text(
+          id: aiMsgId,
+          authorId: _aiUser.id,
+          text: fullReply,
+          createdAt: DateTime.now(),
+        ),
       );
     }
+
+    _history
+        .add(ChatMessage(role: 'assistant', content: fullReply, id: aiMsgId));
+    _isStreaming = false;
+
+    _saveMessages();
   }
 
   @override
   Widget build(BuildContext context) {
-    // ── 细粒度的 select 监听, 避免整个页面因流式推送而重建 ──
-    final messages = ref.watch(chatProvider.select((s) => s.messages));
-    final isResponding =
-        ref.watch(chatProvider.select((s) => s.isAssistantResponding));
-    final conversations = ref.watch(conversationsProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final markdownConfig =
+        isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig;
+    final adapterConfigured = _adapter.isConfigured;
+    final controller = _controller;
+
+    // Get conversation title
     final activeId = ref.watch(activeConversationIdProvider);
-    final title = _getTitle(conversations, activeId);
-
-    // Build subtitle from LLM provider config
-    String modelSubtitle = '';
-    final entriesState = ref.watch(providerEntriesProvider);
-    final llmEntry =
-        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
-    if (llmEntry != null && llmEntry.configs.isNotEmpty) {
-      final config = llmEntry.configs.first;
-      final modelName =
-          config.models.isNotEmpty ? config.models.first.modelId : '未选择';
-      modelSubtitle = 'Model: $modelName';
+    final conversations = ref.watch(conversationsProvider);
+    String title = '新对话';
+    if (activeId != null) {
+      final conv = conversations.where((c) => c.id == activeId).firstOrNull;
+      if (conv != null && conv.title.isNotEmpty) title = conv.title;
     }
-
-    // ── 仅在用户消息添加或流式完成时持久化 ──
-    ref.listen(chatProvider.select((s) => s.messages),
-        (List<ChatMessage>? prev, List<ChatMessage> next) {
-      final currentId = ref.read(activeConversationIdProvider);
-      if (currentId == null) return;
-
-      // 空状态变更时持久化
-      if (next.isEmpty) {
-        ref
-            .read(conversationsProvider.notifier)
-            .updateMessages(currentId, next);
-        return;
-      }
-
-      // 消息列表增长时持久化（用户发送消息 | 流式完成，新增 assistant 消息）
-      // 注意：新架构中 isStreaming 只在 ChatState 层面跟踪，
-      // messages 中的消息 isStreaming 始终为 false。
-      if (prev != null && next.length > prev.length) {
-        ref
-            .read(conversationsProvider.notifier)
-            .updateMessages(currentId, next);
-      }
-    });
-
-    // ── 监听对话切换，加载对应消息 ──
-    // 仅在 messages 为空时才加载（避免新建对话时覆盖刚发送的消息）
-    ref.listen<String?>(activeConversationIdProvider,
-        (String? prev, String? next) {
-      if (next != null && next != prev) {
-        final currentMessages = ref.read(chatProvider).messages;
-        if (currentMessages.isNotEmpty) return;
-        final convs = ref.read(conversationsProvider);
-        final conv = convs.where((c) => c.id == next).firstOrNull;
-        if (conv != null) {
-          ref.read(chatProvider.notifier).loadMessages(conv.messages);
-        }
-      }
-    });
-
-    // ── 流式结束: 平滑滚底 ──
-    ref.listen(chatProvider.select((s) => s.isAssistantResponding),
-        (bool? prev, bool next) {
-      if (prev == true && next == false) {
-        _userScrolledAway = false;
-        _scrollToBottom(instant: false);
-      }
-    });
-
-    // ── 流式内容变化: 用户未离开底部时立即跳转 ──
-    ref.listen(chatProvider.select((s) => s.streamingAssistantContent),
-        (String? prev, String next) {
-      if (next.isNotEmpty && !_userScrolledAway) {
-        _scrollToBottom(instant: true);
-      }
-    });
-
-    // ── Wire up ChatService when config changes ──
-    final chatService = ref.watch(chatServiceProvider);
-
-    ref.listen<ChatService?>(chatServiceProvider, (prev, next) {
-      ref.read(chatProvider.notifier).setChatService(next);
-    });
-
-    // ── 错误展示 ──
-    ref.listen<String?>(
-      chatProvider.select((s) => s.error),
-      (String? prev, String? next) {
-        if (next != null && next.isNotEmpty) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!context.mounted) return;
-
-            final cs = Theme.of(context).colorScheme;
-            ScaffoldMessenger.of(context)
-              ..clearSnackBars()
-              ..showSnackBar(
-                SnackBar(
-                  content: SelectableText(
-                    next,
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  backgroundColor: cs.error,
-                  duration: const Duration(seconds: 8),
-                  behavior: SnackBarBehavior.floating,
-                  action: SnackBarAction(
-                    label: '关闭',
-                    textColor: cs.onError,
-                    onPressed: () {
-                      ref.read(chatProvider.notifier).clearError();
-                    },
-                  ),
-                ),
-              );
-          });
-
-          // 注意：不再在这里调用 clearError()，让错误保留在 state 中
-          // 这样 _buildErrorBanner 的 Consumer 也能看到错误
-          // 错误会在用户点击关闭按钮或发送新消息时被清除
-        }
-      },
-    );
 
     return SafeArea(
       child: Container(
-        // Page body background: one level below cs.surface → subtle layering
         color: Theme.of(context).colorScheme.surfaceContainerLow,
         child: Column(
           children: [
-            // ── 顶部标题栏 ──
-            ChatHeader(
-              title: title,
-              subtitle: modelSubtitle.isNotEmpty ? modelSubtitle : null,
-              onMenuTap: null,
-              actions: Row(
-                mainAxisSize: MainAxisSize.min,
+            // ── Top bar ──
+            Container(
+              height: 48,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                border: Border(
+                  bottom: BorderSide(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                    width: 0.5,
+                  ),
+                ),
+              ),
+              child: Row(
                 children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
                   IconButton(
                     icon: const Icon(Icons.history),
                     tooltip: '历史记录',
@@ -309,8 +250,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               ),
             ),
 
-            // ── 未配置聊天API提示 ──
-            if (chatService == null)
+            // ── Unconfigured banner ──
+            if (!adapterConfigured)
               Container(
                 width: double.infinity,
                 padding:
@@ -318,7 +259,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 color: Theme.of(context)
                     .colorScheme
                     .errorContainer
-                    .withValues(alpha: 0.3),
+                    .withOpacity(0.3),
                 child: Row(
                   children: [
                     Icon(Icons.warning_amber_rounded,
@@ -334,9 +275,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       ),
                     ),
                     TextButton(
-                      onPressed: () {
-                        _navigateToProviderConfig(context);
-                      },
+                      onPressed: _navigateToProviderConfig,
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                         minimumSize: Size.zero,
@@ -354,27 +293,66 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 ),
               ),
 
-            // ── 消息列表（流式消息在 ListView 内作为最后一条）──
-            // ── 错误横幅（在消息列表之外，不会被滚出屏幕）──
-            Consumer(builder: (context, ref, _) {
-              final error = ref.watch(chatProvider.select((s) => s.error));
-              if (error == null || error.isEmpty) {
-                return const SizedBox.shrink();
-              }
-              return _buildErrorBanner(context, error);
-            }),
-
-            // ── 消息列表（流式消息在 ListView 内作为最后一条）──
+            // ── Chat widget ──
             Expanded(
-              child: messages.isEmpty && !isResponding
-                  ? _buildEmptyState(context, chatService: chatService)
-                  : _buildMessageList(messages, isResponding: isResponding),
-            ),
+              child: controller == null
+                  ? const SizedBox.shrink()
+                  : Chat(
+                      key: ValueKey(controller.hashCode),
+                      currentUserId: _currentUser.id,
+                      resolveUser: (id) async {
+                        if (id == _currentUser.id) return _currentUser;
+                        if (id == _aiUser.id) return _aiUser;
+                        return null;
+                      },
+                      chatController: controller,
+                      onMessageSend: _onMessageSend,
+                      theme: isDark ? ChatTheme.dark() : ChatTheme.light(),
+                      builders: Builders(
+                        textMessageBuilder: (context, message, index,
+                            {required bool isSentByMe,
+                            MessageGroupStatus? groupStatus}) {
+                          final isAi = message.authorId == _aiUser.id;
 
-            // ── 底部输入栏 ──
-            ChatInputBar(
-              onSend: _sendMessage,
-              isLoading: isResponding,
+                          if (isAi) {
+                            return Container(
+                              margin: const EdgeInsets.symmetric(vertical: 2),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.grey[850]
+                                    : Colors.grey[100],
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: MarkdownWidget(
+                                data: message.text,
+                                selectable: true,
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                config: markdownConfig.copy(configs: [
+                                  PreConfig(theme: draculaTheme),
+                                ]),
+                              ),
+                            );
+                          }
+
+                          return SimpleTextMessage(
+                              message: message, index: index);
+                        },
+                        textStreamMessageBuilder: (context, message, index,
+                            {required bool isSentByMe,
+                            MessageGroupStatus? groupStatus}) {
+                          return const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
             ),
           ],
         ),
@@ -382,26 +360,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
   }
 
-  // ========================================================================
-  // History panel
-  // ========================================================================
-
-  /// Shows the conversation history panel as a modal bottom sheet.
-  void _showHistory() {
-    final conversations = ref.read(conversationsProvider);
-    final activeId = ref.read(activeConversationIdProvider);
-
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return _buildHistoryPanel(conversations, activeId);
-      },
-    );
-  }
-
+  // ── History panel ──
   Widget _buildHistoryPanel(
       List<Conversation> conversations, String? activeId) {
     final cs = Theme.of(context).colorScheme;
@@ -414,7 +373,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       builder: (context, scrollController) {
         return Column(
           children: [
-            // Drag handle
             Container(
               margin: const EdgeInsets.symmetric(vertical: 8),
               width: 36,
@@ -424,7 +382,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            // Header
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
@@ -449,7 +406,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               ),
             ),
             const Divider(height: 1),
-            // List
             Expanded(
               child: conversations.isEmpty
                   ? Center(
@@ -466,7 +422,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           height: 1,
                           indent: 16,
                           endIndent: 16,
-                          color: cs.outlineVariant.withValues(alpha: 0.5)),
+                          color: cs.outlineVariant.withOpacity(0.5)),
                       itemBuilder: (context, index) {
                         final conv = conversations[index];
                         final isActive = conv.id == activeId;
@@ -485,7 +441,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     return ListTile(
       selected: isActive,
-      selectedTileColor: cs.primaryContainer.withValues(alpha: 0.3),
+      selectedTileColor: cs.primaryContainer.withOpacity(0.3),
       leading: Icon(
         isActive ? Icons.chat_bubble : Icons.chat_bubble_outline,
         color: isActive ? cs.primary : cs.onSurfaceVariant,
@@ -507,16 +463,23 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       ),
       trailing: IconButton(
         icon: Icon(Icons.delete_outline,
-            size: 18, color: cs.error.withValues(alpha: 0.7)),
+            size: 18, color: cs.error.withOpacity(0.7)),
         tooltip: '删除',
         onPressed: () => _deleteConversation(conv.id),
       ),
       onTap: () {
         if (!isActive) {
-          // 先切换 activeId，再加载目标对话的消息。
-          // 顺序很重要：先切换 ID 可避免 persistence listener 以旧 ID 保存。
-          ref.read(conversationsProvider.notifier).selectConversation(conv.id);
-          ref.read(chatProvider.notifier).loadMessages(conv.messages);
+          _saveMessages().then((_) {
+            ref
+                .read(conversationsProvider.notifier)
+                .selectConversation(conv.id);
+            _history.clear();
+            final newCtrl = InMemoryChatController();
+            setState(() => _controller = newCtrl);
+            // Use post-frame callback to load messages after rebuild
+            WidgetsBinding.instance
+                .addPostFrameCallback((_) => _loadConversationMessages());
+          });
         }
         Navigator.of(context).pop();
       },
@@ -549,9 +512,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               final wasActive = ref.read(activeConversationIdProvider) == id;
               ref.read(conversationsProvider.notifier).deleteConversation(id);
               if (wasActive) {
-                ref.read(chatProvider.notifier).clearMessages();
+                _history.clear();
+                final newCtrl = InMemoryChatController();
+                setState(() => _controller = newCtrl);
               }
-              Navigator.of(context).pop(); // close dialog
+              Navigator.of(context).pop();
             },
             style: TextButton.styleFrom(
                 foregroundColor: Theme.of(context).colorScheme.error),
@@ -559,318 +524,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           ),
         ],
       ),
-    );
-  }
-
-  // ========================================================================
-
-  /// Claude-inspired empty state: heading + subtitle + suggestion chips.
-  Widget _buildEmptyState(BuildContext context, {ChatService? chatService}) {
-    final cs = Theme.of(context).colorScheme;
-    final hasService = chatService != null;
-
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 48),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (hasService) ...[
-              Text(
-                '你好！',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w600,
-                  color: cs.onSurface,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '有什么我可以帮助你的吗？',
-                style: TextStyle(
-                  fontSize: 15,
-                  color: cs.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 40),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                alignment: WrapAlignment.center,
-                children: _suggestions.map((suggestion) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: InkWell(
-                      onTap: () => _sendMessage(suggestion),
-                      borderRadius: BorderRadius.circular(20),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 18,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: cs.surface,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: cs.outlineVariant,
-                            width: 0.5,
-                          ),
-                        ),
-                        child: Text(
-                          suggestion,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ] else ...[
-              Icon(Icons.chat_bubble_outline,
-                  size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
-              const SizedBox(height: 16),
-              Text(
-                '请先在设置中配置聊天供应商',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: cs.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '没有可用的聊天服务，请添加API配置',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
-                ),
-              ),
-              const SizedBox(height: 24),
-              OutlinedButton.icon(
-                onPressed: () {
-                  _navigateToProviderConfig(context);
-                },
-                icon: const Icon(Icons.settings, size: 18),
-                label: const Text('前往设置'),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// 错误横幅 — 在消息列表上方显示，可关闭
-  ///
-  /// 使用普通的 Container 而非 MaterialBanner（后者需要 Scaffold 父节点），
-  /// 避免因缺少 Scaffold 上下文导致的布局问题。
-  Widget _buildErrorBanner(BuildContext context, String error) {
-    final cs = Theme.of(context).colorScheme;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: cs.errorContainer.withValues(alpha: 0.85),
-        border: Border(
-          bottom: BorderSide(
-            color: cs.error.withValues(alpha: 0.3),
-            width: 0.5,
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.error_outline, size: 18, color: cs.onErrorContainer),
-          const SizedBox(width: 8),
-          Expanded(
-            child: SelectableText(
-              error,
-              style: TextStyle(
-                fontSize: 12,
-                color: cs.onErrorContainer,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              ref.read(chatProvider.notifier).clearError();
-            },
-            style: TextButton.styleFrom(
-              foregroundColor: cs.onErrorContainer,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: const Text('关闭', style: TextStyle(fontSize: 12)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 消息列表 — thin scrollbar + increased padding.
-  ///
-  /// [isResponding] 为 true 时在 ListView 末尾附加一个流式消息气泡。
-  /// 该气泡使用 [Consumer] 独立监听 [streamingAssistantContent]，
-  /// 避免列表因流式刷新而整体重建。
-  Widget _buildMessageList(
-    List<ChatMessage> messages, {
-    required bool isResponding,
-  }) {
-    return RawScrollbar(
-      controller: _scrollController,
-      thumbVisibility: true,
-      thickness: 4,
-      radius: const Radius.circular(2),
-      child: ListView.builder(
-        controller: _scrollController,
-        padding: const EdgeInsets.only(
-          top: 16,
-          bottom: 16,
-          left: 12,
-          right: 12,
-        ),
-        itemCount: messages.length + (isResponding ? 1 : 0),
-        itemBuilder: (context, index) {
-          // 流式消息气泡 — Consumer 独立监听, 不触发列表重建
-          if (isResponding && index == messages.length) {
-            return Consumer(builder: (context, ref, _) {
-              final content = ref.watch(
-                  chatProvider.select((s) => s.streamingAssistantContent));
-              return _buildStreamingBubble(content);
-            });
-          }
-
-          final msg = messages[index];
-          final isLastAssistant =
-              msg.role == 'assistant' && index == messages.length - 1;
-          return MessageBubble(
-            message: msg,
-            onCopy:
-                msg.content.isNotEmpty ? () => _copyMessage(msg.content) : null,
-            onRetry: isLastAssistant && !msg.isStreaming ? _retryLast : null,
-          );
-        },
-      ),
-    );
-  }
-
-  /// 流式推送气泡 — 类似 AI 消息气泡, 无 hover 操作, 始终显示输入指示器
-  Widget _buildStreamingBubble(String content) {
-    final cs = Theme.of(context).colorScheme;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: AvatarWidget(name: 'S', size: 28),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Stroom',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: cs.onSurfaceVariant.withValues(alpha: 0.65),
-                    letterSpacing: 0.2,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                // 增量 markdown 渲染（内容为空时隐藏渲染器）
-                if (content.isNotEmpty)
-                  DefaultTextStyle(
-                    style: TextStyle(
-                      fontFamily: 'serif',
-                      fontSize: 14,
-                      color: cs.onSurface,
-                      height: 1.7,
-                    ),
-                    child: MarkdownRenderer(
-                      data: content,
-                      selectable: true,
-                    ),
-                  ),
-                const SizedBox(height: 6),
-                // 始终显示输入指示器（代替 hover 操作按钮）
-                const _StreamingTypingIndicator(),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 三跳点弹跳输入指示器
-class _StreamingTypingIndicator extends StatefulWidget {
-  const _StreamingTypingIndicator();
-
-  @override
-  State<_StreamingTypingIndicator> createState() =>
-      _StreamingTypingIndicatorState();
-}
-
-class _StreamingTypingIndicatorState extends State<_StreamingTypingIndicator>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final color = Theme.of(context).colorScheme.primary;
-
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: List.generate(3, (i) {
-            // Stagger each dot by 1/3 of the animation cycle
-            final t = (_controller.value + i / 3) % 1.0;
-            // Triangle wave: bounce scale from 0.4 → 1.0 → 0.4
-            final scale = 0.4 + 0.6 * (t < 0.5 ? t * 2 : (1.0 - t) * 2);
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 3),
-              child: Transform.scale(
-                scale: scale,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.7),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ),
-            );
-          }),
-        );
-      },
     );
   }
 }

@@ -1,62 +1,37 @@
 import 'package:uuid/uuid.dart';
 
+/// 简化的聊天消息模型，仅用于持久化到 SharedPreferences
+/// UI 层使用 flutter_chat_ui 的 Message 类型
 class ChatMessage {
   final String id;
-  final String role;
+  final String role; // 'user' | 'assistant'
   final String content;
   final DateTime createdAt;
-  final bool isStreaming;
-  final bool isError;
 
   ChatMessage({
     String? id,
     required this.role,
     required this.content,
     DateTime? createdAt,
-    this.isStreaming = false,
-    this.isError = false,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
-
-  ChatMessage copyWith({
-    String? id,
-    String? role,
-    String? content,
-    DateTime? createdAt,
-    bool? isStreaming,
-    bool? isError,
-  }) {
-    return ChatMessage(
-      id: id ?? this.id,
-      role: role ?? this.role,
-      content: content ?? this.content,
-      createdAt: createdAt ?? this.createdAt,
-      isStreaming: isStreaming ?? this.isStreaming,
-      isError: isError ?? this.isError,
-    );
-  }
 
   Map<String, dynamic> toMap() => {
         'id': id,
         'role': role,
         'content': content,
         'createdAt': createdAt.toIso8601String(),
-        'isStreaming': isStreaming,
-        'isError': isError,
       };
 
   factory ChatMessage.fromMap(Map<String, dynamic> map) => ChatMessage(
-        id: (map['id'] as String?) ?? const Uuid().v4(),
+        id: map['id'] as String?,
         role: (map['role'] as String?) ?? '',
-        content: map['content'] as String? ?? '',
+        content: (map['content'] as String?) ?? '',
         createdAt: map['createdAt'] != null
             ? DateTime.parse(map['createdAt'] as String)
-            : DateTime.now(),
-        isStreaming: map['isStreaming'] as bool? ?? false,
-        isError: map['isError'] as bool? ?? false,
+            : null,
       );
 
   @override
-  String toString() =>
-      'ChatMessage(id: $id, role: $role, isStreaming: $isStreaming, isError: $isError)';
+  String toString() => 'ChatMessage(id: $id, role: $role)';
 }
