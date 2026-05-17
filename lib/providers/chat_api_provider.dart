@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import '../models/chat_message.dart';
+import '../services/sse_client.dart';
 
 // ============================================================================
 // 抽象基类 — BaseChatProvider
@@ -132,21 +133,37 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     debugPrint(
         'OpenAICompatibleChatProvider: POST $_baseUrl - 消息数: ${messages.length}');
 
-    final response = await _dio.post(
-      _baseUrl,
-      cancelToken: cancelToken,
-      data: body,
-    );
+    try {
+      final response = await _dio.post(
+        _baseUrl,
+        cancelToken: cancelToken,
+        data: body,
+      );
 
-    final choices = response.data['choices'] as List?;
-    if (choices == null || choices.isEmpty) {
-      throw Exception('API 返回了空的 choices 列表');
+      final choices = response.data['choices'] as List?;
+      if (choices == null || choices.isEmpty) {
+        throw Exception('API 返回了空的 choices 列表');
+      }
+      final content = choices[0]['message']?['content'] as String?;
+      if (content == null) {
+        throw Exception('API 返回内容为空');
+      }
+      return content;
+    } on DioException catch (e) {
+      final statusCode = e.response?.statusCode ?? 0;
+      final body = e.response?.data;
+      String detail;
+      if (body is Map) {
+        detail = body['error'] is Map
+            ? '${body['error']['message'] ?? body}'
+            : '$body';
+      } else if (body is String) {
+        detail = body;
+      } else {
+        detail = '$body';
+      }
+      throw Exception('API 请求失败 (HTTP $statusCode): $detail');
     }
-    final content = choices[0]['message']?['content'] as String?;
-    if (content == null) {
-      throw Exception('API 返回内容为空');
-    }
-    return content;
   }
 
   // ── 流式对话 ────────────────────────────────────────────────────
@@ -159,9 +176,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     double? temperature,
     Map<String, dynamic>? extraParams,
   }) async* {
-    if (_apiKey.isEmpty) {
-      return;
-    }
+    if (_apiKey.isEmpty) return;
 
     final body = _buildBody(messages,
         model: model,
@@ -173,44 +188,15 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     debugPrint(
         'OpenAICompatibleChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}');
 
-    final response = await _dio.post(
+    yield* sseStream(
       _baseUrl,
-      options: Options(responseType: ResponseType.stream),
-      data: body,
+      {
+        'Content-Type': 'application/json',
+        if (_apiKey.isNotEmpty) 'Authorization': 'Bearer $_apiKey',
+        'Accept': 'text/event-stream',
+      },
+      jsonEncode(body),
     );
-
-    final rawStream = response.data.stream as Stream<Uint8List>;
-    final lineStream = rawStream
-        .cast<List<int>>()
-        .transform(utf8.decoder)
-        .transform(const LineSplitter());
-
-    await for (final line in lineStream) {
-      // SSE 格式: "data: {json}"
-      if (line.startsWith('data: ')) {
-        final dataStr = line.substring(6).trim();
-
-        // 结束信号
-        if (dataStr == '[DONE]') break;
-
-        try {
-          final data = jsonDecode(dataStr) as Map<String, dynamic>;
-          final choices = data['choices'] as List?;
-          if (choices != null && choices.isNotEmpty) {
-            final delta = choices[0]['delta'] as Map<String, dynamic>?;
-            if (delta != null) {
-              final content = delta['content'] as String?;
-              if (content != null && content.isNotEmpty) {
-                yield content;
-              }
-            }
-          }
-        } catch (e) {
-          debugPrint('OpenAICompatibleChatProvider: 解析 SSE 数据失败: $e');
-          // 跳过无法解析的行，继续处理后续数据
-        }
-      }
-    }
   }
 }
 

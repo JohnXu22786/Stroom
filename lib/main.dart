@@ -3,13 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'application.dart';
 import 'providers/tts_config.dart';
-import 'providers/chat_provider_config.dart' show registerBuiltinChatProviders;
 
 Future<void> main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
     registerBuiltinProviders();
-    registerBuiltinChatProviders();
 
     runApp(
       const ProviderScope(
