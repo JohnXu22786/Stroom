@@ -26,6 +26,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   late final ChatAdapter _adapter;
   final List<ChatMessage> _history = [];
   bool _isStreaming = false;
+  int _selectedModelIndex = 0;
+  Timer? _flushTimer;
+  String _pending = '';
+  bool _cancelledByUser = false;
 
   @override
   void initState() {
@@ -39,6 +43,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   @override
   void dispose() {
+    _flushTimer?.cancel();
     _saveMessages();
     _controller?.dispose();
     _adapter.dispose();
@@ -53,6 +58,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void _configureAdapter() {
     final entriesState = ref.read(providerEntriesProvider);
     _adapter.configure(entriesState);
+    // Sync selected model index with adapter state
+    final models = _adapter.availableModels(entriesState);
+    final idx = models.indexWhere(
+      (m) =>
+          m.configIndex == _adapter.currentConfigIndex &&
+          m.modelIndex == _adapter.currentModelIndex,
+    );
+    _selectedModelIndex = idx >= 0 ? idx : 0;
     if (mounted) setState(() {});
   }
 
@@ -128,6 +141,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Future<void> _onMessageSend(String text) async {
     if (_isStreaming) return;
     _isStreaming = true;
+    if (mounted) setState(() {});
+    _cancelledByUser = false;
 
     // Ensure a conversation exists
     final convId = ref.read(activeConversationIdProvider);
@@ -155,9 +170,45 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     await _controller?.insertMessage(placeholder);
 
     String fullReply = '';
+    _pending = '';
+
+    void flushPending() {
+      if (_pending.isEmpty) return;
+      fullReply += _pending;
+      final textToFlush = fullReply;
+      _pending = '';
+      _controller?.updateMessage(
+        placeholder,
+        Message.text(
+          id: aiMsgId,
+          authorId: _aiUser.id,
+          text: textToFlush,
+          createdAt: DateTime.now(),
+        ),
+      );
+    }
+
     try {
-      await for (final chunk in _adapter.sendStream(text, history: _history)) {
-        fullReply += chunk;
+      final stream = _adapter.sendStream(text, history: _history);
+      await for (final chunk in stream) {
+        if (_cancelledByUser) break;
+        _pending += chunk;
+        _flushTimer ??= Timer(const Duration(milliseconds: 200), () {
+          _flushTimer = null;
+          flushPending();
+        });
+      }
+    } catch (e) {
+      if (!_cancelledByUser) {
+        _pending = '';
+        fullReply = '错误: $e';
+      }
+    } finally {
+      _flushTimer?.cancel();
+      _flushTimer = null;
+      flushPending();
+      // Update message if it was an error
+      if (fullReply.startsWith('错误:')) {
         await _controller?.updateMessage(
           placeholder,
           Message.text(
@@ -168,24 +219,23 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           ),
         );
       }
-    } catch (e) {
-      fullReply = '错误: $e';
-      await _controller?.updateMessage(
-        placeholder,
-        Message.text(
-          id: aiMsgId,
-          authorId: _aiUser.id,
-          text: fullReply,
-          createdAt: DateTime.now(),
-        ),
-      );
     }
 
     _history
         .add(ChatMessage(role: 'assistant', content: fullReply, id: aiMsgId));
     _isStreaming = false;
+    _cancelledByUser = false;
+    if (mounted) setState(() {});
 
     _saveMessages();
+  }
+
+  void _stopStreaming() {
+    _cancelledByUser = true;
+    _flushTimer?.cancel();
+    _flushTimer = null;
+    _adapter.cancel();
+    if (mounted) setState(() {});
   }
 
   @override
@@ -236,6 +286,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       ),
                     ),
                   ),
+                  // ── Model selector ──
+                  if (adapterConfigured) _buildModelSelector(),
                   IconButton(
                     icon: const Icon(Icons.history),
                     tooltip: '历史记录',
@@ -246,6 +298,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     tooltip: '新对话',
                     onPressed: _newConversation,
                   ),
+                  // ── Stop button ──
+                  if (_isStreaming)
+                    IconButton(
+                      icon: Icon(Icons.stop_circle_outlined,
+                          color: Colors.red[400]),
+                      tooltip: '停止生成',
+                      onPressed: _stopStreaming,
+                    ),
                 ],
               ),
             ),
@@ -355,6 +415,48 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // ── Model selector widget ──
+  Widget _buildModelSelector() {
+    final entriesState = ref.read(providerEntriesProvider);
+    final models = _adapter.availableModels(entriesState);
+    if (models.length <= 1) return const SizedBox.shrink();
+
+    final clampedIndex = _selectedModelIndex.clamp(0, models.length - 1);
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: SizedBox(
+        height: 32,
+        child: DropdownButton<int>(
+          value: clampedIndex,
+          isDense: true,
+          underline: const SizedBox.shrink(),
+          style: TextStyle(
+            fontSize: 13,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+          onChanged: (idx) {
+            if (idx == null) return;
+            final model = models[idx];
+            _adapter.selectModel(
+                entriesState, model.configIndex, model.modelIndex);
+            setState(() => _selectedModelIndex = idx);
+          },
+          items: List.generate(models.length, (i) {
+            final model = models[i];
+            return DropdownMenuItem<int>(
+              value: i,
+              child: Text(
+                model.displayName,
+                overflow: TextOverflow.ellipsis,
+              ),
+            );
+          }),
         ),
       ),
     );

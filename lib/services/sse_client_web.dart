@@ -14,7 +14,7 @@ Stream<String> sseStream(
   headers.forEach((k, v) => xhr.setRequestHeader(k, v));
   xhr.responseType = 'text';
 
-  xhr.onProgress.listen((_) {
+  final progressSub = xhr.onProgress.listen((_) {
     final fullText = xhr.responseText ?? '';
     final lines = fullText.split('\n');
     // 最后一行可能不完整，只处理前面完整的行
@@ -26,6 +26,7 @@ Stream<String> sseStream(
       if (line.startsWith('data: ')) {
         final data = line.substring(6).trim();
         if (data == '[DONE]') {
+          processedLines = completeCount;
           if (!controller.isClosed) controller.close();
           return;
         }
@@ -47,15 +48,29 @@ Stream<String> sseStream(
     processedLines = completeCount;
   });
 
-  xhr.onError.listen((_) {
+  final errorSub = xhr.onError.listen((_) {
     if (!controller.isClosed) {
       controller.addError('网络请求失败');
     }
   });
 
-  xhr.onLoadEnd.listen((_) {
+  final loadEndSub = xhr.onLoadEnd.listen((_) {
     if (!controller.isClosed) controller.close();
+    progressSub.cancel();
+    errorSub.cancel();
+    xhr.abort();
   });
+
+  void _cleanupSubs() {
+    progressSub.cancel();
+    errorSub.cancel();
+    loadEndSub.cancel();
+  }
+
+  controller.onCancel = () {
+    _cleanupSubs();
+    xhr.abort();
+  };
 
   xhr.send(body);
 
