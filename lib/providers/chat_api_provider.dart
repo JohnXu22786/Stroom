@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
-import '../models/chat_message.dart';
 import '../services/sse_client.dart';
 
 // ============================================================================
@@ -11,6 +10,9 @@ import '../services/sse_client.dart';
 
 /// 聊天 API 供应商抽象基类
 /// 采用策略模式，为不同的 LLM 聊天服务提供统一调用接口
+///
+/// [messages] 已预处理好为 API 格式的 message 列表，
+/// 由上游 ChatService 负责将 ChatMessage 转化为 API 格式。
 abstract class BaseChatProvider {
   /// 供应商名称
   String get name;
@@ -20,7 +22,7 @@ abstract class BaseChatProvider {
 
   /// 非流式对话，返回完整回复文本
   Future<String> chat(
-    List<ChatMessage> messages, {
+    List<Map<String, dynamic>> messages, {
     String? model,
     int? maxTokens,
     double? temperature,
@@ -30,7 +32,7 @@ abstract class BaseChatProvider {
 
   /// 流式对话，逐段 yield 回复文本
   Stream<String> chatStream(
-    List<ChatMessage> messages, {
+    List<Map<String, dynamic>> messages, {
     String? model,
     int? maxTokens,
     double? temperature,
@@ -80,8 +82,11 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   List<String> get supportedModelIds => [];
 
   /// 构建请求体
+  ///
+  /// [messages] 已由 ChatService 预处理为 API 格式
+  ///（OpenAI multimodal content array 或 plain string）。
   Map<String, dynamic> _buildBody(
-    List<ChatMessage> messages, {
+    List<Map<String, dynamic>> messages, {
     String? model,
     int? maxTokens,
     double? temperature,
@@ -89,16 +94,9 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     Map<String, dynamic>? extraParams,
   }) {
     return {
-      // extraParams 放在前面，显式参数放在后面覆盖，防止用户自定义参数
-      // 意外覆盖 model/messages/max_tokens/temperature/stream 等关键字段
       if (extraParams != null) ...extraParams,
       'model': model ?? defaultParams['model'],
-      'messages': messages
-          .map((m) => {
-                'role': m.role,
-                'content': m.content,
-              })
-          .toList(),
+      'messages': messages,
       'max_tokens': maxTokens ?? defaultParams['max_tokens'],
       'temperature': temperature ?? defaultParams['temperature'],
       'stream': stream,
@@ -116,7 +114,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
 
   @override
   Future<String> chat(
-    List<ChatMessage> messages, {
+    List<Map<String, dynamic>> messages, {
     String? model,
     int? maxTokens,
     double? temperature,
@@ -171,7 +169,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
 
   @override
   Stream<String> chatStream(
-    List<ChatMessage> messages, {
+    List<Map<String, dynamic>> messages, {
     String? model,
     int? maxTokens,
     double? temperature,
