@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -6,6 +7,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import '../models/chat_message.dart';
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
+import 'attachment_storage.dart';
 
 // ====================================================================
 // ChatService — AI 聊天服务抽象层
@@ -41,12 +43,13 @@ class ChatService {
 
   // ── Instance methods ────────────────────────────────────────────
 
-  /// Stream a message - sends user message + history to the API provider,
-  /// yields response chunks via stream.
+  /// Stream a message — converts [history] (which already contains the latest
+  /// user message with attachments) into API‑format messages and streams the
+  /// reply.
   ///
-  /// [userMessage] - the new user message text
-  /// [history] - previous messages in the conversation (used as context)
-  /// Returns a Stream<String> of response chunks.
+  /// [history] must already include the latest user message (added by the
+  /// caller before calling this method). Attachments are converted to the
+  /// OpenAI multimodal content‑array format (base64 inline images).
   Stream<String> sendStream(String userMessage,
       {required List<ChatMessage> history}) {
     cancel();
@@ -62,52 +65,111 @@ class ChatService {
       },
     );
 
-    // Build messages list: history + new user message
-    final messages = [
-      ...history,
-      ChatMessage(role: 'user', content: userMessage),
-    ];
-
     final extraParams = _buildExtraParams();
-
     _cancelToken = CancelToken();
 
-    _streamSubscription = _provider!
-        .chatStream(
-      messages,
-      model: _modelConfig!.modelId,
-      maxTokens:
-          (_modelConfig!.typeConfig['maxTokens'] as num?)?.toInt() ?? 4096,
-      temperature:
-          (_modelConfig!.typeConfig['temperature'] as num?)?.toDouble() ?? 0.7,
-      extraParams: extraParams,
-      cancelToken: _cancelToken,
-    )
-        .listen(
-      (chunk) {
+    // Pre‑process messages in a microtask so the stream is returned
+    // immediately (caller can listen right away).
+    Future.microtask(() async {
+      try {
+        final apiMessages = await _prepareApiMessages(history);
+        _streamSubscription = _provider!
+            .chatStream(
+          apiMessages,
+          model: _modelConfig!.modelId,
+          maxTokens: (_modelConfig!.typeConfig['maxTokens'] as num?)
+                  ?.toInt() ??
+              4096,
+          temperature: (_modelConfig!.typeConfig['temperature'] as num?)
+                  ?.toDouble() ??
+              0.7,
+          extraParams: extraParams,
+          cancelToken: _cancelToken,
+        )
+            .listen(
+          (chunk) {
+            if (!_controller!.isClosed) _controller!.add(chunk);
+          },
+          onDone: () {
+            _streamSubscription = null;
+            if (!_controller!.isClosed) _controller!.close();
+            _cleanUp();
+          },
+          onError: (Object error) {
+            _streamSubscription = null;
+            debugPrint('ChatService stream error: $error');
+            if (!_controller!.isClosed) {
+              _controller!.addError(error);
+              _controller!.close();
+            }
+            _cleanUp();
+          },
+        );
+      } catch (e) {
         if (!_controller!.isClosed) {
-          _controller!.add(chunk);
-        }
-      },
-      onDone: () {
-        _streamSubscription = null;
-        if (!_controller!.isClosed) {
+          _controller!.addError(e);
           _controller!.close();
         }
-        _cleanUp();
-      },
-      onError: (Object error) {
-        _streamSubscription = null;
-        debugPrint('ChatService stream error: $error');
-        if (!_controller!.isClosed) {
-          _controller!.addError(error);
-          _controller!.close();
-        }
-        _cleanUp();
-      },
-    );
+      }
+    });
 
     return _controller!.stream;
+  }
+
+  /// Convert [ChatMessage] list to API‑format message maps.
+  ///
+  /// Messages with image attachments are converted to the OpenAI multimodal
+  /// content‑array format. Non‑image attachments are currently skipped.
+  Future<List<Map<String, dynamic>>> _prepareApiMessages(
+      List<ChatMessage> history) async {
+    final result = <Map<String, dynamic>>[];
+    for (final msg in history) {
+      if (msg.attachments.isEmpty) {
+        result.add({'role': msg.role, 'content': msg.content});
+      } else {
+        final parts = <Map<String, dynamic>>[];
+        if (msg.content.isNotEmpty) {
+          parts.add({'type': 'text', 'text': msg.content});
+        }
+        for (final att in msg.attachments) {
+          if (att.fileType == 'image') {
+            final bytes = await AttachmentStorage.readFile(att.storagePath);
+            if (bytes != null && bytes.isNotEmpty) {
+              final b64 = base64Encode(bytes);
+              final ext = _imageExtension(att.mimeType);
+              parts.add({
+                'type': 'image_url',
+                'image_url': {'url': 'data:image/$ext;base64,$b64'},
+              });
+            }
+          } else {
+            // Non‑image files: include as text description
+            parts.add({
+              'type': 'text',
+              'text': '[Attached file: ${att.fileName}]',
+            });
+          }
+        }
+        result.add({'role': msg.role, 'content': parts});
+      }
+    }
+    return result;
+  }
+
+  /// Map MIME type to file extension for data URI.
+  static String _imageExtension(String mimeType) {
+    switch (mimeType) {
+      case 'image/png':
+        return 'png';
+      case 'image/gif':
+        return 'gif';
+      case 'image/webp':
+        return 'webp';
+      case 'image/bmp':
+        return 'bmp';
+      default:
+        return 'jpeg';
+    }
   }
 
   /// Non-streaming version - collects stream into a single string.
