@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:html' as html;
 
+import 'package:dio/dio.dart';
+
 /// Web 平台的 SSE 流式客户端
 /// 使用 dart:html HttpRequest.onProgress 实现真正的逐 token 流式
-Stream<String> sseStream(
-    String url, Map<String, String> headers, String body) async* {
+Stream<String> sseStream(String url, Map<String, String> headers, String body,
+    {CancelToken? cancelToken}) async* {
   final controller = StreamController<String>();
   int processedLines = 0;
 
@@ -49,9 +51,14 @@ Stream<String> sseStream(
     processedLines = completeCount;
   });
 
-  final errorSub = xhr.onError.listen((_) {
+  final errorSub = xhr.onError.listen((event) {
     if (!controller.isClosed) {
-      controller.addError('网络请求失败');
+      final statusCode = xhr.status;
+      final statusText = xhr.statusText;
+      final errorMsg = statusCode != 0
+          ? '网络请求失败 (HTTP $statusCode${(statusText ?? '').isNotEmpty ? ": $statusText" : ""})'
+          : '网络请求失败: 无法连接到服务器';
+      controller.addError(errorMsg);
     }
   });
 
@@ -68,7 +75,29 @@ Stream<String> sseStream(
     loadEndSub.cancel();
   }
 
+  cancelToken?.whenCancel.then((_) {
+    if (!controller.isClosed) {
+      _cleanupSubs();
+      xhr.abort();
+      controller.close();
+    }
+  });
+
+  // Poll cancel token periodically
+  Timer? cancelCheckTimer;
+  if (cancelToken != null) {
+    cancelCheckTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (cancelToken.isCancelled && !controller.isClosed) {
+        cancelCheckTimer?.cancel();
+        _cleanupSubs();
+        xhr.abort();
+        controller.close();
+      }
+    });
+  }
+
   controller.onCancel = () {
+    cancelCheckTimer?.cancel();
     _cleanupSubs();
     xhr.abort();
   };
