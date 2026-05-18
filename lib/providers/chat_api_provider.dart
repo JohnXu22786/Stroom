@@ -35,6 +35,7 @@ abstract class BaseChatProvider {
     int? maxTokens,
     double? temperature,
     Map<String, dynamic>? extraParams,
+    CancelToken? cancelToken,
   });
 
   /// 获取默认参数配置
@@ -175,6 +176,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     int? maxTokens,
     double? temperature,
     Map<String, dynamic>? extraParams,
+    CancelToken? cancelToken,
   }) async* {
     if (_apiKey.isEmpty) return;
 
@@ -196,6 +198,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         'Accept': 'text/event-stream',
       },
       jsonEncode(body),
+      cancelToken: cancelToken,
     );
   }
 }

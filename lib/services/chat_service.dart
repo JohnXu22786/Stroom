@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../models/chat_message.dart';
@@ -24,6 +25,7 @@ class ChatService {
   // ── Instance fields (used when constructed with a provider) ─────
   final BaseChatProvider? _provider;
   final ModelConfig? _modelConfig;
+  CancelToken? _cancelToken;
   StreamSubscription<String>? _streamSubscription;
   StreamController<String>? _controller;
 
@@ -52,6 +54,10 @@ class ChatService {
     _controller = StreamController<String>(
       onCancel: () {
         debugPrint('ChatService: stream cancelled');
+        _cancelToken?.cancel();
+        _cancelToken = null;
+        _streamSubscription?.cancel();
+        _streamSubscription = null;
         _cleanUp();
       },
     );
@@ -64,6 +70,8 @@ class ChatService {
 
     final extraParams = _buildExtraParams();
 
+    _cancelToken = CancelToken();
+
     _streamSubscription = _provider!
         .chatStream(
       messages,
@@ -73,6 +81,7 @@ class ChatService {
       temperature:
           (_modelConfig!.typeConfig['temperature'] as num?)?.toDouble() ?? 0.7,
       extraParams: extraParams,
+      cancelToken: _cancelToken,
     )
         .listen(
       (chunk) {
@@ -113,6 +122,8 @@ class ChatService {
 
   /// Cancel the current stream
   void cancel() {
+    _cancelToken?.cancel();
+    _cancelToken = null;
     _streamSubscription?.cancel();
     _streamSubscription = null;
     if (_controller != null && !_controller!.isClosed) {
