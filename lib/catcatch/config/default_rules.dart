@@ -133,7 +133,7 @@ class DefaultRules {
   static const int maxRetriesPerSegment = 3;
 
   /// 期望时长筛选容差（秒）
-  static const int durationToleranceSeconds = 2;
+  static const int durationToleranceSeconds = 3;
 
   /// 临时文件后缀
   static const String tempFileSuffix = '.catcatch_tmp';

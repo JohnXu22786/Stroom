@@ -203,8 +203,33 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     state = state.where((t) => t.id != id).toList();
   }
 
+  /// 用户确认继续处理特殊格式（在 converting 步骤前调用）
+  ///
+  /// 当下载的文件是 ts/flv 等特殊格式或来自播放列表时，
+  /// 任务会暂停等待用户确认。调用此方法表示用户同意继续转换。
+  void confirmAndContinue(String taskId) {
+    final index = state.indexWhere((t) => t.id == taskId);
+    if (index < 0) return;
+
+    final task = state[index];
+    final metadata = Map<String, String>.from(task.metadata);
+    metadata['pendingConfirm'] = 'done';
+    metadata.remove('pendingConfirmFormat');
+
+    final updated = task.copyWith(metadata: metadata);
+    state = [
+      for (int i = 0; i < state.length; i++)
+        if (i == index) updated else state[i],
+    ];
+
+    _executeTaskFrom(updated, StepType.converting);
+  }
+
   /// 用户选择媒体资源（在 userSelecting 步骤后调用）
-  void selectMedia(String taskId, MediaResource media) {
+  ///
+  /// [mergeAudioUrl] 如果非空，表示需要将指定音频 URL 合并到选中的视频中。
+  void selectMedia(String taskId, MediaResource media,
+      {String? mergeAudioUrl}) {
     final index = state.indexWhere((t) => t.id == taskId);
     if (index < 0) return;
 
@@ -216,10 +241,21 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       return s;
     }).toList();
 
+    // 如果传入了合并音频 URL，存入任务元数据
+    Map<String, String> metadata = Map.from(state[index].metadata);
+    if (mergeAudioUrl != null && mergeAudioUrl.isNotEmpty) {
+      metadata['mergeAudioUrl'] = mergeAudioUrl;
+      metadata['mergeMode'] = 'audio_video';
+    } else {
+      metadata.remove('mergeAudioUrl');
+      metadata.remove('mergeMode');
+    }
+
     final task = state[index].copyWith(
       selectedMedia: media,
       status: TaskStatus.running,
       steps: steps,
+      metadata: metadata,
     );
     state = [
       for (int i = 0; i < state.length; i++)
@@ -228,6 +264,38 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
     // 从 downloading 步骤继续
     _executeTaskFrom(task, StepType.downloading);
+  }
+
+  /// 跳过转换步骤，直接保存原始格式文件
+  ///
+  /// 当用户选择"保留原始格式"时调用，跳过 ffmpeg 转换直接进入保存步骤。
+  void skipConversion(String taskId) {
+    final index = state.indexWhere((t) => t.id == taskId);
+    if (index < 0) return;
+
+    // 标记 converting 步骤为已跳过
+    final steps = state[index].steps.map((s) {
+      if (s.type == StepType.converting) {
+        return StepStatus.skipped(StepType.converting);
+      }
+      return s;
+    }).toList();
+
+    final metadata = Map<String, String>.from(state[index].metadata);
+    metadata['pendingConfirm'] = 'done';
+    metadata.remove('pendingConfirmFormat');
+
+    final task = state[index].copyWith(
+      metadata: metadata,
+      steps: steps,
+    );
+    state = [
+      for (int i = 0; i < state.length; i++)
+        if (i == index) task else state[i],
+    ];
+
+    // 从 saving 步骤继续
+    _executeTaskFrom(task, StepType.saving);
   }
 
   /// 恢复未完成的任务（应用启动时调用）

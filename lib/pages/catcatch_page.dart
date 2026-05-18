@@ -60,6 +60,9 @@ String _truncateUrl(String url, {int maxLen = 40}) {
 // =============================================================================
 
 Widget _stepIcon(StepStatus step) {
+  if (step.skipped) {
+    return const Icon(Icons.skip_next, color: Colors.orange, size: 20);
+  }
   if (step.completed) {
     return const Icon(Icons.check_circle, color: Colors.green, size: 20);
   }
@@ -100,6 +103,7 @@ Future<void> showMediaPreview(
   );
 }
 
+// =============================================================================
 class _MediaPreviewSheet extends ConsumerStatefulWidget {
   final MediaResource resource;
   final String taskTitle;
@@ -627,6 +631,8 @@ class _TaskCardState extends ConsumerState<_TaskCard> {
   bool _expanded = false;
   // 本地状态：每个任务当前选中的 media（仅 UI 选中，确认下载时才触发 provider）
   final Map<String, MediaResource?> _selectedMedia = {};
+  // 本地状态：音频合并 URL（音视频分轨合并时使用）
+  final Map<String, String?> _mergeAudioUrls = {};
 
   @override
   void initState() {
@@ -772,6 +778,10 @@ class _TaskCardState extends ConsumerState<_TaskCard> {
               child: _buildStepTimeline(task, colorScheme),
             ),
 
+            // 特殊格式/播放列表转换确认提示
+            if (task.metadata['pendingConfirm'] == 'special_format')
+              _buildSpecialFormatConfirm(task, colorScheme),
+
             // 检测到的媒体资源（userSelecting 步骤时显示）
             if (task.status == TaskStatus.running &&
                 task.steps.any(
@@ -830,9 +840,11 @@ class _TaskCardState extends ConsumerState<_TaskCard> {
                       Expanded(
                         child: Container(
                           width: 2,
-                          color: step.completed
-                              ? Colors.green.shade300
-                              : colorScheme.outlineVariant,
+                          color: step.skipped
+                              ? Colors.orange.shade300
+                              : step.completed
+                                  ? Colors.green.shade300
+                                  : colorScheme.outlineVariant,
                         ),
                       ),
                   ],
@@ -853,13 +865,25 @@ class _TaskCardState extends ConsumerState<_TaskCard> {
                               fontWeight: FontWeight.w500,
                               color: step.completed
                                   ? Colors.green.shade700
-                                  : step.running
-                                      ? colorScheme.primary
-                                      : step.failed
-                                          ? Colors.red.shade700
-                                          : colorScheme.onSurface,
+                                  : step.skipped
+                                      ? Colors.orange.shade700
+                                      : step.running
+                                          ? colorScheme.primary
+                                          : step.failed
+                                              ? Colors.red.shade700
+                                              : colorScheme.onSurface,
                             ),
                       ),
+
+                      // 已跳过提示
+                      if (step.skipped) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '已跳过（无需处理）',
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.orange.shade400),
+                        ),
+                      ],
 
                       // 进度条（进行中）
                       if (step.running && step.progress > 0) ...[
@@ -938,11 +962,18 @@ class _TaskCardState extends ConsumerState<_TaskCard> {
     // 如果只有一个资源，自动选择
     final autoSelected = mediaList.length == 1;
     // 使用本地状态存储 UI 选中，仅在"确认下载"时通知 provider
-    // 仅在 provider 有值时同步到本地，避免覆盖用户正在做的选择
     if (task.selectedMedia != null) {
       _selectedMedia[task.id] = task.selectedMedia;
     }
     final selectedMedia = _selectedMedia[task.id];
+
+    // 检查是否有音视频分轨资源
+    final splitGroups = <String, List<MediaResource>>{};
+    for (final m in mediaList) {
+      if (m.groupId != null && m.isLikelySplitTrack) {
+        splitGroups.putIfAbsent(m.groupId!, () => []).add(m);
+      }
+    }
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -957,113 +988,21 @@ class _TaskCardState extends ConsumerState<_TaskCard> {
           ),
           const SizedBox(height: 8),
 
-          // 媒体列表
-          ...mediaList.map((media) {
-            final isSelected = selectedMedia?.url == media.url;
-
-            return Card(
-              elevation: 0,
-              margin: const EdgeInsets.only(bottom: 6),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-                side: BorderSide(
-                  color: isSelected
-                      ? colorScheme.primary
-                      : colorScheme.outlineVariant,
-                  width: isSelected ? 1.5 : 0.5,
-                ),
+          // 音视频分轨提示横幅
+          if (splitGroups.isNotEmpty) ...[
+            for (final entry in splitGroups.entries)
+              _buildSplitTrackGroup(
+                context,
+                task,
+                entry.value,
+                colorScheme,
               ),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: () {
-                  if (!autoSelected) {
-                    setState(() {
-                      _selectedMedia[task.id] = media;
-                    });
-                  }
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      // 单选按钮（仅多资源时显示）
-                      if (!autoSelected)
-                        Icon(
-                          selectedMedia?.url == media.url
-                              ? Icons.radio_button_checked
-                              : Icons.radio_button_unchecked,
-                          color: selectedMedia?.url == media.url
-                              ? Theme.of(context).colorScheme.primary
-                              : Colors.grey,
-                          size: 20,
-                        ),
+            const SizedBox(height: 12),
+          ],
 
-                      // 文件信息
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${media.name}.${media.ext}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.copyWith(fontWeight: FontWeight.w500),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '${_formatSize(media.size)} · ${media.mimeType ?? media.ext.toUpperCase()}',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // 预览按钮
-                      if (media.isPlayable)
-                        IconButton(
-                          icon: Icon(
-                            Icons.play_circle_filled,
-                            color: colorScheme.primary,
-                          ),
-                          tooltip: '预览',
-                          onPressed: () {
-                            showMediaPreview(
-                              context,
-                              media,
-                              task.title.isNotEmpty
-                                  ? task.title
-                                  : _truncateUrl(task.url),
-                            );
-                          },
-                        )
-                      else
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          child: Text(
-                            '不支持预览',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade400,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }),
+          // 媒体列表（按资源类型分组排列）
+          ..._buildGroupedMediaList(
+              task, mediaList, selectedMedia, autoSelected, colorScheme),
 
           // 确认下载按钮（多资源时显示）
           if (!autoSelected) ...[
@@ -1072,12 +1011,19 @@ class _TaskCardState extends ConsumerState<_TaskCard> {
               width: double.infinity,
               child: FilledButton.icon(
                 onPressed: selectedMedia != null
-                    ? () => ref
-                        .read(catcatchTasksProvider.notifier)
-                        .selectMedia(task.id, selectedMedia)
+                    ? () {
+                        final notifier =
+                            ref.read(catcatchTasksProvider.notifier);
+                        final mergeAudio = _mergeAudioUrls[task.id];
+                        notifier.selectMedia(
+                          task.id,
+                          selectedMedia,
+                          mergeAudioUrl: mergeAudio,
+                        );
+                      }
                     : null,
                 icon: const Icon(Icons.download),
-                label: const Text('确认下载'),
+                label: const Text('确认下载选中的资源'),
                 style: FilledButton.styleFrom(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -1091,87 +1037,738 @@ class _TaskCardState extends ConsumerState<_TaskCard> {
     );
   }
 
+  /// 构建音视频分轨提示和操作组
+  Widget _buildSplitTrackGroup(
+    BuildContext context,
+    CatCatchTask task,
+    List<MediaResource> group,
+    ColorScheme colorScheme,
+  ) {
+    final audioResources = group.where((m) => m.isAudio).toList();
+    final videoResources = group.where((m) => m.isVideo).toList();
+
+    if (audioResources.isEmpty || videoResources.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.amber.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.amber.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 提示横幅
+          Row(
+            children: [
+              Icon(Icons.info_outline, size: 18, color: Colors.amber.shade800),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '⚠ 疑似音视频分离',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.amber.shade900,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '检测到此组资源可能是同一个视频的音频和视频分离的流，'
+            '您可以选择合并音视频，或仅下载其中一种。',
+            style: TextStyle(fontSize: 12, color: Colors.amber.shade800),
+          ),
+          const SizedBox(height: 12),
+
+          // 音频资源
+          if (audioResources.isNotEmpty) ...[
+            Text('🎵 音频流',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 4),
+            ...audioResources.map((audio) => _buildSplitTrackItem(
+                  context,
+                  task,
+                  audio,
+                  colorScheme,
+                  isAudio: true,
+                )),
+          ],
+          const SizedBox(height: 8),
+
+          // 视频资源
+          if (videoResources.isNotEmpty) ...[
+            Text('🎬 视频流',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 4),
+            ...videoResources.map((video) => _buildSplitTrackItem(
+                  context,
+                  task,
+                  video,
+                  colorScheme,
+                  isAudio: false,
+                )),
+          ],
+          const SizedBox(height: 12),
+
+          // 操作按钮：合并 / 仅视频 / 仅音频
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              // 合并音视频
+              FilledButton.tonalIcon(
+                onPressed: () {
+                  // 选择视频为主体，存储音频合并 URL 到本地状态
+                  final primaryVideo = videoResources.first;
+                  setState(() {
+                    _selectedMedia[task.id] = primaryVideo;
+                    _mergeAudioUrls[task.id] = audioResources.first.url;
+                  });
+                },
+                icon: const Icon(Icons.merge, size: 18),
+                label: const Text('合并音视频', style: TextStyle(fontSize: 12)),
+                style: FilledButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+              // 仅视频
+              OutlinedButton.icon(
+                onPressed: () {
+                  setState(
+                      () => _selectedMedia[task.id] = videoResources.first);
+                },
+                icon: const Icon(Icons.videocam, size: 18),
+                label: const Text('仅视频', style: TextStyle(fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+              // 仅音频
+              OutlinedButton.icon(
+                onPressed: () {
+                  setState(
+                      () => _selectedMedia[task.id] = audioResources.first);
+                },
+                icon: const Icon(Icons.audiotrack, size: 18),
+                label: const Text('仅音频', style: TextStyle(fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // 当前选择状态提示
+          if (_selectedMedia[task.id] != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle,
+                      size: 14, color: Colors.amber.shade700),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _mergeAudioUrls[task.id] != null
+                          ? '已选择: 合并音视频'
+                          : '已选择: ${_selectedMedia[task.id]?.name}.${_selectedMedia[task.id]?.ext}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.amber.shade800,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 构建音视频分轨组内的单个资源项（含预览）
+  Widget _buildSplitTrackItem(
+    BuildContext context,
+    CatCatchTask task,
+    MediaResource media,
+    ColorScheme colorScheme, {
+    required bool isAudio,
+  }) {
+    final isSelected = _selectedMedia[task.id]?.url == media.url;
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 4),
+      color: isSelected
+          ? colorScheme.primaryContainer.withValues(alpha: 0.5)
+          : colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: isSelected ? colorScheme.primary : Colors.transparent,
+          width: 1.5,
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () {
+          setState(() {
+            _selectedMedia[task.id] = media;
+            _mergeAudioUrls[task.id] = null;
+          });
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: Row(
+            children: [
+              // 选中指示器
+              if (isSelected)
+                Icon(Icons.radio_button_checked,
+                    size: 16, color: colorScheme.primary)
+              else
+                Icon(
+                  isAudio ? Icons.audiotrack : Icons.videocam,
+                  size: 16,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${media.name}.${media.ext}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight:
+                        isSelected ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                ),
+              ),
+              Text(
+                _formatSize(media.size),
+                style: TextStyle(
+                    fontSize: 11, color: colorScheme.onSurfaceVariant),
+              ),
+              const SizedBox(width: 8),
+              // 预览按钮
+              IconButton(
+                icon: Icon(
+                  Icons.play_circle_filled,
+                  size: 20,
+                  color: media.isPlayable
+                      ? colorScheme.primary
+                      : Colors.grey.shade300,
+                ),
+                tooltip: isAudio ? '预览音频' : '预览视频',
+                onPressed: media.isPlayable
+                    ? () => showMediaPreview(
+                          context,
+                          media,
+                          task.title.isNotEmpty
+                              ? task.title
+                              : _truncateUrl(task.url),
+                        )
+                    : null,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 按时长和类型将媒体资源分组排列（相近时长的排在一起让用户比较）
+  List<Widget> _buildGroupedMediaList(
+    CatCatchTask task,
+    List<MediaResource> mediaList,
+    MediaResource? selectedMedia,
+    bool autoSelected,
+    ColorScheme colorScheme,
+  ) {
+    if (mediaList.isEmpty) return [];
+
+    // 过滤掉已在 splitGroups 中显示的
+    final splitIds = <String>{};
+    for (final m in mediaList) {
+      if (m.groupId != null && m.isLikelySplitTrack) {
+        splitIds.add(m.url);
+      }
+    }
+    final remaining =
+        mediaList.where((m) => !splitIds.contains(m.url)).toList();
+    if (remaining.isEmpty) return [];
+
+    // 按时长分组：有时长的排在一起
+    final withDuration = <MediaResource>[];
+    final withoutDuration = <MediaResource>[];
+    for (final m in remaining) {
+      if (m.duration != null) {
+        withDuration.add(m);
+      } else {
+        withoutDuration.add(m);
+      }
+    }
+
+    // 对有时长的按时长排序
+    withDuration.sort((a, b) {
+      final aSec = _parseDurationToSeconds(a.duration!);
+      final bSec = _parseDurationToSeconds(b.duration!);
+      if (aSec == null && bSec == null) return 0;
+      if (aSec == null) return 1;
+      if (bSec == null) return -1;
+      return aSec.compareTo(bSec);
+    });
+
+    final widgets = <Widget>[];
+
+    // 显示带时长的（按相似时长分组，±5秒容差）
+    double? lastDurationSec;
+    for (final media in withDuration) {
+      final currSec = media.duration != null
+          ? _parseDurationToSeconds(media.duration!)
+          : null;
+      final showLabel = currSec != null &&
+          (lastDurationSec == null || (currSec - lastDurationSec).abs() > 5);
+      if (showLabel) {
+        lastDurationSec = currSec;
+        final durationLabel = _formatDurationSimple(media.duration!);
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 4),
+            child: Row(
+              children: [
+                Icon(Icons.schedule,
+                    size: 14, color: colorScheme.onSurfaceVariant),
+                const SizedBox(width: 4),
+                Text(
+                  '时长: $durationLabel',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      } else if (currSec != null &&
+          lastDurationSec != null &&
+          (currSec - lastDurationSec).abs() <= 5) {
+        // Same group as previous, no label
+      }
+      widgets.add(_buildMediaItem(
+          media, selectedMedia, autoSelected, task, colorScheme));
+    }
+
+    // 显示无时长信息的
+    if (withoutDuration.isNotEmpty) {
+      if (withDuration.isNotEmpty) {
+        widgets.add(const SizedBox(height: 4));
+      }
+      for (final media in withoutDuration) {
+        widgets.add(_buildMediaItem(
+            media, selectedMedia, autoSelected, task, colorScheme));
+      }
+    }
+
+    return widgets;
+  }
+
+  /// 构建单个媒体资源选择项
+  Widget _buildMediaItem(
+    MediaResource media,
+    MediaResource? selectedMedia,
+    bool autoSelected,
+    CatCatchTask task,
+    ColorScheme colorScheme,
+  ) {
+    final isSelected = selectedMedia?.url == media.url;
+    final ext = media.ext.toLowerCase();
+    final isAudioType =
+        ['mp3', 'wav', 'm4a', 'aac', 'opus', 'weba'].contains(ext);
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 6),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: isSelected ? colorScheme.primary : colorScheme.outlineVariant,
+          width: isSelected ? 1.5 : 0.5,
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () {
+          if (!autoSelected) {
+            setState(() => _selectedMedia[task.id] = media);
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Row(
+            children: [
+              // 类型图标
+              Icon(
+                isAudioType ? Icons.audiotrack : Icons.videocam,
+                size: 18,
+                color: isAudioType ? Colors.purple : Colors.blue,
+              ),
+              const SizedBox(width: 8),
+
+              // 单选按钮
+              if (!autoSelected)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Icon(
+                    isSelected
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_unchecked,
+                    color: isSelected ? colorScheme.primary : Colors.grey,
+                    size: 20,
+                  ),
+                ),
+
+              // 文件信息
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${media.name}.${media.ext}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Text(
+                          '${_formatSize(media.size)} · ${media.mimeType ?? media.ext.toUpperCase()}',
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                        ),
+                        if (media.isLikelySplitTrack) ...[
+                          const SizedBox(width: 6),
+                          Icon(Icons.call_split,
+                              size: 12, color: Colors.amber.shade600),
+                          const SizedBox(width: 2),
+                          Text(
+                            '分轨',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.amber.shade600,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              // 预览按钮
+              if (media.isPlayable)
+                IconButton(
+                  icon: Icon(
+                    Icons.play_circle_filled,
+                    color: colorScheme.primary,
+                  ),
+                  tooltip: isAudioType ? '预览音频' : '预览视频',
+                  onPressed: () {
+                    showMediaPreview(
+                      context,
+                      media,
+                      task.title.isNotEmpty
+                          ? task.title
+                          : _truncateUrl(task.url),
+                    );
+                  },
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text(
+                    '不支持预览',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 简易时长格式化
+  String _formatDurationSimple(String duration) {
+    final sec = _parseDurationToSeconds(duration);
+    if (sec == null) return duration;
+    if (sec < 60) return '${sec.round()}秒';
+    if (sec < 3600) return '${(sec ~/ 60)}分${(sec % 60).round()}秒';
+    return '${(sec ~/ 3600)}时${((sec % 3600) ~/ 60)}分';
+  }
+
+  /// 尝试解析时长字符串为秒数
+  double? _parseDurationToSeconds(String duration) {
+    final parts = duration.split(':');
+    if (parts.length == 3) {
+      final h = double.tryParse(parts[0]) ?? 0;
+      final m = double.tryParse(parts[1]) ?? 0;
+      final s = double.tryParse(parts[2]) ?? 0;
+      return h * 3600 + m * 60 + s;
+    }
+    if (parts.length == 2) {
+      final m = double.tryParse(parts[0]) ?? 0;
+      final s = double.tryParse(parts[1]) ?? 0;
+      return m * 60 + s;
+    }
+    return double.tryParse(duration);
+  }
+
+  /// 构建特殊格式/播放列表转换确认提示
+  Widget _buildSpecialFormatConfirm(
+      CatCatchTask task, ColorScheme colorScheme) {
+    final format = task.metadata['pendingConfirmFormat'] ?? '未知格式';
+    final isPlaylist = task.selectedMedia?.isPlaylist ?? false;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.blue.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.blue.shade200),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.settings_suggest,
+                    size: 20, color: Colors.blue.shade700),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isPlaylist ? '需要处理播放列表' : '检测到特殊格式',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blue.shade800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isPlaylist
+                  ? '该资源是一个播放列表（$format），需要自动解析并下载所有分段后合并为可播放的视频文件。'
+                  : '下载的文件格式为 $format，并不是标准的 MP4 格式。需要使用 FFmpeg 自动转换为 MP4。',
+              style: TextStyle(
+                  fontSize: 13,
+                  color: colorScheme.onSurfaceVariant,
+                  height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      ref
+                          .read(catcatchTasksProvider.notifier)
+                          .confirmAndContinue(task.id);
+                    },
+                    icon: const Icon(Icons.auto_fix_high, size: 18),
+                    label: const Text('自动处理', style: TextStyle(fontSize: 13)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      // 跳过转换步骤，直接保存原始文件
+                      ref
+                          .read(catcatchTasksProvider.notifier)
+                          .skipConversion(task.id);
+                    },
+                    icon: const Icon(Icons.save_alt, size: 18),
+                    label: Text(
+                      '保留原始格式',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ===========================================================================
   // 底部操作按钮
   // ===========================================================================
 
   Widget _buildActionButtons(CatCatchTask task, ColorScheme colorScheme) {
+    // 检查是否处于下载步骤（用于显示断点续传标识）
+    final isDownloadingStep = task.steps.any(
+      (s) => s.type == StepType.downloading && (s.running || s.completed),
+    );
+    final resumeSupported = task.metadata['resumeSupported'] == 'true';
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          // ----- 运行中 -----
-          if (task.status == TaskStatus.running) ...[
-            _actionButton(
-              icon: Icons.pause,
-              label: '暂停',
-              color: Colors.orange,
-              onPressed: () =>
-                  ref.read(catcatchTasksProvider.notifier).pauseTask(task.id),
-            ),
-            _actionButton(
-              icon: Icons.delete_outline,
-              label: '删除',
-              color: Colors.red,
-              onPressed: () =>
-                  ref.read(catcatchTasksProvider.notifier).removeTask(task.id),
-            ),
-          ],
-
-          // ----- 已暂停 -----
-          if (task.status == TaskStatus.paused) ...[
-            _actionButton(
-              icon: Icons.play_arrow,
-              label: '继续',
-              color: Colors.blue,
-              onPressed: () =>
-                  ref.read(catcatchTasksProvider.notifier).resumeTask(task.id),
-            ),
-            _actionButton(
-              icon: Icons.delete_outline,
-              label: '删除',
-              color: Colors.red,
-              onPressed: () =>
-                  ref.read(catcatchTasksProvider.notifier).removeTask(task.id),
-            ),
-          ],
-
-          // ----- 已完成 -----
-          if (task.status == TaskStatus.completed) ...[
-            if (task.downloadedFilePath != null)
-              _actionButton(
-                icon: Icons.folder_open,
-                label: '打开文件',
-                color: Colors.green,
-                onPressed: () => _openFile(task.downloadedFilePath!),
+          // 断点续传状态提示
+          if (isDownloadingStep &&
+              task.metadata['resumeSupported'] != null) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6, right: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    resumeSupported ? Icons.cloud_download : Icons.cloud_off,
+                    size: 14,
+                    color: resumeSupported ? Colors.green : Colors.grey,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    resumeSupported ? '支持断点续传' : '该站点不支持断点续传',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: resumeSupported ? Colors.green : Colors.grey,
+                    ),
+                  ),
+                ],
               ),
-            _actionButton(
-              icon: Icons.delete_outline,
-              label: '删除',
-              color: Colors.red,
-              onPressed: () =>
-                  ref.read(catcatchTasksProvider.notifier).removeTask(task.id),
             ),
           ],
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              // ----- 运行中 -----
+              if (task.status == TaskStatus.running) ...[
+                _actionButton(
+                  icon: Icons.pause,
+                  label: '暂停下载',
+                  color: Colors.orange,
+                  onPressed: () => ref
+                      .read(catcatchTasksProvider.notifier)
+                      .pauseTask(task.id),
+                ),
+                _actionButton(
+                  icon: Icons.delete_outline,
+                  label: '删除',
+                  color: Colors.red,
+                  onPressed: () => ref
+                      .read(catcatchTasksProvider.notifier)
+                      .removeTask(task.id),
+                ),
+              ],
 
-          // ----- 已失败 -----
-          if (task.status == TaskStatus.failed) ...[
-            _actionButton(
-              icon: Icons.refresh,
-              label: '重试',
-              color: Colors.blue,
-              onPressed: () =>
-                  ref.read(catcatchTasksProvider.notifier).retryTask(task.id),
-            ),
-            _actionButton(
-              icon: Icons.delete_outline,
-              label: '删除',
-              color: Colors.red,
-              onPressed: () =>
-                  ref.read(catcatchTasksProvider.notifier).removeTask(task.id),
-            ),
-          ],
+              // ----- 已暂停 -----
+              if (task.status == TaskStatus.paused) ...[
+                _actionButton(
+                  icon: Icons.play_arrow,
+                  label: resumeSupported ? '继续下载' : '重新下载',
+                  color: Colors.blue,
+                  onPressed: () => ref
+                      .read(catcatchTasksProvider.notifier)
+                      .resumeTask(task.id),
+                ),
+                _actionButton(
+                  icon: Icons.delete_outline,
+                  label: '删除',
+                  color: Colors.red,
+                  onPressed: () => ref
+                      .read(catcatchTasksProvider.notifier)
+                      .removeTask(task.id),
+                ),
+              ],
+
+              // ----- 已完成 -----
+              if (task.status == TaskStatus.completed) ...[
+                if (task.downloadedFilePath != null)
+                  _actionButton(
+                    icon: Icons.folder_open,
+                    label: '打开文件',
+                    color: Colors.green,
+                    onPressed: () => _openFile(task.downloadedFilePath!),
+                  ),
+                _actionButton(
+                  icon: Icons.delete_outline,
+                  label: '删除',
+                  color: Colors.red,
+                  onPressed: () => ref
+                      .read(catcatchTasksProvider.notifier)
+                      .removeTask(task.id),
+                ),
+              ],
+
+              // ----- 已失败 -----
+              if (task.status == TaskStatus.failed) ...[
+                _actionButton(
+                  icon: Icons.refresh,
+                  label: '重试',
+                  color: Colors.blue,
+                  onPressed: () => ref
+                      .read(catcatchTasksProvider.notifier)
+                      .retryTask(task.id),
+                ),
+                _actionButton(
+                  icon: Icons.delete_outline,
+                  label: '删除',
+                  color: Colors.red,
+                  onPressed: () => ref
+                      .read(catcatchTasksProvider.notifier)
+                      .removeTask(task.id),
+                ),
+              ],
+            ],
+          ),
         ],
       ),
     );

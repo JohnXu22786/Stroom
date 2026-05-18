@@ -17,6 +17,69 @@ import '../config/default_rules.dart';
 class DownloadManager {
   DownloadManager._();
 
+  /// 任务暂停令牌映射表，key 为任务 ID，value 为暂停 Completer
+  static final Map<String, Completer<void>> _pauseTokens = {};
+
+  /// 检测服务器是否支持断点续传（Range 请求）
+  ///
+  /// 发送 HEAD 请求检查响应头中的 `Accept-Ranges` 是否为 `bytes`。
+  /// [url] 目标 URL
+  /// [headers] 自定义 HTTP 头
+  /// 返回 `true` 表示服务器支持范围请求（可续传）。
+  static Future<bool> checkServerResumeSupport(String url,
+      {Map<String, String>? headers}) async {
+    final dio = Dio();
+    try {
+      final mergedHeaders =
+          Map<String, String>.from(DefaultRules.defaultHeaders);
+      if (headers != null) mergedHeaders.addAll(headers);
+      final response = await dio.head(
+        url,
+        options: Options(
+          headers: mergedHeaders,
+          receiveTimeout: const Duration(seconds: 10),
+        ),
+      );
+      final acceptRanges = response.headers.value('accept-ranges');
+      return acceptRanges?.toLowerCase() == 'bytes';
+    } catch (e) {
+      debugPrint('[DownloadManager] Resume check failed: $e');
+      return false;
+    } finally {
+      dio.close();
+    }
+  }
+
+  /// 暂停指定下载任务
+  ///
+  /// 创建一个 Completer 存入暂停令牌表，下载循环检测到后会等待该 Completer 完成。
+  /// [taskId] 任务 ID
+  static Future<void> pauseDownload(String taskId) async {
+    final completer = Completer<void>();
+    _pauseTokens[taskId] = completer;
+    debugPrint('[DownloadManager] Paused task: $taskId');
+  }
+
+  /// 恢复指定下载任务
+  ///
+  /// 完成对应的 Completer，使下载循环继续执行。
+  /// [taskId] 任务 ID
+  static void resumeDownload(String taskId) {
+    final completer = _pauseTokens.remove(taskId);
+    if (completer != null && !completer.isCompleted) {
+      completer.complete();
+      debugPrint('[DownloadManager] Resumed task: $taskId');
+    }
+  }
+
+  /// 检查指定任务是否处于暂停状态
+  ///
+  /// [taskId] 任务 ID
+  /// 返回 `true` 表示该任务已暂停。
+  static bool isPaused(String taskId) {
+    return _pauseTokens.containsKey(taskId);
+  }
+
   /// 下载单个文件，支持断点续传
   ///
   /// [url] 文件 URL
@@ -26,6 +89,7 @@ class DownloadManager {
   /// [onProgress] 进度回调 (receivedBytes, totalBytes)
   /// [cancelToken] 取消令牌
   /// [existingPath] 已存在的文件路径（从中断处继续）
+  /// [taskId] 任务 ID（用于暂停/恢复控制）
   ///
   /// 返回最终完整的文件路径。
   static Future<String> downloadFile({
@@ -36,6 +100,7 @@ class DownloadManager {
     void Function(int received, int total)? onProgress,
     CancelToken? cancelToken,
     String? existingPath,
+    String taskId = '',
   }) async {
     // Directory creation - wrapped in try-catch for web compatibility
     try {
@@ -102,6 +167,13 @@ class DownloadManager {
         try {
           final stream = response.data.stream as Stream<List<int>>;
           await for (final chunk in stream) {
+            // 检查暂停状态，如果已暂停则等待恢复
+            if (taskId.isNotEmpty) {
+              final pauseCompleter = _pauseTokens[taskId];
+              if (pauseCompleter != null) {
+                await pauseCompleter.future;
+              }
+            }
             await raf.writeFrom(chunk);
             // Progress already handled by onReceiveProgress above
           }
@@ -206,6 +278,7 @@ class DownloadManager {
         semaphore: semaphore,
         cancelToken: cancelToken,
         errors: errors,
+        taskId: taskId,
         onSegmentComplete: (idx) {
           completedCount++;
           final progress = (completedCount * 100 ~/ total).clamp(0, 100);
@@ -353,6 +426,8 @@ class DownloadManager {
   // ===========================================================================
 
   /// 下载单个分段
+  ///
+  /// [taskId] 任务 ID（用于暂停/恢复控制）
   static Future<void> _downloadSingleSegment({
     required int index,
     required String url,
@@ -363,6 +438,7 @@ class DownloadManager {
     CancelToken? cancelToken,
     required Map<int, String> errors,
     required void Function(int index) onSegmentComplete,
+    String taskId = '',
   }) async {
     await semaphore.acquire();
     try {
@@ -404,6 +480,13 @@ class DownloadManager {
               try {
                 final stream = response.data.stream as Stream<List<int>>;
                 await for (final chunk in stream) {
+                  // 检查暂停状态，如果已暂停则等待恢复
+                  if (taskId.isNotEmpty) {
+                    final pauseCompleter = _pauseTokens[taskId];
+                    if (pauseCompleter != null) {
+                      await pauseCompleter.future;
+                    }
+                  }
                   await raf.writeFrom(chunk);
                 }
               } finally {
