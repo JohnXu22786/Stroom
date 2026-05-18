@@ -55,7 +55,8 @@ class GLMTTSProvider extends BaseTTSProvider {
 
   GLMTTSProvider({String? apiKey, String? baseUrl})
       : _apiKey = apiKey,
-        _baseUrl = baseUrl ?? 'https://open.bigmodel.cn/api/paas/v4/audio/speech' {
+        _baseUrl =
+            baseUrl ?? 'https://open.bigmodel.cn/api/paas/v4/audio/speech' {
     _dio = Dio(BaseOptions(
       baseUrl: '',
       headers: {
@@ -141,8 +142,11 @@ class GLMTTSProvider extends BaseTTSProvider {
     }
 
     final validatedParams = validateParams(params ?? {});
-    final format = (validatedParams['format'] as String?)?.toLowerCase() ?? 'wav';
-    final responseFormat = (validatedParams['response_format'] as String?)?.toLowerCase() ?? format;
+    final format =
+        (validatedParams['format'] as String?)?.toLowerCase() ?? 'wav';
+    final responseFormat =
+        (validatedParams['response_format'] as String?)?.toLowerCase() ??
+            format;
 
     debugPrint('GLMTTSProvider: 开始非流式合成 - 文本长度: ${text.length} 字符');
 
@@ -160,7 +164,8 @@ class GLMTTSProvider extends BaseTTSProvider {
           'voice': validatedParams['voice'],
           'speed': validatedParams['speed'],
           'response_format': responseFormat,
-          if (validatedParams.containsKey('instructions') && (validatedParams['instructions'] as String).isNotEmpty)
+          if (validatedParams.containsKey('instructions') &&
+              (validatedParams['instructions'] as String).isNotEmpty)
             'instructions': validatedParams['instructions'],
         },
       );
@@ -168,7 +173,8 @@ class GLMTTSProvider extends BaseTTSProvider {
       final audioData = Uint8List.fromList(response.data);
       final elapsed = DateTime.now().difference(startTime).inMilliseconds;
 
-      debugPrint('GLMTTSProvider: 合成成功 - 音频大小: ${audioData.length} 字节, 耗时: ${elapsed}ms');
+      debugPrint(
+          'GLMTTSProvider: 合成成功 - 音频大小: ${audioData.length} 字节, 耗时: ${elapsed}ms');
 
       if (audioData.isEmpty) {
         throw Exception('GLM-TTS返回了空的音频数据');
@@ -202,15 +208,18 @@ class GLMTTSProvider extends BaseTTSProvider {
     }
 
     final validatedParams = validateParams(params ?? {});
-    final requestedFormat = (validatedParams['format'] as String?)?.toLowerCase() ?? 'wav';
+    final requestedFormat =
+        (validatedParams['format'] as String?)?.toLowerCase() ?? 'wav';
 
     // 流式模式下强制使用pcm格式（GLM-TTS API限制）
     if (requestedFormat != 'pcm') {
-      debugPrint('GLMTTSProvider: 流式合成不支持直接输出"$requestedFormat"格式，已强制使用"pcm"格式');
+      debugPrint(
+          'GLMTTSProvider: 流式合成不支持直接输出"$requestedFormat"格式，已强制使用"pcm"格式');
       validatedParams['response_format'] = 'pcm';
     }
 
-    final sampleRate = (validatedParams['sample_rate'] as num?)?.toInt() ?? 24000;
+    final sampleRate =
+        (validatedParams['sample_rate'] as num?)?.toInt() ?? 24000;
     final convertToTarget = requestedFormat != 'pcm';
 
     debugPrint('GLMTTSProvider: 开始流式合成 - 文本长度: ${text.length} 字符');
@@ -228,7 +237,8 @@ class GLMTTSProvider extends BaseTTSProvider {
           'speed': validatedParams['speed'],
           'response_format': 'pcm',
           'stream': true,
-          if (validatedParams.containsKey('instructions') && (validatedParams['instructions'] as String).isNotEmpty)
+          if (validatedParams.containsKey('instructions') &&
+              (validatedParams['instructions'] as String).isNotEmpty)
             'instructions': validatedParams['instructions'],
         },
       );
@@ -250,7 +260,8 @@ class GLMTTSProvider extends BaseTTSProvider {
         // 检查数据块对齐（16位PCM需要2字节对齐）
         var alignedChunk = chunk;
         if (chunk.length % 2 != 0) {
-          debugPrint('GLMTTSProvider: 数据块 #$chunkCount 大小不对齐: ${chunk.length} 字节，已添加填充字节');
+          debugPrint(
+              'GLMTTSProvider: 数据块 #$chunkCount 大小不对齐: ${chunk.length} 字节，已添加填充字节');
           alignedChunk = Uint8List.fromList([...chunk, 0x00]);
         }
 
@@ -262,9 +273,11 @@ class GLMTTSProvider extends BaseTTSProvider {
 
         // 每5个数据块记录一次进度
         if (chunkCount % 5 == 0) {
-          final elapsed = DateTime.now().difference(streamStartTime).inMilliseconds;
+          final elapsed =
+              DateTime.now().difference(streamStartTime).inMilliseconds;
           final throughput = elapsed > 0 ? (totalSize / elapsed * 1000) : 0.0;
-          debugPrint('GLMTTSProvider: 流式进度 - 数据块: $chunkCount, 总大小: $totalSize 字节, '
+          debugPrint(
+              'GLMTTSProvider: 流式进度 - 数据块: $chunkCount, 总大小: $totalSize 字节, '
               '耗时: ${elapsed}ms, 吞吐量: ${throughput.toStringAsFixed(1)} B/s');
         }
       }
@@ -272,7 +285,8 @@ class GLMTTSProvider extends BaseTTSProvider {
       // 如果请求非PCM格式，进行格式转换
       if (convertToTarget && pcmChunks.isNotEmpty) {
         try {
-          final pcmData = Uint8List(pcmChunks.fold<int>(0, (sum, c) => sum + c.length));
+          final pcmData =
+              Uint8List(pcmChunks.fold<int>(0, (sum, c) => sum + c.length));
           var offset = 0;
           for (final chunk in pcmChunks) {
             pcmData.setRange(offset, offset + chunk.length, chunk);
@@ -297,8 +311,10 @@ class GLMTTSProvider extends BaseTTSProvider {
         }
       }
 
-      final totalTime = DateTime.now().difference(streamStartTime).inMilliseconds;
-      debugPrint('GLMTTSProvider: 流式合成完成 - 数据块: $chunkCount, 总大小: $totalSize 字节, '
+      final totalTime =
+          DateTime.now().difference(streamStartTime).inMilliseconds;
+      debugPrint(
+          'GLMTTSProvider: 流式合成完成 - 数据块: $chunkCount, 总大小: $totalSize 字节, '
           '总耗时: ${totalTime}ms');
     } on DioException catch (e) {
       final errorMsg = _parseDioError(e);
@@ -310,13 +326,15 @@ class GLMTTSProvider extends BaseTTSProvider {
     }
   }
 
-  /// 解析Dio错误为可读消息
+  /// 解析Dio错误为可读消息，保留原始错误详情
   String _parseDioError(DioException e) {
+    final String origMsg = e.message ?? '';
+    final String extra = origMsg.isNotEmpty ? '\n原始错误: $origMsg' : '';
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
-        return '连接超时，请检查网络';
+        return '连接超时，请检查网络$extra';
       case DioExceptionType.receiveTimeout:
-        return '接收超时，服务器响应过慢';
+        return '接收超时，服务器响应过慢$extra';
       case DioExceptionType.badResponse:
         final statusCode = e.response?.statusCode;
         final body = e.response?.data;
@@ -332,18 +350,21 @@ class GLMTTSProvider extends BaseTTSProvider {
           bodyStr = body?.toString() ?? '无响应体';
         }
         if (statusCode == 401 || statusCode == 403) {
-          return 'API密钥无效或权限不足 (HTTP $statusCode): $bodyStr';
+          return 'API密钥无效或权限不足 (HTTP $statusCode): $bodyStr$extra';
         } else if (statusCode == 429) {
-          return '请求过于频繁，请稍后重试 (HTTP $statusCode)';
+          return '请求过于频繁，请稍后重试 (HTTP $statusCode)$extra';
         } else if (statusCode == 500) {
-          return '服务器内部错误 (HTTP $statusCode): $bodyStr';
+          return '服务器内部错误 (HTTP $statusCode): $bodyStr$extra';
         } else if (statusCode == 404) {
-          return 'API端点不存在 (HTTP 404): $bodyStr\n请检查API基础URL设置是否正确';
+          return 'API端点不存在 (HTTP 404): $bodyStr\n请检查API基础URL设置是否正确$extra';
         }
-        return '服务器返回错误 (HTTP $statusCode): $bodyStr';
+        return '服务器返回错误 (HTTP $statusCode): $bodyStr$extra';
       case DioExceptionType.cancel:
-        return '请求已取消';
+        return '请求已取消$extra';
       default:
+        if (e.type == DioExceptionType.connectionError && kIsWeb) {
+          return '无法连接到服务器。Web端常见原因：CORS跨域限制或API地址不正确。请检查：1) 供应商配置中的API地址是否正确 2) 服务器是否允许跨域请求$extra';
+        }
         return '网络错误: ${e.message}';
     }
   }
@@ -487,7 +508,8 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
           'voice': validatedParams['voice'],
           'speed': validatedParams['speed'],
           'response_format': responseFormat,
-          if (validatedParams.containsKey('instructions') && (validatedParams['instructions'] as String).isNotEmpty)
+          if (validatedParams.containsKey('instructions') &&
+              (validatedParams['instructions'] as String).isNotEmpty)
             'instructions': validatedParams['instructions'],
         },
       );
@@ -495,7 +517,8 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
       final audioData = Uint8List.fromList(response.data);
       final elapsed = DateTime.now().difference(startTime).inMilliseconds;
 
-      debugPrint('AIHUBMIXTTSProvider: 合成成功 - 音频大小: ${audioData.length} 字节, 耗时: ${elapsed}ms');
+      debugPrint(
+          'AIHUBMIXTTSProvider: 合成成功 - 音频大小: ${audioData.length} 字节, 耗时: ${elapsed}ms');
 
       if (audioData.isEmpty) {
         throw Exception('AIHUBMIX-TTS返回了空的音频数据');
@@ -526,10 +549,12 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
         (validatedParams['response_format'] as String?)?.toLowerCase() ?? 'mp3';
 
     if (requestedFormat != 'pcm') {
-      debugPrint('AIHUBMIXTTSProvider: 流式合成不支持直接输出"$requestedFormat"格式，已强制使用"pcm"格式');
+      debugPrint(
+          'AIHUBMIXTTSProvider: 流式合成不支持直接输出"$requestedFormat"格式，已强制使用"pcm"格式');
     }
 
-    final sampleRate = (validatedParams['sample_rate'] as num?)?.toInt() ?? 24000;
+    final sampleRate =
+        (validatedParams['sample_rate'] as num?)?.toInt() ?? 24000;
     final convertToTarget = requestedFormat != 'pcm';
 
     debugPrint('AIHUBMIXTTSProvider: 开始流式合成 - 文本长度: ${text.length} 字符');
@@ -547,7 +572,8 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
           'speed': validatedParams['speed'],
           'response_format': 'pcm',
           'stream': true,
-          if (validatedParams.containsKey('instructions') && (validatedParams['instructions'] as String).isNotEmpty)
+          if (validatedParams.containsKey('instructions') &&
+              (validatedParams['instructions'] as String).isNotEmpty)
             'instructions': validatedParams['instructions'],
         },
       );
@@ -580,16 +606,19 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
         yield alignedChunk;
 
         if (chunkCount % 5 == 0) {
-          final elapsed = DateTime.now().difference(streamStartTime).inMilliseconds;
+          final elapsed =
+              DateTime.now().difference(streamStartTime).inMilliseconds;
           final throughput = elapsed > 0 ? (totalSize / elapsed * 1000) : 0.0;
-          debugPrint('AIHUBMIXTTSProvider: 流式进度 - 数据块: $chunkCount, 总大小: $totalSize 字节, '
+          debugPrint(
+              'AIHUBMIXTTSProvider: 流式进度 - 数据块: $chunkCount, 总大小: $totalSize 字节, '
               '耗时: ${elapsed}ms, 吞吐量: ${throughput.toStringAsFixed(1)} B/s');
         }
       }
 
       if (convertToTarget && pcmChunks.isNotEmpty) {
         try {
-          final pcmData = Uint8List(pcmChunks.fold<int>(0, (sum, c) => sum + c.length));
+          final pcmData =
+              Uint8List(pcmChunks.fold<int>(0, (sum, c) => sum + c.length));
           var offset = 0;
           for (final chunk in pcmChunks) {
             pcmData.setRange(offset, offset + chunk.length, chunk);
@@ -612,8 +641,10 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
         }
       }
 
-      final totalTime = DateTime.now().difference(streamStartTime).inMilliseconds;
-      debugPrint('AIHUBMIXTTSProvider: 流式合成完成 - 数据块: $chunkCount, 总大小: $totalSize 字节, '
+      final totalTime =
+          DateTime.now().difference(streamStartTime).inMilliseconds;
+      debugPrint(
+          'AIHUBMIXTTSProvider: 流式合成完成 - 数据块: $chunkCount, 总大小: $totalSize 字节, '
           '总耗时: ${totalTime}ms');
     } on DioException catch (e) {
       final errorMsg = _parseDioError(e);
@@ -627,11 +658,13 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
 
   /// 解析Dio错误为可读消息
   String _parseDioError(DioException e) {
+    final String origMsg = e.message ?? '';
+    final String extra = origMsg.isNotEmpty ? '\n原始错误: $origMsg' : '';
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
-        return '连接超时，请检查网络';
+        return '连接超时，请检查网络$extra';
       case DioExceptionType.receiveTimeout:
-        return '接收超时，服务器响应过慢';
+        return '接收超时，服务器响应过慢$extra';
       case DioExceptionType.badResponse:
         final statusCode = e.response?.statusCode;
         final body = e.response?.data;
@@ -647,18 +680,21 @@ class AIHUBMIXTTSProvider extends BaseTTSProvider {
           bodyStr = body?.toString() ?? '无响应体';
         }
         if (statusCode == 401 || statusCode == 403) {
-          return 'API密钥无效或权限不足 (HTTP $statusCode): $bodyStr';
+          return 'API密钥无效或权限不足 (HTTP $statusCode): $bodyStr$extra';
         } else if (statusCode == 429) {
-          return '请求过于频繁，请稍后重试 (HTTP $statusCode)';
+          return '请求过于频繁，请稍后重试 (HTTP $statusCode)$extra';
         } else if (statusCode == 500) {
-          return '服务器内部错误 (HTTP $statusCode): $bodyStr';
+          return '服务器内部错误 (HTTP $statusCode): $bodyStr$extra';
         } else if (statusCode == 404) {
-          return 'API端点不存在 (HTTP 404): $bodyStr\n请检查API基础URL设置是否正确';
+          return 'API端点不存在 (HTTP 404): $bodyStr\n请检查API基础URL设置是否正确$extra';
         }
-        return '服务器返回错误 (HTTP $statusCode): $bodyStr';
+        return '服务器返回错误 (HTTP $statusCode): $bodyStr$extra';
       case DioExceptionType.cancel:
-        return '请求已取消';
+        return '请求已取消$extra';
       default:
+        if (e.type == DioExceptionType.connectionError && kIsWeb) {
+          return '无法连接到服务器。Web端常见原因：CORS跨域限制或API地址不正确。请检查：1) 供应商配置中的API地址是否正确 2) 服务器是否允许跨域请求$extra';
+        }
         return '网络错误: ${e.message}';
     }
   }
@@ -689,20 +725,18 @@ class CustomTTSProvider extends BaseTTSProvider {
     required String baseUrl,
     String apiKey = '',
     String name = 'custom',
-  }) : _baseUrl = baseUrl,
-       _apiKey = apiKey,
-       _name = name,
-       _dio = Dio(BaseOptions(
-         baseUrl: '',
-         headers: {
-           'Content-Type': 'application/json',
-           if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
-         },
-         connectTimeout: const Duration(seconds: 10),
-         receiveTimeout: const Duration(seconds: 30),
-       ));
-
-
+  })  : _baseUrl = baseUrl,
+        _apiKey = apiKey,
+        _name = name,
+        _dio = Dio(BaseOptions(
+          baseUrl: '',
+          headers: {
+            'Content-Type': 'application/json',
+            if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
+          },
+          connectTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 30),
+        ));
 
   @override
   String get name => _name;
@@ -734,13 +768,13 @@ class CustomTTSProvider extends BaseTTSProvider {
 
   @override
   Map<String, dynamic> get defaultParams => {
-    'voice': 'alloy',
-    'speed': 1.0,
-    'volume': 1.0,
-    'format': 'wav',
-    'sample_rate': 24000,
-    'response_format': 'wav',
-  };
+        'voice': 'alloy',
+        'speed': 1.0,
+        'volume': 1.0,
+        'format': 'wav',
+        'sample_rate': 24000,
+        'response_format': 'wav',
+      };
 
   @override
   Map<String, dynamic> validateParams(Map<String, dynamic> userParams) {
@@ -751,7 +785,8 @@ class CustomTTSProvider extends BaseTTSProvider {
   }
 
   @override
-  Future<Uint8List> synthesize(String text, {Map<String, dynamic>? params, CancelToken? cancelToken}) async {
+  Future<Uint8List> synthesize(String text,
+      {Map<String, dynamic>? params, CancelToken? cancelToken}) async {
     if (_apiKey.isEmpty) throw Exception('API 密钥未配置');
     final validated = validateParams(params ?? {});
     final body = _buildBody(text, validated);
@@ -782,7 +817,8 @@ class CustomTTSProvider extends BaseTTSProvider {
   }
 
   @override
-  Stream<Uint8List> streamSynthesize(String text, {Map<String, dynamic>? params}) async* {
+  Stream<Uint8List> streamSynthesize(String text,
+      {Map<String, dynamic>? params}) async* {
     if (_apiKey.isEmpty) throw Exception('API 密钥未配置');
     final validated = validateParams(params ?? {});
     final body = _buildBody(text, validated);
@@ -810,26 +846,40 @@ class CustomTTSProvider extends BaseTTSProvider {
   }
 
   String _parseDioError(DioException e) {
+    final String origMsg = e.message ?? '';
+    final String extra = origMsg.isNotEmpty ? '\n原始错误: $origMsg' : '';
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
-        return '连接超时，请检查网络';
+        return '连接超时，请检查网络$extra';
       case DioExceptionType.receiveTimeout:
-        return '接收超时，服务器响应过慢';
+        return '接收超时，服务器响应过慢$extra';
       case DioExceptionType.badResponse:
         final statusCode = e.response?.statusCode;
         final body = e.response?.data;
         String bodyStr;
         if (body is List<int>) {
-          try { bodyStr = utf8.decode(body); } catch (_) { bodyStr = body.toString(); }
-        } else { bodyStr = body?.toString() ?? '无响应体'; }
-        if (statusCode == 401 || statusCode == 403) return 'API密钥无效或权限不足 (HTTP $statusCode): $bodyStr';
-        if (statusCode == 429) return '请求过于频繁，请稍后重试 (HTTP $statusCode)';
-        if (statusCode == 404) return 'API端点不存在 (HTTP 404): $bodyStr\n请检查API基础URL设置是否正确';
-        if (statusCode == 500) return '服务器内部错误 (HTTP $statusCode): $bodyStr';
-        return '服务器返回错误 (HTTP $statusCode): $bodyStr';
+          try {
+            bodyStr = utf8.decode(body);
+          } catch (_) {
+            bodyStr = body.toString();
+          }
+        } else {
+          bodyStr = body?.toString() ?? '无响应体';
+        }
+        if (statusCode == 401 || statusCode == 403)
+          return 'API密钥无效或权限不足 (HTTP $statusCode): $bodyStr$extra';
+        if (statusCode == 429) return '请求过于频繁，请稍后重试 (HTTP $statusCode)$extra';
+        if (statusCode == 404)
+          return 'API端点不存在 (HTTP 404): $bodyStr\n请检查API基础URL设置是否正确$extra';
+        if (statusCode == 500)
+          return '服务器内部错误 (HTTP $statusCode): $bodyStr$extra';
+        return '服务器返回错误 (HTTP $statusCode): $bodyStr$extra';
       case DioExceptionType.cancel:
-        return '请求已取消';
+        return '请求已取消$extra';
       default:
+        if (e.type == DioExceptionType.connectionError && kIsWeb) {
+          return '无法连接到服务器。Web端常见原因：CORS跨域限制或API地址不正确。请检查：1) 供应商配置中的API地址是否正确 2) 服务器是否允许跨域请求$extra';
+        }
         return '网络错误: ${e.message}';
     }
   }
