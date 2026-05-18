@@ -234,7 +234,7 @@ class SniffingEngine {
   static List<MediaResource> filterByDuration(
     List<MediaResource> resources,
     int expectedDurationSec, {
-    int toleranceSec = 2,
+    int toleranceSec = DefaultRules.durationToleranceSeconds,
   }) {
     if (resources.isEmpty) return [];
     // 仅筛选有时长信息的资源（播放列表等）

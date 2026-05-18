@@ -29,6 +29,7 @@ class StepStatus {
   final bool completed;
   final bool running;
   final bool failed;
+  final bool skipped;
   final String? error;
   final int progress; // 0-100，仅 running 时有效
 
@@ -37,6 +38,7 @@ class StepStatus {
     this.completed = false,
     this.running = false,
     this.failed = false,
+    this.skipped = false,
     this.error,
     this.progress = 0,
   });
@@ -56,6 +58,10 @@ class StepStatus {
   factory StepStatus.done(StepType type) =>
       StepStatus(type: type, completed: true, progress: 100);
 
+  /// 已跳过（如因为无需转换直接复制）
+  factory StepStatus.skipped(StepType type) =>
+      StepStatus(type: type, skipped: true, progress: 100);
+
   /// 已失败
   factory StepStatus.fail(StepType type, String? error) =>
       StepStatus(type: type, failed: true, error: error);
@@ -73,6 +79,7 @@ class StepStatus {
         'completed': completed,
         'running': running,
         'failed': failed,
+        'skipped': skipped,
         'error': error,
         'progress': progress,
       };
@@ -82,6 +89,7 @@ class StepStatus {
         completed: map['completed'] as bool? ?? false,
         running: map['running'] as bool? ?? false,
         failed: map['failed'] as bool? ?? false,
+        skipped: map['skipped'] as bool? ?? false,
         error: map['error'] as String?,
         progress: map['progress'] as int? ?? 0,
       );
@@ -91,6 +99,7 @@ class StepStatus {
     bool? completed,
     bool? running,
     bool? failed,
+    bool? skipped,
     String? error,
     int? progress,
   }) =>
@@ -99,6 +108,7 @@ class StepStatus {
         completed: completed ?? this.completed,
         running: running ?? this.running,
         failed: failed ?? this.failed,
+        skipped: skipped ?? this.skipped,
         error: error ?? this.error,
         progress: progress ?? this.progress,
       );
@@ -106,7 +116,7 @@ class StepStatus {
   @override
   String toString() =>
       'StepStatus(${type.label}, completed=$completed, running=$running, '
-      'failed=$failed, progress=$progress, error=$error)';
+      'failed=$failed, skipped=$skipped, progress=$progress, error=$error)';
 }
 
 // =============================================================================

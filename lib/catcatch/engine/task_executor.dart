@@ -102,7 +102,7 @@ class TaskExecutor {
       for (int i = startFromIndex; i < steps.length; i++) {
         if (cancelToken?.isCancelled ?? false) return null;
         final stepType = steps[i].type;
-        if (steps[i].completed) continue;
+        if (steps[i].completed || steps[i].skipped) continue;
         _markStep(steps, i, running: true);
         switch (stepType) {
           case StepType.fetching:
@@ -128,13 +128,16 @@ class TaskExecutor {
             break;
           case StepType.filtering:
             final filtered = SniffingEngine.filterByDuration(
-                detectedMedia, task.expectedDurationSec);
+                detectedMedia, task.expectedDurationSec,
+                toleranceSec: DefaultRules.durationToleranceSeconds);
+            // 检测音视频分轨并标记
+            final withSplitTrack = _detectSplitTracks(filtered);
             _markStep(steps, i, done: true);
             onUpdate(task.copyWith(
                 steps: steps,
-                detectedMedia: filtered,
+                detectedMedia: withSplitTrack,
                 progress: _calcProgress(steps)));
-            detectedMedia = filtered;
+            detectedMedia = withSplitTrack;
             break;
           case StepType.userSelecting:
             if (selectedMedia == null && detectedMedia.length > 1) {
@@ -143,8 +146,9 @@ class TaskExecutor {
             }
             selectedMedia ??=
                 detectedMedia.isNotEmpty ? detectedMedia.first : null;
-            if (selectedMedia == null)
+            if (selectedMedia == null) {
               throw Exception('未能获取到可用媒体资源，请检查URL是否正确以及目标网站是否可达');
+            }
             _markStep(steps, i, done: true);
             onUpdate(task.copyWith(
                 steps: steps,
@@ -152,6 +156,23 @@ class TaskExecutor {
                 progress: _calcProgress(steps)));
             break;
           case StepType.downloading:
+            // 检查服务器是否支持断点续传
+            if (task.metadata['resumeSupported'] == null &&
+                selectedMedia != null) {
+              final supportsResume =
+                  await DownloadManager.checkServerResumeSupport(
+                selectedMedia.url,
+                headers: DefaultRules.buildBrowserHeaders(
+                  referer: selectedMedia.initiator,
+                ),
+              );
+              onUpdate(task.copyWith(
+                metadata: {
+                  ...task.metadata,
+                  'resumeSupported': supportsResume ? 'true' : 'false',
+                },
+              ));
+            }
             downloadedFilePath = await _executeDownload(
               task: task,
               steps: steps,
@@ -164,6 +185,29 @@ class TaskExecutor {
             break;
           case StepType.converting:
             if (downloadedFilePath == null) throw Exception('下载文件路径为空，无法转换');
+
+            // 检查是否需要用户确认转换操作（特殊格式/播放列表）
+            final pendingConfirm = task.metadata['pendingConfirm'];
+            if (pendingConfirm != 'done') {
+              final ext = p
+                  .extension(downloadedFilePath)
+                  .toLowerCase()
+                  .replaceAll('.', '');
+              final isPlaylistSelected =
+                  task.selectedMedia?.isPlaylist ?? false;
+              if (isPlaylistSelected || _isSpecialFormat(ext)) {
+                onUpdate(task.copyWith(
+                  steps: steps,
+                  metadata: {
+                    ...task.metadata,
+                    'pendingConfirm': 'special_format',
+                    'pendingConfirmFormat': ext,
+                  },
+                ));
+                return null;
+              }
+            }
+
             downloadedFilePath = await _executeConvert(
                 task: task,
                 steps: steps,
@@ -393,6 +437,11 @@ class TaskExecutor {
         }
         final ext = media.ext;
         final fileName = '${media.name}.$ext';
+        final tempDir = Directory(downloadDir);
+        if (!await tempDir.exists()) await tempDir.create(recursive: true);
+        final tempPath =
+            p.join(downloadDir, '.${fileName}${DefaultRules.tempFileSuffix}');
+
         final downloadedFilePath = await DownloadManager.downloadFile(
           url: media.url,
           saveDir: downloadDir,
@@ -406,6 +455,8 @@ class TaskExecutor {
                 task.copyWith(steps: steps, progress: _calcProgress(steps)));
           },
           cancelToken: cancelToken,
+          taskId: task.id,
+          existingPath: tempPath,
         );
         _markStep(steps, 5, done: true);
         onUpdate(task.copyWith(steps: steps, progress: _calcProgress(steps)));
@@ -462,6 +513,122 @@ class TaskExecutor {
     return finalPath;
   }
 
+  /// 检测疑似音视频分轨资源
+  /// 对同一时长区间内既有音频又有视频的情况进行标记
+  static List<MediaResource> _detectSplitTracks(List<MediaResource> media) {
+    if (media.length < 2) return media;
+
+    final result = List<MediaResource>.from(media);
+    final audioList = <int>[];
+    final videoList = <int>[];
+
+    // 分离音视频索引
+    for (int i = 0; i < result.length; i++) {
+      if (result[i].isAudio) audioList.add(i);
+      if (result[i].isVideo) videoList.add(i);
+    }
+
+    if (audioList.isEmpty || videoList.isEmpty) return result;
+
+    // 按时长相似度分组
+    for (final ai in audioList) {
+      for (final vi in videoList) {
+        if (result[ai].groupId != null || result[vi].groupId != null) continue;
+        final aDuration = result[ai].duration;
+        final vDuration = result[vi].duration;
+        if (aDuration != null && vDuration != null) {
+          final aSec = _parseDurationToSeconds(aDuration);
+          final vSec = _parseDurationToSeconds(vDuration);
+          if (aSec != null && vSec != null && (aSec - vSec).abs() <= 2) {
+            final groupId = 'split_${result[ai].name}_${result[vi].name}';
+            result[ai] = result[ai].copyWith(
+              groupId: groupId,
+              isLikelySplitTrack: true,
+            );
+            result[vi] = result[vi].copyWith(
+              groupId: groupId,
+              isLikelySplitTrack: true,
+            );
+          }
+        } else {
+          // 无时长信息时，通过文件名相似度判断
+          final aName = result[ai].name.toLowerCase();
+          final vName = result[vi].name.toLowerCase();
+          final commonPrefix = _longestCommonPrefix(aName, vName);
+          if (commonPrefix.length > 5 &&
+              (aName.contains('audio') ||
+                  vName.contains('audio') ||
+                  aName.contains('video') ||
+                  vName.contains('video'))) {
+            final groupId = 'split_$commonPrefix';
+            result[ai] = result[ai].copyWith(
+              groupId: groupId,
+              isLikelySplitTrack: true,
+            );
+            result[vi] = result[vi].copyWith(
+              groupId: groupId,
+              isLikelySplitTrack: true,
+            );
+          }
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /// 计算两个字符串的最长公共前缀
+  static String _longestCommonPrefix(String a, String b) {
+    final minLen = a.length < b.length ? a.length : b.length;
+    int i = 0;
+    while (i < minLen && a[i] == b[i]) {
+      i++;
+    }
+    return a.substring(0, i);
+  }
+
+  /// 将 "00:12:34.567" 格式的时长转为秒
+  static double? _parseDurationToSeconds(String duration) {
+    final parts = duration.split(':');
+    if (parts.length == 3) {
+      final h = double.tryParse(parts[0]) ?? 0;
+      final m = double.tryParse(parts[1]) ?? 0;
+      final s = double.tryParse(parts[2]) ?? 0;
+      return h * 3600 + m * 60 + s;
+    }
+    if (parts.length == 2) {
+      final m = double.tryParse(parts[0]) ?? 0;
+      final s = double.tryParse(parts[1]) ?? 0;
+      return m * 60 + s;
+    }
+    return double.tryParse(duration);
+  }
+
+  /// 判断扩展名是否为需要用户确认转换的特殊格式
+  ///
+  /// 特殊格式通常指非标准播放格式（如 ts、flv 等），
+  /// 需要询问用户是否自动用 ffmpeg 转码为 mp4。
+  static bool _isSpecialFormat(String ext) {
+    const specialFormats = {
+      'ts',
+      'flv',
+      'f4v',
+      'hlv',
+      'mkv',
+      'avi',
+      'wmv',
+      'mpeg',
+      'mpg',
+      'm4s',
+      'ogg',
+      'ogv',
+      'm3u8',
+      'm3u',
+      'mpd',
+    };
+    return specialFormats.contains(ext.toLowerCase());
+  }
+
   static void _ensureSteps(List<StepStatus> steps) {
     final existing = {for (final s in steps) s.type};
     for (final type in StepType.values) {
@@ -480,6 +647,7 @@ class TaskExecutor {
       {bool done = false,
       bool running = false,
       bool failed = false,
+      bool skipped = false,
       String? error,
       int progress = 0}) {
     if (index >= steps.length) return;
@@ -487,6 +655,7 @@ class TaskExecutor {
         completed: done,
         running: running,
         failed: failed,
+        skipped: skipped,
         error: error,
         progress: progress);
   }

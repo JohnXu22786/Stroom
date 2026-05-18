@@ -29,6 +29,12 @@ class MediaResource {
   /// 可选的时长信息（字符串形式，如 "00:12:34.567"）
   final String? duration;
 
+  /// 分组标识，用于关联属于同一视频的不同轨道（如音频+视频）
+  final String? groupId;
+
+  /// 是否为音视频分离的轨道（同一内容的独立音频/视频流）
+  final bool isLikelySplitTrack;
+
   const MediaResource({
     required this.url,
     required this.name,
@@ -39,6 +45,8 @@ class MediaResource {
     this.isPlayable = false,
     this.isPlaylist = false,
     this.duration,
+    this.groupId,
+    this.isLikelySplitTrack = false,
   });
 
   // ---------------------------------------------------------------------------
@@ -89,6 +97,8 @@ class MediaResource {
         'isPlayable': isPlayable,
         'isPlaylist': isPlaylist,
         'duration': duration,
+        'groupId': groupId,
+        'isLikelySplitTrack': isLikelySplitTrack,
       };
 
   factory MediaResource.fromMap(Map<String, dynamic> map) => MediaResource(
@@ -101,6 +111,8 @@ class MediaResource {
         isPlayable: map['isPlayable'] as bool? ?? false,
         isPlaylist: map['isPlaylist'] as bool? ?? false,
         duration: map['duration'] as String?,
+        groupId: map['groupId'] as String?,
+        isLikelySplitTrack: map['isLikelySplitTrack'] as bool? ?? false,
       );
 
   MediaResource copyWith({
@@ -113,6 +125,10 @@ class MediaResource {
     bool? isPlayable,
     bool? isPlaylist,
     String? duration,
+    String? groupId,
+    bool? isLikelySplitTrack,
+    bool clearGroupId = false,
+    bool clearIsLikelySplitTrack = false,
   }) =>
       MediaResource(
         url: url ?? this.url,
@@ -124,11 +140,15 @@ class MediaResource {
         isPlayable: isPlayable ?? this.isPlayable,
         isPlaylist: isPlaylist ?? this.isPlaylist,
         duration: duration ?? this.duration,
+        groupId: clearGroupId ? null : (groupId ?? this.groupId),
+        isLikelySplitTrack: clearIsLikelySplitTrack
+            ? false
+            : (isLikelySplitTrack ?? this.isLikelySplitTrack),
       );
 
   @override
   String toString() =>
-      'MediaResource($name.$ext, url=$url, size=$size, mime=$mimeType)';
+      'MediaResource($name.$ext, url=$url, size=$size, mime=$mimeType, groupId=$groupId, isLikelySplitTrack=$isLikelySplitTrack)';
 
   @override
   bool operator ==(Object other) =>
@@ -137,8 +157,10 @@ class MediaResource {
           runtimeType == other.runtimeType &&
           url == other.url &&
           name == other.name &&
-          ext == other.ext;
+          ext == other.ext &&
+          groupId == other.groupId &&
+          isLikelySplitTrack == other.isLikelySplitTrack;
 
   @override
-  int get hashCode => Object.hash(url, name, ext);
+  int get hashCode => Object.hash(url, name, ext, groupId, isLikelySplitTrack);
 }
