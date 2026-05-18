@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,10 +38,14 @@ class Conversation {
       };
 
   factory Conversation.fromMap(Map<String, dynamic> map) => Conversation(
-        id: map['id'] as String,
+        id: map['id'] as String?,
         title: map['title'] as String? ?? '',
-        createdAt: DateTime.parse(map['createdAt'] as String),
-        updatedAt: DateTime.parse(map['updatedAt'] as String),
+        createdAt: map['createdAt'] != null
+            ? DateTime.parse(map['createdAt'] as String)
+            : null,
+        updatedAt: map['updatedAt'] != null
+            ? DateTime.parse(map['updatedAt'] as String)
+            : null,
         messages: (map['messages'] as List?)
                 ?.map((e) =>
                     ChatMessage.fromMap(Map<String, dynamic>.from(e as Map)))
@@ -71,6 +76,8 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   final Ref _ref;
 
   ConversationsNotifier(this._ref) : super([]);
+
+  Timer? _persistTimer;
 
   // --------------------------------------------------------------------------
   // Persistence
@@ -113,13 +120,22 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   }
 
   Future<void> _persist() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final json = jsonEncode(state.map((e) => e.toMap()).toList());
-      await prefs.setString('conversations', json);
-    } catch (e) {
-      debugPrint('Failed to persist conversations: $e');
-    }
+    _persistTimer?.cancel();
+    _persistTimer = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final json = jsonEncode(state.map((e) => e.toMap()).toList());
+        await prefs.setString('conversations', json);
+      } catch (e) {
+        debugPrint('Failed to persist conversations: $e');
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _persistTimer?.cancel();
+    super.dispose();
   }
 
   // --------------------------------------------------------------------------
@@ -181,15 +197,21 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       if (c.id != conversationId) return c;
       c.messages = messages;
       c.updatedAt = DateTime.now();
-      // Derive title from the first user message if title is empty.
+      // Derive title from the conversation overview if title is empty.
       if (c.title.isEmpty && messages.isNotEmpty) {
         final firstUser = messages.firstWhere(
           (m) => m.role == 'user',
           orElse: () => messages.first,
         );
-        c.title = firstUser.content.length > 60
-            ? '${firstUser.content.substring(0, 60)}…'
-            : firstUser.content;
+        final firstAssistant =
+            messages.where((m) => m.role == 'assistant').firstOrNull;
+
+        String combined = firstUser.content;
+        if (firstAssistant != null) {
+          combined += ' - ${firstAssistant.content}';
+        }
+        c.title =
+            combined.length > 60 ? '${combined.substring(0, 60)}…' : combined;
       }
       return c;
     }).toList();

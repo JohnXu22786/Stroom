@@ -1,16 +1,20 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:flutter_highlight/themes/dracula.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/chat_message.dart';
 import '../services/chat_adapter.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/provider_config.dart';
 import 'provider_config_page.dart';
+
+final _isStreamingProvider = StateProvider<bool>((ref) => false);
 
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({super.key});
@@ -25,11 +29,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   late final User _aiUser;
   late final ChatAdapter _adapter;
   final List<ChatMessage> _history = [];
-  bool _isStreaming = false;
   int _selectedModelIndex = 0;
   Timer? _flushTimer;
   String _pending = '';
   bool _cancelledByUser = false;
+  String _lastUserMessage = '';
 
   @override
   void initState() {
@@ -38,13 +42,23 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _aiUser = User(id: 'ai1', name: 'Stroom');
     _adapter = ChatAdapter();
     _controller = InMemoryChatController();
+
+    // Reactively load messages when the active conversation changes
+    ref.listen(activeConversationIdProvider, (prev, next) {
+      if (next != null && next != prev) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _loadConversationMessages();
+        });
+      }
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) => _initialize());
   }
 
   @override
   void dispose() {
     _flushTimer?.cancel();
-    _saveMessages();
+    unawaited(_saveMessages());
     _controller?.dispose();
     _adapter.dispose();
     super.dispose();
@@ -52,6 +66,20 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   void _initialize() {
     _configureAdapter();
+    // Restore saved model selection
+    SharedPreferences.getInstance().then((prefs) {
+      final saved = prefs.getInt('selected_model_index');
+      if (saved != null) {
+        final entriesState = ref.read(providerEntriesProvider);
+        final models = _adapter.availableModels(entriesState);
+        if (saved >= 0 && saved < models.length) {
+          final model = models[saved];
+          _adapter.selectModel(
+              entriesState, model.configIndex, model.modelIndex);
+          setState(() => _selectedModelIndex = saved);
+        }
+      }
+    });
     _loadConversationMessages();
   }
 
@@ -118,6 +146,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _saveMessages().then((_) {
       ref.read(conversationsProvider.notifier).createConversation();
       _history.clear();
+      _controller?.dispose();
       final newCtrl = InMemoryChatController();
       setState(() => _controller = newCtrl);
     });
@@ -139,8 +168,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   Future<void> _onMessageSend(String text) async {
-    if (_isStreaming) return;
-    _isStreaming = true;
+    _lastUserMessage = text;
+    if (ref.read(_isStreamingProvider)) return;
+    ref.read(_isStreamingProvider.notifier).state = true;
     if (mounted) setState(() {});
     _cancelledByUser = false;
 
@@ -223,7 +253,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     _history
         .add(ChatMessage(role: 'assistant', content: fullReply, id: aiMsgId));
-    _isStreaming = false;
+    ref.read(_isStreamingProvider.notifier).state = false;
     _cancelledByUser = false;
     if (mounted) setState(() {});
 
@@ -235,7 +265,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _flushTimer?.cancel();
     _flushTimer = null;
     _adapter.cancel();
-    if (mounted) setState(() {});
+    ref.read(_isStreamingProvider.notifier).state = false;
   }
 
   @override
@@ -245,6 +275,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig;
     final adapterConfigured = _adapter.isConfigured;
     final controller = _controller;
+    final isStreaming = ref.watch(_isStreamingProvider);
 
     // Get conversation title
     final activeId = ref.watch(activeConversationIdProvider);
@@ -299,7 +330,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     onPressed: _newConversation,
                   ),
                   // ── Stop button ──
-                  if (_isStreaming)
+                  if (isStreaming)
                     IconButton(
                       icon: Icon(Icons.stop_circle_outlined,
                           color: Colors.red[400]),
@@ -369,30 +400,113 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       onMessageSend: _onMessageSend,
                       theme: isDark ? ChatTheme.dark() : ChatTheme.light(),
                       builders: Builders(
+                        composerBuilder: (context) => _ChatComposer(
+                          onSend: _onMessageSend,
+                          onStop: _stopStreaming,
+                        ),
                         textMessageBuilder: (context, message, index,
                             {required bool isSentByMe,
                             MessageGroupStatus? groupStatus}) {
                           final isAi = message.authorId == _aiUser.id;
 
                           if (isAi) {
-                            return Container(
-                              margin: const EdgeInsets.symmetric(vertical: 2),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? Colors.grey[850]
-                                    : Colors.grey[100],
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: MarkdownWidget(
-                                data: message.text,
-                                selectable: true,
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                config: markdownConfig.copy(configs: [
-                                  PreConfig(theme: draculaTheme),
-                                ]),
-                              ),
+                            if (message.text.startsWith('错误:')) {
+                              return Container(
+                                margin: const EdgeInsets.symmetric(vertical: 2),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: (isDark
+                                          ? Colors.grey[850]
+                                          : Colors.grey[100])!
+                                      .withOpacity(0.7),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: Colors.red.withOpacity(0.3),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      message.text,
+                                      style: TextStyle(
+                                        color: Colors.red[700],
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    TextButton.icon(
+                                      onPressed: () =>
+                                          _onMessageSend(_lastUserMessage),
+                                      icon: Icon(Icons.refresh, size: 16),
+                                      label: const Text('重试',
+                                          style: TextStyle(fontSize: 13)),
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: Colors.red[700],
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 4),
+                                        minimumSize: Size.zero,
+                                        tapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
+
+                            return Stack(
+                              children: [
+                                Container(
+                                  margin:
+                                      const EdgeInsets.symmetric(vertical: 2),
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? Colors.grey[850]
+                                        : Colors.grey[100],
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: MarkdownWidget(
+                                    data: message.text,
+                                    selectable: true,
+                                    shrinkWrap: true,
+                                    physics:
+                                        const NeverScrollableScrollPhysics(),
+                                    config: markdownConfig.copy(configs: [
+                                      PreConfig(theme: draculaTheme),
+                                    ]),
+                                  ),
+                                ),
+                                Positioned(
+                                  top: 0,
+                                  right: 0,
+                                  child: IconButton(
+                                    icon: Icon(Icons.copy, size: 16),
+                                    tooltip: '复制',
+                                    style: IconButton.styleFrom(
+                                      foregroundColor: Colors.grey[500],
+                                      padding: const EdgeInsets.all(4),
+                                      minimumSize: const Size(28, 28),
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    onPressed: () {
+                                      Clipboard.setData(
+                                          ClipboardData(text: message.text));
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        const SnackBar(
+                                          content: Text('已复制'),
+                                          duration: Duration(seconds: 1),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
                             );
                           }
 
@@ -446,6 +560,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             _adapter.selectModel(
                 entriesState, model.configIndex, model.modelIndex);
             setState(() => _selectedModelIndex = idx);
+            // Persist selection
+            SharedPreferences.getInstance().then((prefs) {
+              prefs.setInt('selected_model_index', idx);
+            });
           },
           items: List.generate(models.length, (i) {
             final model = models[i];
@@ -563,11 +681,22 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         _formatDate(conv.updatedAt),
         style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
       ),
-      trailing: IconButton(
-        icon: Icon(Icons.delete_outline,
-            size: 18, color: cs.error.withOpacity(0.7)),
-        tooltip: '删除',
-        onPressed: () => _deleteConversation(conv.id),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: Icon(Icons.edit_outlined,
+                size: 18, color: cs.onSurfaceVariant.withOpacity(0.7)),
+            tooltip: '重命名',
+            onPressed: () => _renameConversation(conv.id, conv.title),
+          ),
+          IconButton(
+            icon: Icon(Icons.delete_outline,
+                size: 18, color: cs.error.withOpacity(0.7)),
+            tooltip: '删除',
+            onPressed: () => _deleteConversation(conv.id),
+          ),
+        ],
       ),
       onTap: () {
         if (!isActive) {
@@ -576,11 +705,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 .read(conversationsProvider.notifier)
                 .selectConversation(conv.id);
             _history.clear();
+            _controller?.dispose();
             final newCtrl = InMemoryChatController();
             setState(() => _controller = newCtrl);
-            // Use post-frame callback to load messages after rebuild
-            WidgetsBinding.instance
-                .addPostFrameCallback((_) => _loadConversationMessages());
           });
         }
         Navigator.of(context).pop();
@@ -596,6 +723,50 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (diff.inDays < 1) return '${diff.inHours} 小时前';
     if (diff.inDays < 7) return '${diff.inDays} 天前';
     return '${date.month}/${date.day}';
+  }
+
+  void _renameConversation(String id, String currentTitle) {
+    final controller = TextEditingController(text: currentTitle);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('重命名对话'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: '输入新名称',
+            border: OutlineInputBorder(),
+          ),
+          onSubmitted: (value) {
+            if (value.trim().isNotEmpty) {
+              ref
+                  .read(conversationsProvider.notifier)
+                  .renameConversation(id, value.trim());
+            }
+            Navigator.of(context).pop();
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isNotEmpty) {
+                ref
+                    .read(conversationsProvider.notifier)
+                    .renameConversation(id, value);
+              }
+              Navigator.of(context).pop();
+            },
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _deleteConversation(String id) {
@@ -615,6 +786,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               ref.read(conversationsProvider.notifier).deleteConversation(id);
               if (wasActive) {
                 _history.clear();
+                _controller?.dispose();
                 final newCtrl = InMemoryChatController();
                 setState(() => _controller = newCtrl);
               }
@@ -624,6 +796,102 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 foregroundColor: Theme.of(context).colorScheme.error),
             child: const Text('删除'),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChatComposer extends ConsumerStatefulWidget {
+  final Future<void> Function(String text) onSend;
+  final VoidCallback onStop;
+
+  const _ChatComposer({
+    required this.onSend,
+    required this.onStop,
+  });
+
+  @override
+  ConsumerState<_ChatComposer> createState() => _ChatComposerState();
+}
+
+class _ChatComposerState extends ConsumerState<_ChatComposer> {
+  final _textController = TextEditingController();
+  final _focusNode = FocusNode();
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _handleSubmitted(String text) {
+    if (text.trim().isEmpty) return;
+    widget.onSend(text.trim());
+    _textController.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isStreaming = ref.watch(_isStreamingProvider);
+    final hasText = _textController.text.trim().isNotEmpty;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        border: Border(
+          top: BorderSide(color: cs.outlineVariant, width: 0.5),
+        ),
+      ),
+      padding: EdgeInsets.only(
+        left: 12,
+        right: 4,
+        top: 8,
+        bottom: 8 + MediaQuery.of(context).padding.bottom,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _textController,
+              focusNode: _focusNode,
+              textInputAction: TextInputAction.send,
+              onSubmitted: _handleSubmitted,
+              onChanged: (_) => setState(() {}),
+              minLines: 1,
+              maxLines: 4,
+              decoration: InputDecoration(
+                hintText: '输入消息...',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: BorderSide.none,
+                ),
+                filled: true,
+                fillColor: cs.surfaceContainerHigh.withOpacity(0.8),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          if (isStreaming)
+            IconButton(
+              icon: Icon(Icons.stop_circle_outlined, color: Colors.red[400]),
+              tooltip: '停止生成',
+              onPressed: widget.onStop,
+            )
+          else
+            IconButton(
+              icon: Icon(Icons.send_rounded, color: cs.primary),
+              tooltip: '发送',
+              onPressed:
+                  hasText ? () => _handleSubmitted(_textController.text) : null,
+            ),
         ],
       ),
     );

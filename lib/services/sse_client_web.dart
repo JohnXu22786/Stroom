@@ -13,6 +13,7 @@ Stream<String> sseStream(
   xhr.open('POST', url);
   headers.forEach((k, v) => xhr.setRequestHeader(k, v));
   xhr.responseType = 'text';
+  xhr.timeout = 30000; // 30 second timeout
 
   final progressSub = xhr.onProgress.listen((_) {
     final fullText = xhr.responseText ?? '';
