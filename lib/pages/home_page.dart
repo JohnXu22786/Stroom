@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -26,7 +24,7 @@ enum AppPage {
 final selectedPageProvider = StateProvider<AppPage>((ref) => AppPage.home);
 
 /// 主页，采用 FlClash 风格的响应式布局：
-/// - 移动端：底部导航栏（主页、对话、文件、设置）+ 浮动加号按钮
+/// - 移动端：底部导航栏（主页、对话、+、文件、设置）
 /// - 桌面端：侧边栏导航
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -35,30 +33,18 @@ class HomePage extends ConsumerStatefulWidget {
   ConsumerState<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends ConsumerState<HomePage>
-    with SingleTickerProviderStateMixin {
+class _HomePageState extends ConsumerState<HomePage> {
   late PageController _pageController;
-  late AnimationController _plusAnimationController;
-  late Animation<double> _plusRotation;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: AppPage.home.index);
-    _plusAnimationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _plusRotation = Tween<double>(begin: 0.0, end: 0.125).animate(
-      CurvedAnimation(
-          parent: _plusAnimationController, curve: Curves.easeInOut),
-    );
   }
 
   @override
   void dispose() {
     _pageController.dispose();
-    _plusAnimationController.dispose();
     super.dispose();
   }
 
@@ -154,8 +140,6 @@ class _HomePageState extends ConsumerState<HomePage>
       ],
     ).then((value) {
       if (!mounted) return;
-      // 关闭菜单后复位加号旋转
-      _plusAnimationController.reverse();
       if (value == null) return;
 
       switch (value) {
@@ -187,21 +171,86 @@ class _HomePageState extends ConsumerState<HomePage>
   Widget _buildNavigationRail(BuildContext context) {
     final selectedPage = ref.watch(selectedPageProvider);
 
+    int selectedIndex;
+    if (selectedPage.index >= 2) {
+      selectedIndex = selectedPage.index + 1;
+    } else {
+      selectedIndex = selectedPage.index;
+    }
+
     return NavigationRail(
-      selectedIndex: selectedPage.index,
+      selectedIndex: selectedIndex,
       onDestinationSelected: (index) {
-        ref.read(selectedPageProvider.notifier).state = AppPage.values[index];
-        _pageController.jumpToPage(index);
+        if (index == 2) {
+          _showPlusMenu(context);
+          return;
+        }
+        final pageIndex = index > 2 ? index - 1 : index;
+        ref.read(selectedPageProvider.notifier).state =
+            AppPage.values[pageIndex];
+        _pageController.jumpToPage(pageIndex);
       },
       labelType: NavigationRailLabelType.all,
-      destinations: AppPage.values.map((page) {
-        return NavigationRailDestination(
-          icon: Icon(_getPageIcon(page)),
-          selectedIcon: Icon(_getPageIcon(page),
+      destinations: [
+        NavigationRailDestination(
+          icon: Icon(_getPageIcon(AppPage.home)),
+          selectedIcon: Icon(_getPageIcon(AppPage.home),
               color: Theme.of(context).colorScheme.primary),
-          label: Text(_getPageTitle(page)),
-        );
-      }).toList(),
+          label: Text(_getPageTitle(AppPage.home)),
+        ),
+        NavigationRailDestination(
+          icon: Icon(_getPageIcon(AppPage.chat)),
+          selectedIcon: Icon(_getPageIcon(AppPage.chat),
+              color: Theme.of(context).colorScheme.primary),
+          label: Text(_getPageTitle(AppPage.chat)),
+        ),
+        NavigationRailDestination(
+          icon: Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Theme.of(context)
+                  .colorScheme
+                  .primary
+                  .withValues(alpha: 0.85),
+            ),
+            child: const Icon(Icons.add, color: Colors.white, size: 20),
+          ),
+          selectedIcon: Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Theme.of(context).colorScheme.primary,
+              boxShadow: [
+                BoxShadow(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withValues(alpha: 0.3),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Icon(Icons.add, color: Colors.white, size: 20),
+          ),
+          label: const Text(''),
+        ),
+        NavigationRailDestination(
+          icon: Icon(_getPageIcon(AppPage.files)),
+          selectedIcon: Icon(_getPageIcon(AppPage.files),
+              color: Theme.of(context).colorScheme.primary),
+          label: Text(_getPageTitle(AppPage.files)),
+        ),
+        NavigationRailDestination(
+          icon: Icon(_getPageIcon(AppPage.settings)),
+          selectedIcon: Icon(_getPageIcon(AppPage.settings),
+              color: Theme.of(context).colorScheme.primary),
+          label: Text(_getPageTitle(AppPage.settings)),
+        ),
+      ],
     );
   }
 
@@ -209,18 +258,77 @@ class _HomePageState extends ConsumerState<HomePage>
   Widget _buildBottomNavigationBar(BuildContext context) {
     final selectedPage = ref.watch(selectedPageProvider);
 
+    int selectedIndex;
+    if (selectedPage.index >= 2) {
+      selectedIndex = selectedPage.index + 1;
+    } else {
+      selectedIndex = selectedPage.index;
+    }
+
     return NavigationBar(
-      selectedIndex: selectedPage.index,
+      selectedIndex: selectedIndex,
       onDestinationSelected: (index) {
-        ref.read(selectedPageProvider.notifier).state = AppPage.values[index];
-        _pageController.jumpToPage(index);
+        if (index == 2) {
+          _showPlusMenu(context);
+          return;
+        }
+        final pageIndex = index > 2 ? index - 1 : index;
+        ref.read(selectedPageProvider.notifier).state =
+            AppPage.values[pageIndex];
+        _pageController.jumpToPage(pageIndex);
       },
-      destinations: AppPage.values.map((page) {
-        return NavigationDestination(
-          icon: Icon(_getPageIcon(page)),
-          label: _getPageTitle(page),
-        );
-      }).toList(),
+      destinations: [
+        NavigationDestination(
+          icon: Icon(_getPageIcon(AppPage.home)),
+          label: _getPageTitle(AppPage.home),
+        ),
+        NavigationDestination(
+          icon: Icon(_getPageIcon(AppPage.chat)),
+          label: _getPageTitle(AppPage.chat),
+        ),
+        NavigationDestination(
+          icon: Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Theme.of(context)
+                  .colorScheme
+                  .primary
+                  .withValues(alpha: 0.85),
+            ),
+            child: const Icon(Icons.add, color: Colors.white, size: 16),
+          ),
+          selectedIcon: Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Theme.of(context).colorScheme.primary,
+              boxShadow: [
+                BoxShadow(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withValues(alpha: 0.3),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Icon(Icons.add, color: Colors.white, size: 16),
+          ),
+          label: '',
+        ),
+        NavigationDestination(
+          icon: Icon(_getPageIcon(AppPage.files)),
+          label: _getPageTitle(AppPage.files),
+        ),
+        NavigationDestination(
+          icon: Icon(_getPageIcon(AppPage.settings)),
+          label: _getPageTitle(AppPage.settings),
+        ),
+      ],
     );
   }
 
@@ -261,42 +369,6 @@ class _HomePageState extends ConsumerState<HomePage>
     return KeyedSubtree(
       key: ValueKey('page_${page.name}'),
       child: _buildPageContent(page),
-    );
-  }
-
-  Widget _buildPlusButton(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _plusRotation,
-      builder: (context, child) {
-        return Transform.rotate(
-          angle: _plusRotation.value * 2 * pi,
-          child: child,
-        );
-      },
-      child: Container(
-        width: 56,
-        height: 56,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Theme.of(context).colorScheme.primary,
-          boxShadow: [
-            BoxShadow(
-              color:
-                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: IconButton(
-          key: const Key('plus_action_button'),
-          icon: const Icon(Icons.add, color: Colors.white),
-          onPressed: () {
-            _plusAnimationController.forward();
-            _showPlusMenu(context);
-          },
-        ),
-      ),
     );
   }
 
@@ -353,44 +425,7 @@ class _HomePageState extends ConsumerState<HomePage>
           ),
         ],
       ),
-      // 桌面端：浮动加号按钮
-      floatingActionButton: !isMobile
-          ? FloatingActionButton(
-              key: const Key('desktop_plus_fab'),
-              onPressed: () {
-                _plusAnimationController.forward();
-                _showPlusMenu(context);
-              },
-              child: AnimatedBuilder(
-                animation: _plusRotation,
-                builder: (context, child) {
-                  return Transform.rotate(
-                    angle: _plusRotation.value * 2 * pi,
-                    child: child,
-                  );
-                },
-                child: const Icon(Icons.add),
-              ),
-            )
-          : null,
-      // 移动端：底部导航栏 + 浮动加号按钮
-      bottomNavigationBar: isMobile
-          ? Stack(
-              clipBehavior: Clip.none,
-              children: [
-                _buildBottomNavigationBar(context),
-                // 加号按钮 - 定位在导航栏上方中央
-                Positioned(
-                  top: -16,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: _buildPlusButton(context),
-                  ),
-                ),
-              ],
-            )
-          : null,
+      bottomNavigationBar: isMobile ? _buildBottomNavigationBar(context) : null,
     );
   }
 }
