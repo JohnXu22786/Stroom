@@ -37,27 +37,29 @@ class SortConfig {
     if (field == newField) {
       return SortConfig(
         field: field,
-        order: order == SortOrder.descending ? SortOrder.ascending : SortOrder.descending,
+        order: order == SortOrder.descending
+            ? SortOrder.ascending
+            : SortOrder.descending,
       );
     }
     return SortConfig(field: newField, order: SortOrder.descending);
   }
 
   Map<String, dynamic> toJson() => {
-    'field': field.name,
-    'order': order.name,
-  };
+        'field': field.name,
+        'order': order.name,
+      };
 
   factory SortConfig.fromJson(Map<String, dynamic> json) => SortConfig(
-    field: SortField.values.firstWhere(
-      (e) => e.name == json['field'],
-      orElse: () => SortField.createdAt,
-    ),
-    order: SortOrder.values.firstWhere(
-      (e) => e.name == json['order'],
-      orElse: () => SortOrder.descending,
-    ),
-  );
+        field: SortField.values.firstWhere(
+          (e) => e.name == json['field'],
+          orElse: () => SortField.createdAt,
+        ),
+        order: SortOrder.values.firstWhere(
+          (e) => e.name == json['order'],
+          orElse: () => SortOrder.descending,
+        ),
+      );
 
   /// 排序标签（用于显示）
   String get label {
@@ -120,6 +122,14 @@ final audioSortConfigProvider =
 final imageSortConfigProvider =
     StateNotifierProvider<SortConfigNotifier, SortConfig>((ref) {
   final notifier = SortConfigNotifier('image_sort_config');
+  notifier.load();
+  return notifier;
+});
+
+/// 视频页排序（storage key: 'video_sort_config'）
+final videoSortConfigProvider =
+    StateNotifierProvider<SortConfigNotifier, SortConfig>((ref) {
+  final notifier = SortConfigNotifier('video_sort_config');
   notifier.load();
   return notifier;
 });

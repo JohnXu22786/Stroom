@@ -3,11 +3,16 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../main.dart' as main_lib;
+import 'catcatch_page.dart';
+import '../catcatch/providers/catcatch_provider.dart';
+import '../catcatch/models/catcatch_task.dart';
 import 'chat_page.dart';
 import 'files_page.dart';
 import 'settings_page.dart';
 import 'camera_page.dart';
 import 'tts_create_page.dart';
+import 'video_capture_page.dart';
 
 /// 页面枚举，定义应用中的主要页面（不含加号按钮）
 enum AppPage {
@@ -111,6 +116,15 @@ class _HomePageState extends ConsumerState<HomePage>
       position: position,
       items: [
         const PopupMenuItem(
+          value: 'catcatch',
+          child: ListTile(
+            leading: Icon(Icons.language, color: Colors.purple),
+            title: Text('获取网页视频'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuItem(
           value: 'record',
           child: ListTile(
             leading: Icon(Icons.mic, color: Colors.blue),
@@ -128,6 +142,15 @@ class _HomePageState extends ConsumerState<HomePage>
             contentPadding: EdgeInsets.zero,
           ),
         ),
+        const PopupMenuItem(
+          value: 'capture_video',
+          child: ListTile(
+            leading: Icon(Icons.videocam, color: Colors.red),
+            title: Text('录像'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
       ],
     ).then((value) {
       if (!mounted) return;
@@ -136,6 +159,11 @@ class _HomePageState extends ConsumerState<HomePage>
       if (value == null) return;
 
       switch (value) {
+        case 'catcatch':
+          navigator.push(
+            MaterialPageRoute(builder: (_) => const CatCatchPage()),
+          );
+          break;
         case 'record':
           navigator.push(
             MaterialPageRoute(builder: (_) => const TTSCreatePage()),
@@ -144,6 +172,11 @@ class _HomePageState extends ConsumerState<HomePage>
         case 'capture':
           navigator.push(
             MaterialPageRoute(builder: (_) => const CameraPage()),
+          );
+          break;
+        case 'capture_video':
+          navigator.push(
+            MaterialPageRoute(builder: (_) => const VideoCapturePage()),
           );
           break;
       }
@@ -269,24 +302,53 @@ class _HomePageState extends ConsumerState<HomePage>
 
   @override
   Widget build(BuildContext context) {
+    // 在启动时消费 catcatchStartupProvider，触发 restoreUnfinishedTasks
+    ref.watch(main_lib.catcatchStartupProvider);
+
     final isMobile = _isMobile(context);
+    final runningTasksCount = ref
+        .watch(catcatchTasksProvider)
+        .where((t) => t.status == TaskStatus.running)
+        .length;
 
     return Scaffold(
-      body: Row(
+      body: Stack(
         children: [
-          // 桌面端显示侧边栏导航
-          if (!isMobile) _buildNavigationRail(context),
-          // 页面内容区域，使用Expanded填充剩余空间
-          Expanded(
-            child: PageView(
-              controller: _pageController,
-              onPageChanged: (index) {
-                ref.read(selectedPageProvider.notifier).state =
-                    AppPage.values[index];
+          Row(
+            children: [
+              // 桌面端显示侧边栏导航
+              if (!isMobile) _buildNavigationRail(context),
+              // 页面内容区域，使用Expanded填充剩余空间
+              Expanded(
+                child: PageView(
+                  controller: _pageController,
+                  onPageChanged: (index) {
+                    ref.read(selectedPageProvider.notifier).state =
+                        AppPage.values[index];
+                  },
+                  children: AppPage.values.map((page) {
+                    return _buildPageContentWithKey(page);
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
+          // 右上角任务列表入口
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            right: 16,
+            child: IconButton(
+              icon: Badge(
+                isLabelVisible: runningTasksCount > 0,
+                label: Text('$runningTasksCount'),
+                child: const Icon(Icons.assignment_outlined),
+              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CatCatchPage()),
+                );
               },
-              children: AppPage.values.map((page) {
-                return _buildPageContentWithKey(page);
-              }).toList(),
             ),
           ),
         ],
