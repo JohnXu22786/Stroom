@@ -41,8 +41,8 @@ Stream<String> sseStream(
               controller.add(content);
             }
           }
-        } catch (_) {
-          // 跳过无法解析的行
+        } catch (e) {
+          print('sse_client_web: failed to parse SSE chunk: $e');
         }
       }
     }

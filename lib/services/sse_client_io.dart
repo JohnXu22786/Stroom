@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 
 /// 原生平台的 SSE 流式客户端
 /// 使用 Dio ResponseType.stream（在原生平台有效）
@@ -44,7 +45,9 @@ Stream<String> sseStream(String url, Map<String, String> headers, String body,
               }
             }
           }
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('sse_client_io: failed to parse SSE chunk: $e');
+        }
       }
     }
   } on DioException catch (e) {
