@@ -30,8 +30,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   late final ChatAdapter _adapter;
   final List<ChatMessage> _history = [];
   int _selectedModelIndex = 0;
-  Timer? _flushTimer;
-  String _pending = '';
   bool _cancelledByUser = false;
   String _lastUserMessage = '';
 
@@ -57,8 +55,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   @override
   void dispose() {
-    _flushTimer?.cancel();
-    unawaited(_saveMessages());
     _controller?.dispose();
     _adapter.dispose();
     super.dispose();
@@ -119,11 +115,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   Future<void> _saveMessages() async {
-    final convId = ref.read(activeConversationIdProvider);
-    if (convId == null) return;
-    await ref
-        .read(conversationsProvider.notifier)
-        .updateMessages(convId, [..._history]);
+    try {
+      final convId = ref.read(activeConversationIdProvider);
+      if (convId == null) return;
+      await ref
+          .read(conversationsProvider.notifier)
+          .updateMessages(convId, [..._history]);
+    } catch (e) {
+      debugPrint('_saveMessages failed: $e');
+    }
   }
 
   void _navigateToProviderConfig() {
@@ -200,19 +200,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     await _controller?.insertMessage(placeholder);
 
     String fullReply = '';
-    _pending = '';
+    DateTime lastUpdate = DateTime.now();
+    const minInterval = Duration(milliseconds: 50);
 
-    void flushPending() {
-      if (_pending.isEmpty) return;
-      fullReply += _pending;
-      final textToFlush = fullReply;
-      _pending = '';
+    void updateMessage(String content) {
       _controller?.updateMessage(
         placeholder,
         Message.text(
           id: aiMsgId,
           authorId: _aiUser.id,
-          text: textToFlush,
+          text: content,
           createdAt: DateTime.now(),
         ),
       );
@@ -222,37 +219,25 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       final stream = _adapter.sendStream(text, history: _history);
       await for (final chunk in stream) {
         if (_cancelledByUser) break;
-        _pending += chunk;
-        _flushTimer ??= Timer(const Duration(milliseconds: 200), () {
-          _flushTimer = null;
-          flushPending();
-        });
+        fullReply += chunk;
+        final now = DateTime.now();
+        if (now.difference(lastUpdate) >= minInterval) {
+          lastUpdate = now;
+          updateMessage(fullReply);
+        }
       }
     } catch (e) {
       if (!_cancelledByUser) {
-        _pending = '';
         fullReply = '错误: $e';
       }
     } finally {
-      _flushTimer?.cancel();
-      _flushTimer = null;
-      flushPending();
-      // Update message if it was an error
-      if (fullReply.startsWith('错误:')) {
-        await _controller?.updateMessage(
-          placeholder,
-          Message.text(
-            id: aiMsgId,
-            authorId: _aiUser.id,
-            text: fullReply,
-            createdAt: DateTime.now(),
-          ),
-        );
-      }
+      updateMessage(fullReply);
     }
 
-    _history
-        .add(ChatMessage(role: 'assistant', content: fullReply, id: aiMsgId));
+    if (fullReply.isNotEmpty) {
+      _history.add(
+          ChatMessage(role: 'assistant', content: fullReply, id: aiMsgId));
+    }
     ref.read(_isStreamingProvider.notifier).state = false;
     _cancelledByUser = false;
     if (mounted) setState(() {});
@@ -262,8 +247,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   void _stopStreaming() {
     _cancelledByUser = true;
-    _flushTimer?.cancel();
-    _flushTimer = null;
     _adapter.cancel();
     ref.read(_isStreamingProvider.notifier).state = false;
   }

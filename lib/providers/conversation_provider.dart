@@ -132,9 +132,21 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     });
   }
 
+  void _persistNow() {
+    _persistTimer?.cancel();
+    _persistTimer = null;
+    try {
+      final prefs = SharedPreferences.getInstance();
+      final json = jsonEncode(state.map((e) => e.toMap()).toList());
+      prefs.then((p) => p.setString('conversations', json));
+    } catch (e) {
+      debugPrint('Failed to persist conversations synchronously: $e');
+    }
+  }
+
   @override
   void dispose() {
-    _persistTimer?.cancel();
+    _persistNow();
     super.dispose();
   }
 
