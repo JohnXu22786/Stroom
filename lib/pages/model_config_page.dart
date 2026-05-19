@@ -736,6 +736,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
 
     final updated = ProviderEntry(
       id: entry.id,
+      type: entry.type,
       name: entry.name,
       configs: configs,
     );
