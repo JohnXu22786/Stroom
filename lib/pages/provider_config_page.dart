@@ -8,8 +8,7 @@ class ProviderConfigPage extends ConsumerStatefulWidget {
   const ProviderConfigPage({super.key, required this.entryId});
 
   @override
-  ConsumerState<ProviderConfigPage> createState() =>
-      _ProviderConfigPageState();
+  ConsumerState<ProviderConfigPage> createState() => _ProviderConfigPageState();
 }
 
 class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
@@ -62,6 +61,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 
     final updated = ProviderEntry(
       id: entry.id,
+      type: entry.type,
       name: entry.name,
       configs: configs,
     );
@@ -101,6 +101,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 
     final updated = ProviderEntry(
       id: entry.id,
+      type: entry.type,
       name: entry.name,
       configs: configs,
     );
@@ -154,7 +155,6 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
               ]),
             ),
           ),
-
           if (entry.configs.isEmpty)
             const SliverFillRemaining(
               hasScrollBody: false,
@@ -182,9 +182,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   final providerName = config.providerName.isNotEmpty
                       ? config.providerName
                       : '（未命名）';
-                  final hostPreview = config.host.isNotEmpty
-                      ? config.host
-                      : '(未设置 Host)';
+                  final hostPreview =
+                      config.host.isNotEmpty ? config.host : '(未设置 Host)';
 
                   return Card(
                     key: ValueKey('config_${widget.entryId}_$i'),
@@ -203,32 +202,28 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                         ],
                       ),
                       title: Text(providerName,
-                          style:
-                              const TextStyle(fontWeight: FontWeight.w600)),
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
                       subtitle: Text(hostPreview,
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.grey[600])),
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey[600])),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
-                            icon:
-                                const Icon(Icons.delete, color: Colors.red),
+                            icon: const Icon(Icons.delete, color: Colors.red),
                             onPressed: () => _deleteConfig(i),
                             tooltip: '删除配置',
                           ),
                           const Icon(Icons.chevron_right),
                         ],
                       ),
-                      contentPadding:
-                          const EdgeInsets.only(left: 8, right: 4),
+                      contentPadding: const EdgeInsets.only(left: 8, right: 4),
                       onTap: () => _editConfig(i),
                     ),
                   );
                 },
               ),
             ),
-
           const SliverPadding(
             padding: EdgeInsets.all(16),
           ),

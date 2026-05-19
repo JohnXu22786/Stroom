@@ -13,7 +13,7 @@ dependencies:
   # FlClash Architecture Dependencies
   flutter_riverpod: ^2.4.0
   riverpod_annotation: ^2.3.0
-  freezed_annotation: ^2.4.0
+  freezed_annotation: ^3.1.0
   dynamic_color: ^1.0.0
   flutter_localizations:
     sdk: flutter
@@ -40,6 +40,12 @@ dependencies:
   share_plus: ^7.2.0
   sqflite: ^2.3.0
 
+  # Chat UI
+  flutter_chat_ui: ^2.11.1
+  flutter_chat_core: ^2.9.0
+  markdown_widget: ^2.3.2+8
+  flutter_highlight: ^0.7.0
+
   flutter_inappwebview: ^6.0.0
 
   # UI and Utilities
@@ -55,7 +61,7 @@ dev_dependencies:
     sdk: flutter
   build_runner: ^2.4.0
   riverpod_generator: ^2.3.0
-  freezed: ^2.4.0
+  freezed: ^3.1.0
   flutter_lints: ^3.0.0
 
 flutter:
