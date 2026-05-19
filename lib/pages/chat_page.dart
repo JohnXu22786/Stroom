@@ -37,6 +37,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   int _selectedModelIndex = 0;
   bool _cancelledByUser = false;
   String _lastUserMessage = '';
+  List<Attachment> _lastAttachments = [];
 
   @override
   void initState() {
@@ -98,6 +99,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (conv == null || conv.messages.isEmpty) return;
 
     _history.clear();
+    _controller?.dispose();
+    final newCtrl = InMemoryChatController();
+    _controller = newCtrl;
     for (final msg in conv.messages) {
       _history.add(msg);
       await _controller?.insertMessage(Message.text(
@@ -139,6 +143,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   void _newConversation() {
+    if (ref.read(_isStreamingProvider)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('请等待当前消息生成完成')),
+        );
+      }
+      return;
+    }
     _saveMessages().then((_) {
       ref.read(conversationsProvider.notifier).createConversation();
       _history.clear();
@@ -165,6 +177,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _onMessageSend(String text, List<Attachment> attachments) async {
     _lastUserMessage = text;
+    _lastAttachments = List.from(attachments);
     if (ref.read(_isStreamingProvider)) return;
     ref.read(_isStreamingProvider.notifier).state = true;
     if (mounted) setState(() {});
@@ -224,7 +237,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       }
     } catch (e) {
       if (!_cancelledByUser) {
-        fullReply = '错误: $e';
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('发送失败: $e')),
+          );
+        }
+        fullReply = '';
       }
     } finally {
       updateMessage(fullReply);
@@ -238,7 +256,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _cancelledByUser = false;
     if (mounted) setState(() {});
 
-    _saveMessages();
+    await _saveMessages();
   }
 
   Future<void> _deleteMessage(String messageId) async {
@@ -531,7 +549,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                     const SizedBox(height: 8),
                                     TextButton.icon(
                                       onPressed: () =>
-                                          _onMessageSend(_lastUserMessage, []),
+                                          _onMessageSend(_lastUserMessage, List.from(_lastAttachments)),
                                       icon: Icon(Icons.refresh, size: 16),
                                       label: const Text('重试',
                                           style: TextStyle(fontSize: 13)),
@@ -575,27 +593,45 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                 Positioned(
                                   top: 0,
                                   right: 0,
-                                  child: IconButton(
-                                    icon: Icon(Icons.copy, size: 16),
-                                    tooltip: '复制',
-                                    style: IconButton.styleFrom(
-                                      foregroundColor: Colors.grey[500],
-                                      padding: const EdgeInsets.all(4),
-                                      minimumSize: const Size(28, 28),
-                                      tapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                    ),
-                                    onPressed: () {
-                                      Clipboard.setData(
-                                          ClipboardData(text: message.text));
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        const SnackBar(
-                                          content: Text('已复制'),
-                                          duration: Duration(seconds: 1),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: Icon(Icons.copy, size: 16),
+                                        tooltip: '复制',
+                                        style: IconButton.styleFrom(
+                                          foregroundColor: Colors.grey[500],
+                                          padding: const EdgeInsets.all(4),
+                                          minimumSize: const Size(28, 28),
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
                                         ),
-                                      );
-                                    },
+                                        onPressed: () {
+                                          Clipboard.setData(
+                                              ClipboardData(text: message.text));
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            const SnackBar(
+                                              content: Text('已复制'),
+                                              duration: Duration(seconds: 1),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                      IconButton(
+                                        icon: Icon(Icons.close, size: 16),
+                                        tooltip: '删除',
+                                        style: IconButton.styleFrom(
+                                          foregroundColor: Colors.grey[500],
+                                          padding: const EdgeInsets.all(4),
+                                          minimumSize: const Size(28, 28),
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        onPressed: () =>
+                                            _confirmDeleteMessage(message.id),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
@@ -833,6 +869,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         ],
       ),
       onTap: () {
+        if (ref.read(_isStreamingProvider)) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('请等待当前消息生成完成')),
+            );
+          }
+          return;
+        }
         if (!isActive) {
           _saveMessages().then((_) {
             ref
@@ -1144,8 +1188,12 @@ class _ChatComposerState extends ConsumerState<_ChatComposer> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
-    return Container(
-      decoration: BoxDecoration(
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: Container(
+        decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
         border: Border(
           top: BorderSide(color: cs.outlineVariant, width: 0.5),
@@ -1229,6 +1277,7 @@ class _ChatComposerState extends ConsumerState<_ChatComposer> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
