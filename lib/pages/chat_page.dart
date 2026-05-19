@@ -36,8 +36,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   final List<ChatMessage> _history = [];
   int _selectedModelIndex = 0;
   bool _cancelledByUser = false;
-  String _lastUserMessage = '';
-  List<Attachment> _lastAttachments = [];
 
   @override
   void initState() {
@@ -176,12 +174,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   Future<void> _onMessageSend(String text, List<Attachment> attachments) async {
-    _lastUserMessage = text;
-    _lastAttachments = List.from(attachments);
     if (ref.read(_isStreamingProvider)) return;
-    ref.read(_isStreamingProvider.notifier).state = true;
-    if (mounted) setState(() {});
-    _cancelledByUser = false;
 
     // Ensure a conversation exists
     final convId = ref.read(activeConversationIdProvider);
@@ -190,15 +183,26 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
 
     final userMsgId = 'u${DateTime.now().millisecondsSinceEpoch}';
-    final aiMsgId = 'a${DateTime.now().millisecondsSinceEpoch}';
 
-    _history.add(ChatMessage(role: 'user', content: text, id: userMsgId, attachments: attachments));
+    _history.add(ChatMessage(
+        role: 'user', content: text, id: userMsgId, attachments: attachments));
     await _controller?.insertMessage(Message.text(
       id: userMsgId,
       authorId: _currentUser.id,
       text: text,
       createdAt: DateTime.now(),
     ));
+
+    await _startStreaming(text);
+  }
+
+  Future<void> _startStreaming(String text) async {
+    if (ref.read(_isStreamingProvider)) return;
+    ref.read(_isStreamingProvider.notifier).state = true;
+    if (mounted) setState(() {});
+    _cancelledByUser = false;
+
+    final aiMsgId = 'a${DateTime.now().millisecondsSinceEpoch}';
 
     final placeholder = Message.textStream(
       id: aiMsgId,
@@ -257,6 +261,108 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (mounted) setState(() {});
 
     await _saveMessages();
+  }
+
+  void _confirmRetryOrEdit(String messageId) {
+    final index = _history.indexWhere((m) => m.id == messageId);
+    if (index == -1) return;
+    if (ref.read(_isStreamingProvider)) return;
+
+    final msg = _history[index];
+    final isUser = msg.role == 'user';
+    final newerMessagesExist = index < _history.length - 1;
+
+    if (isUser) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('编辑消息'),
+          content: Text(
+            newerMessagesExist
+                ? '确定要编辑这条消息吗？此操作将删除此消息及之后的所有消息。'
+                : '确定要重新发送这条消息吗？',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _editUserMessage(messageId);
+              },
+              child: const Text('确定'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('重试'),
+          content: Text(
+            newerMessagesExist
+                ? '确定要重试这条回复吗？此操作将删除此消息及之后的所有消息。'
+                : '确定要重新生成回复吗？',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _retryAssistantMessage(messageId);
+              },
+              child: const Text('确定'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  Future<void> _editUserMessage(String messageId) async {
+    final index = _history.indexWhere((m) => m.id == messageId);
+    if (index == -1) return;
+    final msg = _history[index];
+
+    // Remove this message and all after from history
+    final removed = _history.sublist(index);
+    _history.removeRange(index, _history.length);
+    for (final r in removed) {
+      final ctrlMsg =
+          _controller?.messages.where((m) => m.id == r.id).firstOrNull;
+      if (ctrlMsg != null) {
+        await _controller?.removeMessage(ctrlMsg);
+      }
+    }
+
+    // Re-send with same content (acts as edit)
+    await _onMessageSend(msg.content, msg.attachments);
+  }
+
+  Future<void> _retryAssistantMessage(String messageId) async {
+    final index = _history.indexWhere((m) => m.id == messageId);
+    if (index == -1 || index == 0) return;
+
+    // Remove this assistant message and all after from history
+    final removed = _history.sublist(index);
+    _history.removeRange(index, _history.length);
+    for (final r in removed) {
+      final ctrlMsg =
+          _controller?.messages.where((m) => m.id == r.id).firstOrNull;
+      if (ctrlMsg != null) {
+        await _controller?.removeMessage(ctrlMsg);
+      }
+    }
+
+    // Re-generate using the preceding user message
+    final userMsg = _history[index - 1];
+    await _startStreaming(userMsg.content);
   }
 
   Future<void> _deleteMessage(String messageId) async {
@@ -383,6 +489,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (next != null && next != prev) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _loadConversationMessages();
+        });
+      }
+    });
+
+    // Re-configure adapter when provider entries change (e.g. after load completes)
+    ref.listen(providerEntriesProvider, (prev, next) {
+      if (prev != next) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _configureAdapter();
         });
       }
     });
@@ -519,9 +634,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                             MessageGroupStatus? groupStatus}) {
                           final isAi = message.authorId == _aiUser.id;
 
+                          Widget messageBubble;
                           if (isAi) {
                             if (message.text.startsWith('错误:')) {
-                              return Container(
+                              messageBubble = Container(
                                 margin: const EdgeInsets.symmetric(vertical: 2),
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
@@ -535,149 +651,104 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                     width: 1,
                                   ),
                                 ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      message.text,
-                                      style: TextStyle(
-                                        color: Colors.red[700],
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    TextButton.icon(
-                                      onPressed: () =>
-                                          _onMessageSend(_lastUserMessage, List.from(_lastAttachments)),
-                                      icon: Icon(Icons.refresh, size: 16),
-                                      label: const Text('重试',
-                                          style: TextStyle(fontSize: 13)),
-                                      style: TextButton.styleFrom(
-                                        foregroundColor: Colors.red[700],
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 12, vertical: 4),
-                                        minimumSize: Size.zero,
-                                        tapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                      ),
-                                    ),
-                                  ],
+                                child: Text(
+                                  message.text,
+                                  style: TextStyle(
+                                    color: Colors.red[700],
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              );
+                            } else {
+                              messageBubble = Container(
+                                margin:
+                                    const EdgeInsets.symmetric(vertical: 2),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? Colors.grey[850]
+                                      : Colors.grey[100],
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: MarkdownWidget(
+                                  data: message.text,
+                                  selectable: true,
+                                  shrinkWrap: true,
+                                  physics:
+                                      const NeverScrollableScrollPhysics(),
+                                  config: markdownConfig.copy(configs: [
+                                    PreConfig(theme: draculaTheme),
+                                  ]),
                                 ),
                               );
                             }
-
-                            return Stack(
+                          } else {
+                            final chatMsg = _history.where((m) => m.id == message.id).firstOrNull;
+                            final hasAttachments = chatMsg?.attachments.isNotEmpty == true;
+                            messageBubble = Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                Container(
-                                  margin:
-                                      const EdgeInsets.symmetric(vertical: 2),
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: isDark
-                                        ? Colors.grey[850]
-                                        : Colors.grey[100],
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: MarkdownWidget(
-                                    data: message.text,
-                                    selectable: true,
-                                    shrinkWrap: true,
-                                    physics:
-                                        const NeverScrollableScrollPhysics(),
-                                    config: markdownConfig.copy(configs: [
-                                      PreConfig(theme: draculaTheme),
-                                    ]),
-                                  ),
-                                ),
-                                Positioned(
-                                  top: 0,
-                                  right: 0,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        icon: Icon(Icons.copy, size: 16),
-                                        tooltip: '复制',
-                                        style: IconButton.styleFrom(
-                                          foregroundColor: Colors.grey[500],
-                                          padding: const EdgeInsets.all(4),
-                                          minimumSize: const Size(28, 28),
-                                          tapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
-                                        ),
-                                        onPressed: () {
-                                          Clipboard.setData(
-                                              ClipboardData(text: message.text));
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
-                                            const SnackBar(
-                                              content: Text('已复制'),
-                                              duration: Duration(seconds: 1),
-                                            ),
-                                          );
+                                SimpleTextMessage(message: message, index: index),
+                                if (hasAttachments)
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 4, right: 4, bottom: 4),
+                                    child: SizedBox(
+                                      height: 56,
+                                      child: ListView.builder(
+                                        scrollDirection: Axis.horizontal,
+                                        itemCount: chatMsg!.attachments.length,
+                                        itemBuilder: (ctx, i) {
+                                          final att = chatMsg.attachments[i];
+                                          return _buildMessageAttachmentPreview(att);
                                         },
                                       ),
-                                      IconButton(
-                                        icon: Icon(Icons.close, size: 16),
-                                        tooltip: '删除',
-                                        style: IconButton.styleFrom(
-                                          foregroundColor: Colors.grey[500],
-                                          padding: const EdgeInsets.all(4),
-                                          minimumSize: const Size(28, 28),
-                                          tapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
-                                        ),
-                                        onPressed: () =>
-                                            _confirmDeleteMessage(message.id),
-                                      ),
-                                    ],
+                                    ),
                                   ),
-                                ),
                               ],
                             );
                           }
 
-                          final chatMsg = _history.where((m) => m.id == message.id).firstOrNull;
-                          final hasAttachments = chatMsg?.attachments.isNotEmpty == true;
-
-                          return Stack(
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  SimpleTextMessage(message: message, index: index),
-                                  if (hasAttachments)
-                                    Padding(
-                                      padding: const EdgeInsets.only(left: 4, right: 4, bottom: 4),
-                                      child: SizedBox(
-                                        height: 56,
-                                        child: ListView.builder(
-                                          scrollDirection: Axis.horizontal,
-                                          itemCount: chatMsg!.attachments.length,
-                                          itemBuilder: (ctx, i) {
-                                            final att = chatMsg.attachments[i];
-                                            return _buildMessageAttachmentPreview(att);
-                                          },
-                                        ),
-                                      ),
+                              messageBubble,
+                              Padding(
+                                padding: const EdgeInsets.only(left: 4, top: 2, bottom: 4),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _ActionButton(
+                                      icon: Icons.copy,
+                                      tooltip: '复制',
+                                      onPressed: () {
+                                        Clipboard.setData(
+                                            ClipboardData(text: message.text));
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                            content: Text('已复制'),
+                                            duration: Duration(seconds: 1),
+                                          ),
+                                        );
+                                      },
                                     ),
-                                ],
-                              ),
-                              Positioned(
-                                top: 0,
-                                right: 0,
-                                child: IconButton(
-                                  icon: Icon(Icons.close, size: 16),
-                                  tooltip: '删除',
-                                  style: IconButton.styleFrom(
-                                    foregroundColor: Colors.grey[500],
-                                    padding: const EdgeInsets.all(4),
-                                    minimumSize: const Size(28, 28),
-                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                  onPressed: () => _confirmDeleteMessage(message.id),
+                                    const SizedBox(width: 2),
+                                    _ActionButton(
+                                      icon: isAi ? Icons.refresh : Icons.edit_outlined,
+                                      tooltip: isAi ? '重试' : '编辑',
+                                      onPressed: () =>
+                                          _confirmRetryOrEdit(message.id),
+                                    ),
+                                    const SizedBox(width: 2),
+                                    _ActionButton(
+                                      icon: Icons.delete_outline,
+                                      tooltip: '删除',
+                                      onPressed: () =>
+                                          _confirmDeleteMessage(message.id),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
@@ -989,6 +1060,34 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 }
 
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  const _ActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: Icon(icon, size: 16),
+      tooltip: tooltip,
+      style: IconButton.styleFrom(
+        foregroundColor: Colors.grey[500],
+        padding: const EdgeInsets.all(4),
+        minimumSize: const Size(28, 28),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      ),
+      onPressed: onPressed,
+    );
+  }
+}
+
 class _ChatComposer extends ConsumerStatefulWidget {
   final Future<void> Function(String text, List<Attachment> attachments) onSend;
   final VoidCallback onStop;
@@ -1057,7 +1156,7 @@ class _ChatComposerState extends ConsumerState<_ChatComposer> {
                 title: const Text('相册'),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _pickFromGallery();
+                  _showGalleryPicker();
                 },
               ),
               ListTile(
@@ -1066,6 +1165,50 @@ class _ChatComposerState extends ConsumerState<_ChatComposer> {
                 onTap: () {
                   Navigator.pop(ctx);
                   _pickFromFilePicker();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showGalleryPicker() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_album_outlined),
+                title: const Text('系统相册'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickFromGallery();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.folder_outlined),
+                title: const Text('应用相册'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickFromAppGallery();
                 },
               ),
             ],
@@ -1100,6 +1243,27 @@ class _ChatComposerState extends ConsumerState<_ChatComposer> {
         final bytes = await file.readAsBytes();
         await _addPendingAttachment(file.name, bytes);
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导入失败: $e'), duration: const Duration(seconds: 2)),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickFromAppGallery() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.first;
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) return;
+      await _addPendingAttachment(file.name, bytes);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
