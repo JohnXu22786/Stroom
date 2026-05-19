@@ -5,6 +5,7 @@
 
     <!-- Camera permission -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- Storage permissions for reading and writing images -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -30,7 +31,8 @@
         android:allowBackup="false"
         android:theme="@style/LaunchTheme"
         android:requestLegacyExternalStorage="true"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true">
 
         <activity
             android:name=".MainActivity"
