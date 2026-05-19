@@ -3,11 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'gallery_page.dart';
 import 'tts_page.dart';
+import 'video_gallery_page.dart';
 
-/// Tab order provider - allows reordering the two tabs
-final fileTabOrderProvider = StateProvider<List<int>>((ref) => [0, 1]);
+/// Tab order provider - allows reordering the tabs
+final fileTabOrderProvider = StateProvider<List<int>>((ref) => [0, 1, 2]);
 
-/// 文件页面 - 包含图片和音频两个标签页，支持左右滑动切换和标签排序
+/// 文件页面 - 包含图片、视频和音频三个标签页，支持左右滑动切换和标签排序
 class FilesPage extends ConsumerStatefulWidget {
   const FilesPage({super.key});
 
@@ -22,7 +23,7 @@ class _FilesPageState extends ConsumerState<FilesPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -31,7 +32,7 @@ class _FilesPageState extends ConsumerState<FilesPage>
     super.dispose();
   }
 
-  static const _tabLabels = ['图片', '音频'];
+  static const _tabLabels = ['图片', '视频', '音频'];
 
   @override
   Widget build(BuildContext context) {
@@ -61,6 +62,8 @@ class _FilesPageState extends ConsumerState<FilesPage>
                 case 0:
                   return const GalleryPage();
                 case 1:
+                  return const VideoGalleryPage();
+                case 2:
                   return const TtsPage();
                 default:
                   return const SizedBox.shrink();
