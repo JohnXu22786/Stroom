@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
@@ -531,13 +532,15 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         setState(() => _isTestingAudio = false);
       }
     } on DioException catch (e) {
+      final String origMsg = e.message ?? '';
+      final String extra = origMsg.isNotEmpty ? '\n原始错误: $origMsg' : '';
       String errorMsg;
       switch (e.type) {
         case DioExceptionType.connectionTimeout:
-          errorMsg = '连接超时，请检查网络';
+          errorMsg = '连接超时，请检查网络$extra';
           break;
         case DioExceptionType.receiveTimeout:
-          errorMsg = '接收超时，服务器响应过慢';
+          errorMsg = '接收超时，服务器响应过慢$extra';
           break;
         case DioExceptionType.badResponse:
           final statusCode = e.response?.statusCode;
@@ -552,13 +555,18 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           } else {
             bodyStr = body?.toString() ?? '无响应体';
           }
-          errorMsg = 'HTTP $statusCode: $bodyStr';
+          errorMsg = 'HTTP $statusCode: $bodyStr$extra';
           break;
         case DioExceptionType.cancel:
-          errorMsg = '请求已取消';
+          errorMsg = '请求已取消$extra';
           break;
         default:
-          errorMsg = '网络错误: ${e.message}';
+          if (e.type == DioExceptionType.connectionError && kIsWeb) {
+            errorMsg =
+                '无法连接到服务器。Web端常见原因：CORS跨域限制或API地址不正确。请检查：1) 供应商配置中的API地址是否正确 2) 服务器是否允许跨域请求$extra';
+          } else {
+            errorMsg = '网络错误: ${e.message}';
+          }
       }
       if (mounted) {
         setState(() {

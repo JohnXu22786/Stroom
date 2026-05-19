@@ -33,6 +33,7 @@ dependencies:
   audio_session: ^0.1.12
   just_audio: ^0.9.36
   uuid: ^4.3.0
+  video_player: ^2.9.1
   crypto: ^3.0.3
   mime: ^1.0.4
   file: ^6.1.4
@@ -45,7 +46,10 @@ dependencies:
   markdown_widget: ^2.3.2+8
   flutter_highlight: ^0.7.0
 
+  flutter_inappwebview: ^6.0.0
+
   # UI and Utilities
+  chewie: ^1.8.1
   cupertino_icons: ^1.0.6
   material_color_utilities: ^0.13.0
   idb_shim: ^2.9.0

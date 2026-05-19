@@ -25,6 +25,7 @@ Uint8List _utf8Encode(String text) => Uint8List.fromList(utf8.encode(text));
 class ManifestTables {
   static const String imageRecords = 'image_records';
   static const String audioRecords = 'audio_records';
+  static const String videoRecords = 'video_records';
   static const String folders = 'folders';
 }
 
@@ -98,6 +99,18 @@ class ManifestDatabase {
           )
         ''');
         await db.execute('''
+          CREATE TABLE IF NOT EXISTS video_records (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            hash TEXT NOT NULL,
+            format TEXT NOT NULL DEFAULT 'mp4',
+            created_at INTEGER NOT NULL,
+            size INTEGER NOT NULL DEFAULT 0,
+            folder TEXT NOT NULL DEFAULT '',
+            duration INTEGER NOT NULL DEFAULT 0
+          )
+        ''');
+        await db.execute('''
           CREATE TABLE IF NOT EXISTS folders (
             path TEXT PRIMARY KEY
           )
@@ -144,6 +157,7 @@ class ManifestDatabase {
   static Map<String, dynamic> _emptyWebData() => {
         ManifestTables.imageRecords: <Map<String, dynamic>>[],
         ManifestTables.audioRecords: <Map<String, dynamic>>[],
+        ManifestTables.videoRecords: <Map<String, dynamic>>[],
         ManifestTables.folders: <String>[],
       };
 
@@ -370,6 +384,97 @@ class ManifestDatabase {
     final placeholders = ids.map((_) => '?').join(',');
     await db.delete(
       ManifestTables.audioRecords,
+      where: 'id IN ($placeholders)',
+      whereArgs: ids,
+    );
+  }
+
+  // ==================================================================
+  // Video record operations
+  // ==================================================================
+
+  /// 获取所有视频记录
+  static Future<List<Map<String, dynamic>>> getAllVideoRecords() async {
+    if (_useJsonStore) {
+      final data = await _loadWebData();
+      final list = data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
+      return list.cast<Map<String, dynamic>>();
+    }
+    final db = await database;
+    final rows = await db.query(ManifestTables.videoRecords);
+    return rows.map(_dbRowToRecord).toList();
+  }
+
+  /// 插入一条视频记录
+  static Future<void> insertVideoRecord(Map<String, dynamic> record) async {
+    if (_useJsonStore) {
+      final data = await _loadWebData();
+      final list = data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
+      list.add(record);
+      await _saveWebData();
+      return;
+    }
+    final db = await database;
+    await db.insert(
+      ManifestTables.videoRecords,
+      _recordToDbRow(record),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// 更新一条视频记录
+  static Future<void> updateVideoRecord(
+      String id, Map<String, dynamic> updates) async {
+    if (_useJsonStore) {
+      final data = await _loadWebData();
+      final list = data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
+      final index = list.indexWhere((r) => (r as Map)['id'] == id);
+      if (index != -1) {
+        (list[index] as Map<String, dynamic>).addAll(updates);
+        await _saveWebData();
+      }
+      return;
+    }
+    final db = await database;
+    await db.update(
+      ManifestTables.videoRecords,
+      _recordToDbRow(updates),
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// 删除一条视频记录
+  static Future<void> deleteVideoRecord(String id) async {
+    if (_useJsonStore) {
+      final data = await _loadWebData();
+      final list = data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
+      list.removeWhere((r) => (r as Map)['id'] == id);
+      await _saveWebData();
+      return;
+    }
+    final db = await database;
+    await db.delete(
+      ManifestTables.videoRecords,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// 批量删除视频记录
+  static Future<void> deleteVideoRecords(List<String> ids) async {
+    if (_useJsonStore) {
+      final data = await _loadWebData();
+      final list = data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
+      final idSet = ids.toSet();
+      list.removeWhere((r) => idSet.contains((r as Map)['id']));
+      await _saveWebData();
+      return;
+    }
+    final db = await database;
+    final placeholders = ids.map((_) => '?').join(',');
+    await db.delete(
+      ManifestTables.videoRecords,
       where: 'id IN ($placeholders)',
       whereArgs: ids,
     );
