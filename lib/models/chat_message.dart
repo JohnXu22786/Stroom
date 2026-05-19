@@ -105,19 +105,25 @@ class ChatMessage {
         'attachments': attachments.map((a) => a.toMap()).toList(),
       };
 
-  factory ChatMessage.fromMap(Map<String, dynamic> map) => ChatMessage(
-        id: map['id'] as String?,
-        role: (map['role'] as String?) ?? '',
-        content: (map['content'] as String?) ?? '',
-        createdAt: map['createdAt'] != null
-            ? DateTime.parse(map['createdAt'] as String)
-            : null,
-        attachments: (map['attachments'] as List?)
-                ?.map((e) =>
-                    Attachment.fromMap(Map<String, dynamic>.from(e as Map)))
-                .toList() ??
-            [],
-      );
+  factory ChatMessage.fromMap(Map<String, dynamic> map) {
+    var roleStr = (map['role'] as String?) ?? '';
+    if (roleStr != 'user' && roleStr != 'assistant') {
+      roleStr = 'user';
+    }
+    return ChatMessage(
+      id: map['id'] as String?,
+      role: roleStr,
+      content: (map['content'] as String?) ?? '',
+      createdAt: map['createdAt'] != null
+          ? DateTime.parse(map['createdAt'] as String)
+          : null,
+      attachments: (map['attachments'] as List?)
+              ?.map((e) =>
+                  Attachment.fromMap(Map<String, dynamic>.from(e as Map)))
+              .toList() ??
+          [],
+    );
+  }
 
   @override
   String toString() => 'ChatMessage(id: $id, role: $role)';

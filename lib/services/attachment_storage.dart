@@ -36,7 +36,8 @@ class AttachmentStorage {
   static Future<String> saveFile(String fileName, Uint8List bytes) async {
     final ext = _extractExtension(fileName);
     final hash = computeHash(bytes);
-    final storageName = '$hash.$ext';
+    final uniqueId = DateTime.now().millisecondsSinceEpoch.toString();
+    final storageName = '${hash}_$uniqueId.$ext';
     final storagePath = '$_storageDirName/$storageName';
 
     if (kIsWeb) {

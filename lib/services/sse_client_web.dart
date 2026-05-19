@@ -58,11 +58,37 @@ Stream<String> sseStream(String url, Map<String, String> headers, String body,
       final errorMsg = statusCode != 0
           ? '网络请求失败 (HTTP $statusCode${(statusText ?? '').isNotEmpty ? ": $statusText" : ""})'
           : '网络请求失败: 无法连接到服务器';
-      controller.addError(errorMsg);
+      controller.addError(Exception(errorMsg));
     }
   });
 
   final loadEndSub = xhr.onLoadEnd.listen((_) {
+    // Process all remaining lines (don't drop the last complete line)
+    final remainingText = xhr.responseText ?? '';
+    if (remainingText.isNotEmpty) {
+      final allLines = remainingText.split('\n');
+      for (var i = processedLines; i < allLines.length; i++) {
+        final line = allLines[i];
+        if (line.startsWith('data: ')) {
+          final data = line.substring(6).trim();
+          if (data == '[DONE]') break;
+          try {
+            final json = jsonDecode(data) as Map<String, dynamic>;
+            final choices = json['choices'] as List<dynamic>?;
+            if (choices != null && choices.isNotEmpty) {
+              final delta = choices[0]['delta'] as Map<String, dynamic>?;
+              if (delta != null && delta['content'] != null) {
+                controller.add(delta['content'] as String);
+              }
+            }
+          } catch (e) {
+            if (e is FormatException) {
+              print('SSE parse error in onLoadEnd: $e');
+            }
+          }
+        }
+      }
+    }
     if (!controller.isClosed) controller.close();
     progressSub.cancel();
     errorSub.cancel();

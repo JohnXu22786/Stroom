@@ -27,6 +27,7 @@ class ChatService {
   // ── Instance fields (used when constructed with a provider) ─────
   final BaseChatProvider? _provider;
   final ModelConfig? _modelConfig;
+  bool _isCancelledByUser = false;
   CancelToken? _cancelToken;
   StreamSubscription<String>? _streamSubscription;
   StreamController<String>? _controller;
@@ -53,6 +54,7 @@ class ChatService {
   Stream<String> sendStream(String userMessage,
       {required List<ChatMessage> history}) {
     cancel();
+    _isCancelledByUser = false;
 
     _controller = StreamController<String>(
       onCancel: () {
@@ -66,13 +68,14 @@ class ChatService {
     );
 
     final extraParams = _buildExtraParams();
-    _cancelToken = CancelToken();
 
     // Pre‑process messages in a microtask so the stream is returned
     // immediately (caller can listen right away).
     Future.microtask(() async {
       try {
+        if (_isCancelledByUser) return; // cancelled before microtask ran
         final apiMessages = await _prepareApiMessages(history);
+        _cancelToken = CancelToken();
         _streamSubscription = _provider!
             .chatStream(
           apiMessages,
@@ -92,13 +95,15 @@ class ChatService {
           },
           onDone: () {
             _streamSubscription = null;
-            if (!_controller!.isClosed) _controller!.close();
+            if (_controller != null && !_controller!.isClosed) {
+              _controller!.close();
+            }
             _cleanUp();
           },
           onError: (Object error) {
             _streamSubscription = null;
             debugPrint('ChatService stream error: $error');
-            if (!_controller!.isClosed) {
+            if (_controller != null && !_controller!.isClosed) {
               _controller!.addError(error);
               _controller!.close();
             }
@@ -135,6 +140,10 @@ class ChatService {
           if (att.fileType == 'image') {
             final bytes = await AttachmentStorage.readFile(att.storagePath);
             if (bytes != null && bytes.isNotEmpty) {
+              if (bytes.length > 10 * 1024 * 1024) {
+                parts.add({'type': 'text', 'text': '[图片过大已跳过: ${att.fileName}]'});
+                continue;
+              }
               final b64 = base64Encode(bytes);
               final ext = _imageExtension(att.mimeType);
               parts.add({
@@ -143,11 +152,25 @@ class ChatService {
               });
             }
           } else {
-            // Non‑image files: include as text description
-            parts.add({
-              'type': 'text',
-              'text': '[Attached file: ${att.fileName}]',
-            });
+            // Try to read text content for text-based files
+            final textExts = ['txt', 'md', 'json', 'csv', 'log', 'yaml', 'xml', 'ini', 'cfg', 'py', 'js', 'ts', 'dart', 'java', 'cpp', 'h', 'rs', 'go', 'rb', 'php'];
+            final ext = att.fileName.split('.').last.toLowerCase();
+            if (textExts.contains(ext)) {
+              try {
+                final bytes = await AttachmentStorage.readFile(att.storagePath);
+                if (bytes == null) throw Exception('file not readable');
+                final textContent = utf8.decode(bytes);
+                final truncated = textContent.length > 4000 ? textContent.substring(0, 4000) + '\n... [truncated]' : textContent;
+                parts.add({'type': 'text', 'text': '以下为文件 ${att.fileName} 的内容:\n$truncated'});
+              } catch (_) {
+                parts.add({'type': 'text', 'text': '[${att.fileName} - 无法读取文件内容]'});
+              }
+            } else {
+              parts.add({
+                'type': 'text',
+                'text': '[Attached file: ${att.fileName}]',
+              });
+            }
           }
         }
         result.add({'role': msg.role, 'content': parts});
@@ -184,6 +207,7 @@ class ChatService {
 
   /// Cancel the current stream
   void cancel() {
+    _isCancelledByUser = true;
     _cancelToken?.cancel();
     _cancelToken = null;
     _streamSubscription?.cancel();

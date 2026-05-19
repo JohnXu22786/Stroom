@@ -78,6 +78,8 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   @override
   String get name => _name;
 
+  // TODO: 可从 CustomParam 中提取模型列表，若某 param 的 type 或 key 为 'model'，
+  // 使用其 defaultValue?.split(',') 作为模型列表。目前暂无可信数据源，留空。
   @override
   List<String> get supportedModelIds => [];
 
@@ -94,12 +96,12 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     Map<String, dynamic>? extraParams,
   }) {
     return {
-      if (extraParams != null) ...extraParams,
       'model': model ?? defaultParams['model'],
       'messages': messages,
       'max_tokens': maxTokens ?? defaultParams['max_tokens'],
       'temperature': temperature ?? defaultParams['temperature'],
       'stream': stream,
+      if (extraParams != null) ...extraParams,
     };
   }
 
@@ -121,7 +123,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
   }) async {
-    if (_apiKey.isEmpty) throw Exception('API 密钥未配置');
+    if (_apiKey.isEmpty) throw Exception('API key not configured');
 
     final body = _buildBody(messages,
         model: model,
@@ -162,6 +164,8 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         detail = '$body';
       }
       throw Exception('API 请求失败 (HTTP $statusCode): $detail');
+    } catch (e) {
+      throw Exception('请求失败: $e');
     }
   }
 
@@ -176,7 +180,9 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
   }) async* {
-    if (_apiKey.isEmpty) return;
+    if (_apiKey.isEmpty) {
+      throw Exception('API key not configured');
+    }
 
     final body = _buildBody(messages,
         model: model,
