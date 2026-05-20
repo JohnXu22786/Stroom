@@ -713,7 +713,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
       _modelConfig = model;
       _maxWordsLimit = model.maxWordsPerRequest;
       if (model.voices.isNotEmpty) {
-        _selectedVoice = model.voices.first.name;
+        _selectedVoice = model.voices.first.id;
       }
       // 初始化自定义参数控制器
       _customParamControllers.clear();
@@ -733,7 +733,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          initialValue: model.voices.any((v) => v.name == _selectedVoice) ? _selectedVoice : model.voices.first.name,
+          initialValue: model.voices.any((v) => v.id == _selectedVoice) ? _selectedVoice : model.voices.first.id,
           key: ValueKey('voice_$_selectedVoice'),
           decoration: const InputDecoration(
             border: OutlineInputBorder(),
@@ -742,7 +742,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
           ),
           items: model.voices.map((v) {
             return DropdownMenuItem<String>(
-              value: v.name,
+              value: v.id,
               child: Text(v.name),
             );
           }).toList(),
