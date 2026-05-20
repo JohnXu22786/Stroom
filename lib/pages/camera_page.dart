@@ -115,11 +115,13 @@ class _CameraPageState extends ConsumerState<CameraPage>
   void _showAspectRatioPicker() {
     showModalBottomSheet<int>(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return Padding(
+        return SingleChildScrollView(
+          child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -170,6 +172,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
               }),
             ],
           ),
+        ),
         );
       },
     ).then((index) {
