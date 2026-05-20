@@ -78,53 +78,8 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
 
   void _onIdFocusChange(int index) {
     if (!_idFocusNodes[index].hasFocus) {
-      final dupes = _findDuplicateIndices(index);
-      if (dupes.isNotEmpty) {
-        _showDuplicateDialog(index);
-      } else {
-        // 无重复时强制刷新（可能刚删除重复行，消除警告图标）
-        setState(() {});
-      }
-    }
-  }
-
-  Future<void> _showDuplicateDialog(int index) async {
-    final id = _idCtrls[index].text.trim();
-    if (id.isEmpty) return;
-
-    final choice = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('音色ID重复'),
-        content: Text('音色ID "$id" 已存在，如何处理？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, 'skip'),
-            child: const Text('跳过（保留原值）'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, 'update'),
-            child: const Text('更新（使用新值）'),
-          ),
-        ],
-      ),
-    );
-
-    if (choice == 'skip' && mounted) {
-      _idCtrls[index].text = _voices[index].id;
+      // 只刷新 UI 显示警告图标，重复检测交由保存时 _DuplicateResolveDialog 处理
       setState(() {});
-    } else if (choice == 'update' && mounted) {
-      final dupes = _findDuplicateIndices(index);
-      if (dupes.isNotEmpty) {
-        final oldIdx = dupes.first;
-        // 覆盖旧条目
-        _voices[oldIdx].id = _idCtrls[index].text;
-        _voices[oldIdx].name = _nameCtrls[index].text;
-        _nameCtrls[oldIdx].text = _nameCtrls[index].text;
-        _idCtrls[oldIdx].text = _idCtrls[index].text;
-        // 删除当前行
-        _deleteRow(index);
-      }
     }
   }
 
