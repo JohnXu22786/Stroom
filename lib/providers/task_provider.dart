@@ -1,9 +1,13 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:dio/dio.dart';
+import 'package:path/path.dart' as p;
+
+import '../services/storage_service.dart';
 
 import 'tts_state_provider.dart';
 import 'provider_config.dart';
@@ -91,6 +95,50 @@ class SynthesisTask {
       originalResponse: originalResponse ?? this.originalResponse,
     );
   }
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'title': title,
+        'status': status.name,
+        'error': error,
+        'createdAt': createdAt.toIso8601String(),
+        'completedAt': completedAt?.toIso8601String(),
+        'statusChangedAt': statusChangedAt?.toIso8601String(),
+        'text': text,
+        'providerConfig': providerConfig.toMap(),
+        'modelConfig': modelConfig.toMap(),
+        'customParams': customParams,
+        'trimPreset': trimPreset,
+        'originalRequest': originalRequest,
+        'originalResponse': originalResponse,
+      };
+
+  factory SynthesisTask.fromMap(Map<String, dynamic> map) => SynthesisTask(
+        id: map['id'] as String,
+        title: map['title'] as String,
+        status: TaskStatus.values.byName(map['status'] as String),
+        error: map['error'] as String?,
+        createdAt: DateTime.parse(map['createdAt'] as String),
+        completedAt: map['completedAt'] != null
+            ? DateTime.parse(map['completedAt'] as String)
+            : null,
+        statusChangedAt: map['statusChangedAt'] != null
+            ? DateTime.parse(map['statusChangedAt'] as String)
+            : null,
+        text: map['text'] as String,
+        providerConfig:
+            ProviderConfigItem.fromMap(map['providerConfig'] as Map<String, dynamic>),
+        modelConfig:
+            ModelConfig.fromMap(map['modelConfig'] as Map<String, dynamic>),
+        customParams: map['customParams'] != null
+            ? Map<String, String>.from(map['customParams'] as Map)
+            : null,
+        trimPreset: map['trimPreset'] != null
+            ? Map<String, dynamic>.from(map['trimPreset'] as Map)
+            : null,
+        originalRequest: map['originalRequest'] as String?,
+        originalResponse: map['originalResponse'] as String?,
+      );
 }
 
 // ============================================================================
@@ -132,6 +180,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     );
 
     state = [task, ...state];
+    _persistTasks();
 
     // 在后台执行合成
     _executeTask(task);
@@ -295,6 +344,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       completedAt: null,
     );
     state = newState;
+    _persistTasks();
   }
 
   /// 继续已暂停的任务（重新开始）
@@ -312,6 +362,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     final newState = [...state];
     newState[index] = updated;
     state = newState;
+    _persistTasks();
 
     _executeTask(updated);
   }
@@ -333,17 +384,10 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     final newState = [...state];
     newState[index] = updated;
     state = newState;
+    _persistTasks();
 
     // 执行
     _executeTask(updated);
-  }
-
-  /// 关闭失败任务的错误信息（保留任务记录，仅清除错误字段）
-  void dismissError(String taskId) {
-    state = state.map((t) {
-      if (t.id != taskId || t.status != TaskStatus.failed) return t;
-      return t.copyWith(error: null);
-    }).toList();
   }
 
   /// 将指定 ID 的任务标记为失败（用于外部触发，如应用退出）
@@ -356,6 +400,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
         completedAt: DateTime.now(),
       );
     }).toList();
+    _persistTasks();
   }
 
   /// 将所有运行中的任务标记为失败（应用退出/断开连接时调用）
@@ -368,6 +413,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
         completedAt: DateTime.now(),
       );
     }).toList();
+    _persistTasks();
   }
 
   /// 删除单个任务
@@ -376,6 +422,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     final token = _cancelTokens.remove(taskId);
     token?.cancel();
     state = state.where((t) => t.id != taskId).toList();
+    _persistTasks();
   }
 
   void _updateTask(String taskId, TaskStatus status,
@@ -393,6 +440,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
                 : null,
       );
     }).toList();
+    _persistTasks();
   }
 
   /// 保存音频文件（与 TTSStateNotifier 逻辑一致）
@@ -428,5 +476,61 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
 
     await FileManifest.addRecord(record);
     return record;
+  }
+
+  // ============================================================================
+  // 持久化
+  // ============================================================================
+
+  Future<void> _persistTasks() async {
+    try {
+      final file = await _tasksFile();
+      final data = state.map((t) => t.toMap()).toList();
+      await file.writeAsString(jsonEncode(data));
+    } catch (e) {
+      debugPrint('[TaskListNotifier] Failed to persist tasks: $e');
+    }
+  }
+
+  Future<List<SynthesisTask>> _loadPersistedTasks() async {
+    try {
+      final file = await _tasksFile();
+      if (!await file.exists()) return [];
+      final content = await file.readAsString();
+      if (content.isEmpty) return [];
+      final list = jsonDecode(content) as List;
+      return list
+          .map((m) => SynthesisTask.fromMap(Map<String, dynamic>.from(m as Map)))
+          .toList();
+    } catch (e) {
+      debugPrint('[TaskListNotifier] Failed to load persisted tasks: $e');
+      return [];
+    }
+  }
+
+  Future<File> _tasksFile() async {
+    final dirPath = await AppStorage.directory;
+    final synthDir = Directory(p.join(dirPath, 'synthesis'));
+    try {
+      if (!await synthDir.exists()) {
+        await synthDir.create(recursive: true);
+      }
+    } catch (_) {}
+    return File(p.join(synthDir.path, 'tasks.json'));
+  }
+
+  /// 从持久化恢复所有任务（应用启动时调用）
+  Future<void> restoreFromPersistence() async {
+    final tasks = await _loadPersistedTasks();
+    if (tasks.isEmpty) return;
+    state = [
+      for (final task in tasks)
+        if (task.status == TaskStatus.running)
+          task.copyWith(status: TaskStatus.failed, error: '应用重启，已中断')
+        else
+          task,
+    ];
+    debugPrint(
+        '[TaskListNotifier] Restored ${tasks.length} tasks from persistence');
   }
 }

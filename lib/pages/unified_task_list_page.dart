@@ -1723,17 +1723,6 @@ class _SynthesisTaskCard extends ConsumerWidget {
                                 ),
                               ),
                             ],
-                            const SizedBox(width: 4),
-                            GestureDetector(
-                              onTap: () => ref
-                                  .read(taskListProvider.notifier)
-                                  .dismissError(task.id),
-                              child: Icon(
-                                Icons.close,
-                                size: 16,
-                                color: Colors.red[300],
-                              ),
-                            ),
                           ],
                         ),
                       ),
@@ -1841,26 +1830,11 @@ class _SynthesisTaskCard extends ConsumerWidget {
                   PopupMenuButton<String>(
                     icon: const Icon(Icons.more_vert, size: 20),
                     onSelected: (value) {
-                      if (value == 'dismiss_error') {
-                        ref
-                            .read(taskListProvider.notifier)
-                            .dismissError(task.id);
-                      } else if (value == 'remove') {
+                      if (value == 'remove') {
                         ref.read(taskListProvider.notifier).removeTask(task.id);
                       }
                     },
                     itemBuilder: (_) => [
-                      if (task.error != null)
-                        const PopupMenuItem(
-                          value: 'dismiss_error',
-                          child: ListTile(
-                            leading:
-                                Icon(Icons.close, size: 20, color: Colors.grey),
-                            title: Text('关闭错误信息'),
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                        ),
                       const PopupMenuItem(
                         value: 'remove',
                         child: ListTile(
