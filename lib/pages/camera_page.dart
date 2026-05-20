@@ -34,8 +34,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
   Offset _focusOffset = Offset.zero;
   bool _showFocusIndicator = false;
 
-  static const _aspectRatios = [4 / 3, 16 / 9, 1 / 1];
-  static const _aspectLabels = ['4:3', '16:9', '1:1'];
+  static const _aspectRatios = [3 / 4, 9 / 16, 1 / 1];
+  static const _aspectLabels = ['3:4', '9:16', '1:1'];
 
   @override
   void initState() {
@@ -157,7 +157,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
     final croppedImage =
         await picture.toImage(targetW.round(), targetH.round());
     final byteData =
-        await croppedImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+        await croppedImage.toByteData(format: ui.ImageByteFormat.png);
     if (byteData == null) return imageData;
     final rgbaBytes = byteData.buffer.asUint8List();
     final result = await FlutterImageCompress.compressWithList(
@@ -224,19 +224,34 @@ class _CameraPageState extends ConsumerState<CameraPage>
       var bytes = await xFile.readAsBytes();
       if (_discardRequested) return;
 
+      // Step 1: Re-encode to correct EXIF orientation (always needed)
+      bytes = await FlutterImageCompress.compressWithList(
+        bytes,
+        quality: 100,
+        format: CompressFormat.jpeg,
+      );
+      if (_discardRequested) return;
+
+      // Step 2: Crop on correctly-oriented pixels
       final aspectRatio = _aspectRatios[_aspectIndex];
-      if (aspectRatio != 4 / 3) {
+      if (aspectRatio != 3 / 4) {
         bytes = await _cropToAspectRatio(bytes, aspectRatio);
         if (_discardRequested) return;
       }
 
+      // Step 3: Apply target quality compression
       final settings = ref.read(cameraSettingsProvider);
       final quality = (settings.compressionQuality * 100).round();
-      final finalBytes = await FlutterImageCompress.compressWithList(
-        bytes,
-        quality: quality,
-        format: CompressFormat.jpeg,
-      );
+      Uint8List finalBytes;
+      if (quality < 100) {
+        finalBytes = await FlutterImageCompress.compressWithList(
+          bytes,
+          quality: quality,
+          format: CompressFormat.jpeg,
+        );
+      } else {
+        finalBytes = bytes;
+      }
       if (_discardRequested) return;
 
       final hash = computeImageHash(finalBytes);
