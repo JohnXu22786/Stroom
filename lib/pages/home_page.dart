@@ -3,8 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../main.dart' as main_lib;
 import 'catcatch_page.dart';
+import 'unified_task_list_page.dart';
 import '../catcatch/providers/catcatch_provider.dart';
-import '../catcatch/models/catcatch_task.dart';
+import '../providers/task_provider.dart';
 import 'chat_page.dart';
 import 'files_page.dart';
 import 'settings_page.dart';
@@ -168,7 +169,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   /// 构建侧边栏导航（用于桌面端）
-  Widget _buildNavigationRail(BuildContext context) {
+  Widget _buildNavigationRail(BuildContext context, int activeTaskCount) {
     final selectedPage = ref.watch(selectedPageProvider);
 
     int selectedIndex;
@@ -193,9 +194,17 @@ class _HomePageState extends ConsumerState<HomePage> {
       labelType: NavigationRailLabelType.all,
       destinations: [
         NavigationRailDestination(
-          icon: Icon(_getPageIcon(AppPage.home)),
-          selectedIcon: Icon(_getPageIcon(AppPage.home),
-              color: Theme.of(context).colorScheme.primary),
+          icon: Badge(
+            isLabelVisible: activeTaskCount > 0,
+            label: Text('$activeTaskCount'),
+            child: Icon(_getPageIcon(AppPage.home)),
+          ),
+          selectedIcon: Badge(
+            isLabelVisible: activeTaskCount > 0,
+            label: Text('$activeTaskCount'),
+            child: Icon(_getPageIcon(AppPage.home),
+                color: Theme.of(context).colorScheme.primary),
+          ),
           label: Text(_getPageTitle(AppPage.home)),
         ),
         NavigationRailDestination(
@@ -255,7 +264,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   /// 构建底部导航栏（用于移动端）
-  Widget _buildBottomNavigationBar(BuildContext context) {
+  Widget _buildBottomNavigationBar(BuildContext context, int activeTaskCount) {
     final selectedPage = ref.watch(selectedPageProvider);
 
     int selectedIndex;
@@ -279,7 +288,11 @@ class _HomePageState extends ConsumerState<HomePage> {
       },
       destinations: [
         NavigationDestination(
-          icon: Icon(_getPageIcon(AppPage.home)),
+          icon: Badge(
+            isLabelVisible: activeTaskCount > 0,
+            label: Text('$activeTaskCount'),
+            child: Icon(_getPageIcon(AppPage.home)),
+          ),
           label: _getPageTitle(AppPage.home),
         ),
         NavigationDestination(
@@ -378,10 +391,16 @@ class _HomePageState extends ConsumerState<HomePage> {
     ref.watch(main_lib.catcatchStartupProvider);
 
     final isMobile = _isMobile(context);
-    final runningTasksCount = ref
-        .watch(catcatchTasksProvider)
-        .where((t) => t.status == TaskStatus.running)
-        .length;
+    final catcatchTasks = ref.watch(catcatchTasksProvider);
+    final synthesisTasks = ref.watch(taskListProvider);
+    final lastRead = ref.watch(taskListLastReadProvider);
+    final activeTaskCount =
+        catcatchTasks
+            .where((t) => t.status.name != 'completed' && (t.statusChangedAt ?? t.createdAt).isAfter(lastRead))
+            .length +
+        synthesisTasks
+            .where((t) => t.status.name != 'completed' && (t.statusChangedAt ?? t.createdAt).isAfter(lastRead))
+            .length;
 
     return Scaffold(
       body: Stack(
@@ -389,7 +408,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           Row(
             children: [
               // 桌面端显示侧边栏导航
-              if (!isMobile) _buildNavigationRail(context),
+              if (!isMobile) _buildNavigationRail(context, activeTaskCount),
               // 页面内容区域，使用Expanded填充剩余空间
               Expanded(
                 child: PageView(
@@ -411,21 +430,21 @@ class _HomePageState extends ConsumerState<HomePage> {
             right: 16,
             child: IconButton(
               icon: Badge(
-                isLabelVisible: runningTasksCount > 0,
-                label: Text('$runningTasksCount'),
-                child: const Icon(Icons.assignment_outlined),
+                isLabelVisible: activeTaskCount > 0,
+                label: Text('$activeTaskCount'),
+                child: const Icon(Icons.pending_actions),
               ),
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const CatCatchPage()),
+                  MaterialPageRoute(builder: (_) => const UnifiedTaskListPage()),
                 );
               },
             ),
           ),
         ],
       ),
-      bottomNavigationBar: isMobile ? _buildBottomNavigationBar(context) : null,
+      bottomNavigationBar: isMobile ? _buildBottomNavigationBar(context, activeTaskCount) : null,
     );
   }
 }

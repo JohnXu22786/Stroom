@@ -16,7 +16,6 @@ import '../utils/audio_playback.dart';
 import '../utils/audio_utils.dart';
 import '../widgets/file_manager_view.dart';
 import 'tts_create_page.dart';
-import 'task_list_page.dart';
 import 'audio_player_page.dart';
 
 class TtsPage extends ConsumerStatefulWidget {
@@ -563,11 +562,6 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       return sortConfig.order == SortOrder.descending ? -cmp : cmp;
     });
 
-    final runningTasks = ref
-        .watch(taskListProvider)
-        .where((t) => t.status == TaskStatus.running)
-        .length;
-
     final config = FileManagerConfig<AudioRecord>(
       title: '录音',
       topActionBar: Padding(
@@ -681,22 +675,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
             _shareAudio(file.storagePath);
         }
       },
-      extraAppBarActions: () => [
-        IconButton(
-          icon: Badge(
-            isLabelVisible: runningTasks > 0,
-            label: Text('$runningTasks', style: const TextStyle(fontSize: 10)),
-            child: const Icon(Icons.swap_vert),
-          ),
-          tooltip: '任务列表',
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const TaskListPage()),
-            );
-          },
-        ),
-      ],
+      extraAppBarActions: () => [],
     );
 
     return FileManagerView<AudioRecord>(

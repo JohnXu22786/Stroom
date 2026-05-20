@@ -29,6 +29,7 @@ class SynthesisTask {
   final String? error;
   final DateTime createdAt;
   final DateTime? completedAt;
+  final DateTime? statusChangedAt;
 
   // 用于重试的完整参数
   final String text;
@@ -50,6 +51,7 @@ class SynthesisTask {
     this.error,
     DateTime? createdAt,
     this.completedAt,
+    this.statusChangedAt,
     required this.text,
     required this.providerConfig,
     required this.modelConfig,
@@ -63,16 +65,23 @@ class SynthesisTask {
     TaskStatus? status,
     String? error,
     DateTime? completedAt,
+    DateTime? statusChangedAt,
     String? originalRequest,
     String? originalResponse,
   }) {
+    final newStatus = status ?? this.status;
+    final newStatusChangedAt = statusChangedAt ??
+        (status != null && status != this.status
+            ? DateTime.now()
+            : this.statusChangedAt);
     return SynthesisTask(
       id: id,
       title: title,
-      status: status ?? this.status,
+      status: newStatus,
       error: error,
       createdAt: createdAt,
       completedAt: completedAt ?? this.completedAt,
+      statusChangedAt: newStatusChangedAt,
       text: text,
       providerConfig: providerConfig,
       modelConfig: modelConfig,
