@@ -11,6 +11,8 @@ import '../catcatch/models/media_resource.dart';
 import '../catcatch/models/catcatch_task.dart' as catcatch;
 import '../catcatch/providers/catcatch_provider.dart';
 import '../providers/task_provider.dart';
+import 'catcatch_page.dart';
+import 'tts_create_page.dart';
 
 String _formatSize(int? bytes) {
   if (bytes == null) return '未知大小';
@@ -1570,9 +1572,15 @@ class _CatCatchTaskCardState extends ConsumerState<_CatCatchTaskCard> {
                   icon: Icons.refresh,
                   label: '重试',
                   color: Colors.blue,
-                  onPressed: () => ref
-                      .read(catcatchTasksProvider.notifier)
-                      .retryTask(task.id),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => CatCatchPage(
+                        initialUrl: task.url,
+                        initialDurationSec: task.expectedDurationSec,
+                      ),
+                    ),
+                  ),
                 ),
                 _actionButton(
                   icon: Icons.delete_outline,
@@ -1815,9 +1823,14 @@ class _SynthesisTaskCard extends ConsumerWidget {
                     height: 32,
                     child: ElevatedButton.icon(
                       onPressed: () {
-                        ref
-                            .read(taskListProvider.notifier)
-                            .retryTask(task.id);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => TTSCreatePage(
+                              retryTask: task,
+                            ),
+                          ),
+                        );
                       },
                       icon: const Icon(Icons.refresh, size: 16),
                       label:
