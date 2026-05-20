@@ -38,40 +38,43 @@ class _FilesPageState extends ConsumerState<FilesPage>
   Widget build(BuildContext context) {
     final tabOrder = ref.watch(fileTabOrderProvider);
 
-    return Column(
-      key: const Key('files_page'),
-      children: [
-        // Tab bar for switching between image and audio sections
-        Material(
-          color: Theme.of(context).colorScheme.surface,
-          child: GestureDetector(
-            key: const Key('files_tab_bar_gesture'),
-            onLongPress: () => _showReorderDialog(context, tabOrder),
-            child: TabBar(
-              controller: _tabController,
-              tabs: tabOrder.map((i) => Tab(text: _tabLabels[i])).toList(),
+    return SafeArea(
+      top: true,
+      child: Column(
+        key: const Key('files_page'),
+        children: [
+          // Tab bar for switching between image and audio sections
+          Material(
+            color: Theme.of(context).colorScheme.surface,
+            child: GestureDetector(
+              key: const Key('files_tab_bar_gesture'),
+              onLongPress: () => _showReorderDialog(context, tabOrder),
+              child: TabBar(
+                controller: _tabController,
+                tabs: tabOrder.map((i) => Tab(text: _tabLabels[i])).toList(),
+              ),
             ),
           ),
-        ),
-        // Content area - GalleryPage and TtsPage handle their own Scaffolds
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: tabOrder.map((i) {
-              switch (i) {
-                case 0:
-                  return const GalleryPage();
-                case 1:
-                  return const VideoGalleryPage();
-                case 2:
-                  return const TtsPage();
-                default:
-                  return const SizedBox.shrink();
-              }
-            }).toList(),
+          // Content area - GalleryPage and TtsPage handle their own Scaffolds
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: tabOrder.map((i) {
+                switch (i) {
+                  case 0:
+                    return const GalleryPage();
+                  case 1:
+                    return const VideoGalleryPage();
+                  case 2:
+                    return const TtsPage();
+                  default:
+                    return const SizedBox.shrink();
+                }
+              }).toList(),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

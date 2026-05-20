@@ -329,6 +329,7 @@ class _FileManagerViewState<T extends FileRecord>
 
   PreferredSizeWidget _buildAppBar(Map<String, List<T>> grouped) {
     return AppBar(
+      primary: false,
       title: Text(
         _selectionMode
             ? '已选择 ${_selectedIds.length} 项'

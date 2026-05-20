@@ -85,57 +85,94 @@ class _HomePageState extends ConsumerState<HomePage> {
   /// 显示加号弹出的菜单
   void _showPlusMenu(BuildContext context) {
     final navigator = Navigator.of(context);
-    final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
     final overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (renderBox == null || overlay == null) return;
+    if (overlay == null) return;
 
-    final position = RelativeRect.fromRect(
-      Rect.fromPoints(
-        Offset(renderBox.size.width / 2 - 100, renderBox.size.height - 200),
-        Offset(renderBox.size.width / 2 + 100, renderBox.size.height),
-      ),
-      Offset.zero & overlay.size,
-    );
+    final isMobile = _isMobile(context);
+    final screenSize = MediaQuery.of(context).size;
+    final padding = MediaQuery.of(context).padding;
+
+    RelativeRect position;
+
+    if (isMobile) {
+      // 底部导航栏：从"+"按钮位置向上弹出
+      final centerX = screenSize.width / 2;
+      const navBarHeight = 80.0;
+      final navBarTop = screenSize.height - navBarHeight;
+
+      position = RelativeRect.fromLTRB(
+        centerX - 20,
+        navBarTop - 10,
+        centerX + 20,
+        navBarTop + 10,
+      );
+    } else {
+      // 侧边栏：从"+"按钮位置向右弹出
+      const railWidth = 80.0;
+      final availableHeight =
+          screenSize.height - padding.top - padding.bottom;
+      final itemHeight = availableHeight / 5;
+      final plusCenterY = itemHeight * 2 + itemHeight / 2 + padding.top;
+
+      position = RelativeRect.fromLTRB(
+        railWidth,
+        plusCenterY - 20,
+        railWidth + 10,
+        plusCenterY + 20,
+      );
+    }
 
     showMenu<String>(
       context: context,
       position: position,
       items: [
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'catcatch',
-          child: ListTile(
-            leading: Icon(Icons.language, color: Colors.purple),
-            title: Text('获取网页视频'),
-            dense: true,
-            contentPadding: EdgeInsets.zero,
+          child: SizedBox(
+            width: 200,
+            child: _buildMenuItem(
+              icon: Icons.language,
+              color: Colors.purple,
+              title: '获取网页视频',
+              subtitle: '下载网页中的视频资源',
+            ),
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'record',
-          child: ListTile(
-            leading: Icon(Icons.mic, color: Colors.blue),
-            title: Text('录音'),
-            dense: true,
-            contentPadding: EdgeInsets.zero,
+          child: SizedBox(
+            width: 200,
+            child: _buildMenuItem(
+              icon: Icons.mic,
+              color: Colors.blue,
+              title: '录音',
+              subtitle: '录制音频内容',
+            ),
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'capture',
-          child: ListTile(
-            leading: Icon(Icons.camera_alt, color: Colors.green),
-            title: Text('拍摄'),
-            dense: true,
-            contentPadding: EdgeInsets.zero,
+          child: SizedBox(
+            width: 200,
+            child: _buildMenuItem(
+              icon: Icons.camera_alt,
+              color: Colors.green,
+              title: '拍摄',
+              subtitle: '拍照记录精彩瞬间',
+            ),
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'capture_video',
-          child: ListTile(
-            leading: Icon(Icons.videocam, color: Colors.red),
-            title: Text('录像'),
-            dense: true,
-            contentPadding: EdgeInsets.zero,
+          child: SizedBox(
+            width: 200,
+            child: _buildMenuItem(
+              icon: Icons.videocam,
+              color: Colors.red,
+              title: '录像',
+              subtitle: '录制视频内容',
+            ),
           ),
         ),
       ],
@@ -168,6 +205,53 @@ class _HomePageState extends ConsumerState<HomePage> {
     });
   }
 
+  Widget _buildMenuItem({
+    required IconData icon,
+    required Color color,
+    required String title,
+    String? subtitle,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[500],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   /// 构建侧边栏导航（用于桌面端）
   Widget _buildNavigationRail(BuildContext context, int activeTaskCount) {
     final selectedPage = ref.watch(selectedPageProvider);
@@ -180,6 +264,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
 
     return NavigationRail(
+      groupAlignment: 0.0,
       selectedIndex: selectedIndex,
       onDestinationSelected: (index) {
         if (index == 2) {
@@ -391,6 +476,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     ref.watch(main_lib.catcatchStartupProvider);
 
     final isMobile = _isMobile(context);
+    final selectedPage = ref.watch(selectedPageProvider);
     final catcatchTasks = ref.watch(catcatchTasksProvider);
     final synthesisTasks = ref.watch(taskListProvider);
     final lastRead = ref.watch(taskListLastReadProvider);
@@ -424,24 +510,25 @@ class _HomePageState extends ConsumerState<HomePage> {
               ),
             ],
           ),
-          // 右上角任务列表入口
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 8,
-            right: 16,
-            child: IconButton(
-              icon: Badge(
-                isLabelVisible: activeTaskCount > 0,
-                label: Text('$activeTaskCount'),
-                child: const Icon(Icons.pending_actions),
+          // 右上角任务列表入口（仅在首页显示）
+          if (selectedPage == AppPage.home)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 8,
+              right: 16,
+              child: IconButton(
+                icon: Badge(
+                  isLabelVisible: activeTaskCount > 0,
+                  label: Text('$activeTaskCount'),
+                  child: const Icon(Icons.pending_actions),
+                ),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const UnifiedTaskListPage()),
+                  );
+                },
               ),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const UnifiedTaskListPage()),
-                );
-              },
             ),
-          ),
         ],
       ),
       bottomNavigationBar: isMobile ? _buildBottomNavigationBar(context, activeTaskCount) : null,
