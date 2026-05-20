@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
@@ -8,6 +9,7 @@ import 'package:markdown_widget/markdown_widget.dart';
 import 'package:flutter_highlight/themes/dracula.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
+import '../widgets/camera_choice_dialog.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:mime/mime.dart';
 import '../services/attachment_storage.dart';
@@ -17,6 +19,7 @@ import '../models/chat_message.dart';
 import '../services/chat_adapter.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/provider_config.dart';
+import '../pages/camera_page.dart';
 import 'provider_config_page.dart';
 
 final _isStreamingProvider = StateProvider<bool>((ref) => false);
@@ -1219,12 +1222,27 @@ class _ChatComposerState extends ConsumerState<_ChatComposer> {
   }
 
   Future<void> _pickFromCamera() async {
+    final choice = await showCameraChoiceDialog(context);
+    if (choice == null) return;
     try {
-      final picker = ImagePicker();
-      final file = await picker.pickImage(source: ImageSource.camera);
-      if (file == null) return;
-      final bytes = await file.readAsBytes();
-      await _addPendingAttachment(file.name, bytes);
+      if (choice == CameraChoice.app) {
+        final result = await Navigator.push<String>(
+          context,
+          MaterialPageRoute(builder: (_) => const CameraPage()),
+        );
+        if (result != null && result.isNotEmpty) {
+          final file = File(result);
+          final bytes = await file.readAsBytes();
+          final fileName = result.split(RegExp(r'[/\\]')).last;
+          await _addPendingAttachment(fileName, bytes);
+        }
+      } else {
+        final picker = ImagePicker();
+        final file = await picker.pickImage(source: ImageSource.camera);
+        if (file == null) return;
+        final bytes = await file.readAsBytes();
+        await _addPendingAttachment(file.name, bytes);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

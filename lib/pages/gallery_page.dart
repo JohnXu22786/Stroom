@@ -14,6 +14,7 @@ import '../utils/image_manifest.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
+import '../widgets/camera_choice_dialog.dart';
 import '../widgets/file_manager_view.dart';
 import 'camera_page.dart';
 
@@ -89,6 +90,8 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     }
     return clean;
   }
+
+  String _pad(int n) => n.toString().padLeft(2, '0');
 
   // ====================================================================
   // Helpers
@@ -224,10 +227,49 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   // ====================================================================
 
   Future<void> _takePhoto() async {
-    final result = await Navigator.push<String>(
-      context,
-      MaterialPageRoute(builder: (_) => CameraPage(folder: _currentFolder)),
-    );
+    final choice = await showCameraChoiceDialog(context);
+    if (choice == null || !mounted) return;
+
+    String? result;
+    if (choice == CameraChoice.app) {
+      result = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(builder: (_) => CameraPage(folder: _currentFolder)),
+      );
+    } else {
+      try {
+        final picker = ImagePicker();
+        final file = await picker.pickImage(source: ImageSource.camera);
+        if (file != null) {
+          final bytes = await file.readAsBytes();
+          final hash = computeImageHash(bytes);
+          final format = 'jpg';
+          final fileName = '$hash.$format';
+          await ImageManifest.writeFile(fileName, bytes);
+          final thumbnailBytes = await generateThumbnail(bytes);
+          final thumbFileName = '${hash}_thumb.png';
+          await ImageManifest.writeFile(thumbFileName, thumbnailBytes);
+          final now = DateTime.now();
+          final timestamp =
+              '${now.year}${_pad(now.month)}${_pad(now.day)}_${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}';
+          await ImageManifest.addRecord(ImageRecord(
+            name: '照片_$timestamp',
+            hash: hash,
+            format: format,
+            createdAt: DateTime.now(),
+            size: bytes.length,
+            folder: _currentFolder,
+          ));
+          result = await ImageManifest.readFilePath(fileName);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('拍照失败: $e'), duration: const Duration(seconds: 2)),
+          );
+        }
+      }
+    }
 
     await ref.read(imageRecordsProvider.notifier).loadRecords();
     await ref.read(imageFolderListProvider.notifier).loadFolders();
