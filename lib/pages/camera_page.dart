@@ -16,7 +16,8 @@ class CameraPage extends ConsumerStatefulWidget {
   ConsumerState<CameraPage> createState() => _CameraPageState();
 }
 
-class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObserver {
+class _CameraPageState extends ConsumerState<CameraPage>
+    with WidgetsBindingObserver {
   CameraController? _controller;
   List<CameraDescription>? _cameras;
   bool _isInitialized = false;
@@ -26,6 +27,12 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
   int _aspectIndex = 0;
   bool _isSaving = false;
   bool _discardRequested = false;
+
+  double _shutterScale = 1.0;
+  bool _showFlash = false;
+  bool _showGrid = false;
+  Offset _focusOffset = Offset.zero;
+  bool _showFocusIndicator = false;
 
   static const _aspectRatios = [4 / 3, 16 / 9, 1 / 1];
   static const _aspectLabels = ['4:3', '16:9', '1:1'];
@@ -71,8 +78,13 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
               orElse: () => _cameras!.first,
             );
 
+      final settings = ref.read(cameraSettingsProvider);
+      final preset = settings.highQuality
+          ? ResolutionPreset.veryHigh
+          : ResolutionPreset.medium;
+
       _controller =
-          CameraController(camera, ResolutionPreset.high, enableAudio: false);
+          CameraController(camera, preset, enableAudio: false);
       await _controller!.initialize();
       if (mounted) setState(() => _isInitialized = true);
     } catch (_) {}
@@ -118,7 +130,8 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
     _controller!.setZoomLevel(_zoomLevel);
   }
 
-  Future<Uint8List> _cropToAspectRatio(Uint8List imageData, double aspectRatio) async {
+  Future<Uint8List> _cropToAspectRatio(
+      Uint8List imageData, double aspectRatio) async {
     final codec = await ui.instantiateImageCodec(imageData);
     final frame = await codec.getNextFrame();
     final image = frame.image;
@@ -141,8 +154,10 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
       Paint(),
     );
     final picture = recorder.endRecording();
-    final croppedImage = await picture.toImage(targetW.round(), targetH.round());
-    final byteData = await croppedImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+    final croppedImage =
+        await picture.toImage(targetW.round(), targetH.round());
+    final byteData =
+        await croppedImage.toByteData(format: ui.ImageByteFormat.rawRgba);
     if (byteData == null) return imageData;
     final rgbaBytes = byteData.buffer.asUint8List();
     final result = await FlutterImageCompress.compressWithList(
@@ -155,8 +170,50 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
     return result;
   }
 
+  void _animateShutter() {
+    setState(() => _shutterScale = 0.85);
+    Future.delayed(const Duration(milliseconds: 80), () {
+      if (mounted) setState(() => _shutterScale = 1.0);
+    });
+  }
+
+  void _triggerFlash() {
+    setState(() => _showFlash = true);
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) setState(() => _showFlash = false);
+    });
+  }
+
+  void _onTapDown(TapDownDetails details) {
+    if (_controller == null || !_isInitialized) return;
+
+    final RenderBox box = context.findRenderObject() as RenderBox;
+    final localOffset = box.globalToLocal(details.globalPosition);
+    final size = box.size;
+
+    final normalizedOffset = Offset(
+      (localOffset.dx / size.width).clamp(0.0, 1.0),
+      (localOffset.dy / size.height).clamp(0.0, 1.0),
+    );
+
+    _controller!.setFocusPoint(normalizedOffset);
+    _controller!.setExposurePoint(normalizedOffset);
+
+    setState(() {
+      _focusOffset = localOffset;
+      _showFocusIndicator = true;
+    });
+
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      if (mounted) setState(() => _showFocusIndicator = false);
+    });
+  }
+
   Future<void> _takePicture() async {
     if (!_isInitialized || _controller == null || _isSaving) return;
+
+    _animateShutter();
+    _triggerFlash();
 
     setState(() => _isSaving = true);
 
@@ -175,16 +232,11 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
 
       final settings = ref.read(cameraSettingsProvider);
       final quality = (settings.compressionQuality * 100).round();
-      Uint8List finalBytes;
-      if (quality < 100) {
-        finalBytes = await FlutterImageCompress.compressWithList(
-          bytes,
-          quality: quality,
-          format: CompressFormat.jpeg,
-        );
-      } else {
-        finalBytes = bytes;
-      }
+      final finalBytes = await FlutterImageCompress.compressWithList(
+        bytes,
+        quality: quality,
+        format: CompressFormat.jpeg,
+      );
       if (_discardRequested) return;
 
       final hash = computeImageHash(finalBytes);
@@ -235,7 +287,8 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
       if (mounted && !_discardRequested) {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('拍照失败: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('拍照失败: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -283,7 +336,12 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
     return Stack(
       children: [
         if (_isInitialized && _controller != null)
-          Positioned.fill(child: CameraPreview(_controller!))
+          Positioned.fill(
+            child: GestureDetector(
+              onTapDown: _onTapDown,
+              child: CameraPreview(_controller!),
+            ),
+          )
         else
           const Positioned.fill(
             child: ColoredBox(
@@ -293,6 +351,43 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
               ),
             ),
           ),
+
+        // Grid overlay
+        if (_showGrid && _isInitialized)
+          Positioned.fill(
+            child: CustomPaint(painter: _GridPainter()),
+          ),
+
+        // Focus indicator
+        Positioned(
+          left: _focusOffset.dx - 25,
+          top: _focusOffset.dy - 25,
+          child: AnimatedOpacity(
+            opacity: _showFocusIndicator ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 300),
+            child: IgnorePointer(
+              child: Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.yellow, width: 2),
+                ),
+              ),
+            ),
+          ),
+        ),
+
+        // Flash overlay
+        Positioned.fill(
+          child: IgnorePointer(
+            child: AnimatedOpacity(
+              opacity: _showFlash ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 50),
+              child: Container(color: Colors.white),
+            ),
+          ),
+        ),
 
         // Saving overlay
         if (_isSaving)
@@ -328,11 +423,14 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               IconButton(
-                onPressed: _isSaving ? null : () {
-                  _discardRequested = true;
-                  Navigator.pop(context);
-                },
-                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: _isSaving
+                    ? null
+                    : () {
+                        _discardRequested = true;
+                        Navigator.pop(context);
+                      },
+                icon:
+                    const Icon(Icons.close, color: Colors.white, size: 28),
               ),
               Container(
                 padding:
@@ -354,7 +452,18 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
                     onPressed: _toggleFlash,
                     icon: Icon(
                       _flashIcon(),
-                      color: _flashMode == FlashMode.off ? Colors.white : Colors.amber,
+                      color: _flashMode == FlashMode.off
+                          ? Colors.white
+                          : Colors.amber,
+                      size: 28,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () =>
+                        setState(() => _showGrid = !_showGrid),
+                    icon: Icon(
+                      _showGrid ? Icons.grid_on : Icons.grid_off,
+                      color: _showGrid ? Colors.amber : Colors.white,
                       size: 28,
                     ),
                   ),
@@ -376,7 +485,8 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
               GestureDetector(
                 onTap: _toggleAspectRatio,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 6),
                   decoration: BoxDecoration(
                     color: Colors.black54,
                     borderRadius: BorderRadius.circular(16),
@@ -414,15 +524,24 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
                   const SizedBox(width: 32),
                   GestureDetector(
                     onTap: _takePicture,
-                    child: Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        color: _isSaving ? Colors.grey : Colors.white,
-                        shape: BoxShape.circle,
+                    child: AnimatedScale(
+                      scale: _shutterScale,
+                      duration: const Duration(milliseconds: 80),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          color:
+                              _isSaving ? Colors.grey : Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.camera_alt,
+                            color: _isSaving
+                                ? Colors.grey
+                                : Colors.black,
+                            size: 36),
                       ),
-                      child: Icon(Icons.camera_alt,
-                          color: _isSaving ? Colors.grey : Colors.black, size: 36),
                     ),
                   ),
                   const SizedBox(width: 80),
@@ -445,4 +564,24 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
       ),
     );
   }
+}
+
+class _GridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.4)
+      ..strokeWidth = 1.0;
+
+    final w = size.width;
+    final h = size.height;
+
+    canvas.drawLine(Offset(w / 3, 0), Offset(w / 3, h), paint);
+    canvas.drawLine(Offset(2 * w / 3, 0), Offset(2 * w / 3, h), paint);
+    canvas.drawLine(Offset(0, h / 3), Offset(w, h / 3), paint);
+    canvas.drawLine(Offset(0, 2 * h / 3), Offset(w, 2 * h / 3), paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
