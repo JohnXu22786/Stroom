@@ -16,11 +16,9 @@ void main() {
       ),
     );
 
-    // 找加号按钮（桌面端 FloatingActionButton）
-    expect(find.byType(FloatingActionButton), findsOneWidget);
-
-    // 点击加号按钮
-    await tester.tap(find.byType(FloatingActionButton));
+    // 桌面端 NavigationRail 中有加号图标
+    expect(find.byIcon(Icons.add), findsAtLeast(1));
+    await tester.tap(find.byIcon(Icons.add).first);
     await tester.pumpAndSettle();
 
     // 验证菜单中有"获取网页视频"
@@ -50,9 +48,9 @@ void main() {
   });
 
   // ──────────────────────────────────────────────
-  // Plus icon inside FAB
+  // Plus icon in navigation
   // ──────────────────────────────────────────────
-  testWidgets('Home page FAB contains add icon', (tester) async {
+  testWidgets('Home page has add icon in navigation', (tester) async {
     await tester.pumpWidget(
       const ProviderScope(
         child: MaterialApp(
@@ -61,7 +59,7 @@ void main() {
       ),
     );
 
-    // 验证 FAB 存在（桌面端），FAB 内自带加号图标
-    expect(find.byType(FloatingActionButton), findsOneWidget);
+    // 桌面端 NavigationRail 中有加号图标
+    expect(find.byIcon(Icons.add), findsAtLeast(1));
   });
 }
