@@ -10,28 +10,11 @@ class TaskListPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tasks = ref.watch(taskListProvider);
-    final hasCompleted = tasks.any((t) => t.status == TaskStatus.completed);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('任务列表'),
         centerTitle: true,
-        actions: [
-          if (hasCompleted)
-            GestureDetector(
-              onTap: () => _confirmClearCompleted(context, ref),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text(
-                  '清空已完成',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                ),
-              ),
-            ),
-        ],
       ),
       body: tasks.isEmpty
           ? const Center(
@@ -56,16 +39,6 @@ class TaskListPage extends ConsumerWidget {
     );
   }
 
-  void _confirmClearCompleted(BuildContext context, WidgetRef ref) {
-    // 直接清除已完成，无需二次确认；保留进行中/失败/暂停
-    final notifier = ref.read(taskListProvider.notifier);
-    final tasks = ref.read(taskListProvider);
-    for (final t in tasks) {
-      if (t.status == TaskStatus.completed) {
-        notifier.removeTask(t.id);
-      }
-    }
-  }
 }
 
 class _TaskCard extends ConsumerWidget {
@@ -111,7 +84,6 @@ class _TaskCard extends ConsumerWidget {
                       ),
                     ],
                   ),
-                  // 失败的显示完整错误信息（直到手动关闭）
                   if (task.status == TaskStatus.failed && task.error != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 6),
@@ -148,6 +120,22 @@ class _TaskCard extends ConsumerWidget {
                                 ),
                               ),
                             ),
+                            if (task.originalRequest != null ||
+                                task.originalResponse != null) ...[
+                              const SizedBox(width: 4),
+                              GestureDetector(
+                                onTap: () => _showOriginalDetailDialog(
+                                    context, task),
+                                child: const Text(
+                                  '详情',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
                             const SizedBox(width: 4),
                             GestureDetector(
                               onTap: () => ref
@@ -415,6 +403,94 @@ class _TaskCard extends ConsumerWidget {
           child: SelectableText(
             error,
             style: const TextStyle(fontSize: 13, height: 1.5),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 弹窗显示原始请求体和原始错误响应体（不做解析）
+  void _showOriginalDetailDialog(BuildContext context, SynthesisTask task) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.code, color: Colors.orange, size: 20),
+            SizedBox(width: 8),
+            Text('原始请求与响应'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (task.originalRequest != null) ...[
+                  const Text(
+                    '原始请求体:',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blueGrey,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: SelectableText(
+                      task.originalRequest!,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                if (task.originalResponse != null) ...[
+                  const Text(
+                    '原始响应体:',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.red,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: SelectableText(
+                      task.originalResponse!,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
         actions: [
