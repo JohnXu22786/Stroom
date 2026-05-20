@@ -112,9 +112,70 @@ class _CameraPageState extends ConsumerState<CameraPage>
     _controller!.setFlashMode(_flashMode);
   }
 
-  void _toggleAspectRatio() {
-    setState(() {
-      _aspectIndex = (_aspectIndex + 1) % _aspectRatios.length;
+  void _showAspectRatioPicker() {
+    showModalBottomSheet<int>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 32,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurfaceVariant
+                      .withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                '选择画面比例',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const SizedBox(height: 16),
+              ...List.generate(_aspectLabels.length, (i) {
+                final label = _aspectLabels[i];
+                final isSelected = i == _aspectIndex;
+                return ListTile(
+                  leading: Icon(
+                    isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+                    color: isSelected
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  title: Text(
+                    label,
+                    style: TextStyle(
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      color: isSelected
+                          ? Theme.of(context).colorScheme.primary
+                          : null,
+                    ),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  onTap: () => Navigator.pop(context, i),
+                );
+              }),
+            ],
+          ),
+        );
+      },
+    ).then((index) {
+      if (index != null && mounted) {
+        setState(() => _aspectIndex = index);
+      }
     });
   }
 
@@ -510,7 +571,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
             children: [
               // Aspect ratio toggle
               GestureDetector(
-                onTap: _toggleAspectRatio,
+                onTap: _showAspectRatioPicker,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 16, vertical: 6),
