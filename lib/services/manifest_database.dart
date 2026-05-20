@@ -73,7 +73,7 @@ class ManifestDatabase {
     final dbPath = p.join(dir.path, 'stroom_manifest.db');
     return await openDatabase(
       dbPath,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE IF NOT EXISTS image_records (
@@ -95,7 +95,8 @@ class ManifestDatabase {
             created_at INTEGER NOT NULL,
             size INTEGER NOT NULL DEFAULT 0,
             folder TEXT NOT NULL DEFAULT '',
-            source_text TEXT NOT NULL DEFAULT ''
+            source_text TEXT NOT NULL DEFAULT '',
+            duration INTEGER NOT NULL DEFAULT 0
           )
         ''');
         await db.execute('''
@@ -117,7 +118,11 @@ class ManifestDatabase {
         ''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
-        // 预留：后续 schema 变更在此处理
+        if (oldVersion < 2) {
+          await db.execute(
+            'ALTER TABLE audio_records ADD COLUMN duration INTEGER NOT NULL DEFAULT 0',
+          );
+        }
       },
     );
   }
