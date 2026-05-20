@@ -63,6 +63,13 @@ class _ProviderConfigDetailPageState
       _providerNameController.text = config.providerName;
       _hostController.text = config.host;
       _keyController.text = config.key;
+    } else {
+      final def = _entry != null
+          ? ProviderTypeRegistry.get(_entry!.type)
+          : null;
+      if (def != null) {
+        _hostController.text = def.defaultHost ?? '';
+      }
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted &&
@@ -96,7 +103,8 @@ class _ProviderConfigDetailPageState
     final entry = _entry;
     if (entry == null) return;
 
-    if (entry.type == 'llm') {
+    final useLlmModel = ProviderTypeRegistry.get(entry.type)?.useLlmModelConfig ?? false;
+    if (useLlmModel) {
       final result = await Navigator.push<ModelConfig>(
         context,
         MaterialPageRoute(
@@ -148,7 +156,8 @@ class _ProviderConfigDetailPageState
     final entry = _entry;
     if (entry == null) return;
 
-    if (entry.type == 'llm') {
+    final useLlmModel = ProviderTypeRegistry.get(entry.type)?.useLlmModelConfig ?? false;
+    if (useLlmModel) {
       final config = _config;
       if (config == null ||
           modelIndex < 0 ||
@@ -277,11 +286,13 @@ class _ProviderConfigDetailPageState
 
     var configs = entry.configs.map((c) => c.copy()).toList();
 
+    final def = ProviderTypeRegistry.get(entry.type);
     final newConfig = ProviderConfigItem(
       providerName: _providerNameController.text.trim(),
       host: host,
       key: key,
-      models: _config?.models.map((m) => m.copy()).toList() ?? [],
+      models: _config?.models.map((m) => m.copy()).toList() ??
+          def?.defaultModels.map((m) => m.copy()).toList() ?? [],
     );
 
     if (_isEditing &&
@@ -311,11 +322,12 @@ class _ProviderConfigDetailPageState
 
   @override
   Widget build(BuildContext context) {
+    final entryName = _entry?.name ?? '';
     final title = _isEditing
         ? (_providerNameController.text.isNotEmpty
             ? _providerNameController.text
             : '编辑配置')
-        : '新建供应商配置';
+        : '新建$entryName配置';
 
     final models = _models;
 
@@ -359,8 +371,7 @@ class _ProviderConfigDetailPageState
             controller: _hostController,
             decoration: const InputDecoration(
               labelText: 'API 地址',
-              hintText: 'https://api.openai.com/v1/chat/completions',
-              helperText: '填写完整 API 端点地址',
+              hintText: 'https://api.openai.com/v1/chat/completions（填写完整 API 端点地址）',
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.link, color: Colors.orange),
             ),

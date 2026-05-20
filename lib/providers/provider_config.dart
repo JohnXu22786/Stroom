@@ -378,6 +378,46 @@ class ProviderEntry {
 }
 
 // ============================================================================
+// 供应商类型注册表 — 每种类型可注册默认值，新增类型只需注册一次
+// ============================================================================
+
+class ProviderTypeDefinition {
+  final String type;
+  final String? defaultHost;
+  final List<ModelConfig> defaultModels;
+  final bool useLlmModelConfig;
+
+  const ProviderTypeDefinition({
+    required this.type,
+    this.defaultHost,
+    this.defaultModels = const [],
+    this.useLlmModelConfig = false,
+  });
+}
+
+class ProviderTypeRegistry {
+  static final Map<String, ProviderTypeDefinition> _registry = {};
+
+  static void register(ProviderTypeDefinition def) {
+    _registry[def.type] = def;
+  }
+
+  static ProviderTypeDefinition? get(String type) => _registry[type];
+
+  static bool isRegistered(String type) => _registry.containsKey(type);
+}
+
+void registerBuiltinProviderTypes() {
+  ProviderTypeRegistry.register(const ProviderTypeDefinition(
+    type: 'llm',
+    useLlmModelConfig: true,
+  ));
+  ProviderTypeRegistry.register(const ProviderTypeDefinition(
+    type: 'tts',
+  ));
+}
+
+// ============================================================================
 // 供应商条目列表状态
 // ============================================================================
 

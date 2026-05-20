@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'application.dart';
 import 'providers/tts_config.dart';
+import 'providers/provider_config.dart';
 import 'catcatch/providers/catcatch_provider.dart';
 import 'providers/task_provider.dart';
 
@@ -16,6 +17,7 @@ Future<void> main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
     registerBuiltinProviders();
+    registerBuiltinProviderTypes();
 
     runApp(
       const ProviderScope(
