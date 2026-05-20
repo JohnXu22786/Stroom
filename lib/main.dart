@@ -4,10 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'application.dart';
 import 'providers/tts_config.dart';
 import 'catcatch/providers/catcatch_provider.dart';
+import 'providers/task_provider.dart';
 
 /// 初始化 ProviderScope 的 overrides
 final catcatchStartupProvider = FutureProvider<void>((ref) async {
   await ref.read(catcatchTasksProvider.notifier).restoreUnfinishedTasks();
+  await ref.read(taskListProvider.notifier).restoreFromPersistence();
 });
 
 Future<void> main() async {

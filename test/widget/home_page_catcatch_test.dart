@@ -33,7 +33,7 @@ void main() {
   // ──────────────────────────────────────────────
   // Task list icon
   // ──────────────────────────────────────────────
-  testWidgets('Home page has catcatch task list icon in top right',
+  testWidgets('Home page has task list icon in top right with pending_actions icon',
       (tester) async {
     await tester.pumpWidget(
       const ProviderScope(
@@ -43,8 +43,8 @@ void main() {
       ),
     );
 
-    // 找任务列表图标
-    expect(find.byIcon(Icons.assignment_outlined), findsOneWidget);
+    // 找任务列表图标 (改用 Icons.pending_actions)
+    expect(find.byIcon(Icons.pending_actions), findsOneWidget);
   });
 
   // ──────────────────────────────────────────────

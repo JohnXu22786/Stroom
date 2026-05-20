@@ -21,8 +21,9 @@ class TTSCreatePage extends ConsumerStatefulWidget {
   final String? initialText;
   final bool isOverwrite;
   final String? originalTitle;
+  final SynthesisTask? retryTask;
 
-  const TTSCreatePage({super.key, this.initialText, this.isOverwrite = false, this.originalTitle});
+  const TTSCreatePage({super.key, this.initialText, this.isOverwrite = false, this.originalTitle, this.retryTask});
 
   @override
   ConsumerState<TTSCreatePage> createState() => _TTSCreatePageState();
@@ -66,22 +67,35 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   @override
   void initState() {
     super.initState();
-    // 如果传入了初始文本，填充到文本输入框
+    _initTaskData(); // 先处理 retryTask 再处理单独的 initialText/originalTitle（后者优先级更高）
     if (widget.initialText != null && widget.initialText!.isNotEmpty) {
       _textController.text = widget.initialText!;
     }
-    // 如果传入了原标题且默认勾选，填充标题
     if (widget.originalTitle != null && widget.originalTitle!.isNotEmpty && _useOriginalTitle) {
       _titleController.text = widget.originalTitle!;
     }
-    // 监听文本变化以刷新字数提示
     _textController.addListener(_onTextChanged);
-    // 进入页面时清除上次残留的合成错误，避免旧错误持续显示
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         ref.read(ttsStateProvider.notifier).clearError();
       }
     });
+  }
+
+  void _initTaskData() {
+    final task = widget.retryTask;
+    if (task == null) return;
+    _textController.text = task.text;
+    if (task.title.isNotEmpty) {
+      _titleController.text = task.title;
+    }
+    // 预设 modelConfig 和 customParams，等 _refreshModels 加载后自动匹配选中
+    _modelConfig = task.modelConfig;
+    for (final p in task.modelConfig.customParams) {
+      final override = task.customParams?[p.paramName];
+      _customParamControllers[p.paramName] =
+          TextEditingController(text: override ?? p.defaultValue);
+    }
   }
 
   void _onTextChanged() {

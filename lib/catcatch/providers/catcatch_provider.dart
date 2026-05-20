@@ -201,6 +201,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     }
 
     state = state.where((t) => t.id != id).toList();
+    _persistTasks();
   }
 
   /// 用户确认继续处理特殊格式（在 converting 步骤前调用）
@@ -298,26 +299,23 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     _executeTaskFrom(task, StepType.saving);
   }
 
-  /// 恢复未完成的任务（应用启动时调用）
+  /// 恢复所有持久化的任务（应用启动时调用）
   Future<void> restoreUnfinishedTasks() async {
     try {
       final tasks = await _loadPersistedTasks();
       if (tasks.isEmpty) return;
 
-      // 只恢复 running 和 paused 状态的任务
-      final unfinished = tasks.where((t) =>
-          t.status == TaskStatus.running || t.status == TaskStatus.paused);
-      if (unfinished.isEmpty) return;
-
-      // 将所有任务标记为 paused（避免自动继续执行）
+      // 加载全部任务，running 的改为 paused，其余保持原样（包括 failed 中的原始错误）
       state = [
-        ...state,
-        for (final task in unfinished)
-          task.copyWith(status: TaskStatus.paused, error: '应用重启，已暂停'),
+        for (final task in tasks)
+          if (task.status == TaskStatus.running)
+            task.copyWith(status: TaskStatus.paused, error: '应用重启，已暂停')
+          else
+            task,
       ];
 
       debugPrint(
-        '[CatCatchNotifier] Restored ${unfinished.length} unfinished tasks',
+        '[CatCatchNotifier] Restored ${tasks.length} tasks from persistence',
       );
     } catch (e) {
       debugPrint('[CatCatchNotifier] Failed to restore tasks: $e');
