@@ -26,8 +26,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     final m = widget.model;
     _nameController = TextEditingController(text: m?.name ?? '');
     _modelIdController = TextEditingController(text: m?.modelId ?? '');
-    final maxTokens = (m?.typeConfig['maxTokens'] as num?)?.toInt() ?? 4096;
-    _maxTokensController = TextEditingController(text: maxTokens.toString());
+    final maxTokens = (m?.typeConfig['maxTokens'] as num?)?.toInt();
+    _maxTokensController = TextEditingController(
+        text: maxTokens != null ? maxTokens.toString() : '');
     _customParams = (m?.customParams ?? []).map((p) => p.copy()).toList();
   }
 
@@ -72,8 +73,17 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     }
 
     final maxTokensStr = _maxTokensController.text.trim();
+    if (maxTokensStr.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('最大 Token 数为必填项'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     final maxTokens = int.tryParse(maxTokensStr);
-    if (maxTokensStr.isNotEmpty && (maxTokens == null || maxTokens <= 0)) {
+    if (maxTokens == null || maxTokens <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('最大 Token 数必须为正整数'),
@@ -118,7 +128,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     final result = ModelConfig(
       name: name,
       modelId: modelId,
-      typeConfig: {'maxTokens': maxTokens ?? 4096},
+      typeConfig: {'maxTokens': maxTokens},
       customParams: _customParams.map((p) => p.copy()).toList(),
     );
 
@@ -179,13 +189,13 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           // ==========================================================
           // Max Tokens
           // ==========================================================
-          const Text('Max Tokens',
+          const Text('Max Tokens *',
               style: TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           TextField(
             controller: _maxTokensController,
             decoration: const InputDecoration(
-              hintText: '4096',
+              hintText: '输入最大 Token 数',
               border: OutlineInputBorder(),
             ),
             keyboardType: TextInputType.number,
