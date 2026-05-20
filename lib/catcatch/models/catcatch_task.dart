@@ -149,6 +149,7 @@ class CatCatchTask {
   final String? error;
   final DateTime createdAt;
   final DateTime? completedAt;
+  final DateTime? statusChangedAt;
   final List<MediaResource> detectedMedia;
   final MediaResource? selectedMedia;
   final int progress;
@@ -165,6 +166,7 @@ class CatCatchTask {
     this.error,
     required this.createdAt,
     this.completedAt,
+    this.statusChangedAt,
     this.detectedMedia = const [],
     this.selectedMedia,
     this.progress = 0,
@@ -186,6 +188,7 @@ class CatCatchTask {
     String? error,
     DateTime? createdAt,
     DateTime? completedAt,
+    DateTime? statusChangedAt,
     List<MediaResource>? detectedMedia,
     MediaResource? selectedMedia,
     int? progress,
@@ -195,18 +198,25 @@ class CatCatchTask {
     bool clearCompletedAt = false,
     bool clearDownloadedFilePath = false,
     bool clearSelectedMedia = false,
-  }) =>
-      CatCatchTask(
+  }) {
+    final newStatus = status ?? this.status;
+    final newStatusChangedAt = statusChangedAt ??
+        (status != null && status != this.status
+            ? DateTime.now()
+            : this.statusChangedAt);
+
+    return CatCatchTask(
         id: id ?? this.id,
         url: url ?? this.url,
         expectedDurationSec: expectedDurationSec ?? this.expectedDurationSec,
         title: title ?? this.title,
-        status: status ?? this.status,
+        status: newStatus,
         steps: steps ?? this.steps,
         error: clearError ? null : (error ?? this.error),
         createdAt: createdAt ?? this.createdAt,
         completedAt:
             clearCompletedAt ? null : (completedAt ?? this.completedAt),
+        statusChangedAt: newStatusChangedAt,
         detectedMedia: detectedMedia ?? this.detectedMedia,
         selectedMedia:
             clearSelectedMedia ? null : (selectedMedia ?? this.selectedMedia),
@@ -216,6 +226,7 @@ class CatCatchTask {
             : (downloadedFilePath ?? this.downloadedFilePath),
         metadata: metadata ?? this.metadata,
       );
+  }
 
   // ---------------------------------------------------------------------------
   // 序列化
@@ -231,6 +242,7 @@ class CatCatchTask {
         'error': error,
         'createdAt': createdAt.toIso8601String(),
         'completedAt': completedAt?.toIso8601String(),
+        'statusChangedAt': statusChangedAt?.toIso8601String(),
         'detectedMedia': detectedMedia.map((m) => m.toMap()).toList(),
         'selectedMedia': selectedMedia?.toMap(),
         'progress': progress,
@@ -254,6 +266,9 @@ class CatCatchTask {
             DateTime.now(),
         completedAt: map['completedAt'] != null
             ? DateTime.tryParse(map['completedAt'] as String)
+            : null,
+        statusChangedAt: map['statusChangedAt'] != null
+            ? DateTime.tryParse(map['statusChangedAt'] as String)
             : null,
         detectedMedia: (map['detectedMedia'] as List?)
                 ?.map((m) =>
