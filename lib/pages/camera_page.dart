@@ -159,9 +159,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
     final byteData =
         await croppedImage.toByteData(format: ui.ImageByteFormat.png);
     if (byteData == null) return imageData;
-    final rgbaBytes = byteData.buffer.asUint8List();
+    final pngBytes = byteData.buffer.asUint8List();
     final result = await FlutterImageCompress.compressWithList(
-      rgbaBytes,
+      pngBytes,
       minWidth: targetW.round(),
       minHeight: targetH.round(),
       quality: 100,
