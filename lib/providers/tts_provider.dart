@@ -5,6 +5,18 @@ import 'provider_config.dart';
 
 import '../utils/audio_utils.dart';
 
+/// 合成异常 — 携带原始请求体和原始响应体
+class SynthesisException implements Exception {
+  final String message;
+  final String? requestBody;
+  final String? responseBody;
+
+  SynthesisException(this.message, {this.requestBody, this.responseBody});
+
+  @override
+  String toString() => message;
+}
+
 /// TTS供应商抽象基类
 /// 采用策略模式，为不同的语音合成服务提供统一的调用接口
 abstract class BaseTTSProvider {
@@ -138,6 +150,7 @@ class CustomTTSProvider extends BaseTTSProvider {
     if (_apiKey.isEmpty) throw Exception('API 密钥未配置');
     final validated = validateParams(params ?? {});
     final body = _buildBody(text, validated);
+    final requestBodyStr = jsonEncode(body);
 
     debugPrint('CustomTTSProvider: POST $_baseUrl - 文本长度: ${text.length}');
     try {
@@ -160,7 +173,24 @@ class CustomTTSProvider extends BaseTTSProvider {
       }
       return data;
     } on DioException catch (e) {
-      throw Exception('合成失败: ${_parseDioError(e)}');
+      String responseBodyStr = '';
+      if (e.response?.data != null) {
+        final d = e.response!.data;
+        if (d is List<int>) {
+          try {
+            responseBodyStr = utf8.decode(d);
+          } catch (_) {
+            responseBodyStr = d.toString();
+          }
+        } else {
+          responseBodyStr = d.toString();
+        }
+      }
+      throw SynthesisException(
+        '合成失败: ${_parseDioError(e)}',
+        requestBody: requestBodyStr,
+        responseBody: responseBodyStr,
+      );
     }
   }
 
