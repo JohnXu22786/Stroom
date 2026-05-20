@@ -34,8 +34,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
   Offset _focusOffset = Offset.zero;
   bool _showFocusIndicator = false;
 
-  static const _aspectRatios = [3 / 4, 9 / 16, 1 / 1];
-  static const _aspectLabels = ['3:4', '9:16', '1:1'];
+  static const _aspectRatios = [4 / 3, 3 / 4, 16 / 9, 9 / 16, 1 / 1];
+  static const _aspectLabels = ['4:3', '3:4', '16:9', '9:16', '1:1'];
 
   @override
   void initState() {
@@ -234,7 +234,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
 
       // Step 2: Crop on correctly-oriented pixels
       final aspectRatio = _aspectRatios[_aspectIndex];
-      if (aspectRatio != 3 / 4) {
+      if (aspectRatio != _aspectRatios[0]) {
         bytes = await _cropToAspectRatio(bytes, aspectRatio);
         if (_discardRequested) return;
       }
@@ -371,6 +371,18 @@ class _CameraPageState extends ConsumerState<CameraPage>
         if (_showGrid && _isInitialized)
           Positioned.fill(
             child: CustomPaint(painter: _GridPainter()),
+          ),
+
+        // Crop preview overlay — darken areas outside selected ratio
+        if (_isInitialized)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _CropPreviewPainter(
+                  selectedAspectRatio: _aspectRatios[_aspectIndex],
+                ),
+              ),
+            ),
           ),
 
         // Focus indicator
@@ -599,4 +611,63 @@ class _GridPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _CropPreviewPainter extends CustomPainter {
+  final double selectedAspectRatio;
+
+  _CropPreviewPainter({required this.selectedAspectRatio});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final previewRatio = size.width / size.height;
+    if ((previewRatio - selectedAspectRatio).abs() < 0.001) return;
+
+    double left, top, cropW, cropH;
+    if (previewRatio > selectedAspectRatio) {
+      cropW = size.height * selectedAspectRatio;
+      left = (size.width - cropW) / 2;
+      top = 0;
+      cropH = size.height;
+    } else {
+      cropH = size.width / selectedAspectRatio;
+      top = (size.height - cropH) / 2;
+      left = 0;
+      cropW = size.width;
+    }
+
+    final fillPaint = Paint()..color = Colors.black54;
+    final borderPaint = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    // Top bar
+    if (top > 0) {
+      canvas.drawRect(Rect.fromLTWH(0, 0, size.width, top), fillPaint);
+    }
+    // Bottom bar
+    final bottom = top + cropH;
+    if (bottom < size.height) {
+      canvas.drawRect(
+          Rect.fromLTWH(0, bottom, size.width, size.height - bottom), fillPaint);
+    }
+    // Left bar (when preview is wider)
+    if (left > 0) {
+      canvas.drawRect(Rect.fromLTWH(0, top, left, cropH), fillPaint);
+    }
+    // Right bar
+    final right = left + cropW;
+    if (right < size.width) {
+      canvas.drawRect(
+          Rect.fromLTWH(right, top, size.width - right, cropH), fillPaint);
+    }
+
+    // Border around crop area
+    canvas.drawRect(Rect.fromLTWH(left, top, cropW, cropH), borderPaint);
+  }
+
+  @override
+  bool shouldRepaint(_CropPreviewPainter oldDelegate) =>
+      oldDelegate.selectedAspectRatio != selectedAspectRatio;
 }
