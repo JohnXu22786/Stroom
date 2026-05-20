@@ -292,7 +292,10 @@ class _MediaPreviewSheetState extends ConsumerState<_MediaPreviewSheet> {
 // =============================================================================
 
 class CatCatchPage extends ConsumerStatefulWidget {
-  const CatCatchPage({super.key});
+  final String? initialUrl;
+  final int? initialDurationSec;
+
+  const CatCatchPage({super.key, this.initialUrl, this.initialDurationSec});
 
   @override
   ConsumerState<CatCatchPage> createState() => _CatCatchPageState();
@@ -303,6 +306,19 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
   final _minController = TextEditingController();
   final _secController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialUrl != null) {
+      _urlController.text = widget.initialUrl!;
+    }
+    if (widget.initialDurationSec != null && widget.initialDurationSec! > 0) {
+      final totalSec = widget.initialDurationSec!;
+      _minController.text = (totalSec ~/ 60).toString();
+      _secController.text = (totalSec % 60).toString();
+    }
+  }
 
   @override
   void dispose() {
