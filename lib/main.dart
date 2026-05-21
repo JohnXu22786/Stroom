@@ -6,11 +6,14 @@ import 'providers/tts_config.dart';
 import 'providers/provider_config.dart';
 import 'catcatch/providers/catcatch_provider.dart';
 import 'providers/task_provider.dart';
+import 'pages/unified_task_list_page.dart';
 
 /// 初始化 ProviderScope 的 overrides
 final catcatchStartupProvider = FutureProvider<void>((ref) async {
   await ref.read(catcatchTasksProvider.notifier).restoreUnfinishedTasks();
   await ref.read(taskListProvider.notifier).restoreFromPersistence();
+  final lastRead = await loadTaskListLastRead();
+  ref.read(taskListLastReadProvider.notifier).state = lastRead;
 });
 
 Future<void> main() async {
