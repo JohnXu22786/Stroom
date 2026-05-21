@@ -149,6 +149,9 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
           _selectedModelIndex = null;
         } else {
           _selectedModelIndex = allModels.indexWhere((o) => o.config.modelId == prevModelId);
+          if (_modelConfig!.voices.isNotEmpty) {
+            _selectedVoice = _modelConfig!.voices.first.id;
+          }
         }
         _availableModels = allModels;
         // 清理多余的 controller
