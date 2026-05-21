@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/theme_provider.dart';
 import '../providers/provider_config.dart';
+import '../providers/camera_settings_provider.dart';
 import 'provider_config_page.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
@@ -13,20 +14,6 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
-  bool _saveToGallery = true;
-  bool _highQuality = false;
-  double _compressionQuality = 0.85;
-
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeProvider);
@@ -130,6 +117,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   // ================================================================
 
   Widget _buildCameraSettings() {
+    final settings = ref.watch(cameraSettingsProvider);
+    final notifier = ref.read(cameraSettingsProvider.notifier);
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -140,10 +130,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: '保存到相册',
               subtitle: '自动将拍摄的照片保存到设备相册',
               trailing: Switch(
-                value: _saveToGallery,
-                onChanged: (v) => setState(() => _saveToGallery = v),
+                value: settings.saveToGallery,
+                onChanged: (v) => notifier.setSaveToGallery(v),
               ),
-              onTap: () => setState(() => _saveToGallery = !_saveToGallery),
+              onTap: () => notifier.setSaveToGallery(!settings.saveToGallery),
             ),
             const Divider(height: 1),
             _buildListTile(
@@ -151,10 +141,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: '高质量照片',
               subtitle: '使用更高的分辨率拍摄照片',
               trailing: Switch(
-                value: _highQuality,
-                onChanged: (v) => setState(() => _highQuality = v),
+                value: settings.highQuality,
+                onChanged: (v) => notifier.setHighQuality(v),
               ),
-              onTap: () => setState(() => _highQuality = !_highQuality),
+              onTap: () => notifier.setHighQuality(!settings.highQuality),
             ),
             const Divider(height: 1),
             Padding(
@@ -167,19 +157,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     children: [
                       const Text('压缩质量', style: TextStyle(fontSize: 16)),
                       Text(
-                        '${(_compressionQuality * 100).toInt()}%',
+                        '${(settings.compressionQuality * 100).toInt()}%',
                         style: const TextStyle(
                             fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
                   Slider(
-                    value: _compressionQuality,
+                    value: settings.compressionQuality,
                     min: 0.1,
                     max: 1.0,
                     divisions: 9,
-                    label: '${(_compressionQuality * 100).toInt()}%',
-                    onChanged: (v) => setState(() => _compressionQuality = v),
+                    label: '${(settings.compressionQuality * 100).toInt()}%',
+                    onChanged: (v) => notifier.setCompressionQuality(v),
                   ),
                 ],
               ),

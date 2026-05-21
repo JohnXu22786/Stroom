@@ -12,6 +12,8 @@ import 'settings_page.dart';
 import 'camera_page.dart';
 import 'tts_create_page.dart';
 import 'video_capture_page.dart';
+import 'package:image_picker/image_picker.dart';
+import '../widgets/camera_choice_dialog.dart';
 
 /// 页面枚举，定义应用中的主要页面（不含加号按钮）
 enum AppPage {
@@ -192,9 +194,21 @@ class _HomePageState extends ConsumerState<HomePage> {
           );
           break;
         case 'capture':
-          navigator.push(
-            MaterialPageRoute(builder: (_) => const CameraPage()),
-          );
+          showCameraChoiceDialog(context).then((choice) {
+            if (choice == CameraChoice.app) {
+              navigator.push(
+                MaterialPageRoute(builder: (_) => const CameraPage()),
+              );
+            } else if (choice == CameraChoice.system) {
+              ImagePicker().pickImage(source: ImageSource.camera).then((file) {
+                if (file != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('照片已选择'), duration: Duration(seconds: 2)),
+                  );
+                }
+              });
+            }
+          });
           break;
         case 'capture_video':
           navigator.push(

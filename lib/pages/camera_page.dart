@@ -1,25 +1,43 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/camera_settings_provider.dart';
 import '../utils/image_manifest.dart';
 
-class CameraPage extends StatefulWidget {
+class CameraPage extends ConsumerStatefulWidget {
   final String folder;
   const CameraPage({super.key, this.folder = ''});
 
   @override
-  State<CameraPage> createState() => _CameraPageState();
+  ConsumerState<CameraPage> createState() => _CameraPageState();
 }
 
-class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
+class _CameraPageState extends ConsumerState<CameraPage>
+    with WidgetsBindingObserver {
   CameraController? _controller;
   List<CameraDescription>? _cameras;
   bool _isInitialized = false;
   bool _isFrontCamera = false;
   double _zoomLevel = 1.0;
   FlashMode _flashMode = FlashMode.off;
+  int _aspectIndex = 0;
+  bool _isSaving = false;
+  bool _discardRequested = false;
+
+  double _shutterScale = 1.0;
+  bool _showFlash = false;
+  bool _showGrid = false;
+  Offset _focusOffset = Offset.zero;
+  bool _showFocusIndicator = false;
+  Timer? _focusTimer;
+
+  static const _aspectRatios = [4 / 3, 3 / 4, 16 / 9, 9 / 16, 1 / 1];
+  static const _aspectLabels = ['4:3', '3:4', '16:9', '9:16', '1:1'];
 
   @override
   void initState() {
@@ -31,6 +49,8 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _discardRequested = true;
+    _focusTimer?.cancel();
     _controller?.dispose();
     super.dispose();
   }
@@ -49,7 +69,7 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
     if (!mounted) return;
     try {
       _cameras = await availableCameras();
-      if (_cameras == null || _cameras!.isEmpty) return;
+      if (_cameras!.isEmpty) return;
 
       final camera = _isFrontCamera
           ? _cameras!.firstWhere(
@@ -61,15 +81,29 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
               orElse: () => _cameras!.first,
             );
 
+      final settings = ref.read(cameraSettingsProvider);
+      final preset = settings.highQuality
+          ? ResolutionPreset.veryHigh
+          : ResolutionPreset.medium;
+
       _controller =
-          CameraController(camera, ResolutionPreset.high, enableAudio: false);
+          CameraController(camera, preset, enableAudio: false);
       await _controller!.initialize();
       if (mounted) setState(() => _isInitialized = true);
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('相机启动失败: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _toggleCamera() {
-    if (_cameras == null || _cameras!.length < 2) return;
+    if (_cameras!.length < 2) return;
     setState(() => _isFrontCamera = !_isFrontCamera);
     _controller?.dispose();
     _controller = null;
@@ -90,6 +124,76 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
     _controller!.setFlashMode(_flashMode);
   }
 
+  void _showAspectRatioPicker() {
+    showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SingleChildScrollView(
+          child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 32,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurfaceVariant
+                      .withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                '选择画面比例',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const SizedBox(height: 16),
+              ...List.generate(_aspectLabels.length, (i) {
+                final label = _aspectLabels[i];
+                final isSelected = i == _aspectIndex;
+                return ListTile(
+                  leading: Icon(
+                    isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+                    color: isSelected
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  title: Text(
+                    label,
+                    style: TextStyle(
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      color: isSelected
+                          ? Theme.of(context).colorScheme.primary
+                          : null,
+                    ),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  onTap: () => Navigator.pop(context, i),
+                );
+              }),
+            ],
+          ),
+        ),
+        );
+      },
+    ).then((index) {
+      if (index != null && mounted) {
+        setState(() => _aspectIndex = index);
+      }
+    });
+  }
+
   void _zoomIn() {
     if (_controller == null || !_isInitialized) return;
     setState(() => _zoomLevel = (_zoomLevel + 0.5).clamp(1.0, 5.0));
@@ -102,21 +206,142 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
     _controller!.setZoomLevel(_zoomLevel);
   }
 
+  void _animateShutter() {
+    setState(() => _shutterScale = 0.85);
+    Future.delayed(const Duration(milliseconds: 80), () {
+      if (mounted) setState(() => _shutterScale = 1.0);
+    });
+  }
+
+  void _triggerFlash() {
+    setState(() => _showFlash = true);
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) setState(() => _showFlash = false);
+    });
+  }
+
+  void _onTapDown(TapDownDetails details) {
+    if (_controller == null || !_isInitialized) return;
+
+    final RenderBox box = context.findRenderObject() as RenderBox;
+    final localOffset = box.globalToLocal(details.globalPosition);
+    final size = box.size;
+
+    final normalizedOffset = Offset(
+      (localOffset.dx / size.width).clamp(0.0, 1.0),
+      (localOffset.dy / size.height).clamp(0.0, 1.0),
+    );
+
+    _controller!.setFocusPoint(normalizedOffset);
+    _controller!.setExposurePoint(normalizedOffset);
+
+    setState(() {
+      _focusOffset = localOffset;
+      _showFocusIndicator = true;
+    });
+
+    _focusTimer?.cancel();
+    _focusTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted) setState(() => _showFocusIndicator = false);
+    });
+  }
+
   Future<void> _takePicture() async {
-    if (!_isInitialized || _controller == null) return;
+    if (!_isInitialized || _controller == null || _isSaving) return;
+
+    _animateShutter();
+    _triggerFlash();
+
+    setState(() => _isSaving = true);
+
     try {
       final xFile = await _controller!.takePicture();
-      final bytes = await xFile.readAsBytes();
-      final hash = computeImageHash(bytes);
+      if (_discardRequested) return;
+
+      var bytes = await xFile.readAsBytes();
+      if (_discardRequested) return;
+
+      // Step 1: Re-encode to correct EXIF orientation (always needed)
+      bytes = await FlutterImageCompress.compressWithList(
+        bytes,
+        quality: 100,
+        format: CompressFormat.jpeg,
+      );
+      if (_discardRequested) return;
+
+      // Step 2: Crop + target quality (in one compressWithList call)
+      final aspectRatio = _aspectRatios[_aspectIndex];
+      final settings = ref.read(cameraSettingsProvider);
+      final quality = (settings.compressionQuality * 100).round();
+
+      if (aspectRatio != _aspectRatios[0]) {
+        final codec = await ui.instantiateImageCodec(bytes);
+        final frame = await codec.getNextFrame();
+        final image = frame.image;
+        final srcWidth = image.width;
+        final srcHeight = image.height;
+
+        double targetW = srcWidth.toDouble();
+        double targetH = targetW / aspectRatio;
+        if (targetH > srcHeight) {
+          targetH = srcHeight.toDouble();
+          targetW = targetH * aspectRatio;
+        }
+        final dx = (srcWidth - targetW) / 2;
+        final dy = (srcHeight - targetH) / 2;
+        final recorder = ui.PictureRecorder();
+        final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, targetW, targetH));
+        canvas.drawImageRect(
+          image,
+          Rect.fromLTWH(dx, dy, targetW, targetH),
+          Rect.fromLTWH(0, 0, targetW, targetH),
+          Paint(),
+        );
+        final picture = recorder.endRecording();
+        final croppedImage =
+            await picture.toImage(targetW.round(), targetH.round());
+        final byteData =
+            await croppedImage.toByteData(format: ui.ImageByteFormat.png);
+        if (byteData == null) return;
+        final pngBytes = byteData.buffer.asUint8List();
+        bytes = await FlutterImageCompress.compressWithList(
+          pngBytes,
+          minWidth: targetW.round(),
+          minHeight: targetH.round(),
+          quality: quality < 100 ? quality : 100,
+          format: CompressFormat.jpeg,
+        );
+      } else if (quality < 100) {
+        bytes = await FlutterImageCompress.compressWithList(
+          bytes,
+          quality: quality,
+          format: CompressFormat.jpeg,
+        );
+      }
+      if (_discardRequested) return;
+
+      final Uint8List finalBytes = bytes;
+
+      final hash = computeImageHash(finalBytes);
       const format = 'jpg';
       final fileName = '$hash.$format';
 
-      await ImageManifest.writeFile(fileName, bytes);
+      await ImageManifest.writeFile(fileName, finalBytes);
+      if (_discardRequested) {
+        await ImageManifest.deleteFile(fileName);
+        return;
+      }
 
-      // Generate and save thumbnail
-      final thumbnailBytes = await _generateThumbnail(bytes);
+      final thumbnailBytes = await _generateThumbnail(finalBytes);
       final thumbFileName = '${hash}_thumb.png';
-      await ImageManifest.writeFile(thumbFileName, thumbnailBytes);
+      if (thumbnailBytes.isNotEmpty) {
+        await ImageManifest.writeFile(thumbFileName, thumbnailBytes);
+      }
+      if (_discardRequested) {
+        await ImageManifest.deleteFile(fileName);
+        await ImageManifest.deleteFile(thumbFileName);
+        return;
+      }
 
       final now = DateTime.now();
       final timestamp =
@@ -126,18 +351,34 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
         hash: hash,
         format: format,
         createdAt: DateTime.now(),
-        size: bytes.length,
+        size: finalBytes.length,
         folder: widget.folder,
       );
       await ImageManifest.addRecord(record);
 
       final filePath = await ImageManifest.readFilePath(fileName);
-      if (mounted) Navigator.pop(context, filePath);
-    } catch (e) {
-      if (mounted) {
+      if (mounted && !_discardRequested) {
+        setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('拍照失败: $e'), backgroundColor: Colors.red),
+          const SnackBar(
+            content: Text('照片已保存'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
+        Navigator.pop(context, filePath);
+      }
+    } catch (e) {
+      if (mounted && !_discardRequested) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('拍照失败: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted && _isSaving) {
+        setState(() => _isSaving = false);
       }
     }
   }
@@ -153,10 +394,10 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
       final frame = await codec.getNextFrame();
       final byteData =
           await frame.image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) return imageData;
+      if (byteData == null) return Uint8List(0);
       return byteData.buffer.asUint8List();
-    } catch (e) {
-      return imageData;
+    } catch (_) {
+      return Uint8List(0);
     }
   }
 
@@ -177,11 +418,23 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        // Camera preview or loading indicator
+    return PopScope(
+      canPop: !_isSaving,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          _discardRequested = true;
+          Navigator.pop(context);
+        }
+      },
+      child: Stack(
+        children: [
         if (_isInitialized && _controller != null)
-          Positioned.fill(child: CameraPreview(_controller!))
+          Positioned.fill(
+            child: GestureDetector(
+              onTapDown: _onTapDown,
+              child: CameraPreview(_controller!),
+            ),
+          )
         else
           const Positioned.fill(
             child: ColoredBox(
@@ -192,7 +445,81 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
             ),
           ),
 
-        // Top overlay: close button, zoom indicator, flash toggle
+        // Grid overlay
+        if (_showGrid && _isInitialized)
+          Positioned.fill(
+            child: CustomPaint(painter: _GridPainter()),
+          ),
+
+        // Crop preview overlay — darken areas outside selected ratio
+        if (_isInitialized)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _CropPreviewPainter(
+                  selectedAspectRatio: _aspectRatios[_aspectIndex],
+                ),
+              ),
+            ),
+          ),
+
+        // Focus indicator
+        Positioned(
+          left: _focusOffset.dx - 25,
+          top: _focusOffset.dy - 25,
+          child: AnimatedOpacity(
+            opacity: _showFocusIndicator ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 300),
+            child: IgnorePointer(
+              child: Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.yellow, width: 2),
+                ),
+              ),
+            ),
+          ),
+        ),
+
+        // Flash overlay
+        Positioned.fill(
+          child: IgnorePointer(
+            child: AnimatedOpacity(
+              opacity: _showFlash ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 50),
+              child: Container(color: Colors.white),
+            ),
+          ),
+        ),
+
+        // Saving overlay
+        if (_isSaving)
+          Positioned.fill(
+            child: Container(
+              color: Colors.black54,
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Colors.white),
+                    SizedBox(height: 16),
+                    Text(
+                      '保存中...',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+        // Top overlay
         Positioned(
           top: MediaQuery.of(context).padding.top + 8,
           left: 16,
@@ -201,8 +528,14 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               IconButton(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: _isSaving
+                    ? null
+                    : () {
+                        _discardRequested = true;
+                        Navigator.pop(context);
+                      },
+                icon:
+                    const Icon(Icons.close, color: Colors.white, size: 28),
               ),
               Container(
                 padding:
@@ -217,20 +550,35 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
                       color: Colors.white, fontWeight: FontWeight.bold),
                 ),
               ),
-              IconButton(
-                onPressed: _toggleFlash,
-                icon: Icon(
-                  _flashIcon(),
-                  color:
-                      _flashMode == FlashMode.off ? Colors.white : Colors.amber,
-                  size: 28,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    onPressed: _toggleFlash,
+                    icon: Icon(
+                      _flashIcon(),
+                      color: _flashMode == FlashMode.off
+                          ? Colors.white
+                          : Colors.amber,
+                      size: 28,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () =>
+                        setState(() => _showGrid = !_showGrid),
+                    icon: Icon(
+                      _showGrid ? Icons.grid_on : Icons.grid_off,
+                      color: _showGrid ? Colors.amber : Colors.white,
+                      size: 28,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
 
-        // Bottom overlay: zoom controls, switch camera, shutter
+        // Bottom overlay
         Positioned(
           bottom: 48,
           left: 0,
@@ -238,6 +586,27 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Aspect ratio toggle
+              GestureDetector(
+                onTap: _showAspectRatioPicker,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Text(
+                    _aspectLabels[_aspectIndex],
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
               // Zoom in/out
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -258,27 +627,36 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
                         color: Colors.white, size: 28),
                   ),
                   const SizedBox(width: 32),
-                  // Shutter button
                   GestureDetector(
                     onTap: _takePicture,
-                    child: Container(
-                      width: 72,
-                      height: 72,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
+                    child: AnimatedScale(
+                      scale: _shutterScale,
+                      duration: const Duration(milliseconds: 80),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          color:
+                              _isSaving ? Colors.grey : Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.camera_alt,
+                            color: _isSaving
+                                ? Colors.grey
+                                : Colors.black,
+                            size: 36),
                       ),
-                      child: const Icon(Icons.camera_alt,
-                          color: Colors.black, size: 36),
                     ),
                   ),
-                  const SizedBox(width: 80), // balance layout
+                  const SizedBox(width: 80),
                 ],
               ),
             ],
           ),
         ),
       ],
+      ),
     );
   }
 
@@ -287,9 +665,88 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
       decoration:
           const BoxDecoration(shape: BoxShape.circle, color: Colors.black45),
       child: IconButton(
-        onPressed: onTap,
+        onPressed: _isSaving ? null : onTap,
         icon: Icon(icon, color: Colors.white, size: 22),
       ),
     );
   }
+}
+
+class _GridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.4)
+      ..strokeWidth = 1.0;
+
+    final w = size.width;
+    final h = size.height;
+
+    canvas.drawLine(Offset(w / 3, 0), Offset(w / 3, h), paint);
+    canvas.drawLine(Offset(2 * w / 3, 0), Offset(2 * w / 3, h), paint);
+    canvas.drawLine(Offset(0, h / 3), Offset(w, h / 3), paint);
+    canvas.drawLine(Offset(0, 2 * h / 3), Offset(w, 2 * h / 3), paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _CropPreviewPainter extends CustomPainter {
+  final double selectedAspectRatio;
+
+  _CropPreviewPainter({required this.selectedAspectRatio});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final previewRatio = size.width / size.height;
+    if ((previewRatio - selectedAspectRatio).abs() < 0.001) return;
+
+    double left, top, cropW, cropH;
+    if (previewRatio > selectedAspectRatio) {
+      cropW = size.height * selectedAspectRatio;
+      left = (size.width - cropW) / 2;
+      top = 0;
+      cropH = size.height;
+    } else {
+      cropH = size.width / selectedAspectRatio;
+      top = (size.height - cropH) / 2;
+      left = 0;
+      cropW = size.width;
+    }
+
+    final fillPaint = Paint()..color = Colors.black54;
+    final borderPaint = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    // Top bar
+    if (top > 0) {
+      canvas.drawRect(Rect.fromLTWH(0, 0, size.width, top), fillPaint);
+    }
+    // Bottom bar
+    final bottom = top + cropH;
+    if (bottom < size.height) {
+      canvas.drawRect(
+          Rect.fromLTWH(0, bottom, size.width, size.height - bottom), fillPaint);
+    }
+    // Left bar (when preview is wider)
+    if (left > 0) {
+      canvas.drawRect(Rect.fromLTWH(0, top, left, cropH), fillPaint);
+    }
+    // Right bar
+    final right = left + cropW;
+    if (right < size.width) {
+      canvas.drawRect(
+          Rect.fromLTWH(right, top, size.width - right, cropH), fillPaint);
+    }
+
+    // Border around crop area
+    canvas.drawRect(Rect.fromLTWH(left, top, cropW, cropH), borderPaint);
+  }
+
+  @override
+  bool shouldRepaint(_CropPreviewPainter oldDelegate) =>
+      oldDelegate.selectedAspectRatio != selectedAspectRatio;
 }
