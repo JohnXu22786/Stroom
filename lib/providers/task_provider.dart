@@ -386,8 +386,19 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     state = newState;
     _persistTasks();
 
+    // 确保 SynthesisConfig 使用当前模型的 voice ID，而非过期的 voice name
+    _syncVoiceFromModelConfig(updated.modelConfig);
+
     // 执行
     _executeTask(updated);
+  }
+
+  /// 从模型配置中同步 voice ID 到 SynthesisConfig（防止过期的 voice name 被发送）
+  void _syncVoiceFromModelConfig(ModelConfig modelConfig) {
+    if (modelConfig.voices.isNotEmpty) {
+      final notifier = ref.read(synthesisConfigProvider.notifier);
+      notifier.updateVoice(modelConfig.voices.first.id);
+    }
   }
 
   /// 将指定 ID 的任务标记为失败（用于外部触发，如应用退出）
