@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter_image_compress/flutter_image_compress.dart';
@@ -33,6 +34,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   bool _showGrid = false;
   Offset _focusOffset = Offset.zero;
   bool _showFocusIndicator = false;
+  Timer? _focusTimer;
 
   static const _aspectRatios = [4 / 3, 3 / 4, 16 / 9, 9 / 16, 1 / 1];
   static const _aspectLabels = ['4:3', '3:4', '16:9', '9:16', '1:1'];
@@ -48,6 +50,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _discardRequested = true;
+    _focusTimer?.cancel();
     _controller?.dispose();
     super.dispose();
   }
@@ -66,7 +69,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
     if (!mounted) return;
     try {
       _cameras = await availableCameras();
-      if (_cameras == null || _cameras!.isEmpty) return;
+      if (_cameras!.isEmpty) return;
 
       final camera = _isFrontCamera
           ? _cameras!.firstWhere(
@@ -87,11 +90,20 @@ class _CameraPageState extends ConsumerState<CameraPage>
           CameraController(camera, preset, enableAudio: false);
       await _controller!.initialize();
       if (mounted) setState(() => _isInitialized = true);
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('相机启动失败: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _toggleCamera() {
-    if (_cameras == null || _cameras!.length < 2) return;
+    if (_cameras!.length < 2) return;
     setState(() => _isFrontCamera = !_isFrontCamera);
     _controller?.dispose();
     _controller = null;
@@ -194,46 +206,6 @@ class _CameraPageState extends ConsumerState<CameraPage>
     _controller!.setZoomLevel(_zoomLevel);
   }
 
-  Future<Uint8List> _cropToAspectRatio(
-      Uint8List imageData, double aspectRatio) async {
-    final codec = await ui.instantiateImageCodec(imageData);
-    final frame = await codec.getNextFrame();
-    final image = frame.image;
-    final srcWidth = image.width;
-    final srcHeight = image.height;
-    double targetW = srcWidth.toDouble();
-    double targetH = targetW / aspectRatio;
-    if (targetH > srcHeight) {
-      targetH = srcHeight.toDouble();
-      targetW = targetH * aspectRatio;
-    }
-    final dx = (srcWidth - targetW) / 2;
-    final dy = (srcHeight - targetH) / 2;
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, targetW, targetH));
-    canvas.drawImageRect(
-      image,
-      Rect.fromLTWH(dx, dy, targetW, targetH),
-      Rect.fromLTWH(0, 0, targetW, targetH),
-      Paint(),
-    );
-    final picture = recorder.endRecording();
-    final croppedImage =
-        await picture.toImage(targetW.round(), targetH.round());
-    final byteData =
-        await croppedImage.toByteData(format: ui.ImageByteFormat.png);
-    if (byteData == null) return imageData;
-    final pngBytes = byteData.buffer.asUint8List();
-    final result = await FlutterImageCompress.compressWithList(
-      pngBytes,
-      minWidth: targetW.round(),
-      minHeight: targetH.round(),
-      quality: 100,
-      format: CompressFormat.jpeg,
-    );
-    return result;
-  }
-
   void _animateShutter() {
     setState(() => _shutterScale = 0.85);
     Future.delayed(const Duration(milliseconds: 80), () {
@@ -268,7 +240,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
       _showFocusIndicator = true;
     });
 
-    Future.delayed(const Duration(milliseconds: 1500), () {
+    _focusTimer?.cancel();
+    _focusTimer = Timer(const Duration(milliseconds: 1500), () {
       if (mounted) setState(() => _showFocusIndicator = false);
     });
   }
@@ -296,27 +269,58 @@ class _CameraPageState extends ConsumerState<CameraPage>
       );
       if (_discardRequested) return;
 
-      // Step 2: Crop on correctly-oriented pixels
+      // Step 2: Crop + target quality (in one compressWithList call)
       final aspectRatio = _aspectRatios[_aspectIndex];
-      if (aspectRatio != _aspectRatios[0]) {
-        bytes = await _cropToAspectRatio(bytes, aspectRatio);
-        if (_discardRequested) return;
-      }
-
-      // Step 3: Apply target quality compression
       final settings = ref.read(cameraSettingsProvider);
       final quality = (settings.compressionQuality * 100).round();
-      Uint8List finalBytes;
-      if (quality < 100) {
-        finalBytes = await FlutterImageCompress.compressWithList(
+
+      if (aspectRatio != _aspectRatios[0]) {
+        final codec = await ui.instantiateImageCodec(bytes);
+        final frame = await codec.getNextFrame();
+        final image = frame.image;
+        final srcWidth = image.width;
+        final srcHeight = image.height;
+
+        double targetW = srcWidth.toDouble();
+        double targetH = targetW / aspectRatio;
+        if (targetH > srcHeight) {
+          targetH = srcHeight.toDouble();
+          targetW = targetH * aspectRatio;
+        }
+        final dx = (srcWidth - targetW) / 2;
+        final dy = (srcHeight - targetH) / 2;
+        final recorder = ui.PictureRecorder();
+        final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, targetW, targetH));
+        canvas.drawImageRect(
+          image,
+          Rect.fromLTWH(dx, dy, targetW, targetH),
+          Rect.fromLTWH(0, 0, targetW, targetH),
+          Paint(),
+        );
+        final picture = recorder.endRecording();
+        final croppedImage =
+            await picture.toImage(targetW.round(), targetH.round());
+        final byteData =
+            await croppedImage.toByteData(format: ui.ImageByteFormat.png);
+        if (byteData == null) return;
+        final pngBytes = byteData.buffer.asUint8List();
+        bytes = await FlutterImageCompress.compressWithList(
+          pngBytes,
+          minWidth: targetW.round(),
+          minHeight: targetH.round(),
+          quality: quality < 100 ? quality : 100,
+          format: CompressFormat.jpeg,
+        );
+      } else if (quality < 100) {
+        bytes = await FlutterImageCompress.compressWithList(
           bytes,
           quality: quality,
           format: CompressFormat.jpeg,
         );
-      } else {
-        finalBytes = bytes;
       }
       if (_discardRequested) return;
+
+      final Uint8List finalBytes = bytes;
 
       final hash = computeImageHash(finalBytes);
       const format = 'jpg';
@@ -330,7 +334,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
 
       final thumbnailBytes = await _generateThumbnail(finalBytes);
       final thumbFileName = '${hash}_thumb.png';
-      await ImageManifest.writeFile(thumbFileName, thumbnailBytes);
+      if (thumbnailBytes.isNotEmpty) {
+        await ImageManifest.writeFile(thumbFileName, thumbnailBytes);
+      }
       if (_discardRequested) {
         await ImageManifest.deleteFile(fileName);
         await ImageManifest.deleteFile(thumbFileName);
@@ -412,8 +418,16 @@ class _CameraPageState extends ConsumerState<CameraPage>
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
+    return PopScope(
+      canPop: !_isSaving,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          _discardRequested = true;
+          Navigator.pop(context);
+        }
+      },
+      child: Stack(
+        children: [
         if (_isInitialized && _controller != null)
           Positioned.fill(
             child: GestureDetector(
@@ -642,6 +656,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
           ),
         ),
       ],
+      ),
     );
   }
 
