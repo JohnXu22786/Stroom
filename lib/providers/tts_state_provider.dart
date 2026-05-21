@@ -80,6 +80,11 @@ final synthesisConfigProvider =
 class SynthesisConfigNotifier extends StateNotifier<SynthesisConfig> {
   SynthesisConfigNotifier() : super(const SynthesisConfig());
 
+  /// 已知的 voice ID 白名单（非语音名称）
+  static const _knownVoiceIds = {
+    'female', 'male', 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer',
+  };
+
   Future<void> loadConfig() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -91,6 +96,18 @@ class SynthesisConfigNotifier extends StateNotifier<SynthesisConfig> {
         var config = SynthesisConfig.fromMap(configMap);
         // 统一强制为 wav 格式，忽略旧数据中的 mp3
         config = config.copyWith(format: 'wav');
+
+        // 迁移旧 voice name → voice ID：如果 voice 包含中文字符，则是旧名称
+        final voice = config.voice;
+        if (voice.contains(RegExp(r'[\u4e00-\u9fff]')) ||
+            (voice.isNotEmpty &&
+                !_knownVoiceIds.contains(voice) &&
+                !RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(voice))) {
+          config = config.copyWith(voice: 'female');
+          // 覆写持久化值
+          await prefs.setString('synthesis_config', jsonEncode(config.toMap()));
+        }
+
         state = config;
       }
     } catch (e) {

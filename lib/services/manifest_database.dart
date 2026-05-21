@@ -119,9 +119,13 @@ class ManifestDatabase {
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
-          await db.execute(
-            'ALTER TABLE audio_records ADD COLUMN duration INTEGER NOT NULL DEFAULT 0',
-          );
+          try {
+            await db.execute(
+              'ALTER TABLE audio_records ADD COLUMN duration INTEGER NOT NULL DEFAULT 0',
+            );
+          } catch (_) {
+            // 列可能已存在，忽略
+          }
         }
       },
     );

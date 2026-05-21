@@ -441,6 +441,11 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   Future<void> load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+
+      // 第1步：迁移旧版 chat_configs → provider_entries
+      await _migrateOldChatConfigs(prefs);
+
+      // 第2步：正常加载 provider_entries
       final json = prefs.getString('provider_entries');
       if (json != null) {
         final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
@@ -465,6 +470,83 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         name: 'LLM供应商',
       ),
     ]);
+  }
+
+  /// 迁移旧版 chat_configs（被重构删除的 ChatProviderConfigItem 格式）到 provider_entries
+  Future<void> _migrateOldChatConfigs(SharedPreferences prefs) async {
+    final oldJson = prefs.getString('chat_configs');
+    if (oldJson == null || oldJson.isEmpty) return;
+
+    try {
+      final oldList =
+          (jsonDecode(oldJson) as List).cast<Map<String, dynamic>>();
+      if (oldList.isEmpty) return;
+
+      final migratedConfigs = <ProviderConfigItem>[];
+      for (final oldItem in oldList) {
+        final oldModels = (oldItem['models'] as List?)
+                ?.cast<Map<String, dynamic>>() ??
+            [];
+
+        final models = oldModels.map((m) {
+          final typeConfig = <String, dynamic>{};
+          final maxTokens = m['maxTokens'];
+          if (maxTokens != null) typeConfig['maxTokens'] = maxTokens;
+          final temperature = m['temperature'];
+          if (temperature != null) typeConfig['temperature'] = temperature;
+
+          return ModelConfig(
+            name: m['modelId'] as String? ?? '',
+            modelId: m['modelId'] as String? ?? '',
+            supportStream: m['supportStream'] as bool? ?? true,
+            typeConfig: typeConfig,
+          );
+        }).toList();
+
+        migratedConfigs.add(ProviderConfigItem(
+          providerName: oldItem['providerName'] as String? ?? '',
+          host: oldItem['host'] as String? ?? '',
+          key: oldItem['key'] as String? ?? '',
+          models: models,
+        ));
+      }
+
+      if (migratedConfigs.isEmpty) return;
+
+      // 读取或初始化当前 provider_entries
+      String? existingJson;
+      try {
+        existingJson = prefs.getString('provider_entries');
+      } catch (_) {}
+
+      List<Map<String, dynamic>> existingEntries = [];
+      if (existingJson != null && existingJson.isNotEmpty) {
+        existingEntries =
+            (jsonDecode(existingJson) as List).cast<Map<String, dynamic>>();
+      }
+
+      // 如果已有 llm 类型条目则不覆盖
+      final hasLlmEntry =
+          existingEntries.any((e) => e['type'] == 'llm' && e['id'] != 'builtin_llm');
+      if (!hasLlmEntry) {
+        existingEntries.add({
+          'id': 'migrated_llm',
+          'type': 'llm',
+          'name': 'LLM供应商',
+          'configs': migratedConfigs.map((c) => c.toMap()).toList(),
+        });
+
+        await prefs.setString('provider_entries', jsonEncode(existingEntries));
+      }
+
+      // 删除旧数据，防止重复迁移
+      await prefs.remove('chat_configs');
+      await prefs.remove('chat_selected_config_id');
+      debugPrint(
+          'Migrated ${oldList.length} old chat config(s) to provider_entries');
+    } catch (e) {
+      debugPrint('Failed to migrate old chat configs: $e');
+    }
   }
 
   Future<void> _persist() async {
