@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../catcatch/models/media_resource.dart';
 import '../catcatch/models/catcatch_task.dart' as catcatch;
+import '../services/storage_service.dart';
 import '../catcatch/providers/catcatch_provider.dart';
 import '../providers/task_provider.dart';
 import 'catcatch_page.dart';
@@ -354,6 +356,35 @@ class _MediaPreviewSheetState extends ConsumerState<_MediaPreviewSheet> {
 /// 任务列表上次打开时间戳，用于判断未读任务
 final taskListLastReadProvider = StateProvider<DateTime>((ref) => DateTime(2000));
 
+Future<void> persistTaskListLastRead(DateTime dt) async {
+  try {
+    final dirPath = await AppStorage.directory;
+    final file = File(p.join(dirPath, 'task_list_last_read.json'));
+    await file.writeAsString(jsonEncode({'lastRead': dt.toIso8601String()}));
+  } catch (e) {
+    debugPrint('Failed to persist lastRead: $e');
+  }
+}
+
+Future<DateTime> loadTaskListLastRead() async {
+  try {
+    final dirPath = await AppStorage.directory;
+    final file = File(p.join(dirPath, 'task_list_last_read.json'));
+    if (await file.exists()) {
+      final content = await file.readAsString();
+      if (content.isNotEmpty) {
+        final data = jsonDecode(content) as Map;
+        if (data['lastRead'] != null) {
+          return DateTime.parse(data['lastRead'] as String);
+        }
+      }
+    }
+  } catch (e) {
+    debugPrint('Failed to load lastRead: $e');
+  }
+  return DateTime(2000);
+}
+
 class UnifiedTaskListPage extends ConsumerStatefulWidget {
   const UnifiedTaskListPage({super.key});
 
@@ -373,7 +404,9 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
     // 打开列表即标记已读
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        ref.read(taskListLastReadProvider.notifier).state = DateTime.now();
+        final now = DateTime.now();
+        ref.read(taskListLastReadProvider.notifier).state = now;
+        persistTaskListLastRead(now);
       }
     });
   }
@@ -425,6 +458,72 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                     ref.read(taskListProvider.notifier).removeTask(t.id);
                   }
                 }
+              } else if (value == 'clear_failed') {
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('确认清除'),
+                    content: const Text('确定要清除所有失败任务吗？'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('取消'),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          for (final t in catcatchTasks) {
+                            if (t.status.name == 'failed') {
+                              ref
+                                  .read(catcatchTasksProvider.notifier)
+                                  .removeTask(t.id);
+                            }
+                          }
+                          for (final t in synthesisTasks) {
+                            if (t.status.name == 'failed') {
+                              ref
+                                  .read(taskListProvider.notifier)
+                                  .removeTask(t.id);
+                            }
+                          }
+                        },
+                        child: const Text('确定',
+                            style: TextStyle(color: Colors.red)),
+                      ),
+                    ],
+                  ),
+                );
+              } else if (value == 'clear_all') {
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('确认清除'),
+                    content: const Text('确定要清除所有任务吗？此操作不可撤销。'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('取消'),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          for (final t in catcatchTasks) {
+                            ref
+                                .read(catcatchTasksProvider.notifier)
+                                .removeTask(t.id);
+                          }
+                          for (final t in synthesisTasks) {
+                            ref
+                                .read(taskListProvider.notifier)
+                                .removeTask(t.id);
+                          }
+                        },
+                        child: const Text('确定',
+                            style: TextStyle(color: Colors.red)),
+                      ),
+                    ],
+                  ),
+                );
               }
             },
             itemBuilder: (_) => [
@@ -433,6 +532,27 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                 child: ListTile(
                   leading: Icon(Icons.cleaning_services, size: 20),
                   title: Text('清除已完成'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'clear_failed',
+                child: ListTile(
+                  leading:
+                      Icon(Icons.error_outline, size: 20, color: Colors.red),
+                  title: Text('清除失败任务',
+                      style: TextStyle(color: Colors.red)),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'clear_all',
+                child: ListTile(
+                  leading: Icon(Icons.delete_sweep, size: 20, color: Colors.red),
+                  title: Text('清除所有',
+                      style: TextStyle(color: Colors.red)),
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                 ),
