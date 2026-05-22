@@ -5,6 +5,7 @@ import '../providers/theme_provider.dart';
 import '../providers/provider_config.dart';
 import '../providers/camera_settings_provider.dart';
 import 'provider_config_page.dart';
+import 'backup_restore_page.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -35,6 +36,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           const SizedBox(height: 24),
           _buildSectionHeader('供应商设置'),
           _buildProviderSettings(),
+          const SizedBox(height: 24),
+          _buildSectionHeader('数据备份'),
+          _buildBackupSection(),
           const SizedBox(height: 24),
           _buildSectionHeader('关于'),
           _buildAboutSection(),
@@ -219,6 +223,32 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       context,
       MaterialPageRoute(
         builder: (_) => ProviderConfigPage(entryId: entryId),
+      ),
+    );
+  }
+
+  // ================================================================
+  // 数据备份
+  // ================================================================
+
+  Widget _buildBackupSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: _buildListTile(
+          leading: const Icon(Icons.backup, color: Colors.teal),
+          title: '数据备份与恢复',
+          subtitle: '导出或导入应用数据',
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const BackupRestorePage(),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
