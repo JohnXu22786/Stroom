@@ -16,11 +16,14 @@ class ModelConfigPage extends ConsumerStatefulWidget {
   final String entryId;
   final int configIndex;
   final int modelIndex; // -1 for new model
+  final ModelConfig? initialModel; // for editing pending models (configIndex == -1)
+
   const ModelConfigPage({
     super.key,
     required this.entryId,
     required this.configIndex,
     required this.modelIndex,
+    this.initialModel,
   });
 
   @override
@@ -109,8 +112,45 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     if (entry == null) return;
 
     if (widget.configIndex < 0 || widget.configIndex >= entry.configs.length) {
-      _voices = [];
-      _customParams = [];
+      if (widget.initialModel != null) {
+        final model = widget.initialModel!;
+        _nameController.text = model.name;
+        _modelIdController.text = model.modelId;
+        _voices = model.voices.map((v) => v.copy()).toList();
+        _volumeMinController.text =
+            model.hasVolume ? model.volumeMin.toString() : '';
+        _volumeMaxController.text =
+            model.hasVolume ? model.volumeMax.toString() : '';
+        _speedMinController.text =
+            model.hasSpeed ? model.speedMin.toString() : '';
+        _speedMaxController.text =
+            model.hasSpeed ? model.speedMax.toString() : '';
+        _maxWordsController.text = model.maxWordsPerRequest > 0
+            ? model.maxWordsPerRequest.toString()
+            : '';
+        _customParams = model.customParams.map((p) => p.copy()).toList();
+        _supportStream = model.supportStream;
+        _supportInstruction = model.supportInstruction;
+        _selectedTrimPresetId = model.selectedTrimPresetId;
+      } else {
+        _voices = [];
+        _customParams = [];
+        _supportStream = false;
+        _supportInstruction = false;
+        _selectedTrimPresetId = null;
+      }
+      _initialVoices = _voices.map((v) => v.copy()).toList();
+      _initialCustomParams = _customParams.map((p) => p.copy()).toList();
+      _initialName = _nameController.text.trim();
+      _initialModelId = _modelIdController.text.trim();
+      _initialVolumeMin = _volumeMinController.text.trim();
+      _initialVolumeMax = _volumeMaxController.text.trim();
+      _initialSpeedMin = _speedMinController.text.trim();
+      _initialSpeedMax = _speedMaxController.text.trim();
+      _initialMaxWords = _maxWordsController.text.trim();
+      _initialSupportStream = _supportStream;
+      _initialSupportInstruction = _supportInstruction;
+      _initialTrimPresetId = _selectedTrimPresetId;
       return;
     }
     final configModels = entry.configs[widget.configIndex].models;
@@ -715,6 +755,13 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       supportInstruction: _supportInstruction,
       selectedTrimPresetId: _selectedTrimPresetId,
     );
+
+    if (widget.configIndex < 0 || widget.configIndex >= entry.configs.length) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      Navigator.pop(context, modelConfig);
+      return;
+    }
 
     var configs = entry.configs.map((c) => c.copy()).toList();
     var models = List<ModelConfig>.from(configs[widget.configIndex].models);
