@@ -24,21 +24,47 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   }
 
   Future<void> _onImport() async {
+    bool backupFirst = true;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('确认恢复'),
-        content: const Text('恢复将覆盖所有现有数据，确定要继续吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('确认恢复'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('恢复将覆盖所有现有数据。'),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Checkbox(
+                    value: backupFirst,
+                    onChanged: (v) =>
+                        setDialogState(() => backupFirst = v ?? true),
+                  ),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setDialogState(
+                          () => backupFirst = !backupFirst),
+                      child: const Text('先备份当前数据（推荐）'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('确定'),
-          ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('确定'),
+            ),
+          ],
+        ),
       ),
     );
 
@@ -46,6 +72,14 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
 
     setState(() => _isImporting = true);
     try {
+      if (backupFirst) {
+        final backupPath = await BackupService.exportBackupAuto();
+        if (backupPath != null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('已备份当前数据到: $backupPath')),
+          );
+        }
+      }
       await BackupService.importBackup(context);
     } finally {
       if (mounted) setState(() => _isImporting = false);

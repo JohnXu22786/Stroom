@@ -470,6 +470,33 @@ class BackupService {
     }
   }
 
+  /// 导出当前数据的备份，让用户选择保存路径。
+  static Future<String?> exportBackupAuto() async {
+    try {
+      final bytes = await _buildBackupBytes();
+      final dateStr =
+          DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
+      final defaultName = 'stroom_backup_$dateStr.zip';
+
+      String? outputPath;
+      if (kIsWeb) {
+        outputPath = await FilePicker.saveFile(
+          fileName: defaultName,
+          bytes: bytes,
+        );
+      } else {
+        outputPath = await FilePicker.saveFile(fileName: defaultName);
+        if (outputPath != null) {
+          await File(outputPath).writeAsBytes(bytes);
+        }
+      }
+      return outputPath;
+    } catch (e) {
+      debugPrint('自动备份失败: $e');
+      return null;
+    }
+  }
+
   /// 导入备份：弹出打开文件对话框，从选中的 zip 恢复。
   static Future<void> importBackup(BuildContext context) async {
     try {
@@ -483,11 +510,8 @@ class BackupService {
       final bytes = file.bytes;
 
       if (bytes != null) {
-        // 直接使用内存中的字节恢复，无需写入临时文件
-        // （Web 上 FilePicker 直接返回 bytes，Native 上也可通过 bytes 属性获取）
         await _restoreFromBytes(bytes);
       } else if (file.path != null) {
-        // Native 兜底：从文件路径读取
         await restoreBackup(file.path!);
       }
 
