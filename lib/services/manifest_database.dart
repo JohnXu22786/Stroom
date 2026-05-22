@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
@@ -581,6 +582,26 @@ class ManifestDatabase {
   // ==================================================================
   // 工具方法
   // ==================================================================
+
+  /// 清除所有数据（双模式通用）。
+  ///
+  /// 在 Native 模式下删除 SQLite 数据库文件；
+  /// 在 Web / 测试模式下清除 WebFileStore 中的数据。
+  static Future<void> clearAllData() async {
+    if (_useJsonStore) {
+      _webData = null;
+      await WebFileStore.delete(_webStoreKey);
+    } else if (_database != null) {
+      await _database!.close();
+      _database = null;
+      final dir = await getApplicationDocumentsDirectory();
+      final dbPath = p.join(dir.path, 'stroom_manifest.db');
+      final dbFile = File(dbPath);
+      if (await dbFile.exists()) {
+        await dbFile.delete();
+      }
+    }
+  }
 
   /// 关闭数据库连接（Native 端）
   static Future<void> close() async {
