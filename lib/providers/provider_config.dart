@@ -445,7 +445,10 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       // 第1步：迁移旧版 chat_configs → provider_entries
       await _migrateOldChatConfigs(prefs);
 
-      // 第2步：正常加载 provider_entries
+      // 第2步：迁移旧版 CustomParam 缺少 type 字段的问题
+      await _migrateOldCustomParams(prefs);
+
+      // 第3步：正常加载 provider_entries
       final json = prefs.getString('provider_entries');
       if (json != null) {
         final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
@@ -546,6 +549,44 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
           'Migrated ${oldList.length} old chat config(s) to provider_entries');
     } catch (e) {
       debugPrint('Failed to migrate old chat configs: $e');
+    }
+  }
+
+  Future<void> _migrateOldCustomParams(SharedPreferences prefs) async {
+    try {
+      final json = prefs.getString('provider_entries');
+      if (json == null || json.isEmpty) return;
+
+      final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
+      bool changed = false;
+
+      for (final entry in list) {
+        final configs = entry['configs'] as List?;
+        if (configs == null) continue;
+        for (final config in configs) {
+          final configMap = config as Map<String, dynamic>;
+          final models = configMap['models'] as List?;
+          if (models == null) continue;
+          for (final model in models) {
+            final modelMap = model as Map<String, dynamic>;
+            final customParams = modelMap['customParams'] as List?;
+            if (customParams == null) continue;
+            for (int i = 0; i < customParams.length; i++) {
+              final param = customParams[i] as Map<String, dynamic>;
+              if (param['type'] == null) {
+                param['type'] = 'string';
+                changed = true;
+              }
+            }
+          }
+        }
+      }
+
+      if (changed) {
+        await prefs.setString('provider_entries', jsonEncode(list));
+      }
+    } catch (e) {
+      debugPrint('Failed to migrate custom param types: $e');
     }
   }
 

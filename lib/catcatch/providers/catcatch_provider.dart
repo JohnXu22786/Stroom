@@ -305,9 +305,28 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       final tasks = await _loadPersistedTasks();
       if (tasks.isEmpty) return;
 
+      // 迁移旧数据：userSelecting 中但 detectedMedia 为空的任务标记为失败
+      final migrated = [
+        for (final task in tasks)
+          if (task.steps.any((s) => s.type == StepType.userSelecting && s.running) &&
+              task.detectedMedia.isEmpty)
+            task.copyWith(
+              status: TaskStatus.failed,
+              error: '旧任务的媒体数据已丢失，请重试',
+              steps: task.steps.map((s) {
+                if (s.type == StepType.userSelecting && s.running) {
+                  return s.copyWith(failed: true, running: false);
+                }
+                return s;
+              }).toList(),
+            )
+          else
+            task,
+      ];
+
       // 加载全部任务，running 的改为 paused，其余保持原样（包括 failed 中的原始错误）
       state = [
-        for (final task in tasks)
+        for (final task in migrated)
           if (task.status == TaskStatus.running)
             task.copyWith(status: TaskStatus.paused, error: '应用重启，已暂停')
           else
