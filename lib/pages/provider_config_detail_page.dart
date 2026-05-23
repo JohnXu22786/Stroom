@@ -142,21 +142,20 @@ class _ProviderConfigDetailPageState
         if (mounted) setState(() {});
       }
     } else {
-      final result = await Navigator.push(
+      await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => ModelConfigPage(
             entryId: widget.entryId,
-            configIndex: widget.configIndex >= 0 ? widget.configIndex : -1,
+            configIndex: widget.configIndex >= 0 ? widget.configIndex : 0,
             modelIndex: -1,
           ),
         ),
       );
-      if (result != null && mounted) {
-        if (result is ModelConfig) {
-          _pendingModels.insert(0, result);
-        }
-        if (mounted) setState(() {});
+      if (mounted) {
+        // Force re-read entry from provider to reflect newly saved models
+        ref.invalidate(providerEntriesProvider);
+        setState(() {});
       }
     }
   }
@@ -234,7 +233,10 @@ class _ProviderConfigDetailPageState
             ),
           ),
         );
-        if (mounted) setState(() {});
+        if (mounted) {
+          ref.invalidate(providerEntriesProvider);
+          setState(() {});
+        }
       } else {
         if (modelIndex < 0 || modelIndex >= _pendingModels.length) return;
         final result = await Navigator.push(
