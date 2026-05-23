@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -72,7 +73,7 @@ class ManifestDatabase {
   static Future<Database> _initDatabase() async {
     final dir = await getApplicationDocumentsDirectory();
     final dbPath = p.join(dir.path, 'stroom_manifest.db');
-    return await openDatabase(
+    final db = await openDatabase(
       dbPath,
       version: 2,
       onCreate: (db, version) async {
@@ -130,6 +131,91 @@ class ManifestDatabase {
         }
       },
     );
+    await _migrateOldVideoRecords(db);
+    return db;
+  }
+
+  static Future<void> _migrateOldVideoRecords(Database db) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('migrated_video_records') == true) return;
+    final videoFormats = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'wmv', 'm4v', '3gp', 'gif'];
+    final placeholders = videoFormats.map((_) => '?').join(',');
+    final rows = await db.query(
+      ManifestTables.audioRecords,
+      where: 'format IN ($placeholders)',
+      whereArgs: videoFormats,
+    );
+    if (rows.isEmpty) {
+      await prefs.setBool('migrated_video_records', true);
+      return;
+    }
+    final batch = db.batch();
+    for (final row in rows) {
+      batch.insert(
+        ManifestTables.videoRecords,
+        {
+          'id': row['id'],
+          'name': row['name'],
+          'hash': row['hash'],
+          'format': row['format'],
+          'created_at': row['created_at'],
+          'size': row['size'],
+          'folder': row['folder'],
+          'duration': row['duration'],
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      batch.delete(
+        ManifestTables.audioRecords,
+        where: 'id = ?',
+        whereArgs: [row['id']],
+      );
+    }
+    await batch.commit(noResult: true);
+    await prefs.setBool('migrated_video_records', true);
+  }
+
+  static Future<void> _migrateOldVideoRecordsJson() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('migrated_video_records') == true) return;
+    final audioList = _webData![ManifestTables.audioRecords] as List<dynamic>? ?? [];
+    final videoList = _webData![ManifestTables.videoRecords] as List<dynamic>? ?? [];
+    if (videoList.isNotEmpty) {
+      await prefs.setBool('migrated_video_records', true);
+      return;
+    }
+    final videoFormats = {'mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'wmv', 'm4v', '3gp', 'gif'};
+    final toMigrate = <Map<String, dynamic>>[];
+    final remaining = <Map<String, dynamic>>[];
+    for (final item in audioList) {
+      final map = item as Map<String, dynamic>;
+      if (videoFormats.contains(map['format'] as String?)) {
+        toMigrate.add(map);
+      } else {
+        remaining.add(map);
+      }
+    }
+    if (toMigrate.isEmpty) {
+      await prefs.setBool('migrated_video_records', true);
+      return;
+    }
+    for (final record in toMigrate) {
+      final videoRecord = <String, dynamic>{
+        'id': record['id'],
+        'name': record['name'],
+        'hash': record['hash'],
+        'format': record['format'],
+        'createdAt': record['createdAt'],
+        'size': record['size'],
+        'folder': record['folder'],
+        'duration': record['duration'],
+      };
+      videoList.add(videoRecord);
+    }
+    _webData![ManifestTables.audioRecords] = remaining;
+    _webData![ManifestTables.videoRecords] = videoList;
+    await _saveWebData();
+    await prefs.setBool('migrated_video_records', true);
   }
 
   // ==================================================================
@@ -151,6 +237,7 @@ class ManifestDatabase {
       debugPrint('ManifestDatabase._loadWebData error: $e');
       _webData = _emptyWebData();
     }
+    await _migrateOldVideoRecordsJson();
     return _webData!;
   }
 
