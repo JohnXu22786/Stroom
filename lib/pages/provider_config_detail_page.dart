@@ -142,7 +142,7 @@ class _ProviderConfigDetailPageState
         if (mounted) setState(() {});
       }
     } else {
-      await Navigator.push(
+      final result = await Navigator.push<ModelConfig>(
         context,
         MaterialPageRoute(
           builder: (_) => ModelConfigPage(
@@ -153,7 +153,9 @@ class _ProviderConfigDetailPageState
         ),
       );
       if (mounted) {
-        // Force re-read entry from provider to reflect newly saved models
+        if (result is ModelConfig) {
+          _pendingModels.insert(0, result);
+        }
         ref.invalidate(providerEntriesProvider);
         setState(() {});
       }
