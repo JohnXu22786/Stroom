@@ -61,17 +61,21 @@ class ManifestOperations<T extends FileRecord> {
   // ---- 判断当前操作哪张表 ------------------------------------------------
 
   bool get _isImageTable => tableName == ManifestTables.imageRecords;
+  bool get _isVideoTable => tableName == ManifestTables.videoRecords;
 
   // ---- 数据库代理方法（根据 tableName 路由到正确的表操作） ---------------
 
   Future<List<Map<String, dynamic>>> _dbGetAllRecords() async {
     if (_isImageTable) return ManifestDatabase.getAllImageRecords();
+    if (_isVideoTable) return ManifestDatabase.getAllVideoRecords();
     return ManifestDatabase.getAllAudioRecords();
   }
 
   Future<void> _dbInsertRecord(Map<String, dynamic> record) async {
     if (_isImageTable) {
       await ManifestDatabase.insertImageRecord(record);
+    } else if (_isVideoTable) {
+      await ManifestDatabase.insertVideoRecord(record);
     } else {
       await ManifestDatabase.insertAudioRecord(record);
     }
@@ -80,6 +84,8 @@ class ManifestOperations<T extends FileRecord> {
   Future<void> _dbUpdateRecord(String id, Map<String, dynamic> updates) async {
     if (_isImageTable) {
       await ManifestDatabase.updateImageRecord(id, updates);
+    } else if (_isVideoTable) {
+      await ManifestDatabase.updateVideoRecord(id, updates);
     } else {
       await ManifestDatabase.updateAudioRecord(id, updates);
     }
@@ -88,6 +94,8 @@ class ManifestOperations<T extends FileRecord> {
   Future<void> _dbDeleteRecord(String id) async {
     if (_isImageTable) {
       await ManifestDatabase.deleteImageRecord(id);
+    } else if (_isVideoTable) {
+      await ManifestDatabase.deleteVideoRecord(id);
     } else {
       await ManifestDatabase.deleteAudioRecord(id);
     }
@@ -96,6 +104,8 @@ class ManifestOperations<T extends FileRecord> {
   Future<void> _dbDeleteRecords(List<String> ids) async {
     if (_isImageTable) {
       await ManifestDatabase.deleteImageRecords(ids);
+    } else if (_isVideoTable) {
+      await ManifestDatabase.deleteVideoRecords(ids);
     } else {
       await ManifestDatabase.deleteAudioRecords(ids);
     }
