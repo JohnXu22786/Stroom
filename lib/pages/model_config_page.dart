@@ -88,6 +88,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         return true;
       if (_customParams[i].defaultValue != _initialCustomParams[i].defaultValue)
         return true;
+      if (_customParams[i].type != _initialCustomParams[i].type) return true;
     }
     return false;
   }
