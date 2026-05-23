@@ -5,6 +5,8 @@ import '../main.dart' as main_lib;
 import 'catcatch_page.dart';
 import 'unified_task_list_page.dart';
 import '../catcatch/providers/catcatch_provider.dart';
+import '../catcatch/models/catcatch_task.dart' as catcatch_task;
+import '../catcatch/models/media_resource.dart';
 import '../providers/task_provider.dart';
 import 'chat_page.dart';
 import 'files_page.dart';
@@ -82,6 +84,68 @@ class _HomePageState extends ConsumerState<HomePage> {
       case AppPage.settings:
         return '设置';
     }
+  }
+
+  /// 显示媒体资源选择弹框（供 CatCatch userSelecting 步骤使用）
+  void _showMediaSelectionDialog(BuildContext context, catcatch_task.CatCatchTask task) {
+    final selectedMedia = <String, MediaResource?>{};
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) {
+          final mediaList = task.detectedMedia;
+          MediaResource? current = selectedMedia[task.id];
+          return AlertDialog(
+            title: const Text('选择要下载的资源'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: mediaList.length > 1
+                  ? ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: mediaList.length,
+                      itemBuilder: (_, i) {
+                        final media = mediaList[i];
+                        final isSel = current?.url == media.url;
+                        final isAudio = ['mp3', 'wav', 'm4a', 'aac', 'opus', 'weba'].contains(media.ext.toLowerCase());
+                        return ListTile(
+                          leading: Icon(isAudio ? Icons.audiotrack : Icons.videocam, color: isAudio ? Colors.purple : Colors.blue),
+                          title: Text('${media.name}.${media.ext}'),
+                          subtitle: media.duration != null ? Text('时长: ${media.duration}') : null,
+                          trailing: Icon(isSel ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                              color: isSel ? Theme.of(ctx).colorScheme.primary : Colors.grey),
+                          onTap: () {
+                            setDlgState(() {
+                              current = media;
+                              selectedMedia[task.id] = media;
+                            });
+                          },
+                        );
+                      },
+                    )
+                  : Center(child: Text('检测到 ${mediaList.length} 个资源，自动选择')),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+              FilledButton(
+                onPressed: mediaList.length == 1
+                    ? () {
+                        Navigator.pop(ctx);
+                        ref.read(catcatchTasksProvider.notifier).selectMedia(task.id, mediaList.first);
+                      }
+                    : (current != null
+                        ? () {
+                            Navigator.pop(ctx);
+                            ref.read(catcatchTasksProvider.notifier).selectMedia(task.id, current!);
+                          }
+                        : null),
+                child: const Text('确认下载'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   /// 显示加号弹出的菜单
@@ -501,6 +565,19 @@ class _HomePageState extends ConsumerState<HomePage> {
         synthesisTasks
             .where((t) => t.status.name != 'completed' && (t.statusChangedAt ?? t.createdAt).isAfter(lastRead))
             .length;
+
+    ref.listen(catcatchTasksProvider, (prev, next) {
+      if (!mounted) return;
+      for (final task in next) {
+        if (task.status.name == 'running' &&
+            task.steps.any((s) => s.type.name == 'userSelecting' && s.running) &&
+            task.detectedMedia.isNotEmpty &&
+            task.selectedMedia == null) {
+          _showMediaSelectionDialog(context, task);
+          break;
+        }
+      }
+    });
 
     return Scaffold(
       body: Stack(
