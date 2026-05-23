@@ -141,7 +141,7 @@ class TaskExecutor {
             break;
           case StepType.userSelecting:
             if (selectedMedia == null && detectedMedia.length > 1) {
-              onUpdate(task.copyWith(steps: steps, status: TaskStatus.running));
+              onUpdate(task.copyWith(steps: steps, status: TaskStatus.running, detectedMedia: detectedMedia));
               return null;
             }
             selectedMedia ??=
