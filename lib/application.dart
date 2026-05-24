@@ -47,20 +47,20 @@ class Application extends ConsumerWidget {
           theme: ThemeData(
             useMaterial3: true,
             colorScheme: colorScheme,
-            pageTransitionsTheme: const PageTransitionsTheme(
+            pageTransitionsTheme: PageTransitionsTheme(
               builders: {
-                TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-                TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+                TargetPlatform.android: const CupertinoPageTransitionsBuilder(),
+                TargetPlatform.iOS: const CupertinoPageTransitionsBuilder(),
               },
             ),
           ),
           darkTheme: ThemeData(
             useMaterial3: true,
             colorScheme: darkColorScheme,
-            pageTransitionsTheme: const PageTransitionsTheme(
+            pageTransitionsTheme: PageTransitionsTheme(
               builders: {
-                TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-                TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+                TargetPlatform.android: const CupertinoPageTransitionsBuilder(),
+                TargetPlatform.iOS: const CupertinoPageTransitionsBuilder(),
               },
             ),
           ),
