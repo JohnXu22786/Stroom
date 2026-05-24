@@ -115,10 +115,21 @@ jobs:
           URL="https://services.gradle.org/distributions/gradle-8.14-all.zip"
           curl -sL -o /tmp/gradle.zip "$URL"
           HASH=$(echo -n "$URL" | sha1sum | cut -d' ' -f1)
+          echo "URL_HASH=$HASH"
           mkdir -p "$HOME/.gradle/wrapper/dists/gradle-8.14-all/$HASH"
           cp /tmp/gradle.zip "$HOME/.gradle/wrapper/dists/gradle-8.14-all/$HASH/gradle-8.14-all.zip"
           unzip -q /tmp/gradle.zip -d "$HOME/.gradle/wrapper/dists/gradle-8.14-all/$HASH"
-      - run: flutter build apk --release
+          echo "Cache contents:"
+          ls -laR "$HOME/.gradle/wrapper/dists/"
+      - run: flutter build apk --release || true
+      - name: Debug wrapper properties
+        run: |
+          echo "=== gradle-wrapper.properties ==="
+          cat android/gradle/wrapper/gradle-wrapper.properties
+          echo "=== gradlew ==="
+          head -5 android/gradlew
+          echo "=== Cache check ==="
+          ls -laR "$HOME/.gradle/wrapper/dists/" || echo "No dists dir"
       - name: Rename APK
         run: mv build/app/outputs/flutter-apk/app-release.apk "stroom-android-release-$TAG.apk"
       - uses: softprops/action-gh-release@v2
