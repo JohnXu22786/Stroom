@@ -634,8 +634,13 @@ class _HomePageState extends ConsumerState<HomePage> {
     final lastRead = ref.watch(taskListLastReadProvider);
     final activeTaskCount =
         catcatchTasks
-            .where((t) => t.status.name != 'completed' && (t.statusChangedAt ?? t.createdAt).isAfter(lastRead))
-            .length +
+            .where((t) =>
+              t.status.name != 'completed' && (
+                (t.statusChangedAt ?? t.createdAt).isAfter(lastRead) ||
+                (t.status.name == 'running' &&
+                 t.steps.any((s) => s.type.name == 'userSelecting' && s.running))
+              )
+            ).length +
         synthesisTasks
             .where((t) => t.status.name != 'completed' && (t.statusChangedAt ?? t.createdAt).isAfter(lastRead))
             .length;
