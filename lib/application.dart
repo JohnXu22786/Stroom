@@ -49,8 +49,8 @@ class Application extends ConsumerWidget {
             colorScheme: colorScheme,
             pageTransitionsTheme: PageTransitionsTheme(
               builders: {
-                TargetPlatform.android: const CupertinoPageTransitionsBuilder(),
-                TargetPlatform.iOS: const CupertinoPageTransitionsBuilder(),
+                TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+                TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
               },
             ),
           ),
@@ -59,8 +59,8 @@ class Application extends ConsumerWidget {
             colorScheme: darkColorScheme,
             pageTransitionsTheme: PageTransitionsTheme(
               builders: {
-                TargetPlatform.android: const CupertinoPageTransitionsBuilder(),
-                TargetPlatform.iOS: const CupertinoPageTransitionsBuilder(),
+                TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+                TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
               },
             ),
           ),
