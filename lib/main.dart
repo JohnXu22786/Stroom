@@ -7,6 +7,7 @@ import 'providers/provider_config.dart';
 import 'catcatch/providers/catcatch_provider.dart';
 import 'providers/task_provider.dart';
 import 'pages/unified_task_list_page.dart';
+import 'services/background_service.dart';
 
 /// 初始化 ProviderScope 的 overrides
 final catcatchStartupProvider = FutureProvider<void>((ref) async {
@@ -19,6 +20,7 @@ final catcatchStartupProvider = FutureProvider<void>((ref) async {
 Future<void> main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
+    await initializeBackgroundService();
     registerBuiltinProviders();
     registerBuiltinProviderTypes();
 
