@@ -142,11 +142,12 @@ class ChatAdapter {
     currentModelIndex = -1;
   }
 
-  /// 流式发送消息，返回文本块流
-  Stream<String> sendStream(String text, {required List<ChatMessage> history}) {
+  Stream<String> sendStream(String text, {required List<ChatMessage> history, bool reasoning = false}) {
     if (_chatService == null) {
       return Stream.error('请先配置聊天供应商');
     }
-    return _chatService!.sendStream(text, history: history);
+    return _chatService!.sendStream(text, history: history, reasoning: reasoning);
   }
+
+  String get reasoningContent => _chatService?.reasoningContent ?? '';
 }

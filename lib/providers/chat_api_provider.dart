@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
+import '../models/ai_stream_event.dart';
 import '../services/sse_client.dart';
 
 // ============================================================================
@@ -14,33 +15,30 @@ import '../services/sse_client.dart';
 /// [messages] 已预处理好为 API 格式的 message 列表，
 /// 由上游 ChatService 负责将 ChatMessage 转化为 API 格式。
 abstract class BaseChatProvider {
-  /// 供应商名称
   String get name;
 
-  /// 支持的模型 ID 列表
   List<String> get supportedModelIds;
 
-  /// 非流式对话，返回完整回复文本
   Future<String> chat(
     List<Map<String, dynamic>> messages, {
     String? model,
     int? maxTokens,
     double? temperature,
+    bool reasoning = false,
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
   });
 
-  /// 流式对话，逐段 yield 回复文本
-  Stream<String> chatStream(
+  Stream<AIStreamEvent> chatStream(
     List<Map<String, dynamic>> messages, {
     String? model,
     int? maxTokens,
     double? temperature,
+    bool reasoning = false,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
   });
 
-  /// 获取默认参数配置
   Map<String, dynamic> get defaultParams;
 }
 
@@ -92,6 +90,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     String? model,
     int? maxTokens,
     double? temperature,
+    bool reasoning = false,
     bool stream = false,
     Map<String, dynamic>? extraParams,
   }) {
@@ -101,9 +100,14 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       'max_tokens': maxTokens ?? defaultParams['max_tokens'],
       'temperature': temperature ?? defaultParams['temperature'],
       'stream': stream,
+      if (reasoning) ..._reasoningParams(),
       if (extraParams != null) ...extraParams,
     };
   }
+
+  Map<String, dynamic> _reasoningParams() => {
+        'thinking': {'type': 'enabled'},
+      };
 
   @override
   Map<String, dynamic> get defaultParams => {
@@ -120,6 +124,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     String? model,
     int? maxTokens,
     double? temperature,
+    bool reasoning = false,
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
   }) async {
@@ -129,6 +134,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         model: model,
         maxTokens: maxTokens,
         temperature: temperature,
+        reasoning: reasoning,
         extraParams: extraParams);
 
     debugPrint(
@@ -172,11 +178,12 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   // ── 流式对话 ────────────────────────────────────────────────────
 
   @override
-  Stream<String> chatStream(
+  Stream<AIStreamEvent> chatStream(
     List<Map<String, dynamic>> messages, {
     String? model,
     int? maxTokens,
     double? temperature,
+    bool reasoning = false,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
   }) async* {
@@ -188,13 +195,14 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         model: model,
         maxTokens: maxTokens,
         temperature: temperature,
+        reasoning: reasoning,
         stream: true,
         extraParams: extraParams);
 
     debugPrint(
         'OpenAICompatibleChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}');
 
-    yield* sseStream(
+    await for (final event in sseStream(
       _baseUrl,
       {
         'Content-Type': 'application/json',
@@ -203,7 +211,32 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       },
       jsonEncode(body),
       cancelToken: cancelToken,
-    );
+    )) {
+      final dataStr = event.substring('data: '.length).trim();
+      if (dataStr == '[DONE]') break;
+
+      try {
+        final data = jsonDecode(dataStr) as Map<String, dynamic>;
+        final choices = data['choices'] as List?;
+        if (choices != null && choices.isNotEmpty) {
+          final delta = choices[0]['delta'] as Map<String, dynamic>?;
+          if (delta != null) {
+            final content = delta['content'] as String?;
+            if (content != null && content.isNotEmpty) {
+              yield AIStreamEvent(content);
+            }
+            if (reasoning) {
+              final reasoningContent = delta['reasoning_content'] as String?;
+              if (reasoningContent != null && reasoningContent.isNotEmpty) {
+                yield AIStreamEvent(reasoningContent, isReasoning: true);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('OpenAICompatibleChatProvider: failed to parse SSE chunk: $e');
+      }
+    }
   }
 }
 
