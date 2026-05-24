@@ -114,17 +114,17 @@ jobs:
         run: |
           curl -sL -o /tmp/gradle-9.0-bin.zip "https://services.gradle.org/distributions/gradle-9.0-bin.zip"
           mkdir -p ~/gradle-dist
-          unzip -q /tmp/gradle-9.0-bin.zip -d ~/gradle-dist/
-          echo "GRADLE_HOME=$HOME/gradle-dist/gradle-9.0" >> "$GITHUB_ENV"
+          unzip -q /tmp/gradle-9.0-bin.zip -d /tmp/gradle-extract
+          GRADLE_DIR=$(ls /tmp/gradle-extract)
+          mv /tmp/gradle-extract/"$GRADLE_DIR"/* ~/gradle-dist/
+          ls -la ~/gradle-dist/bin/gradle
+          echo "GRADLE_HOME=$HOME/gradle-dist" >> "$GITHUB_ENV"
           cd android
-          # Point wrapper to local gradle via gradlew script override
           cat > gradlew << 'SCRIPT'
           #!/bin/sh
-          GRADLE_HOME="$HOME/gradle-dist/gradle-9.0"
-          exec "$GRADLE_HOME/bin/gradle" "$@"
+          exec "$HOME/gradle-dist/bin/gradle" "$@"
           SCRIPT
           chmod +x gradlew
-          cat gradlew
       - run: flutter build apk --release
         env:
           _JAVA_OPTIONS: -Djava.net.preferIPv4Stack=true
