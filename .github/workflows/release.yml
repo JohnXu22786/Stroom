@@ -110,19 +110,15 @@ jobs:
           path: ~/.gradle
           key: gradle-${{ runner.os }}
       - run: flutter pub get
-      - name: Setup Gradle
+      - name: Pre-cache Gradle
         run: |
-          URL="https://services.gradle.org/distributions/gradle-8.13-bin.zip"
+          URL="https://services.gradle.org/distributions/gradle-8.14-all.zip"
           curl -sL -o /tmp/gradle.zip "$URL"
           HASH=$(echo -n "$URL" | sha1sum | cut -d' ' -f1)
-          mkdir -p "$HOME/.gradle/wrapper/dists/gradle-8.13-bin/$HASH"
-          cp /tmp/gradle.zip "$HOME/.gradle/wrapper/dists/gradle-8.13-bin/$HASH/gradle-8.13-bin.zip"
-          unzip -q /tmp/gradle.zip -d "$HOME/.gradle/wrapper/dists/gradle-8.13-bin/$HASH"
-          ls -la "$HOME/.gradle/wrapper/dists/gradle-8.13-bin/$HASH/"
+          mkdir -p "$HOME/.gradle/wrapper/dists/gradle-8.14-all/$HASH"
+          cp /tmp/gradle.zip "$HOME/.gradle/wrapper/dists/gradle-8.14-all/$HASH/gradle-8.14-all.zip"
+          unzip -q /tmp/gradle.zip -d "$HOME/.gradle/wrapper/dists/gradle-8.14-all/$HASH"
       - run: flutter build apk --release
-        env:
-          _JAVA_OPTIONS: -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv6Addresses=false
-          GRADLE_OPTS: -Djava.net.preferIPv4Stack=true
       - name: Rename APK
         run: mv build/app/outputs/flutter-apk/app-release.apk "stroom-android-release-$TAG.apk"
       - uses: softprops/action-gh-release@v2
