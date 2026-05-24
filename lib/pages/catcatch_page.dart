@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../catcatch/models/media_resource.dart';
 import '../catcatch/providers/catcatch_provider.dart';
+import 'browser_page.dart';
 import 'unified_task_list_page.dart';
 
 // =============================================================================
@@ -387,6 +388,18 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
         foregroundColor: colorScheme.onSurface,
         elevation: 0,
         scrolledUnderElevation: 1,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.language, size: 20),
+            tooltip: '内置浏览器',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const BrowserPage(initialUrl: 'https://www.google.com'),
+              ),
+            ),
+          ),
+        ],
       ),
       body: _buildInputSection(colorScheme),
     );
