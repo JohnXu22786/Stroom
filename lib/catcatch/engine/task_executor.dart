@@ -12,6 +12,7 @@ import '../models/media_resource.dart';
 import 'sniffing_engine.dart';
 import 'm3u8_parser.dart';
 import 'webview_sniffer.dart';
+import 'media_probe.dart';
 import 'mpd_parser.dart';
 import 'download_manager.dart';
 import 'ffmpeg_converter.dart';
@@ -333,6 +334,11 @@ class TaskExecutor {
       }
     }
 
+    // 主动探针：对可播放但缺少时长/分辨率信息的视频预先探测
+    if (!(cancelToken?.isCancelled ?? false)) {
+      resources = await _probeMediaResources(resources);
+    }
+
     _markStep(steps, 0, done: true);
     _markStep(steps, 1, done: true);
     onUpdate(task.copyWith(
@@ -340,6 +346,37 @@ class TaskExecutor {
         detectedMedia: resources,
         progress: _calcProgress(steps)));
     return resources;
+  }
+
+  /// 对可播放但缺少信息的媒体资源进行主动探测（时长、分辨率）。
+  static Future<List<MediaResource>> _probeMediaResources(
+      List<MediaResource> resources) async {
+    if (kIsWeb) return resources;
+
+    final result = <MediaResource>[];
+    for (final res in resources) {
+      if (res.isPlayable && (res.duration == null || res.width == null)) {
+        final probe = await MediaProbe.probe(res.url);
+        result.add(res.copyWith(
+          duration: probe.duration != null
+              ? _formatDuration(probe.duration!)
+              : res.duration,
+          width: probe.width ?? res.width,
+          height: probe.height ?? res.height,
+        ));
+        continue;
+      }
+      result.add(res);
+    }
+    return result;
+  }
+
+  static String _formatDuration(Duration d) {
+    final h = d.inHours.toString().padLeft(2, '0');
+    final m = (d.inMinutes % 60).toString().padLeft(2, '0');
+    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
+    final ms = (d.inMilliseconds % 1000).toString().padLeft(3, '0');
+    return '$h:$m:$s.$ms';
   }
 
   /// Step 2: 解析播放列表
