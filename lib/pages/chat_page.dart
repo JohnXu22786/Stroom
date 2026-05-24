@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:flutter_highlight/themes/dracula.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -628,10 +629,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       onMessageSend: (text) => _onMessageSend(text, []),
                       theme: isDark ? ChatTheme.dark() : ChatTheme.light(),
                       builders: Builders(
-                        composerBuilder: (context) => _ChatComposer(
-                          onSend: _onMessageSend,
-                          onStop: _stopStreaming,
-                        ),
+composerBuilder: (context) => ChatComposerWidget(
+  onSend: _onMessageSend,
+  onStop: _stopStreaming,
+),
                         textMessageBuilder: (context, message, index,
                             {required bool isSentByMe,
                             MessageGroupStatus? groupStatus}) {
@@ -1091,20 +1092,20 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
-class _ChatComposer extends ConsumerStatefulWidget {
-  final Future<void> Function(String text, List<Attachment> attachments) onSend;
+class ChatComposerWidget extends ConsumerStatefulWidget {
+  final void Function(String text, List<Attachment> attachments) onSend;
   final VoidCallback onStop;
 
-  const _ChatComposer({
+  const ChatComposerWidget({
     required this.onSend,
     required this.onStop,
   });
 
   @override
-  ConsumerState<_ChatComposer> createState() => _ChatComposerState();
+  ConsumerState<ChatComposerWidget> createState() => ChatComposerWidgetState();
 }
 
-class _ChatComposerState extends ConsumerState<_ChatComposer> {
+class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
   final _textController = TextEditingController();
   final _focusNode = FocusNode();
   final List<Attachment> _pendingAttachments = [];
