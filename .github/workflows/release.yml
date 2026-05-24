@@ -110,12 +110,19 @@ jobs:
           path: ~/.gradle
           key: gradle-${{ runner.os }}
       - run: flutter pub get
-      - name: Test Gradle download
-        run: curl -sI --connect-timeout 10 "https://services.gradle.org/distributions/gradle-9.0-bin.zip" 2>&1 || true
+      - name: Pre-cache Gradle distribution
+        run: |
+          curl -sL -o /tmp/gradle-9.0-bin.zip "https://services.gradle.org/distributions/gradle-9.0-bin.zip"
+          HASH=$(echo -n "https://services.gradle.org/distributions/gradle-9.0-bin.zip" | sha1sum | cut -d' ' -f1)
+          CACHE_DIR="$HOME/.gradle/wrapper/dists/gradle-9.0-bin/$HASH"
+          mkdir -p "$CACHE_DIR"
+          cp /tmp/gradle-9.0-bin.zip "$CACHE_DIR/gradle-9.0-bin.zip"
+          unzip -q /tmp/gradle-9.0-bin.zip -d "$CACHE_DIR"
+          rm /tmp/gradle-9.0-bin.zip
       - run: flutter build apk --release
         env:
           _JAVA_OPTIONS: -Djava.net.preferIPv4Stack=true
-          GRADLE_OPTS: -Djava.net.preferIPv4Stack=true -Dorg.gradle.internal.launcher.welcomeMessageEnabled=false
+          GRADLE_OPTS: -Djava.net.preferIPv4Stack=true
       - name: Rename APK
         run: mv build/app/outputs/flutter-apk/app-release.apk "stroom-android-release-$TAG.apk"
       - uses: softprops/action-gh-release@v2
