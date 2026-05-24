@@ -1109,6 +1109,13 @@ class _ChatComposerState extends ConsumerState<_ChatComposer> {
   final _focusNode = FocusNode();
   final List<Attachment> _pendingAttachments = [];
   final Map<String, Uint8List> _pendingImageBytes = {};
+  final GlobalKey _composerKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reportComposerHeight());
+  }
 
   @override
   void dispose() {
@@ -1117,12 +1124,25 @@ class _ChatComposerState extends ConsumerState<_ChatComposer> {
     super.dispose();
   }
 
+  void _reportComposerHeight() {
+    if (!mounted) return;
+    final renderBox = _composerKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox != null) {
+      final height = renderBox.size.height;
+      final bottomSafeArea = MediaQuery.of(context).padding.bottom;
+      try {
+        context.read<ComposerHeightNotifier>().setHeight(height - bottomSafeArea);
+      } catch (_) {}
+    }
+  }
+
   void _handleSubmitted(String text) {
     if (text.trim().isEmpty && _pendingAttachments.isEmpty) return;
     widget.onSend(text.trim(), [..._pendingAttachments]);
     _pendingAttachments.clear();
     _pendingImageBytes.clear();
     _textController.clear();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reportComposerHeight());
   }
 
   void _showAttachmentPicker() {
@@ -1352,6 +1372,7 @@ class _ChatComposerState extends ConsumerState<_ChatComposer> {
         ),
       );
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reportComposerHeight());
   }
 
   void _removePendingAttachment(int index) {
@@ -1360,6 +1381,7 @@ class _ChatComposerState extends ConsumerState<_ChatComposer> {
     setState(() {
       _pendingAttachments.removeAt(index);
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reportComposerHeight());
   }
 
   @override
@@ -1375,6 +1397,7 @@ class _ChatComposerState extends ConsumerState<_ChatComposer> {
       right: 0,
       bottom: 0,
       child: Container(
+        key: _composerKey,
         decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
         border: Border(
