@@ -267,6 +267,65 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     _executeTaskFrom(task, StepType.downloading);
   }
 
+  /// 批量选择多个媒体资源进行下载
+  ///
+  /// 第一个资源走正常 `selectMedia` 流程，其余资源作为独立子任务直接进入下载步骤。
+  void batchSelectMedia(
+    String parentTaskId,
+    List<MediaResource> mediaList, {
+    String? mergeAudioUrl,
+  }) {
+    if (mediaList.isEmpty) return;
+    if (mediaList.length == 1) {
+      selectMedia(parentTaskId, mediaList.first,
+          mergeAudioUrl: mergeAudioUrl);
+      return;
+    }
+
+    // 第一个资源：走正常流程
+    selectMedia(parentTaskId, mediaList.first,
+        mergeAudioUrl: mergeAudioUrl);
+
+    // 其余资源：创建子任务，跳过分析直接下载
+    final parentIndex = state.indexWhere((t) => t.id == parentTaskId);
+    if (parentIndex < 0) return;
+    final parent = state[parentIndex];
+
+    for (int i = 1; i < mediaList.length; i++) {
+      final media = mediaList[i];
+      _addChildDownloadTask(parent, media);
+    }
+  }
+
+  /// 创建子下载任务（跳过分析，直接下载指定资源）
+  void _addChildDownloadTask(CatCatchTask parent, MediaResource media) {
+    final id = const Uuid().v4();
+    final allSteps = StepType.values.map((t) {
+      final idx = StepType.values.indexOf(t);
+      if (idx < StepType.values.indexOf(StepType.downloading)) {
+        return StepStatus.done(t);
+      }
+      return StepStatus.pending(t);
+    }).toList();
+
+    final childTask = CatCatchTask(
+      id: id,
+      url: parent.url,
+      expectedDurationSec: parent.expectedDurationSec,
+      title: '${parent.title} - ${media.name}.${media.ext}',
+      status: TaskStatus.running,
+      steps: allSteps,
+      createdAt: DateTime.now(),
+      detectedMedia: [media],
+      selectedMedia: media,
+      metadata: Map.from(parent.metadata),
+    );
+
+    state = [...state, childTask];
+    _persistTasks();
+    _executeTaskFrom(childTask, StepType.downloading);
+  }
+
   /// 跳过转换步骤，直接保存原始格式文件
   ///
   /// 当用户选择"保留原始格式"时调用，跳过 ffmpeg 转换直接进入保存步骤。
