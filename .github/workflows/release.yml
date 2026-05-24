@@ -112,12 +112,10 @@ jobs:
       - run: flutter pub get
       - name: Setup Gradle with local distribution
         run: |
-          curl -sL -o /tmp/gradle-9.0-bin.zip "https://services.gradle.org/distributions/gradle-9.0-bin.zip"
+          curl -sL -o /tmp/gradle.zip "https://services.gradle.org/distributions/gradle-8.13-bin.zip"
           mkdir -p ~/gradle-dist
-          unzip -q /tmp/gradle-9.0-bin.zip -d /tmp/gradle-extract
-          GRADLE_DIR=$(ls /tmp/gradle-extract)
-          mv /tmp/gradle-extract/"$GRADLE_DIR"/* ~/gradle-dist/
-          ls -la ~/gradle-dist/bin/gradle
+          unzip -q /tmp/gradle.zip -d /tmp/gradle-extract
+          mv /tmp/gradle-extract/gradle-8.13/* ~/gradle-dist/
           echo "GRADLE_HOME=$HOME/gradle-dist" >> "$GITHUB_ENV"
           cd android
           cat > gradlew << 'SCRIPT'
