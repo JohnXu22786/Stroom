@@ -303,9 +303,9 @@ class CatCatchPage extends ConsumerStatefulWidget {
 
 class _CatCatchPageState extends ConsumerState<CatCatchPage> {
   final _urlController = TextEditingController();
-  final _minController = TextEditingController();
-  final _secController = TextEditingController();
+  final _durationController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  String _durationDisplay = '';
 
   @override
   void initState() {
@@ -315,31 +315,85 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
     }
     if (widget.initialDurationSec != null && widget.initialDurationSec! > 0) {
       final totalSec = widget.initialDurationSec!;
-      _minController.text = (totalSec ~/ 60).toString();
-      _secController.text = (totalSec % 60).toString();
+      final h = totalSec ~/ 3600;
+      final m = (totalSec % 3600) ~/ 60;
+      final s = totalSec % 60;
+      final parts = <String>[];
+      if (h > 0) parts.add(h.toString());
+      parts.add(m.toString());
+      parts.add(s.toString());
+      _durationController.text = parts.join(' ');
+      _updateDurationDisplay();
     }
+    _durationController.addListener(_updateDurationDisplay);
   }
 
   @override
   void dispose() {
     _urlController.dispose();
-    _minController.dispose();
-    _secController.dispose();
+    _durationController.dispose();
     super.dispose();
+  }
+
+  void _updateDurationDisplay() {
+    final parsed = _parseDurationInput(_durationController.text);
+    if (parsed == null) {
+      setState(() => _durationDisplay = '');
+      return;
+    }
+    final parts = <String>[];
+    if (parsed.hours > 0) parts.add('${parsed.hours}时');
+    if (parsed.minutes > 0 || parsed.hours > 0) parts.add('${parsed.minutes}分');
+    parts.add('${parsed.seconds}秒');
+    setState(() => _durationDisplay = parts.join(''));
+  }
+
+  _DurationResult? _parseDurationInput(String text) {
+    final numbers = text.split(RegExp(r'[^\d]+')).where((s) => s.isNotEmpty).map(int.parse).toList();
+    if (numbers.isEmpty) return null;
+
+    var h = 0, m = 0, s = 0;
+    if (numbers.length == 1) {
+      s = numbers[0];
+      m = s ~/ 60;
+      s = s % 60;
+      h = m ~/ 60;
+      m = m % 60;
+      return _DurationResult(hours: h, minutes: m, seconds: s);
+    }
+    if (numbers.length == 2) {
+      m = numbers[0];
+      s = numbers[1];
+      if (m > 59 || s > 59) return null;
+      return _DurationResult(hours: 0, minutes: m, seconds: s);
+    }
+    h = numbers[0];
+    m = numbers[1];
+    s = numbers[2];
+    if (m > 59 || s > 59) return null;
+    return _DurationResult(hours: h, minutes: m, seconds: s);
   }
 
   void _startTask() {
     if (!_formKey.currentState!.validate()) return;
 
     final url = _urlController.text.trim();
-    final min = int.tryParse(_minController.text.trim()) ?? 0;
-    final sec = int.tryParse(_secController.text.trim()) ?? 0;
-    final totalSec = min * 60 + sec;
+    final parsed = _parseDurationInput(_durationController.text);
+    if (parsed == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('请输入有效的时长（时 分 秒 用空格分隔）'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    final totalSec = parsed.hours * 3600 + parsed.minutes * 60 + parsed.seconds;
 
     if (totalSec <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('请输入视频时长（分和秒）'),
+          content: Text('请输入视频时长'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -434,82 +488,59 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
             ),
             const SizedBox(height: 12),
 
-            Row(
-              children: [
-                SizedBox(
-                  width: 60,
-                  child: TextFormField(
-                    controller: _minController,
-                    decoration: InputDecoration(
-                      hintText: '分',
-                      labelText: '视频时长',
-                      labelStyle: const TextStyle(fontSize: 13),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      filled: true,
-                      fillColor: colorScheme.surface,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 12,
-                      ),
-                    ),
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    textInputAction: TextInputAction.next,
-                  ),
+            TextFormField(
+              controller: _durationController,
+              decoration: InputDecoration(
+                hintText: '时长（时 分 秒 用空格分隔，如 "2 30" 或 "90" 或 "1 0 30"）',
+                labelText: '视频时长',
+                prefixIcon: const Icon(Icons.timer_outlined, size: 20),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 4),
-                  child: Text('分', style: TextStyle(fontSize: 16)),
+                filled: true,
+                fillColor: colorScheme.surface,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
                 ),
-                SizedBox(
-                  width: 60,
-                  child: TextFormField(
-                    controller: _secController,
-                    decoration: InputDecoration(
-                      hintText: '秒',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      filled: true,
-                      fillColor: colorScheme.surface,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 12,
-                      ),
-                    ),
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    textInputAction: TextInputAction.done,
-                    onFieldSubmitted: (_) => _startTask(),
-                  ),
+                suffixText: _durationDisplay.isNotEmpty ? _durationDisplay : null,
+                suffixStyle: TextStyle(
+                  fontSize: 13,
+                  color: colorScheme.primary,
+                  fontWeight: FontWeight.w600,
                 ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 4),
-                  child: Text('秒', style: TextStyle(fontSize: 16)),
-                ),
-                const Spacer(),
+              ),
+              keyboardType: TextInputType.text,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => _startTask(),
+            ),
 
-                FilledButton.icon(
-                  onPressed: _startTask,
-                  icon: const Icon(Icons.search),
-                  label: const Text('开始分析'),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 14,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
+            const SizedBox(height: 12),
+
+            FilledButton.icon(
+              onPressed: _startTask,
+              icon: const Icon(Icons.search),
+              label: const Text('开始分析'),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 14,
                 ),
-              ],
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
             ),
           ],
         ),
       ),
     );
   }
+}
+
+class _DurationResult {
+  final int hours;
+  final int minutes;
+  final int seconds;
+  const _DurationResult({required this.hours, required this.minutes, required this.seconds});
 }
