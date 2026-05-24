@@ -112,15 +112,13 @@ jobs:
       - run: flutter pub get
       - name: Setup Gradle
         run: |
-          cd android
-          gradle wrapper --gradle-version 8.13
-          URL=$(grep 'distributionUrl' gradle/wrapper/gradle-wrapper.properties | cut -d= -f2- | sed 's/\\://g')
-          echo "URL=$URL"
+          URL="https://services.gradle.org/distributions/gradle-8.13-bin.zip"
           curl -sL -o /tmp/gradle.zip "$URL"
           HASH=$(echo -n "$URL" | sha1sum | cut -d' ' -f1)
           mkdir -p "$HOME/.gradle/wrapper/dists/gradle-8.13-bin/$HASH"
           cp /tmp/gradle.zip "$HOME/.gradle/wrapper/dists/gradle-8.13-bin/$HASH/gradle-8.13-bin.zip"
           unzip -q /tmp/gradle.zip -d "$HOME/.gradle/wrapper/dists/gradle-8.13-bin/$HASH"
+          ls -la "$HOME/.gradle/wrapper/dists/gradle-8.13-bin/$HASH/"
       - run: flutter build apk --release
         env:
           _JAVA_OPTIONS: -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv6Addresses=false
