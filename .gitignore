@@ -107,7 +107,6 @@ windows/runner/Runner.pdb
 windows/runner/Runner.res
 windows/runner/Runner.ilk
 windows/runner/Runner.obj
-windows/runner/Runner.rc
 windows/runner/Runner.rc.res
 windows/runner/Runner.sln
 windows/runner/Runner.vcxproj
