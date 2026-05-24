@@ -407,6 +407,7 @@ lcov.info
 *.vshost.exe.manifest
 *.application
 *.manifest
+!windows/runner/runner.exe.manifest
 *.deploy
 *.appx
 *.appxbundle
