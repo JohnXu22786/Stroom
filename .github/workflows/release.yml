@@ -110,15 +110,21 @@ jobs:
           path: ~/.gradle
           key: gradle-${{ runner.os }}
       - run: flutter pub get
-      - name: Pre-cache Gradle distribution
+      - name: Setup Gradle with local distribution
         run: |
           curl -sL -o /tmp/gradle-9.0-bin.zip "https://services.gradle.org/distributions/gradle-9.0-bin.zip"
-          HASH=$(echo -n "https://services.gradle.org/distributions/gradle-9.0-bin.zip" | sha1sum | cut -d' ' -f1)
-          CACHE_DIR="$HOME/.gradle/wrapper/dists/gradle-9.0-bin/$HASH"
-          mkdir -p "$CACHE_DIR"
-          cp /tmp/gradle-9.0-bin.zip "$CACHE_DIR/gradle-9.0-bin.zip"
-          unzip -q /tmp/gradle-9.0-bin.zip -d "$CACHE_DIR"
-          rm /tmp/gradle-9.0-bin.zip
+          mkdir -p ~/gradle-dist
+          unzip -q /tmp/gradle-9.0-bin.zip -d ~/gradle-dist/
+          echo "GRADLE_HOME=$HOME/gradle-dist/gradle-9.0" >> "$GITHUB_ENV"
+          cd android
+          # Point wrapper to local gradle via gradlew script override
+          cat > gradlew << 'SCRIPT'
+          #!/bin/sh
+          GRADLE_HOME="$HOME/gradle-dist/gradle-9.0"
+          exec "$GRADLE_HOME/bin/gradle" "$@"
+          SCRIPT
+          chmod +x gradlew
+          cat gradlew
       - run: flutter build apk --release
         env:
           _JAVA_OPTIONS: -Djava.net.preferIPv4Stack=true
