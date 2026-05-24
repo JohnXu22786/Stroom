@@ -46,7 +46,11 @@ class FFmpegConverter {
 
     // 如果已经是可播放格式，直接复制
     if (playableExts.contains(inputExt)) {
-      await File(inputPath).copy(outputPath);
+      final sourceFile = File(inputPath);
+      if (!await sourceFile.exists()) {
+        throw FileSystemException('源文件不存在，无法复制', inputPath);
+      }
+      await sourceFile.copy(outputPath);
       return outputPath;
     }
 
@@ -68,7 +72,7 @@ class FFmpegConverter {
       onProgress?.call(10);
       final inputFile = File(inputPath);
       if (!await inputFile.exists()) {
-        throw FileSystemException('Input file not found', inputPath);
+throw FileSystemException('下载源文件不存在，请重新下载', inputPath);
       }
 
       onProgress?.call(50);

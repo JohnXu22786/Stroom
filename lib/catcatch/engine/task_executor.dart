@@ -186,6 +186,25 @@ class TaskExecutor {
           case StepType.converting:
             if (downloadedFilePath == null) throw Exception('下载文件路径为空，无法转换');
 
+            // 检查下载的文件是否仍然存在（防止重启后临时文件被清理）
+            if (!File(downloadedFilePath).existsSync()) {
+              debugPrint('[TaskExecutor] 下载文件不存在，重新下载: $downloadedFilePath');
+              downloadedFilePath = await _executeDownload(
+                task: task,
+                steps: steps,
+                media: selectedMedia ??
+                    (detectedMedia.isNotEmpty ? detectedMedia.first : null),
+                detectedMedia: detectedMedia,
+                onUpdate: onUpdate,
+                cancelToken: cancelToken,
+              );
+              if (downloadedFilePath == null) {
+                throw Exception('重新下载失败，下载文件不存在');
+              }
+              // 更新任务状态中的下载路径
+              onUpdate(task.copyWith(downloadedFilePath: downloadedFilePath));
+            }
+
             // 检查是否需要用户确认转换操作（特殊格式/播放列表）
             final pendingConfirm = task.metadata['pendingConfirm'];
             if (pendingConfirm != 'done') {
@@ -477,6 +496,10 @@ class TaskExecutor {
       required String inputPath,
       required void Function(CatCatchTask) onUpdate,
       CancelToken? cancelToken}) async {
+    // 防御性检查
+    if (!File(inputPath).existsSync()) {
+      throw FileSystemException('下载源文件不存在，请重新下载', inputPath);
+    }
     final appDirPath = await AppStorage.directory;
     final outputDir = p.join(appDirPath, 'catcatch', 'converted');
     final outputName = '${p.basenameWithoutExtension(inputPath)}.mp4';
