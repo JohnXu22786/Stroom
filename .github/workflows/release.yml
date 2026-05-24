@@ -110,22 +110,20 @@ jobs:
           path: ~/.gradle
           key: gradle-${{ runner.os }}
       - run: flutter pub get
-      - name: Setup Gradle with local distribution
+      - name: Setup Gradle
         run: |
-          curl -sL -o /tmp/gradle.zip "https://services.gradle.org/distributions/gradle-8.13-bin.zip"
-          mkdir -p ~/gradle-dist
-          unzip -q /tmp/gradle.zip -d /tmp/gradle-extract
-          mv /tmp/gradle-extract/gradle-8.13/* ~/gradle-dist/
-          echo "GRADLE_HOME=$HOME/gradle-dist" >> "$GITHUB_ENV"
           cd android
-          cat > gradlew << 'SCRIPT'
-          #!/bin/sh
-          exec "$HOME/gradle-dist/bin/gradle" "$@"
-          SCRIPT
-          chmod +x gradlew
+          gradle wrapper --gradle-version 8.13
+          URL=$(grep 'distributionUrl' gradle/wrapper/gradle-wrapper.properties | cut -d= -f2- | sed 's/\\://g')
+          echo "URL=$URL"
+          curl -sL -o /tmp/gradle.zip "$URL"
+          HASH=$(echo -n "$URL" | sha1sum | cut -d' ' -f1)
+          mkdir -p "$HOME/.gradle/wrapper/dists/gradle-8.13-bin/$HASH"
+          cp /tmp/gradle.zip "$HOME/.gradle/wrapper/dists/gradle-8.13-bin/$HASH/gradle-8.13-bin.zip"
+          unzip -q /tmp/gradle.zip -d "$HOME/.gradle/wrapper/dists/gradle-8.13-bin/$HASH"
       - run: flutter build apk --release
         env:
-          _JAVA_OPTIONS: -Djava.net.preferIPv4Stack=true
+          _JAVA_OPTIONS: -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv6Addresses=false
           GRADLE_OPTS: -Djava.net.preferIPv4Stack=true
       - name: Rename APK
         run: mv build/app/outputs/flutter-apk/app-release.apk "stroom-android-release-$TAG.apk"
