@@ -668,8 +668,25 @@ class _CatCatchTaskCard extends ConsumerStatefulWidget {
 
 class _CatCatchTaskCardState extends ConsumerState<_CatCatchTaskCard> {
   bool _expanded = false;
-  final Map<String, MediaResource?> _selectedMedia = {};
+  final Map<String, Set<String>> _selectedMediaUrls = {};
   final Map<String, String?> _mergeAudioUrls = {};
+
+  Set<String> _getSelectedUrls(String taskId) =>
+      _selectedMediaUrls.putIfAbsent(taskId, () => {});
+
+  bool _isSelected(String taskId, String url) =>
+      _getSelectedUrls(taskId).contains(url);
+
+  void _toggleSelection(String taskId, String url) {
+    setState(() {
+      final urls = _getSelectedUrls(taskId);
+      if (urls.contains(url)) {
+        urls.remove(url);
+      } else {
+        urls.add(url);
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -970,10 +987,6 @@ class _CatCatchTaskCardState extends ConsumerState<_CatCatchTaskCard> {
     if (mediaList.isEmpty) return const SizedBox.shrink();
 
     final autoSelected = mediaList.length == 1;
-    if (task.selectedMedia != null) {
-      _selectedMedia[task.id] = task.selectedMedia;
-    }
-    final selectedMedia = _selectedMedia[task.id];
 
     final splitGroups = <String, List<MediaResource>>{};
     for (final m in mediaList) {
@@ -982,13 +995,17 @@ class _CatCatchTaskCardState extends ConsumerState<_CatCatchTaskCard> {
       }
     }
 
+    final selectedUrls = _getSelectedUrls(task.id);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '检测到 ${mediaList.length} 个媒体资源',
+            selectedUrls.isNotEmpty
+                ? '已选 ${selectedUrls.length}/${mediaList.length} 个资源'
+                : '检测到 ${mediaList.length} 个媒体资源（点击选择，可多选）',
             style: Theme.of(context)
                 .textTheme
                 .titleSmall
@@ -1005,27 +1022,31 @@ class _CatCatchTaskCardState extends ConsumerState<_CatCatchTaskCard> {
               ),
             const SizedBox(height: 12),
           ],
-          ..._buildGroupedMediaList(
-              task, mediaList, selectedMedia, autoSelected, colorScheme),
+          ..._buildGroupedMediaList(task, mediaList, colorScheme),
           if (!autoSelected) ...[
             const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: selectedMedia != null
+                onPressed: selectedUrls.isNotEmpty
                     ? () {
+                        final selectedMediaList = mediaList
+                            .where((m) => selectedUrls.contains(m.url))
+                            .toList();
                         final notifier =
                             ref.read(catcatchTasksProvider.notifier);
                         final mergeAudio = _mergeAudioUrls[task.id];
-                        notifier.selectMedia(
+                        notifier.batchSelectMedia(
                           task.id,
-                          selectedMedia,
+                          selectedMediaList,
                           mergeAudioUrl: mergeAudio,
                         );
                       }
                     : null,
                 icon: const Icon(Icons.download),
-                label: const Text('确认下载选中的资源'),
+                label: Text(selectedUrls.isNotEmpty
+                    ? '下载选中的 ${selectedUrls.length} 个资源'
+                    : '请选择要下载的资源'),
                 style: FilledButton.styleFrom(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -1126,7 +1147,9 @@ class _CatCatchTaskCardState extends ConsumerState<_CatCatchTaskCard> {
                 onPressed: () {
                   final primaryVideo = videoResources.first;
                   setState(() {
-                    _selectedMedia[task.id] = primaryVideo;
+                    final urls = _getSelectedUrls(task.id);
+                    urls.add(primaryVideo.url);
+                    urls.add(audioResources.first.url);
                     _mergeAudioUrls[task.id] = audioResources.first.url;
                   });
                 },
@@ -1141,8 +1164,13 @@ class _CatCatchTaskCardState extends ConsumerState<_CatCatchTaskCard> {
               ),
               OutlinedButton.icon(
                 onPressed: () {
-                  setState(
-                      () => _selectedMedia[task.id] = videoResources.first);
+                  setState(() {
+                    final urls = _getSelectedUrls(task.id);
+                    for (final v in videoResources) {
+                      urls.add(v.url);
+                    }
+                    _mergeAudioUrls[task.id] = null;
+                  });
                 },
                 icon: const Icon(Icons.videocam, size: 18),
                 label: const Text('仅视频', style: TextStyle(fontSize: 12)),
@@ -1155,8 +1183,13 @@ class _CatCatchTaskCardState extends ConsumerState<_CatCatchTaskCard> {
               ),
               OutlinedButton.icon(
                 onPressed: () {
-                  setState(
-                      () => _selectedMedia[task.id] = audioResources.first);
+                  setState(() {
+                    final urls = _getSelectedUrls(task.id);
+                    for (final a in audioResources) {
+                      urls.add(a.url);
+                    }
+                    _mergeAudioUrls[task.id] = null;
+                  });
                 },
                 icon: const Icon(Icons.audiotrack, size: 18),
                 label: const Text('仅音频', style: TextStyle(fontSize: 12)),
@@ -1169,36 +1202,6 @@ class _CatCatchTaskCardState extends ConsumerState<_CatCatchTaskCard> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          if (_selectedMedia[task.id] != null) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.amber.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.check_circle,
-                      size: 14, color: Colors.amber.shade700),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      _mergeAudioUrls[task.id] != null
-                          ? '已选择: 合并音视频'
-                          : '已选择: ${_selectedMedia[task.id]?.name}.${_selectedMedia[task.id]?.ext}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.amber.shade800,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -1211,7 +1214,7 @@ class _CatCatchTaskCardState extends ConsumerState<_CatCatchTaskCard> {
     ColorScheme colorScheme, {
     required bool isAudio,
   }) {
-    final isSelected = _selectedMedia[task.id]?.url == media.url;
+    final isSelected = _isSelected(task.id, media.url);
 
     return Card(
       elevation: 0,
@@ -1228,25 +1231,19 @@ class _CatCatchTaskCardState extends ConsumerState<_CatCatchTaskCard> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap: () {
-          setState(() {
-            _selectedMedia[task.id] = media;
-            _mergeAudioUrls[task.id] = null;
-          });
-        },
+        onTap: () => _toggleSelection(task.id, media.url),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Row(
             children: [
-              if (isSelected)
-                Icon(Icons.radio_button_checked,
-                    size: 16, color: colorScheme.primary)
-              else
-                Icon(
-                  isAudio ? Icons.audiotrack : Icons.videocam,
-                  size: 16,
-                  color: colorScheme.onSurfaceVariant,
-                ),
+              Icon(
+                isSelected
+                    ? Icons.check_box
+                    : Icons.check_box_outline_blank,
+                size: 18,
+                color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 4),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -1297,8 +1294,6 @@ class _CatCatchTaskCardState extends ConsumerState<_CatCatchTaskCard> {
   List<Widget> _buildGroupedMediaList(
     catcatch.CatCatchTask task,
     List<MediaResource> mediaList,
-    MediaResource? selectedMedia,
-    bool autoSelected,
     ColorScheme colorScheme,
   ) {
     if (mediaList.isEmpty) return [];
@@ -1368,8 +1363,7 @@ class _CatCatchTaskCardState extends ConsumerState<_CatCatchTaskCard> {
           lastDurationSec != null &&
           (currSec - lastDurationSec).abs() <= 5) {
       }
-      widgets.add(_buildMediaItem(
-          media, selectedMedia, autoSelected, task, colorScheme));
+      widgets.add(_buildMediaItem(media, task, colorScheme));
     }
 
     if (withoutDuration.isNotEmpty) {
@@ -1377,8 +1371,7 @@ class _CatCatchTaskCardState extends ConsumerState<_CatCatchTaskCard> {
         widgets.add(const SizedBox(height: 4));
       }
       for (final media in withoutDuration) {
-        widgets.add(_buildMediaItem(
-            media, selectedMedia, autoSelected, task, colorScheme));
+        widgets.add(_buildMediaItem(media, task, colorScheme));
       }
     }
 
@@ -1387,12 +1380,10 @@ class _CatCatchTaskCardState extends ConsumerState<_CatCatchTaskCard> {
 
   Widget _buildMediaItem(
     MediaResource media,
-    MediaResource? selectedMedia,
-    bool autoSelected,
     catcatch.CatCatchTask task,
     ColorScheme colorScheme,
   ) {
-    final isSelected = selectedMedia?.url == media.url;
+    final isSelected = _isSelected(task.id, media.url);
     final ext = media.ext.toLowerCase();
     final isAudioType =
         ['mp3', 'wav', 'm4a', 'aac', 'opus', 'weba'].contains(ext);
@@ -1409,11 +1400,7 @@ class _CatCatchTaskCardState extends ConsumerState<_CatCatchTaskCard> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap: () {
-          if (!autoSelected) {
-            setState(() => _selectedMedia[task.id] = media);
-          }
-        },
+        onTap: () => _toggleSelection(task.id, media.url),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Row(
@@ -1424,17 +1411,16 @@ class _CatCatchTaskCardState extends ConsumerState<_CatCatchTaskCard> {
                 color: isAudioType ? Colors.purple : Colors.blue,
               ),
               const SizedBox(width: 8),
-              if (!autoSelected)
-                Padding(
-                  padding: const EdgeInsets.only(right: 4),
-                  child: Icon(
-                    isSelected
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked,
-                    color: isSelected ? colorScheme.primary : Colors.grey,
-                    size: 20,
-                  ),
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Icon(
+                  isSelected
+                      ? Icons.check_box
+                      : Icons.check_box_outline_blank,
+                  color: isSelected ? colorScheme.primary : Colors.grey,
+                  size: 20,
                 ),
+              ),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
