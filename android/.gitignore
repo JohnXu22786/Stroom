@@ -1,8 +1,8 @@
 gradle-wrapper.jar
 /.gradle
 /captures/
-/gradlew
-/gradlew.bat
+# /gradlew  -- tracked in git, needed for CI system-Gradle bypass
+# /gradlew.bat
 /local.properties
 GeneratedPluginRegistrant.java
 .cxx/
