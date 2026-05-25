@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'manifest_database.dart';
+import '../utils/app_version.dart';
 import '../utils/web_file_store.dart';
 import 'storage_service.dart';
 
@@ -60,7 +61,7 @@ class BackupService {
     final manifest = {
       'version': 1,
       'createdAt': DateTime.now().toIso8601String(),
-      'appVersion': '1.0.0',
+      'appVersion': appVersion,
     };
     _addStringToArchive(archive, 'manifest.json', jsonEncode(manifest));
     onProgress?.call(0.05);
