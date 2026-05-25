@@ -986,8 +986,6 @@ class _CatCatchTaskCardState extends ConsumerState<_CatCatchTaskCard> {
     final mediaList = task.detectedMedia;
     if (mediaList.isEmpty) return const SizedBox.shrink();
 
-    final autoSelected = mediaList.length == 1;
-
     final splitGroups = <String, List<MediaResource>>{};
     for (final m in mediaList) {
       if (m.groupId != null && m.isLikelySplitTrack) {
@@ -1023,38 +1021,36 @@ class _CatCatchTaskCardState extends ConsumerState<_CatCatchTaskCard> {
             const SizedBox(height: 12),
           ],
           ..._buildGroupedMediaList(task, mediaList, colorScheme),
-          if (!autoSelected) ...[
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: selectedUrls.isNotEmpty
-                    ? () {
-                        final selectedMediaList = mediaList
-                            .where((m) => selectedUrls.contains(m.url))
-                            .toList();
-                        final notifier =
-                            ref.read(catcatchTasksProvider.notifier);
-                        final mergeAudio = _mergeAudioUrls[task.id];
-                        notifier.batchSelectMedia(
-                          task.id,
-                          selectedMediaList,
-                          mergeAudioUrl: mergeAudio,
-                        );
-                      }
-                    : null,
-                icon: const Icon(Icons.download),
-                label: Text(selectedUrls.isNotEmpty
-                    ? '下载选中的 ${selectedUrls.length} 个资源'
-                    : '请选择要下载的资源'),
-                style: FilledButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: selectedUrls.isNotEmpty
+                  ? () {
+                      final selectedMediaList = mediaList
+                          .where((m) => selectedUrls.contains(m.url))
+                          .toList();
+                      final notifier =
+                          ref.read(catcatchTasksProvider.notifier);
+                      final mergeAudio = _mergeAudioUrls[task.id];
+                      notifier.batchSelectMedia(
+                        task.id,
+                        selectedMediaList,
+                        mergeAudioUrl: mergeAudio,
+                      );
+                    }
+                  : null,
+              icon: const Icon(Icons.download),
+              label: Text(selectedUrls.isNotEmpty
+                  ? '下载选中的 ${selectedUrls.length} 个资源'
+                  : '请选择要下载的资源'),
+              style: FilledButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
             ),
-          ],
+          ),
         ],
       ),
     );
