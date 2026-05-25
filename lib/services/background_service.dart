@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 
-const _serviceName = 'com.example.stroom.background_service';
+const _serviceName = 'com.johntsui.stroom.background_service';
 const _serviceTitle = 'Stroom';
 const _serviceContent = '后台任务运行中…';
 

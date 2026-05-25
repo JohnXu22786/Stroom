@@ -1,4 +1,4 @@
-package com.example.stroom
+package com.johntsui.stroom
 
 import io.flutter.embedding.android.FlutterActivity
 
