@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show debugPrint;
 import '../models/chat_message.dart';
 import '../providers/provider_config.dart';
 import 'chat_service.dart';
@@ -62,6 +63,7 @@ class ChatAdapter {
     final llmEntry =
         entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
     if (llmEntry == null || llmEntry.configs.isEmpty) {
+      debugPrint('ChatAdapter.configure: no LLM entry or configs');
       _chatService = null;
       currentConfigIndex = -1;
       currentModelIndex = -1;
@@ -69,6 +71,7 @@ class ChatAdapter {
     }
     final config = llmEntry.configs.first;
     if (config.host.isEmpty || config.key.isEmpty) {
+      debugPrint('ChatAdapter.configure: first config host or key empty');
       _chatService = null;
       currentConfigIndex = -1;
       currentModelIndex = -1;
@@ -76,11 +79,13 @@ class ChatAdapter {
     }
     final modelConfig = config.models.isNotEmpty ? config.models.first : null;
     if (modelConfig == null) {
+      debugPrint('ChatAdapter.configure: no models in first config');
       _chatService = null;
       currentConfigIndex = -1;
       currentModelIndex = -1;
       return;
     }
+    debugPrint('ChatAdapter.configure: host=${config.host} model=${modelConfig.modelId}');
     final provider = createChatProviderFromConfig(
       providerName: config.providerName,
       baseUrl: config.host,
@@ -99,6 +104,7 @@ class ChatAdapter {
     if (llmEntry == null ||
         configIndex < 0 ||
         configIndex >= llmEntry.configs.length) {
+      debugPrint('ChatAdapter.selectModel: invalid configIndex=$configIndex');
       _chatService = null;
       currentConfigIndex = -1;
       currentModelIndex = -1;
@@ -106,18 +112,21 @@ class ChatAdapter {
     }
     final config = llmEntry.configs[configIndex];
     if (config.host.isEmpty || config.key.isEmpty) {
+      debugPrint('ChatAdapter.selectModel: config[$configIndex] host or key empty');
       _chatService = null;
       currentConfigIndex = -1;
       currentModelIndex = -1;
       return;
     }
     if (modelIndex < 0 || modelIndex >= config.models.length) {
+      debugPrint('ChatAdapter.selectModel: invalid modelIndex=$modelIndex');
       _chatService = null;
       currentConfigIndex = -1;
       currentModelIndex = -1;
       return;
     }
     final modelConfig = config.models[modelIndex];
+    debugPrint('ChatAdapter.selectModel: using config[$configIndex] host=${config.host} model=${modelConfig.modelId}');
     final provider = createChatProviderFromConfig(
       providerName: config.providerName,
       baseUrl: config.host,

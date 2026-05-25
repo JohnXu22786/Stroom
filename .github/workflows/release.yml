@@ -18,10 +18,11 @@ jobs:
     outputs:
       app_version: ${{ steps.extract-version.outputs.app_version }}
     steps:
-      - uses: actions/checkout@v4
       - id: extract-version
         run: |
-          VERSION=$(grep '^version: ' pubspec.yaml | sed 's/version: //')
+          TAG="${{ env.TAG }}"
+          # Strip leading 'v' if present: v1.2.3 -> 1.2.3
+          VERSION="${TAG#v}"
           echo "app_version=$VERSION" >> $GITHUB_OUTPUT
 
   windows:
