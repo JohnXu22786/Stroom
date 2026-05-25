@@ -80,9 +80,10 @@ class ChatService {
             .chatStream(
           apiMessages,
           model: _modelConfig!.modelId,
-          maxTokens: (_modelConfig!.typeConfig['maxTokens'] as num?)
-                  ?.toInt() ??
-              4096,
+          maxTokens: (_modelConfig!.typeConfig['context'] as num?)
+                  ?.toInt()
+              ?? (_modelConfig!.typeConfig['maxTokens'] as num?)?.toInt()
+              ?? 4096,
           temperature: (_modelConfig!.typeConfig['temperature'] as num?)
                   ?.toDouble() ??
               0.7,
