@@ -40,6 +40,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   final List<ChatMessage> _history = [];
   int _selectedModelIndex = 0;
   bool _cancelledByUser = false;
+  bool _reasoningEnabled = false;
+  final Map<String, String> _reasoningContents = {};
 
   @override
   void initState() {
@@ -217,6 +219,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     await _controller?.insertMessage(placeholder);
 
     String fullReply = '';
+    String reasoningBuffer = '';
     DateTime lastUpdate = DateTime.now();
     const minInterval = Duration(milliseconds: 50);
 
@@ -233,7 +236,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
 
     try {
-      final stream = _adapter.sendStream(text, history: _history);
+      final stream = _adapter.sendStream(text,
+          history: _history, reasoning: _reasoningEnabled);
       await for (final chunk in stream) {
         if (_cancelledByUser) break;
         fullReply += chunk;
@@ -254,11 +258,23 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       }
     } finally {
       updateMessage(fullReply);
+      if (_reasoningEnabled) {
+        reasoningBuffer = _adapter.reasoningContent;
+      }
     }
 
     if (fullReply.isNotEmpty) {
-      _history.add(
-          ChatMessage(role: 'assistant', content: fullReply, id: aiMsgId));
+      final msg = ChatMessage(
+        role: 'assistant',
+        content: fullReply,
+        id: aiMsgId,
+        reasoningContent:
+            reasoningBuffer.isNotEmpty ? reasoningBuffer : null,
+      );
+      _history.add(msg);
+      if (reasoningBuffer.isNotEmpty) {
+        _reasoningContents[aiMsgId] = reasoningBuffer;
+      }
     }
     ref.read(_isStreamingProvider.notifier).state = false;
     _cancelledByUser = false;
@@ -548,6 +564,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   ),
                   // ── Model selector ──
                   if (adapterConfigured) _buildModelSelector(),
+                  // ── Reasoning toggle ──
+                  if (adapterConfigured)
+                    IconButton(
+                      icon: Icon(
+                        Icons.psychology,
+                        color: _reasoningEnabled
+                            ? Theme.of(context).colorScheme.primary
+                            : null,
+                      ),
+                      tooltip: _reasoningEnabled ? '推理已开启' : '推理',
+                      onPressed: () =>
+                          setState(() => _reasoningEnabled = !_reasoningEnabled),
+                    ),
                   IconButton(
                     icon: const Icon(Icons.history),
                     tooltip: '历史记录',
@@ -664,6 +693,7 @@ composerBuilder: (context) => ChatComposerWidget(
                                 ),
                               );
                             } else {
+                              final reasoningText = _reasoningContents[message.id];
                               messageBubble = Container(
                                 margin:
                                     const EdgeInsets.symmetric(vertical: 2),
@@ -674,15 +704,23 @@ composerBuilder: (context) => ChatComposerWidget(
                                       : Colors.grey[100],
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: MarkdownWidget(
-                                  data: message.text,
-                                  selectable: true,
-                                  shrinkWrap: true,
-                                  physics:
-                                      const NeverScrollableScrollPhysics(),
-                                  config: markdownConfig.copy(configs: [
-                                    PreConfig(theme: draculaTheme),
-                                  ]),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (reasoningText != null)
+                                      _ReasoningSection(reasoningText: reasoningText),
+                                    MarkdownWidget(
+                                      data: message.text,
+                                      selectable: true,
+                                      shrinkWrap: true,
+                                      physics:
+                                          const NeverScrollableScrollPhysics(),
+                                      config: markdownConfig.copy(configs: [
+                                        PreConfig(theme: draculaTheme),
+                                      ]),
+                                    ),
+                                  ],
                                 ),
                               );
                             }
@@ -1088,6 +1126,74 @@ class _ActionButton extends StatelessWidget {
         visualDensity: VisualDensity.compact,
       ),
       onPressed: onPressed,
+    );
+  }
+}
+
+class _ReasoningSection extends StatefulWidget {
+  final String reasoningText;
+  const _ReasoningSection({required this.reasoningText});
+
+  @override
+  State<_ReasoningSection> createState() => _ReasoningSectionState();
+}
+
+class _ReasoningSectionState extends State<_ReasoningSection> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _expanded ? Icons.expand_less : Icons.chevron_right,
+                  size: 16,
+                  color: Colors.orange[700],
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '推理过程',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.orange[700],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_expanded)
+            Container(
+              margin: const EdgeInsets.only(top: 4),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.grey[800] : Colors.orange[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: Colors.orange.withOpacity(0.3),
+                ),
+              ),
+              child: Text(
+                widget.reasoningText,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.grey[400] : Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
