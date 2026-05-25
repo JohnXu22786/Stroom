@@ -493,8 +493,8 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
 
         final models = oldModels.map((m) {
           final typeConfig = <String, dynamic>{};
-          final maxTokens = m['maxTokens'];
-          if (maxTokens != null) typeConfig['maxTokens'] = maxTokens;
+          final maxTokens = m['maxTokens'] ?? m['context'];
+          if (maxTokens != null) typeConfig['context'] = maxTokens;
           final temperature = m['temperature'];
           if (temperature != null) typeConfig['temperature'] = temperature;
 
