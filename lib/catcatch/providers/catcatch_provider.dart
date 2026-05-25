@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import '../../services/storage_service.dart';
+import '../../services/background_service.dart';
 import 'package:uuid/uuid.dart';
 import 'package:dio/dio.dart' show CancelToken;
 import '../models/catcatch_task.dart';
@@ -432,8 +433,15 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   // 内部执行方法
   // ===========================================================================
 
+  /// 检查是否有运行中的任务
+  bool _hasRunningTasks() =>
+      state.any((t) => t.status == TaskStatus.running);
+
   /// 执行任务
   Future<void> _executeTask(CatCatchTask task) async {
+    if (!_hasRunningTasks()) {
+      await startBackgroundService();
+    }
     final cancelToken = CancelToken();
     _cancelTokens[task.id] = cancelToken;
 
@@ -499,6 +507,9 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   /// 从指定步骤执行
   Future<void> _executeTaskFrom(CatCatchTask task, StepType fromStep) async {
+    if (!_hasRunningTasks()) {
+      await startBackgroundService();
+    }
     final cancelToken = CancelToken();
     _cancelTokens[task.id] = cancelToken;
 
@@ -571,6 +582,9 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       await file.writeAsString(jsonEncode(data));
     } catch (e) {
       debugPrint('[CatCatchNotifier] Failed to persist tasks: $e');
+    }
+    if (!_hasRunningTasks()) {
+      await stopBackgroundService();
     }
   }
 
