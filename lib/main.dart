@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'application.dart';
@@ -20,7 +21,10 @@ final catcatchStartupProvider = FutureProvider<void>((ref) async {
 Future<void> main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
-    await initializeBackgroundService();
+    if (defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS) {
+      await initializeBackgroundService();
+    }
     registerBuiltinProviders();
     registerBuiltinProviderTypes();
 
