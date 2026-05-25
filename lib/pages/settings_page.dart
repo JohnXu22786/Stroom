@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/theme_provider.dart';
 import '../providers/provider_config.dart';
 import '../providers/camera_settings_provider.dart';
+import '../utils/app_version.dart';
 import 'provider_config_page.dart';
 import 'backup_restore_page.dart';
 
@@ -266,7 +267,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             _buildListTile(
               leading: const Icon(Icons.info_outline, color: Colors.blue),
               title: '应用版本',
-              subtitle: '1.0.0',
+              subtitle: appVersion,
               trailing: null,
               onTap: () {},
             ),
@@ -311,7 +312,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     showLicensePage(
       context: context,
       applicationName: 'Stroom',
-      applicationVersion: '1.0.0',
+      applicationVersion: appVersion,
       applicationLegalese: '© 2023 Stroom Team',
     );
   }

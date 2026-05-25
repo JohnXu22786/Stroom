@@ -12,7 +12,19 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  prepare-version:
+    runs-on: ubuntu-latest
+    outputs:
+      app_version: ${{ steps.extract-version.outputs.app_version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: extract-version
+        run: |
+          VERSION=$(grep '^version: ' pubspec.yaml | sed 's/version: //')
+          echo "app_version=$VERSION" >> $GITHUB_OUTPUT
+
   windows:
+    needs: prepare-version
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +32,7 @@ jobs:
         with:
           channel: stable
       - run: flutter pub get
-      - run: flutter build windows --release
+      - run: flutter build windows --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
       - name: Create Windows archive
         shell: pwsh
         run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath "stroom-windows-release-$env:TAG.zip"
@@ -32,6 +44,7 @@ jobs:
 
 
   macos:
+    needs: prepare-version
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,7 +56,7 @@ jobs:
       - name: Configure CocoaPods
         run: |
           pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
-      - run: flutter build macos --release
+      - run: flutter build macos --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
       - name: Create macOS archive
         shell: bash
         run: |
@@ -55,6 +68,7 @@ jobs:
           files: stroom-macos-release-*.zip
 
   linux:
+    needs: prepare-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -66,7 +80,7 @@ jobs:
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
       - run: flutter create --platforms=linux .
       - run: flutter pub get
-      - run: flutter build linux --release
+      - run: flutter build linux --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
       - name: Create Linux archive
         run: |
           cd build/linux/x64/release/bundle
@@ -77,6 +91,7 @@ jobs:
           files: stroom-linux-release-*.zip
 
   web:
+    needs: prepare-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -84,7 +99,7 @@ jobs:
         with:
           channel: stable
       - run: flutter pub get
-      - run: flutter build web --release
+      - run: flutter build web --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
       - name: Create Web archive
         run: |
           cd build/web
@@ -95,6 +110,7 @@ jobs:
           files: stroom-web-release-*.zip
 
   android:
+    needs: prepare-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -117,7 +133,7 @@ jobs:
           mkdir -p ~/.gradle/init.d
           cp android/gradle-init-scripts/plugin-repos.gradle ~/.gradle/init.d/
       - run: flutter pub get
-      - run: flutter build apk --release
+      - run: flutter build apk --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
       - name: Rename APK
         run: mv build/app/outputs/flutter-apk/app-release.apk "stroom-android-release-$TAG.apk"
       - uses: softprops/action-gh-release@v2

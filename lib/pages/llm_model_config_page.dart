@@ -14,7 +14,7 @@ class LlmModelConfigPage extends StatefulWidget {
 class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _modelIdController;
-  late final TextEditingController _maxTokensController;
+  late final TextEditingController _contextController;
   late List<CustomParam> _customParams;
   bool _isSaving = false;
 
@@ -26,9 +26,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     final m = widget.model;
     _nameController = TextEditingController(text: m?.name ?? '');
     _modelIdController = TextEditingController(text: m?.modelId ?? '');
-    final maxTokens = (m?.typeConfig['maxTokens'] as num?)?.toInt();
-    _maxTokensController = TextEditingController(
-        text: maxTokens != null ? maxTokens.toString() : '');
+    final context = (m?.typeConfig['context'] as num?)?.toInt()
+        ?? (m?.typeConfig['maxTokens'] as num?)?.toInt();
+    _contextController = TextEditingController(
+        text: context != null ? context.toString() : '');
     _customParams = (m?.customParams ?? []).map((p) => p.copy()).toList();
   }
 
@@ -36,7 +37,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   void dispose() {
     _nameController.dispose();
     _modelIdController.dispose();
-    _maxTokensController.dispose();
+    _contextController.dispose();
     super.dispose();
   }
 
@@ -72,21 +73,21 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       return;
     }
 
-    final maxTokensStr = _maxTokensController.text.trim();
-    if (maxTokensStr.isEmpty) {
+    final contextStr = _contextController.text.trim();
+    if (contextStr.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('最大 Token 数为必填项'),
+          content: Text('上下文长度为必填项'),
           behavior: SnackBarBehavior.floating,
         ),
       );
       return;
     }
-    final maxTokens = int.tryParse(maxTokensStr);
-    if (maxTokens == null || maxTokens <= 0) {
+    final contextValue = int.tryParse(contextStr);
+    if (contextValue == null || contextValue <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('最大 Token 数必须为正整数'),
+          content: Text('上下文长度必须为正整数'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -128,7 +129,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     final result = ModelConfig(
       name: name,
       modelId: modelId,
-      typeConfig: {'maxTokens': maxTokens},
+      typeConfig: {'context': contextValue},
       customParams: _customParams.map((p) => p.copy()).toList(),
     );
 
@@ -187,15 +188,15 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           const SizedBox(height: 16),
 
           // ==========================================================
-          // Max Tokens
+          // 上下文长度
           // ==========================================================
-          const Text('Max Tokens *',
+          const Text('上下文长度 (Context) *',
               style: TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           TextField(
-            controller: _maxTokensController,
+            controller: _contextController,
             decoration: const InputDecoration(
-              hintText: '输入最大 Token 数',
+              hintText: '输入上下文长度',
               border: OutlineInputBorder(),
             ),
             keyboardType: TextInputType.number,

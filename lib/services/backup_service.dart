@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'manifest_database.dart';
+import '../utils/app_version.dart';
 import '../utils/web_file_store.dart';
 import 'storage_service.dart';
 
@@ -25,22 +26,25 @@ import 'storage_service.dart';
 class BackupService {
   BackupService._();
 
-  /// 创建完整备份 zip 到 [outputPath]，返回 zip 文件路径。
-  /// 仅 Native 平台可用；Web 平台请使用 [exportBackup]。
   static Future<String> createBackup({
     required String outputPath,
     void Function(double progress)? onProgress,
   }) async {
+    if (kIsWeb) {
+      throw UnsupportedError('createBackup is not available on web. Use exportBackup instead.');
+    }
     final bytes = await _buildBackupBytes(onProgress: onProgress);
     await File(outputPath).writeAsBytes(bytes);
     return outputPath;
   }
 
-  /// 从 zip 文件恢复所有数据。仅 Native 平台可用。
   static Future<void> restoreBackup(
     String zipPath, {
     void Function(double progress)? onProgress,
   }) async {
+    if (kIsWeb) {
+      throw UnsupportedError('restoreBackup is not available on web. Use importBackup instead.');
+    }
     final bytes = await File(zipPath).readAsBytes();
     await _restoreFromBytes(bytes, onProgress: onProgress);
   }
@@ -60,7 +64,7 @@ class BackupService {
     final manifest = {
       'version': 1,
       'createdAt': DateTime.now().toIso8601String(),
-      'appVersion': '1.0.0',
+      'appVersion': appVersion,
     };
     _addStringToArchive(archive, 'manifest.json', jsonEncode(manifest));
     onProgress?.call(0.05);
@@ -201,7 +205,6 @@ class BackupService {
     // 旧格式: files/pictures/, files/tts_audio/, ..., tasks/synthesis_tasks.json
     const knownDirs = ['pictures', 'tts_audio', 'videos', 'attachments',
                        'synthesis', 'catcatch'];
-    final appDir = await AppStorage.directory;
     final skipFiles = {'manifest.json', 'stroom_manifest.json',
         'database/manifest_data.json', 'preferences.json'};
 
@@ -236,13 +239,9 @@ class BackupService {
 
       final relativePath = key.substring(matchedDir.length + 1);
 
-      // 任务文件写入 synthesis/tasks.json 或 catcatch/tasks.json
       if (matchedDir == 'synthesis' || matchedDir == 'catcatch') {
         if (relativePath == 'tasks.json') {
-          final targetDir = Directory(p.join(appDir, matchedDir));
-          await targetDir.create(recursive: true);
-          await File(p.join(targetDir.path, 'tasks.json'))
-              .writeAsBytes(entry.value);
+          await _writeFile(matchedDir, 'tasks.json', entry.value);
         }
         continue;
       }
