@@ -130,7 +130,9 @@ jobs:
           gradle-version: "8.14"
       - run: flutter pub get
       - name: Decode keystore
-        run: echo "${{ secrets.KEYSTORE }}" | base64 -d > ${{ runner.temp }}/keystore.jks
+        env:
+          KEYSTORE: ${{ secrets.KEYSTORE }}
+        run: printf '%s' "$KEYSTORE" | base64 -d > ${{ runner.temp }}/keystore.jks
       - name: Build APK
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/keystore.jks
