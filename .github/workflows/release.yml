@@ -129,7 +129,15 @@ jobs:
         with:
           gradle-version: "8.14"
       - run: flutter pub get
-      - run: flutter build apk --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
+      - name: Decode keystore
+        run: echo "${{ secrets.KEYSTORE }}" | base64 -d > ${{ runner.temp }}/keystore.jks
+      - name: Build APK
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/keystore.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: flutter build apk --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
       - name: Rename APK
         run: mv build/app/outputs/flutter-apk/app-release.apk "stroom-android-release-$TAG.apk"
       - uses: softprops/action-gh-release@v2

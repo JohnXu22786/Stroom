@@ -1,12 +1,20 @@
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Load keystore config from key.properties (local) or environment variables (CI).
+val keystoreProperties = java.util.Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(keystorePropertiesFile.inputStream())
+}
+
+fun String?.orEnv(key: String): String? = this?.takeIf { it.isNotEmpty() } ?: System.getenv(key)
+
 android {
-    namespace = "com.example.stroom"
+    namespace = "com.johntsui.stroom"
     compileSdk = 36
     ndkVersion = "28.2.13676358"
 
@@ -20,14 +28,23 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.stroom"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        applicationId = "com.johntsui.stroom"
         minSdk = flutter.minSdkVersion
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = keystoreProperties["storeFile"]
+                ?.toString()?.takeIf { it.isNotEmpty() }?.let { file(it) }
+                ?: System.getenv("KEYSTORE_PATH")?.let { file(it) }
+
+            storePassword = keystoreProperties["storePassword"]?.orEnv("KEYSTORE_PASSWORD")
+            keyAlias = keystoreProperties["keyAlias"]?.orEnv("KEY_ALIAS")
+            keyPassword = keystoreProperties["keyPassword"]?.orEnv("KEY_PASSWORD")
+        }
     }
 
     buildTypes {
@@ -38,9 +55,7 @@ android {
             }
         }
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }
