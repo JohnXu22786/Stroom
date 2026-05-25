@@ -10,6 +10,8 @@ import 'package:path_provider/path_provider.dart';
 
 import '../catcatch/models/media_resource.dart';
 import '../catcatch/providers/catcatch_provider.dart';
+import '../utils/duration_parser.dart';
+import 'browser_page.dart';
 import 'unified_task_list_page.dart';
 
 // =============================================================================
@@ -336,42 +338,22 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
   }
 
   void _updateDurationDisplay() {
-    final parsed = _parseDurationInput(_durationController.text);
+    final parsed = parseSmartDuration(_durationController.text);
     if (parsed == null) {
       setState(() => _durationDisplay = '');
       return;
     }
-    final parts = <String>[];
-    if (parsed.hours > 0) parts.add('${parsed.hours}时');
-    if (parsed.minutes > 0 || parsed.hours > 0) parts.add('${parsed.minutes}分');
-    parts.add('${parsed.seconds}秒');
-    setState(() => _durationDisplay = parts.join(''));
+    setState(() => _durationDisplay = formatDurationDisplay(parsed));
   }
 
   _DurationResult? _parseDurationInput(String text) {
-    final numbers = text.split(RegExp(r'[^\d]+')).where((s) => s.isNotEmpty).map(int.parse).toList();
-    if (numbers.isEmpty) return null;
-
-    var h = 0, m = 0, s = 0;
-    if (numbers.length == 1) {
-      s = numbers[0];
-      m = s ~/ 60;
-      s = s % 60;
-      h = m ~/ 60;
-      m = m % 60;
-      return _DurationResult(hours: h, minutes: m, seconds: s);
-    }
-    if (numbers.length == 2) {
-      m = numbers[0];
-      s = numbers[1];
-      if (m > 59 || s > 59) return null;
-      return _DurationResult(hours: 0, minutes: m, seconds: s);
-    }
-    h = numbers[0];
-    m = numbers[1];
-    s = numbers[2];
-    if (m > 59 || s > 59) return null;
-    return _DurationResult(hours: h, minutes: m, seconds: s);
+    final result = parseSmartDuration(text);
+    if (result == null) return null;
+    return _DurationResult(
+      hours: result.hours,
+      minutes: result.minutes,
+      seconds: result.seconds,
+    );
   }
 
   void _startTask() {
