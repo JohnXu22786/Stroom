@@ -365,6 +365,95 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     await _onMessageSend(msg.content, msg.attachments);
   }
 
+  void _showEditMessageDialog(String messageId) {
+    final index = _history.indexWhere((m) => m.id == messageId);
+    if (index == -1) return;
+    final msg = _history[index];
+    final editingController = TextEditingController(text: msg.content);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(8),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const Text(
+                    '编辑消息',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () {
+                      editingController.dispose();
+                      Navigator.pop(ctx);
+                    },
+                    tooltip: '关闭',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: TextField(
+                  controller: editingController,
+                  maxLines: null,
+                  expands: true,
+                  textAlignVertical: TextAlignVertical.top,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: '编辑消息...',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.all(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.send_rounded, size: 18),
+                  label: const Text('发送'),
+                  onPressed: () {
+                    final newText = editingController.text.trim();
+                    editingController.dispose();
+                    Navigator.pop(ctx);
+                    if (newText.isEmpty) return;
+                    // Replace message content and re-send
+                    _editUserMessageWithText(messageId, newText);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editUserMessageWithText(String messageId, String newText) async {
+    final index = _history.indexWhere((m) => m.id == messageId);
+    if (index == -1) return;
+    final msg = _history[index];
+
+    // Remove this message and all after from history
+    final removed = _history.sublist(index);
+    _history.removeRange(index, _history.length);
+    for (final r in removed) {
+      final ctrlMsg =
+          _controller?.messages.where((m) => m.id == r.id).firstOrNull;
+      if (ctrlMsg != null) {
+        await _controller?.removeMessage(ctrlMsg);
+      }
+    }
+
+    // Send with edited text
+    await _onMessageSend(newText, msg.attachments);
+  }
+
   Future<void> _retryAssistantMessage(String messageId) async {
     final index = _history.indexWhere((m) => m.id == messageId);
     if (index == -1 || index == 0) return;
@@ -777,12 +866,28 @@ composerBuilder: (context) => ChatComposerWidget(
                                       },
                                     ),
                                     const SizedBox(width: 2),
-                                    _ActionButton(
-                                      icon: isAi ? Icons.refresh : Icons.edit_outlined,
-                                      tooltip: isAi ? '重试' : '编辑',
-                                      onPressed: () =>
-                                          _confirmRetryOrEdit(message.id),
-                                    ),
+                                    if (isAi)
+                                      _ActionButton(
+                                        icon: Icons.refresh,
+                                        tooltip: '重试',
+                                        onPressed: () =>
+                                            _confirmRetryOrEdit(message.id),
+                                      )
+                                    else ...[
+                                      _ActionButton(
+                                        icon: Icons.replay,
+                                        tooltip: '重新发送',
+                                        onPressed: () =>
+                                            _editUserMessage(message.id),
+                                      ),
+                                      const SizedBox(width: 2),
+                                      _ActionButton(
+                                        icon: Icons.edit_outlined,
+                                        tooltip: '编辑',
+                                        onPressed: () =>
+                                            _showEditMessageDialog(message.id),
+                                      ),
+                                    ],
                                     const SizedBox(width: 2),
                                     _ActionButton(
                                       icon: Icons.delete_outline,
@@ -1252,6 +1357,69 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _reportComposerHeight());
   }
 
+  void _showComposerFullscreenEditor() {
+    final editingController = TextEditingController(text: _textController.text);
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(8),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const Text(
+                    '编辑消息',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () {
+                      editingController.dispose();
+                      Navigator.pop(ctx);
+                    },
+                    tooltip: '关闭',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: TextField(
+                  controller: editingController,
+                  maxLines: null,
+                  expands: true,
+                  textAlignVertical: TextAlignVertical.top,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: '输入消息...',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.all(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.send_rounded, size: 18),
+                  label: const Text('发送'),
+                  onPressed: () {
+                    final text = editingController.text;
+                    editingController.dispose();
+                    Navigator.pop(ctx);
+                    _handleSubmitted(text);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showAttachmentPicker() {
     showModalBottomSheet(
       context: context,
@@ -1567,6 +1735,12 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
                         horizontal: 16,
                         vertical: 10,
                       ),
+                      suffixIcon: IconButton(
+                        icon: Icon(Icons.fullscreen, size: 20, color: cs.onSurfaceVariant),
+                        tooltip: '全屏编辑',
+                        onPressed: _showComposerFullscreenEditor,
+                      ),
+                      suffixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 0),
                     ),
                   ),
                 ),
