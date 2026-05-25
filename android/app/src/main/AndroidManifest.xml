@@ -6,6 +6,9 @@
     <!-- Camera permission -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Storage permissions for reading and writing images -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -75,8 +78,10 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- Optional: if you plan to use a foreground service, declare it here -->
-        <!-- <service android:name=".ForegroundService" android:exported="false" /> -->
+        <service
+            android:name="com.foregroundservice.ForegroundService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
 
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
