@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 
+import '../models/ai_stream_event.dart';
 import '../models/chat_message.dart';
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
@@ -29,8 +30,9 @@ class ChatService {
   final ModelConfig? _modelConfig;
   bool _isCancelledByUser = false;
   CancelToken? _cancelToken;
-  StreamSubscription<String>? _streamSubscription;
+  StreamSubscription<AIStreamEvent>? _streamSubscription;
   StreamController<String>? _controller;
+  String _reasoningBuffer = '';
 
   /// Construct an instance backed by a real provider and model config.
   ChatService({
@@ -52,9 +54,10 @@ class ChatService {
   /// caller before calling this method). Attachments are converted to the
   /// OpenAI multimodal content‑array format (base64 inline images).
   Stream<String> sendStream(String userMessage,
-      {required List<ChatMessage> history}) {
+      {required List<ChatMessage> history, bool reasoning = false}) {
     cancel();
     _isCancelledByUser = false;
+    _reasoningBuffer = '';
 
     _controller = StreamController<String>(
       onCancel: () {
@@ -69,20 +72,20 @@ class ChatService {
 
     final extraParams = _buildExtraParams();
 
-    // Pre‑process messages in a microtask so the stream is returned
-    // immediately (caller can listen right away).
     Future.microtask(() async {
       try {
-        if (_isCancelledByUser) return; // cancelled before microtask ran
+        if (_isCancelledByUser) return;
         final apiMessages = await _prepareApiMessages(history);
         _cancelToken = CancelToken();
         _streamSubscription = _provider!
             .chatStream(
           apiMessages,
           model: _modelConfig!.modelId,
-          maxTokens: (_modelConfig!.typeConfig['maxTokens'] as num?)
-                  ?.toInt() ??
-              4096,
+          reasoning: reasoning,
+          maxTokens: (_modelConfig!.typeConfig['context'] as num?)
+                  ?.toInt()
+              ?? (_modelConfig!.typeConfig['maxTokens'] as num?)?.toInt()
+              ?? 4096,
           temperature: (_modelConfig!.typeConfig['temperature'] as num?)
                   ?.toDouble() ??
               0.7,
@@ -90,8 +93,12 @@ class ChatService {
           cancelToken: _cancelToken,
         )
             .listen(
-          (chunk) {
-            if (!_controller!.isClosed) _controller!.add(chunk);
+          (event) {
+            if (event.isReasoning) {
+              _reasoningBuffer += event.text;
+            } else if (!_controller!.isClosed) {
+              _controller!.add(event.text);
+            }
           },
           onDone: () {
             _streamSubscription = null;
@@ -120,6 +127,8 @@ class ChatService {
 
     return _controller!.stream;
   }
+
+  String get reasoningContent => _reasoningBuffer;
 
   /// Convert [ChatMessage] list to API‑format message maps.
   ///
@@ -197,9 +206,9 @@ class ChatService {
 
   /// Non-streaming version - collects stream into a single string.
   Future<String> send(String userMessage,
-      {required List<ChatMessage> history}) async {
+      {required List<ChatMessage> history, bool reasoning = false}) async {
     final chunks = <String>[];
-    await for (final chunk in sendStream(userMessage, history: history)) {
+    await for (final chunk in sendStream(userMessage, history: history, reasoning: reasoning)) {
       chunks.add(chunk);
     }
     return chunks.join('');

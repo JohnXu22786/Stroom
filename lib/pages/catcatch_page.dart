@@ -423,6 +423,18 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
         foregroundColor: colorScheme.onSurface,
         elevation: 0,
         scrolledUnderElevation: 1,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.language, size: 20),
+            tooltip: '内置浏览器',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const BrowserPage(initialUrl: 'https://www.google.com'),
+              ),
+            ),
+          ),
+        ],
       ),
       body: _buildInputSection(colorScheme),
     );
