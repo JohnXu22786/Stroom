@@ -228,6 +228,20 @@ class TaskExecutor {
               }
             }
 
+            // 普通格式文件不需要转码/合并，直接跳过
+            final skipExt = p
+                .extension(downloadedFilePath)
+                .toLowerCase()
+                .replaceAll('.', '');
+            final isPlaylistSel =
+                task.selectedMedia?.isPlaylist ?? false;
+            if (!isPlaylistSel && !_isSpecialFormat(skipExt)) {
+              _markStep(steps, i, skipped: true);
+              onUpdate(task.copyWith(
+                  steps: steps, progress: _calcProgress(steps)));
+              continue;
+            }
+
             downloadedFilePath = await _executeConvert(
                 task: task,
                 steps: steps,
