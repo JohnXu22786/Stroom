@@ -427,6 +427,15 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     _persistTasks();
   }
 
+  /// 关闭指定任务的错误信息
+  void dismissError(String taskId) {
+    state = state.map((t) {
+      if (t.id != taskId) return t;
+      return t.copyWith(error: null);
+    }).toList();
+    _persistTasks();
+  }
+
   /// 删除单个任务
   void removeTask(String taskId) {
     // 取消正在进行的 HTTP 请求
