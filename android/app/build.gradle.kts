@@ -4,14 +4,20 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// Load keystore config from key.properties (local) or environment variables (CI).
-val keystoreProperties = java.util.Properties()
-val keystorePropertiesFile = rootProject.file("key.properties")
-if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(keystorePropertiesFile.inputStream())
+import java.util.Properties
+import java.io.FileInputStream
+
+val keystoreProps = Properties()
+val keystorePropsFile = rootProject.file("key.properties")
+if (keystorePropsFile.exists()) {
+    keystoreProps.load(FileInputStream(keystorePropsFile))
 }
 
-fun String?.orEnv(key: String): String? = this?.takeIf { it.isNotEmpty() } ?: System.getenv(key)
+fun prop(key: String, env: String): String {
+    val v = keystoreProps.getProperty(key)
+    if (v != null && v.isNotEmpty()) return v
+    return System.getenv(env) ?: ""
+}
 
 android {
     namespace = "com.johntsui.stroom"
@@ -37,13 +43,11 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = keystoreProperties["storeFile"]
-                ?.toString()?.takeIf { it.isNotEmpty() }?.let { file(it) }
-                ?: System.getenv("KEYSTORE_PATH")?.let { file(it) }
-
-            storePassword = keystoreProperties["storePassword"]?.orEnv("KEYSTORE_PASSWORD")
-            keyAlias = keystoreProperties["keyAlias"]?.orEnv("KEY_ALIAS")
-            keyPassword = keystoreProperties["keyPassword"]?.orEnv("KEY_PASSWORD")
+            val sf = prop("storeFile", "KEYSTORE_PATH")
+            if (sf.isNotEmpty()) storeFile = file(sf)
+            storePassword = prop("storePassword", "KEYSTORE_PASSWORD")
+            keyAlias = prop("keyAlias", "KEY_ALIAS")
+            keyPassword = prop("keyPassword", "KEY_PASSWORD")
         }
     }
 
