@@ -32,8 +32,14 @@ class MediaResource {
   /// 分组标识，用于关联属于同一视频的不同轨道（如音频+视频）
   final String? groupId;
 
-  /// 是否为音视频分离的轨道（同一内容的独立音频/视频流）
+  /// 是否音视频分离的轨道（同一内容的独立音频/视频流）
   final bool isLikelySplitTrack;
+
+  /// 视频宽度（像素），通过探针获取
+  final int? width;
+
+  /// 视频高度（像素），通过探针获取
+  final int? height;
 
   const MediaResource({
     required this.url,
@@ -47,6 +53,8 @@ class MediaResource {
     this.duration,
     this.groupId,
     this.isLikelySplitTrack = false,
+    this.width,
+    this.height,
   });
 
   // ---------------------------------------------------------------------------
@@ -99,6 +107,8 @@ class MediaResource {
         'duration': duration,
         'groupId': groupId,
         'isLikelySplitTrack': isLikelySplitTrack,
+        'width': width,
+        'height': height,
       };
 
   factory MediaResource.fromMap(Map<String, dynamic> map) => MediaResource(
@@ -113,6 +123,8 @@ class MediaResource {
         duration: map['duration'] as String?,
         groupId: map['groupId'] as String?,
         isLikelySplitTrack: map['isLikelySplitTrack'] as bool? ?? false,
+        width: map['width'] as int?,
+        height: map['height'] as int?,
       );
 
   MediaResource copyWith({
@@ -127,6 +139,8 @@ class MediaResource {
     String? duration,
     String? groupId,
     bool? isLikelySplitTrack,
+    int? width,
+    int? height,
     bool clearGroupId = false,
     bool clearIsLikelySplitTrack = false,
   }) =>
@@ -144,6 +158,8 @@ class MediaResource {
         isLikelySplitTrack: clearIsLikelySplitTrack
             ? false
             : (isLikelySplitTrack ?? this.isLikelySplitTrack),
+        width: width ?? this.width,
+        height: height ?? this.height,
       );
 
   @override
