@@ -5,7 +5,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../models/ai_stream_event.dart';
+import '../models/chat_event.dart';
 import '../models/chat_message.dart';
+import '../models/tool_call.dart';
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
 import 'attachment_storage.dart';
@@ -128,6 +130,157 @@ class ChatService {
     return _controller!.stream;
   }
 
+  /// Stream a message WITH tool call support.
+  /// Returns both text chunks and tool call events.
+  /// Handles the function-calling loop internally.
+  Stream<ChatEvent> sendStreamWithTools(
+    String userMessage, {
+    required List<ChatMessage> history,
+    bool reasoning = false,
+    List<ToolDefinition> tools = const [],
+  }) {
+    _isCancelledByUser = false;
+    _reasoningBuffer = '';
+
+    final controller = StreamController<ChatEvent>(
+      onCancel: () {
+        _cancelToken?.cancel();
+        _cancelToken = null;
+        _streamSubscription?.cancel();
+        _streamSubscription = null;
+      },
+    );
+
+    final extraParams = _buildExtraParams();
+    final toolDefs = tools.map((t) => t.toJson()).toList();
+
+    Future.microtask(() async {
+      try {
+        if (_isCancelledByUser) return;
+        var messages = await _prepareApiMessages(history);
+        int loopProtection = 0;
+
+        while (!_isCancelledByUser && loopProtection < 10) {
+          loopProtection++;
+          _cancelToken = CancelToken();
+
+          final completer = Completer<void>();
+          final toolCallRefs = <Map<String, dynamic>>[];
+
+          _streamSubscription = _provider!
+              .chatStream(
+            messages,
+            model: _modelConfig!.modelId,
+            reasoning: reasoning,
+            maxTokens:
+                (_modelConfig!.typeConfig['context'] as num?)?.toInt() ??
+                    (_modelConfig!.typeConfig['maxTokens'] as num?)?.toInt() ??
+                    4096,
+            temperature:
+                (_modelConfig!.typeConfig['temperature'] as num?)?.toDouble() ??
+                    0.7,
+            tools: toolDefs.isNotEmpty ? toolDefs : null,
+            extraParams: extraParams,
+            cancelToken: _cancelToken,
+          ).listen(
+            (event) {
+              if (_isCancelledByUser) return;
+              if (event.isReasoning) {
+                _reasoningBuffer += event.text;
+              } else if (event.isToolCallEvent) {
+                toolCallRefs.addAll(event.toolCalls!);
+              } else if (event.text.isNotEmpty) {
+                controller.add(TextEvent(event.text));
+              }
+            },
+            onDone: () {
+              _streamSubscription = null;
+              if (!completer.isCompleted) completer.complete();
+            },
+            onError: (Object error) {
+              _streamSubscription = null;
+              debugPrint('ChatService stream error: $error');
+              if (!controller.isClosed) {
+                controller.addError(error);
+              }
+              if (!completer.isCompleted) completer.complete();
+            },
+          );
+
+          await completer.future;
+          if (_isCancelledByUser) break;
+
+          // No tool calls → done
+          if (toolCallRefs.isEmpty) break;
+
+          // Process tool calls
+          for (final tc in toolCallRefs) {
+            if (_isCancelledByUser) break;
+            final fn = tc['function'] as Map<String, dynamic>? ?? {};
+            final name = fn['name'] as String? ?? 'unknown';
+            final rawArgs = fn['arguments'] as String? ?? '{}';
+            final toolCallId = tc['id'] as String? ?? '';
+
+            Map<String, dynamic> parsedArgs = {};
+            try {
+              parsedArgs =
+                  Map<String, dynamic>.from(jsonDecode(rawArgs));
+            } catch (_) {}
+
+            final toolCallData = ToolCallData(
+              id: toolCallId,
+              name: name,
+              arguments: parsedArgs,
+              status: ToolCallStatus.running,
+            );
+
+            controller.add(ToolCallStartEvent(toolCallData));
+
+            // Execute tool
+            String result;
+            try {
+              result = _executeTool(name, parsedArgs);
+            } catch (e) {
+              result = 'Error: $e';
+            }
+
+            controller.add(
+                ToolCallCompleteEvent(toolCallId, result));
+
+            // Add tool call + result to messages for the next API turn
+            messages.add({
+              'role': 'assistant',
+              'content': null,
+              'tool_calls': [
+                {
+                  'id': toolCallId,
+                  'type': 'function',
+                  'function': {'name': name, 'arguments': rawArgs},
+                }
+              ],
+            });
+            messages.add({
+              'role': 'tool',
+              'tool_call_id': toolCallId,
+              'content': result,
+            });
+          }
+        }
+      } catch (e) {
+        if (!controller.isClosed) {
+          controller.addError(e);
+        }
+      } finally {
+        if (!controller.isClosed) {
+          await controller.close();
+        }
+        _cleanUp();
+      }
+    });
+
+    return controller.stream;
+  }
+
   String get reasoningContent => _reasoningBuffer;
 
   /// Convert [ChatMessage] list to API‑format message maps.
@@ -231,6 +384,31 @@ class ChatService {
     if (_controller?.isClosed ?? true) {
       _controller = null;
     }
+  }
+
+  // ── Tool execution ────────────────────────────────────────────────
+
+  static final Map<String, Map<String, dynamic>> _toolRegistries = {};
+
+  /// Register a tool handler for a given tool definition.
+  /// The handler receives parsed arguments and returns a result string.
+  static void registerTool(
+    ToolDefinition def,
+    String Function(Map<String, dynamic>) handler,
+  ) {
+    _toolRegistries[def.name] = {
+      'definition': def,
+      'handler': handler,
+    };
+  }
+
+  String _executeTool(String name, Map<String, dynamic> args) {
+    final entry = _toolRegistries[name];
+    if (entry != null) {
+      final handler = entry['handler'] as String Function(Map<String, dynamic>);
+      return handler(args);
+    }
+    return 'Error: Unknown tool "$name"';
   }
 
   // ── Extra params helpers ─────────────────────────────────────────

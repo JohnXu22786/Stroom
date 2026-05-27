@@ -35,6 +35,7 @@ abstract class BaseChatProvider {
     int? maxTokens,
     double? temperature,
     bool reasoning = false,
+    List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
   });
@@ -92,6 +93,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     double? temperature,
     bool reasoning = false,
     bool stream = false,
+    List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
   }) {
     return {
@@ -101,6 +103,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       'temperature': temperature ?? defaultParams['temperature'],
       'stream': stream,
       if (reasoning) ..._reasoningParams(),
+      if (tools != null && tools.isNotEmpty) 'tools': tools,
       if (extraParams != null) ...extraParams,
     };
   }
@@ -184,6 +187,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     int? maxTokens,
     double? temperature,
     bool reasoning = false,
+    List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
   }) async* {
@@ -197,10 +201,13 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         temperature: temperature,
         reasoning: reasoning,
         stream: true,
+        tools: tools,
         extraParams: extraParams);
 
     debugPrint(
         'OpenAICompatibleChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}');
+
+    final Map<int, Map<String, dynamic>> toolCallAccumulators = {};
 
     await for (final event in sseStream(
       _baseUrl,
@@ -220,15 +227,41 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         final choices = data['choices'] as List?;
         if (choices != null && choices.isNotEmpty) {
           final delta = choices[0]['delta'] as Map<String, dynamic>?;
-          if (delta != null) {
-            final content = delta['content'] as String?;
-            if (content != null && content.isNotEmpty) {
-              yield AIStreamEvent(content);
+          if (delta == null) continue;
+
+          // Text content
+          final content = delta['content'] as String?;
+          if (content != null && content.isNotEmpty) {
+            yield AIStreamEvent(content);
+          }
+
+          // Reasoning content
+          if (reasoning) {
+            final reasoningContent = delta['reasoning_content'] as String?;
+            if (reasoningContent != null && reasoningContent.isNotEmpty) {
+              yield AIStreamEvent(reasoningContent, isReasoning: true);
             }
-            if (reasoning) {
-              final reasoningContent = delta['reasoning_content'] as String?;
-              if (reasoningContent != null && reasoningContent.isNotEmpty) {
-                yield AIStreamEvent(reasoningContent, isReasoning: true);
+          }
+
+          // Tool call deltas (streamed in chunks by index)
+          final toolCallsDelta = delta['tool_calls'] as List?;
+          if (toolCallsDelta != null) {
+            for (final tc in toolCallsDelta) {
+              final index = tc['index'] as int;
+              toolCallAccumulators.putIfAbsent(index, () => {});
+              final acc = toolCallAccumulators[index]!;
+
+              if (tc['id'] != null) acc['id'] = tc['id'];
+              if (tc['type'] != null) acc['type'] = tc['type'];
+              if (tc['function'] != null) {
+                acc.putIfAbsent('function', () => <String, dynamic>{});
+                final fn = tc['function'] as Map<String, dynamic>;
+                final accFn = acc['function'] as Map<String, dynamic>;
+                if (fn['name'] != null) accFn['name'] = fn['name'];
+                if (fn['arguments'] != null) {
+                  accFn['arguments'] = (accFn['arguments'] as String? ?? '') +
+                      (fn['arguments'] as String);
+                }
               }
             }
           }
@@ -236,6 +269,18 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       } catch (e) {
         debugPrint('OpenAICompatibleChatProvider: failed to parse SSE chunk: $e');
       }
+    }
+
+    // After stream ends, yield tool calls if any were accumulated
+    if (toolCallAccumulators.isNotEmpty) {
+      final toolCalls = toolCallAccumulators.entries
+          .map((e) => {
+                'id': e.value['id'] as String? ?? 'call_${e.key}',
+                'type': e.value['type'] as String? ?? 'function',
+                'function': e.value['function'] as Map<String, dynamic>? ?? {},
+              })
+          .toList();
+      yield AIStreamEvent('', toolCalls: toolCalls);
     }
   }
 }

@@ -7,12 +7,33 @@ void main() {
       final event = AIStreamEvent('hello');
       expect(event.text, 'hello');
       expect(event.isReasoning, false);
+      expect(event.isToolCallEvent, false);
     });
 
     test('creates reasoning event', () {
       final event = AIStreamEvent('thinking...', isReasoning: true);
       expect(event.text, 'thinking...');
       expect(event.isReasoning, true);
+      expect(event.isToolCallEvent, false);
+    });
+
+    test('creates tool call event', () {
+      final event = AIStreamEvent('', toolCalls: [
+        {'id': 'call_1', 'type': 'function', 'function': {'name': 'calc', 'arguments': '{}'}},
+      ]);
+      expect(event.isToolCallEvent, true);
+      expect(event.toolCalls!.length, 1);
+      expect(event.toolCalls![0]['id'], 'call_1');
+    });
+
+    test('empty toolCalls list is not a tool call event', () {
+      final event = AIStreamEvent('', toolCalls: []);
+      expect(event.isToolCallEvent, false);
+    });
+
+    test('null toolCalls is not a tool call event', () {
+      final event = AIStreamEvent('hello');
+      expect(event.isToolCallEvent, false);
     });
   });
 
@@ -86,6 +107,64 @@ void main() {
     test('skips null content', () {
       expect(parseDelta({'content': null}), isNull);
       expect(parseDelta({'reasoning_content': null}, reasoning: true), isNull);
+    });
+  });
+
+  group('tool call delta accumulation', () {
+    Map<int, Map<String, dynamic>> accumulateToolCalls(List<Map<String, dynamic>> deltas) {
+      final accumulators = <int, Map<String, dynamic>>{};
+      for (final tc in deltas) {
+        final index = tc['index'] as int;
+        accumulators.putIfAbsent(index, () => {});
+        final acc = accumulators[index]!;
+        if (tc['id'] != null) acc['id'] = tc['id'];
+        if (tc['type'] != null) acc['type'] = tc['type'];
+        if (tc['function'] != null) {
+          acc.putIfAbsent('function', () => <String, dynamic>{});
+          final fn = tc['function'] as Map<String, dynamic>;
+          final accFn = acc['function'] as Map<String, dynamic>;
+          if (fn['name'] != null) accFn['name'] = fn['name'];
+          if (fn['arguments'] != null) {
+            accFn['arguments'] = (accFn['arguments'] as String? ?? '') + (fn['arguments'] as String);
+          }
+        }
+      }
+      return accumulators;
+    }
+
+    test('accumulates tool call arguments across chunks', () {
+      final result = accumulateToolCalls([
+        {'index': 0, 'id': 'call_1', 'type': 'function', 'function': {'name': 'calculator', 'arguments': '{"expr'}},
+        {'index': 0, 'function': {'arguments': 'ession": "2+2"}'}},
+      ]);
+      expect(result[0]!['id'], 'call_1');
+      expect(result[0]!['type'], 'function');
+      expect((result[0]!['function'] as Map)['name'], 'calculator');
+      expect((result[0]!['function'] as Map)['arguments'], '{"expression": "2+2"}');
+    });
+
+    test('handles multiple tool call indices', () {
+      final result = accumulateToolCalls([
+        {'index': 0, 'id': 'call_1', 'function': {'name': 'calc1', 'arguments': '{"a":1}'}},
+        {'index': 1, 'id': 'call_2', 'function': {'name': 'calc2', 'arguments': '{"b":2}'}},
+      ]);
+      expect(result.length, 2);
+      expect((result[0]!['function'] as Map)['name'], 'calc1');
+      expect((result[1]!['function'] as Map)['name'], 'calc2');
+    });
+
+    test('handles empty arguments', () {
+      final result = accumulateToolCalls([
+        {'index': 0, 'id': 'call_1', 'function': {'name': 'calc', 'arguments': ''}},
+      ]);
+      expect((result[0]!['function'] as Map)['arguments'], '');
+    });
+
+    test('handles missing function field', () {
+      final result = accumulateToolCalls([
+        {'index': 0, 'id': 'call_1', 'type': 'function'},
+      ]);
+      expect((result[0]!['function'] as Map?)?.isEmpty ?? true, true);
     });
   });
 }

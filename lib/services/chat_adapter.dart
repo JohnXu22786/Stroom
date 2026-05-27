@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint;
+import '../models/chat_event.dart';
 import '../models/chat_message.dart';
+import '../models/tool_call.dart';
 import '../providers/provider_config.dart';
 import 'chat_service.dart';
 import '../providers/chat_api_provider.dart';
@@ -156,6 +158,25 @@ class ChatAdapter {
       return Stream.error('请先配置聊天供应商');
     }
     return _chatService!.sendStream(text, history: history, reasoning: reasoning);
+  }
+
+  /// Send a message with tool call support.
+  /// Returns a stream of [ChatEvent] (text chunks and tool call events).
+  Stream<ChatEvent> sendStreamWithTools(
+    String text, {
+    required List<ChatMessage> history,
+    bool reasoning = false,
+    List<ToolDefinition> tools = const [],
+  }) {
+    if (_chatService == null) {
+      return Stream.error('请先配置聊天供应商');
+    }
+    return _chatService!.sendStreamWithTools(
+      text,
+      history: history,
+      reasoning: reasoning,
+      tools: tools,
+    );
   }
 
   String get reasoningContent => _chatService?.reasoningContent ?? '';
