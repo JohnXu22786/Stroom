@@ -16,12 +16,29 @@ import 'package:mime/mime.dart';
 import '../services/attachment_storage.dart';
 import '../widgets/file_preview.dart';
 
+import '../models/chat_event.dart';
 import '../models/chat_message.dart';
+import '../models/tool_call.dart';
 import '../services/chat_adapter.dart';
+import '../services/chat_service.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/provider_config.dart';
 import '../pages/camera_page.dart';
+import '../widgets/llm/jumping_dots.dart';
+import '../widgets/llm/tool_call_card.dart';
 import 'provider_config_page.dart';
+
+sealed class _MessageSegment {}
+
+class _TextSegment extends _MessageSegment {
+  final String text;
+  _TextSegment(this.text);
+}
+
+class _ToolCallSegment extends _MessageSegment {
+  final ToolCallData data;
+  _ToolCallSegment(this.data);
+}
 
 final _isStreamingProvider = StateProvider<bool>((ref) => false);
 
@@ -42,6 +59,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   bool _cancelledByUser = false;
   bool _reasoningEnabled = false;
   final Map<String, String> _reasoningContents = {};
+  final Map<String, List<_MessageSegment>> _chatSegments = {};
+  String? _streamingMsgId;
+
+  static bool _toolsRegistered = false;
 
   @override
   void initState() {
@@ -51,7 +72,54 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _adapter = ChatAdapter();
     _controller = InMemoryChatController();
 
+    if (!_toolsRegistered) {
+      _toolsRegistered = true;
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'calculator',
+          description: 'Evaluate a math expression and return the result',
+          parameters: {
+            'type': 'object',
+            'properties': {
+              'expression': {
+                'type': 'string',
+                'description': 'A math expression to evaluate e.g. 2 + 2',
+              },
+            },
+            'required': ['expression'],
+          },
+        ),
+        _executeCalculator,
+      );
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) => _initialize());
+  }
+
+  String _executeCalculator(Map<String, dynamic> args) {
+    try {
+      final expr = (args['expression'] as String?) ?? '';
+      final sanitized = expr.replaceAll(' ', '');
+      final double result;
+      if (sanitized.contains('+')) {
+        final parts = sanitized.split('+');
+        result = parts.map((p) => double.parse(p)).reduce((a, b) => a + b);
+      } else if (sanitized.contains('*')) {
+        final parts = sanitized.split('*');
+        result = parts.map((p) => double.parse(p)).reduce((a, b) => a * b);
+      } else if (sanitized.contains('/')) {
+        final nums = sanitized.split('/').map((p) => double.parse(p)).toList();
+        result = nums.reduce((a, b) => a / b);
+      } else if (sanitized.contains('-')) {
+        final parts = sanitized.split('-');
+        result = parts.map((p) => double.parse(p)).reduce((a, b) => a - b);
+      } else {
+        result = double.parse(sanitized);
+      }
+      return result.toString();
+    } catch (e) {
+      return 'Error: $e';
+    }
   }
 
   @override
@@ -158,6 +226,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _saveMessages().then((_) {
       ref.read(conversationsProvider.notifier).createConversation();
       _history.clear();
+      _chatSegments.clear();
+      _streamingMsgId = null;
       _controller?.dispose();
       final newCtrl = InMemoryChatController();
       setState(() => _controller = newCtrl);
@@ -209,6 +279,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _cancelledByUser = false;
 
     final aiMsgId = 'a${DateTime.now().millisecondsSinceEpoch}';
+    _streamingMsgId = aiMsgId;
+    _chatSegments[aiMsgId] = [];
+    String textBeforeToolCall = '';
 
     final placeholder = Message.textStream(
       id: aiMsgId,
@@ -222,6 +295,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     String reasoningBuffer = '';
     DateTime lastUpdate = DateTime.now();
     const minInterval = Duration(milliseconds: 50);
+    bool hasReceivedFirstToken = false;
 
     void updateMessage(String content) {
       _controller?.updateMessage(
@@ -236,15 +310,75 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
 
     try {
-      final stream = _adapter.sendStream(text,
-          history: _history, reasoning: _reasoningEnabled);
-      await for (final chunk in stream) {
+      final stream = _adapter.sendStreamWithTools(
+        text,
+        history: _history,
+        reasoning: _reasoningEnabled,
+        tools: const [
+          ToolDefinition(
+            name: 'calculator',
+            description: 'Evaluate a math expression and return the result',
+            parameters: {
+              'type': 'object',
+              'properties': {
+                'expression': {
+                  'type': 'string',
+                  'description': 'A math expression to evaluate e.g. 2 + 2',
+                },
+              },
+              'required': ['expression'],
+            },
+          ),
+        ],
+      );
+
+      await for (final event in stream) {
         if (_cancelledByUser) break;
-        fullReply += chunk;
-        final now = DateTime.now();
-        if (now.difference(lastUpdate) >= minInterval) {
-          lastUpdate = now;
-          updateMessage(fullReply);
+
+        switch (event) {
+          case TextEvent e:
+            if (!hasReceivedFirstToken) {
+              hasReceivedFirstToken = true;
+              if (mounted) setState(() {});
+            }
+            fullReply += e.text;
+            textBeforeToolCall += e.text;
+            final now = DateTime.now();
+            if (now.difference(lastUpdate) >= minInterval) {
+              lastUpdate = now;
+              updateMessage(fullReply);
+            }
+
+          case ToolCallStartEvent e:
+            // Flush accumulated text before tool call as a segment
+            if (textBeforeToolCall.isNotEmpty) {
+              _chatSegments[aiMsgId]!.add(
+                _TextSegment(textBeforeToolCall),
+              );
+              textBeforeToolCall = '';
+            }
+            _chatSegments[aiMsgId]!.add(
+              _ToolCallSegment(
+                e.toolCall.copyWith(status: ToolCallStatus.running),
+              ),
+            );
+            if (mounted) setState(() {});
+
+          case ToolCallCompleteEvent e:
+            final segs = _chatSegments[aiMsgId] ?? [];
+            for (var i = segs.length - 1; i >= 0; i--) {
+              final seg = segs[i];
+              if (seg is _ToolCallSegment && seg.data.id == e.toolCallId) {
+                segs[i] = _ToolCallSegment(
+                  seg.data.copyWith(
+                    status: ToolCallStatus.completed,
+                    result: e.result,
+                  ),
+                );
+                break;
+              }
+            }
+            if (mounted) setState(() {});
         }
       }
     } catch (e) {
@@ -263,7 +397,26 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         fullReply = errorMsg;
       }
     } finally {
-      updateMessage(fullReply);
+      // Flush remaining text after last tool call as a segment
+      if (textBeforeToolCall.isNotEmpty) {
+        _chatSegments[aiMsgId]!.add(_TextSegment(textBeforeToolCall));
+      }
+      // Mark any still-running tool calls as cancelled
+      for (var i = 0; i < (_chatSegments[aiMsgId]?.length ?? 0); i++) {
+        final seg = _chatSegments[aiMsgId]![i];
+        if (seg is _ToolCallSegment && seg.data.status == ToolCallStatus.running) {
+          _chatSegments[aiMsgId]![i] = _ToolCallSegment(
+            seg.data.copyWith(
+              status: ToolCallStatus.error,
+              result: 'Cancelled',
+            ),
+          );
+        }
+      }
+      // Final update — ensure last chunk is shown
+      if (fullReply.isNotEmpty) {
+        updateMessage(fullReply);
+      }
       if (_reasoningEnabled) {
         reasoningBuffer = _adapter.reasoningContent;
       }
@@ -284,6 +437,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         _reasoningContents[aiMsgId] = reasoningBuffer;
       }
     }
+    _streamingMsgId = null;
     ref.read(_isStreamingProvider.notifier).state = false;
     _cancelledByUser = false;
     if (mounted) setState(() {});
@@ -820,6 +974,12 @@ composerBuilder: (context) => ChatComposerWidget(
                               );
                             } else {
                               final reasoningText = _reasoningContents[message.id];
+                              final segments = _chatSegments[message.id];
+                              final isWaitingForFirstToken =
+                                  message.id == _streamingMsgId &&
+                                  message.text.isEmpty &&
+                                  isStreaming;
+
                               messageBubble = Container(
                                 margin:
                                     const EdgeInsets.symmetric(vertical: 2),
@@ -836,16 +996,43 @@ composerBuilder: (context) => ChatComposerWidget(
                                   children: [
                                     if (reasoningText != null)
                                       _ReasoningSection(reasoningText: reasoningText),
-                                    MarkdownWidget(
-                                      data: message.text,
-                                      selectable: true,
-                                      shrinkWrap: true,
-                                      physics:
-                                          const NeverScrollableScrollPhysics(),
-                                      config: markdownConfig.copy(configs: [
-                                        PreConfig(theme: draculaTheme),
-                                      ]),
-                                    ),
+                                    // Show JumpingDots while waiting for first token
+                                    if (isWaitingForFirstToken)
+                                      const Padding(
+                                        padding: EdgeInsets.symmetric(vertical: 8),
+                                        child: JumpingDotsProgressIndicator(
+                                          color: Colors.grey,
+                                          fontSize: 14,
+                                        ),
+                                      )
+                                    else if (segments != null && segments.isNotEmpty)
+                                      // Segments: text and tool calls in order
+                                      ...segments.map((seg) => switch (seg) {
+                                            _TextSegment s => Padding(
+                                              padding: const EdgeInsets.only(bottom: 4),
+                                              child: MarkdownWidget(
+                                                data: s.text,
+                                                selectable: true,
+                                                shrinkWrap: true,
+                                                physics: const NeverScrollableScrollPhysics(),
+                                                config: markdownConfig.copy(configs: [
+                                                  PreConfig(theme: draculaTheme),
+                                                ]),
+                                              ),
+                                            ),
+                                            _ToolCallSegment s => ToolCallCard(data: s.data),
+                                          })
+                                    else
+                                      MarkdownWidget(
+                                        data: message.text,
+                                        selectable: true,
+                                        shrinkWrap: true,
+                                        physics:
+                                            const NeverScrollableScrollPhysics(),
+                                        config: markdownConfig.copy(configs: [
+                                          PreConfig(theme: draculaTheme),
+                                        ]),
+                                      ),
                                   ],
                                 ),
                               );
