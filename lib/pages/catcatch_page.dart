@@ -509,6 +509,17 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
               onFieldSubmitted: (_) => _startTask(),
             ),
 
+            Padding(
+              padding: const EdgeInsets.only(top: 4, left: 4),
+              child: Text(
+                '按时长筛选视频资源，不匹配的将不会出现在结果列表中',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colorScheme.onSurfaceVariant.withOpacity(0.7),
+                ),
+              ),
+            ),
+
             const SizedBox(height: 12),
 
             FilledButton.icon(
