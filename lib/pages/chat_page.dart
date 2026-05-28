@@ -131,7 +131,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   void _initialize() {
     _configureAdapter();
-    // Restore saved model selection
+    // Restore saved model selection — clear stale index if out of range
     SharedPreferences.getInstance().then((prefs) {
       final saved = prefs.getInt('selected_model_index');
       if (saved != null) {
@@ -142,6 +142,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           _adapter.selectModel(
               entriesState, model.configIndex, model.modelIndex);
           setState(() => _selectedModelIndex = saved);
+        } else {
+          prefs.remove('selected_model_index');
         }
       }
     });
@@ -163,27 +165,31 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   Future<void> _loadConversationMessages() async {
-    final activeId = ref.read(activeConversationIdProvider);
-    if (activeId == null) return;
+    try {
+      final activeId = ref.read(activeConversationIdProvider);
+      if (activeId == null) return;
 
-    final convs = ref.read(conversationsProvider);
-    final conv = convs.where((c) => c.id == activeId).firstOrNull;
-    if (conv == null || conv.messages.isEmpty) return;
+      final convs = ref.read(conversationsProvider);
+      final conv = convs.where((c) => c.id == activeId).firstOrNull;
+      if (conv == null || conv.messages.isEmpty) return;
 
-    _history.clear();
-    _controller?.dispose();
-    final newCtrl = InMemoryChatController();
-    _controller = newCtrl;
-    for (final msg in conv.messages) {
-      _history.add(msg);
-      await _controller?.insertMessage(Message.text(
-        id: msg.id,
-        authorId: msg.role == 'user' ? _currentUser.id : _aiUser.id,
-        text: msg.content,
-        createdAt: msg.createdAt,
-      ));
+      _history.clear();
+      _controller?.dispose();
+      final newCtrl = InMemoryChatController();
+      _controller = newCtrl;
+      for (final msg in conv.messages) {
+        _history.add(msg);
+        await _controller?.insertMessage(Message.text(
+          id: msg.id,
+          authorId: msg.role == 'user' ? _currentUser.id : _aiUser.id,
+          text: msg.content,
+          createdAt: msg.createdAt,
+        ));
+      }
+      if (mounted) setState(() {});
+    } catch (e, s) {
+      debugPrint('[ChatPage] _loadConversationMessages error: $e\n$s');
     }
-    if (mounted) setState(() {});
   }
 
   Future<void> _saveMessages() async {
@@ -381,8 +387,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             if (mounted) setState(() {});
         }
       }
-    } catch (e) {
+    } catch (e, s) {
       if (!_cancelledByUser) {
+        debugPrint('[ChatPage] streaming error: $e\n$s');
         final errorMsg = _formatErrorMessage(e);
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -509,18 +516,24 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _editUserMessage(String messageId) async {
     final index = _history.indexWhere((m) => m.id == messageId);
-    if (index == -1) return;
+    if (index == -1 || index >= _history.length) return;
     final msg = _history[index];
 
     // Remove this message and all after from history
-    final removed = _history.sublist(index);
-    _history.removeRange(index, _history.length);
-    for (final r in removed) {
-      final ctrlMsg =
-          _controller?.messages.where((m) => m.id == r.id).firstOrNull;
-      if (ctrlMsg != null) {
-        await _controller?.removeMessage(ctrlMsg);
+    try {
+      if (index < _history.length) {
+        final removed = _history.sublist(index);
+        _history.removeRange(index, _history.length);
+        for (final r in removed) {
+          final ctrlMsg =
+              _controller?.messages.where((m) => m.id == r.id).firstOrNull;
+          if (ctrlMsg != null) {
+            await _controller?.removeMessage(ctrlMsg);
+          }
+        }
       }
+    } catch (e) {
+      debugPrint('[ChatPage] _editUserMessage remove failed: $e');
     }
 
     // Re-send with same content (acts as edit)
@@ -598,18 +611,24 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _editUserMessageWithText(String messageId, String newText) async {
     final index = _history.indexWhere((m) => m.id == messageId);
-    if (index == -1) return;
+    if (index == -1 || index >= _history.length) return;
     final msg = _history[index];
 
     // Remove this message and all after from history
-    final removed = _history.sublist(index);
-    _history.removeRange(index, _history.length);
-    for (final r in removed) {
-      final ctrlMsg =
-          _controller?.messages.where((m) => m.id == r.id).firstOrNull;
-      if (ctrlMsg != null) {
-        await _controller?.removeMessage(ctrlMsg);
+    try {
+      if (index < _history.length) {
+        final removed = _history.sublist(index);
+        _history.removeRange(index, _history.length);
+        for (final r in removed) {
+          final ctrlMsg =
+              _controller?.messages.where((m) => m.id == r.id).firstOrNull;
+          if (ctrlMsg != null) {
+            await _controller?.removeMessage(ctrlMsg);
+          }
+        }
       }
+    } catch (e) {
+      debugPrint('[ChatPage] _editUserMessageWithText remove failed: $e');
     }
 
     // Send with edited text
@@ -618,17 +637,23 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _retryAssistantMessage(String messageId) async {
     final index = _history.indexWhere((m) => m.id == messageId);
-    if (index == -1 || index == 0) return;
+    if (index == -1 || index == 0 || index >= _history.length) return;
 
     // Remove this assistant message and all after from history
-    final removed = _history.sublist(index);
-    _history.removeRange(index, _history.length);
-    for (final r in removed) {
-      final ctrlMsg =
-          _controller?.messages.where((m) => m.id == r.id).firstOrNull;
-      if (ctrlMsg != null) {
-        await _controller?.removeMessage(ctrlMsg);
+    try {
+      if (index < _history.length) {
+        final removed = _history.sublist(index);
+        _history.removeRange(index, _history.length);
+        for (final r in removed) {
+          final ctrlMsg =
+              _controller?.messages.where((m) => m.id == r.id).firstOrNull;
+          if (ctrlMsg != null) {
+            await _controller?.removeMessage(ctrlMsg);
+          }
+        }
       }
+    } catch (e) {
+      debugPrint('[ChatPage] _retryAssistantMessage remove failed: $e');
     }
 
     // Re-generate using the preceding user message
@@ -1153,6 +1178,19 @@ composerBuilder: (context) => ChatComposerWidget(
     if (models.length <= 1) return const SizedBox.shrink();
 
     final clampedIndex = _selectedModelIndex.clamp(0, models.length - 1);
+    // Re-sync if clampedIndex differs from selected (e.g. models changed)
+    if (clampedIndex != _selectedModelIndex) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          final model = models.length > clampedIndex ? models[clampedIndex] : null;
+          if (model != null) {
+            _adapter.selectModel(
+                entriesState, model.configIndex, model.modelIndex);
+            setState(() => _selectedModelIndex = clampedIndex);
+          }
+        }
+      });
+    }
 
     return Padding(
       padding: const EdgeInsets.only(right: 4),
@@ -1167,7 +1205,7 @@ composerBuilder: (context) => ChatComposerWidget(
             color: Theme.of(context).colorScheme.onSurface,
           ),
           onChanged: (idx) {
-            if (idx == null) return;
+            if (idx == null || idx >= models.length) return;
             final model = models[idx];
             _adapter.selectModel(
                 entriesState, model.configIndex, model.modelIndex);
