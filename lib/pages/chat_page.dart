@@ -26,6 +26,7 @@ import '../providers/provider_config.dart';
 import '../pages/camera_page.dart';
 import '../widgets/llm/jumping_dots.dart';
 import '../widgets/llm/tool_call_card.dart';
+import 'conversations_page.dart';
 import 'provider_config_page.dart';
 
 sealed class _MessageSegment {}
@@ -171,12 +172,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
       final convs = ref.read(conversationsProvider);
       final conv = convs.where((c) => c.id == activeId).firstOrNull;
-      if (conv == null || conv.messages.isEmpty) return;
+      if (conv == null) return;
 
       _history.clear();
+      _chatSegments.clear();
+      _streamingMsgId = null;
       _controller?.dispose();
       final newCtrl = InMemoryChatController();
       _controller = newCtrl;
+
+      if (conv.messages.isEmpty) {
+        if (mounted) setState(() {});
+        return;
+      }
       for (final msg in conv.messages) {
         _history.add(msg);
         await _controller?.insertMessage(Message.text(
@@ -241,18 +249,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   void _showHistory() {
-    final conversations = ref.read(conversationsProvider);
-    final activeId = ref.read(activeConversationIdProvider);
-
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return _buildHistoryPanel(conversations, activeId);
-      },
-    );
+    _saveMessages().then((_) {
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ConversationsPage()),
+      ).then((_) {
+        if (!mounted) return;
+        _loadConversationMessages();
+      });
+    });
   }
 
   Future<void> _onMessageSend(String text, List<Attachment> attachments) async {
@@ -1226,244 +1232,6 @@ composerBuilder: (context) => ChatComposerWidget(
             );
           }),
         ),
-      ),
-    );
-  }
-
-  // ── History panel ──
-  Widget _buildHistoryPanel(
-      List<Conversation> conversations, String? activeId) {
-    final cs = Theme.of(context).colorScheme;
-
-    return DraggableScrollableSheet(
-      initialChildSize: 0.6,
-      minChildSize: 0.3,
-      maxChildSize: 0.85,
-      expand: false,
-      builder: (context, scrollController) {
-        return Column(
-          children: [
-            Container(
-              margin: const EdgeInsets.symmetric(vertical: 8),
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: cs.outlineVariant,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  Text(
-                    '历史记录',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: cs.onSurface,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${conversations.length} 个对话',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: cs.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: conversations.isEmpty
-                  ? Center(
-                      child: Text(
-                        '暂无历史记录',
-                        style: TextStyle(color: cs.onSurfaceVariant),
-                      ),
-                    )
-                  : ListView.separated(
-                      controller: scrollController,
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      itemCount: conversations.length,
-                      separatorBuilder: (_, __) => Divider(
-                          height: 1,
-                          indent: 16,
-                          endIndent: 16,
-                          color: cs.outlineVariant.withOpacity(0.5)),
-                      itemBuilder: (context, index) {
-                        final conv = conversations[index];
-                        final isActive = conv.id == activeId;
-                        return _buildConversationItem(conv, isActive);
-                      },
-                    ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildConversationItem(Conversation conv, bool isActive) {
-    final cs = Theme.of(context).colorScheme;
-
-    return ListTile(
-      selected: isActive,
-      selectedTileColor: cs.primaryContainer.withOpacity(0.3),
-      leading: Icon(
-        isActive ? Icons.chat_bubble : Icons.chat_bubble_outline,
-        color: isActive ? cs.primary : cs.onSurfaceVariant,
-        size: 20,
-      ),
-      title: Text(
-        conv.title.isEmpty ? '新对话' : conv.title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-          color: cs.onSurface,
-        ),
-      ),
-      subtitle: Text(
-        _formatDate(conv.updatedAt),
-        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            icon: Icon(Icons.edit_outlined,
-                size: 18, color: cs.onSurfaceVariant.withOpacity(0.7)),
-            tooltip: '重命名',
-            onPressed: () => _renameConversation(conv.id, conv.title),
-          ),
-          IconButton(
-            icon: Icon(Icons.delete_outline,
-                size: 18, color: cs.error.withOpacity(0.7)),
-            tooltip: '删除',
-            onPressed: () => _deleteConversation(conv.id),
-          ),
-        ],
-      ),
-      onTap: () {
-        if (ref.read(_isStreamingProvider)) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('请等待当前消息生成完成')),
-            );
-          }
-          return;
-        }
-        if (!isActive) {
-          _saveMessages().then((_) {
-            ref
-                .read(conversationsProvider.notifier)
-                .selectConversation(conv.id);
-            _history.clear();
-            _controller?.dispose();
-            final newCtrl = InMemoryChatController();
-            setState(() => _controller = newCtrl);
-          });
-        }
-        Navigator.of(context).pop();
-      },
-    );
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final diff = now.difference(date);
-    if (diff.inMinutes < 1) return '刚刚';
-    if (diff.inHours < 1) return '${diff.inMinutes} 分钟前';
-    if (diff.inDays < 1) return '${diff.inHours} 小时前';
-    if (diff.inDays < 7) return '${diff.inDays} 天前';
-    return '${date.month}/${date.day}';
-  }
-
-  void _renameConversation(String id, String currentTitle) {
-    final controller = TextEditingController(text: currentTitle);
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('重命名对话'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: '输入新名称',
-            border: OutlineInputBorder(),
-          ),
-          onSubmitted: (value) {
-            if (value.trim().isNotEmpty) {
-              ref
-                  .read(conversationsProvider.notifier)
-                  .renameConversation(id, value.trim());
-            }
-            Navigator.of(context).pop();
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () {
-              final value = controller.text.trim();
-              if (value.isNotEmpty) {
-                ref
-                    .read(conversationsProvider.notifier)
-                    .renameConversation(id, value);
-              }
-              Navigator.of(context).pop();
-            },
-            child: const Text('确定'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _deleteConversation(String id) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('删除对话'),
-        content: const Text('确定要删除这个对话吗？此操作无法撤销。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () async {
-              final convs = ref.read(conversationsProvider);
-              final conv = convs.where((c) => c.id == id).firstOrNull;
-              if (conv != null) {
-                for (final msg in conv.messages) {
-                  for (final att in msg.attachments) {
-                    await AttachmentStorage.deleteFile(att.storagePath);
-                  }
-                }
-              }
-              final wasActive = ref.read(activeConversationIdProvider) == id;
-              await ref.read(conversationsProvider.notifier).deleteConversation(id);
-              if (wasActive) {
-                _history.clear();
-                _controller?.dispose();
-                final newCtrl = InMemoryChatController();
-                setState(() => _controller = newCtrl);
-              }
-              if (mounted) Navigator.of(context).pop();
-            },
-            style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error),
-            child: const Text('删除'),
-          ),
-        ],
       ),
     );
   }
