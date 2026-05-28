@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../providers/theme_provider.dart';
 import '../providers/provider_config.dart';
@@ -285,6 +286,32 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _showPrivacyDialog(),
             ),
+            const Divider(height: 1),
+            _buildListTile(
+              leading: const Icon(Icons.link, color: Colors.blueGrey),
+              title: '项目主页',
+              subtitle: 'GitHub',
+              trailing: const Icon(Icons.open_in_new, size: 18),
+              onTap: () => _openUrl('https://github.com/JohnXu22786/Stroom'),
+            ),
+            const Divider(height: 1),
+            _buildListTile(
+              leading: const Icon(Icons.description, color: Colors.brown),
+              title: '开源协议',
+              subtitle: 'GNU General Public License v3.0',
+              trailing: const Icon(Icons.open_in_new, size: 18),
+              onTap: () => _openUrl(
+                  'https://github.com/JohnXu22786/Stroom/blob/main/LICENSE'),
+            ),
+            const Divider(height: 1),
+            _buildListTile(
+              leading: const Icon(Icons.bug_report, color: Colors.orange),
+              title: '问题反馈',
+              subtitle: 'Issues',
+              trailing: const Icon(Icons.open_in_new, size: 18),
+              onTap: () => _openUrl(
+                  'https://github.com/JohnXu22786/Stroom/issues'),
+            ),
           ],
         ),
       ),
@@ -342,5 +369,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         );
       },
     );
+  }
+
+  Future<void> _openUrl(String urlString) async {
+    final uri = Uri.tryParse(urlString);
+    if (uri == null) return;
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 }
