@@ -32,6 +32,7 @@ class StepStatus {
   final bool skipped;
   final String? error;
   final int progress; // 0-100，仅 running 时有效
+  final String? detail; // 步骤执行详情，可点击展开查看
 
   const StepStatus({
     required this.type,
@@ -41,6 +42,7 @@ class StepStatus {
     this.skipped = false,
     this.error,
     this.progress = 0,
+    this.detail,
   });
 
   // ---------------------------------------------------------------------------
@@ -55,20 +57,20 @@ class StepStatus {
       StepStatus(type: type, running: true, progress: 0);
 
   /// 已完成
-  factory StepStatus.done(StepType type) =>
-      StepStatus(type: type, completed: true, progress: 100);
+  factory StepStatus.done(StepType type, {String? detail}) =>
+      StepStatus(type: type, completed: true, progress: 100, detail: detail);
 
   /// 已跳过（如因为无需转换直接复制）
-  factory StepStatus.skipped(StepType type) =>
-      StepStatus(type: type, skipped: true, progress: 100);
+  factory StepStatus.skipped(StepType type, {String? detail}) =>
+      StepStatus(type: type, skipped: true, progress: 100, detail: detail);
 
   /// 已失败
-  factory StepStatus.fail(StepType type, String? error) =>
-      StepStatus(type: type, failed: true, error: error);
+  factory StepStatus.fail(StepType type, String? error, {String? detail}) =>
+      StepStatus(type: type, failed: true, error: error, detail: detail);
 
   /// 运行中 + 进度
-  factory StepStatus.progressing(StepType type, int progress) =>
-      StepStatus(type: type, running: true, progress: progress);
+  factory StepStatus.progressing(StepType type, int progress, {String? detail}) =>
+      StepStatus(type: type, running: true, progress: progress, detail: detail);
 
   // ---------------------------------------------------------------------------
   // 序列化
@@ -82,6 +84,7 @@ class StepStatus {
         'skipped': skipped,
         'error': error,
         'progress': progress,
+        'detail': detail,
       };
 
   factory StepStatus.fromMap(Map<String, dynamic> map) => StepStatus(
@@ -92,6 +95,7 @@ class StepStatus {
         skipped: map['skipped'] as bool? ?? false,
         error: map['error'] as String?,
         progress: map['progress'] as int? ?? 0,
+        detail: map['detail'] as String?,
       );
 
   StepStatus copyWith({
@@ -102,6 +106,9 @@ class StepStatus {
     bool? skipped,
     String? error,
     int? progress,
+    String? detail,
+    bool clearError = false,
+    bool clearDetail = false,
   }) =>
       StepStatus(
         type: type ?? this.type,
@@ -109,8 +116,9 @@ class StepStatus {
         running: running ?? this.running,
         failed: failed ?? this.failed,
         skipped: skipped ?? this.skipped,
-        error: error ?? this.error,
+        error: clearError ? null : (error ?? this.error),
         progress: progress ?? this.progress,
+        detail: clearDetail ? null : (detail ?? this.detail),
       );
 
   @override
