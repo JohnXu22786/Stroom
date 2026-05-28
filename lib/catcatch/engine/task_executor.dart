@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as p;
@@ -131,12 +130,15 @@ class TaskExecutor {
             onUpdate(task.copyWith(steps: steps, detectedMedia: detectedMedia));
             break;
           case StepType.filtering:
+            final beforeCount = detectedMedia.length;
             final filtered = SniffingEngine.filterByDuration(
                 detectedMedia, task.expectedDurationSec,
                 toleranceSec: DefaultRules.durationToleranceSeconds);
             // 检测音视频分轨并标记
             final withSplitTrack = _detectSplitTracks(filtered);
-            _markStep(steps, i, done: true);
+            final detail = _buildDurationFilterDetail(
+                beforeCount, withSplitTrack.length, task.expectedDurationSec);
+            _markStep(steps, i, done: true, detail: detail);
             onUpdate(task.copyWith(
                 steps: steps,
                 detectedMedia: withSplitTrack,
@@ -145,7 +147,17 @@ class TaskExecutor {
             break;
           case StepType.userSelecting:
             if (selectedMedia == null && detectedMedia.length > 1) {
-              onUpdate(task.copyWith(steps: steps, status: TaskStatus.running, detectedMedia: detectedMedia));
+              final detail = '共${detectedMedia.length}个资源，请用户选择';
+              onUpdate(task.copyWith(
+                  steps: steps.map((s) {
+                    if (s.type == StepType.userSelecting) {
+                      return s.copyWith(detail: detail);
+                    }
+                    return s;
+                  }).toList(),
+                  status: TaskStatus.running,
+                  detectedMedia: detectedMedia,
+                  progress: _calcProgress(steps)));
               return null;
             }
             selectedMedia ??=
@@ -153,7 +165,10 @@ class TaskExecutor {
             if (selectedMedia == null) {
               throw Exception('未能获取到可用媒体资源，请检查URL是否正确以及目标网站是否可达');
             }
-            _markStep(steps, i, done: true);
+            final autoDetail = detectedMedia.length == 1
+                ? '剩余1个结果，自动进入下载'
+                : '自动选择第1个结果，进入下载';
+            _markStep(steps, i, done: true, detail: autoDetail);
             onUpdate(task.copyWith(
                 steps: steps,
                 selectedMedia: selectedMedia,
@@ -239,7 +254,8 @@ class TaskExecutor {
             final isPlaylistSel =
                 task.selectedMedia?.isPlaylist ?? false;
             if (!isPlaylistSel && !_isSpecialFormat(skipExt)) {
-              _markStep(steps, i, skipped: true);
+              _markStep(steps, i, skipped: true,
+                  detail: '.$skipExt 格式无需转换，已跳过');
               onUpdate(task.copyWith(
                   steps: steps, progress: _calcProgress(steps)));
               continue;
@@ -288,7 +304,8 @@ class TaskExecutor {
           steps: steps,
           status: TaskStatus.failed,
           error: taskError,
-          downloadedFilePath: downloadedFilePath));
+          downloadedFilePath: downloadedFilePath,
+          progress: _calcProgress(steps)));
       return null;
     }
   }
@@ -356,7 +373,8 @@ class TaskExecutor {
       resources = await _probeMediaResources(resources);
     }
 
-    _markStep(steps, 0, done: true);
+    _markStep(steps, 0, done: true,
+        detail: '获取到${resources.length}个媒体资源');
     _markStep(steps, 1, done: true);
     onUpdate(task.copyWith(
         steps: steps,
@@ -445,7 +463,9 @@ class TaskExecutor {
             isPlayable: false,
             isPlaylist: false);
       }).toList();
-      _markStep(steps, 2, done: true);
+      final totalCount = media.length + segmentMedia.length;
+      _markStep(steps, 2, done: true,
+          detail: '获取到$totalCount个资源（播放列表${segments.length}个分段）');
       return [...media, ...segmentMedia];
     }
     _markStep(steps, 2, done: true);
@@ -696,6 +716,24 @@ class TaskExecutor {
     return result;
   }
 
+  /// 构建时长筛选详情文本
+  static String _buildDurationFilterDetail(
+      int beforeCount, int afterCount, int expectedDurationSec) {
+    final h = expectedDurationSec ~/ 3600;
+    final m = (expectedDurationSec % 3600) ~/ 60;
+    final s = expectedDurationSec % 60;
+    final parts = <String>[];
+    if (h > 0) parts.add('${h}小时');
+    if (m > 0) parts.add('${m}分钟');
+    parts.add('${s}秒');
+    final durationStr = parts.join('');
+    final removed = beforeCount - afterCount;
+    if (removed > 0) {
+      return '按照${durationStr}时长筛选后剩余$afterCount个结果（已排除$removed个不匹配的资源）';
+    }
+    return '按时长${durationStr}筛选，$afterCount个资源全部匹配';
+  }
+
   /// 计算两个字符串的最长公共前缀
   static String _longestCommonPrefix(String a, String b) {
     final minLen = a.length < b.length ? a.length : b.length;
@@ -768,7 +806,8 @@ class TaskExecutor {
       bool failed = false,
       bool skipped = false,
       String? error,
-      int progress = 0}) {
+      int progress = 0,
+      String? detail}) {
     if (index >= steps.length) return;
     steps[index] = steps[index].copyWith(
         completed: done,
@@ -776,7 +815,8 @@ class TaskExecutor {
         failed: failed,
         skipped: skipped,
         error: error,
-        progress: progress);
+        progress: progress,
+        detail: detail);
   }
 
   static void _markAllDone(List<StepStatus> steps) {
@@ -790,7 +830,7 @@ class TaskExecutor {
     if (steps.isEmpty) return 0;
     int sum = 0;
     for (final s in steps) {
-      if (s.completed) {
+      if (s.completed || s.skipped) {
         sum += 100;
       } else if (s.running) {
         sum += s.progress;

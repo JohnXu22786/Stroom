@@ -668,6 +668,7 @@ class _CatCatchTaskCard extends ConsumerStatefulWidget {
 
 class _CatCatchTaskCardState extends ConsumerState<_CatCatchTaskCard> {
   bool _expanded = false;
+  final Set<int> _expandedSteps = {};
   final Map<String, Set<String>> _selectedMediaUrls = {};
   final Map<String, String?> _mergeAudioUrls = {};
 
@@ -864,117 +865,182 @@ class _CatCatchTaskCardState extends ConsumerState<_CatCatchTaskCard> {
       itemBuilder: (_, i) {
         final step = steps[i];
         final isLast = i == steps.length - 1;
+        final isDetailExpanded = _expandedSteps.contains(i);
+        final hasDetail = step.detail != null && step.detail!.isNotEmpty;
 
-        return IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 28,
-                child: Column(
-                  children: [
-                    _stepIcon(step),
-                    if (!isLast)
-                      Expanded(
-                        child: Container(
-                          width: 2,
-                          color: step.skipped
-                              ? Colors.orange.shade300
-                              : step.completed
-                                  ? Colors.green.shade300
-                                  : colorScheme.outlineVariant,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsets.only(bottom: isLast ? 0 : 12),
+        return InkWell(
+          onTap: hasDetail
+              ? () {
+                  setState(() {
+                    if (isDetailExpanded) {
+                      _expandedSteps.remove(i);
+                    } else {
+                      _expandedSteps.add(i);
+                    }
+                  });
+                }
+              : null,
+          borderRadius: BorderRadius.circular(8),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 28,
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        step.type.label,
-                        style:
-                            Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.w500,
-                                  color: step.completed
-                                      ? Colors.green.shade700
-                                      : step.skipped
-                                          ? Colors.orange.shade700
-                                          : step.running
-                                              ? colorScheme.primary
-                                              : step.failed
-                                                  ? Colors.red.shade700
-                                                  : colorScheme.onSurface,
-                                ),
-                      ),
-                      if (step.skipped) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          '已跳过（无需处理）',
-                          style: TextStyle(
-                              fontSize: 11, color: Colors.orange.shade400),
-                        ),
-                      ],
-                      if (step.running && step.progress > 0) ...[
-                        const SizedBox(height: 4),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            value: step.progress / 100.0,
-                            minHeight: 4,
-                            backgroundColor: colorScheme.outlineVariant,
+                      _stepIcon(step),
+                      if (!isLast)
+                        Expanded(
+                          child: Container(
+                            width: 2,
+                            color: step.skipped
+                                ? Colors.orange.shade300
+                                : step.completed
+                                    ? Colors.green.shade300
+                                    : colorScheme.outlineVariant,
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${step.progress}%',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                      if (step.failed && step.error != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          step.error!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.red.shade400,
-                          ),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        TextButton.icon(
-                          onPressed: () {
-                            ref
-                                .read(catcatchTasksProvider.notifier)
-                                .retryStep(task.id, step.type);
-                          },
-                          icon: const Icon(Icons.refresh, size: 16),
-                          label: const Text('重试此步骤',
-                              style: TextStyle(fontSize: 12)),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            foregroundColor: Colors.red.shade400,
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: isLast ? 0 : 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                step.type.label,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w500,
+                                      color: step.completed
+                                          ? Colors.green.shade700
+                                          : step.skipped
+                                              ? Colors.orange.shade700
+                                              : step.running
+                                                  ? colorScheme.primary
+                                                  : step.failed
+                                                      ? Colors.red.shade700
+                                                      : colorScheme.onSurface,
+                                    ),
+                              ),
+                            ),
+                            if (hasDetail)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 4),
+                                child: Icon(
+                                  isDetailExpanded
+                                      ? Icons.expand_less
+                                      : Icons.expand_more,
+                                  size: 16,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                          ],
+                        ),
+                        if (hasDetail && isDetailExpanded) ...[
+                          const SizedBox(height: 4),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: colorScheme.surfaceContainerLow,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              step.detail!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colorScheme.onSurfaceVariant,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ] else if (hasDetail && !isDetailExpanded) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            step.detail!,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                        if (step.skipped && step.detail == null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            '已跳过（无需处理）',
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.orange.shade400),
+                          ),
+                        ],
+                        if (step.running && step.progress > 0) ...[
+                          const SizedBox(height: 4),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: step.progress / 100.0,
+                              minHeight: 4,
+                              backgroundColor: colorScheme.outlineVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${step.progress}%',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                        if (step.failed && step.error != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            step.error!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.red.shade400,
+                            ),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          TextButton.icon(
+                            onPressed: () {
+                              ref
+                                  .read(catcatchTasksProvider.notifier)
+                                  .retryStep(task.id, step.type);
+                            },
+                            icon: const Icon(Icons.refresh, size: 16),
+                            label: const Text('重试此步骤',
+                                style: TextStyle(fontSize: 12)),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              foregroundColor: Colors.red.shade400,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
