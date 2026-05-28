@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as p;
 import '../../services/storage_service.dart';
 import '../../utils/retry_helper.dart';
+import '../../utils/video_manifest.dart';
 import 'package:dio/dio.dart';
 import '../config/default_rules.dart';
 import '../models/catcatch_task.dart';
@@ -582,9 +585,51 @@ class TaskExecutor {
     final fileName = p.basename(sourcePath);
     final finalPath = await _uniquePath(p.join(saveDir, fileName));
     await File(sourcePath).copy(finalPath);
+
+    // 自动注册下载的视频到视频库
+    if (!kIsWeb) {
+      try {
+        await _registerCompletedVideo(finalPath, task);
+      } catch (e) {
+        debugPrint('[TaskExecutor] Register video to gallery failed: $e');
+      }
+    }
+
     _markStep(steps, 7, done: true);
     onUpdate(task.copyWith(steps: steps, progress: _calcProgress(steps)));
     return finalPath;
+  }
+
+  /// 将已完成的下载文件注册到应用视频库（VideoManifest），
+  /// 使其出现在视频文件浏览页面中。
+  static Future<void> _registerCompletedVideo(
+      String filePath, CatCatchTask task) async {
+    final ext = p.extension(filePath).toLowerCase().replaceAll('.', '');
+    const videoExts = {'mp4', 'webm', 'ogg', 'mov', 'mkv', 'ogv', 'avi', 'flv', 'wmv'};
+    if (!videoExts.contains(ext)) return;
+
+    final file = File(filePath);
+    if (!await file.exists()) return;
+
+    final fileBytes = await file.readAsBytes();
+    final hash = md5.convert(fileBytes).toString();
+
+    // 检查是否已注册（按 hash 去重）
+    final existing = await VideoManifest.getRecordByHash(hash);
+    if (existing != null) return;
+
+    final recordName = p.basenameWithoutExtension(filePath);
+    final record = VideoRecord(
+      name: recordName,
+      hash: hash,
+      format: ext,
+      createdAt: DateTime.now(),
+      size: fileBytes.length,
+      duration: task.expectedDurationSec * 1000, // 转为毫秒
+    );
+    await VideoManifest.writeFile('$hash.$ext', fileBytes);
+    await VideoManifest.addRecord(record);
+    debugPrint('[TaskExecutor] Registered video to gallery: $recordName.$ext');
   }
 
   /// 检测疑似音视频分轨资源
