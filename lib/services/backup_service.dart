@@ -440,20 +440,10 @@ class BackupService {
       // 在内存中构建归档
       final bytes = await _buildBackupBytes();
 
-      String? outputPath;
-      if (kIsWeb) {
-        outputPath = await FilePicker.saveFile(
-          fileName: defaultName,
-          bytes: bytes,
-        );
-      } else {
-        outputPath = await FilePicker.saveFile(
-          fileName: defaultName,
-        );
-        if (outputPath != null) {
-          await File(outputPath).writeAsBytes(bytes);
-        }
-      }
+      final outputPath = await FilePicker.saveFile(
+        fileName: defaultName,
+        bytes: bytes,
+      );
 
       if (outputPath != null && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -477,18 +467,10 @@ class BackupService {
           DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
       final defaultName = 'stroom_backup_$dateStr.zip';
 
-      String? outputPath;
-      if (kIsWeb) {
-        outputPath = await FilePicker.saveFile(
-          fileName: defaultName,
-          bytes: bytes,
-        );
-      } else {
-        outputPath = await FilePicker.saveFile(fileName: defaultName);
-        if (outputPath != null) {
-          await File(outputPath).writeAsBytes(bytes);
-        }
-      }
+      final outputPath = await FilePicker.saveFile(
+        fileName: defaultName,
+        bytes: bytes,
+      );
       return outputPath;
     } catch (e) {
       debugPrint('自动备份失败: $e');
