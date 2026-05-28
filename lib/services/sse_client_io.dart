@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
 
 /// 原生平台的 SSE 流式客户端
 /// 使用 Dio ResponseType.stream（在原生平台有效）
@@ -30,24 +29,9 @@ Stream<String> sseStream(String url, Map<String, String> headers, String body,
 
     await for (final line in lineStream) {
       if (line.startsWith('data: ')) {
-        final dataStr = line.substring(6).trim();
-        if (dataStr == '[DONE]') break;
-
-        try {
-          final data = jsonDecode(dataStr) as Map<String, dynamic>;
-          final choices = data['choices'] as List?;
-          if (choices != null && choices.isNotEmpty) {
-            final delta = choices[0]['delta'] as Map<String, dynamic>?;
-            if (delta != null) {
-              final content = delta['content'] as String?;
-              if (content != null && content.isNotEmpty) {
-                yield content;
-              }
-            }
-          }
-        } catch (e) {
-          debugPrint('sse_client_io: failed to parse SSE chunk: $e');
-        }
+        // Yield the raw SSE line; the caller (chat_api_provider.dart)
+        // strips the prefix, parses JSON, and handles content/reasoning/tool_calls.
+        yield line;
       }
     }
   } on DioException catch (e) {
