@@ -150,6 +150,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   void _initialize() {
     _configureAdapter();
+    // Restore saved model selection — clear stale index if out of range
     SharedPreferences.getInstance().then((prefs) {
       final saved = prefs.getInt('selected_model_index');
       if (saved != null) {
@@ -177,6 +178,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           m.configIndex == _adapter.currentConfigIndex &&
           m.modelIndex == _adapter.currentModelIndex,
     );
+    // Sync selected model index with adapter state
     _selectedModelIndex = idx >= 0 ? idx : 0;
     if (mounted) setState(() {});
   }
@@ -192,6 +194,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
       _history.clear();
       _controller?.dispose();
+      _messageKeys.clear();
+      _expandedErrors.clear();
+      _searchTextController.clear();
+      _isSearching = false;
+      _searchQuery = '';
+      _searchMatches.clear();
+      _currentMatchIndex = 0;
       final newCtrl = InMemoryChatController();
       _controller = newCtrl;
       for (final msg in conv.messages) {
@@ -211,7 +220,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _saveMessages() async {
     try {
-      final convId = ref.read(activeConversationIdProvider);
+    // Ensure a conversation exists
+    final convId = ref.read(activeConversationIdProvider);
       if (convId == null) return;
       await ref
           .read(conversationsProvider.notifier)
@@ -372,6 +382,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             }
 
           case ToolCallStartEvent e:
+            // Flush accumulated text before tool call as a segment
             if (textBeforeToolCall.isNotEmpty) {
               _chatSegments[aiMsgId]!.add(
                 _TextSegment(textBeforeToolCall),
@@ -419,9 +430,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         fullReply = errorMsg;
       }
     } finally {
+      // Flush remaining text after last tool call as a segment
       if (textBeforeToolCall.isNotEmpty) {
         _chatSegments[aiMsgId]!.add(_TextSegment(textBeforeToolCall));
       }
+      // Mark any still-running tool calls as cancelled
       for (var i = 0; i < (_chatSegments[aiMsgId]?.length ?? 0); i++) {
         final seg = _chatSegments[aiMsgId]![i];
         if (seg is _ToolCallSegment && seg.data.status == ToolCallStatus.running) {
@@ -433,6 +446,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           );
         }
       }
+      // Final update — ensure last chunk is shown
       if (fullReply.isNotEmpty) {
         updateMessage(fullReply);
       }
@@ -531,6 +545,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (index == -1 || index >= _history.length) return;
     final msg = _history[index];
 
+    // Remove this message and all after from history
     try {
       if (index < _history.length) {
         final removed = _history.sublist(index);
@@ -547,6 +562,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       debugPrint('[ChatPage] _editUserMessage remove failed: $e');
     }
 
+    // Re-send with same content (acts as edit)
     await _onMessageSend(msg.content, msg.attachments);
   }
 
@@ -607,6 +623,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     editingController.dispose();
                     Navigator.pop(ctx);
                     if (newText.isEmpty) return;
+                    // Replace message content and re-send
                     _editUserMessageWithText(messageId, newText);
                   },
                 ),
@@ -623,6 +640,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (index == -1 || index >= _history.length) return;
     final msg = _history[index];
 
+    // Remove this message and all after from history
     try {
       if (index < _history.length) {
         final removed = _history.sublist(index);
@@ -639,6 +657,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       debugPrint('[ChatPage] _editUserMessageWithText remove failed: $e');
     }
 
+    // Send with edited text
     await _onMessageSend(newText, msg.attachments);
   }
 
@@ -646,6 +665,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final index = _history.indexWhere((m) => m.id == messageId);
     if (index == -1 || index == 0 || index >= _history.length) return;
 
+    // Remove this message and all after from history
     try {
       if (index < _history.length) {
         final removed = _history.sublist(index);
@@ -662,6 +682,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       debugPrint('[ChatPage] _retryAssistantMessage remove failed: $e');
     }
 
+    // Re-generate using the preceding user message
     final userMsg = _history[index - 1];
     await _startStreaming(userMsg.content);
   }
@@ -776,6 +797,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     ref.read(_isStreamingProvider.notifier).state = false;
   }
 
+  /// 格式化错误信息，分类显示友好的提示并保留原始错误
   String _formatErrorMessage(Object error) {
     return formatChatErrorMessage(error);
   }
@@ -788,7 +810,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (query.isEmpty) return;
       final lowerQuery = query.toLowerCase();
       for (final msg in _history) {
-        final lowerContent = msg.content.toLowerCase();
+        final text = msg.content;
+        final lowerContent = text.toLowerCase();
         int start = 0;
         while (true) {
           final idx = lowerContent.indexOf(lowerQuery, start);
@@ -838,48 +861,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     });
   }
 
-  Widget _buildHighlightedText(String text, String messageId) {
+  Widget _buildHighlightedText(String text, String messageId, {Color? textColor}) {
     if (_searchQuery.isEmpty) {
-      return SelectableText(text);
+      return SelectableText(text, style: textColor != null ? TextStyle(color: textColor) : null);
     }
     final matches = _searchMatches.where((m) => m.messageId == messageId).toList();
     if (matches.isEmpty) {
-      return SelectableText(text);
+      return SelectableText(text, style: textColor != null ? TextStyle(color: textColor) : null);
     }
     final spans = <TextSpan>[];
     int lastEnd = 0;
-    for (final match in matches) {
-      if (match.matchStart > lastEnd) {
-        spans.add(TextSpan(text: text.substring(lastEnd, match.matchStart)));
-      }
-      final matchText = text.substring(match.matchStart, match.matchEnd);
-      final isCurrent = _searchMatches.indexOf(match) == _currentMatchIndex;
-      spans.add(TextSpan(
-        text: matchText,
-        style: TextStyle(
-          backgroundColor: isCurrent ? Colors.orangeAccent : Colors.yellow,
-          color: Colors.black87,
-          fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-        ),
-      ));
-      lastEnd = match.matchEnd;
-    }
-    if (lastEnd < text.length) {
-      spans.add(TextSpan(text: text.substring(lastEnd)));
-    }
-    return SelectableText.rich(
-      TextSpan(
-        style: DefaultTextStyle.of(context).style,
-        children: spans,
-      ),
-    );
-  }
-
-  Widget _buildHighlightedRichText(String text, String messageId) {
-    final matches = _searchMatches.where((m) => m.messageId == messageId).toList();
-    final spans = <TextSpan>[];
-    int lastEnd = 0;
-    for (final match in matches) {
+    for (var i = 0; i < matches.length; i++) {
+      final match = matches[i];
       if (match.matchStart > lastEnd) {
         spans.add(TextSpan(text: text.substring(lastEnd, match.matchStart)));
       }
@@ -995,6 +988,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final controller = _controller;
     final isStreaming = ref.watch(_isStreamingProvider);
 
+    // Reactively load messages when the active conversation changes
     ref.listen(activeConversationIdProvider, (prev, next) {
       if (next != null && next != prev) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1003,6 +997,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       }
     });
 
+    // Re-configure adapter when provider entries change (e.g. after load completes)
     ref.listen(providerEntriesProvider, (prev, next) {
       if (prev != next) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1011,6 +1006,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       }
     });
 
+    // Get conversation title
     final activeId = ref.watch(activeConversationIdProvider);
     final conversations = ref.watch(conversationsProvider);
     String title = '新对话';
@@ -1253,7 +1249,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       },
                       chatController: controller,
                       onMessageSend: (text) => _onMessageSend(text, []),
-                      timeFormat: DateFormat(''),
+
                       theme: isDark ? ChatTheme.dark() : ChatTheme.light(),
                       builders: Builders(
 composerBuilder: (context) => ChatComposerWidget(
@@ -1309,6 +1305,7 @@ composerBuilder: (context) => ChatComposerWidget(
                                       _buildHighlightedText(
                                         message.text.replaceAll('错误: ', ''),
                                         message.id,
+                                        textColor: Colors.red[700],
                                       )
                                     else
                                       SelectableText(
@@ -1401,12 +1398,13 @@ composerBuilder: (context) => ChatComposerWidget(
                                       : Colors.grey[100],
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: Column(
+                                  child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     if (reasoningText != null)
                                       _ReasoningSection(reasoningText: reasoningText),
+                                    // Show JumpingDots while waiting for first token
                                     if (isWaitingForFirstToken)
                                       const Padding(
                                         padding: EdgeInsets.symmetric(vertical: 8),
@@ -1416,11 +1414,12 @@ composerBuilder: (context) => ChatComposerWidget(
                                         ),
                                       )
                                     else if (segments != null && segments.isNotEmpty)
+                                      // Segments: text and tool calls in order
                                       ...segments.map((seg) => switch (seg) {
                                             _TextSegment s => Padding(
                                               padding: const EdgeInsets.only(bottom: 4),
                                               child: hasSearchMatch
-                                                ? _buildHighlightedRichText(s.text, message.id)
+                                                ? _buildHighlightedText(s.text, message.id)
                                                 : MarkdownWidget(
                                                     data: s.text,
                                                     selectable: true,
@@ -1434,7 +1433,7 @@ composerBuilder: (context) => ChatComposerWidget(
                                             _ToolCallSegment s => ToolCallCard(data: s.data),
                                           })
                                     else if (hasSearchMatch)
-                                      _buildHighlightedRichText(message.text, message.id)
+                                      _buildHighlightedText(message.text, message.id)
                                     else
                                       MarkdownWidget(
                                         data: message.text,
@@ -1535,7 +1534,7 @@ composerBuilder: (context) => ChatComposerWidget(
                                       ),
                                     ],
                                     const SizedBox(width: 2),
-                                    if (_developerMode && isAi)
+                                    if (_developerMode && isAi && _history.any((m) => m.id == message.id && (m.rawRequest != null || m.rawResponse != null)))
                                       _ActionButton(
                                         icon: Icons.code,
                                         tooltip: 'JSON 审查',
@@ -1610,12 +1609,14 @@ composerBuilder: (context) => ChatComposerWidget(
     );
   }
 
+  // ── Model selector widget ──
   Widget _buildModelSelector() {
     final entriesState = ref.read(providerEntriesProvider);
     final models = _adapter.availableModels(entriesState);
     if (models.length <= 1) return const SizedBox.shrink();
 
     final clampedIndex = _selectedModelIndex.clamp(0, models.length - 1);
+    // Re-sync if clampedIndex differs from selected (e.g. models changed)
     if (clampedIndex != _selectedModelIndex) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -1647,6 +1648,7 @@ composerBuilder: (context) => ChatComposerWidget(
             _adapter.selectModel(
                 entriesState, model.configIndex, model.modelIndex);
             setState(() => _selectedModelIndex = idx);
+            // Persist selection
             SharedPreferences.getInstance().then((prefs) {
               prefs.setInt('selected_model_index', idx);
             });
@@ -1666,6 +1668,7 @@ composerBuilder: (context) => ChatComposerWidget(
     );
   }
 
+  // ── History panel ──
   Widget _buildHistoryPanel(
       List<Conversation> conversations, String? activeId) {
     final cs = Theme.of(context).colorScheme;
@@ -1904,6 +1907,7 @@ composerBuilder: (context) => ChatComposerWidget(
   }
 }
 
+/// 格式化聊天错误信息，分类显示友好的提示并保留原始错误
 String formatChatErrorMessage(Object error) {
   final errorStr = error.toString();
 
