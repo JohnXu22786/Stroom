@@ -260,28 +260,70 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   // ================================================================
 
   Widget _buildAboutSection() {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        _buildAboutHeader(theme),
+        const SizedBox(height: 16),
+        _buildAboutMenu(theme),
+      ],
+    );
+  }
+
+  Widget _buildAboutHeader(ThemeData theme) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+        child: Column(
+          children: [
+            Icon(
+              Icons.auto_awesome,
+              size: 56,
+              color: theme.colorScheme.primary,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Stroom',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '版本 $appVersion',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAboutMenu(ThemeData theme) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Column(
           children: [
             _buildListTile(
-              leading: const Icon(Icons.info_outline, color: Colors.blue),
-              title: '应用版本',
-              subtitle: appVersion,
-              trailing: null,
+              leading: const Icon(Icons.update, color: Colors.blue),
+              title: '检查更新',
+              subtitle: '点击检查新版本',
+              trailing: const Icon(Icons.chevron_right),
               onTap: () {},
             ),
             const Divider(height: 1),
             _buildListTile(
-              leading: const Icon(Icons.code, color: Colors.orange),
+              leading: const Icon(Icons.code, color: Colors.teal),
               title: '开源许可',
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _showLicenseDialog(),
             ),
             const Divider(height: 1),
             _buildListTile(
-              leading: const Icon(Icons.privacy_tip, color: Colors.red),
+              leading: const Icon(Icons.privacy_tip, color: Colors.indigo),
               title: '隐私政策',
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _showPrivacyDialog(),
@@ -305,9 +347,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ),
             const Divider(height: 1),
             _buildListTile(
-              leading: const Icon(Icons.bug_report, color: Colors.orange),
+              leading: const Icon(Icons.bug_report, color: Colors.deepOrange),
               title: '问题反馈',
-              subtitle: 'Issues',
+              subtitle: 'GitHub Issues',
               trailing: const Icon(Icons.open_in_new, size: 18),
               onTap: () => _openUrl(
                   'https://github.com/JohnXu22786/Stroom/issues'),
@@ -349,13 +391,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('隐私政策'),
+          title: Row(
+            children: [
+              Icon(Icons.privacy_tip, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 8),
+              const Text('隐私政策'),
+            ],
+          ),
           content: const SingleChildScrollView(
             child: Text(
-              'Stroom尊重并保护所有使用服务用户的个人隐私权。\n\n'
-              '1. 相机权限：仅用于拍摄照片，不会收集或上传任何图像数据。\n'
-              '2. 相册权限：仅用于选择照片和保存照片，所有照片都保存在本地设备。\n'
-              '3. 数据安全：所有拍摄的照片都保存在您的设备本地，我们不会访问或上传任何数据。\n'
+              'Stroom 尊重并保护所有使用服务用户的个人隐私权。\n\n'
+              '1. 相机权限：仅用于拍摄照片，不会收集或上传任何图像数据。\n\n'
+              '2. 相册权限：仅用于选择照片和保存照片，所有照片都保存在本地设备。\n\n'
+              '3. 数据安全：所有拍摄的照片都保存在您的设备本地，'
+              '我们不会访问或上传任何数据。\n\n'
               '4. 第三方服务：本应用不包含任何第三方分析或广告服务。\n\n'
               '如果您有任何疑问，请联系我们。',
             ),
