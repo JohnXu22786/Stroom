@@ -89,6 +89,8 @@ class ChatMessage {
   final bool isStreaming;
   final bool isError;
   final String? reasoningContent;
+  final Map<String, dynamic>? rawRequest;
+  final Map<String, dynamic>? rawResponse;
 
   ChatMessage({
     String? id,
@@ -99,6 +101,8 @@ class ChatMessage {
     this.isStreaming = false,
     this.isError = false,
     this.reasoningContent,
+    this.rawRequest,
+    this.rawResponse,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
         attachments = attachments ?? [];
@@ -112,6 +116,8 @@ class ChatMessage {
         if (isStreaming) 'isStreaming': true,
         if (isError) 'isError': true,
         if (reasoningContent != null) 'reasoningContent': reasoningContent,
+        if (rawRequest != null) 'rawRequest': rawRequest,
+        if (rawResponse != null) 'rawResponse': rawResponse,
       };
 
   factory ChatMessage.fromMap(Map<String, dynamic> map) {
@@ -134,6 +140,8 @@ class ChatMessage {
       isStreaming: map['isStreaming'] as bool? ?? false,
       isError: map['isError'] as bool? ?? false,
       reasoningContent: map['reasoningContent'] as String?,
+      rawRequest: map['rawRequest'] as Map<String, dynamic>?,
+      rawResponse: map['rawResponse'] as Map<String, dynamic>?,
     );
   }
 
