@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -40,6 +41,13 @@ class _ToolCallSegment extends _MessageSegment {
   _ToolCallSegment(this.data);
 }
 
+class _SearchMatch {
+  final String messageId;
+  final int matchStart;
+  final int matchEnd;
+  _SearchMatch(this.messageId, this.matchStart, this.matchEnd);
+}
+
 final _isStreamingProvider = StateProvider<bool>((ref) => false);
 
 class ChatPage extends ConsumerStatefulWidget {
@@ -61,6 +69,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   final Map<String, String> _reasoningContents = {};
   final Map<String, List<_MessageSegment>> _chatSegments = {};
   String? _streamingMsgId;
+
+  bool _isSearching = false;
+  String _searchQuery = '';
+  final List<_SearchMatch> _searchMatches = [];
+  int _currentMatchIndex = 0;
+  final TextEditingController _searchTextController = TextEditingController();
+  final Map<String, GlobalKey> _messageKeys = {};
+
+  bool _developerMode = false;
+  final Map<String, bool> _expandedErrors = {};
 
   static bool _toolsRegistered = false;
 
@@ -126,12 +144,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void dispose() {
     _controller?.dispose();
     _adapter.dispose();
+    _searchTextController.dispose();
     super.dispose();
   }
 
   void _initialize() {
     _configureAdapter();
-    // Restore saved model selection — clear stale index if out of range
     SharedPreferences.getInstance().then((prefs) {
       final saved = prefs.getInt('selected_model_index');
       if (saved != null) {
@@ -153,7 +171,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void _configureAdapter() {
     final entriesState = ref.read(providerEntriesProvider);
     _adapter.configure(entriesState);
-    // Sync selected model index with adapter state
     final models = _adapter.availableModels(entriesState);
     final idx = models.indexWhere(
       (m) =>
@@ -258,7 +275,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Future<void> _onMessageSend(String text, List<Attachment> attachments) async {
     if (ref.read(_isStreamingProvider)) return;
 
-    // Ensure a conversation exists
     final convId = ref.read(activeConversationIdProvider);
     if (convId == null) {
       ref.read(conversationsProvider.notifier).createConversation();
@@ -356,7 +372,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             }
 
           case ToolCallStartEvent e:
-            // Flush accumulated text before tool call as a segment
             if (textBeforeToolCall.isNotEmpty) {
               _chatSegments[aiMsgId]!.add(
                 _TextSegment(textBeforeToolCall),
@@ -404,11 +419,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         fullReply = errorMsg;
       }
     } finally {
-      // Flush remaining text after last tool call as a segment
       if (textBeforeToolCall.isNotEmpty) {
         _chatSegments[aiMsgId]!.add(_TextSegment(textBeforeToolCall));
       }
-      // Mark any still-running tool calls as cancelled
       for (var i = 0; i < (_chatSegments[aiMsgId]?.length ?? 0); i++) {
         final seg = _chatSegments[aiMsgId]![i];
         if (seg is _ToolCallSegment && seg.data.status == ToolCallStatus.running) {
@@ -420,7 +433,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           );
         }
       }
-      // Final update — ensure last chunk is shown
       if (fullReply.isNotEmpty) {
         updateMessage(fullReply);
       }
@@ -519,7 +531,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (index == -1 || index >= _history.length) return;
     final msg = _history[index];
 
-    // Remove this message and all after from history
     try {
       if (index < _history.length) {
         final removed = _history.sublist(index);
@@ -536,7 +547,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       debugPrint('[ChatPage] _editUserMessage remove failed: $e');
     }
 
-    // Re-send with same content (acts as edit)
     await _onMessageSend(msg.content, msg.attachments);
   }
 
@@ -597,7 +607,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     editingController.dispose();
                     Navigator.pop(ctx);
                     if (newText.isEmpty) return;
-                    // Replace message content and re-send
                     _editUserMessageWithText(messageId, newText);
                   },
                 ),
@@ -614,7 +623,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (index == -1 || index >= _history.length) return;
     final msg = _history[index];
 
-    // Remove this message and all after from history
     try {
       if (index < _history.length) {
         final removed = _history.sublist(index);
@@ -631,7 +639,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       debugPrint('[ChatPage] _editUserMessageWithText remove failed: $e');
     }
 
-    // Send with edited text
     await _onMessageSend(newText, msg.attachments);
   }
 
@@ -639,7 +646,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final index = _history.indexWhere((m) => m.id == messageId);
     if (index == -1 || index == 0 || index >= _history.length) return;
 
-    // Remove this assistant message and all after from history
     try {
       if (index < _history.length) {
         final removed = _history.sublist(index);
@@ -656,7 +662,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       debugPrint('[ChatPage] _retryAssistantMessage remove failed: $e');
     }
 
-    // Re-generate using the preceding user message
     final userMsg = _history[index - 1];
     await _startStreaming(userMsg.content);
   }
@@ -771,9 +776,214 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     ref.read(_isStreamingProvider.notifier).state = false;
   }
 
-  /// 格式化错误信息，分类显示友好的提示并保留原始错误
   String _formatErrorMessage(Object error) {
     return formatChatErrorMessage(error);
+  }
+
+  void _performSearch(String query) {
+    setState(() {
+      _searchQuery = query;
+      _searchMatches.clear();
+      _currentMatchIndex = 0;
+      if (query.isEmpty) return;
+      final lowerQuery = query.toLowerCase();
+      for (final msg in _history) {
+        final lowerContent = msg.content.toLowerCase();
+        int start = 0;
+        while (true) {
+          final idx = lowerContent.indexOf(lowerQuery, start);
+          if (idx == -1) break;
+          _searchMatches.add(_SearchMatch(msg.id, idx, idx + query.length));
+          start = idx + query.length;
+        }
+      }
+    });
+    if (_searchMatches.isNotEmpty) {
+      _scrollToCurrentMatch();
+    }
+  }
+
+  void _scrollToCurrentMatch() {
+    if (_currentMatchIndex < 0 || _currentMatchIndex >= _searchMatches.length) return;
+    final match = _searchMatches[_currentMatchIndex];
+    final key = _messageKeys[match.messageId];
+    if (key?.currentContext != null) {
+      Scrollable.ensureVisible(key!.currentContext!, alignment: 0.3);
+    }
+  }
+
+  void _previousMatch() {
+    if (_searchMatches.isEmpty) return;
+    setState(() {
+      _currentMatchIndex = (_currentMatchIndex - 1 + _searchMatches.length) % _searchMatches.length;
+    });
+    _scrollToCurrentMatch();
+  }
+
+  void _nextMatch() {
+    if (_searchMatches.isEmpty) return;
+    setState(() {
+      _currentMatchIndex = (_currentMatchIndex + 1) % _searchMatches.length;
+    });
+    _scrollToCurrentMatch();
+  }
+
+  void _closeSearch() {
+    setState(() {
+      _isSearching = false;
+      _searchQuery = '';
+      _searchMatches.clear();
+      _currentMatchIndex = 0;
+      _searchTextController.clear();
+    });
+  }
+
+  Widget _buildHighlightedText(String text, String messageId) {
+    if (_searchQuery.isEmpty) {
+      return SelectableText(text);
+    }
+    final matches = _searchMatches.where((m) => m.messageId == messageId).toList();
+    if (matches.isEmpty) {
+      return SelectableText(text);
+    }
+    final spans = <TextSpan>[];
+    int lastEnd = 0;
+    for (final match in matches) {
+      if (match.matchStart > lastEnd) {
+        spans.add(TextSpan(text: text.substring(lastEnd, match.matchStart)));
+      }
+      final matchText = text.substring(match.matchStart, match.matchEnd);
+      final isCurrent = _searchMatches.indexOf(match) == _currentMatchIndex;
+      spans.add(TextSpan(
+        text: matchText,
+        style: TextStyle(
+          backgroundColor: isCurrent ? Colors.orangeAccent : Colors.yellow,
+          color: Colors.black87,
+          fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+        ),
+      ));
+      lastEnd = match.matchEnd;
+    }
+    if (lastEnd < text.length) {
+      spans.add(TextSpan(text: text.substring(lastEnd)));
+    }
+    return SelectableText.rich(
+      TextSpan(
+        style: DefaultTextStyle.of(context).style,
+        children: spans,
+      ),
+    );
+  }
+
+  Widget _buildHighlightedRichText(String text, String messageId) {
+    final matches = _searchMatches.where((m) => m.messageId == messageId).toList();
+    final spans = <TextSpan>[];
+    int lastEnd = 0;
+    for (final match in matches) {
+      if (match.matchStart > lastEnd) {
+        spans.add(TextSpan(text: text.substring(lastEnd, match.matchStart)));
+      }
+      final matchText = text.substring(match.matchStart, match.matchEnd);
+      final isCurrent = _searchMatches.indexOf(match) == _currentMatchIndex;
+      spans.add(TextSpan(
+        text: matchText,
+        style: TextStyle(
+          backgroundColor: isCurrent ? Colors.orangeAccent : Colors.yellow,
+          color: Colors.black87,
+          fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+        ),
+      ));
+      lastEnd = match.matchEnd;
+    }
+    if (lastEnd < text.length) {
+      spans.add(TextSpan(text: text.substring(lastEnd)));
+    }
+    return SelectableText.rich(
+      TextSpan(
+        style: DefaultTextStyle.of(context).style,
+        children: spans,
+      ),
+    );
+  }
+
+  void _showJsonInspection(String msgId) {
+    final chatMsg = _history.where((m) => m.id == msgId).firstOrNull;
+    if (chatMsg == null) return;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final encoder = const JsonEncoder.withIndent('  ');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        child: DefaultTabController(
+          length: 2,
+          child: Container(
+            width: double.maxFinite,
+            constraints: const BoxConstraints(maxHeight: 500),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
+                  child: Row(
+                    children: [
+                      const Text(
+                        'JSON 审查',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+                const TabBar(
+                  tabs: [
+                    Tab(text: 'Request'),
+                    Tab(text: 'Response'),
+                  ],
+                ),
+                Flexible(
+                  child: TabBarView(
+                    children: [
+                      SingleChildScrollView(
+                        padding: const EdgeInsets.all(12),
+                        child: SelectableText(
+                          chatMsg.rawRequest != null
+                              ? encoder.convert(chatMsg.rawRequest)
+                              : '无请求数据',
+                          style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                            color: isDark ? Colors.grey[300] : Colors.grey[800],
+                          ),
+                        ),
+                      ),
+                      SingleChildScrollView(
+                        padding: const EdgeInsets.all(12),
+                        child: SelectableText(
+                          chatMsg.rawResponse != null
+                              ? encoder.convert(chatMsg.rawResponse)
+                              : '无响应数据',
+                          style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                            color: isDark ? Colors.grey[300] : Colors.grey[800],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -785,7 +995,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final controller = _controller;
     final isStreaming = ref.watch(_isStreamingProvider);
 
-    // Reactively load messages when the active conversation changes
     ref.listen(activeConversationIdProvider, (prev, next) {
       if (next != null && next != prev) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -794,7 +1003,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       }
     });
 
-    // Re-configure adapter when provider entries change (e.g. after load completes)
     ref.listen(providerEntriesProvider, (prev, next) {
       if (prev != next) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -803,7 +1011,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       }
     });
 
-    // Get conversation title
     final activeId = ref.watch(activeConversationIdProvider);
     final conversations = ref.watch(conversationsProvider);
     String title = '新对话';
@@ -833,15 +1040,52 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      title,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Theme.of(context).colorScheme.onSurface,
+                    child: GestureDetector(
+                      onLongPress: () => setState(() => _developerMode = !_developerMode),
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              title,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
+                            ),
+                          ),
+                          if (_developerMode)
+                            Container(
+                              margin: const EdgeInsets.only(left: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: Colors.amber,
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                              child: const Text(
+                                'DEV',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
+                  ),
+                  // ── Search toggle ──
+                  IconButton(
+                    icon: Icon(
+                      _isSearching ? Icons.search_off : Icons.search,
+                      color: _isSearching
+                          ? Theme.of(context).colorScheme.primary
+                          : null,
+                    ),
+                    tooltip: '搜索消息',
+                    onPressed: () => setState(() => _isSearching = !_isSearching),
                   ),
                   // ── Model selector ──
                   if (adapterConfigured) _buildModelSelector(),
@@ -879,6 +1123,78 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 ],
               ),
             ),
+
+            // ── Search bar ──
+            if (_isSearching)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  border: Border(
+                    bottom: BorderSide(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                      width: 0.5,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.search, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: SizedBox(
+                        height: 32,
+                        child: TextField(
+                          controller: _searchTextController,
+                          autofocus: true,
+                          onChanged: _performSearch,
+                          decoration: const InputDecoration(
+                            hintText: '搜索消息...',
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            border: OutlineInputBorder(),
+                          ),
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                    ),
+                    if (_searchMatches.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        '${_currentMatchIndex + 1}/${_searchMatches.length}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                    IconButton(
+                      icon: const Icon(Icons.keyboard_arrow_up, size: 20),
+                      tooltip: '上一个',
+                      onPressed: _previousMatch,
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.keyboard_arrow_down, size: 20),
+                      tooltip: '下一个',
+                      onPressed: _nextMatch,
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      tooltip: '关闭搜索',
+                      onPressed: _closeSearch,
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    ),
+                  ],
+                ),
+              ),
 
             // ── Unconfigured banner ──
             if (!adapterConfigured)
@@ -937,6 +1253,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       },
                       chatController: controller,
                       onMessageSend: (text) => _onMessageSend(text, []),
+                      timeFormat: DateFormat(''),
                       theme: isDark ? ChatTheme.dark() : ChatTheme.light(),
                       builders: Builders(
 composerBuilder: (context) => ChatComposerWidget(
@@ -952,6 +1269,7 @@ composerBuilder: (context) => ChatComposerWidget(
                           if (isAi) {
                             final chatMsg = _history.where((m) => m.id == message.id).firstOrNull;
                             if ((chatMsg?.isError == true) || message.text.startsWith('错误:')) {
+                              final isExpanded = _expandedErrors[message.id] ?? false;
                               messageBubble = Container(
                                 margin: const EdgeInsets.symmetric(vertical: 2),
                                 padding: const EdgeInsets.all(12),
@@ -987,13 +1305,78 @@ composerBuilder: (context) => ChatComposerWidget(
                                       ],
                                     ),
                                     const SizedBox(height: 6),
-                                    SelectableText(
-                                      message.text.replaceAll('错误: ', ''),
-                                      style: TextStyle(
-                                        color: Colors.red[700],
-                                        fontSize: 13,
+                                    if (isExpanded)
+                                      _buildHighlightedText(
+                                        message.text.replaceAll('错误: ', ''),
+                                        message.id,
+                                      )
+                                    else
+                                      SelectableText(
+                                        message.text.replaceAll('错误: ', ''),
+                                        style: TextStyle(
+                                          color: Colors.red[700],
+                                          fontSize: 13,
+                                        ),
                                       ),
-                                    ),
+                                    if (chatMsg != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 8),
+                                        child: TextButton.icon(
+                                          icon: Icon(
+                                            isExpanded ? Icons.expand_less : Icons.expand_more,
+                                            size: 14,
+                                          ),
+                                          label: Text(
+                                            isExpanded ? '收起详情' : '查看详情',
+                                            style: const TextStyle(fontSize: 12),
+                                          ),
+                                          onPressed: () {
+                                            setState(() {
+                                              _expandedErrors[message.id] = !isExpanded;
+                                            });
+                                          },
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          ),
+                                        ),
+                                      ),
+                                    if (isExpanded && chatMsg != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 6),
+                                        child: Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: isDark ? Colors.grey[900] : Colors.grey[200],
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              if (chatMsg.rawRequest != null || chatMsg.rawResponse != null) ...[
+                                                if (chatMsg.rawRequest != null)
+                                                  _buildJsonBlock('Request', chatMsg.rawRequest, isDark),
+                                                if (chatMsg.rawResponse != null)
+                                                  Padding(
+                                                    padding: const EdgeInsets.only(top: 6),
+                                                    child: _buildJsonBlock('Response', chatMsg.rawResponse, isDark),
+                                                  ),
+                                              ] else
+                                                Text(
+                                                  '无详细数据',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: isDark ? Colors.grey[500] : Colors.grey[600],
+                                                    fontStyle: FontStyle.italic,
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
                                   ],
                                 ),
                               );
@@ -1004,6 +1387,9 @@ composerBuilder: (context) => ChatComposerWidget(
                                   message.id == _streamingMsgId &&
                                   message.text.isEmpty &&
                                   isStreaming;
+                              final hasSearchMatch = _isSearching &&
+                                  _searchQuery.isNotEmpty &&
+                                  _searchMatches.any((m) => m.messageId == message.id);
 
                               messageBubble = Container(
                                 margin:
@@ -1021,7 +1407,6 @@ composerBuilder: (context) => ChatComposerWidget(
                                   children: [
                                     if (reasoningText != null)
                                       _ReasoningSection(reasoningText: reasoningText),
-                                    // Show JumpingDots while waiting for first token
                                     if (isWaitingForFirstToken)
                                       const Padding(
                                         padding: EdgeInsets.symmetric(vertical: 8),
@@ -1031,22 +1416,25 @@ composerBuilder: (context) => ChatComposerWidget(
                                         ),
                                       )
                                     else if (segments != null && segments.isNotEmpty)
-                                      // Segments: text and tool calls in order
                                       ...segments.map((seg) => switch (seg) {
                                             _TextSegment s => Padding(
                                               padding: const EdgeInsets.only(bottom: 4),
-                                              child: MarkdownWidget(
-                                                data: s.text,
-                                                selectable: true,
-                                                shrinkWrap: true,
-                                                physics: const NeverScrollableScrollPhysics(),
-                                                config: markdownConfig.copy(configs: [
-                                                  PreConfig(theme: draculaTheme),
-                                                ]),
-                                              ),
+                                              child: hasSearchMatch
+                                                ? _buildHighlightedRichText(s.text, message.id)
+                                                : MarkdownWidget(
+                                                    data: s.text,
+                                                    selectable: true,
+                                                    shrinkWrap: true,
+                                                    physics: const NeverScrollableScrollPhysics(),
+                                                    config: markdownConfig.copy(configs: [
+                                                      PreConfig(theme: draculaTheme),
+                                                    ]),
+                                                  ),
                                             ),
                                             _ToolCallSegment s => ToolCallCard(data: s.data),
                                           })
+                                    else if (hasSearchMatch)
+                                      _buildHighlightedRichText(message.text, message.id)
                                     else
                                       MarkdownWidget(
                                         data: message.text,
@@ -1065,11 +1453,17 @@ composerBuilder: (context) => ChatComposerWidget(
                           } else {
                             final chatMsg = _history.where((m) => m.id == message.id).firstOrNull;
                             final hasAttachments = chatMsg?.attachments.isNotEmpty == true;
+                            final hasSearchMatch = _isSearching &&
+                                _searchQuery.isNotEmpty &&
+                                _searchMatches.any((m) => m.messageId == message.id);
                             messageBubble = Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                SimpleTextMessage(message: message, index: index),
+                                if (hasSearchMatch)
+                                  _buildHighlightedText(message.text, message.id)
+                                else
+                                  SimpleTextMessage(message: message, index: index),
                                 if (hasAttachments)
                                   Padding(
                                     padding: const EdgeInsets.only(left: 4, right: 4, bottom: 4),
@@ -1093,7 +1487,10 @@ composerBuilder: (context) => ChatComposerWidget(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              messageBubble,
+                              Container(
+                                key: _messageKeys.putIfAbsent(message.id, () => GlobalKey()),
+                                child: messageBubble,
+                              ),
                               Padding(
                                 padding: const EdgeInsets.only(left: 4, top: 2, bottom: 4),
                                 child: Row(
@@ -1138,6 +1535,13 @@ composerBuilder: (context) => ChatComposerWidget(
                                       ),
                                     ],
                                     const SizedBox(width: 2),
+                                    if (_developerMode && isAi)
+                                      _ActionButton(
+                                        icon: Icons.code,
+                                        tooltip: 'JSON 审查',
+                                        onPressed: () => _showJsonInspection(message.id),
+                                      ),
+                                    const SizedBox(width: 2),
                                     _ActionButton(
                                       icon: Icons.delete_outline,
                                       tooltip: '删除',
@@ -1171,14 +1575,47 @@ composerBuilder: (context) => ChatComposerWidget(
     );
   }
 
-  // ── Model selector widget ──
+  Widget _buildJsonBlock(String label, dynamic data, bool isDark) {
+    final encoder = const JsonEncoder.withIndent('  ');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$label:',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: isDark ? Colors.grey[400] : Colors.grey[700],
+          ),
+        ),
+        const SizedBox(height: 2),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.black : Colors.grey[300],
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: SelectableText(
+            encoder.convert(data),
+            style: TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 11,
+              color: isDark ? Colors.grey[300] : Colors.grey[800],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildModelSelector() {
     final entriesState = ref.read(providerEntriesProvider);
     final models = _adapter.availableModels(entriesState);
     if (models.length <= 1) return const SizedBox.shrink();
 
     final clampedIndex = _selectedModelIndex.clamp(0, models.length - 1);
-    // Re-sync if clampedIndex differs from selected (e.g. models changed)
     if (clampedIndex != _selectedModelIndex) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -1210,7 +1647,6 @@ composerBuilder: (context) => ChatComposerWidget(
             _adapter.selectModel(
                 entriesState, model.configIndex, model.modelIndex);
             setState(() => _selectedModelIndex = idx);
-            // Persist selection
             SharedPreferences.getInstance().then((prefs) {
               prefs.setInt('selected_model_index', idx);
             });
@@ -1230,7 +1666,6 @@ composerBuilder: (context) => ChatComposerWidget(
     );
   }
 
-  // ── History panel ──
   Widget _buildHistoryPanel(
       List<Conversation> conversations, String? activeId) {
     final cs = Theme.of(context).colorScheme;
@@ -1469,7 +1904,6 @@ composerBuilder: (context) => ChatComposerWidget(
   }
 }
 
-/// 格式化聊天错误信息，分类显示友好的提示并保留原始错误
 String formatChatErrorMessage(Object error) {
   final errorStr = error.toString();
 
