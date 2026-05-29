@@ -151,6 +151,21 @@ class VideoManifest {
   static Future<String?> readFilePath(String fileName) =>
       _ops.readFilePath(fileName);
 
+  static Future<bool> hasThumbnail(String hash) async {
+    final thumbPath = '${hash}_thumb.jpg';
+    return (await readFile(thumbPath)) != null;
+  }
+
+  static Future<Uint8List?> readThumbnail(String hash) async {
+    final thumbPath = '${hash}_thumb.jpg';
+    return readFile(thumbPath);
+  }
+
+  static Future<void> writeThumbnail(String hash, Uint8List bytes) async {
+    final thumbPath = '${hash}_thumb.jpg';
+    await writeFile(thumbPath, bytes);
+  }
+
   // Folder management
   static Future<Set<String>> getAllFolders() => _ops.getAllFolders();
   static Future<void> addFolder(String name) => _ops.addFolder(name);
