@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../providers/theme_provider.dart';
 import '../providers/provider_config.dart';
 import '../providers/camera_settings_provider.dart';
+import '../providers/update_provider.dart';
 import '../utils/app_version.dart';
 import 'provider_config_page.dart';
 import 'backup_restore_page.dart';
@@ -260,6 +261,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   // ================================================================
 
   Widget _buildAboutSection() {
+    final updateState = ref.watch(updateProvider);
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -271,6 +273,37 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               subtitle: appVersion,
               trailing: null,
               onTap: () {},
+            ),
+            const Divider(height: 1),
+            _buildListTile(
+              leading: updateState.isChecking
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.update, color: Colors.blue),
+              title: '检查更新',
+              subtitle: updateState.updateAvailable
+                  ? '发现新版本 ${updateState.latestVersion}'
+                  : null,
+              trailing: updateState.updateAvailable
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Text(
+                        '新版本',
+                        style: TextStyle(color: Colors.white, fontSize: 12),
+                      ),
+                    )
+                  : const Icon(Icons.chevron_right),
+              onTap: updateState.isChecking
+                  ? () {}
+                  : () => _checkForUpdate(),
             ),
             const Divider(height: 1),
             _buildListTile(
@@ -315,6 +348,95 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _checkForUpdate() async {
+    final notifier = ref.read(updateProvider.notifier);
+    await notifier.checkForUpdate();
+    final state = ref.read(updateProvider);
+
+    if (state.error != null) {
+      _showSnackBar(state.error!);
+    } else if (state.updateAvailable) {
+      _showUpdateDialog(state);
+    } else {
+      _showSnackBar('已是最新版本');
+    }
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+    );
+  }
+
+  void _showUpdateDialog(UpdateState state) {
+    showDialog(
+      context: context,
+      barrierDismissible: !state.mandatory,
+      builder: (context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(
+                state.mandatory ? Icons.warning_amber_rounded : Icons.system_update,
+                color: state.mandatory ? Colors.red : Colors.blue,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(state.mandatory ? '强制更新' : '发现新版本'),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('最新版本: ${state.latestVersion}'),
+                if (state.mandatory) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    '此版本为强制更新，请立即升级以继续使用。',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ],
+                if (state.releaseNotes != null &&
+                    state.releaseNotes!.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text('更新内容:',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text(state.releaseNotes!),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            if (!state.mandatory)
+              TextButton(
+                onPressed: () {
+                  ref.read(updateProvider.notifier).skipVersion(state.latestVersion!);
+                  Navigator.of(context).pop();
+                },
+                child: const Text('跳过此版本'),
+              ),
+            if (!state.mandatory)
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('稍后提醒'),
+              ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _openUrl(state.downloadUrl ?? 'https://github.com/JohnXu22786/Stroom/releases');
+              },
+              child: const Text('立即更新'),
+            ),
+          ],
+        );
+      },
     );
   }
 
