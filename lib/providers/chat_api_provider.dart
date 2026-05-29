@@ -19,6 +19,9 @@ abstract class BaseChatProvider {
 
   List<String> get supportedModelIds;
 
+  Map<String, dynamic>? get lastRequestBody => null;
+  Map<String, dynamic>? get lastResponseData => null;
+
   Future<String> chat(
     List<Map<String, dynamic>> messages, {
     String? model,
@@ -56,6 +59,8 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   final String _baseUrl;
   final String _name;
   final Dio _dio;
+  Map<String, dynamic>? _lastRequestBody;
+  Map<String, dynamic>? _lastResponseData;
 
   OpenAICompatibleChatProvider({
     required String baseUrl,
@@ -76,6 +81,12 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
 
   @override
   String get name => _name;
+
+  @override
+  Map<String, dynamic>? get lastRequestBody => _lastRequestBody;
+
+  @override
+  Map<String, dynamic>? get lastResponseData => _lastResponseData;
 
   // TODO: 可从 CustomParam 中提取模型列表，若某 param 的 type 或 key 为 'model'，
   // 使用其 defaultValue?.split(',') 作为模型列表。目前暂无可信数据源，留空。
@@ -144,11 +155,16 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         'OpenAICompatibleChatProvider: POST $_baseUrl - 消息数: ${messages.length}');
 
     try {
+      _lastRequestBody = body;
       final response = await _dio.post(
         _baseUrl,
         cancelToken: cancelToken,
         data: body,
       );
+
+      _lastResponseData = response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : <String, dynamic>{'raw': '$response.data'};
 
       final choices = response.data['choices'] as List?;
       if (choices == null || choices.isEmpty) {
@@ -204,71 +220,81 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         tools: tools,
         extraParams: extraParams);
 
+    _lastRequestBody = body;
+
     debugPrint(
         'OpenAICompatibleChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}');
 
     final Map<int, Map<String, dynamic>> toolCallAccumulators = {};
 
-    await for (final event in sseStream(
-      _baseUrl,
-      {
-        'Content-Type': 'application/json',
-        if (_apiKey.isNotEmpty) 'Authorization': 'Bearer $_apiKey',
-        'Accept': 'text/event-stream',
-      },
-      jsonEncode(body),
-      cancelToken: cancelToken,
-    )) {
-      final dataStr = event.substring('data: '.length).trim();
-      if (dataStr == '[DONE]') break;
+    try {
+      await for (final event in sseStream(
+        _baseUrl,
+        {
+          'Content-Type': 'application/json',
+          if (_apiKey.isNotEmpty) 'Authorization': 'Bearer $_apiKey',
+          'Accept': 'text/event-stream',
+        },
+        jsonEncode(body),
+        cancelToken: cancelToken,
+      )) {
+        final dataStr = event.substring('data: '.length).trim();
+        if (dataStr == '[DONE]') break;
 
-      try {
-        final data = jsonDecode(dataStr) as Map<String, dynamic>;
-        final choices = data['choices'] as List?;
-        if (choices != null && choices.isNotEmpty) {
-          final delta = choices[0]['delta'] as Map<String, dynamic>?;
-          if (delta == null) continue;
+        try {
+          final data = jsonDecode(dataStr) as Map<String, dynamic>;
+          _lastResponseData = data;
+          final choices = data['choices'] as List?;
+          if (choices != null && choices.isNotEmpty) {
+            final delta = choices[0]['delta'] as Map<String, dynamic>?;
+            if (delta == null) continue;
 
-          // Text content
-          final content = delta['content'] as String?;
-          if (content != null && content.isNotEmpty) {
-            yield AIStreamEvent(content);
-          }
-
-          // Reasoning content
-          if (reasoning) {
-            final reasoningContent = delta['reasoning_content'] as String?;
-            if (reasoningContent != null && reasoningContent.isNotEmpty) {
-              yield AIStreamEvent(reasoningContent, isReasoning: true);
+            // Text content
+            final content = delta['content'] as String?;
+            if (content != null && content.isNotEmpty) {
+              yield AIStreamEvent(content);
             }
-          }
 
-          // Tool call deltas (streamed in chunks by index)
-          final toolCallsDelta = delta['tool_calls'] as List?;
-          if (toolCallsDelta != null) {
-            for (final tc in toolCallsDelta) {
-              final index = tc['index'] as int;
-              toolCallAccumulators.putIfAbsent(index, () => {});
-              final acc = toolCallAccumulators[index]!;
+            // Reasoning content
+            if (reasoning) {
+              final reasoningContent = delta['reasoning_content'] as String?;
+              if (reasoningContent != null && reasoningContent.isNotEmpty) {
+                yield AIStreamEvent(reasoningContent, isReasoning: true);
+              }
+            }
 
-              if (tc['id'] != null) acc['id'] = tc['id'];
-              if (tc['type'] != null) acc['type'] = tc['type'];
-              if (tc['function'] != null) {
-                acc.putIfAbsent('function', () => <String, dynamic>{});
-                final fn = tc['function'] as Map<String, dynamic>;
-                final accFn = acc['function'] as Map<String, dynamic>;
-                if (fn['name'] != null) accFn['name'] = fn['name'];
-                if (fn['arguments'] != null) {
-                  accFn['arguments'] = (accFn['arguments'] as String? ?? '') +
-                      (fn['arguments'] as String);
+            // Tool call deltas (streamed in chunks by index)
+            final toolCallsDelta = delta['tool_calls'] as List?;
+            if (toolCallsDelta != null) {
+              for (final tc in toolCallsDelta) {
+                final index = tc['index'] as int;
+                toolCallAccumulators.putIfAbsent(index, () => {});
+                final acc = toolCallAccumulators[index]!;
+
+                if (tc['id'] != null) acc['id'] = tc['id'];
+                if (tc['type'] != null) acc['type'] = tc['type'];
+                if (tc['function'] != null) {
+                  acc.putIfAbsent('function', () => <String, dynamic>{});
+                  final fn = tc['function'] as Map<String, dynamic>;
+                  final accFn = acc['function'] as Map<String, dynamic>;
+                  if (fn['name'] != null) accFn['name'] = fn['name'];
+                  if (fn['arguments'] != null) {
+                    accFn['arguments'] = (accFn['arguments'] as String? ?? '') +
+                        (fn['arguments'] as String);
+                  }
                 }
               }
             }
           }
+        } catch (e) {
+          debugPrint('OpenAICompatibleChatProvider: failed to parse SSE chunk: $e');
         }
-      } catch (e) {
-        debugPrint('OpenAICompatibleChatProvider: failed to parse SSE chunk: $e');
       }
+    } catch (e) {
+      if (e is DioException && e.response?.data is Map) {
+        _lastResponseData = Map<String, dynamic>.from(e.response!.data as Map);
+      }
+      rethrow;
     }
 
     // After stream ends, yield tool calls if any were accumulated

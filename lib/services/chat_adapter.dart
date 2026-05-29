@@ -180,4 +180,7 @@ class ChatAdapter {
   }
 
   String get reasoningContent => _chatService?.reasoningContent ?? '';
+
+  Map<String, dynamic>? get lastRequestBody => _chatService?.lastRequestBody;
+  Map<String, dynamic>? get lastResponseData => _chatService?.lastResponseData;
 }
