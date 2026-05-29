@@ -377,31 +377,13 @@ class _FileManagerViewState<T extends FileRecord>
           // Sort button
           PopupMenuButton<SortField>(
             key: const Key('fm_sort_btn'),
-            icon: Icon(
-              widget.sortConfig.field == SortField.createdAt
-                  ? Icons.access_time
-                  : widget.sortConfig.field == SortField.name
-                      ? Icons.sort_by_alpha
-                      : Icons.storage,
-            ),
+            icon: const Icon(Icons.sort),
             tooltip: '排序（${widget.sortConfig.label}）',
             onSelected: widget.onToggleSort,
             itemBuilder: (_) => [
-              CheckedPopupMenuItem(
-                value: SortField.createdAt,
-                checked: widget.sortConfig.field == SortField.createdAt,
-                child: const Text('按时间'),
-              ),
-              CheckedPopupMenuItem(
-                value: SortField.name,
-                checked: widget.sortConfig.field == SortField.name,
-                child: const Text('按文件名'),
-              ),
-              CheckedPopupMenuItem(
-                value: SortField.size,
-                checked: widget.sortConfig.field == SortField.size,
-                child: const Text('按大小'),
-              ),
+              _buildSortMenuItem(SortField.createdAt, '按时间'),
+              _buildSortMenuItem(SortField.name, '按文件名'),
+              _buildSortMenuItem(SortField.size, '按大小'),
             ],
           ),
           // Thumbnail toggle
@@ -432,6 +414,27 @@ class _FileManagerViewState<T extends FileRecord>
           ),
         ],
       ],
+    );
+  }
+
+  PopupMenuEntry<SortField> _buildSortMenuItem(SortField field, String label) {
+    final isSelected = widget.sortConfig.field == field;
+    return CheckedPopupMenuItem(
+      value: field,
+      checked: isSelected,
+      child: Row(
+        children: [
+          Expanded(child: Text(label)),
+          if (isSelected)
+            Icon(
+              widget.sortConfig.order == SortOrder.descending
+                  ? Icons.arrow_downward
+                  : Icons.arrow_upward,
+              size: 16,
+              color: Colors.grey,
+            ),
+        ],
+      ),
     );
   }
 
