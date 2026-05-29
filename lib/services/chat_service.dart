@@ -35,6 +35,8 @@ class ChatService {
   StreamSubscription<AIStreamEvent>? _streamSubscription;
   StreamController<String>? _controller;
   String _reasoningBuffer = '';
+  Map<String, dynamic>? _lastRequestBody;
+  Map<String, dynamic>? _lastResponseData;
 
   /// Construct an instance backed by a real provider and model config.
   ChatService({
@@ -45,6 +47,11 @@ class ChatService {
 
   /// Whether there's an active streaming session (instance or static).
   bool get isStreamActive => _controller != null && !_controller!.isClosed;
+
+  Map<String, dynamic>? get lastRequestBody =>
+      _lastRequestBody ?? _provider?.lastRequestBody;
+  Map<String, dynamic>? get lastResponseData =>
+      _lastResponseData ?? _provider?.lastResponseData;
 
   // ── Instance methods ────────────────────────────────────────────
 
@@ -78,6 +85,13 @@ class ChatService {
       try {
         if (_isCancelledByUser) return;
         final apiMessages = await _prepareApiMessages(history);
+        _lastRequestBody = {
+          'messages': apiMessages,
+          'model': _modelConfig?.modelId,
+          'max_tokens': (_modelConfig!.typeConfig['context'] as num?)?.toInt() ??
+              (_modelConfig!.typeConfig['maxTokens'] as num?)?.toInt() ?? 4096,
+          'temperature': (_modelConfig!.typeConfig['temperature'] as num?)?.toDouble() ?? 0.7,
+        };
         _cancelToken = CancelToken();
         _streamSubscription = _provider!
             .chatStream(
@@ -158,6 +172,14 @@ class ChatService {
       try {
         if (_isCancelledByUser) return;
         var messages = await _prepareApiMessages(history);
+        _lastRequestBody = {
+          'messages': messages,
+          'model': _modelConfig?.modelId,
+          'max_tokens': (_modelConfig!.typeConfig['context'] as num?)?.toInt() ??
+              (_modelConfig!.typeConfig['maxTokens'] as num?)?.toInt() ?? 4096,
+          'temperature': (_modelConfig!.typeConfig['temperature'] as num?)?.toDouble() ?? 0.7,
+          'tools': toolDefs.isNotEmpty ? toolDefs : null,
+        };
         int loopProtection = 0;
 
         while (!_isCancelledByUser && loopProtection < 10) {
@@ -267,6 +289,7 @@ class ChatService {
           }
         }
       } catch (e) {
+        _lastResponseData = _provider?.lastResponseData;
         if (!controller.isClosed) {
           controller.addError(e);
         }
