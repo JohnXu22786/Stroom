@@ -57,7 +57,8 @@ class _Version implements Comparable<_Version> {
 
   factory _Version.parse(String versionString) {
     final cleaned = versionString.replaceAll(RegExp(r'^v'), '');
-    final parts = cleaned.split('+').first.split('.');
+    final base = cleaned.split('+').first.split('-').first;
+    final parts = base.split('.');
     return _Version._(
       major: parts.isNotEmpty ? int.tryParse(parts[0]) ?? 0 : 0,
       minor: parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0,
@@ -91,7 +92,12 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     state = state.copyWith(isChecking: true, error: null);
 
     try {
-      final response = await Dio().get(_kUpdateCheckUrl);
+      final response = await Dio(
+        BaseOptions(
+          connectTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 10),
+        ),
+      ).get(_kUpdateCheckUrl);
       if (response.statusCode == 200) {
         final data = jsonDecode(response.data.toString()) as Map<String, dynamic>;
         final latestVersion = data['latest_version'] as String? ?? '';
