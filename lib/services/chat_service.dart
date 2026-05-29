@@ -121,11 +121,13 @@ class ChatService {
             if (_controller != null && !_controller!.isClosed) {
               _controller!.close();
             }
+            _lastResponseData = _provider?.lastResponseData;
             _cleanUp();
           },
           onError: (Object error) {
             _streamSubscription = null;
             debugPrint('ChatService stream error: $error');
+            _lastResponseData = _provider?.lastResponseData;
             if (_controller != null && !_controller!.isClosed) {
               _controller!.addError(error);
               _controller!.close();
@@ -134,6 +136,7 @@ class ChatService {
           },
         );
       } catch (e) {
+        _lastResponseData = _provider?.lastResponseData;
         if (!_controller!.isClosed) {
           _controller!.addError(e);
           _controller!.close();
