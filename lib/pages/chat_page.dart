@@ -150,20 +150,25 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   void _initialize() {
     _configureAdapter();
-    // Restore saved model selection — clear stale index if out of range
     SharedPreferences.getInstance().then((prefs) {
-      final saved = prefs.getInt('selected_model_index');
-      if (saved != null) {
+      // Restore saved model selection — clear stale index if out of range
+      final savedIdx = prefs.getInt('selected_model_index');
+      if (savedIdx != null) {
         final entriesState = ref.read(providerEntriesProvider);
         final models = _adapter.availableModels(entriesState);
-        if (saved >= 0 && saved < models.length) {
-          final model = models[saved];
+        if (savedIdx >= 0 && savedIdx < models.length) {
+          final model = models[savedIdx];
           _adapter.selectModel(
               entriesState, model.configIndex, model.modelIndex);
-          setState(() => _selectedModelIndex = saved);
+          setState(() => _selectedModelIndex = savedIdx);
         } else {
           prefs.remove('selected_model_index');
         }
+      }
+      // Restore saved reasoning toggle
+      final savedReasoning = prefs.getBool('reasoning_enabled');
+      if (savedReasoning != null) {
+        setState(() => _reasoningEnabled = savedReasoning);
       }
     });
     _loadConversationMessages();
@@ -1095,8 +1100,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                             : null,
                       ),
                       tooltip: _reasoningEnabled ? '推理已开启' : '推理',
-                      onPressed: () =>
-                          setState(() => _reasoningEnabled = !_reasoningEnabled),
+                      onPressed: () {
+                        setState(() =>
+                            _reasoningEnabled = !_reasoningEnabled);
+                        SharedPreferences.getInstance().then((prefs) =>
+                            prefs.setBool(
+                                'reasoning_enabled', _reasoningEnabled));
+                      },
                     ),
                   IconButton(
                     icon: const Icon(Icons.history),
