@@ -113,15 +113,21 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       'max_tokens': maxTokens ?? defaultParams['max_tokens'],
       'temperature': temperature ?? defaultParams['temperature'],
       'stream': stream,
-      if (reasoning) ..._reasoningParams(),
+      if (reasoning) ..._reasoningParams(model),
       if (tools != null && tools.isNotEmpty) 'tools': tools,
       if (extraParams != null) ...extraParams,
     };
   }
 
-  Map<String, dynamic> _reasoningParams() => {
-        'thinking': {'type': 'enabled'},
-      };
+  Map<String, dynamic> _reasoningParams(String? model) {
+    if (model != null) {
+      final lower = model.toLowerCase();
+      if (lower.contains('deepseek') || lower.contains('r1')) {
+        return {'thinking': {'type': 'enabled'}};
+      }
+    }
+    return {'reasoning_effort': 'medium'};
+  }
 
   @override
   Map<String, dynamic> get defaultParams => {
