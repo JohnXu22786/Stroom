@@ -35,6 +35,7 @@ dependencies:
   just_audio: ^0.9.36
   uuid: ^4.3.0
   video_player: ^2.9.1
+  video_thumbnail: ^0.5.3
   crypto: ^3.0.3
   mime: ^1.0.4
   file: ^6.1.4
