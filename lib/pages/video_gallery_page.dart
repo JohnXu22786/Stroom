@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:video_player/video_player.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
 import 'package:chewie/chewie.dart';
 
 import '../providers/video_provider.dart';
@@ -144,6 +146,22 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         );
 
         await VideoManifest.writeFile(storageFileName, bytes);
+        try {
+          final videoPath =
+              await VideoManifest.readFilePath(storageFileName);
+          if (videoPath != null) {
+            final thumbBytes = await VideoThumbnail.thumbnailData(
+              video: videoPath,
+              imageFormat: ImageFormat.JPEG,
+              maxWidth: 256,
+              quality: 75,
+              timeMs: 1000,
+            );
+            if (thumbBytes != null) {
+              await VideoManifest.writeThumbnail(hash, thumbBytes);
+            }
+          }
+        } catch (_) {}
         await VideoManifest.addRecord(VideoRecord(
           name: displayName,
           hash: hash,
@@ -503,7 +521,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     );
 
     // Build file-thumbnail builder — simplified, just a video cam icon
-    Widget fileThumbnailBuilder(VideoRecord file) {
+    Widget buildThumbnailFallback(VideoRecord file) {
       return Container(
         color: Colors.grey[900],
         child: Stack(
@@ -534,6 +552,54 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
               ),
           ],
         ),
+      );
+    }
+
+    Widget fileThumbnailBuilder(VideoRecord file) {
+      return FutureBuilder<Uint8List?>(
+        future: VideoManifest.readThumbnail(file.hash),
+        builder: (context, snapshot) {
+          final thumbData = snapshot.data;
+          if (thumbData != null && thumbData.isNotEmpty) {
+            return Container(
+              color: Colors.black,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.memory(
+                    thumbData,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                    errorBuilder: (_, __, ___) =>
+                        buildThumbnailFallback(file),
+                  ),
+                  if (file.duration > 0)
+                    Positioned(
+                      bottom: 4,
+                      right: 4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          _formatDuration(file.duration),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }
+          return buildThumbnailFallback(file);
+        },
       );
     }
 
