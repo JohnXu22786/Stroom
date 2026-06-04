@@ -755,51 +755,153 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Widget _buildMessageAttachmentPreview(Attachment att) {
     final isImage = att.fileType == 'image';
     final cs = Theme.of(context).colorScheme;
-    return Container(
-      width: 56,
-      margin: const EdgeInsets.only(right: 4),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(6),
+    return GestureDetector(
+      onTap: () => _showAttachmentPreview(att),
+      child: Container(
+        width: 56,
+        margin: const EdgeInsets.only(right: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: isImage
+                  ? FutureBuilder<Uint8List?>(
+                      future: AttachmentStorage.readFile(att.storagePath),
+                      builder: (ctx, snap) {
+                        if (snap.connectionState == ConnectionState.done &&
+                            snap.hasData &&
+                            snap.data != null) {
+                          return Image.memory(snap.data!, fit: BoxFit.cover);
+                        }
+                        return Icon(Icons.image_outlined, size: 18,
+                            color: cs.onSurfaceVariant);
+                      },
+                    )
+                  : Icon(Icons.insert_drive_file_outlined, size: 18,
+                      color: cs.onSurfaceVariant),
             ),
-            clipBehavior: Clip.antiAlias,
-            child: isImage
-                ? FutureBuilder<Uint8List?>(
-                    future: AttachmentStorage.readFile(att.storagePath),
-                    builder: (ctx, snap) {
-                      if (snap.connectionState == ConnectionState.done &&
-                          snap.hasData &&
-                          snap.data != null) {
-                        return Image.memory(snap.data!, fit: BoxFit.cover);
-                      }
-                      return Icon(Icons.image_outlined, size: 18,
-                          color: cs.onSurfaceVariant);
-                    },
-                  )
-                : Icon(Icons.insert_drive_file_outlined, size: 18,
-                    color: cs.onSurfaceVariant),
-          ),
-          const SizedBox(height: 1),
-          Text(
-            att.fileName.length > 8
-                ? '${att.fileName.substring(0, 7)}…'
-                : att.fileName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 9,
-              color: cs.onSurfaceVariant,
+            const SizedBox(height: 1),
+            Text(
+              att.fileName.length > 8
+                  ? '${att.fileName.substring(0, 7)}…'
+                  : att.fileName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 9,
+                color: cs.onSurfaceVariant,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
+  }
+
+  void _showAttachmentPreview(Attachment att) async {
+    final data = await AttachmentStorage.readFile(att.storagePath);
+    if (data == null || data.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('无法加载文件')),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    final isImage = att.fileType == 'image';
+    if (isImage) {
+      showDialog(
+        context: context,
+        builder: (ctx) => Dialog(
+          backgroundColor: Colors.black,
+          insetPadding: EdgeInsets.zero,
+          child: Stack(
+            children: [
+              Center(
+                child: InteractiveViewer(
+                  minScale: 0.5,
+                  maxScale: 4.0,
+                  child: Image.memory(
+                    data,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.broken_image,
+                              size: 48, color: Colors.white54),
+                          SizedBox(height: 8),
+                          Text('无法加载图片', style: TextStyle(color: Colors.white54)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 8,
+                right: 8,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ),
+              Positioned(
+                bottom: 16,
+                left: 16,
+                right: 16,
+                child: Text(
+                  att.fileName,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(att.fileName),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('类型: ${att.mimeType}'),
+              const SizedBox(height: 4),
+              Text('大小: ${_formatFileSize(att.fileSize)}'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
   void _stopStreaming() {
@@ -1534,21 +1636,13 @@ composerBuilder: (context) => ChatComposerWidget(
                                         onPressed: () =>
                                             _confirmRetryOrEdit(message.id),
                                       )
-                                    else ...[
-                                      _ActionButton(
-                                        icon: Icons.replay,
-                                        tooltip: '重新发送',
-                                        onPressed: () =>
-                                            _editUserMessage(message.id),
-                                      ),
-                                      const SizedBox(width: 2),
+                                    else
                                       _ActionButton(
                                         icon: Icons.edit_outlined,
                                         tooltip: '编辑',
                                         onPressed: () =>
                                             _showEditMessageDialog(message.id),
                                       ),
-                                    ],
                                     const SizedBox(width: 2),
                                     if (_developerMode && isAi && _history.any((m) => m.id == message.id && (m.rawRequest != null || m.rawResponse != null)))
                                       _ActionButton(
