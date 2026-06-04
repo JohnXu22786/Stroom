@@ -17,6 +17,8 @@ class Conversation {
   final DateTime createdAt;
   DateTime updatedAt;
   List<ChatMessage> messages;
+  bool isPinned;
+  int sortOrder;
 
   Conversation({
     String? id,
@@ -24,6 +26,8 @@ class Conversation {
     DateTime? createdAt,
     DateTime? updatedAt,
     List<ChatMessage>? messages,
+    this.isPinned = false,
+    this.sortOrder = 0,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now(),
@@ -35,6 +39,8 @@ class Conversation {
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
         'messages': messages.map((m) => m.toMap()).toList(),
+        'isPinned': isPinned,
+        'sortOrder': sortOrder,
       };
 
   factory Conversation.fromMap(Map<String, dynamic> map) => Conversation(
@@ -51,6 +57,8 @@ class Conversation {
                     ChatMessage.fromMap(Map<String, dynamic>.from(e as Map)))
                 .toList() ??
             [],
+        isPinned: map['isPinned'] as bool? ?? false,
+        sortOrder: map['sortOrder'] as int? ?? 0,
       );
 
   @override
@@ -63,6 +71,8 @@ class Conversation {
 
 /// ID of the currently active conversation, or null if none is selected.
 final activeConversationIdProvider = StateProvider<String?>((ref) => null);
+
+final conversationSearchQueryProvider = StateProvider<String>((ref) => '');
 
 /// Persistent list of all conversations.
 final conversationsProvider =
@@ -192,6 +202,65 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
 
   /// Renames a conversation.
   Future<void> renameConversation(String id, String title) async {
+    state = state.map((c) {
+      if (c.id != id) return c;
+      c.title = title;
+      c.updatedAt = DateTime.now();
+      return c;
+    }).toList();
+    await _persist();
+  }
+
+  /// Toggles the pinned state of a conversation.
+  void togglePin(String id) {
+    state = state.map((c) {
+      if (c.id != id) return c;
+      c.isPinned = !c.isPinned;
+      c.updatedAt = DateTime.now();
+      return c;
+    }).toList();
+    _persist();
+  }
+
+  /// Reorders a conversation from [oldIndex] to [newIndex] in the list.
+  void reorderConversation(int oldIndex, int newIndex) {
+    final list = [...state];
+    final item = list.removeAt(oldIndex);
+    list.insert(newIndex, item);
+    state = list;
+    _persist();
+  }
+
+  /// Deletes multiple conversations by [ids]. Also clears active if included.
+  Future<void> batchDelete(List<String> ids) async {
+    final idSet = ids.toSet();
+    state = state.where((c) => !idSet.contains(c.id)).toList();
+    if (idSet.contains(_ref.read(activeConversationIdProvider))) {
+      _ref.read(activeConversationIdProvider.notifier).state = null;
+    }
+    await _persist();
+    await _persistActiveId();
+  }
+
+  /// Auto-generates a title for a conversation using the first messages.
+  Future<void> autoRenameConversation(String id) async {
+    final conv = state.where((c) => c.id == id).firstOrNull;
+    if (conv == null || conv.messages.isEmpty) return;
+
+    final firstUser = conv.messages.firstWhere(
+      (m) => m.role == 'user',
+      orElse: () => conv.messages.first,
+    );
+    final firstAssistant =
+        conv.messages.where((m) => m.role == 'assistant').firstOrNull;
+
+    String combined = firstUser.content;
+    if (firstAssistant != null) {
+      combined += ' - ${firstAssistant.content}';
+    }
+    final title =
+        combined.length > 60 ? '${combined.substring(0, 60)}…' : combined;
+
     state = state.map((c) {
       if (c.id != id) return c;
       c.title = title;
