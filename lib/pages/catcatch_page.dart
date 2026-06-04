@@ -397,6 +397,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text('任务已添加'),
+        duration: const Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
         action: SnackBarAction(
           label: '查看任务列表',
