@@ -5,6 +5,17 @@ class DurationResult {
   const DurationResult({required this.hours, required this.minutes, required this.seconds});
 }
 
+int totalSeconds({int hours = 0, int minutes = 0, int seconds = 0}) {
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
+String formatHms(DurationResult d) {
+  final h = d.hours.toString().padLeft(2, '0');
+  final m = d.minutes.toString().padLeft(2, '0');
+  final s = d.seconds.toString().padLeft(2, '0');
+  return '$h:$m:$s';
+}
+
 DurationResult? parseSmartDuration(String text) {
   final numbers = text
       .split(RegExp(r'[^\d]+'))
