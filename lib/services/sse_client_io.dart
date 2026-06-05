@@ -35,18 +35,8 @@ Stream<String> sseStream(String url, Map<String, String> headers, String body,
       }
     }
   } on DioException catch (e) {
-    final statusCode = e.response?.statusCode ?? 0;
-    final errBody = e.response?.data;
-    String detail;
-    if (errBody is Map) {
-      detail = errBody['error'] is Map
-          ? '${errBody['error']['message'] ?? errBody}'
-          : '$errBody';
-    } else if (errBody is String) {
-      detail = errBody;
-    } else {
-      detail = '$errBody';
-    }
-    throw Exception('API 请求失败 (HTTP $statusCode): $detail');
+    // Rethrow the original DioException so that upstream code
+    // (chat_api_provider.dart) can capture response data and status code.
+    rethrow;
   }
 }

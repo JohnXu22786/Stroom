@@ -37,6 +37,9 @@ class ChatService {
   String _reasoningBuffer = '';
   Map<String, dynamic>? _lastRequestBody;
   Map<String, dynamic>? _lastResponseData;
+  Map<String, String>? _lastRequestHeaders;
+  String? _lastRequestUrl;
+  int? _lastResponseStatusCode;
 
   /// Construct an instance backed by a real provider and model config.
   ChatService({
@@ -52,6 +55,12 @@ class ChatService {
       _lastRequestBody ?? _provider?.lastRequestBody;
   Map<String, dynamic>? get lastResponseData =>
       _lastResponseData ?? _provider?.lastResponseData;
+  Map<String, String>? get lastRequestHeaders =>
+      _lastRequestHeaders ?? _provider?.lastRequestHeaders;
+  String? get lastRequestUrl =>
+      _lastRequestUrl ?? _provider?.lastRequestUrl;
+  int? get lastResponseStatusCode =>
+      _lastResponseStatusCode ?? _provider?.lastResponseStatusCode;
 
   // ── Instance methods ────────────────────────────────────────────
 
@@ -225,6 +234,7 @@ class ChatService {
             onError: (Object error) {
               _streamSubscription = null;
               debugPrint('ChatService stream error: $error');
+              _lastResponseData = _provider?.lastResponseData;
               if (!controller.isClosed) {
                 controller.addError(error);
               }
