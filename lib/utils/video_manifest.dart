@@ -130,6 +130,7 @@ class VideoManifest {
     fromMap: VideoRecord.fromMap,
     tableName: 'video_records',
     toMap: (r) => r.toMap(),
+    thumbnailExtension: '.jpg',
   );
 
   static Future<List<VideoRecord>> loadRecords() => _ops.loadRecords();
@@ -151,18 +152,21 @@ class VideoManifest {
   static Future<String?> readFilePath(String fileName) =>
       _ops.readFilePath(fileName);
 
+  /// Derived from the configured [thumbnailExtension] in [_ops].
+  static String get _thumbExtension => _ops.thumbnailExtension;
+
   static Future<bool> hasThumbnail(String hash) async {
-    final thumbPath = '${hash}_thumb.jpg';
+    final thumbPath = '${hash}_thumb$_thumbExtension';
     return (await readFile(thumbPath)) != null;
   }
 
   static Future<Uint8List?> readThumbnail(String hash) async {
-    final thumbPath = '${hash}_thumb.jpg';
+    final thumbPath = '${hash}_thumb$_thumbExtension';
     return readFile(thumbPath);
   }
 
   static Future<void> writeThumbnail(String hash, Uint8List bytes) async {
-    final thumbPath = '${hash}_thumb.jpg';
+    final thumbPath = '${hash}_thumb$_thumbExtension';
     await writeFile(thumbPath, bytes);
   }
 
