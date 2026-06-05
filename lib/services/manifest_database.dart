@@ -42,9 +42,12 @@ class ManifestDatabase {
 
   /// Enable test mode — all operations use in-memory JSON storage
   /// (same code path as web), avoiding sqflite native dependencies.
+  /// Also switches [WebFileStore] to in-memory mode so no IndexedDB
+  /// dependency is needed in tests.
   static void enableTestMode() {
     _useInMemoryStorage = true;
     _webData = null;
+    WebFileStore.enableTestMode();
   }
 
   /// Whether to use JSON-based storage (web or test mode)
