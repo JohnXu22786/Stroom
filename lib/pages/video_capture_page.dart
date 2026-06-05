@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
+import 'package:video_thumbnail/video_thumbnail.dart';
 import '../providers/video_provider.dart';
 import '../utils/video_manifest.dart';
 
@@ -186,7 +188,31 @@ class _VideoCapturePageState extends ConsumerState<VideoCapturePage>
       var format = p.extension(videoFile.path).replaceAll('.', '');
       if (format.isEmpty) format = 'mp4';
       final hash = computeVideoHash(videoBytes);
-      await VideoManifest.writeFile('$hash.$format', videoBytes);
+
+      // 写入视频文件并获取本地路径（用于生成缩略图）
+      String? videoPath;
+      try {
+        videoPath = await VideoManifest.writeFile('$hash.$format', videoBytes);
+      } catch (_) {}
+
+      // 生成视频缩略图
+      if (videoPath != null && videoPath.isNotEmpty) {
+        try {
+          final thumbBytes = await VideoThumbnail.thumbnailData(
+            video: videoPath,
+            imageFormat: ImageFormat.JPEG,
+            maxWidth: 256,
+            quality: 75,
+            timeMs: 1000,
+          );
+          if (thumbBytes != null) {
+            await VideoManifest.writeThumbnail(hash, thumbBytes);
+          }
+        } catch (e) {
+          debugPrint('_saveVideo thumbnail error: $e');
+        }
+      }
+
       final record = VideoRecord(
         name: displayName,
         hash: hash,

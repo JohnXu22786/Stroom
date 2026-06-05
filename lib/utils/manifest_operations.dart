@@ -42,6 +42,9 @@ class ManifestOperations<T extends FileRecord> {
   /// record → Map<String, dynamic> 转换函数
   final Map<String, dynamic> Function(T record) toMap;
 
+  /// 缩略图文件扩展名（含点号），如 '.png' 或 '.jpg'
+  final String thumbnailExtension;
+
   ManifestOperations({
     required this.manifestKey,
     required this.storageDirName,
@@ -50,6 +53,7 @@ class ManifestOperations<T extends FileRecord> {
     this.onExtraDelete,
     required this.tableName,
     required this.toMap,
+    this.thumbnailExtension = '.png',
   });
 
   // ---- Per-type cache ---------------------------------------------------
@@ -179,7 +183,7 @@ class ManifestOperations<T extends FileRecord> {
     final hashRefCount =
         _cache!.where((x) => _hashOf(x) == _hashOf(record)).length;
     if (hashRefCount <= 1) {
-      final thumbName = '${_hashOf(record)}_thumb.png';
+      final thumbName = '${_hashOf(record)}_thumb$thumbnailExtension';
       if (kIsWeb) {
         await WebFileStore.delete(_webKey(thumbName));
       } else {
@@ -246,7 +250,7 @@ class ManifestOperations<T extends FileRecord> {
       final h = _hashOf(r);
       hashCount[h] = (hashCount[h] ?? 1) - 1;
       if (hashCount[h]! <= 0) {
-        final thumbName = '${_hashOf(r)}_thumb.png';
+        final thumbName = '${_hashOf(r)}_thumb$thumbnailExtension';
         if (kIsWeb) {
           await WebFileStore.delete(_webKey(thumbName));
         } else {
@@ -453,7 +457,7 @@ class ManifestOperations<T extends FileRecord> {
       final h = _hashOf(r);
       hashCount[h] = (hashCount[h] ?? 1) - 1;
       if (hashCount[h]! <= 0) {
-        final thumbName = '${_hashOf(r)}_thumb.png';
+        final thumbName = '${_hashOf(r)}_thumb$thumbnailExtension';
         if (kIsWeb) {
           await WebFileStore.delete(_webKey(thumbName));
         } else {
