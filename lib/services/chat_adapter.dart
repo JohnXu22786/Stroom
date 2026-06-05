@@ -183,4 +183,7 @@ class ChatAdapter {
 
   Map<String, dynamic>? get lastRequestBody => _chatService?.lastRequestBody;
   Map<String, dynamic>? get lastResponseData => _chatService?.lastResponseData;
+  Map<String, String>? get lastRequestHeaders => _chatService?.lastRequestHeaders;
+  String? get lastRequestUrl => _chatService?.lastRequestUrl;
+  int? get lastResponseStatusCode => _chatService?.lastResponseStatusCode;
 }

@@ -21,6 +21,9 @@ abstract class BaseChatProvider {
 
   Map<String, dynamic>? get lastRequestBody => null;
   Map<String, dynamic>? get lastResponseData => null;
+  Map<String, String>? get lastRequestHeaders => null;
+  String? get lastRequestUrl => null;
+  int? get lastResponseStatusCode => null;
 
   Future<String> chat(
     List<Map<String, dynamic>> messages, {
@@ -61,6 +64,9 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   final Dio _dio;
   Map<String, dynamic>? _lastRequestBody;
   Map<String, dynamic>? _lastResponseData;
+  Map<String, String>? _lastRequestHeaders;
+  String? _lastRequestUrl;
+  int? _lastResponseStatusCode;
 
   OpenAICompatibleChatProvider({
     required String baseUrl,
@@ -87,6 +93,15 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
 
   @override
   Map<String, dynamic>? get lastResponseData => _lastResponseData;
+
+  @override
+  Map<String, String>? get lastRequestHeaders => _lastRequestHeaders;
+
+  @override
+  String? get lastRequestUrl => _lastRequestUrl;
+
+  @override
+  int? get lastResponseStatusCode => _lastResponseStatusCode;
 
   // TODO: 可从 CustomParam 中提取模型列表，若某 param 的 type 或 key 为 'model'，
   // 使用其 defaultValue?.split(',') 作为模型列表。目前暂无可信数据源，留空。
@@ -129,6 +144,12 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     return {'reasoning_effort': 'medium'};
   }
 
+  /// Mask API key for display, showing only first 8 chars and last 4 chars.
+  String _maskApiKey(String key) {
+    if (key.length <= 16) return '${key.substring(0, 4)}****';
+    return '${key.substring(0, 8)}...${key.substring(key.length - 4)}';
+  }
+
   @override
   Map<String, dynamic> get defaultParams => {
         'model': 'gpt-4o',
@@ -162,6 +183,13 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
 
     try {
       _lastRequestBody = body;
+      _lastRequestUrl = _baseUrl;
+      _lastRequestHeaders = {
+        'Content-Type': 'application/json',
+        if (_apiKey.isNotEmpty) 'Authorization': 'Bearer ${_maskApiKey(_apiKey)}',
+      };
+      _lastResponseStatusCode = null;
+      _lastResponseData = null;
       final response = await _dio.post(
         _baseUrl,
         cancelToken: cancelToken,
@@ -171,6 +199,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       _lastResponseData = response.data is Map
           ? Map<String, dynamic>.from(response.data as Map)
           : <String, dynamic>{'raw': '$response.data'};
+      _lastResponseStatusCode = response.statusCode;
 
       final choices = response.data['choices'] as List?;
       if (choices == null || choices.isEmpty) {
@@ -182,9 +211,15 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       }
       return content;
     } on DioException catch (e) {
+      _lastResponseStatusCode = e.response?.statusCode;
+      if (e.response?.data is Map) {
+        _lastResponseData = Map<String, dynamic>.from(e.response!.data as Map);
+      } else if (e.response?.data is String) {
+        _lastResponseData = <String, dynamic>{'raw': e.response!.data as String};
+      }
       final statusCode = e.response?.statusCode ?? 0;
-      final body = e.response?.data;
       String detail;
+      final body = e.response?.data;
       if (body is Map) {
         detail = body['error'] is Map
             ? '${body['error']['message'] ?? body}'
@@ -227,6 +262,14 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         extraParams: extraParams);
 
     _lastRequestBody = body;
+    _lastRequestUrl = _baseUrl;
+    _lastRequestHeaders = {
+      'Content-Type': 'application/json',
+      if (_apiKey.isNotEmpty) 'Authorization': 'Bearer ${_maskApiKey(_apiKey)}',
+      'Accept': 'text/event-stream',
+    };
+    _lastResponseStatusCode = null;
+    _lastResponseData = null;
 
     debugPrint(
         'OpenAICompatibleChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}');
@@ -234,6 +277,8 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     final Map<int, Map<String, dynamic>> toolCallAccumulators = {};
 
     try {
+      // Mark as successfully connected once we start receiving events
+      _lastResponseStatusCode = 200;
       await for (final event in sseStream(
         _baseUrl,
         {
@@ -297,8 +342,16 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         }
       }
     } catch (e) {
-      if (e is DioException && e.response?.data is Map) {
-        _lastResponseData = Map<String, dynamic>.from(e.response!.data as Map);
+      if (e is DioException) {
+        if (e.response?.data is Map) {
+          _lastResponseData = Map<String, dynamic>.from(e.response!.data as Map);
+          _lastResponseStatusCode = e.response?.statusCode;
+        } else {
+          // Non-HTTP errors (DNS failure, timeout, etc.) or non-Map response body
+          // — reset status code and clear stale response data
+          _lastResponseStatusCode = null;
+          _lastResponseData = null;
+        }
       }
       rethrow;
     }
