@@ -29,6 +29,7 @@ import '../widgets/llm/jumping_dots.dart';
 import '../widgets/llm/tool_call_card.dart';
 import 'conversations_page.dart';
 import 'provider_config_page.dart';
+import '../utils/data_sanitizer.dart';
 
 sealed class _MessageSegment {}
 
@@ -339,6 +340,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     DateTime lastUpdate = DateTime.now();
     const minInterval = Duration(milliseconds: 50);
     bool hasReceivedFirstToken = false;
+    Map<String, dynamic>? rawRequestCapture;
+    Map<String, dynamic>? rawResponseCapture;
 
     void updateMessage(String content) {
       _controller?.updateMessage(
@@ -439,6 +442,23 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           );
         }
         fullReply = errorMsg;
+        // Capture full request/response raw data for error detail display
+        final reqBody = _adapter.lastRequestBody;
+        final headers = _adapter.lastRequestHeaders;
+        final url = _adapter.lastRequestUrl;
+        if (reqBody != null || headers != null || url != null) {
+          rawRequestCapture = {};
+          if (url != null) rawRequestCapture!['url'] = url;
+          if (headers != null) rawRequestCapture!['headers'] = headers;
+          if (reqBody != null) rawRequestCapture!['body'] = reqBody;
+        }
+        final respData = _adapter.lastResponseData;
+        final statusCode = _adapter.lastResponseStatusCode;
+        if (respData != null || statusCode != null) {
+          rawResponseCapture = {};
+          if (statusCode != null) rawResponseCapture!['statusCode'] = statusCode;
+          if (respData != null) rawResponseCapture!['data'] = respData;
+        }
       }
     } finally {
       // Flush remaining text after last tool call as a segment
@@ -475,6 +495,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         isError: isError,
         reasoningContent:
             reasoningBuffer.isNotEmpty ? reasoningBuffer : null,
+        rawRequest: isError ? rawRequestCapture : null,
+        rawResponse: isError ? rawResponseCapture : null,
       );
       _history.add(msg);
       if (reasoningBuffer.isNotEmpty) {
@@ -1059,7 +1081,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         padding: const EdgeInsets.all(12),
                         child: SelectableText(
                           chatMsg.rawRequest != null
-                              ? encoder.convert(chatMsg.rawRequest)
+                              ? encoder.convert(
+                                  DataSanitizer.sanitizeForDisplay(chatMsg.rawRequest))
                               : '无请求数据',
                           style: TextStyle(
                             fontFamily: 'monospace',
@@ -1072,7 +1095,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         padding: const EdgeInsets.all(12),
                         child: SelectableText(
                           chatMsg.rawResponse != null
-                              ? encoder.convert(chatMsg.rawResponse)
+                              ? encoder.convert(
+                                  DataSanitizer.sanitizeForDisplay(chatMsg.rawResponse))
                               : '无响应数据',
                           style: TextStyle(
                             fontFamily: 'monospace',
@@ -1383,7 +1407,6 @@ composerBuilder: (context) => ChatComposerWidget(
                           if (isAi) {
                             final chatMsg = _history.where((m) => m.id == message.id).firstOrNull;
                             if ((chatMsg?.isError == true) || message.text.startsWith('错误:')) {
-                              final isExpanded = _expandedErrors[message.id] ?? false;
                               messageBubble = Container(
                                 margin: const EdgeInsets.symmetric(vertical: 2),
                                 padding: const EdgeInsets.all(12),
@@ -1419,76 +1442,36 @@ composerBuilder: (context) => ChatComposerWidget(
                                       ],
                                     ),
                                     const SizedBox(height: 6),
-                                    if (isExpanded)
-                                      _buildHighlightedText(
-                                        message.text.replaceAll('错误: ', ''),
-                                        message.id,
-                                        textColor: Colors.red[700],
-                                      )
-                                    else
-                                      SelectableText(
-                                        message.text.replaceAll('错误: ', ''),
-                                        style: TextStyle(
-                                          color: Colors.red[700],
-                                          fontSize: 13,
-                                        ),
+                                    SelectableText(
+                                      message.text.replaceAll('错误: ', ''),
+                                      style: TextStyle(
+                                        color: Colors.red[700],
+                                        fontSize: 13,
                                       ),
-                                    if (chatMsg != null)
+                                    ),
+                                    if (chatMsg != null &&
+                                        (chatMsg.rawRequest != null ||
+                                            chatMsg.rawResponse != null))
                                       Padding(
                                         padding: const EdgeInsets.only(top: 8),
                                         child: TextButton.icon(
-                                          icon: Icon(
-                                            isExpanded ? Icons.expand_less : Icons.expand_more,
+                                          icon: const Icon(
+                                            Icons.preview,
                                             size: 14,
                                           ),
-                                          label: Text(
-                                            isExpanded ? '收起详情' : '查看详情',
-                                            style: const TextStyle(fontSize: 12),
+                                          label: const Text(
+                                            '查看详细错误',
+                                            style: TextStyle(fontSize: 12),
                                           ),
-                                          onPressed: () {
-                                            setState(() {
-                                              _expandedErrors[message.id] = !isExpanded;
-                                            });
-                                          },
+                                          onPressed: () =>
+                                              _showErrorDetailDialog(
+                                            context,
+                                            message.id,
+                                          ),
                                           style: TextButton.styleFrom(
                                             padding: const EdgeInsets.symmetric(horizontal: 8),
                                             minimumSize: Size.zero,
                                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                          ),
-                                        ),
-                                      ),
-                                    if (isExpanded && chatMsg != null)
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 6),
-                                        child: Container(
-                                          width: double.infinity,
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color: isDark ? Colors.grey[900] : Colors.grey[200],
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              if (chatMsg.rawRequest != null || chatMsg.rawResponse != null) ...[
-                                                if (chatMsg.rawRequest != null)
-                                                  _buildJsonBlock('Request', chatMsg.rawRequest, isDark),
-                                                if (chatMsg.rawResponse != null)
-                                                  Padding(
-                                                    padding: const EdgeInsets.only(top: 6),
-                                                    child: _buildJsonBlock('Response', chatMsg.rawResponse, isDark),
-                                                  ),
-                                              ] else
-                                                Text(
-                                                  '无详细数据',
-                                                  style: TextStyle(
-                                                    fontSize: 11,
-                                                    color: isDark ? Colors.grey[500] : Colors.grey[600],
-                                                    fontStyle: FontStyle.italic,
-                                                  ),
-                                                ),
-                                            ],
                                           ),
                                         ),
                                       ),
@@ -1686,6 +1669,7 @@ composerBuilder: (context) => ChatComposerWidget(
 
   Widget _buildJsonBlock(String label, dynamic data, bool isDark) {
     final encoder = const JsonEncoder.withIndent('  ');
+    final sanitized = DataSanitizer.sanitizeForDisplay(data);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -1707,7 +1691,7 @@ composerBuilder: (context) => ChatComposerWidget(
             borderRadius: BorderRadius.circular(4),
           ),
           child: SelectableText(
-            encoder.convert(data),
+            encoder.convert(sanitized),
             style: TextStyle(
               fontFamily: 'monospace',
               fontSize: 11,
@@ -1716,6 +1700,103 @@ composerBuilder: (context) => ChatComposerWidget(
           ),
         ),
       ],
+    );
+  }
+
+  void _showErrorDetailDialog(BuildContext context, String messageId) {
+    final chatMsg = _history.where((m) => m.id == messageId).firstOrNull;
+    if (chatMsg == null) return;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final rawRequest = chatMsg.rawRequest;
+    final rawResponse = chatMsg.rawResponse;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: 600,
+            maxHeight: MediaQuery.of(ctx).size.height * 0.8,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(4),
+                    topRight: Radius.circular(4),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.error_outline, size: 18, color: Colors.red[700]),
+                    const SizedBox(width: 8),
+                    Text(
+                      '错误详情',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.red[700],
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      onPressed: () => Navigator.pop(ctx),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+              ),
+              // Body with tabs or scrollable content
+              Flexible(
+                child: rawRequest != null || rawResponse != null
+                    ? ListView(
+                        padding: const EdgeInsets.all(16),
+                        shrinkWrap: true,
+                        children: [
+                          if (rawRequest != null) ...[
+                            _buildJsonBlock('请求 (Request)', rawRequest, isDark),
+                            const SizedBox(height: 12),
+                          ],
+                          if (rawResponse != null)
+                            _buildJsonBlock('响应 (Response)', rawResponse, isDark),
+                        ],
+                      )
+                    : const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Center(
+                          child: Text(
+                            '无详细数据',
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ),
+                      ),
+              ),
+              // Close button
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('关闭'),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
