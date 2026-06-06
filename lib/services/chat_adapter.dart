@@ -162,11 +162,13 @@ class ChatAdapter {
 
   /// Send a message with tool call support.
   /// Returns a stream of [ChatEvent] (text chunks and tool call events).
+  /// [systemPrompt] is an optional system-level instruction.
   Stream<ChatEvent> sendStreamWithTools(
     String text, {
     required List<ChatMessage> history,
     bool reasoning = false,
     List<ToolDefinition> tools = const [],
+    String? systemPrompt,
   }) {
     if (_chatService == null) {
       return Stream.error('请先配置聊天供应商');
@@ -176,6 +178,7 @@ class ChatAdapter {
       history: history,
       reasoning: reasoning,
       tools: tools,
+      systemPrompt: systemPrompt,
     );
   }
 
