@@ -352,6 +352,29 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
           _lastResponseStatusCode = null;
           _lastResponseData = null;
         }
+
+        // Wrap DioException in a friendly Exception so downstream code
+        // (ChatService → ChatAdapter → ChatPage) always receives a
+        // predictable, human-readable error rather than a raw DioException.
+        // This avoids the regression where DioException.toString() shows
+        // a technical message like "DioException [bad response]: The status
+        // code 400..." which doesn't match formatChatErrorMessage's patterns.
+        final statusCode = e.response?.statusCode ?? 0;
+        String detail;
+        final body = e.response?.data;
+        if (body is Map) {
+          detail = body['error'] is Map
+              ? '${body['error']['message'] ?? body}'
+              : '$body';
+        } else if (body is String) {
+          detail = body;
+        } else {
+          detail = '$e';
+        }
+        if (statusCode > 0) {
+          throw Exception('API 请求失败 (HTTP $statusCode): $detail');
+        }
+        throw Exception('API 请求失败: $detail');
       }
       rethrow;
     }
