@@ -53,6 +53,57 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
     if (state.isEmpty) {
       _createDefaultAssistant();
     }
+
+    // Migration: assign old conversations (null assistantId) to the
+    // default assistant.  Runs at most once.
+    // Must run after the default assistant is guaranteed to exist.
+    await _migrateOldConversations();
+  }
+
+  /// Assigns the default assistant's ID to conversations that have a null
+  /// [assistantId], so they become visible in the topic selection page.
+  ///
+  /// Guarded by the `migrated_old_conversations` flag so it only runs once.
+  Future<void> _migrateOldConversations() async {
+    if (state.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('migrated_old_conversations') == true) return;
+
+      final convJson = prefs.getString('conversations');
+      if (convJson == null) {
+        await prefs.setBool('migrated_old_conversations', true);
+        return;
+      }
+
+      final convList = (jsonDecode(convJson) as List)
+          .cast<Map<String, dynamic>>();
+      final defaultId = state.first.id;
+
+      var migrated = false;
+      final updated = convList.map((m) {
+        if (m['assistantId'] == null) {
+          migrated = true;
+          return <String, dynamic>{...m, 'assistantId': defaultId};
+        }
+        return m;
+      }).toList();
+
+      if (migrated) {
+        await prefs.setString('conversations', jsonEncode(updated));
+        debugPrint('Migrated old conversations to default assistant.');
+      }
+
+      await prefs.setBool('migrated_old_conversations', true);
+    } catch (e) {
+      debugPrint('Failed to migrate old conversations: $e');
+      // Set the flag even on error to avoid retrying a permanently
+      // malformed store on every startup.
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('migrated_old_conversations', true);
+      } catch (_) {}
+    }
   }
 
   Future<void> _persist() async {
