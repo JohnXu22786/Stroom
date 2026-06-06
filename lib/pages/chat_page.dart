@@ -29,7 +29,6 @@ import '../pages/camera_page.dart';
 import '../widgets/llm/jumping_dots.dart';
 import '../widgets/llm/tool_call_card.dart';
 import 'assistant_selection_page.dart';
-import 'topic_selection_page.dart';
 import 'provider_config_page.dart';
 import '../utils/data_sanitizer.dart';
 
@@ -276,43 +275,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         if (mounted) _configureAdapter();
       });
     }
-  }
-
-  void _newConversation() {
-    if (ref.read(_isStreamingProvider)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('请等待当前消息生成完成')),
-        );
-      }
-      return;
-    }
-    _saveMessages().then((_) {
-      final assistantId = ref.read(selectedAssistantIdProvider);
-      ref.read(conversationsProvider.notifier).createConversation(
-            assistantId: assistantId,
-          );
-
-      _history.clear();
-      _chatSegments.clear();
-      _streamingMsgId = null;
-      _controller?.dispose();
-      final newCtrl = InMemoryChatController();
-      setState(() => _controller = newCtrl);
-    });
-  }
-
-  void _showHistory() {
-    _saveMessages().then((_) {
-      if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => TopicSelectionPage()),
-      ).then((_) {
-        if (!mounted) return;
-        _loadConversationMessages();
-      });
-    });
   }
 
   Future<void> _onMessageSend(String text, List<Attachment> attachments) async {
@@ -1296,16 +1258,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                 'reasoning_enabled', _reasoningEnabled));
                       },
                     ),
-                  IconButton(
-                    icon: const Icon(Icons.history),
-                    tooltip: '历史记录',
-                    onPressed: _showHistory,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.add),
-                    tooltip: '新对话',
-                    onPressed: _newConversation,
-                  ),
                   // ── Stop button ──
                   if (isStreaming)
                     IconButton(
