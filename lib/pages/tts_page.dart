@@ -93,8 +93,8 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
     _isImporting = true;
     try {
       final result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a', 'wma'],
+        type: FileType.audio,
+        withData: true,
         allowMultiple: true,
       );
       if (result == null || result.files.isEmpty) return;
