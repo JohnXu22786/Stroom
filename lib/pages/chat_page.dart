@@ -1145,11 +1145,82 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
   }
 
+  MarkdownConfig _buildMarkdownConfig(BuildContext context, bool isDark) {
+    final theme = Theme.of(context);
+    return MarkdownConfig(configs: [
+      PConfig(
+        textStyle: TextStyle(
+          fontSize: 16,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      H1Config(
+        style: TextStyle(
+          fontSize: 32,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      H2Config(
+        style: TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      H3Config(
+        style: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      H4Config(
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      H5Config(
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      H6Config(
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      LinkConfig(
+        style: TextStyle(
+          color: theme.colorScheme.primary,
+          decoration: TextDecoration.underline,
+        ),
+      ),
+      CodeConfig(
+        style: TextStyle(
+          backgroundColor: theme.colorScheme.surfaceContainerHighest,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      PreConfig(
+        decoration: BoxDecoration(
+          color: isDark ? Colors.grey[850] : Colors.grey[200],
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final markdownConfig =
-        isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig;
+    final markdownConfig = _buildMarkdownConfig(context, isDark);
     final adapterConfigured = _adapter.isConfigured;
     final controller = _controller;
     final isStreaming = ref.watch(_isStreamingProvider);
