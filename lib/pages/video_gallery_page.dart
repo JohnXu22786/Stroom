@@ -149,6 +149,20 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         );
 
         final videoPath = await VideoManifest.writeFile(storageFileName, bytes);
+        // Try to obtain video duration from the file
+        int videoDurationMs = 0;
+        if (videoPath.isNotEmpty && !kIsWeb) {
+          VideoPlayerController? vController;
+          try {
+            vController = VideoPlayerController.file(File(videoPath));
+            await vController.initialize();
+            videoDurationMs = vController.value.duration.inMilliseconds;
+          } catch (_) {
+            // Duration detection failed, default to 0
+          } finally {
+            await vController?.dispose();
+          }
+        }
         if (videoPath.isNotEmpty) {
           try {
             final thumbBytes = await VideoThumbnail.thumbnailData(
@@ -170,6 +184,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
           createdAt: DateTime.now(),
           size: bytes.length,
           folder: _currentFolder,
+          duration: videoDurationMs,
         ));
       }
 
