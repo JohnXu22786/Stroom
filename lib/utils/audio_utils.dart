@@ -83,6 +83,8 @@ String getMimeType(String format) {
       return 'audio/aac';
     case 'm4a':
       return 'audio/mp4';
+    case 'opus':
+      return 'audio/ogg';
     case 'wma':
       return 'audio/x-ms-wma';
     case 'pcm':
@@ -100,6 +102,7 @@ String getMimeType(String format) {
 /// WAV:  "RIFF"
 /// MP3:  "ID3" 或 0xFFFx (MPEG sync)
 /// FLAC: "fLaC"
+/// M4A:  box_size(4B) + "ftyp"  (ISO Base Media File Format)
 const _magicWav = [0x52, 0x49, 0x46, 0x46];
 const _magicMp3Id3 = [0x49, 0x44, 0x33];
 const _magicFlac = [0x66, 0x4C, 0x61, 0x43];
@@ -146,6 +149,17 @@ String detectAudioFormat(Uint8List data) {
       data[2] == _magicOgg[2] &&
       data[3] == _magicOgg[3]) {
     return 'ogg';
+  }
+
+  // M4A/MP4: "ftyp" at offset 4 (ISO Base Media File Format)
+  // Bytes 0-3 are the box size (variable), bytes 4-7 are "ftyp"
+  if (data.length >= 8 &&
+      data[4] == 0x66 && // 'f'
+      data[5] == 0x74 && // 't'
+      data[6] == 0x79 && // 'y'
+      data[7] == 0x70   // 'p'
+      ) {
+    return 'm4a';
   }
 
   // 无匹配 → 裸数据
