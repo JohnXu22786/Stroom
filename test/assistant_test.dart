@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
@@ -353,6 +354,213 @@ void main() {
       expect(a1Topics.length, 2);
       expect(a2Topics.length, 1);
       expect(nullTopics.length, 1);
+    });
+  });
+
+  group('Migration: old conversations to default assistant', () {
+    test('migrates old conversations (null assistantId) to default assistant', () async {
+      final defaultAssistant = Assistant(
+        name: '默认助手',
+        prompt: '你是一个有帮助的AI助手。',
+      );
+
+      SharedPreferences.setMockInitialValues({
+        'conversations': jsonEncode([
+          {
+            'id': 'old-conv-1',
+            'title': '旧对话1',
+            'createdAt': DateTime.now().toIso8601String(),
+            'updatedAt': DateTime.now().toIso8601String(),
+            'messages': <dynamic>[],
+            'isPinned': false,
+            'sortOrder': 0,
+          },
+          {
+            'id': 'old-conv-2',
+            'title': '旧对话2',
+            'createdAt': DateTime.now().toIso8601String(),
+            'updatedAt': DateTime.now().toIso8601String(),
+            'messages': <dynamic>[],
+            'isPinned': false,
+            'sortOrder': 0,
+          },
+        ]),
+        'assistants': jsonEncode([defaultAssistant.toMap()]),
+      });
+
+      final container = ProviderContainer();
+      addTearDown(() => container.dispose());
+
+      // Trigger assistant provider first — migration runs during _load()
+      container.read(assistantProvider);
+      await Future(() => null);
+
+      // Then trigger conversation provider — reads already-migrated data
+      container.read(conversationsProvider);
+      await Future(() => null);
+
+      final conversations = container.read(conversationsProvider);
+      expect(conversations.length, 2);
+      for (final conv in conversations) {
+        expect(conv.assistantId, defaultAssistant.id,
+            reason: 'Conversation "${conv.title}" should have default assistant ID');
+      }
+
+      // Migration flag should be set
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('migrated_old_conversations'), true);
+    });
+
+    test('creates default assistant then migrates when no assistants exist', () async {
+      SharedPreferences.setMockInitialValues({
+        'conversations': jsonEncode([
+          {
+            'id': 'old-conv-1',
+            'title': '旧对话1',
+            'createdAt': DateTime.now().toIso8601String(),
+            'updatedAt': DateTime.now().toIso8601String(),
+            'messages': <dynamic>[],
+            'isPinned': false,
+            'sortOrder': 0,
+          },
+        ]),
+      });
+
+      final container = ProviderContainer();
+      addTearDown(() => container.dispose());
+
+      // Trigger assistant provider first — creates default assistant + migration
+      container.read(assistantProvider);
+      await Future(() => null);
+
+      // Then trigger conversation provider
+      container.read(conversationsProvider);
+      await Future(() => null);
+
+      final conversations = container.read(conversationsProvider);
+      expect(conversations.length, 1);
+      expect(conversations.first.assistantId, isNotNull);
+
+      // Verify a default assistant was created
+      final assistants = container.read(assistantProvider);
+      expect(assistants.length, 1);
+      expect(assistants.first.name, '默认助手');
+
+      // The conversation should reference the same default assistant
+      expect(
+        assistants.any((a) => a.id == conversations.first.assistantId),
+        true,
+        reason: 'Conversation should reference the default assistant ID',
+      );
+    });
+
+    test('migration flag prevents re-running on subsequent loads', () async {
+      SharedPreferences.setMockInitialValues({
+        'conversations': jsonEncode([
+          {
+            'id': 'old-conv-1',
+            'title': '旧对话1',
+            'createdAt': DateTime.now().toIso8601String(),
+            'updatedAt': DateTime.now().toIso8601String(),
+            'messages': <dynamic>[],
+            'isPinned': false,
+            'sortOrder': 0,
+          },
+        ]),
+        'migrated_old_conversations': true, // Already migrated
+      });
+
+      final container = ProviderContainer();
+      addTearDown(() => container.dispose());
+
+      container.read(assistantProvider);
+      await Future(() => null);
+
+      container.read(conversationsProvider);
+      await Future(() => null);
+
+      // Conversations with null assistantId should stay null
+      final conversations = container.read(conversationsProvider);
+      expect(conversations.length, 1);
+      expect(conversations.first.assistantId, isNull);
+    });
+
+    test('conversations with existing assistantId are left unchanged', () async {
+      final defaultAssistant = Assistant(
+        name: '默认助手',
+        prompt: 'Test',
+      );
+
+      SharedPreferences.setMockInitialValues({
+        'conversations': jsonEncode([
+          {
+            'id': 'conv-with-assistant',
+            'title': '已有助手的对话',
+            'createdAt': DateTime.now().toIso8601String(),
+            'updatedAt': DateTime.now().toIso8601String(),
+            'messages': <dynamic>[],
+            'isPinned': false,
+            'sortOrder': 0,
+            'assistantId': 'custom-assistant-id',
+          },
+          {
+            'id': 'old-conv',
+            'title': '旧对话',
+            'createdAt': DateTime.now().toIso8601String(),
+            'updatedAt': DateTime.now().toIso8601String(),
+            'messages': <dynamic>[],
+            'isPinned': false,
+            'sortOrder': 0,
+          },
+        ]),
+        'assistants': jsonEncode([defaultAssistant.toMap()]),
+      });
+
+      final container = ProviderContainer();
+      addTearDown(() => container.dispose());
+
+      container.read(assistantProvider);
+      await Future(() => null);
+
+      container.read(conversationsProvider);
+      await Future(() => null);
+
+      final conversations = container.read(conversationsProvider);
+      expect(conversations.length, 2);
+
+      // The conversation that already had an assistantId should keep it
+      final withAssistant =
+          conversations.firstWhere((c) => c.id == 'conv-with-assistant');
+      expect(withAssistant.assistantId, 'custom-assistant-id');
+
+      // The old conversation should be migrated
+      final oldConv = conversations.firstWhere((c) => c.id == 'old-conv');
+      expect(oldConv.assistantId, defaultAssistant.id);
+    });
+
+    test('handles empty conversations list gracefully', () async {
+      SharedPreferences.setMockInitialValues({
+        'conversations': jsonEncode(<dynamic>[]),
+      });
+
+      final container = ProviderContainer();
+      addTearDown(() => container.dispose());
+
+      container.read(assistantProvider);
+      await Future(() => null);
+      await Future(() => null);
+
+      container.read(conversationsProvider);
+      await Future(() => null);
+      await Future(() => null);
+
+      // No conversations — nothing to migrate, but no crash either
+      final conversations = container.read(conversationsProvider);
+      expect(conversations, isEmpty);
+
+      // Migration flag should still be set
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('migrated_old_conversations'), true);
     });
   });
 }
