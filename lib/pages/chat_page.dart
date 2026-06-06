@@ -24,10 +24,12 @@ import '../services/chat_adapter.dart';
 import '../services/chat_service.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/provider_config.dart';
+import '../providers/assistant_provider.dart';
 import '../pages/camera_page.dart';
 import '../widgets/llm/jumping_dots.dart';
 import '../widgets/llm/tool_call_card.dart';
-import 'conversations_page.dart';
+import 'assistant_selection_page.dart';
+import 'topic_selection_page.dart';
 import 'provider_config_page.dart';
 import '../utils/data_sanitizer.dart';
 
@@ -113,7 +115,22 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       );
     }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => _initialize());
+    // Check if we have a selected assistant and active conversation
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final assistantId = ref.read(selectedAssistantIdProvider);
+      final activeConvId = ref.read(activeConversationIdProvider);
+
+      if (assistantId == null || activeConvId == null) {
+        // If no assistant or topic selected, go back to assistant selection
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const AssistantSelectionPage()),
+        );
+        return;
+      }
+
+      _initialize();
+    });
   }
 
   String _executeCalculator(Map<String, dynamic> args) {
@@ -271,7 +288,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       return;
     }
     _saveMessages().then((_) {
-      ref.read(conversationsProvider.notifier).createConversation();
+      final assistantId = ref.read(selectedAssistantIdProvider);
+      ref.read(conversationsProvider.notifier).createConversation(
+            assistantId: assistantId,
+          );
+
       _history.clear();
       _chatSegments.clear();
       _streamingMsgId = null;
@@ -286,7 +307,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (!mounted) return;
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => const ConversationsPage()),
+        MaterialPageRoute(builder: (_) => TopicSelectionPage()),
       ).then((_) {
         if (!mounted) return;
         _loadConversationMessages();
@@ -299,7 +320,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     final convId = ref.read(activeConversationIdProvider);
     if (convId == null) {
-      ref.read(conversationsProvider.notifier).createConversation();
+      final assistantId = ref.read(selectedAssistantIdProvider);
+      ref.read(conversationsProvider.notifier).createConversation(
+            assistantId: assistantId,
+          );
     }
 
     final userMsgId = 'u${DateTime.now().millisecondsSinceEpoch}';
@@ -356,10 +380,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
 
     try {
+      // Get the assistant's system prompt
+      final assistant = ref.read(selectedAssistantProvider);
+      final systemPrompt = assistant?.prompt;
+
       final stream = _adapter.sendStreamWithTools(
         text,
         history: _history,
         reasoning: _reasoningEnabled,
+        systemPrompt: systemPrompt,
         tools: const [
           ToolDefinition(
             name: 'calculator',
@@ -1146,6 +1175,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     // Get conversation title
     final activeId = ref.watch(activeConversationIdProvider);
     final conversations = ref.watch(conversationsProvider);
+    final selectedAssistant = ref.watch(selectedAssistantProvider);
     String title = '新对话';
     if (activeId != null) {
       final conv = conversations.where((c) => c.id == activeId).firstOrNull;
@@ -1177,6 +1207,32 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       onLongPress: () => setState(() => _developerMode = !_developerMode),
                       child: Row(
                         children: [
+                          // Assistant emoji + name
+                          if (selectedAssistant != null) ...[
+                            Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              child: Text(
+                                selectedAssistant.emoji,
+                                style: const TextStyle(fontSize: 18),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.5),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                selectedAssistant.name,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                ),
+                              ),
+                            ),
+                          ],
                           Flexible(
                             child: Text(
                               title,
