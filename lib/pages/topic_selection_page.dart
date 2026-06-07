@@ -253,6 +253,10 @@ class TopicSelectionPage extends ConsumerWidget {
     // Quick access to assistant settings without leaving topic selection
     double temperature = assistant.settings.temperature;
     bool enableTemperature = assistant.settings.enableTemperature;
+    double topP = assistant.settings.topP;
+    bool enableTopP = assistant.settings.enableTopP;
+    int topK = assistant.settings.topK;
+    bool enableTopK = assistant.settings.enableTopK;
 
     showDialog(
       context: context,
@@ -263,9 +267,11 @@ class TopicSelectionPage extends ConsumerWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Temperature
                 SwitchListTile(
-                  title: const Text('温度 (Temperature)'),
-                  subtitle: Text('$temperature'),
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('温度 (Temperature)', style: TextStyle(fontSize: 14)),
+                  subtitle: Text(temperature.toStringAsFixed(2), style: const TextStyle(fontSize: 11)),
                   value: enableTemperature,
                   onChanged: (v) =>
                       setDlgState(() => enableTemperature = v),
@@ -279,6 +285,44 @@ class TopicSelectionPage extends ConsumerWidget {
                     label: temperature.toStringAsFixed(2),
                     onChanged: (v) =>
                         setDlgState(() => temperature = v),
+                  ),
+                const Divider(height: 8),
+
+                // Top P
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Top P', style: TextStyle(fontSize: 14)),
+                  subtitle: Text(topP.toStringAsFixed(2), style: const TextStyle(fontSize: 11)),
+                  value: enableTopP,
+                  onChanged: (v) => setDlgState(() => enableTopP = v),
+                ),
+                if (enableTopP)
+                  Slider(
+                    value: topP,
+                    min: 0,
+                    max: 1,
+                    divisions: 20,
+                    label: topP.toStringAsFixed(2),
+                    onChanged: (v) => setDlgState(() => topP = v),
+                  ),
+                const Divider(height: 8),
+
+                // Top K
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Top K', style: TextStyle(fontSize: 14)),
+                  subtitle: Text(topK.toString(), style: const TextStyle(fontSize: 11)),
+                  value: enableTopK,
+                  onChanged: (v) => setDlgState(() => enableTopK = v),
+                ),
+                if (enableTopK)
+                  Slider(
+                    value: topK.toDouble(),
+                    min: 0,
+                    max: 100,
+                    divisions: 100,
+                    label: topK.toString(),
+                    onChanged: (v) => setDlgState(() => topK = v.round()),
                   ),
               ],
             ),
@@ -296,6 +340,10 @@ class TopicSelectionPage extends ConsumerWidget {
                       assistantId: assistant.id,
                       temperature: temperature,
                       enableTemperature: enableTemperature,
+                      topP: topP,
+                      enableTopP: enableTopP,
+                      topK: topK,
+                      enableTopK: enableTopK,
                     );
                 Navigator.pop(ctx);
               },

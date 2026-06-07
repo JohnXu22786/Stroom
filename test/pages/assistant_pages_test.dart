@@ -212,4 +212,108 @@ void main() {
       );
     });
   });
+
+  group('Assistant emoji/image picker', () {
+    testWidgets('create dialog shows expanded emoji grid', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            assistantProvider.overrideWith((ref) {
+              // Start with an assistant so empty state is not shown
+              final notifier = AssistantsNotifier();
+              notifier.createAssistant(name: '已有助手', prompt: 'P1', emoji: '🤖');
+              return notifier;
+            }),
+          ],
+          child: const MaterialApp(
+            home: AssistantSelectionPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap the add button in AppBar
+      await tester.tap(find.byTooltip('新建助手'));
+      await tester.pumpAndSettle();
+
+      // The dialog title should appear
+      expect(find.text('新建助手'), findsOneWidget);
+
+      // The emoji tab bar should exist
+      expect(find.text('Emoji'), findsOneWidget);
+      expect(find.text('图片'), findsOneWidget);
+
+      // The emoji grid should have more than 16 options (presence of '🎯')
+      expect(find.text('🎯'), findsOneWidget);
+      // Check some common emojis from the expanded set
+      expect(find.text('😀'), findsOneWidget);
+      expect(find.text('🐶'), findsOneWidget);
+    });
+
+    testWidgets('edit dialog shows expanded emoji grid', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          assistantProvider.overrideWith((ref) {
+            final notifier = AssistantsNotifier();
+            notifier.createAssistant(name: '测试助手', prompt: 'P1', emoji: '🤖');
+            return notifier;
+          }),
+        ],
+        child: const MaterialApp(
+          home: AssistantSelectionPage(),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      // Long press the assistant card to open menu
+      await tester.longPress(find.text('🤖'));
+      await tester.pumpAndSettle();
+
+      // Tap edit
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      // The emoji tab bar should exist
+      expect(find.text('Emoji'), findsOneWidget);
+      expect(find.text('图片'), findsOneWidget);
+    });
+  });
+
+  group('Assistant settings extended params dialog', () {
+    testWidgets('settings dialog shows extended parameters', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          assistantProvider.overrideWith((ref) {
+            final notifier = AssistantsNotifier();
+            notifier.createAssistant(name: '参数助手', prompt: 'P1', emoji: '🤖');
+            return notifier;
+          }),
+        ],
+        child: const MaterialApp(
+          home: AssistantSelectionPage(),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      // Long press to open menu then tap settings
+      await tester.longPress(find.text('🤖'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('设置'));
+      await tester.pumpAndSettle();
+
+      // Title
+      expect(find.text('助手参数设置'), findsOneWidget);
+
+      // Should show new parameter labels
+      expect(find.text('Top K'), findsWidgets);
+      expect(find.text('频率惩罚 (Frequency Penalty)'), findsOneWidget);
+      expect(find.text('存在惩罚 (Presence Penalty)'), findsOneWidget);
+
+      // Should show override model settings toggle
+      expect(find.text('覆盖模型设置'), findsOneWidget);
+    });
+  });
 }
