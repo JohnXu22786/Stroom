@@ -66,12 +66,14 @@ class ManifestOperations<T extends FileRecord> {
 
   bool get _isImageTable => tableName == ManifestTables.imageRecords;
   bool get _isVideoTable => tableName == ManifestTables.videoRecords;
+  bool get _isTextTable => tableName == ManifestTables.textRecords;
 
   // ---- 数据库代理方法（根据 tableName 路由到正确的表操作） ---------------
 
   Future<List<Map<String, dynamic>>> _dbGetAllRecords() async {
     if (_isImageTable) return ManifestDatabase.getAllImageRecords();
     if (_isVideoTable) return ManifestDatabase.getAllVideoRecords();
+    if (_isTextTable) return ManifestDatabase.getAllTextRecords();
     return ManifestDatabase.getAllAudioRecords();
   }
 
@@ -80,6 +82,8 @@ class ManifestOperations<T extends FileRecord> {
       await ManifestDatabase.insertImageRecord(record);
     } else if (_isVideoTable) {
       await ManifestDatabase.insertVideoRecord(record);
+    } else if (_isTextTable) {
+      await ManifestDatabase.insertTextRecord(record);
     } else {
       await ManifestDatabase.insertAudioRecord(record);
     }
@@ -90,6 +94,8 @@ class ManifestOperations<T extends FileRecord> {
       await ManifestDatabase.updateImageRecord(id, updates);
     } else if (_isVideoTable) {
       await ManifestDatabase.updateVideoRecord(id, updates);
+    } else if (_isTextTable) {
+      await ManifestDatabase.updateTextRecord(id, updates);
     } else {
       await ManifestDatabase.updateAudioRecord(id, updates);
     }
@@ -100,6 +106,8 @@ class ManifestOperations<T extends FileRecord> {
       await ManifestDatabase.deleteImageRecord(id);
     } else if (_isVideoTable) {
       await ManifestDatabase.deleteVideoRecord(id);
+    } else if (_isTextTable) {
+      await ManifestDatabase.deleteTextRecord(id);
     } else {
       await ManifestDatabase.deleteAudioRecord(id);
     }
@@ -110,6 +118,8 @@ class ManifestOperations<T extends FileRecord> {
       await ManifestDatabase.deleteImageRecords(ids);
     } else if (_isVideoTable) {
       await ManifestDatabase.deleteVideoRecords(ids);
+    } else if (_isTextTable) {
+      await ManifestDatabase.deleteTextRecords(ids);
     } else {
       await ManifestDatabase.deleteAudioRecords(ids);
     }
