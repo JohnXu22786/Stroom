@@ -133,3 +133,11 @@ final videoSortConfigProvider =
   notifier.load();
   return notifier;
 });
+
+/// 文本页排序（storage key: 'text_sort_config'）
+final textSortConfigProvider =
+    StateNotifierProvider<SortConfigNotifier, SortConfig>((ref) {
+  final notifier = SortConfigNotifier('text_sort_config');
+  notifier.load();
+  return notifier;
+});

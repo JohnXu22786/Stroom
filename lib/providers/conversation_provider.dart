@@ -19,7 +19,6 @@ class Conversation {
   List<ChatMessage> messages;
   bool isPinned;
   int sortOrder;
-  String? assistantId;
 
   Conversation({
     String? id,
@@ -29,7 +28,6 @@ class Conversation {
     List<ChatMessage>? messages,
     this.isPinned = false,
     this.sortOrder = 0,
-    this.assistantId,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now(),
@@ -43,7 +41,6 @@ class Conversation {
         'messages': messages.map((m) => m.toMap()).toList(),
         'isPinned': isPinned,
         'sortOrder': sortOrder,
-        if (assistantId != null) 'assistantId': assistantId,
       };
 
   factory Conversation.fromMap(Map<String, dynamic> map) => Conversation(
@@ -62,7 +59,6 @@ class Conversation {
             [],
         isPinned: map['isPinned'] as bool? ?? false,
         sortOrder: map['sortOrder'] as int? ?? 0,
-        assistantId: map['assistantId'] as String?,
       );
 
   @override
@@ -173,14 +169,13 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   ///
   /// 不在此处持久化（避免与后续 updateMessages 的持久化竞争），
   /// 由 chat_provider 的 listener 负责持久化带消息的状态。
-  String createConversation({String? assistantId}) {
+  String createConversation() {
     final now = DateTime.now();
     final conv = Conversation(
       title: '',
       createdAt: now,
       updatedAt: now,
       messages: [],
-      assistantId: assistantId,
     );
     state = [...state, conv];
     _ref.read(activeConversationIdProvider.notifier).state = conv.id;
