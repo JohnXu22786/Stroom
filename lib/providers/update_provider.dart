@@ -11,7 +11,6 @@ final updateProvider = StateNotifierProvider<UpdateNotifier, UpdateState>(
 class UpdateState {
   final bool isChecking;
   final String? latestVersion;
-  final bool mandatory;
   final String? releaseNotes;
   final String? downloadUrl;
   final String? error;
@@ -20,7 +19,6 @@ class UpdateState {
   const UpdateState({
     this.isChecking = false,
     this.latestVersion,
-    this.mandatory = false,
     this.releaseNotes,
     this.downloadUrl,
     this.error,
@@ -30,7 +28,6 @@ class UpdateState {
   UpdateState copyWith({
     bool? isChecking,
     String? latestVersion,
-    bool? mandatory,
     String? releaseNotes,
     String? downloadUrl,
     String? error,
@@ -39,7 +36,6 @@ class UpdateState {
     return UpdateState(
       isChecking: isChecking ?? this.isChecking,
       latestVersion: latestVersion ?? this.latestVersion,
-      mandatory: mandatory ?? this.mandatory,
       releaseNotes: releaseNotes ?? this.releaseNotes,
       downloadUrl: downloadUrl ?? this.downloadUrl,
       error: error ?? this.error,
@@ -48,18 +44,18 @@ class UpdateState {
   }
 }
 
-class _Version implements Comparable<_Version> {
+class Version implements Comparable<Version> {
   final int major;
   final int minor;
   final int patch;
 
-  _Version._({required this.major, required this.minor, required this.patch});
+  Version._({required this.major, required this.minor, required this.patch});
 
-  factory _Version.parse(String versionString) {
+  factory Version.parse(String versionString) {
     final cleaned = versionString.replaceAll(RegExp(r'^v'), '');
     final base = cleaned.split('+').first.split('-').first;
     final parts = base.split('.');
-    return _Version._(
+    return Version._(
       major: parts.isNotEmpty ? int.tryParse(parts[0]) ?? 0 : 0,
       minor: parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0,
       patch: parts.length > 2 ? int.tryParse(parts[2]) ?? 0 : 0,
@@ -67,24 +63,34 @@ class _Version implements Comparable<_Version> {
   }
 
   @override
-  int compareTo(_Version other) {
+  int compareTo(Version other) {
     if (major != other.major) return major.compareTo(other.major);
     if (minor != other.minor) return minor.compareTo(other.minor);
     return patch.compareTo(other.patch);
   }
 
-  bool operator <(_Version other) => compareTo(other) < 0;
-  bool operator >(_Version other) => compareTo(other) > 0;
-  bool operator <=(_Version other) => compareTo(other) <= 0;
-  bool operator >=(_Version other) => compareTo(other) >= 0;
+  bool operator <(Version other) => compareTo(other) < 0;
+  bool operator >(Version other) => compareTo(other) > 0;
+  bool operator <=(Version other) => compareTo(other) <= 0;
+  bool operator >=(Version other) => compareTo(other) >= 0;
 }
 
-const String _kUpdateCheckUrl = 'https://raw.githubusercontent.com/JohnXu22786/Stroom/main/version.json';
+const String _kUpdateCheckUrl = 'https://api.github.com/repos/JohnXu22786/Stroom/releases/latest';
 const String _kSkippedVersionKey = 'update_skipped_version';
 const String _kUpdateAvailableKey = 'update_available_data';
 
 class UpdateNotifier extends StateNotifier<UpdateState> {
-  UpdateNotifier() : super(const UpdateState());
+  final Dio _dio;
+
+  UpdateNotifier({Dio? dio})
+      : _dio = dio ??
+            Dio(
+              BaseOptions(
+                connectTimeout: const Duration(seconds: 10),
+                receiveTimeout: const Duration(seconds: 10),
+              ),
+            ),
+        super(const UpdateState());
 
   Future<void> checkForUpdate({bool silent = false}) async {
     if (state.isChecking) return;
@@ -92,39 +98,30 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     state = state.copyWith(isChecking: true, error: null);
 
     try {
-      final response = await Dio(
-        BaseOptions(
-          connectTimeout: const Duration(seconds: 10),
-          receiveTimeout: const Duration(seconds: 10),
-        ),
-      ).get(_kUpdateCheckUrl);
+      final response = await _dio.get(_kUpdateCheckUrl);
       if (response.statusCode == 200) {
         final data = jsonDecode(response.data.toString()) as Map<String, dynamic>;
-        final latestVersion = data['latest_version'] as String? ?? '';
-        final minimumVersion = data['minimum_version'] as String? ?? '';
-        final mandatory = data['mandatory'] as bool? ?? false;
-        final releaseNotes = data['release_notes'] as String? ?? '';
-        final downloadUrl = data['download_url'] as String? ?? '';
+        final tagName = data['tag_name'] as String? ?? '';
+        final latestVersion = tagName.replaceAll(RegExp(r'^v'), '');
+        final releaseNotes = data['body'] as String? ?? '';
+        final downloadUrl = data['html_url'] as String? ?? '';
 
-        final current = _Version.parse(appVersion);
-        final latest = _Version.parse(latestVersion);
-        final minVersion = _Version.parse(minimumVersion);
+        final current = Version.parse(appVersion);
+        final latest = Version.parse(latestVersion);
 
         final updateAvailable = latest > current;
-        final isMandatory = mandatory || (minVersion > current);
 
         if (updateAvailable) {
           final prefs = await SharedPreferences.getInstance();
           final skippedVersion = prefs.getString(_kSkippedVersionKey);
 
-          if (skippedVersion == latestVersion && !isMandatory) {
+          if (skippedVersion == latestVersion) {
             state = const UpdateState();
             return;
           }
 
           final updateData = jsonEncode({
             'latest_version': latestVersion,
-            'mandatory': isMandatory,
             'release_notes': releaseNotes,
             'download_url': downloadUrl,
           });
@@ -133,7 +130,6 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
           state = UpdateState(
             updateAvailable: true,
             latestVersion: latestVersion,
-            mandatory: isMandatory,
             releaseNotes: releaseNotes,
             downloadUrl: downloadUrl,
           );

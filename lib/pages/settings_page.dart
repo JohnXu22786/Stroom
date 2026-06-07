@@ -386,9 +386,33 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _checkForUpdate() async {
+    // Show immediate feedback that the check is starting
+    final snackBar = ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            ),
+            SizedBox(width: 12),
+            Text('正在检查更新...'),
+          ],
+        ),
+        duration: Duration(days: 1), // Keep visible until dismissed
+      ),
+    );
+
     final notifier = ref.read(updateProvider.notifier);
     await notifier.checkForUpdate();
     final state = ref.read(updateProvider);
+
+    // Dismiss the checking snackbar
+    snackBar.close();
 
     if (state.error != null) {
       _showSnackBar(state.error!);
@@ -408,19 +432,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   void _showUpdateDialog(UpdateState state) {
     showDialog(
       context: context,
-      barrierDismissible: !state.mandatory,
+      barrierDismissible: true,
       builder: (context) {
         return AlertDialog(
-          title: Row(
+          title: const Row(
             children: [
-              Icon(
-                state.mandatory ? Icons.warning_amber_rounded : Icons.system_update,
-                color: state.mandatory ? Colors.red : Colors.blue,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(state.mandatory ? '强制更新' : '发现新版本'),
-              ),
+              Icon(Icons.system_update, color: Colors.blue),
+              SizedBox(width: 8),
+              Expanded(child: Text('发现新版本')),
             ],
           ),
           content: SingleChildScrollView(
@@ -429,13 +448,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text('最新版本: ${state.latestVersion}'),
-                if (state.mandatory) ...[
-                  const SizedBox(height: 8),
-                  const Text(
-                    '此版本为强制更新，请立即升级以继续使用。',
-                    style: TextStyle(color: Colors.red),
-                  ),
-                ],
                 if (state.releaseNotes != null &&
                     state.releaseNotes!.isNotEmpty) ...[
                   const SizedBox(height: 12),
@@ -448,19 +460,17 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ),
           ),
           actions: [
-            if (!state.mandatory)
-              TextButton(
-                onPressed: () {
-                  ref.read(updateProvider.notifier).skipVersion(state.latestVersion!);
-                  Navigator.of(context).pop();
-                },
-                child: const Text('跳过此版本'),
-              ),
-            if (!state.mandatory)
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('稍后提醒'),
-              ),
+            TextButton(
+              onPressed: () {
+                ref.read(updateProvider.notifier).skipVersion(state.latestVersion!);
+                Navigator.of(context).pop();
+              },
+              child: const Text('跳过此版本'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('稍后提醒'),
+            ),
             FilledButton(
               onPressed: () {
                 Navigator.of(context).pop();
