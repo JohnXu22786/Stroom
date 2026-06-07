@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import '../../services/storage_service.dart';
 import '../../utils/retry_helper.dart';
 import '../../utils/video_manifest.dart';
+import '../../utils/file_manifest.dart';
 import 'package:dio/dio.dart';
 import '../config/default_rules.dart';
 import '../models/catcatch_task.dart';
@@ -643,6 +644,12 @@ class TaskExecutor {
       } catch (e) {
         debugPrint('[TaskExecutor] Register video to gallery failed: $e');
       }
+      // 自动注册下载的音频到音频库
+      try {
+        await _registerCompletedAudio(finalPath, task);
+      } catch (e) {
+        debugPrint('[TaskExecutor] Register audio to gallery failed: $e');
+      }
     }
 
     _markStep(steps, 7, done: true);
@@ -669,6 +676,7 @@ class TaskExecutor {
     if (existing != null) return;
 
     final recordName = p.basenameWithoutExtension(filePath);
+    final videoFolder = task.metadata['videoFolder'] ?? '';
     final record = VideoRecord(
       name: recordName,
       hash: hash,
@@ -676,10 +684,45 @@ class TaskExecutor {
       createdAt: DateTime.now(),
       size: fileBytes.length,
       duration: task.expectedDurationSec * 1000, // 转为毫秒
+      folder: videoFolder,
     );
     await VideoManifest.writeFile('$hash.$ext', fileBytes);
     await VideoManifest.addRecord(record);
-    debugPrint('[TaskExecutor] Registered video to gallery: $recordName.$ext');
+    debugPrint('[TaskExecutor] Registered video to gallery: $recordName.$ext (folder: $videoFolder)');
+  }
+
+  /// 将已完成的下载文件注册到应用音频库（FileManifest），
+  /// 使其出现在音频文件浏览页面中。
+  static Future<void> _registerCompletedAudio(
+      String filePath, CatCatchTask task) async {
+    final ext = p.extension(filePath).toLowerCase().replaceAll('.', '');
+    const audioExts = {'mp3', 'wav', 'm4a', 'aac', 'wma', 'opus', 'flac', 'ogg'};
+    if (!audioExts.contains(ext)) return;
+
+    final file = File(filePath);
+    if (!await file.exists()) return;
+
+    final fileBytes = await file.readAsBytes();
+    final hash = md5.convert(fileBytes).toString();
+
+    // 检查是否已注册（按 hash 去重）
+    final existing = await FileManifest.getRecordByHash(hash);
+    if (existing != null) return;
+
+    final recordName = p.basenameWithoutExtension(filePath);
+    final audioFolder = task.metadata['audioFolder'] ?? '';
+    final record = AudioRecord(
+      name: recordName,
+      hash: hash,
+      format: ext,
+      createdAt: DateTime.now(),
+      size: fileBytes.length,
+      duration: task.expectedDurationSec,
+      folder: audioFolder,
+    );
+    await FileManifest.writeFile('$hash.$ext', fileBytes);
+    await FileManifest.addRecord(record);
+    debugPrint('[TaskExecutor] Registered audio to gallery: $recordName.$ext (folder: $audioFolder)');
   }
 
   /// 检测疑似音视频分轨资源
