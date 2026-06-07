@@ -110,11 +110,25 @@ class TaskExecutor {
         switch (stepType) {
           case StepType.fetching:
             onUpdate(task.copyWith(steps: steps, status: TaskStatus.running));
-            detectedMedia = await _executeFetchAndAnalyze(
-                task: task,
-                steps: steps,
-                onUpdate: onUpdate,
-                cancelToken: cancelToken);
+            final (detectedResources, fetchedPageTitle) =
+                await _executeFetchAndAnalyze(
+                    task: task,
+                    steps: steps,
+                    onUpdate: onUpdate,
+                    cancelToken: cancelToken);
+            detectedMedia = detectedResources;
+            // Update local task with page title so downstream steps can use it
+            if (fetchedPageTitle != null &&
+                fetchedPageTitle.isNotEmpty &&
+                fetchedPageTitle != task.title) {
+              task = task.copyWith(
+                title: fetchedPageTitle,
+                metadata: {
+                  ...task.metadata,
+                  'pageTitle': fetchedPageTitle,
+                },
+              );
+            }
             break;
           case StepType.analyzing:
             _markStep(steps, i, done: true);
@@ -311,12 +325,14 @@ class TaskExecutor {
   }
 
   /// Step 0-1: 获取并分析
-  static Future<List<MediaResource>> _executeFetchAndAnalyze({
+  /// 返回 (检测到的媒体资源列表, 网页标题)
+  static Future<(List<MediaResource>, String?)> _executeFetchAndAnalyze({
     required CatCatchTask task,
     required List<StepStatus> steps,
     required void Function(CatCatchTask) onUpdate,
     CancelToken? cancelToken,
   }) async {
+    var capturedPageTitle = task.title;
     // Step 1: Direct HTTP sniffing
     var resources = await SniffingEngine.analyzeUrl(task.url,
         cancelToken: cancelToken, onProgress: (step, progress) {
@@ -339,7 +355,7 @@ class TaskExecutor {
           'launching WebView background sniffer');
 
       try {
-        final webViewResources = await WebViewSniffer.sniff(
+        final (webViewResources, pageTitle) = await WebViewSniffer.sniff(
           url: task.url,
           timeout: const Duration(seconds: 30),
           cancelToken: cancelToken,
@@ -349,6 +365,18 @@ class TaskExecutor {
                 steps: steps, progress: 20 + (progress * 30 ~/ 100)));
           },
         );
+
+        // Store page title in task metadata for auto-naming
+        if (pageTitle != null && pageTitle.isNotEmpty) {
+          capturedPageTitle = pageTitle;
+          onUpdate(task.copyWith(
+            steps: steps,
+            metadata: {
+              ...task.metadata,
+              'pageTitle': pageTitle,
+            },
+          ));
+        }
 
         // Merge: keep direct sniff results first (usually higher quality), then add new ones
         final existingUrls = resources.map((r) => r.url).toSet();
@@ -380,7 +408,7 @@ class TaskExecutor {
         steps: steps,
         detectedMedia: resources,
         progress: _calcProgress(steps)));
-    return resources;
+    return (resources, capturedPageTitle);
   }
 
   /// 对可播放但缺少信息的媒体资源进行主动探测（时长、分辨率）。
@@ -510,10 +538,13 @@ class TaskExecutor {
               .map((m) => m.url)
               .toList();
           if (segments.isEmpty) throw Exception('播放列表没有可下载的分段');
+          // 使用网页标题命名播放列表合并文件
+          final playlistBaseName = p.basenameWithoutExtension(
+              buildDownloadFileName(media, task.metadata));
           final mergedPath = await DownloadManager.downloadSegmentsAndMerge(
             segmentUrls: segments,
             outputPath: p.join(downloadDir,
-                '${p.basenameWithoutExtension(media.url)}_merged.ts'),
+                '${playlistBaseName}_merged.ts'),
             headers: browserHeaders,
             concurrency: DefaultRules.maxConcurrency,
             onProgress: (completed, total, progress) {
@@ -528,8 +559,7 @@ class TaskExecutor {
           onUpdate(task.copyWith(steps: steps, progress: _calcProgress(steps)));
           return mergedPath;
         }
-        final ext = media.ext;
-        final fileName = '${media.name}.$ext';
+        final fileName = buildDownloadFileName(media, task.metadata);
         final tempDir = Directory(downloadDir);
         if (!await tempDir.exists()) await tempDir.create(recursive: true);
         final tempPath =
@@ -846,10 +876,46 @@ class TaskExecutor {
     final name = p.basenameWithoutExtension(path);
     final ext = p.extension(path);
     for (int i = 1; i < 100; i++) {
-      final newPath = p.join(dir, '${name}_$i$ext');
+      final newPath = p.join(dir, '$name ($i)$ext');
       if (!await File(newPath).exists()) return newPath;
     }
     return path;
+  }
+
+  /// 将网页标题清理为合法的文件名（不含扩展名）
+  ///
+  /// 移除 Windows 文件名中不允许的字符: \ / : * ? " < > |
+  /// 同时截断超长标题（超过 200 字符）
+  /// 多个连续空格合并为一个，首尾空格被去除
+  static String sanitizeForFileName(String title) {
+    // 替换非法字符为空格
+    var clean = title.replaceAll(RegExp(r'[\\/:*?"<>|]'), ' ');
+    // 合并多个连续空格
+    clean = clean.replaceAll(RegExp(r'\s+'), ' ');
+    // 去除首尾空格
+    clean = clean.trim();
+    // 截断超长标题
+    if (clean.length > 200) {
+      clean = clean.substring(0, 200);
+    }
+    return clean;
+  }
+
+  /// 构建下载文件名
+  ///
+  /// 如果任务 metadata 中包含 pageTitle，则使用清理后的网页标题作为文件名，
+  /// 否则回退到 URL 推导的 [media.name]。
+  /// 返回完整的文件名（含扩展名），例如 "My Video.mp4"。
+  static String buildDownloadFileName(
+      MediaResource media, Map<String, String> taskMetadata) {
+    final pageTitle = taskMetadata['pageTitle'];
+    if (pageTitle != null && pageTitle.trim().isNotEmpty) {
+      final sanitized = sanitizeForFileName(pageTitle);
+      if (sanitized.isNotEmpty) {
+        return '$sanitized.${media.ext}';
+      }
+    }
+    return '${media.name}.${media.ext}';
   }
 
   /// Format DioException, preserving original error details.
