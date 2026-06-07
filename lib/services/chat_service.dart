@@ -159,13 +159,11 @@ class ChatService {
   /// Stream a message WITH tool call support.
   /// Returns both text chunks and tool call events.
   /// Handles the function-calling loop internally.
-  /// [systemPrompt] is an optional system-level instruction prepended to the API messages.
   Stream<ChatEvent> sendStreamWithTools(
     String userMessage, {
     required List<ChatMessage> history,
     bool reasoning = false,
     List<ToolDefinition> tools = const [],
-    String? systemPrompt,
   }) {
     _isCancelledByUser = false;
     _reasoningBuffer = '';
@@ -185,7 +183,7 @@ class ChatService {
     Future.microtask(() async {
       try {
         if (_isCancelledByUser) return;
-        var messages = await _prepareApiMessages(history, systemPrompt: systemPrompt);
+        var messages = await _prepareApiMessages(history);
         _lastRequestBody = {
           'messages': messages,
           'model': _modelConfig?.modelId,
@@ -325,16 +323,9 @@ class ChatService {
   ///
   /// Messages with image attachments are converted to the OpenAI multimodal
   /// content‑array format. Non‑image attachments are currently skipped.
-  /// [systemPrompt] is prepended as a 'system' role message if provided.
   Future<List<Map<String, dynamic>>> _prepareApiMessages(
-      List<ChatMessage> history, {String? systemPrompt}) async {
+      List<ChatMessage> history) async {
     final result = <Map<String, dynamic>>[];
-
-    // Prepend system prompt if provided
-    if (systemPrompt != null && systemPrompt.isNotEmpty) {
-      result.add({'role': 'system', 'content': systemPrompt});
-    }
-
     for (final msg in history) {
       if (msg.attachments.isEmpty) {
         result.add({'role': msg.role, 'content': msg.content});
