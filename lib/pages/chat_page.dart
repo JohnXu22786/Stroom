@@ -1,35 +1,56 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:flutter_highlight/themes/dracula.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image_picker/image_picker.dart';
+import '../widgets/camera_choice_dialog.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:mime/mime.dart';
+import '../services/attachment_storage.dart';
+import '../widgets/file_preview.dart';
 
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
 import '../models/tool_call.dart';
-import '../services/attachment_storage.dart';
 import '../services/chat_adapter.dart';
 import '../services/chat_service.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/provider_config.dart';
-import '../providers/assistant_provider.dart';
+import '../pages/camera_page.dart';
 import '../widgets/llm/jumping_dots.dart';
 import '../widgets/llm/tool_call_card.dart';
-import '../utils/data_sanitizer.dart';
-import 'assistant_selection_page.dart';
+import 'conversations_page.dart';
 import 'provider_config_page.dart';
-import 'chat/chat_action_button.dart';
-import 'chat/chat_composer_widget.dart';
-import 'chat/chat_error_utils.dart';
-import 'chat/chat_providers.dart';
-import 'chat/chat_reasoning_section.dart';
-import 'chat/message_segment.dart';
+import '../utils/data_sanitizer.dart';
+
+sealed class _MessageSegment {}
+
+class _TextSegment extends _MessageSegment {
+  final String text;
+  _TextSegment(this.text);
+}
+
+class _ToolCallSegment extends _MessageSegment {
+  final ToolCallData data;
+  _ToolCallSegment(this.data);
+}
+
+class _SearchMatch {
+  final String messageId;
+  final int matchStart;
+  final int matchEnd;
+  _SearchMatch(this.messageId, this.matchStart, this.matchEnd);
+}
+
+final _isStreamingProvider = StateProvider<bool>((ref) => false);
 
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({super.key});
@@ -48,12 +69,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   bool _cancelledByUser = false;
   bool _reasoningEnabled = false;
   final Map<String, String> _reasoningContents = {};
-  final Map<String, List<MessageSegment>> _chatSegments = {};
+  final Map<String, List<_MessageSegment>> _chatSegments = {};
   String? _streamingMsgId;
 
   bool _isSearching = false;
   String _searchQuery = '';
-  final List<SearchMatch> _searchMatches = [];
+  final List<_SearchMatch> _searchMatches = [];
   int _currentMatchIndex = 0;
   final TextEditingController _searchTextController = TextEditingController();
   final Map<String, GlobalKey> _messageKeys = {};
@@ -92,22 +113,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       );
     }
 
-    // Check if we have a selected assistant and active conversation
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final assistantId = ref.read(selectedAssistantIdProvider);
-      final activeConvId = ref.read(activeConversationIdProvider);
-
-      if (assistantId == null || activeConvId == null) {
-        // If no assistant or topic selected, go back to assistant selection
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const AssistantSelectionPage()),
-        );
-        return;
-      }
-
-      _initialize();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initialize());
   }
 
   String _executeCalculator(Map<String, dynamic> args) {
@@ -195,7 +201,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
       _history.clear();
       _chatSegments.clear();
-      _reasoningContents.clear();
       _streamingMsgId = null;
       _controller?.dispose();
       _messageKeys.clear();
@@ -220,11 +225,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           text: msg.content,
           createdAt: msg.createdAt,
         ));
-        // Restore reasoning content for assistant messages so the UI
-        // shows the reasoning chain even after reloading the conversation.
-        if (msg.role == 'assistant' && msg.reasoningContent != null) {
-          _reasoningContents[msg.id] = msg.reasoningContent!;
-        }
       }
       if (mounted) setState(() {});
     } catch (e, s) {
@@ -261,15 +261,45 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
   }
 
+  void _newConversation() {
+    if (ref.read(_isStreamingProvider)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('请等待当前消息生成完成')),
+        );
+      }
+      return;
+    }
+    _saveMessages().then((_) {
+      ref.read(conversationsProvider.notifier).createConversation();
+      _history.clear();
+      _chatSegments.clear();
+      _streamingMsgId = null;
+      _controller?.dispose();
+      final newCtrl = InMemoryChatController();
+      setState(() => _controller = newCtrl);
+    });
+  }
+
+  void _showHistory() {
+    _saveMessages().then((_) {
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ConversationsPage()),
+      ).then((_) {
+        if (!mounted) return;
+        _loadConversationMessages();
+      });
+    });
+  }
+
   Future<void> _onMessageSend(String text, List<Attachment> attachments) async {
-    if (ref.read(isStreamingProvider)) return;
+    if (ref.read(_isStreamingProvider)) return;
 
     final convId = ref.read(activeConversationIdProvider);
     if (convId == null) {
-      final assistantId = ref.read(selectedAssistantIdProvider);
-      ref.read(conversationsProvider.notifier).createConversation(
-            assistantId: assistantId,
-          );
+      ref.read(conversationsProvider.notifier).createConversation();
     }
 
     final userMsgId = 'u${DateTime.now().millisecondsSinceEpoch}';
@@ -287,8 +317,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   Future<void> _startStreaming(String text) async {
-    if (ref.read(isStreamingProvider)) return;
-    ref.read(isStreamingProvider.notifier).state = true;
+    if (ref.read(_isStreamingProvider)) return;
+    ref.read(_isStreamingProvider.notifier).state = true;
     if (mounted) setState(() {});
     _cancelledByUser = false;
 
@@ -326,15 +356,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
 
     try {
-      // Get the assistant's system prompt
-      final assistant = ref.read(selectedAssistantProvider);
-      final systemPrompt = assistant?.prompt;
-
       final stream = _adapter.sendStreamWithTools(
         text,
         history: _history,
         reasoning: _reasoningEnabled,
-        systemPrompt: systemPrompt,
         tools: const [
           ToolDefinition(
             name: 'calculator',
@@ -364,13 +389,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             }
             fullReply += e.text;
             textBeforeToolCall += e.text;
-            // Progressively show reasoning content as it arrives
-            if (_reasoningEnabled) {
-              final currentReasoning = _adapter.reasoningContent;
-              if (currentReasoning.isNotEmpty) {
-                _reasoningContents[aiMsgId] = currentReasoning;
-              }
-            }
             final now = DateTime.now();
             if (now.difference(lastUpdate) >= minInterval) {
               lastUpdate = now;
@@ -381,12 +399,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             // Flush accumulated text before tool call as a segment
             if (textBeforeToolCall.isNotEmpty) {
               _chatSegments[aiMsgId]!.add(
-                TextSegment(textBeforeToolCall),
+                _TextSegment(textBeforeToolCall),
               );
               textBeforeToolCall = '';
             }
             _chatSegments[aiMsgId]!.add(
-              ToolCallSegment(
+              _ToolCallSegment(
                 e.toolCall.copyWith(status: ToolCallStatus.running),
               ),
             );
@@ -396,8 +414,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             final segs = _chatSegments[aiMsgId] ?? [];
             for (var i = segs.length - 1; i >= 0; i--) {
               final seg = segs[i];
-              if (seg is ToolCallSegment && seg.data.id == e.toolCallId) {
-                segs[i] = ToolCallSegment(
+              if (seg is _ToolCallSegment && seg.data.id == e.toolCallId) {
+                segs[i] = _ToolCallSegment(
                   seg.data.copyWith(
                     status: ToolCallStatus.completed,
                     result: e.result,
@@ -445,13 +463,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     } finally {
       // Flush remaining text after last tool call as a segment
       if (textBeforeToolCall.isNotEmpty) {
-        _chatSegments[aiMsgId]!.add(TextSegment(textBeforeToolCall));
+        _chatSegments[aiMsgId]!.add(_TextSegment(textBeforeToolCall));
       }
       // Mark any still-running tool calls as cancelled
       for (var i = 0; i < (_chatSegments[aiMsgId]?.length ?? 0); i++) {
         final seg = _chatSegments[aiMsgId]![i];
-        if (seg is ToolCallSegment && seg.data.status == ToolCallStatus.running) {
-          _chatSegments[aiMsgId]![i] = ToolCallSegment(
+        if (seg is _ToolCallSegment && seg.data.status == ToolCallStatus.running) {
+          _chatSegments[aiMsgId]![i] = _ToolCallSegment(
             seg.data.copyWith(
               status: ToolCallStatus.error,
               result: 'Cancelled',
@@ -486,7 +504,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       }
     }
     _streamingMsgId = null;
-    ref.read(isStreamingProvider.notifier).state = false;
+    ref.read(_isStreamingProvider.notifier).state = false;
     _cancelledByUser = false;
     if (mounted) setState(() {});
 
@@ -496,7 +514,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void _confirmRetryOrEdit(String messageId) {
     final index = _history.indexWhere((m) => m.id == messageId);
     if (index == -1) return;
-    if (ref.read(isStreamingProvider)) return;
+    if (ref.read(_isStreamingProvider)) return;
 
     final msg = _history[index];
     final isUser = msg.role == 'user';
@@ -566,8 +584,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         final removed = _history.sublist(index);
         _history.removeRange(index, _history.length);
         for (final r in removed) {
-          _reasoningContents.remove(r.id);
-          _chatSegments.remove(r.id);
           final ctrlMsg =
               _controller?.messages.where((m) => m.id == r.id).firstOrNull;
           if (ctrlMsg != null) {
@@ -663,8 +679,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         final removed = _history.sublist(index);
         _history.removeRange(index, _history.length);
         for (final r in removed) {
-          _reasoningContents.remove(r.id);
-          _chatSegments.remove(r.id);
           final ctrlMsg =
               _controller?.messages.where((m) => m.id == r.id).firstOrNull;
           if (ctrlMsg != null) {
@@ -690,8 +704,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         final removed = _history.sublist(index);
         _history.removeRange(index, _history.length);
         for (final r in removed) {
-          _reasoningContents.remove(r.id);
-          _chatSegments.remove(r.id);
           final ctrlMsg =
               _controller?.messages.where((m) => m.id == r.id).firstOrNull;
           if (ctrlMsg != null) {
@@ -726,8 +738,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     setState(() {
       _history.removeAt(index);
-      _reasoningContents.remove(messageId);
-      _chatSegments.remove(messageId);
     });
 
     final msgToRemove = _controller?.messages.where((m) => m.id == messageId).firstOrNull;
@@ -919,7 +929,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void _stopStreaming() {
     _cancelledByUser = true;
     _adapter.cancel();
-    ref.read(isStreamingProvider.notifier).state = false;
+    ref.read(_isStreamingProvider.notifier).state = false;
   }
 
   /// 格式化错误信息，分类显示友好的提示并保留原始错误
@@ -941,7 +951,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         while (true) {
           final idx = lowerContent.indexOf(lowerQuery, start);
           if (idx == -1) break;
-          _searchMatches.add(SearchMatch(msg.id, idx, idx + query.length));
+          _searchMatches.add(_SearchMatch(msg.id, idx, idx + query.length));
           start = idx + query.length;
         }
       }
@@ -1106,85 +1116,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
   }
 
-  MarkdownConfig _buildMarkdownConfig(BuildContext context, bool isDark) {
-    final theme = Theme.of(context);
-    return MarkdownConfig(configs: [
-      PConfig(
-        textStyle: TextStyle(
-          fontSize: 16,
-          color: theme.colorScheme.onSurface,
-        ),
-      ),
-      H1Config(
-        style: TextStyle(
-          fontSize: 32,
-          fontWeight: FontWeight.bold,
-          color: theme.colorScheme.onSurface,
-        ),
-      ),
-      H2Config(
-        style: TextStyle(
-          fontSize: 24,
-          fontWeight: FontWeight.bold,
-          color: theme.colorScheme.onSurface,
-        ),
-      ),
-      H3Config(
-        style: TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-          color: theme.colorScheme.onSurface,
-        ),
-      ),
-      H4Config(
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          color: theme.colorScheme.onSurface,
-        ),
-      ),
-      H5Config(
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          color: theme.colorScheme.onSurface,
-        ),
-      ),
-      H6Config(
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          color: theme.colorScheme.onSurface,
-        ),
-      ),
-      LinkConfig(
-        style: TextStyle(
-          color: theme.colorScheme.primary,
-          decoration: TextDecoration.underline,
-        ),
-      ),
-      CodeConfig(
-        style: TextStyle(
-          backgroundColor: theme.colorScheme.surfaceContainerHighest,
-          color: theme.colorScheme.onSurface,
-        ),
-      ),
-      PreConfig(
-        decoration: BoxDecoration(
-          color: isDark ? Colors.grey[850] : Colors.grey[200],
-          borderRadius: BorderRadius.circular(8),
-        ),
-      ),
-    ]);
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final markdownConfig = _buildMarkdownConfig(context, isDark);
+    final markdownConfig =
+        isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig;
     final adapterConfigured = _adapter.isConfigured;
     final controller = _controller;
-    final isStreaming = ref.watch(isStreamingProvider);
+    final isStreaming = ref.watch(_isStreamingProvider);
 
     // Reactively load messages when the active conversation changes
     ref.listen(activeConversationIdProvider, (prev, next) {
@@ -1207,7 +1146,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     // Get conversation title
     final activeId = ref.watch(activeConversationIdProvider);
     final conversations = ref.watch(conversationsProvider);
-    final selectedAssistant = ref.watch(selectedAssistantProvider);
     String title = '新对话';
     if (activeId != null) {
       final conv = conversations.where((c) => c.id == activeId).firstOrNull;
@@ -1239,32 +1177,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       onLongPress: () => setState(() => _developerMode = !_developerMode),
                       child: Row(
                         children: [
-                          // Assistant emoji + name
-                          if (selectedAssistant != null) ...[
-                            Container(
-                              margin: const EdgeInsets.only(right: 6),
-                              child: Text(
-                                selectedAssistant.emoji,
-                                style: const TextStyle(fontSize: 18),
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              margin: const EdgeInsets.only(right: 8),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.5),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                selectedAssistant.name,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  color: Theme.of(context).colorScheme.onPrimaryContainer,
-                                ),
-                              ),
-                            ),
-                          ],
                           Flexible(
                             child: Text(
                               title,
@@ -1328,6 +1240,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                 'reasoning_enabled', _reasoningEnabled));
                       },
                     ),
+                  IconButton(
+                    icon: const Icon(Icons.history),
+                    tooltip: '历史记录',
+                    onPressed: _showHistory,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    tooltip: '新对话',
+                    onPressed: _newConversation,
+                  ),
                   // ── Stop button ──
                   if (isStreaming)
                     IconButton(
@@ -1582,7 +1504,7 @@ composerBuilder: (context) => ChatComposerWidget(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     if (reasoningText != null)
-                                      ChatReasoningSection(reasoningText: reasoningText),
+                                      _ReasoningSection(reasoningText: reasoningText),
                                     // Show JumpingDots while waiting for first token
                                     if (isWaitingForFirstToken)
                                       const Padding(
@@ -1595,7 +1517,7 @@ composerBuilder: (context) => ChatComposerWidget(
                                     else if (segments != null && segments.isNotEmpty)
                                       // Segments: text and tool calls in order
                                       ...segments.map((seg) => switch (seg) {
-                                            TextSegment s => Padding(
+                                            _TextSegment s => Padding(
                                               padding: const EdgeInsets.only(bottom: 4),
                                               child: hasSearchMatch
                                                 ? _buildHighlightedText(s.text, message.id)
@@ -1609,7 +1531,7 @@ composerBuilder: (context) => ChatComposerWidget(
                                                     ]),
                                                   ),
                                             ),
-                                            ToolCallSegment s => ToolCallCard(data: s.data),
+                                            _ToolCallSegment s => ToolCallCard(data: s.data),
                                           })
                                     else if (hasSearchMatch)
                                       _buildHighlightedText(message.text, message.id)
@@ -1674,7 +1596,7 @@ composerBuilder: (context) => ChatComposerWidget(
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    ChatActionButton(
+                                    _ActionButton(
                                       icon: Icons.copy,
                                       tooltip: '复制',
                                       onPressed: () {
@@ -1691,14 +1613,14 @@ composerBuilder: (context) => ChatComposerWidget(
                                     ),
                                     const SizedBox(width: 2),
                                     if (isAi)
-                                      ChatActionButton(
+                                      _ActionButton(
                                         icon: Icons.refresh,
                                         tooltip: '重试',
                                         onPressed: () =>
                                             _confirmRetryOrEdit(message.id),
                                       )
                                     else
-                                      ChatActionButton(
+                                      _ActionButton(
                                         icon: Icons.edit_outlined,
                                         tooltip: '编辑',
                                         onPressed: () =>
@@ -1706,13 +1628,13 @@ composerBuilder: (context) => ChatComposerWidget(
                                       ),
                                     const SizedBox(width: 2),
                                     if (_developerMode && isAi && _history.any((m) => m.id == message.id && (m.rawRequest != null || m.rawResponse != null)))
-                                      ChatActionButton(
+                                      _ActionButton(
                                         icon: Icons.code,
                                         tooltip: 'JSON 审查',
                                         onPressed: () => _showJsonInspection(message.id),
                                       ),
                                     const SizedBox(width: 2),
-                                    ChatActionButton(
+                                    _ActionButton(
                                       icon: Icons.delete_outline,
                                       tooltip: '删除',
                                       onPressed: () =>
@@ -1933,6 +1855,602 @@ composerBuilder: (context) => ChatComposerWidget(
             );
           }),
         ),
+      ),
+    );
+  }
+}
+
+/// 格式化聊天错误信息，分类显示友好的提示并保留原始错误
+String formatChatErrorMessage(Object error) {
+  final errorStr = error.toString();
+
+  if (errorStr.contains('请先配置聊天供应商')) {
+    return '错误: 聊天 API 未配置，请先前往设置页面配置';
+  }
+
+  if (errorStr.contains('API key not configured')) {
+    return '错误: API Key 未配置，请检查设置';
+  }
+
+  if (errorStr.contains('无法连接到服务器') ||
+      errorStr.contains('连接错误')) {
+    return '错误: 无法连接到服务器，请检查网络连接和 API 地址\n$errorStr';
+  }
+
+  if (errorStr.contains('SocketException') ||
+      errorStr.contains('Connection refused') ||
+      errorStr.contains('连接失败')) {
+    return '错误: 网络连接失败，请检查网络连接\n$errorStr';
+  }
+
+  if (errorStr.contains('timeout') || errorStr.contains('超时')) {
+    return '错误: 连接超时，服务器无响应\n$errorStr';
+  }
+
+  if (errorStr.contains('HTTP ')) {
+    return '错误: $errorStr';
+  }
+
+  return '错误: $errorStr';
+}
+
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  const _ActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: Icon(icon, size: 16),
+      tooltip: tooltip,
+      style: IconButton.styleFrom(
+        foregroundColor: Colors.grey[500],
+        padding: const EdgeInsets.all(4),
+        minimumSize: const Size(28, 28),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      ),
+      onPressed: onPressed,
+    );
+  }
+}
+
+class _ReasoningSection extends StatefulWidget {
+  final String reasoningText;
+  const _ReasoningSection({required this.reasoningText});
+
+  @override
+  State<_ReasoningSection> createState() => _ReasoningSectionState();
+}
+
+class _ReasoningSectionState extends State<_ReasoningSection> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _expanded ? Icons.expand_less : Icons.chevron_right,
+                  size: 16,
+                  color: Colors.orange[700],
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '推理过程',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.orange[700],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_expanded)
+            Container(
+              margin: const EdgeInsets.only(top: 4),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.grey[800] : Colors.orange[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: Colors.orange.withOpacity(0.3),
+                ),
+              ),
+              child: Text(
+                widget.reasoningText,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.grey[400] : Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class ChatComposerWidget extends ConsumerStatefulWidget {
+  final void Function(String text, List<Attachment> attachments) onSend;
+  final VoidCallback onStop;
+
+  const ChatComposerWidget({
+    required this.onSend,
+    required this.onStop,
+  });
+
+  @override
+  ConsumerState<ChatComposerWidget> createState() => ChatComposerWidgetState();
+}
+
+class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
+  final _textController = TextEditingController();
+  final _focusNode = FocusNode();
+  final List<Attachment> _pendingAttachments = [];
+  final Map<String, Uint8List> _pendingImageBytes = {};
+  final GlobalKey _composerKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reportComposerHeight());
+  }
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _reportComposerHeight() {
+    if (!mounted) return;
+    final renderBox = _composerKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox != null) {
+      final height = renderBox.size.height;
+      final bottomSafeArea = MediaQuery.of(context).padding.bottom;
+      try {
+        context.read<ComposerHeightNotifier>().setHeight(height - bottomSafeArea);
+      } catch (_) {}
+    }
+  }
+
+  void _handleSubmitted(String text) {
+    if (text.trim().isEmpty && _pendingAttachments.isEmpty) return;
+    widget.onSend(text.trim(), [..._pendingAttachments]);
+    _pendingAttachments.clear();
+    _pendingImageBytes.clear();
+    _textController.clear();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reportComposerHeight());
+  }
+
+  void _showComposerFullscreenEditor() {
+    final editingController = TextEditingController(text: _textController.text);
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(8),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const Text(
+                    '编辑消息',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () {
+                      editingController.dispose();
+                      Navigator.pop(ctx);
+                    },
+                    tooltip: '关闭',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: TextField(
+                  controller: editingController,
+                  maxLines: null,
+                  expands: true,
+                  textAlignVertical: TextAlignVertical.top,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: '输入消息...',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.all(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.send_rounded, size: 18),
+                  label: const Text('发送'),
+                  onPressed: () {
+                    final text = editingController.text;
+                    editingController.dispose();
+                    Navigator.pop(ctx);
+                    _handleSubmitted(text);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showAttachmentPicker() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined),
+                title: const Text('拍照'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickFromCamera();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('相册'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showGalleryPicker();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.insert_drive_file_outlined),
+                title: const Text('文件'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickFromFilePicker();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showGalleryPicker() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_album_outlined),
+                title: const Text('系统相册'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickFromGallery();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.folder_outlined),
+                title: const Text('应用相册'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickFromAppGallery();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickFromCamera() async {
+    final choice = await showCameraChoiceDialog(context);
+    if (choice == null) return;
+    try {
+      if (choice == CameraChoice.app) {
+        final result = await Navigator.push<String>(
+          context,
+          MaterialPageRoute(builder: (_) => const CameraPage()),
+        );
+        if (result != null && result.isNotEmpty) {
+          final file = File(result);
+          final bytes = await file.readAsBytes();
+          final fileName = result.split(RegExp(r'[/\\]')).last;
+          await _addPendingAttachment(fileName, bytes);
+        }
+      } else {
+        final picker = ImagePicker();
+        final file = await picker.pickImage(source: ImageSource.camera);
+        if (file == null) return;
+        final bytes = await file.readAsBytes();
+        await _addPendingAttachment(file.name, bytes);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('拍照失败: $e'), duration: const Duration(seconds: 2)),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
+    try {
+      final picker = ImagePicker();
+      final files = await picker.pickMultiImage();
+      if (files.isEmpty) return;
+      for (final file in files) {
+        final bytes = await file.readAsBytes();
+        await _addPendingAttachment(file.name, bytes);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导入失败: $e'), duration: const Duration(seconds: 2)),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickFromAppGallery() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.first;
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) return;
+      await _addPendingAttachment(file.name, bytes);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导入失败: $e'), duration: const Duration(seconds: 2)),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickFromFilePicker() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.any,
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.first;
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) return;
+      await _addPendingAttachment(file.name, bytes);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导入失败: $e'), duration: const Duration(seconds: 2)),
+        );
+      }
+    }
+  }
+
+  Future<void> _addPendingAttachment(String fileName, Uint8List bytes) async {
+    final mimeType = lookupMimeType(fileName) ?? 'application/octet-stream';
+    final fileType = mimeType.startsWith('image/')
+        ? 'image'
+        : mimeType.startsWith('video/')
+            ? 'video'
+            : mimeType.startsWith('audio/')
+                ? 'audio'
+                : 'document';
+    final storagePath = await AttachmentStorage.saveFile(fileName, bytes);
+    final hash = AttachmentStorage.computeHash(bytes);
+    final att = Attachment(
+      fileName: fileName,
+      mimeType: mimeType,
+      fileType: fileType,
+      hash: hash,
+      storagePath: storagePath,
+      fileSize: bytes.length,
+    );
+    if (fileType == 'image') {
+      _pendingImageBytes[att.id] = bytes;
+    }
+    setState(() {
+      _pendingAttachments.add(att);
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('已导入 $fileName'),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.only(
+            top: 8,
+            left: 16,
+            right: 16,
+            bottom: MediaQuery.of(context).padding.top + 48,
+          ),
+          duration: const Duration(seconds: 2),
+          dismissDirection: DismissDirection.up,
+        ),
+      );
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reportComposerHeight());
+  }
+
+  void _removePendingAttachment(int index) {
+    final att = _pendingAttachments[index];
+    _pendingImageBytes.remove(att.id);
+    setState(() {
+      _pendingAttachments.removeAt(index);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reportComposerHeight());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isStreaming = ref.watch(_isStreamingProvider);
+    final hasText = _textController.text.trim().isNotEmpty;
+    final hasAttachments = _pendingAttachments.isNotEmpty;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: Container(
+        key: _composerKey,
+        decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        border: Border(
+          top: BorderSide(color: cs.outlineVariant, width: 0.5),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (hasAttachments)
+            Container(
+              height: 80,
+              padding: const EdgeInsets.only(left: 12, top: 8),
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: _pendingAttachments.length,
+                itemBuilder: (ctx, i) {
+                  final att = _pendingAttachments[i];
+                  return FilePreviewChip(
+                    attachment: att,
+                    imageBytes: _pendingImageBytes[att.id],
+                    onRemove: () => _removePendingAttachment(i),
+                  );
+                },
+              ),
+            ),
+          Padding(
+            padding: EdgeInsets.only(
+              left: 4,
+              right: 4,
+              top: hasAttachments ? 4 : 8,
+              bottom: 8 + MediaQuery.of(context).padding.bottom,
+            ),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: Icon(Icons.attach_file_outlined, color: cs.onSurfaceVariant),
+                  tooltip: '附件',
+                  onPressed: isStreaming ? null : _showAttachmentPicker,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: TextField(
+                    controller: _textController,
+                    focusNode: _focusNode,
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: _handleSubmitted,
+                    onChanged: (_) => setState(() {}),
+                    minLines: 1,
+                    maxLines: 4,
+                    decoration: InputDecoration(
+                      hintText: '输入消息...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        borderSide: BorderSide.none,
+                      ),
+                      filled: true,
+                      fillColor: cs.surfaceContainerHigh.withOpacity(0.8),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      suffixIcon: IconButton(
+                        icon: Icon(Icons.fullscreen, size: 20, color: cs.onSurfaceVariant),
+                        tooltip: '全屏编辑',
+                        onPressed: _showComposerFullscreenEditor,
+                      ),
+                      suffixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 0),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                if (isStreaming)
+                  IconButton(
+                    icon: Icon(Icons.stop_circle_outlined, color: Colors.red[400]),
+                    tooltip: '停止生成',
+                    onPressed: widget.onStop,
+                  )
+                else
+                  IconButton(
+                    icon: Icon(Icons.send_rounded, color: cs.primary),
+                    tooltip: '发送',
+                    onPressed: (hasText || hasAttachments)
+                        ? () => _handleSubmitted(_textController.text)
+                        : null,
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
       ),
     );
   }
