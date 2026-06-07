@@ -921,20 +921,38 @@ class AssistantSelectionPage extends ConsumerWidget {
                         final valueStr = paramValueController.text.trim();
                         if (name.isEmpty || valueStr.isEmpty) return;
 
+                        String? error;
                         dynamic parsedValue = valueStr;
+
                         if (paramType == 'number') {
-                          parsedValue = num.tryParse(valueStr) ?? valueStr;
+                          final n = num.tryParse(valueStr);
+                          if (n == null) {
+                            error = '无效的数字: "$valueStr"';
+                          } else {
+                            parsedValue = n;
+                          }
                         } else if (paramType == 'boolean') {
-                          parsedValue =
-                              valueStr.toLowerCase() == 'true';
+                          final lower = valueStr.toLowerCase();
+                          if (lower == 'true') {
+                            parsedValue = true;
+                          } else if (lower == 'false') {
+                            parsedValue = false;
+                          } else {
+                            error = '布尔值只能为 true 或 false';
+                          }
                         } else if (paramType == 'json') {
                           try {
-                            parsedValue = 
-                                // ignore: avoid_dynamic_calls
-                                (jsonDecode(valueStr) as dynamic);
+                            parsedValue = jsonDecode(valueStr) as dynamic;
                           } catch (_) {
-                            parsedValue = valueStr;
+                            error = 'JSON 格式错误: "$valueStr"';
                           }
+                        }
+
+                        if (error != null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(error), duration: Duration(seconds: 2)),
+                          );
+                          return;
                         }
 
                         setDlgState(() {
