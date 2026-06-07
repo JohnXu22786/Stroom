@@ -100,7 +100,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     try {
       final response = await _dio.get(_kUpdateCheckUrl);
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.data.toString()) as Map<String, dynamic>;
+        final data = response.data as Map<String, dynamic>;
         final tagName = data['tag_name'] as String? ?? '';
         final latestVersion = tagName.replaceAll(RegExp(r'^v'), '');
         final releaseNotes = data['body'] as String? ?? '';
