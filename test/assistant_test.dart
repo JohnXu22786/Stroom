@@ -563,4 +563,236 @@ void main() {
       expect(prefs.getBool('migrated_old_conversations'), true);
     });
   });
+
+  // ============================================================================
+  // New feature tests: Enhanced emoji/image + extended parameters
+  // ============================================================================
+
+  group('Assistant avatar support', () {
+    test('assistant defaults use emoji with no avatarPath', () {
+      final assistant = Assistant(
+        name: '测试头像',
+        prompt: '你好！',
+      );
+
+      expect(assistant.emoji, '🤖');
+      expect(assistant.avatarPath, isNull);
+    });
+
+    test('assistant toMap/fromMap preserves avatarPath', () {
+      final original = Assistant(
+        name: '图片助手',
+        prompt: 'Test',
+        emoji: '📷',
+        avatarPath: '/path/to/avatar.png',
+      );
+
+      final map = original.toMap();
+      final restored = Assistant.fromMap(map);
+
+      expect(restored.avatarPath, '/path/to/avatar.png');
+      expect(restored.emoji, '📷');
+    });
+
+    test('assistant with avatarPath toMap includes it', () {
+      final assistant = Assistant(
+        name: '助手',
+        prompt: 'Test',
+        avatarPath: '/data/avatars/img1.jpg',
+      );
+
+      final map = assistant.toMap();
+      expect(map['avatarPath'], '/data/avatars/img1.jpg');
+    });
+
+    test('assistant without avatarPath omits from map', () {
+      final assistant = Assistant(
+        name: '助手',
+        prompt: 'Test',
+      );
+
+      final map = assistant.toMap();
+      expect(map.containsKey('avatarPath'), false);
+    });
+
+    test('legacy assistant (no avatarPath) fromMap returns null avatarPath', () {
+      final map = <String, dynamic>{
+        'id': 'legacy-id',
+        'name': '旧助手',
+        'prompt': 'Hello',
+        'emoji': '🤖',
+        'description': '',
+        'settings': AssistantSettings.defaults().toMap(),
+        'createdAt': DateTime.now().toIso8601String(),
+        'updatedAt': DateTime.now().toIso8601String(),
+      };
+
+      final assistant = Assistant.fromMap(map);
+      expect(assistant.avatarPath, isNull);
+      expect(assistant.emoji, '🤖');
+    });
+  });
+
+  group('AssistantSettings extended params', () {
+    test('default settings have new extended values', () {
+      final settings = AssistantSettings.defaults();
+
+      // Existing fields
+      expect(settings.temperature, 1.0);
+      expect(settings.enableTemperature, false);
+
+      // New fields
+      expect(settings.topK, 0);
+      expect(settings.enableTopK, false);
+      expect(settings.frequencyPenalty, 0.0);
+      expect(settings.enableFrequencyPenalty, false);
+      expect(settings.presencePenalty, 0.0);
+      expect(settings.enablePresencePenalty, false);
+      expect(settings.overrideModelSettings, false);
+    });
+
+    test('extended settings serialization round-trip', () {
+      final original = AssistantSettings(
+        temperature: 0.7,
+        enableTemperature: true,
+        topP: 0.9,
+        enableTopP: true,
+        maxTokens: 4096,
+        enableMaxTokens: true,
+        topK: 40,
+        enableTopK: true,
+        frequencyPenalty: 0.5,
+        enableFrequencyPenalty: true,
+        presencePenalty: -0.2,
+        enablePresencePenalty: true,
+        overrideModelSettings: true,
+        customParameters: [
+          CustomParameter(name: 'top_k', type: 'number', value: 40),
+        ],
+      );
+
+      final map = original.toMap();
+      final restored = AssistantSettings.fromMap(map);
+
+      expect(restored.topK, 40);
+      expect(restored.enableTopK, true);
+      expect(restored.frequencyPenalty, 0.5);
+      expect(restored.enableFrequencyPenalty, true);
+      expect(restored.presencePenalty, -0.2);
+      expect(restored.enablePresencePenalty, true);
+      expect(restored.overrideModelSettings, true);
+    });
+
+    test('extended settings defaults round-trip', () {
+      final original = AssistantSettings.defaults();
+      final map = original.toMap();
+      final restored = AssistantSettings.fromMap(map);
+
+      expect(restored.topK, original.topK);
+      expect(restored.enableTopK, original.enableTopK);
+      expect(restored.frequencyPenalty, original.frequencyPenalty);
+      expect(restored.enableFrequencyPenalty, original.enableFrequencyPenalty);
+      expect(restored.presencePenalty, original.presencePenalty);
+      expect(restored.enablePresencePenalty, original.enablePresencePenalty);
+      expect(restored.overrideModelSettings, original.overrideModelSettings);
+    });
+
+    test('copyWith preserves new fields', () {
+      final original = AssistantSettings.defaults();
+      final modified = original.copyWith(
+        topK: 50,
+        enableTopK: true,
+        overrideModelSettings: true,
+      );
+
+      expect(modified.topK, 50);
+      expect(modified.enableTopK, true);
+      expect(modified.overrideModelSettings, true);
+      // Other fields unchanged
+      expect(modified.temperature, 1.0);
+      expect(modified.frequencyPenalty, 0.0);
+    });
+
+    test('legacy map (no new fields) loads defaults', () {
+      final map = <String, dynamic>{
+        'temperature': 0.5,
+        'enableTemperature': true,
+        'topP': 0.8,
+        'enableTopP': false,
+        'maxTokens': 2048,
+        'enableMaxTokens': true,
+        'streamOutput': true,
+        'reasoningEffort': 'default',
+        'enableWebSearch': false,
+        'maxToolCalls': 20,
+        'enableMaxToolCalls': true,
+        'customParameters': <dynamic>[],
+      };
+
+      final settings = AssistantSettings.fromMap(map);
+      expect(settings.topK, 0);
+      expect(settings.enableTopK, false);
+      expect(settings.frequencyPenalty, 0.0);
+      expect(settings.enableFrequencyPenalty, false);
+      expect(settings.presencePenalty, 0.0);
+      expect(settings.enablePresencePenalty, false);
+      expect(settings.overrideModelSettings, false);
+      // Existing fields still work
+      expect(settings.temperature, 0.5);
+    });
+  });
+
+  group('Provider extended params update', () {
+    test('updateAssistantSettings handles new params', () {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = AssistantsNotifier();
+
+      final assistant = notifier.createAssistant(
+        name: '扩展参数助手',
+        prompt: 'Test',
+      );
+
+      notifier.updateAssistantSettings(
+        assistantId: assistant.id,
+        topK: 50,
+        enableTopK: true,
+        frequencyPenalty: 0.3,
+        enableFrequencyPenalty: true,
+        presencePenalty: -0.1,
+        enablePresencePenalty: true,
+        overrideModelSettings: true,
+      );
+
+      final updated = notifier.state.firstWhere((a) => a.id == assistant.id);
+      expect(updated.settings.topK, 50);
+      expect(updated.settings.enableTopK, true);
+      expect(updated.settings.frequencyPenalty, 0.3);
+      expect(updated.settings.enableFrequencyPenalty, true);
+      expect(updated.settings.presencePenalty, -0.1);
+      expect(updated.settings.enablePresencePenalty, true);
+      expect(updated.settings.overrideModelSettings, true);
+      // Other fields unchanged
+      expect(updated.settings.temperature, 1.0);
+      expect(updated.settings.topP, 1.0);
+    });
+
+    test('updateAssistant with avatarPath updates field', () {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = AssistantsNotifier();
+
+      final assistant = notifier.createAssistant(
+        name: '头像助手',
+        prompt: 'Test',
+      );
+
+      notifier.updateAssistant(
+        id: assistant.id,
+        avatarPath: '/new/avatar.png',
+      );
+
+      final updated = notifier.state.firstWhere((a) => a.id == assistant.id);
+      expect(updated.avatarPath, '/new/avatar.png');
+      expect(updated.emoji, '🤖'); // emoji unchanged
+    });
+  });
 }

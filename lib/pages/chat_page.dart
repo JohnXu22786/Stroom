@@ -23,7 +23,6 @@ import '../widgets/llm/jumping_dots.dart';
 import '../widgets/llm/tool_call_card.dart';
 import '../utils/data_sanitizer.dart';
 import 'assistant_selection_page.dart';
-import 'topic_selection_page.dart';
 import 'provider_config_page.dart';
 import 'chat/chat_action_button.dart';
 import 'chat/chat_composer_widget.dart';
@@ -196,6 +195,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
       _history.clear();
       _chatSegments.clear();
+      _reasoningContents.clear();
       _streamingMsgId = null;
       _controller?.dispose();
       _messageKeys.clear();
@@ -220,6 +220,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           text: msg.content,
           createdAt: msg.createdAt,
         ));
+        // Restore reasoning content for assistant messages so the UI
+        // shows the reasoning chain even after reloading the conversation.
+        if (msg.role == 'assistant' && msg.reasoningContent != null) {
+          _reasoningContents[msg.id] = msg.reasoningContent!;
+        }
       }
       if (mounted) setState(() {});
     } catch (e, s) {
@@ -254,43 +259,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         if (mounted) _configureAdapter();
       });
     }
-  }
-
-  void _newConversation() {
-    if (ref.read(isStreamingProvider)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('请等待当前消息生成完成')),
-        );
-      }
-      return;
-    }
-    _saveMessages().then((_) {
-      final assistantId = ref.read(selectedAssistantIdProvider);
-      ref.read(conversationsProvider.notifier).createConversation(
-            assistantId: assistantId,
-          );
-
-      _history.clear();
-      _chatSegments.clear();
-      _streamingMsgId = null;
-      _controller?.dispose();
-      final newCtrl = InMemoryChatController();
-      setState(() => _controller = newCtrl);
-    });
-  }
-
-  void _showHistory() {
-    _saveMessages().then((_) {
-      if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => TopicSelectionPage()),
-      ).then((_) {
-        if (!mounted) return;
-        _loadConversationMessages();
-      });
-    });
   }
 
   Future<void> _onMessageSend(String text, List<Attachment> attachments) async {
@@ -396,6 +364,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             }
             fullReply += e.text;
             textBeforeToolCall += e.text;
+            // Progressively show reasoning content as it arrives
+            if (_reasoningEnabled) {
+              final currentReasoning = _adapter.reasoningContent;
+              if (currentReasoning.isNotEmpty) {
+                _reasoningContents[aiMsgId] = currentReasoning;
+              }
+            }
             final now = DateTime.now();
             if (now.difference(lastUpdate) >= minInterval) {
               lastUpdate = now;
@@ -591,6 +566,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         final removed = _history.sublist(index);
         _history.removeRange(index, _history.length);
         for (final r in removed) {
+          _reasoningContents.remove(r.id);
+          _chatSegments.remove(r.id);
           final ctrlMsg =
               _controller?.messages.where((m) => m.id == r.id).firstOrNull;
           if (ctrlMsg != null) {
@@ -686,6 +663,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         final removed = _history.sublist(index);
         _history.removeRange(index, _history.length);
         for (final r in removed) {
+          _reasoningContents.remove(r.id);
+          _chatSegments.remove(r.id);
           final ctrlMsg =
               _controller?.messages.where((m) => m.id == r.id).firstOrNull;
           if (ctrlMsg != null) {
@@ -711,6 +690,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         final removed = _history.sublist(index);
         _history.removeRange(index, _history.length);
         for (final r in removed) {
+          _reasoningContents.remove(r.id);
+          _chatSegments.remove(r.id);
           final ctrlMsg =
               _controller?.messages.where((m) => m.id == r.id).firstOrNull;
           if (ctrlMsg != null) {
@@ -745,6 +726,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     setState(() {
       _history.removeAt(index);
+      _reasoningContents.remove(messageId);
+      _chatSegments.remove(messageId);
     });
 
     final msgToRemove = _controller?.messages.where((m) => m.id == messageId).firstOrNull;
@@ -1123,11 +1106,82 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
   }
 
+  MarkdownConfig _buildMarkdownConfig(BuildContext context, bool isDark) {
+    final theme = Theme.of(context);
+    return MarkdownConfig(configs: [
+      PConfig(
+        textStyle: TextStyle(
+          fontSize: 16,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      H1Config(
+        style: TextStyle(
+          fontSize: 32,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      H2Config(
+        style: TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      H3Config(
+        style: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      H4Config(
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      H5Config(
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      H6Config(
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      LinkConfig(
+        style: TextStyle(
+          color: theme.colorScheme.primary,
+          decoration: TextDecoration.underline,
+        ),
+      ),
+      CodeConfig(
+        style: TextStyle(
+          backgroundColor: theme.colorScheme.surfaceContainerHighest,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      PreConfig(
+        decoration: BoxDecoration(
+          color: isDark ? Colors.grey[850] : Colors.grey[200],
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final markdownConfig =
-        isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig;
+    final markdownConfig = _buildMarkdownConfig(context, isDark);
     final adapterConfigured = _adapter.isConfigured;
     final controller = _controller;
     final isStreaming = ref.watch(isStreamingProvider);
@@ -1274,16 +1328,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                 'reasoning_enabled', _reasoningEnabled));
                       },
                     ),
-                  IconButton(
-                    icon: const Icon(Icons.history),
-                    tooltip: '历史记录',
-                    onPressed: _showHistory,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.add),
-                    tooltip: '新对话',
-                    onPressed: _newConversation,
-                  ),
                   // ── Stop button ──
                   if (isStreaming)
                     IconButton(

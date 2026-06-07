@@ -39,11 +39,18 @@ class AssistantSettings {
   final bool enableTopP;
   final int maxTokens;
   final bool enableMaxTokens;
+  final int topK;
+  final bool enableTopK;
+  final double frequencyPenalty;
+  final bool enableFrequencyPenalty;
+  final double presencePenalty;
+  final bool enablePresencePenalty;
   final bool streamOutput;
   final String reasoningEffort;
   final bool enableWebSearch;
   final int maxToolCalls;
   final bool enableMaxToolCalls;
+  final bool overrideModelSettings;
   final List<CustomParameter> customParameters;
 
   AssistantSettings({
@@ -53,11 +60,18 @@ class AssistantSettings {
     this.enableTopP = false,
     this.maxTokens = 4096,
     this.enableMaxTokens = false,
+    this.topK = 0,
+    this.enableTopK = false,
+    this.frequencyPenalty = 0.0,
+    this.enableFrequencyPenalty = false,
+    this.presencePenalty = 0.0,
+    this.enablePresencePenalty = false,
     this.streamOutput = true,
     this.reasoningEffort = 'default',
     this.enableWebSearch = false,
     this.maxToolCalls = 20,
     this.enableMaxToolCalls = true,
+    this.overrideModelSettings = false,
     this.customParameters = const [],
   });
 
@@ -70,11 +84,20 @@ class AssistantSettings {
         'enableTopP': enableTopP,
         'maxTokens': maxTokens,
         'enableMaxTokens': enableMaxTokens,
+        if (topK != 0 || enableTopK) 'topK': topK,
+        if (enableTopK) 'enableTopK': enableTopK,
+        if (frequencyPenalty != 0.0 || enableFrequencyPenalty)
+          'frequencyPenalty': frequencyPenalty,
+        if (enableFrequencyPenalty) 'enableFrequencyPenalty': enableFrequencyPenalty,
+        if (presencePenalty != 0.0 || enablePresencePenalty)
+          'presencePenalty': presencePenalty,
+        if (enablePresencePenalty) 'enablePresencePenalty': enablePresencePenalty,
         'streamOutput': streamOutput,
         'reasoningEffort': reasoningEffort,
         'enableWebSearch': enableWebSearch,
         'maxToolCalls': maxToolCalls,
         'enableMaxToolCalls': enableMaxToolCalls,
+        if (overrideModelSettings) 'overrideModelSettings': overrideModelSettings,
         'customParameters':
             customParameters.map((p) => p.toMap()).toList(),
       };
@@ -87,11 +110,21 @@ class AssistantSettings {
         enableTopP: (map['enableTopP'] as bool?) ?? false,
         maxTokens: (map['maxTokens'] as int?) ?? 4096,
         enableMaxTokens: (map['enableMaxTokens'] as bool?) ?? false,
+        topK: (map['topK'] as int?) ?? 0,
+        enableTopK: (map['enableTopK'] as bool?) ?? false,
+        frequencyPenalty: (map['frequencyPenalty'] as num?)?.toDouble() ?? 0.0,
+        enableFrequencyPenalty:
+            (map['enableFrequencyPenalty'] as bool?) ?? false,
+        presencePenalty: (map['presencePenalty'] as num?)?.toDouble() ?? 0.0,
+        enablePresencePenalty:
+            (map['enablePresencePenalty'] as bool?) ?? false,
         streamOutput: (map['streamOutput'] as bool?) ?? true,
         reasoningEffort: (map['reasoningEffort'] as String?) ?? 'default',
         enableWebSearch: (map['enableWebSearch'] as bool?) ?? false,
         maxToolCalls: (map['maxToolCalls'] as int?) ?? 20,
         enableMaxToolCalls: (map['enableMaxToolCalls'] as bool?) ?? true,
+        overrideModelSettings:
+            (map['overrideModelSettings'] as bool?) ?? false,
         customParameters: (map['customParameters'] as List?)
                 ?.map((e) =>
                     CustomParameter.fromMap(Map<String, dynamic>.from(e)))
@@ -106,11 +139,18 @@ class AssistantSettings {
     bool? enableTopP,
     int? maxTokens,
     bool? enableMaxTokens,
+    int? topK,
+    bool? enableTopK,
+    double? frequencyPenalty,
+    bool? enableFrequencyPenalty,
+    double? presencePenalty,
+    bool? enablePresencePenalty,
     bool? streamOutput,
     String? reasoningEffort,
     bool? enableWebSearch,
     int? maxToolCalls,
     bool? enableMaxToolCalls,
+    bool? overrideModelSettings,
     List<CustomParameter>? customParameters,
   }) =>
       AssistantSettings(
@@ -120,11 +160,21 @@ class AssistantSettings {
         enableTopP: enableTopP ?? this.enableTopP,
         maxTokens: maxTokens ?? this.maxTokens,
         enableMaxTokens: enableMaxTokens ?? this.enableMaxTokens,
+        topK: topK ?? this.topK,
+        enableTopK: enableTopK ?? this.enableTopK,
+        frequencyPenalty: frequencyPenalty ?? this.frequencyPenalty,
+        enableFrequencyPenalty:
+            enableFrequencyPenalty ?? this.enableFrequencyPenalty,
+        presencePenalty: presencePenalty ?? this.presencePenalty,
+        enablePresencePenalty:
+            enablePresencePenalty ?? this.enablePresencePenalty,
         streamOutput: streamOutput ?? this.streamOutput,
         reasoningEffort: reasoningEffort ?? this.reasoningEffort,
         enableWebSearch: enableWebSearch ?? this.enableWebSearch,
         maxToolCalls: maxToolCalls ?? this.maxToolCalls,
         enableMaxToolCalls: enableMaxToolCalls ?? this.enableMaxToolCalls,
+        overrideModelSettings:
+            overrideModelSettings ?? this.overrideModelSettings,
         customParameters: customParameters ?? this.customParameters,
       );
 }
@@ -138,6 +188,7 @@ class Assistant {
   final String name;
   final String prompt;
   final String emoji;
+  final String? avatarPath;
   final String description;
   final AssistantSettings settings;
   final String? modelId;
@@ -149,6 +200,7 @@ class Assistant {
     required this.name,
     required this.prompt,
     this.emoji = '🤖',
+    this.avatarPath,
     this.description = '',
     AssistantSettings? settings,
     this.modelId,
@@ -167,6 +219,7 @@ class Assistant {
         'description': description,
         'settings': settings.toMap(),
         if (modelId != null) 'modelId': modelId,
+        if (avatarPath != null) 'avatarPath': avatarPath,
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
       };
@@ -178,6 +231,7 @@ class Assistant {
       name: (map['name'] as String?) ?? '',
       prompt: (map['prompt'] as String?) ?? '',
       emoji: (map['emoji'] as String?) ?? '🤖',
+      avatarPath: map['avatarPath'] as String?,
       description: (map['description'] as String?) ?? '',
       settings: settingsMap != null
           ? AssistantSettings.fromMap(settingsMap)
@@ -197,6 +251,7 @@ class Assistant {
     String? name,
     String? prompt,
     String? emoji,
+    String? avatarPath,
     String? description,
     AssistantSettings? settings,
     String? modelId,
@@ -208,6 +263,7 @@ class Assistant {
         name: name ?? this.name,
         prompt: prompt ?? this.prompt,
         emoji: emoji ?? this.emoji,
+        avatarPath: avatarPath ?? this.avatarPath,
         description: description ?? this.description,
         settings: settings ?? this.settings,
         modelId: modelId ?? this.modelId,
