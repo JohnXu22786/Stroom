@@ -37,6 +37,7 @@ class _ApplicationState extends ConsumerState<Application> {
       if (mounted) {
         _showUpdateDialog(
           latestVersion: pendingUpdate['latest_version'] as String? ?? '',
+          mandatory: pendingUpdate['mandatory'] as bool? ?? false,
           releaseNotes: pendingUpdate['release_notes'] as String? ?? '',
           downloadUrl: pendingUpdate['download_url'] as String? ?? '',
         );
@@ -47,19 +48,25 @@ class _ApplicationState extends ConsumerState<Application> {
 
   void _showUpdateDialog({
     required String latestVersion,
+    required bool mandatory,
     required String releaseNotes,
     required String downloadUrl,
   }) {
     showDialog(
       context: context,
-      barrierDismissible: true,
+      barrierDismissible: !mandatory,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.system_update, color: Colors.blue),
-              SizedBox(width: 8),
-              Expanded(child: Text('发现新版本')),
+              Icon(
+                mandatory ? Icons.warning_amber_rounded : Icons.system_update,
+                color: mandatory ? Colors.red : Colors.blue,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(mandatory ? '强制更新' : '发现新版本'),
+              ),
             ],
           ),
           content: SingleChildScrollView(
@@ -69,6 +76,13 @@ class _ApplicationState extends ConsumerState<Application> {
               children: [
                 Text('最新版本: $latestVersion'),
                 Text('当前版本: $appVersion'),
+                if (mandatory) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    '此版本为强制更新，请立即升级以继续使用。',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ],
                 if (releaseNotes.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   const Text('更新内容:',
@@ -80,19 +94,21 @@ class _ApplicationState extends ConsumerState<Application> {
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: () {
-                ref.read(updateProvider.notifier).skipVersion(latestVersion);
-                Navigator.of(dialogContext).pop();
-              },
-              child: const Text('跳过此版本'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-              },
-              child: const Text('稍后提醒'),
-            ),
+            if (!mandatory)
+              TextButton(
+                onPressed: () {
+                  ref.read(updateProvider.notifier).skipVersion(latestVersion);
+                  Navigator.of(dialogContext).pop();
+                },
+                child: const Text('跳过此版本'),
+              ),
+            if (!mandatory)
+              TextButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                },
+                child: const Text('稍后提醒'),
+              ),
             FilledButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
