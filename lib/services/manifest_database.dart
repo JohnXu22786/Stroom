@@ -28,6 +28,7 @@ class ManifestTables {
   static const String imageRecords = 'image_records';
   static const String audioRecords = 'audio_records';
   static const String videoRecords = 'video_records';
+  static const String textRecords = 'text_records';
   static const String folders = 'folders';
 }
 
@@ -78,7 +79,7 @@ class ManifestDatabase {
     final dbPath = p.join(dir.path, 'stroom_manifest.db');
     final db = await openDatabase(
       dbPath,
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE IF NOT EXISTS image_records (
@@ -117,6 +118,18 @@ class ManifestDatabase {
           )
         ''');
         await db.execute('''
+          CREATE TABLE IF NOT EXISTS text_records (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            hash TEXT NOT NULL,
+            format TEXT NOT NULL DEFAULT 'txt',
+            created_at INTEGER NOT NULL,
+            size INTEGER NOT NULL DEFAULT 0,
+            folder TEXT NOT NULL DEFAULT '',
+            text_length INTEGER NOT NULL DEFAULT 0
+          )
+        ''');
+        await db.execute('''
           CREATE TABLE IF NOT EXISTS folders (
             path TEXT PRIMARY KEY
           )
@@ -130,6 +143,24 @@ class ManifestDatabase {
             );
           } catch (_) {
             // 列可能已存在，忽略
+          }
+        }
+        if (oldVersion < 3) {
+          try {
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS text_records (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                hash TEXT NOT NULL,
+                format TEXT NOT NULL DEFAULT 'txt',
+                created_at INTEGER NOT NULL,
+                size INTEGER NOT NULL DEFAULT 0,
+                folder TEXT NOT NULL DEFAULT '',
+                text_length INTEGER NOT NULL DEFAULT 0
+              )
+            ''');
+          } catch (_) {
+            // 表可能已存在，忽略
           }
         }
       },
@@ -258,6 +289,7 @@ class ManifestDatabase {
         ManifestTables.imageRecords: <Map<String, dynamic>>[],
         ManifestTables.audioRecords: <Map<String, dynamic>>[],
         ManifestTables.videoRecords: <Map<String, dynamic>>[],
+        ManifestTables.textRecords: <Map<String, dynamic>>[],
         ManifestTables.folders: <String>[],
       };
 
@@ -269,12 +301,14 @@ class ManifestDatabase {
   static const Map<String, String> _camelToSnake = {
     'createdAt': 'created_at',
     'sourceText': 'source_text',
+    'textLength': 'text_length',
   };
 
   /// DB snake_case → Dart camelCase（列名映射表）
   static const Map<String, String> _snakeToCamel = {
     'created_at': 'createdAt',
     'source_text': 'sourceText',
+    'text_length': 'textLength',
   };
 
   /// 将 record 的 Map（fromMap 格式，camelCase 键名）转为 DB 行格式（snake_case）
@@ -600,6 +634,97 @@ class ManifestDatabase {
     );
     if (rows.isEmpty) return null;
     return _dbRowToRecord(rows.first);
+  }
+
+  // ==================================================================
+  // Text record operations
+  // ==================================================================
+
+  /// 获取所有文本记录
+  static Future<List<Map<String, dynamic>>> getAllTextRecords() async {
+    if (_useJsonStore) {
+      final data = await _loadWebData();
+      final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
+      return list.cast<Map<String, dynamic>>();
+    }
+    final db = await database;
+    final rows = await db.query(ManifestTables.textRecords);
+    return rows.map(_dbRowToRecord).toList();
+  }
+
+  /// 插入一条文本记录
+  static Future<void> insertTextRecord(Map<String, dynamic> record) async {
+    if (_useJsonStore) {
+      final data = await _loadWebData();
+      final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
+      list.add(record);
+      await _saveWebData();
+      return;
+    }
+    final db = await database;
+    await db.insert(
+      ManifestTables.textRecords,
+      _recordToDbRow(record),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// 更新一条文本记录
+  static Future<void> updateTextRecord(
+      String id, Map<String, dynamic> updates) async {
+    if (_useJsonStore) {
+      final data = await _loadWebData();
+      final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
+      final index = list.indexWhere((r) => (r as Map)['id'] == id);
+      if (index != -1) {
+        (list[index] as Map<String, dynamic>).addAll(updates);
+        await _saveWebData();
+      }
+      return;
+    }
+    final db = await database;
+    await db.update(
+      ManifestTables.textRecords,
+      _recordToDbRow(updates),
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// 删除一条文本记录
+  static Future<void> deleteTextRecord(String id) async {
+    if (_useJsonStore) {
+      final data = await _loadWebData();
+      final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
+      list.removeWhere((r) => (r as Map)['id'] == id);
+      await _saveWebData();
+      return;
+    }
+    final db = await database;
+    await db.delete(
+      ManifestTables.textRecords,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// 批量删除文本记录
+  static Future<void> deleteTextRecords(List<String> ids) async {
+    if (_useJsonStore) {
+      final data = await _loadWebData();
+      final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
+      final idSet = ids.toSet();
+      list.removeWhere((r) => idSet.contains((r as Map)['id']));
+      await _saveWebData();
+      return;
+    }
+    final db = await database;
+    final placeholders = ids.map((_) => '?').join(',');
+    await db.delete(
+      ManifestTables.textRecords,
+      where: 'id IN ($placeholders)',
+      whereArgs: ids,
+    );
   }
 
   // ==================================================================
