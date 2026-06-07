@@ -22,17 +22,22 @@ class WebViewSniffer {
   /// - JavaScript-rendered pages
   /// - Dynamic video elements
   /// - Network request interception for media files
-  static Future<List<MediaResource>> sniff({
+  ///
+  /// Returns a record with:
+  /// - $1: detected media resources (List<MediaResource>)
+  /// - $2: the HTML <title> of the page (String?), if available
+  static Future<(List<MediaResource>, String?)> sniff({
     required String url,
     Duration timeout = defaultTimeout,
     CancelToken? cancelToken,
     void Function(String step, int progress)? onProgress,
   }) async {
     final detectedUrls = <String>{};
-    final completer = Completer<List<MediaResource>>();
+    final completer = Completer<(List<MediaResource>, String?)>();
     Timer? timeoutTimer;
     var disposed = false;
     var resolvedUrl = url;
+    String? capturedTitle;
 
     onProgress?.call('启动后台浏览器', 10);
 
@@ -77,6 +82,16 @@ class WebViewSniffer {
             } catch (_) {}
           }
 
+          // Extract page title for auto-naming
+          try {
+            final titleResult = await controller.evaluateJavascript(
+              source: 'document.title',
+            );
+            if (titleResult is String) {
+              capturedTitle = titleResult.trim();
+            }
+          } catch (_) {}
+
           onProgress?.call('扫描完成，共发现 ${detectedUrls.length} 个资源', 90);
 
           // Convert to MediaResource list
@@ -96,7 +111,7 @@ class WebViewSniffer {
           // Cancel timeout & dispose
           timeoutTimer?.cancel();
           if (!completer.isCompleted) {
-            completer.complete(resources);
+            completer.complete((resources, capturedTitle));
           }
         } catch (e) {
           debugPrint('[WebViewSniffer] onLoadStop error: $e');
@@ -128,7 +143,7 @@ class WebViewSniffer {
             disposed = true;
             headlessWebView.dispose();
           }
-          completer.complete([]);
+          completer.complete((<MediaResource>[], null));
         }
       });
 
@@ -158,7 +173,7 @@ class WebViewSniffer {
             disposed = true;
             headlessWebView.dispose();
           }
-          completer.complete(resources);
+          completer.complete((resources, capturedTitle));
         }
       });
 
