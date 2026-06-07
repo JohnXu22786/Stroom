@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,9 @@ import 'package:stroom/providers/theme_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
 
 /// Creates a mock [Dio] that returns the given [jsonResponse].
+///
+/// The [jsonResponse] string is pre-parsed into a [Map] before setting it on the
+/// response, simulating real Dio's JSON auto-parsing behavior (ResponseType.json).
 Dio _createMockDio(String jsonResponse, {bool noDelay = true}) {
   final dio = Dio(BaseOptions());
   dio.interceptors.add(InterceptorsWrapper(
@@ -21,7 +25,7 @@ Dio _createMockDio(String jsonResponse, {bool noDelay = true}) {
         Response(
           requestOptions: options,
           statusCode: 200,
-          data: jsonResponse,
+          data: jsonDecode(jsonResponse) as Map<String, dynamic>,
         ),
       );
     },
