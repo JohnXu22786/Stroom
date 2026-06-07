@@ -17,6 +17,7 @@ import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
 import '../utils/manifest_bridge.dart';
 import '../widgets/file_manager_view.dart';
+import '../widgets/folder_picker_dialog.dart';
 import 'video_capture_page.dart';
 
 class VideoGalleryPage extends ConsumerStatefulWidget {
@@ -84,10 +85,23 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
   // ====================================================================
 
   Future<void> _recordVideo() async {
+    final folders = ref.read(videoFolderListProvider);
+    final folder = await FolderPickerDialog.show(
+      context,
+      currentFolder: _currentFolder,
+      availableFolders: folders,
+      title: '录像添加至文件夹',
+      onCreateFolder: (name) async {
+        await ref.read(videoFolderListProvider.notifier).addFolder(name);
+        return null;
+      },
+    );
+    if (folder == null || !mounted) return;
+
     final result = await Navigator.push<String>(
       context,
       MaterialPageRoute(
-          builder: (_) => VideoCapturePage(folder: _currentFolder)),
+          builder: (_) => VideoCapturePage(folder: folder)),
     );
 
     await ref.read(videoRecordsProvider.notifier).loadRecords();
