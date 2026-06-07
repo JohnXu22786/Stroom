@@ -7,7 +7,7 @@ import 'unified_task_list_page.dart';
 import '../catcatch/providers/catcatch_provider.dart';
 import '../catcatch/models/catcatch_task.dart' as catcatch_task;
 import '../providers/task_provider.dart';
-import 'assistant_selection_page.dart';
+import 'chat_page.dart';
 import 'files_page.dart';
 import 'settings_page.dart';
 import 'camera_page.dart';
@@ -625,7 +625,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           ),
         );
       case AppPage.chat:
-        return const AssistantSelectionPage();
+        return const ChatPage();
       case AppPage.files:
         return const FilesPage();
       case AppPage.settings:

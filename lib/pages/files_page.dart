@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'gallery_page.dart';
+import 'text_storage_page.dart';
 import 'tts_page.dart';
 import 'video_gallery_page.dart';
 
 /// Tab order provider - allows reordering the tabs
-final fileTabOrderProvider = StateProvider<List<int>>((ref) => [0, 1, 2]);
+final fileTabOrderProvider = StateProvider<List<int>>((ref) => [0, 1, 2, 3]);
 
-/// 文件页面 - 包含图片、视频和音频三个标签页，支持左右滑动切换和标签排序
+/// 文件页面 - 包含文本、图片、视频和音频四个标签页，支持左右滑动切换和标签排序
 class FilesPage extends ConsumerStatefulWidget {
   const FilesPage({super.key});
 
@@ -23,7 +24,7 @@ class _FilesPageState extends ConsumerState<FilesPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -32,7 +33,7 @@ class _FilesPageState extends ConsumerState<FilesPage>
     super.dispose();
   }
 
-  static const _tabLabels = ['图片', '视频', '音频'];
+  static const _tabLabels = ['文本', '图片', '视频', '音频'];
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +44,7 @@ class _FilesPageState extends ConsumerState<FilesPage>
       child: Column(
         key: const Key('files_page'),
         children: [
-          // Tab bar for switching between image and audio sections
+          // Tab bar for switching between file type sections
           Material(
             color: Theme.of(context).colorScheme.surface,
             child: GestureDetector(
@@ -55,17 +56,19 @@ class _FilesPageState extends ConsumerState<FilesPage>
               ),
             ),
           ),
-          // Content area - GalleryPage and TtsPage handle their own Scaffolds
+          // Content area - each page handles its own Scaffold
           Expanded(
             child: TabBarView(
               controller: _tabController,
               children: tabOrder.map((i) {
                 switch (i) {
                   case 0:
-                    return const GalleryPage();
+                    return const TextStoragePage();
                   case 1:
-                    return const VideoGalleryPage();
+                    return const GalleryPage();
                   case 2:
+                    return const VideoGalleryPage();
+                  case 3:
                     return const TtsPage();
                   default:
                     return const SizedBox.shrink();
