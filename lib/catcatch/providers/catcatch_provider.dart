@@ -50,16 +50,24 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   ///
   /// [url] 用户输入的 URL
   /// [expectedDurationSec] 用户期望的时长（秒）
+  /// [videoFolder] 视频文件保存到该文件夹（空字符串表示根目录）
+  /// [audioFolder] 音频文件保存到该文件夹（空字符串表示根目录）
   ///
   /// 返回新任务 ID。
-  String addTask(String url, int expectedDurationSec) {
+  String addTask(String url, int expectedDurationSec,
+      {String videoFolder = '', String audioFolder = ''}) {
     final id = const Uuid().v4();
+    final metadata = <String, String>{
+      if (videoFolder.isNotEmpty) 'videoFolder': videoFolder,
+      if (audioFolder.isNotEmpty) 'audioFolder': audioFolder,
+    };
     final task = CatCatchTask(
       id: id,
       url: url,
       expectedDurationSec: expectedDurationSec,
       title: _inferTitle(url),
       createdAt: DateTime.now(),
+      metadata: metadata,
     );
     state = [...state, task];
 

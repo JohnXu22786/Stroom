@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import '../catcatch/models/media_resource.dart';
 import '../catcatch/providers/catcatch_provider.dart';
 import '../utils/duration_parser.dart';
+import '../widgets/folder_picker_dialog.dart';
 import 'browser_page.dart';
 import 'unified_task_list_page.dart';
 
@@ -310,6 +311,8 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
   final _secondController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   String _previewText = '00:00:00';
+  String _videoFolder = '';
+  String _audioFolder = '';
 
   @override
   void initState() {
@@ -380,7 +383,8 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
     }
 
     try {
-      ref.read(catcatchTasksProvider.notifier).addTask(url, totalSec);
+      ref.read(catcatchTasksProvider.notifier).addTask(url, totalSec,
+          videoFolder: _videoFolder, audioFolder: _audioFolder);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -599,6 +603,28 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
 
             const SizedBox(height: 12),
 
+            // 视频保存文件夹选择
+            _buildFolderSelector(
+              context: context,
+              colorScheme: colorScheme,
+              icon: Icons.videocam,
+              label: '视频保存至',
+              currentFolder: _videoFolder,
+              onTap: () => _pickVideoFolder(),
+            ),
+            const SizedBox(height: 8),
+
+            // 音频保存文件夹选择
+            _buildFolderSelector(
+              context: context,
+              colorScheme: colorScheme,
+              icon: Icons.audio_file,
+              label: '音频保存至',
+              currentFolder: _audioFolder,
+              onTap: () => _pickAudioFolder(),
+            ),
+            const SizedBox(height: 12),
+
             FilledButton.icon(
               onPressed: _startTask,
               icon: const Icon(Icons.search),
@@ -614,6 +640,86 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // ====================================================================
+  // 文件夹选择
+  // ====================================================================
+
+  Future<void> _pickVideoFolder() async {
+    final result = await FolderPickerDialog.show(
+      context,
+      currentFolder: _videoFolder,
+      title: '视频保存至文件夹',
+    );
+    if (result != null && mounted) {
+      setState(() => _videoFolder = result);
+    }
+  }
+
+  Future<void> _pickAudioFolder() async {
+    final result = await FolderPickerDialog.show(
+      context,
+      currentFolder: _audioFolder,
+      title: '音频保存至文件夹',
+    );
+    if (result != null && mounted) {
+      setState(() => _audioFolder = result);
+    }
+  }
+
+  Widget _buildFolderSelector({
+    required BuildContext context,
+    required ColorScheme colorScheme,
+    required IconData icon,
+    required String label,
+    required String currentFolder,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            children: [
+              Icon(icon, size: 18, color: colorScheme.primary),
+              const SizedBox(width: 10),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                currentFolder.isEmpty ? '根目录' : currentFolder,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: colorScheme.primary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const Spacer(),
+              Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
         ),
       ),
     );

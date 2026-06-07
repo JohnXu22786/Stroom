@@ -233,18 +233,20 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
   }
 
   Future<void> _pickFromCamera() async {
-    final choice = await showCameraChoiceDialog(context);
-    if (choice == null) return;
+    final result = await showCameraChoiceDialog(context);
+    if (result == null) return;
+    final folder = result.folder;
     try {
-      if (choice == CameraChoice.app) {
-        final result = await Navigator.push<String>(
+      if (result.choice == CameraChoice.app) {
+        final filePath = await Navigator.push<String>(
           context,
-          MaterialPageRoute(builder: (_) => const CameraPage()),
+          MaterialPageRoute(
+              builder: (_) => CameraPage(folder: folder)),
         );
-        if (result != null && result.isNotEmpty) {
-          final file = File(result);
+        if (filePath != null && filePath.isNotEmpty) {
+          final file = File(filePath);
           final bytes = await file.readAsBytes();
-          final fileName = result.split(RegExp(r'[/\\]')).last;
+          final fileName = filePath.split(RegExp(r'[/\\]')).last;
           await _addPendingAttachment(fileName, bytes);
         }
       } else {
