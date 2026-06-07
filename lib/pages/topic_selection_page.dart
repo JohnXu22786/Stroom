@@ -39,22 +39,6 @@ class TopicSelectionPage extends ConsumerWidget {
         centerTitle: false,
         elevation: 0,
         backgroundColor: cs.surface,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            tooltip: '新话题',
-            onPressed: () => _createNewTopic(context, ref),
-          ),
-          // Switch assistant button
-          IconButton(
-            icon: const Icon(Icons.swap_horiz),
-            tooltip: '切换助手',
-            onPressed: () {
-              ref.read(selectedAssistantIdProvider.notifier).state = null;
-              Navigator.pop(context);
-            },
-          ),
-        ],
       ),
       body: selectedAssistant == null
           ? Center(

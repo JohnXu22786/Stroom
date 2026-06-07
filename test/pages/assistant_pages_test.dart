@@ -18,14 +18,7 @@ Widget createTestApp({
       if (assistants != null)
         assistantProvider.overrideWith((ref) {
           final notifier = AssistantsNotifier();
-          for (final a in assistants) {
-            notifier.createAssistant(
-              name: a.name,
-              prompt: a.prompt,
-              emoji: a.emoji,
-              description: a.description,
-            );
-          }
+          notifier.state = [...assistants];
           return notifier;
         }),
       if (selectedAssistantId != null)
@@ -136,6 +129,87 @@ void main() {
 
       // Since assistant IDs don't match (a1 vs random UUID), show error state
       expect(find.text('未选择助手'), findsOneWidget);
+    });
+
+    // ── Requirement 6 tests: top-right buttons removed ──
+
+    testWidgets('does NOT show top-right add (新建) button in AppBar',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      const assistantId = 'test-assistant-id-1';
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            assistantProvider.overrideWith((ref) {
+              final notifier = AssistantsNotifier();
+              notifier.state = [
+                Assistant(
+                  id: assistantId,
+                  name: '助手1',
+                  prompt: 'P1',
+                  emoji: '🤖',
+                ),
+              ];
+              return notifier;
+            }),
+            selectedAssistantIdProvider.overrideWith((ref) => assistantId),
+          ],
+          child: const MaterialApp(
+            home: TopicSelectionPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The top-right add button should NOT be present (bottom one already exists)
+      // and zero IconButtons with Icons.add in AppBar
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byIcon(Icons.add),
+        ),
+        findsNothing,
+      );
+      // The bottom '新话题' button(s) should still exist
+      expect(find.widgetWithText(FilledButton, '新话题'), findsWidgets);
+    });
+
+    testWidgets('does NOT show top-right switch-assistant (切换助手) button',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      const assistantId = 'test-assistant-id-2';
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            assistantProvider.overrideWith((ref) {
+              final notifier = AssistantsNotifier();
+              notifier.state = [
+                Assistant(
+                  id: assistantId,
+                  name: '助手2',
+                  prompt: 'P2',
+                  emoji: '😊',
+                ),
+              ];
+              return notifier;
+            }),
+            selectedAssistantIdProvider.overrideWith((ref) => assistantId),
+          ],
+          child: const MaterialApp(
+            home: TopicSelectionPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The switch assistant button should NOT be present in AppBar
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byIcon(Icons.swap_horiz),
+        ),
+        findsNothing,
+      );
     });
   });
 }
