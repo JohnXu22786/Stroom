@@ -23,17 +23,19 @@ Stream<String> sseStream(String url, Map<String, String> headers, String body,
       final completeCount = lines.length - 1;
       if (completeCount <= processedLines) return;
 
-      for (var i = processedLines; i < completeCount; i++) {
-        final line = lines[i];
-        if (line.startsWith('data: ')) {
-          final data = line.substring(6).trim();
-          if (data == '[DONE]') {
-            processedLines = completeCount;
-            if (!controller.isClosed) controller.close();
-            return;
-          }
-          controller.add(line);
+    for (var i = processedLines; i < completeCount; i++) {
+      final line = lines[i];
+      if (line.startsWith('data: ')) {
+        final data = line.substring(6).trim();
+        if (data == '[DONE]') {
+          processedLines = completeCount;
+          if (!controller.isClosed) controller.close();
+          return;
         }
+        // Yield the raw SSE line; the caller (chat_api_provider.dart)
+        // strips the prefix, parses JSON, and handles content/reasoning/tool_calls.
+        controller.add(line);
+      }
       }
     processedLines = completeCount;
   });
@@ -59,6 +61,7 @@ Stream<String> sseStream(String url, Map<String, String> headers, String body,
         if (line.startsWith('data: ')) {
           final data = line.substring(6).trim();
           if (data == '[DONE]') break;
+          // Yield raw SSE line (caller strips prefix, parses JSON)
           controller.add(line);
         }
       }

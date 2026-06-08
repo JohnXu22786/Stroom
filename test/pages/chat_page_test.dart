@@ -1,9 +1,13 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stroom/pages/chat_page.dart';
+import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/utils/data_sanitizer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Helper that creates a MaterialApp wrapped in ProviderScope with
@@ -87,5 +91,107 @@ void main() {
     // Positioned widget in ChatComposerWidget not inheriting Material context
     // from the flutter_chat_ui Chat widget's Scaffold.
     // This is a pre-existing limitation in v0.2.15.
+  });
+
+  group('ChatPage JSON error detail dialog data structure', () {
+    test('DataSanitizer handles raw request data structure correctly', () {
+      // Simulate rawRequest structure built by _startStreaming()
+      final rawRequest = <String, dynamic>{
+        'url': 'https://api.example.com/chat',
+        'headers': {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer sk-****1234',
+        },
+        'body': {
+          'model': 'gpt-4',
+          'messages': [
+            {'role': 'user', 'content': 'Hello'},
+          ],
+        },
+      };
+
+      final sanitized = DataSanitizer.sanitizeForDisplay(rawRequest);
+      final encoder = const JsonEncoder.withIndent('  ');
+      final jsonStr = encoder.convert(sanitized);
+
+      // Verify JSON output is valid and contains expected fields
+      expect(jsonStr, contains('"url"'));
+      expect(jsonStr, contains('https://api.example.com/chat'));
+      expect(jsonStr, contains('"model"'));
+      expect(jsonStr, contains('gpt-4'));
+      expect(jsonStr, contains('"Authorization"'));
+      // API key is masked in headers but not sanitized (not base64)
+      expect(jsonStr, contains('sk-****1234'));
+    });
+
+    test('DataSanitizer handles error response data structure', () {
+      final rawResponse = <String, dynamic>{
+        'statusCode': 400,
+        'data': {
+          'error': {
+            'message': 'Bad Request',
+            'type': 'invalid_request_error',
+          },
+        },
+      };
+
+      final sanitized = DataSanitizer.sanitizeForDisplay(rawResponse);
+      final encoder = const JsonEncoder.withIndent('  ');
+      final jsonStr = encoder.convert(sanitized);
+
+      expect(jsonStr, contains('"statusCode"'));
+      expect(jsonStr, contains('400'));
+      expect(jsonStr, contains('Bad Request'));
+      expect(jsonStr, contains('invalid_request_error'));
+    });
+
+    test('DataSanitizer handles null/missing raw data gracefully', () {
+      // When raw data is null
+      final resultNull = DataSanitizer.sanitizeForDisplay(null);
+      expect(resultNull, isNull);
+
+      // Empty map
+      final resultEmpty = DataSanitizer.sanitizeForDisplay(<String, dynamic>{});
+      expect(resultEmpty, <String, dynamic>{});
+    });
+  });
+
+  group('ChatMessage rawRequest/rawResponse serialization for ChatPage', () {
+    test('rawRequest/rawResponse survive conversation message list serialization', () {
+      final messages = [
+        ChatMessage(role: 'user', content: 'Hello', id: 'u1'),
+        ChatMessage(
+          role: 'assistant',
+          content: '错误: API 请求失败 (HTTP 500): Server Error',
+          id: 'a1',
+          isError: true,
+          rawRequest: {'url': 'https://api.example.com/chat', 'body': {}},
+          rawResponse: {'statusCode': 500, 'data': {'error': 'Internal'}},
+        ),
+      ];
+
+      // Simulate conversation serialization (map list)
+      final serialized = messages.map((m) => m.toMap()).toList();
+      final deserialized =
+          serialized.map((m) => ChatMessage.fromMap(m)).toList();
+
+      final errorMsg = deserialized[1];
+      expect(errorMsg.isError, true);
+      expect(errorMsg.rawRequest, isNotNull);
+      expect(errorMsg.rawResponse, isNotNull);
+      expect(errorMsg.rawRequest!['url'], 'https://api.example.com/chat');
+      expect(errorMsg.rawResponse!['statusCode'], 500);
+    });
+
+    test('non-error message does not have rawRequest/rawResponse', () {
+      final msg = ChatMessage(
+        role: 'user',
+        content: 'Hello',
+        id: 'u1',
+      );
+      final map = msg.toMap();
+      expect(map.containsKey('rawRequest'), false);
+      expect(map.containsKey('rawResponse'), false);
+    });
   });
 }
