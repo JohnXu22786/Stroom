@@ -38,6 +38,7 @@ class ChatService {
   Map<String, dynamic>? _lastRequestBody;
   Map<String, dynamic>? _lastResponseData;
   Map<String, String>? _lastRequestHeaders;
+  Map<String, List<String>>? _lastResponseHeaders;
   String? _lastRequestUrl;
   int? _lastResponseStatusCode;
 
@@ -61,6 +62,8 @@ class ChatService {
       _lastRequestUrl ?? _provider?.lastRequestUrl;
   int? get lastResponseStatusCode =>
       _lastResponseStatusCode ?? _provider?.lastResponseStatusCode;
+  Map<String, List<String>>? get lastResponseHeaders =>
+      _lastResponseHeaders ?? _provider?.lastResponseHeaders;
 
   // ── Instance methods ────────────────────────────────────────────
 
