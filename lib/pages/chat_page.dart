@@ -16,6 +16,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:mime/mime.dart';
 import '../services/attachment_storage.dart';
 import '../widgets/file_preview.dart';
+import '../widgets/message_attachment_preview.dart';
+import '../utils/format_file_size.dart';
 
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
@@ -775,55 +777,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   Widget _buildMessageAttachmentPreview(Attachment att) {
-    final isImage = att.fileType == 'image';
-    final cs = Theme.of(context).colorScheme;
-    return GestureDetector(
+    return MessageAttachmentPreview(
+      attachment: att,
       onTap: () => _showAttachmentPreview(att),
-      child: Container(
-        width: 56,
-        margin: const EdgeInsets.only(right: 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: isImage
-                  ? FutureBuilder<Uint8List?>(
-                      future: AttachmentStorage.readFile(att.storagePath),
-                      builder: (ctx, snap) {
-                        if (snap.connectionState == ConnectionState.done &&
-                            snap.hasData &&
-                            snap.data != null) {
-                          return Image.memory(snap.data!, fit: BoxFit.cover);
-                        }
-                        return Icon(Icons.image_outlined, size: 18,
-                            color: cs.onSurfaceVariant);
-                      },
-                    )
-                  : Icon(Icons.insert_drive_file_outlined, size: 18,
-                      color: cs.onSurfaceVariant),
-            ),
-            const SizedBox(height: 1),
-            Text(
-              att.fileName.length > 8
-                  ? '${att.fileName.substring(0, 7)}…'
-                  : att.fileName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 9,
-                color: cs.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -840,90 +796,159 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (!mounted) return;
     final isImage = att.fileType == 'image';
     if (isImage) {
-      showDialog(
-        context: context,
-        builder: (ctx) => Dialog(
-          backgroundColor: Colors.black,
-          insetPadding: EdgeInsets.zero,
-          child: Stack(
-            children: [
-              Center(
-                child: InteractiveViewer(
-                  minScale: 0.5,
-                  maxScale: 4.0,
-                  child: Image.memory(
-                    data,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.broken_image,
-                              size: 48, color: Colors.white54),
-                          SizedBox(height: 8),
-                          Text('无法加载图片', style: TextStyle(color: Colors.white54)),
-                        ],
-                      ),
+      _showImagePreview(att, data);
+    } else {
+      _showFileInfoPreview(att);
+    }
+  }
+
+  /// Full-screen dark dialog with pinch-to-zoom image preview.
+  void _showImagePreview(Attachment att, Uint8List data) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: Image.memory(
+                  data,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.broken_image,
+                            size: 48, color: Colors.white54),
+                        SizedBox(height: 8),
+                        Text('无法加载图片', style: TextStyle(color: Colors.white54)),
+                      ],
                     ),
                   ),
                 ),
               ),
-              Positioned(
-                top: MediaQuery.of(context).padding.top + 8,
-                right: 8,
-                child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                  onPressed: () => Navigator.pop(ctx),
-                ),
+            ),
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.pop(ctx),
               ),
-              Positioned(
-                bottom: 16,
-                left: 16,
-                right: 16,
-                child: Text(
-                  att.fileName,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70, fontSize: 14),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
+            ),
+            Positioned(
+              bottom: 16,
+              left: 16,
+              right: 16,
+              child: Text(
+                att.fileName,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
-            ],
-          ),
-        ),
-      );
-    } else {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text(att.fileName),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('类型: ${att.mimeType}'),
-              const SizedBox(height: 4),
-              Text('大小: ${_formatFileSize(att.fileSize)}'),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('关闭'),
             ),
           ],
         ),
-      );
-    }
+      ),
+    );
   }
 
-  String _formatFileSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  /// Full-screen dark preview for non-image files (documents, audio, video).
+  /// Shows file icon, name, type, size, and action buttons.
+  void _showFileInfoPreview(Attachment att) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    IconData fileIcon;
+    switch (att.fileType) {
+      case 'audio':
+        fileIcon = Icons.audiotrack_outlined;
+        break;
+      case 'video':
+        fileIcon = Icons.videocam_outlined;
+        break;
+      default:
+        fileIcon = Icons.insert_drive_file_outlined;
     }
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+
+    String typeLabel;
+    switch (att.fileType) {
+      case 'audio':
+        typeLabel = '音频文件';
+        break;
+      case 'video':
+        typeLabel = '视频文件';
+        break;
+      case 'document':
+        typeLabel = '文档';
+        break;
+      default:
+        typeLabel = '文件';
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Large file icon
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(fileIcon, size: 48, color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(height: 20),
+              // File name
+              Text(
+                att.fileName,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface,
+                ),
+              ),
+              const SizedBox(height: 12),
+              // File info rows
+              _InfoRow(label: '类型', value: '$typeLabel (${att.mimeType})'),
+              const SizedBox(height: 6),
+              _InfoRow(label: '大小', value: formatFileSize(att.fileSize)),
+              const SizedBox(height: 6),
+              _InfoRow(label: '路径', value: att.storagePath),
+              const SizedBox(height: 24),
+              // Action buttons
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  TextButton.icon(
+                    onPressed: () => Navigator.pop(ctx),
+                    icon: const Icon(Icons.close, size: 18),
+                    label: const Text('关闭'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _stopStreaming() {
@@ -1568,7 +1593,7 @@ composerBuilder: (context) => ChatComposerWidget(
                                   Padding(
                                     padding: const EdgeInsets.only(left: 4, right: 4, bottom: 4),
                                     child: SizedBox(
-                                      height: 56,
+                                      height: 120,
                                       child: ListView.builder(
                                         scrollDirection: Axis.horizontal,
                                         itemCount: chatMsg!.attachments.length,
@@ -1986,6 +2011,46 @@ class _ReasoningSectionState extends State<_ReasoningSection> {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// A simple info row label: value pair used in the file info preview dialog.
+class _InfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _InfoRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 40,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 13,
+              color: cs.onSurface,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }
