@@ -186,4 +186,5 @@ class ChatAdapter {
   Map<String, String>? get lastRequestHeaders => _chatService?.lastRequestHeaders;
   String? get lastRequestUrl => _chatService?.lastRequestUrl;
   int? get lastResponseStatusCode => _chatService?.lastResponseStatusCode;
+  Map<String, List<String>>? get lastResponseHeaders => _chatService?.lastResponseHeaders;
 }

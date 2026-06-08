@@ -16,6 +16,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:mime/mime.dart';
 import '../services/attachment_storage.dart';
 import '../widgets/file_preview.dart';
+import '../widgets/message_attachment_preview.dart';
+import '../utils/format_file_size.dart';
 
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
@@ -28,6 +30,7 @@ import '../pages/camera_page.dart';
 import '../widgets/llm/jumping_dots.dart';
 import '../widgets/llm/tool_call_card.dart';
 import 'conversations_page.dart';
+import 'message_search_page.dart';
 import 'provider_config_page.dart';
 import '../utils/data_sanitizer.dart';
 
@@ -52,8 +55,16 @@ class _SearchMatch {
 
 final _isStreamingProvider = StateProvider<bool>((ref) => false);
 
+/// Search mode: within current conversation or across all conversations.
+enum _SearchMode { current, global }
+
 class ChatPage extends ConsumerStatefulWidget {
-  const ChatPage({super.key});
+  /// Optional search query to auto-activate search mode with.
+  /// When provided, the page will open in search mode with the query
+  /// pre-filled and matching text highlighted. Used by [MessageSearchPage].
+  final String? initialSearchQuery;
+
+  const ChatPage({super.key, this.initialSearchQuery});
 
   @override
   ConsumerState<ChatPage> createState() => _ChatPageState();
@@ -73,6 +84,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   String? _streamingMsgId;
 
   bool _isSearching = false;
+  _SearchMode _searchMode = _SearchMode.current;
   String _searchQuery = '';
   final List<_SearchMatch> _searchMatches = [];
   int _currentMatchIndex = 0;
@@ -114,6 +126,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _initialize());
+    // If initialSearchQuery is provided, activate search mode after init
+    if (widget.initialSearchQuery != null &&
+        widget.initialSearchQuery!.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _searchTextController.text = widget.initialSearchQuery!;
+        _isSearching = true;
+        _performSearch(widget.initialSearchQuery!);
+      });
+    }
   }
 
   String _executeCalculator(Map<String, dynamic> args) {
@@ -152,17 +174,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   void _initialize() {
     _configureAdapter();
+    // Restore saved model selection — clear stale index if out of range
     SharedPreferences.getInstance().then((prefs) {
       // Restore saved model selection — clear stale index if out of range
-      final savedIdx = prefs.getInt('selected_model_index');
-      if (savedIdx != null) {
+      final saved = prefs.getInt('selected_model_index');
+      if (saved != null) {
         final entriesState = ref.read(providerEntriesProvider);
         final models = _adapter.availableModels(entriesState);
-        if (savedIdx >= 0 && savedIdx < models.length) {
-          final model = models[savedIdx];
+        if (saved >= 0 && saved < models.length) {
+          final model = models[saved];
           _adapter.selectModel(
               entriesState, model.configIndex, model.modelIndex);
-          setState(() => _selectedModelIndex = savedIdx);
+          setState(() => _selectedModelIndex = saved);
         } else {
           prefs.remove('selected_model_index');
         }
@@ -197,7 +220,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
       final convs = ref.read(conversationsProvider);
       final conv = convs.where((c) => c.id == activeId).firstOrNull;
-      if (conv == null) return;
+      if (conv == null || conv.messages.isEmpty) {
+        if (mounted) setState(() {});
+        return;
+      }
 
       _history.clear();
       _chatSegments.clear();
@@ -212,11 +238,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       _currentMatchIndex = 0;
       final newCtrl = InMemoryChatController();
       _controller = newCtrl;
-
-      if (conv.messages.isEmpty) {
-        if (mounted) setState(() {});
-        return;
-      }
       for (final msg in conv.messages) {
         _history.add(msg);
         await _controller?.insertMessage(Message.text(
@@ -284,12 +305,21 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void _showHistory() {
     _saveMessages().then((_) {
       if (!mounted) return;
-      Navigator.push(
+      Navigator.push<String>(
         context,
         MaterialPageRoute(builder: (_) => const ConversationsPage()),
-      ).then((_) {
+      ).then((searchQuery) {
         if (!mounted) return;
         _loadConversationMessages();
+        // If the user navigated from search results, activate search mode
+        if (searchQuery != null && searchQuery.isNotEmpty) {
+          setState(() {
+            _searchTextController.text = searchQuery;
+            _searchMode = _SearchMode.current;
+            _isSearching = true;
+          });
+          _performSearch(searchQuery);
+        }
       });
     });
   }
@@ -454,10 +484,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         }
         final respData = _adapter.lastResponseData;
         final statusCode = _adapter.lastResponseStatusCode;
-        if (respData != null || statusCode != null) {
+        final respHeaders = _adapter.lastResponseHeaders;
+        if (respData != null || statusCode != null || respHeaders != null) {
           rawResponseCapture = {};
           if (statusCode != null) rawResponseCapture!['statusCode'] = statusCode;
+          if (respHeaders != null) rawResponseCapture!['headers'] = respHeaders;
           if (respData != null) rawResponseCapture!['data'] = respData;
+        } else {
+          // For network errors (DNS failure, timeout, server not found, etc.)
+          // there is no HTTP response, so capture the error message string.
+          rawResponseCapture = {
+            'error': e.toString(),
+          };
         }
       }
     } finally {
@@ -486,27 +524,35 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       }
     }
 
-    if (fullReply.isNotEmpty) {
-      final isError = fullReply.startsWith('错误:');
-      final msg = ChatMessage(
-        role: 'assistant',
-        content: fullReply,
-        id: aiMsgId,
-        isError: isError,
-        reasoningContent:
-            reasoningBuffer.isNotEmpty ? reasoningBuffer : null,
-        rawRequest: isError ? rawRequestCapture : null,
-        rawResponse: isError ? rawResponseCapture : null,
-      );
-      _history.add(msg);
-      if (reasoningBuffer.isNotEmpty) {
-        _reasoningContents[aiMsgId] = reasoningBuffer;
+    // Wrap post-stream processing in try-catch so that _isStreamingProvider
+    // is ALWAYS reset to false, even if an unexpected error occurs here.
+    // Without this, a stuck streaming flag would permanently block new messages.
+    try {
+      if (fullReply.isNotEmpty) {
+        final isError = fullReply.startsWith('错误:');
+        final msg = ChatMessage(
+          role: 'assistant',
+          content: fullReply,
+          id: aiMsgId,
+          isError: isError,
+          reasoningContent:
+              reasoningBuffer.isNotEmpty ? reasoningBuffer : null,
+          rawRequest: isError ? rawRequestCapture : null,
+          rawResponse: isError ? rawResponseCapture : null,
+        );
+        _history.add(msg);
+        if (reasoningBuffer.isNotEmpty) {
+          _reasoningContents[aiMsgId] = reasoningBuffer;
+        }
       }
+    } catch (e, s) {
+      debugPrint('[ChatPage] post-stream error: $e\n$s');
+    } finally {
+      _streamingMsgId = null;
+      ref.read(_isStreamingProvider.notifier).state = false;
+      _cancelledByUser = false;
+      if (mounted) setState(() {});
     }
-    _streamingMsgId = null;
-    ref.read(_isStreamingProvider.notifier).state = false;
-    _cancelledByUser = false;
-    if (mounted) setState(() {});
 
     await _saveMessages();
   }
@@ -698,7 +744,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final index = _history.indexWhere((m) => m.id == messageId);
     if (index == -1 || index == 0 || index >= _history.length) return;
 
-    // Remove this message and all after from history
+    // Remove this assistant message and all after from history
     try {
       if (index < _history.length) {
         final removed = _history.sublist(index);
@@ -775,55 +821,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   Widget _buildMessageAttachmentPreview(Attachment att) {
-    final isImage = att.fileType == 'image';
-    final cs = Theme.of(context).colorScheme;
-    return GestureDetector(
+    return MessageAttachmentPreview(
+      attachment: att,
       onTap: () => _showAttachmentPreview(att),
-      child: Container(
-        width: 56,
-        margin: const EdgeInsets.only(right: 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: isImage
-                  ? FutureBuilder<Uint8List?>(
-                      future: AttachmentStorage.readFile(att.storagePath),
-                      builder: (ctx, snap) {
-                        if (snap.connectionState == ConnectionState.done &&
-                            snap.hasData &&
-                            snap.data != null) {
-                          return Image.memory(snap.data!, fit: BoxFit.cover);
-                        }
-                        return Icon(Icons.image_outlined, size: 18,
-                            color: cs.onSurfaceVariant);
-                      },
-                    )
-                  : Icon(Icons.insert_drive_file_outlined, size: 18,
-                      color: cs.onSurfaceVariant),
-            ),
-            const SizedBox(height: 1),
-            Text(
-              att.fileName.length > 8
-                  ? '${att.fileName.substring(0, 7)}…'
-                  : att.fileName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 9,
-                color: cs.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -840,95 +840,168 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (!mounted) return;
     final isImage = att.fileType == 'image';
     if (isImage) {
-      showDialog(
-        context: context,
-        builder: (ctx) => Dialog(
-          backgroundColor: Colors.black,
-          insetPadding: EdgeInsets.zero,
-          child: Stack(
-            children: [
-              Center(
-                child: InteractiveViewer(
-                  minScale: 0.5,
-                  maxScale: 4.0,
-                  child: Image.memory(
-                    data,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.broken_image,
-                              size: 48, color: Colors.white54),
-                          SizedBox(height: 8),
-                          Text('无法加载图片', style: TextStyle(color: Colors.white54)),
-                        ],
-                      ),
+      _showImagePreview(att, data);
+    } else {
+      _showFileInfoPreview(att);
+    }
+  }
+
+  /// Full-screen dark dialog with pinch-to-zoom image preview.
+  void _showImagePreview(Attachment att, Uint8List data) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: Image.memory(
+                  data,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.broken_image,
+                            size: 48, color: Colors.white54),
+                        SizedBox(height: 8),
+                        Text('无法加载图片', style: TextStyle(color: Colors.white54)),
+                      ],
                     ),
                   ),
                 ),
               ),
-              Positioned(
-                top: MediaQuery.of(context).padding.top + 8,
-                right: 8,
-                child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                  onPressed: () => Navigator.pop(ctx),
-                ),
+            ),
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.pop(ctx),
               ),
-              Positioned(
-                bottom: 16,
-                left: 16,
-                right: 16,
-                child: Text(
-                  att.fileName,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70, fontSize: 14),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
+            ),
+            Positioned(
+              bottom: 16,
+              left: 16,
+              right: 16,
+              child: Text(
+                att.fileName,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
-            ],
-          ),
-        ),
-      );
-    } else {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text(att.fileName),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('类型: ${att.mimeType}'),
-              const SizedBox(height: 4),
-              Text('大小: ${_formatFileSize(att.fileSize)}'),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('关闭'),
             ),
           ],
         ),
-      );
-    }
+      ),
+    );
   }
 
-  String _formatFileSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  /// Full-screen dark preview for non-image files (documents, audio, video).
+  /// Shows file icon, name, type, size, and action buttons.
+  void _showFileInfoPreview(Attachment att) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    IconData fileIcon;
+    switch (att.fileType) {
+      case 'audio':
+        fileIcon = Icons.audiotrack_outlined;
+        break;
+      case 'video':
+        fileIcon = Icons.videocam_outlined;
+        break;
+      default:
+        fileIcon = Icons.insert_drive_file_outlined;
     }
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+
+    String typeLabel;
+    switch (att.fileType) {
+      case 'audio':
+        typeLabel = '音频文件';
+        break;
+      case 'video':
+        typeLabel = '视频文件';
+        break;
+      case 'document':
+        typeLabel = '文档';
+        break;
+      default:
+        typeLabel = '文件';
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Large file icon
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(fileIcon, size: 48, color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(height: 20),
+              // File name
+              Text(
+                att.fileName,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface,
+                ),
+              ),
+              const SizedBox(height: 12),
+              // File info rows
+              _InfoRow(label: '类型', value: '$typeLabel (${att.mimeType})'),
+              const SizedBox(height: 6),
+              _InfoRow(label: '大小', value: formatFileSize(att.fileSize)),
+              const SizedBox(height: 6),
+              _InfoRow(label: '路径', value: att.storagePath),
+              const SizedBox(height: 24),
+              // Action buttons
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  TextButton.icon(
+                    onPressed: () => Navigator.pop(ctx),
+                    icon: const Icon(Icons.close, size: 18),
+                    label: const Text('关闭'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _stopStreaming() {
     _cancelledByUser = true;
-    _adapter.cancel();
+    try {
+      _adapter.cancel();
+    } catch (e) {
+      debugPrint('[ChatPage] cancel error: $e');
+    }
     ref.read(_isStreamingProvider.notifier).state = false;
   }
 
@@ -989,10 +1062,82 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void _closeSearch() {
     setState(() {
       _isSearching = false;
+      _searchMode = _SearchMode.current;
       _searchQuery = '';
       _searchMatches.clear();
       _currentMatchIndex = 0;
       _searchTextController.clear();
+    });
+  }
+
+  Widget _buildModeChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        decoration: BoxDecoration(
+          color: selected ? cs.primaryContainer : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? cs.primary : cs.outlineVariant,
+            width: selected ? 1.0 : 0.5,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+            color: selected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openGlobalSearch() {
+    Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(builder: (_) => const MessageSearchPage()),
+    ).then((result) async {
+      if (!mounted || result == null) return;
+      final conversationId = result['conversationId'] as String?;
+      final query = result['query'] as String?;
+      if (conversationId == null || query == null || query.isEmpty) return;
+
+      // Step 1: Save current conversation's messages first (before switching)
+      await _saveMessages();
+      if (!mounted) return;
+
+      // Step 2: If switching to a different conversation, select it.
+      // The activeConversationIdProvider listener schedules
+      // _loadConversationMessages in a post-frame callback, which clears
+      // search state. Schedule search activation in a subsequent
+      // post-frame callback so it runs AFTER that load completes.
+      final activeId = ref.read(activeConversationIdProvider);
+      if (conversationId != activeId) {
+        ref.read(conversationsProvider.notifier).selectConversation(conversationId);
+      }
+
+      // Step 3: Schedule search activation for the next frame, after
+      // _loadConversationMessages has completed its synchronous part.
+      // Note: Setting _searchTextController.text triggers onChanged →
+      // _performSearch internally via the controller listener, so the
+      // explicit _performSearch call below is redundant but kept for
+      // safety in case the listener doesn't fire as expected.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          _searchTextController.text = query;
+          _isSearching = true;
+        });
+        _performSearch(query);
+      });
     });
   }
 
@@ -1218,7 +1363,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           : null,
                     ),
                     tooltip: '搜索消息',
-                    onPressed: () => setState(() => _isSearching = !_isSearching),
+                    onPressed: () => setState(() {
+                      _isSearching = !_isSearching;
+                      if (!_isSearching) _searchMode = _SearchMode.current;
+                    }),
                   ),
                   // ── Model selector ──
                   if (adapterConfigured) _buildModelSelector(),
@@ -1275,60 +1423,107 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     ),
                   ),
                 ),
-                child: Row(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.search, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: SizedBox(
-                        height: 32,
-                        child: TextField(
-                          controller: _searchTextController,
-                          autofocus: true,
-                          onChanged: _performSearch,
-                          decoration: const InputDecoration(
-                            hintText: '搜索消息...',
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                            border: OutlineInputBorder(),
+                    // Row 1: Search field + nav controls
+                    Row(
+                      children: [
+                        Icon(Icons.search, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: SizedBox(
+                            height: 32,
+                            child: TextField(
+                              controller: _searchTextController,
+                              autofocus: true,
+                              onChanged: (query) {
+                                if (_searchMode == _SearchMode.current) {
+                                  _performSearch(query);
+                                } else if (query.isNotEmpty) {
+                                  // Global mode: defer to full search page
+                                  _openGlobalSearch();
+                                }
+                              },
+                              decoration: InputDecoration(
+                                hintText: _searchMode == _SearchMode.current
+                                    ? '搜索当前对话...'
+                                    : '搜索所有对话...',
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                border: OutlineInputBorder(),
+                              ),
+                              style: const TextStyle(fontSize: 13),
+                            ),
                           ),
-                          style: const TextStyle(fontSize: 13),
                         ),
-                      ),
-                    ),
-                    if (_searchMatches.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      Text(
-                        '${_currentMatchIndex + 1}/${_searchMatches.length}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        if (_searchMode == _SearchMode.current && _searchMatches.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            '${_currentMatchIndex + 1}/${_searchMatches.length}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                        if (_searchMode == _SearchMode.current) ...[
+                          IconButton(
+                            icon: const Icon(Icons.keyboard_arrow_up, size: 20),
+                            tooltip: '上一个',
+                            onPressed: _previousMatch,
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.keyboard_arrow_down, size: 20),
+                            tooltip: '下一个',
+                            onPressed: _nextMatch,
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          ),
+                        ],
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          tooltip: '关闭搜索',
+                          onPressed: _closeSearch,
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                         ),
-                      ),
-                    ],
-                    IconButton(
-                      icon: const Icon(Icons.keyboard_arrow_up, size: 20),
-                      tooltip: '上一个',
-                      onPressed: _previousMatch,
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      ],
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.keyboard_arrow_down, size: 20),
-                      tooltip: '下一个',
-                      onPressed: _nextMatch,
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 18),
-                      tooltip: '关闭搜索',
-                      onPressed: _closeSearch,
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    // Row 2: Mode toggle chips
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        _buildModeChip(
+                          label: '当前对话',
+                          selected: _searchMode == _SearchMode.current,
+                          onTap: () {
+                            if (_searchMode != _SearchMode.current) {
+                              setState(() {
+                                _searchMode = _SearchMode.current;
+                                _searchTextController.clear();
+                                _performSearch('');
+                              });
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        _buildModeChip(
+                          label: '所有对话',
+                          selected: _searchMode == _SearchMode.global,
+                          onTap: () {
+                            if (_searchMode != _SearchMode.global) {
+                              setState(() => _searchMode = _SearchMode.global);
+                              _openGlobalSearch();
+                            }
+                          },
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -1568,7 +1763,7 @@ composerBuilder: (context) => ChatComposerWidget(
                                   Padding(
                                     padding: const EdgeInsets.only(left: 4, right: 4, bottom: 4),
                                     child: SizedBox(
-                                      height: 56,
+                                      height: 120,
                                       child: ListView.builder(
                                         scrollDirection: Axis.horizontal,
                                         itemCount: chatMsg!.attachments.length,
@@ -1986,6 +2181,46 @@ class _ReasoningSectionState extends State<_ReasoningSection> {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// A simple info row label: value pair used in the file info preview dialog.
+class _InfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _InfoRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 40,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 13,
+              color: cs.onSurface,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }

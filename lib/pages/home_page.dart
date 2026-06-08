@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../main.dart' as main_lib;
+import 'assistant_selection_page.dart';
 import 'catcatch_page.dart' hide showMediaPreview;
 import 'unified_task_list_page.dart';
 import '../catcatch/providers/catcatch_provider.dart';
 import '../catcatch/models/catcatch_task.dart' as catcatch_task;
 import '../providers/task_provider.dart';
+import '../providers/conversation_provider.dart';
 import 'chat_page.dart';
 import 'files_page.dart';
 import 'settings_page.dart';
@@ -15,6 +17,7 @@ import 'tts_create_page.dart';
 import 'video_capture_page.dart';
 import 'package:image_picker/image_picker.dart';
 import '../widgets/camera_choice_dialog.dart';
+import '../widgets/folder_picker_dialog.dart';
 
 /// 页面枚举，定义应用中的主要页面（不含加号按钮）
 enum AppPage {
@@ -340,12 +343,15 @@ class _HomePageState extends ConsumerState<HomePage> {
           );
           break;
         case 'capture':
-          showCameraChoiceDialog(context).then((choice) {
-            if (choice == CameraChoice.app) {
+          showCameraChoiceDialog(context).then((result) {
+            if (result == null) return;
+            final folder = result.folder;
+            if (result.choice == CameraChoice.app) {
               navigator.push(
-                MaterialPageRoute(builder: (_) => const CameraPage()),
+                MaterialPageRoute(
+                    builder: (_) => CameraPage(folder: folder)),
               );
-            } else if (choice == CameraChoice.system) {
+            } else if (result.choice == CameraChoice.system) {
               ImagePicker().pickImage(source: ImageSource.camera).then((file) {
                 if (file != null) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -357,9 +363,16 @@ class _HomePageState extends ConsumerState<HomePage> {
           });
           break;
         case 'capture_video':
-          navigator.push(
-            MaterialPageRoute(builder: (_) => const VideoCapturePage()),
-          );
+          FolderPickerDialog.show(
+            context,
+            title: '录像添加至文件夹',
+          ).then((folder) {
+            if (folder == null || !mounted) return;
+            navigator.push(
+              MaterialPageRoute(
+                  builder: (_) => VideoCapturePage(folder: folder)),
+            );
+          });
           break;
       }
     });
@@ -590,6 +603,15 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
+  /// 根据是否有活跃对话，决定显示聊天页面还是助手选择页
+  Widget _buildChatOrAssistantPage() {
+    final activeId = ref.watch(activeConversationIdProvider);
+    if (activeId != null) {
+      return const ChatPage();
+    }
+    return const AssistantSelectionPage();
+  }
+
   /// 构建页面内容
   Widget _buildPageContent(AppPage page) {
     switch (page) {
@@ -614,7 +636,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           ),
         );
       case AppPage.chat:
-        return const ChatPage();
+        return _buildChatOrAssistantPage();
       case AppPage.files:
         return const FilesPage();
       case AppPage.settings:
