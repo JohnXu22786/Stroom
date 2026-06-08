@@ -24,10 +24,11 @@ import '../services/chat_adapter.dart';
 import '../services/chat_service.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/provider_config.dart';
+import '../providers/assistant_provider.dart';
 import '../pages/camera_page.dart';
 import '../widgets/llm/jumping_dots.dart';
 import '../widgets/llm/tool_call_card.dart';
-import 'conversations_page.dart';
+import 'assistant_selection_page.dart';
 import 'provider_config_page.dart';
 import '../utils/data_sanitizer.dart';
 
@@ -113,7 +114,22 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       );
     }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => _initialize());
+    // Check if we have a selected assistant and active conversation
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final assistantId = ref.read(selectedAssistantIdProvider);
+      final activeConvId = ref.read(activeConversationIdProvider);
+
+      if (assistantId == null || activeConvId == null) {
+        // If no assistant or topic selected, go back to assistant selection
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const AssistantSelectionPage()),
+        );
+        return;
+      }
+
+      _initialize();
+    });
   }
 
   String _executeCalculator(Map<String, dynamic> args) {
@@ -201,6 +217,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
       _history.clear();
       _chatSegments.clear();
+      _reasoningContents.clear();
       _streamingMsgId = null;
       _controller?.dispose();
       _messageKeys.clear();
@@ -225,6 +242,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           text: msg.content,
           createdAt: msg.createdAt,
         ));
+        // Restore reasoning content for assistant messages so the UI
+        // shows the reasoning chain even after reloading the conversation.
+        if (msg.role == 'assistant' && msg.reasoningContent != null) {
+          _reasoningContents[msg.id] = msg.reasoningContent!;
+        }
       }
       if (mounted) setState(() {});
     } catch (e, s) {
@@ -261,45 +283,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
   }
 
-  void _newConversation() {
-    if (ref.read(_isStreamingProvider)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('请等待当前消息生成完成')),
-        );
-      }
-      return;
-    }
-    _saveMessages().then((_) {
-      ref.read(conversationsProvider.notifier).createConversation();
-      _history.clear();
-      _chatSegments.clear();
-      _streamingMsgId = null;
-      _controller?.dispose();
-      final newCtrl = InMemoryChatController();
-      setState(() => _controller = newCtrl);
-    });
-  }
-
-  void _showHistory() {
-    _saveMessages().then((_) {
-      if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const ConversationsPage()),
-      ).then((_) {
-        if (!mounted) return;
-        _loadConversationMessages();
-      });
-    });
-  }
-
   Future<void> _onMessageSend(String text, List<Attachment> attachments) async {
     if (ref.read(_isStreamingProvider)) return;
 
     final convId = ref.read(activeConversationIdProvider);
     if (convId == null) {
-      ref.read(conversationsProvider.notifier).createConversation();
+      final assistantId = ref.read(selectedAssistantIdProvider);
+      ref.read(conversationsProvider.notifier).createConversation(
+            assistantId: assistantId,
+          );
     }
 
     final userMsgId = 'u${DateTime.now().millisecondsSinceEpoch}';
@@ -356,10 +348,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
 
     try {
+      // Get the assistant's system prompt
+      final assistant = ref.read(selectedAssistantProvider);
+      final systemPrompt = assistant?.prompt;
+
       final stream = _adapter.sendStreamWithTools(
         text,
         history: _history,
         reasoning: _reasoningEnabled,
+        systemPrompt: systemPrompt,
         tools: const [
           ToolDefinition(
             name: 'calculator',
@@ -389,6 +386,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             }
             fullReply += e.text;
             textBeforeToolCall += e.text;
+            // Progressively show reasoning content as it arrives
+            if (_reasoningEnabled) {
+              final currentReasoning = _adapter.reasoningContent;
+              if (currentReasoning.isNotEmpty) {
+                _reasoningContents[aiMsgId] = currentReasoning;
+              }
+            }
             final now = DateTime.now();
             if (now.difference(lastUpdate) >= minInterval) {
               lastUpdate = now;
@@ -584,6 +588,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         final removed = _history.sublist(index);
         _history.removeRange(index, _history.length);
         for (final r in removed) {
+          _reasoningContents.remove(r.id);
+          _chatSegments.remove(r.id);
           final ctrlMsg =
               _controller?.messages.where((m) => m.id == r.id).firstOrNull;
           if (ctrlMsg != null) {
@@ -679,6 +685,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         final removed = _history.sublist(index);
         _history.removeRange(index, _history.length);
         for (final r in removed) {
+          _reasoningContents.remove(r.id);
+          _chatSegments.remove(r.id);
           final ctrlMsg =
               _controller?.messages.where((m) => m.id == r.id).firstOrNull;
           if (ctrlMsg != null) {
@@ -704,6 +712,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         final removed = _history.sublist(index);
         _history.removeRange(index, _history.length);
         for (final r in removed) {
+          _reasoningContents.remove(r.id);
+          _chatSegments.remove(r.id);
           final ctrlMsg =
               _controller?.messages.where((m) => m.id == r.id).firstOrNull;
           if (ctrlMsg != null) {
@@ -738,6 +748,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     setState(() {
       _history.removeAt(index);
+      _reasoningContents.remove(messageId);
+      _chatSegments.remove(messageId);
     });
 
     final msgToRemove = _controller?.messages.where((m) => m.id == messageId).firstOrNull;
@@ -1116,11 +1128,82 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
   }
 
+  MarkdownConfig _buildMarkdownConfig(BuildContext context, bool isDark) {
+    final theme = Theme.of(context);
+    return MarkdownConfig(configs: [
+      PConfig(
+        textStyle: TextStyle(
+          fontSize: 16,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      H1Config(
+        style: TextStyle(
+          fontSize: 32,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      H2Config(
+        style: TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      H3Config(
+        style: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      H4Config(
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      H5Config(
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      H6Config(
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      LinkConfig(
+        style: TextStyle(
+          color: theme.colorScheme.primary,
+          decoration: TextDecoration.underline,
+        ),
+      ),
+      CodeConfig(
+        style: TextStyle(
+          backgroundColor: theme.colorScheme.surfaceContainerHighest,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      PreConfig(
+        decoration: BoxDecoration(
+          color: isDark ? Colors.grey[850] : Colors.grey[200],
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final markdownConfig =
-        isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig;
+    final markdownConfig = _buildMarkdownConfig(context, isDark);
     final adapterConfigured = _adapter.isConfigured;
     final controller = _controller;
     final isStreaming = ref.watch(_isStreamingProvider);
@@ -1146,6 +1229,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     // Get conversation title
     final activeId = ref.watch(activeConversationIdProvider);
     final conversations = ref.watch(conversationsProvider);
+    final selectedAssistant = ref.watch(selectedAssistantProvider);
     String title = '新对话';
     if (activeId != null) {
       final conv = conversations.where((c) => c.id == activeId).firstOrNull;
@@ -1177,6 +1261,32 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       onLongPress: () => setState(() => _developerMode = !_developerMode),
                       child: Row(
                         children: [
+                          // Assistant emoji + name
+                          if (selectedAssistant != null) ...[
+                            Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              child: Text(
+                                selectedAssistant.emoji,
+                                style: const TextStyle(fontSize: 18),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.5),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                selectedAssistant.name,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                ),
+                              ),
+                            ),
+                          ],
                           Flexible(
                             child: Text(
                               title,
@@ -1240,16 +1350,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                 'reasoning_enabled', _reasoningEnabled));
                       },
                     ),
-                  IconButton(
-                    icon: const Icon(Icons.history),
-                    tooltip: '历史记录',
-                    onPressed: _showHistory,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.add),
-                    tooltip: '新对话',
-                    onPressed: _newConversation,
-                  ),
                   // ── Stop button ──
                   if (isStreaming)
                     IconButton(
