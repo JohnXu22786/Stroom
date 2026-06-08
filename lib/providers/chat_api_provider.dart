@@ -146,6 +146,8 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
 
   /// Mask API key for display, showing only first 8 chars and last 4 chars.
   String _maskApiKey(String key) {
+    if (key.isEmpty) return '****';
+    if (key.length <= 4) return '${key.substring(0, 1)}***';
     if (key.length <= 16) return '${key.substring(0, 4)}****';
     return '${key.substring(0, 8)}...${key.substring(key.length - 4)}';
   }
@@ -289,6 +291,12 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         jsonEncode(body),
         cancelToken: cancelToken,
       )) {
+        // Guard: both sse implementations yield lines starting with "data: ",
+        // but be defensive in case a future implementation forgets the prefix.
+        if (!event.startsWith('data: ')) {
+          debugPrint('chat_api_provider: skipping unexpected SSE event (no data: prefix)');
+          continue;
+        }
         final dataStr = event.substring('data: '.length).trim();
         if (dataStr == '[DONE]') break;
 
