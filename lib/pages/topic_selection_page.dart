@@ -216,20 +216,15 @@ class TopicSelectionPage extends ConsumerWidget {
     ref.read(conversationsProvider.notifier)
         .createConversation(assistantId: assistantId);
 
-    final activeId = ref.read(activeConversationIdProvider);
-    if (activeId != null) {
-      // Pop back to home page — it will detect the active conversation
-      // and show ChatPage in the "对话" tab.
-      Navigator.of(context).pop();
-    }
+    // Navigate to chat page within the chat tab's nested navigator
+    Navigator.of(context).pushNamed('/chat');
   }
 
   void _onTopicSelected(
       BuildContext context, WidgetRef ref, Conversation topic) {
     ref.read(conversationsProvider.notifier).selectConversation(topic.id);
-    // Pop back to home page — it will detect the active conversation
-    // and show ChatPage in the "对话" tab.
-    Navigator.of(context).pop();
+    // Navigate to chat page within the chat tab's nested navigator
+    Navigator.of(context).pushNamed('/chat');
   }
 
   void _deleteTopic(

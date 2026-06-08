@@ -12,6 +12,7 @@ Widget createTestApp({
   List<Assistant>? assistants,
   String? selectedAssistantId,
   Widget? home,
+  Map<String, WidgetBuilder>? extraRoutes,
 }) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
@@ -35,6 +36,10 @@ Widget createTestApp({
     ],
     child: MaterialApp(
       home: home ?? const AssistantSelectionPage(),
+      routes: {
+        '/topic-selection': (_) => const TopicSelectionPage(),
+        if (extraRoutes != null) ...extraRoutes,
+      },
     ),
   );
 }
