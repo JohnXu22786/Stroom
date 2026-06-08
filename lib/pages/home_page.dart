@@ -3,12 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../main.dart' as main_lib;
 import 'assistant_selection_page.dart';
+import 'topic_selection_page.dart';
 import 'catcatch_page.dart' hide showMediaPreview;
 import 'unified_task_list_page.dart';
 import '../catcatch/providers/catcatch_provider.dart';
 import '../catcatch/models/catcatch_task.dart' as catcatch_task;
 import '../providers/task_provider.dart';
-import '../providers/conversation_provider.dart';
 import 'chat_page.dart';
 import 'files_page.dart';
 import 'settings_page.dart';
@@ -42,6 +42,7 @@ class HomePage extends ConsumerStatefulWidget {
 
 class _HomePageState extends ConsumerState<HomePage> {
   late PageController _pageController;
+  final _chatNavigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
@@ -53,6 +54,17 @@ class _HomePageState extends ConsumerState<HomePage> {
   void dispose() {
     _pageController.dispose();
     super.dispose();
+  }
+
+  /// Resets the chat tab's nested navigator so it always shows
+  /// [AssistantSelectionPage] when the chat tab is entered.
+  void _resetChatNavigator() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_chatNavigatorKey.currentState != null) {
+        _chatNavigatorKey.currentState!
+            .popUntil((route) => route.isFirst);
+      }
+    });
   }
 
   /// 根据屏幕宽度判断是否为移动设备（宽度小于600像素）
@@ -448,6 +460,9 @@ class _HomePageState extends ConsumerState<HomePage> {
         ref.read(selectedPageProvider.notifier).state =
             AppPage.values[pageIndex];
         _pageController.jumpToPage(pageIndex);
+        if (AppPage.values[pageIndex] == AppPage.chat) {
+          _resetChatNavigator();
+        }
       },
       labelType: NavigationRailLabelType.all,
       destinations: [
@@ -543,6 +558,9 @@ class _HomePageState extends ConsumerState<HomePage> {
         ref.read(selectedPageProvider.notifier).state =
             AppPage.values[pageIndex];
         _pageController.jumpToPage(pageIndex);
+        if (AppPage.values[pageIndex] == AppPage.chat) {
+          _resetChatNavigator();
+        }
       },
       destinations: [
         NavigationDestination(
@@ -603,13 +621,38 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  /// 根据是否有活跃对话，决定显示聊天页面还是助手选择页
+  /// 聊天标签页内容：嵌套导航器，始终以助手选择页为根路由。
+  /// 用户流程：选择助手 → 选择话题 → 聊天页面。
+  /// 每次进入聊天标签页时导航器会被重置到根路由（助手选择页）。
   Widget _buildChatOrAssistantPage() {
-    final activeId = ref.watch(activeConversationIdProvider);
-    if (activeId != null) {
-      return const ChatPage();
-    }
-    return const AssistantSelectionPage();
+    return Navigator(
+      key: _chatNavigatorKey,
+      initialRoute: '/assistant-selection',
+      onGenerateRoute: (settings) {
+        switch (settings.name) {
+          case '/assistant-selection':
+            return MaterialPageRoute(
+              builder: (_) => const AssistantSelectionPage(),
+              settings: settings,
+            );
+          case '/topic-selection':
+            return MaterialPageRoute(
+              builder: (_) => const TopicSelectionPage(),
+              settings: settings,
+            );
+          case '/chat':
+            return MaterialPageRoute(
+              builder: (_) => const ChatPage(),
+              settings: settings,
+            );
+          default:
+            return MaterialPageRoute(
+              builder: (_) => const AssistantSelectionPage(),
+              settings: settings,
+            );
+        }
+      },
+    );
   }
 
   /// 构建页面内容
