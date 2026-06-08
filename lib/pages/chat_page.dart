@@ -271,8 +271,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final llmEntry =
         entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
     if (llmEntry != null) {
-      Navigator.push(
-        context,
+      Navigator.of(context, rootNavigator: true).push(
         MaterialPageRoute(
           builder: (_) => ProviderConfigPage(entryId: llmEntry.id),
         ),
@@ -305,8 +304,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void _showHistory() {
     _saveMessages().then((_) {
       if (!mounted) return;
-      Navigator.push<String>(
-        context,
+      Navigator.of(context, rootNavigator: true).push<String>(
         MaterialPageRoute(builder: (_) => const ConversationsPage()),
       ).then((searchQuery) {
         if (!mounted) return;
@@ -1101,8 +1099,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   void _openGlobalSearch() {
-    Navigator.push<Map<String, dynamic>>(
-      context,
+    Navigator.of(context, rootNavigator: true).push<Map<String, dynamic>>(
       MaterialPageRoute(builder: (_) => const MessageSearchPage()),
     ).then((result) async {
       if (!mounted || result == null) return;
@@ -1317,6 +1314,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               ),
               child: Row(
                 children: [
+                  // Back button when inside nested navigator and not first route
+                  if (Navigator.of(context).canPop())
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      tooltip: 'Back',
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
                   Expanded(
                     child: GestureDetector(
                       onLongPress: () => setState(() => _developerMode = !_developerMode),
@@ -2443,8 +2447,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
     if (choice == null) return;
     try {
       if (choice == CameraChoice.app) {
-        final result = await Navigator.push<String>(
-          context,
+        final result = await Navigator.of(context, rootNavigator: true).push<String>(
           MaterialPageRoute(builder: (_) => const CameraPage()),
         );
         if (result != null && result.isNotEmpty) {
