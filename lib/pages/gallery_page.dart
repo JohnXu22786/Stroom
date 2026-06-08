@@ -227,14 +227,26 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   // ====================================================================
 
   Future<void> _takePhoto() async {
-    final choice = await showCameraChoiceDialog(context);
-    if (choice == null || !mounted) return;
+    final folders = ref.read(imageFolderListProvider);
+    final result = await showCameraChoiceDialog(
+      context,
+      initialFolder: _currentFolder,
+      availableFolders: folders,
+      onCreateFolder: (name) async {
+        await ref.read(imageRecordsProvider.notifier).createFolder(name);
+        await ref.read(imageFolderListProvider.notifier).loadFolders();
+        return null;
+      },
+    );
+    if (result == null || !mounted) return;
+    final selectedFolder = result.folder;
 
-    String? result;
-    if (choice == CameraChoice.app) {
-      result = await Navigator.push<String>(
+    String? filePath;
+    if (result.choice == CameraChoice.app) {
+      filePath = await Navigator.push<String>(
         context,
-        MaterialPageRoute(builder: (_) => CameraPage(folder: _currentFolder)),
+        MaterialPageRoute(
+            builder: (_) => CameraPage(folder: selectedFolder)),
       );
     } else {
       try {
@@ -258,9 +270,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
             format: format,
             createdAt: DateTime.now(),
             size: bytes.length,
-            folder: _currentFolder,
+            folder: selectedFolder,
           ));
-          result = await ImageManifest.readFilePath(fileName);
+          filePath = await ImageManifest.readFilePath(fileName);
         }
       } catch (e) {
         if (mounted) {
@@ -274,7 +286,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     await ref.read(imageRecordsProvider.notifier).loadRecords();
     await ref.read(imageFolderListProvider.notifier).loadFolders();
     if (mounted) {
-      if (result != null && result.isNotEmpty) {
+      if (filePath != null && filePath.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
               content: Text('照片已保存'), duration: Duration(seconds: 2)),

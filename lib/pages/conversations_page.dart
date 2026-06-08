@@ -1,8 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/chat_message.dart';
 import '../providers/conversation_provider.dart';
 import '../services/attachment_storage.dart';
+
+/// Helper: count message content matches in a conversation for a query.
+int _countMessageMatches(Conversation conv, String query) {
+  if (query.isEmpty) return 0;
+  final lowerQuery = query.toLowerCase();
+  int count = 0;
+  for (final msg in conv.messages) {
+    final lowerContent = msg.content.toLowerCase();
+    int start = 0;
+    while (true) {
+      final idx = lowerContent.indexOf(lowerQuery, start);
+      if (idx == -1) break;
+      count++;
+      start = idx + lowerQuery.length;
+    }
+  }
+  return count;
+}
 
 class ConversationsPage extends ConsumerStatefulWidget {
   const ConversationsPage({super.key});
@@ -16,6 +35,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
   bool _selectionMode = false;
   final Set<String> _selectedIds = {};
   final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void dispose() {
@@ -45,14 +65,18 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
 
   List<Conversation> _filteredConversations(List<Conversation> conversations) {
     final query = _searchController.text.trim().toLowerCase();
+    _searchQuery = query;
     var result = _sortedConversations(conversations);
     if (query.isNotEmpty) {
-      result = result
-          .where((c) {
-            final displayTitle = c.title.isEmpty ? '新对话' : c.title;
-            return displayTitle.toLowerCase().contains(query);
-          })
-          .toList();
+      // Search both conversation titles AND message content
+      result = result.where((c) {
+        // Check title match
+        final displayTitle = c.title.isEmpty ? '新对话' : c.title;
+        if (displayTitle.toLowerCase().contains(query)) return true;
+        // Check message content match
+        if (_countMessageMatches(c, query) > 0) return true;
+        return false;
+      }).toList();
     }
     return result;
   }
@@ -210,7 +234,9 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
           .read(conversationsProvider.notifier)
           .selectConversation(conv.id);
     }
-    Navigator.of(context).pop();
+    // Pass the current search query back so the chat page can activate search
+    final query = _searchQuery.isNotEmpty ? _searchQuery : null;
+    Navigator.of(context).pop(query);
   }
 
   Widget _buildEmptyState(ColorScheme cs) {
@@ -246,11 +272,11 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                 controller: _searchController,
                 autofocus: true,
                 decoration: InputDecoration(
-                  hintText: '搜索对话...',
+                  hintText: '搜索所有对话中的消息...',
                   border: InputBorder.none,
                   hintStyle: TextStyle(color: cs.onSurfaceVariant),
                 ),
-                onChanged: (_) => setState(() {}),
+                onChanged: (value) => setState(() {}),
               ),
             )
           : AppBar(
@@ -391,6 +417,9 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                 ),
               ),
             ),
+            // Match count badge when searching globally
+            if (_searchQuery.isNotEmpty)
+              _buildMatchBadge(conv, cs),
           ],
         ),
         subtitle: Text(
@@ -485,5 +514,28 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
           }
         },
       );
+  }
+
+  Widget _buildMatchBadge(Conversation conv, ColorScheme cs) {
+    final matchCount = _countMessageMatches(conv, _searchQuery);
+    if (matchCount == 0) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        decoration: BoxDecoration(
+          color: cs.primaryContainer,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          '$matchCount',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: cs.onPrimaryContainer,
+          ),
+        ),
+      ),
+    );
   }
 }
