@@ -218,7 +218,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
       _history.clear();
       _chatSegments.clear();
-      _reasoningContents.clear();
       _streamingMsgId = null;
       _controller?.dispose();
       _messageKeys.clear();
@@ -243,11 +242,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           text: msg.content,
           createdAt: msg.createdAt,
         ));
-        // Restore reasoning content for assistant messages so the UI
-        // shows the reasoning chain even after reloading the conversation.
-        if (msg.role == 'assistant' && msg.reasoningContent != null) {
-          _reasoningContents[msg.id] = msg.reasoningContent!;
-        }
       }
       if (mounted) setState(() {});
     } catch (e, s) {
@@ -301,7 +295,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
       _history.clear();
       _chatSegments.clear();
-      _reasoningContents.clear();
       _streamingMsgId = null;
       _controller?.dispose();
       final newCtrl = InMemoryChatController();
@@ -425,13 +418,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             }
             fullReply += e.text;
             textBeforeToolCall += e.text;
-            // Progressively show reasoning content as it arrives
-            if (_reasoningEnabled) {
-              final currentReasoning = _adapter.reasoningContent;
-              if (currentReasoning.isNotEmpty) {
-                _reasoningContents[aiMsgId] = currentReasoning;
-              }
-            }
             final now = DateTime.now();
             if (now.difference(lastUpdate) >= minInterval) {
               lastUpdate = now;
@@ -627,8 +613,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         final removed = _history.sublist(index);
         _history.removeRange(index, _history.length);
         for (final r in removed) {
-          _reasoningContents.remove(r.id);
-          _chatSegments.remove(r.id);
           final ctrlMsg =
               _controller?.messages.where((m) => m.id == r.id).firstOrNull;
           if (ctrlMsg != null) {
@@ -724,8 +708,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         final removed = _history.sublist(index);
         _history.removeRange(index, _history.length);
         for (final r in removed) {
-          _reasoningContents.remove(r.id);
-          _chatSegments.remove(r.id);
           final ctrlMsg =
               _controller?.messages.where((m) => m.id == r.id).firstOrNull;
           if (ctrlMsg != null) {
@@ -751,8 +733,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         final removed = _history.sublist(index);
         _history.removeRange(index, _history.length);
         for (final r in removed) {
-          _reasoningContents.remove(r.id);
-          _chatSegments.remove(r.id);
           final ctrlMsg =
               _controller?.messages.where((m) => m.id == r.id).firstOrNull;
           if (ctrlMsg != null) {
@@ -787,8 +767,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     setState(() {
       _history.removeAt(index);
-      _reasoningContents.remove(messageId);
-      _chatSegments.remove(messageId);
     });
 
     final msgToRemove = _controller?.messages.where((m) => m.id == messageId).firstOrNull;
