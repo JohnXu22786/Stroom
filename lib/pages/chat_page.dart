@@ -454,10 +454,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         }
         final respData = _adapter.lastResponseData;
         final statusCode = _adapter.lastResponseStatusCode;
-        if (respData != null || statusCode != null) {
+        final respHeaders = _adapter.lastResponseHeaders;
+        if (respData != null || statusCode != null || respHeaders != null) {
           rawResponseCapture = {};
           if (statusCode != null) rawResponseCapture!['statusCode'] = statusCode;
+          if (respHeaders != null) rawResponseCapture!['headers'] = respHeaders;
           if (respData != null) rawResponseCapture!['data'] = respData;
+        } else {
+          // For network errors (DNS failure, timeout, server not found, etc.)
+          // there is no HTTP response, so capture the error message string.
+          rawResponseCapture = {
+            'error': e.toString(),
+          };
         }
       }
     } finally {
@@ -486,27 +494,35 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       }
     }
 
-    if (fullReply.isNotEmpty) {
-      final isError = fullReply.startsWith('错误:');
-      final msg = ChatMessage(
-        role: 'assistant',
-        content: fullReply,
-        id: aiMsgId,
-        isError: isError,
-        reasoningContent:
-            reasoningBuffer.isNotEmpty ? reasoningBuffer : null,
-        rawRequest: isError ? rawRequestCapture : null,
-        rawResponse: isError ? rawResponseCapture : null,
-      );
-      _history.add(msg);
-      if (reasoningBuffer.isNotEmpty) {
-        _reasoningContents[aiMsgId] = reasoningBuffer;
+    // Wrap post-stream processing in try-catch so that _isStreamingProvider
+    // is ALWAYS reset to false, even if an unexpected error occurs here.
+    // Without this, a stuck streaming flag would permanently block new messages.
+    try {
+      if (fullReply.isNotEmpty) {
+        final isError = fullReply.startsWith('错误:');
+        final msg = ChatMessage(
+          role: 'assistant',
+          content: fullReply,
+          id: aiMsgId,
+          isError: isError,
+          reasoningContent:
+              reasoningBuffer.isNotEmpty ? reasoningBuffer : null,
+          rawRequest: isError ? rawRequestCapture : null,
+          rawResponse: isError ? rawResponseCapture : null,
+        );
+        _history.add(msg);
+        if (reasoningBuffer.isNotEmpty) {
+          _reasoningContents[aiMsgId] = reasoningBuffer;
+        }
       }
+    } catch (e, s) {
+      debugPrint('[ChatPage] post-stream error: $e\n$s');
+    } finally {
+      _streamingMsgId = null;
+      ref.read(_isStreamingProvider.notifier).state = false;
+      _cancelledByUser = false;
+      if (mounted) setState(() {});
     }
-    _streamingMsgId = null;
-    ref.read(_isStreamingProvider.notifier).state = false;
-    _cancelledByUser = false;
-    if (mounted) setState(() {});
 
     await _saveMessages();
   }
@@ -928,7 +944,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   void _stopStreaming() {
     _cancelledByUser = true;
-    _adapter.cancel();
+    try {
+      _adapter.cancel();
+    } catch (e) {
+      debugPrint('[ChatPage] cancel error: $e');
+    }
     ref.read(_isStreamingProvider.notifier).state = false;
   }
 
