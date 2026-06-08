@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/assistant.dart';
 import '../providers/assistant_provider.dart';
-import 'topic_selection_page.dart';
 
 /// First page in the chat flow: select an assistant.
 /// Displays assistants in a grid of cards, similar to Cherry Studio's design.
@@ -82,11 +81,8 @@ class AssistantSelectionPage extends ConsumerWidget {
       BuildContext context, WidgetRef ref, Assistant assistant) {
     // Set the selected assistant
     ref.read(selectedAssistantIdProvider.notifier).state = assistant.id;
-    // Navigate to topic selection
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const TopicSelectionPage()),
-    );
+    // Navigate to topic selection within the chat tab's nested navigator
+    Navigator.of(context).pushNamed('/topic-selection');
   }
 
   void _showCreateAssistantDialog(BuildContext context, WidgetRef ref) {
