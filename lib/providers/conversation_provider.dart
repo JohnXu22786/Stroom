@@ -8,6 +8,76 @@ import 'package:uuid/uuid.dart';
 import '../models/chat_message.dart';
 
 // ============================================================================
+// Helper: migrate old conversations with null assistantId to default assistant
+// ============================================================================
+
+/// Migrates old conversations with null assistantId to the default assistant.
+///
+/// Old conversations created before the multi-assistant feature had
+/// null assistantId, making them invisible when filtered by assistant.
+/// This migration assigns them to the default assistant (first in list).
+///
+/// Guarded by the 'migrated_old_conversations' SharedPreferences flag
+/// to ensure it runs only once.
+///
+/// Returns the list of migrated [Conversation]s (in-memory) so callers can
+/// update their state, or `null` if migration was skipped or no assistants
+/// exist yet.
+Future<List<Conversation>?> migrateConversationsFromPrefs(
+    SharedPreferences prefs) async {
+  try {
+    final alreadyMigrated =
+        prefs.getBool('migrated_old_conversations') ?? false;
+    if (alreadyMigrated) return null;
+
+    // Read the default assistant from the assistants store
+    final assistantsJson = prefs.getString('assistants');
+    if (assistantsJson == null || assistantsJson.isEmpty) {
+      return null; // No assistants persisted yet, migration will run next time
+    }
+
+    final assistantsList = (jsonDecode(assistantsJson) as List)
+        .cast<Map<String, dynamic>>();
+    if (assistantsList.isEmpty) {
+      return null; // No assistants, nothing to migrate to
+    }
+    final defaultAssistantId = assistantsList.first['id'] as String;
+
+    // Read and migrate conversations
+    final conversationsJson = prefs.getString('conversations');
+    if (conversationsJson == null) return null;
+
+    final conversationList = (jsonDecode(conversationsJson) as List)
+        .cast<Map<String, dynamic>>();
+    bool changed = false;
+
+    for (final conv in conversationList) {
+      if (conv['assistantId'] == null) {
+        conv['assistantId'] = defaultAssistantId;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      await prefs.setString(
+          'conversations', jsonEncode(conversationList));
+      debugPrint(
+          'Migrated old conversations to default assistant ($defaultAssistantId)');
+    }
+
+    await prefs.setBool('migrated_old_conversations', true);
+
+    // Return the migrated conversations for in-memory state update
+    return conversationList
+        .map((m) => Conversation.fromMap(m))
+        .toList();
+  } catch (e) {
+    debugPrint('Failed to migrate old conversations: $e');
+    return null;
+  }
+}
+
+// ============================================================================
 // Conversation model
 // ============================================================================
 
@@ -19,6 +89,7 @@ class Conversation {
   List<ChatMessage> messages;
   bool isPinned;
   int sortOrder;
+  String? assistantId;
 
   Conversation({
     String? id,
@@ -28,6 +99,7 @@ class Conversation {
     List<ChatMessage>? messages,
     this.isPinned = false,
     this.sortOrder = 0,
+    this.assistantId,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now(),
@@ -41,6 +113,7 @@ class Conversation {
         'messages': messages.map((m) => m.toMap()).toList(),
         'isPinned': isPinned,
         'sortOrder': sortOrder,
+        if (assistantId != null) 'assistantId': assistantId,
       };
 
   factory Conversation.fromMap(Map<String, dynamic> map) => Conversation(
@@ -59,6 +132,7 @@ class Conversation {
             [],
         isPinned: map['isPinned'] as bool? ?? false,
         sortOrder: map['sortOrder'] as int? ?? 0,
+        assistantId: map['assistantId'] as String?,
       );
 
   @override
@@ -103,6 +177,15 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       } else {
         state = [];
       }
+
+      // Migrate old conversations with null assistantId to default assistant.
+      // This runs before the active conversation ID is restored so the UI
+      // sees migrated data from the first frame.
+      final migrated = await migrateConversationsFromPrefs(prefs);
+      if (migrated != null) {
+        state = migrated;
+      }
+
       // Restore last active conversation
       final activeId = prefs.getString('active_conversation_id');
       if (activeId != null && state.any((c) => c.id == activeId)) {
@@ -169,13 +252,14 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   ///
   /// 不在此处持久化（避免与后续 updateMessages 的持久化竞争），
   /// 由 chat_provider 的 listener 负责持久化带消息的状态。
-  String createConversation() {
+  String createConversation({String? assistantId}) {
     final now = DateTime.now();
     final conv = Conversation(
       title: '',
       createdAt: now,
       updatedAt: now,
       messages: [],
+      assistantId: assistantId,
     );
     state = [...state, conv];
     _ref.read(activeConversationIdProvider.notifier).state = conv.id;

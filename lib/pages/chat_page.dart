@@ -167,9 +167,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         } else {
           prefs.remove('selected_model_index');
         }
-        } else {
-          prefs.remove('selected_model_index');
-        }
       }
       // Restore saved reasoning toggle
       final savedReasoning = prefs.getBool('reasoning_enabled');

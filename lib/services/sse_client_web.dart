@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:html' as html;
 
 import 'package:dio/dio.dart';
@@ -21,33 +20,21 @@ Stream<String> sseStream(String url, Map<String, String> headers, String body,
     final fullText = xhr.responseText ?? '';
     final lines = fullText.split('\n');
     // 最后一行可能不完整，只处理前面完整的行
-    final completeCount = lines.length - 1;
-    if (completeCount <= processedLines) return;
+      final completeCount = lines.length - 1;
+      if (completeCount <= processedLines) return;
 
-    for (var i = processedLines; i < completeCount; i++) {
-      final line = lines[i];
-      if (line.startsWith('data: ')) {
-        final data = line.substring(6).trim();
-        if (data == '[DONE]') {
-          processedLines = completeCount;
-          if (!controller.isClosed) controller.close();
-          return;
-        }
-        try {
-          final json = jsonDecode(data) as Map<String, dynamic>;
-          final choices = json['choices'] as List<dynamic>;
-          if (choices.isNotEmpty) {
-            final delta = choices[0]['delta'] as Map<String, dynamic>?;
-            final content = delta?['content'] as String?;
-            if (content != null && content.isNotEmpty) {
-              controller.add(content);
-            }
+      for (var i = processedLines; i < completeCount; i++) {
+        final line = lines[i];
+        if (line.startsWith('data: ')) {
+          final data = line.substring(6).trim();
+          if (data == '[DONE]') {
+            processedLines = completeCount;
+            if (!controller.isClosed) controller.close();
+            return;
           }
-        } catch (e) {
-          print('sse_client_web: failed to parse SSE chunk: $e');
+          controller.add(line);
         }
       }
-    }
     processedLines = completeCount;
   });
 
@@ -72,20 +59,7 @@ Stream<String> sseStream(String url, Map<String, String> headers, String body,
         if (line.startsWith('data: ')) {
           final data = line.substring(6).trim();
           if (data == '[DONE]') break;
-          try {
-            final json = jsonDecode(data) as Map<String, dynamic>;
-            final choices = json['choices'] as List<dynamic>?;
-            if (choices != null && choices.isNotEmpty) {
-              final delta = choices[0]['delta'] as Map<String, dynamic>?;
-              if (delta != null && delta['content'] != null) {
-                controller.add(delta['content'] as String);
-              }
-            }
-          } catch (e) {
-            if (e is FormatException) {
-              print('SSE parse error in onLoadEnd: $e');
-            }
-          }
+          controller.add(line);
         }
       }
     }
