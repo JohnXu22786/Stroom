@@ -174,17 +174,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   void _initialize() {
     _configureAdapter();
+    // Restore saved model selection — clear stale index if out of range
     SharedPreferences.getInstance().then((prefs) {
       // Restore saved model selection — clear stale index if out of range
-      final savedIdx = prefs.getInt('selected_model_index');
-      if (savedIdx != null) {
+      final saved = prefs.getInt('selected_model_index');
+      if (saved != null) {
         final entriesState = ref.read(providerEntriesProvider);
         final models = _adapter.availableModels(entriesState);
-        if (savedIdx >= 0 && savedIdx < models.length) {
-          final model = models[savedIdx];
+        if (saved >= 0 && saved < models.length) {
+          final model = models[saved];
           _adapter.selectModel(
               entriesState, model.configIndex, model.modelIndex);
-          setState(() => _selectedModelIndex = savedIdx);
+          setState(() => _selectedModelIndex = saved);
         } else {
           prefs.remove('selected_model_index');
         }
@@ -219,7 +220,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
       final convs = ref.read(conversationsProvider);
       final conv = convs.where((c) => c.id == activeId).firstOrNull;
-      if (conv == null) return;
+      if (conv == null || conv.messages.isEmpty) {
+        if (mounted) setState(() {});
+        return;
+      }
 
       _history.clear();
       _chatSegments.clear();
@@ -234,11 +238,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       _currentMatchIndex = 0;
       final newCtrl = InMemoryChatController();
       _controller = newCtrl;
-
-      if (conv.messages.isEmpty) {
-        if (mounted) setState(() {});
-        return;
-      }
       for (final msg in conv.messages) {
         _history.add(msg);
         await _controller?.insertMessage(Message.text(
@@ -745,7 +744,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final index = _history.indexWhere((m) => m.id == messageId);
     if (index == -1 || index == 0 || index >= _history.length) return;
 
-    // Remove this message and all after from history
+    // Remove this assistant message and all after from history
     try {
       if (index < _history.length) {
         final removed = _history.sublist(index);
