@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../main.dart' as main_lib;
+import 'assistant_selection_page.dart';
 import 'catcatch_page.dart' hide showMediaPreview;
 import 'unified_task_list_page.dart';
 import '../catcatch/providers/catcatch_provider.dart';
 import '../catcatch/models/catcatch_task.dart' as catcatch_task;
 import '../providers/task_provider.dart';
+import '../providers/conversation_provider.dart';
 import 'chat_page.dart';
 import 'files_page.dart';
 import 'settings_page.dart';
@@ -601,6 +603,15 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
+  /// 根据是否有活跃对话，决定显示聊天页面还是助手选择页
+  Widget _buildChatOrAssistantPage() {
+    final activeId = ref.watch(activeConversationIdProvider);
+    if (activeId != null) {
+      return const ChatPage();
+    }
+    return const AssistantSelectionPage();
+  }
+
   /// 构建页面内容
   Widget _buildPageContent(AppPage page) {
     switch (page) {
@@ -625,7 +636,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           ),
         );
       case AppPage.chat:
-        return const ChatPage();
+        return _buildChatOrAssistantPage();
       case AppPage.files:
         return const FilesPage();
       case AppPage.settings:
