@@ -22,6 +22,7 @@ abstract class BaseChatProvider {
   Map<String, dynamic>? get lastRequestBody => null;
   Map<String, dynamic>? get lastResponseData => null;
   Map<String, String>? get lastRequestHeaders => null;
+  Map<String, List<String>>? get lastResponseHeaders => null;
   String? get lastRequestUrl => null;
   int? get lastResponseStatusCode => null;
 
@@ -65,6 +66,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   Map<String, dynamic>? _lastRequestBody;
   Map<String, dynamic>? _lastResponseData;
   Map<String, String>? _lastRequestHeaders;
+  Map<String, List<String>>? _lastResponseHeaders;
   String? _lastRequestUrl;
   int? _lastResponseStatusCode;
 
@@ -102,6 +104,9 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
 
   @override
   int? get lastResponseStatusCode => _lastResponseStatusCode;
+
+  @override
+  Map<String, List<String>>? get lastResponseHeaders => _lastResponseHeaders;
 
   // TODO: 可从 CustomParam 中提取模型列表，若某 param 的 type 或 key 为 'model'，
   // 使用其 defaultValue?.split(',') 作为模型列表。目前暂无可信数据源，留空。
@@ -190,6 +195,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       };
       _lastResponseStatusCode = null;
       _lastResponseData = null;
+      _lastResponseHeaders = null;
       final response = await _dio.post(
         _baseUrl,
         cancelToken: cancelToken,
@@ -200,6 +206,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
           ? Map<String, dynamic>.from(response.data as Map)
           : <String, dynamic>{'raw': '$response.data'};
       _lastResponseStatusCode = response.statusCode;
+      _lastResponseHeaders = response.headers.map;
 
       final choices = response.data['choices'] as List?;
       if (choices == null || choices.isEmpty) {
@@ -212,6 +219,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       return content;
     } on DioException catch (e) {
       _lastResponseStatusCode = e.response?.statusCode;
+      _lastResponseHeaders = e.response?.headers?.map;
       if (e.response?.data is Map) {
         _lastResponseData = Map<String, dynamic>.from(e.response!.data as Map);
       } else if (e.response?.data is String) {
@@ -270,6 +278,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     };
     _lastResponseStatusCode = null;
     _lastResponseData = null;
+    _lastResponseHeaders = null;
 
     debugPrint(
         'OpenAICompatibleChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}');
@@ -344,14 +353,27 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     } catch (e) {
       if (e is DioException) {
         if (e.response?.data is Map) {
-          _lastResponseData = Map<String, dynamic>.from(e.response!.data as Map);
-          _lastResponseStatusCode = e.response?.statusCode;
+          _lastResponseData =
+              Map<String, dynamic>.from(e.response!.data as Map);
+        } else if (e.response?.data is String) {
+          _lastResponseData =
+              <String, dynamic>{'raw': e.response!.data as String};
         } else {
-          // Non-HTTP errors (DNS failure, timeout, etc.) or non-Map response body
-          // — reset status code and clear stale response data
-          _lastResponseStatusCode = null;
+          // Clear stale streaming data when response body is a Stream,
+          // null, or otherwise unparseable (e.g., non-2xx HTTP with
+          // ResponseType.stream).
           _lastResponseData = null;
         }
+        // Preserve status code even when response body is unavailable.
+        _lastResponseStatusCode = e.response?.statusCode;
+        _lastResponseHeaders = e.response?.headers?.map;
+      } else {
+        // Non-DioException errors (e.g., SSE stream parse failures):
+        // Reset ALL optimistically-set or stale fields to avoid
+        // reporting stale data from the last successful SSE chunk.
+        _lastResponseStatusCode = null;
+        _lastResponseData = null;
+        _lastResponseHeaders = null;
       }
       rethrow;
     }
