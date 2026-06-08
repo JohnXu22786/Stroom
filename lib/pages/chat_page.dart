@@ -28,6 +28,7 @@ import '../pages/camera_page.dart';
 import '../widgets/llm/jumping_dots.dart';
 import '../widgets/llm/tool_call_card.dart';
 import 'conversations_page.dart';
+import 'message_search_page.dart';
 import 'provider_config_page.dart';
 import '../utils/data_sanitizer.dart';
 
@@ -52,8 +53,16 @@ class _SearchMatch {
 
 final _isStreamingProvider = StateProvider<bool>((ref) => false);
 
+/// Search mode: within current conversation or across all conversations.
+enum _SearchMode { current, global }
+
 class ChatPage extends ConsumerStatefulWidget {
-  const ChatPage({super.key});
+  /// Optional search query to auto-activate search mode with.
+  /// When provided, the page will open in search mode with the query
+  /// pre-filled and matching text highlighted. Used by [MessageSearchPage].
+  final String? initialSearchQuery;
+
+  const ChatPage({super.key, this.initialSearchQuery});
 
   @override
   ConsumerState<ChatPage> createState() => _ChatPageState();
@@ -73,6 +82,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   String? _streamingMsgId;
 
   bool _isSearching = false;
+  _SearchMode _searchMode = _SearchMode.current;
   String _searchQuery = '';
   final List<_SearchMatch> _searchMatches = [];
   int _currentMatchIndex = 0;
@@ -114,6 +124,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _initialize());
+    // If initialSearchQuery is provided, activate search mode after init
+    if (widget.initialSearchQuery != null &&
+        widget.initialSearchQuery!.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _searchTextController.text = widget.initialSearchQuery!;
+        _isSearching = true;
+        _performSearch(widget.initialSearchQuery!);
+      });
+    }
   }
 
   String _executeCalculator(Map<String, dynamic> args) {
@@ -284,12 +304,21 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void _showHistory() {
     _saveMessages().then((_) {
       if (!mounted) return;
-      Navigator.push(
+      Navigator.push<String>(
         context,
         MaterialPageRoute(builder: (_) => const ConversationsPage()),
-      ).then((_) {
+      ).then((searchQuery) {
         if (!mounted) return;
         _loadConversationMessages();
+        // If the user navigated from search results, activate search mode
+        if (searchQuery != null && searchQuery.isNotEmpty) {
+          setState(() {
+            _searchTextController.text = searchQuery;
+            _searchMode = _SearchMode.current;
+            _isSearching = true;
+          });
+          _performSearch(searchQuery);
+        }
       });
     });
   }
@@ -989,10 +1018,82 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void _closeSearch() {
     setState(() {
       _isSearching = false;
+      _searchMode = _SearchMode.current;
       _searchQuery = '';
       _searchMatches.clear();
       _currentMatchIndex = 0;
       _searchTextController.clear();
+    });
+  }
+
+  Widget _buildModeChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        decoration: BoxDecoration(
+          color: selected ? cs.primaryContainer : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? cs.primary : cs.outlineVariant,
+            width: selected ? 1.0 : 0.5,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+            color: selected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openGlobalSearch() {
+    Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(builder: (_) => const MessageSearchPage()),
+    ).then((result) async {
+      if (!mounted || result == null) return;
+      final conversationId = result['conversationId'] as String?;
+      final query = result['query'] as String?;
+      if (conversationId == null || query == null || query.isEmpty) return;
+
+      // Step 1: Save current conversation's messages first (before switching)
+      await _saveMessages();
+      if (!mounted) return;
+
+      // Step 2: If switching to a different conversation, select it.
+      // The activeConversationIdProvider listener schedules
+      // _loadConversationMessages in a post-frame callback, which clears
+      // search state. Schedule search activation in a subsequent
+      // post-frame callback so it runs AFTER that load completes.
+      final activeId = ref.read(activeConversationIdProvider);
+      if (conversationId != activeId) {
+        ref.read(conversationsProvider.notifier).selectConversation(conversationId);
+      }
+
+      // Step 3: Schedule search activation for the next frame, after
+      // _loadConversationMessages has completed its synchronous part.
+      // Note: Setting _searchTextController.text triggers onChanged →
+      // _performSearch internally via the controller listener, so the
+      // explicit _performSearch call below is redundant but kept for
+      // safety in case the listener doesn't fire as expected.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          _searchTextController.text = query;
+          _isSearching = true;
+        });
+        _performSearch(query);
+      });
     });
   }
 
@@ -1218,7 +1319,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           : null,
                     ),
                     tooltip: '搜索消息',
-                    onPressed: () => setState(() => _isSearching = !_isSearching),
+                    onPressed: () => setState(() {
+                      _isSearching = !_isSearching;
+                      if (!_isSearching) _searchMode = _SearchMode.current;
+                    }),
                   ),
                   // ── Model selector ──
                   if (adapterConfigured) _buildModelSelector(),
@@ -1275,60 +1379,107 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     ),
                   ),
                 ),
-                child: Row(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.search, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: SizedBox(
-                        height: 32,
-                        child: TextField(
-                          controller: _searchTextController,
-                          autofocus: true,
-                          onChanged: _performSearch,
-                          decoration: const InputDecoration(
-                            hintText: '搜索消息...',
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                            border: OutlineInputBorder(),
+                    // Row 1: Search field + nav controls
+                    Row(
+                      children: [
+                        Icon(Icons.search, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: SizedBox(
+                            height: 32,
+                            child: TextField(
+                              controller: _searchTextController,
+                              autofocus: true,
+                              onChanged: (query) {
+                                if (_searchMode == _SearchMode.current) {
+                                  _performSearch(query);
+                                } else if (query.isNotEmpty) {
+                                  // Global mode: defer to full search page
+                                  _openGlobalSearch();
+                                }
+                              },
+                              decoration: InputDecoration(
+                                hintText: _searchMode == _SearchMode.current
+                                    ? '搜索当前对话...'
+                                    : '搜索所有对话...',
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                border: OutlineInputBorder(),
+                              ),
+                              style: const TextStyle(fontSize: 13),
+                            ),
                           ),
-                          style: const TextStyle(fontSize: 13),
                         ),
-                      ),
-                    ),
-                    if (_searchMatches.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      Text(
-                        '${_currentMatchIndex + 1}/${_searchMatches.length}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        if (_searchMode == _SearchMode.current && _searchMatches.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            '${_currentMatchIndex + 1}/${_searchMatches.length}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                        if (_searchMode == _SearchMode.current) ...[
+                          IconButton(
+                            icon: const Icon(Icons.keyboard_arrow_up, size: 20),
+                            tooltip: '上一个',
+                            onPressed: _previousMatch,
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.keyboard_arrow_down, size: 20),
+                            tooltip: '下一个',
+                            onPressed: _nextMatch,
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          ),
+                        ],
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          tooltip: '关闭搜索',
+                          onPressed: _closeSearch,
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                         ),
-                      ),
-                    ],
-                    IconButton(
-                      icon: const Icon(Icons.keyboard_arrow_up, size: 20),
-                      tooltip: '上一个',
-                      onPressed: _previousMatch,
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      ],
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.keyboard_arrow_down, size: 20),
-                      tooltip: '下一个',
-                      onPressed: _nextMatch,
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 18),
-                      tooltip: '关闭搜索',
-                      onPressed: _closeSearch,
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    // Row 2: Mode toggle chips
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        _buildModeChip(
+                          label: '当前对话',
+                          selected: _searchMode == _SearchMode.current,
+                          onTap: () {
+                            if (_searchMode != _SearchMode.current) {
+                              setState(() {
+                                _searchMode = _SearchMode.current;
+                                _searchTextController.clear();
+                                _performSearch('');
+                              });
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        _buildModeChip(
+                          label: '所有对话',
+                          selected: _searchMode == _SearchMode.global,
+                          onTap: () {
+                            if (_searchMode != _SearchMode.global) {
+                              setState(() => _searchMode = _SearchMode.global);
+                              _openGlobalSearch();
+                            }
+                          },
+                        ),
+                      ],
                     ),
                   ],
                 ),
