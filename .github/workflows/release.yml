@@ -27,7 +27,16 @@ jobs:
 
   windows:
     needs: prepare-version
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        # x64 builds on windows-latest runner
+        # When Flutter SDK publishes stable ARM64 Windows binaries,
+        # add: - arch: arm64; runner: windows-11-arm
+        arch: [x64]
+        include:
+          - arch: x64
+            runner: windows-latest
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -37,11 +46,11 @@ jobs:
       - run: flutter build windows --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
       - name: Create Windows archive
         shell: pwsh
-        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath "stroom-windows-release-$env:TAG.zip"
+        run: Compress-Archive -Path "build\windows\${{ matrix.arch }}\runner\Release\*" -DestinationPath "stroom-windows-${{ matrix.arch }}-release-$env:TAG.zip"
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
-          files: stroom-windows-release-*.zip
+          files: stroom-windows-*-release-*.zip
 
 
 
@@ -58,20 +67,30 @@ jobs:
       - name: Configure CocoaPods
         run: |
           pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
-      - run: flutter build macos --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
+      - name: Build macOS universal binary
+        run: flutter build macos --release --universal --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
       - name: Create macOS archive
         shell: bash
         run: |
           cd build/macos/Build/Products/Release
-          zip -r "$GITHUB_WORKSPACE/stroom-macos-release-$TAG.zip" .
+          zip -r "$GITHUB_WORKSPACE/stroom-macos-universal-release-$TAG.zip" .
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
-          files: stroom-macos-release-*.zip
+          files: stroom-macos-universal-release-*.zip
 
   linux:
     needs: prepare-version
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # x64 builds on ubuntu-latest runner
+        # When Flutter SDK publishes stable ARM64 Linux binaries,
+        # add: - arch: arm64; runner: ubuntu-24.04-arm
+        arch: [x64]
+        include:
+          - arch: x64
+            runner: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -85,12 +104,12 @@ jobs:
       - run: flutter build linux --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
       - name: Create Linux archive
         run: |
-          cd build/linux/x64/release/bundle
-          zip -r "$GITHUB_WORKSPACE/stroom-linux-release-$TAG.zip" .
+          cd build/linux/${{ matrix.arch }}/release/bundle
+          zip -r "$GITHUB_WORKSPACE/stroom-linux-${{ matrix.arch }}-release-$TAG.zip" .
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
-          files: stroom-linux-release-*.zip
+          files: stroom-linux-*-release-*.zip
 
   web:
     needs: prepare-version
