@@ -41,6 +41,7 @@ dependencies:
   file: ^6.1.4
   share_plus: ^7.2.0
   sqflite: ^2.3.0
+  record: ^5.2.0
 
   # Chat UI
   flutter_chat_ui: ^2.11.1
