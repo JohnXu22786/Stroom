@@ -1,0 +1,248 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+
+// ============================================================================
+// OCR Config
+// ============================================================================
+
+/// Configuration for an OpenAI-compatible OCR service.
+class OcrConfig {
+  final String model;
+  final String apiKey;
+  final String host;
+  final String? systemPrompt;
+
+  const OcrConfig({
+    this.model = 'gpt-4o',
+    required this.apiKey,
+    required this.host,
+    this.systemPrompt,
+  });
+
+  /// Returns the host without a trailing slash.
+  String get normalizedHost {
+    var h = host.trim();
+    while (h.endsWith('/')) {
+      h = h.substring(0, h.length - 1);
+    }
+    return h;
+  }
+
+  /// The default system prompt used to guide OCR extraction.
+  String get effectiveSystemPrompt =>
+      systemPrompt ?? '请提取图片中的所有文字内容，保持原始格式和排版。只返回提取的文字，不要添加额外说明。';
+
+  OcrConfig copyWith({
+    String? model,
+    String? apiKey,
+    String? host,
+    String? systemPrompt,
+  }) =>
+      OcrConfig(
+        model: model ?? this.model,
+        apiKey: apiKey ?? this.apiKey,
+        host: host ?? this.host,
+        systemPrompt: systemPrompt ?? this.systemPrompt,
+      );
+}
+
+// ============================================================================
+// OCR Result
+// ============================================================================
+
+/// The result of an OCR operation.
+class OcrResult {
+  final String text;
+  final int processingTimeMs;
+  final int imageCount;
+
+  const OcrResult({
+    required this.text,
+    this.processingTimeMs = 0,
+    this.imageCount = 1,
+  });
+}
+
+// ============================================================================
+// OCR Service
+// ============================================================================
+
+/// An OCR service that uses an OpenAI-compatible Chat Completions API
+/// with vision support to extract text from images.
+///
+/// The API is called with a chat message containing:
+/// - A system prompt instructing the model to extract text
+/// - A user message with the image(s) encoded as base64 data URIs
+///
+/// The response follows the standard OpenAI chat completion format.
+class OcrService {
+  final OcrConfig config;
+  final Dio _dio;
+
+  OcrService({
+    required this.config,
+    Dio? dio,
+  }) : _dio = dio ??
+            Dio(BaseOptions(
+              headers: {
+                'Content-Type': 'application/json',
+                if (config.apiKey.isNotEmpty)
+                  'Authorization': 'Bearer ${config.apiKey}',
+              },
+              connectTimeout: const Duration(seconds: 30),
+              receiveTimeout: const Duration(seconds: 120),
+            ));
+
+  /// The chat completions endpoint URL.
+  String get _chatUrl => '${config.normalizedHost}/chat/completions';
+
+  /// Perform OCR on a single image.
+  ///
+  /// [imageBytes] - The raw image data.
+  /// [imageFormat] - The image format (e.g., 'jpeg', 'png').
+  /// Returns [OcrResult] with the extracted text.
+  Future<OcrResult> recognize({
+    required Uint8List imageBytes,
+    String imageFormat = 'jpeg',
+  }) async {
+    final stopwatch = Stopwatch()..start();
+
+    final base64Image = base64Encode(imageBytes);
+    final dataUri = 'data:image/$imageFormat;base64,$base64Image';
+
+    final body = _buildRequestBody([
+      _buildImageContent(dataUri),
+    ]);
+
+    final response = await _dio.post(
+      _chatUrl,
+      data: body,
+    );
+
+    stopwatch.stop();
+
+    final text = _extractText(response.data);
+
+    return OcrResult(
+      text: text,
+      processingTimeMs: stopwatch.elapsedMilliseconds,
+      imageCount: 1,
+    );
+  }
+
+  /// Perform OCR on multiple images.
+  ///
+  /// [imageBytesList] - List of (bytes, format) tuples.
+  /// Returns [OcrResult] with combined extracted text.
+  Future<OcrResult> recognizeBatch({
+    required List<(Uint8List bytes, String format)> imageBytesList,
+  }) async {
+    if (imageBytesList.isEmpty) {
+      throw ArgumentError('imageBytesList must not be empty');
+    }
+
+    final stopwatch = Stopwatch()..start();
+
+    final contents = <Map<String, dynamic>>[];
+
+    // Add a text instruction for each image
+    for (var i = 0; i < imageBytesList.length; i++) {
+      final (bytes, format) = imageBytesList[i];
+      final base64Image = base64Encode(bytes);
+      final dataUri = 'data:image/$format;base64,$base64Image';
+      contents.addAll([
+        {'type': 'text', 'text': '图片 ${i + 1}：'},
+        _buildImageContent(dataUri),
+      ]);
+    }
+
+    final body = _buildRequestBody(contents);
+
+    final response = await _dio.post(
+      _chatUrl,
+      data: body,
+    );
+
+    stopwatch.stop();
+
+    final text = _extractText(response.data);
+
+    return OcrResult(
+      text: text,
+      processingTimeMs: stopwatch.elapsedMilliseconds,
+      imageCount: imageBytesList.length,
+    );
+  }
+
+  /// Build the standard OpenAI-compatible request body.
+  Map<String, dynamic> _buildRequestBody(
+    List<Map<String, dynamic>> contentList,
+  ) {
+    return {
+      'model': config.model,
+      'messages': [
+        {
+          'role': 'system',
+          'content': config.effectiveSystemPrompt,
+        },
+        {
+          'role': 'user',
+          'content': contentList,
+        },
+      ],
+      'max_tokens': 4096,
+      'temperature': 0.0,
+    };
+  }
+
+  /// Build an image content block for the chat API.
+  Map<String, dynamic> _buildImageContent(String dataUri) {
+    return {
+      'type': 'image_url',
+      'image_url': {
+        'url': dataUri,
+        'detail': 'high',
+      },
+    };
+  }
+
+  /// Extract text from the standard OpenAI chat completion response.
+  String _extractText(Map<String, dynamic> responseData) {
+    try {
+      final choices = responseData['choices'] as List?;
+      if (choices == null || choices.isEmpty) {
+        throw Exception('API 返回了空的 choices 列表');
+      }
+      final content = choices[0]['message']?['content'] as String?;
+      if (content == null || content.trim().isEmpty) {
+        throw Exception('OCR 未识别到文字内容');
+      }
+      return content;
+    } on Exception {
+      rethrow;
+    } catch (e) {
+      throw Exception('解析 OCR 结果失败: $e');
+    }
+  }
+}
+
+// ============================================================================
+// Factory Functions
+// ============================================================================
+
+/// Create an [OcrService] from provider configuration fields.
+OcrService createOcrServiceFromConfig({
+  required String host,
+  required String apiKey,
+  required String model,
+}) {
+  return OcrService(
+    config: OcrConfig(
+      host: host,
+      apiKey: apiKey,
+      model: model,
+    ),
+  );
+}
