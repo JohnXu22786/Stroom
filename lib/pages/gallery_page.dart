@@ -16,7 +16,9 @@ import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
 import '../widgets/camera_choice_dialog.dart';
 import '../widgets/file_manager_view.dart';
+import '../widgets/image_preview_dialog.dart';
 import 'camera_page.dart';
+import 'image_editor_page.dart';
 
 class GalleryPage extends ConsumerStatefulWidget {
   const GalleryPage({super.key});
@@ -166,62 +168,77 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     }
 
     if (!mounted) return;
-    showDialog(
+    // Show preview dialog; if user taps edit, it returns true
+    final shouldEdit = await showDialog<bool>(
       context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.black,
-        insetPadding: EdgeInsets.zero,
-        child: Stack(
-          children: [
-            Center(
-              child: InteractiveViewer(
-                minScale: 0.5,
-                maxScale: 4.0,
-                child: Image.memory(
-                  data,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => const Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.broken_image,
-                            size: 48, color: Colors.white54),
-                        SizedBox(height: 8),
-                        Text('无法加载图片', style: TextStyle(color: Colors.white54)),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            // Close button
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 8,
-              right: 8,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                onPressed: () => Navigator.pop(ctx),
-              ),
-            ),
-            // Bottom file-name
-            Positioned(
-              bottom: 16,
-              left: 16,
-              right: 16,
-              child: Text(
-                '${file.name}.${file.format}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white70, fontSize: 14),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
+      builder: (ctx) => ImagePreviewDialog(
+        imageData: data,
+        fileName: '${file.name}.${file.format}',
       ),
     );
-  }
 
+    // If user wants to edit, open the editor
+    if (shouldEdit == true && mounted) {
+      final editedBytes = await Navigator.push<Uint8List>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ImageEditorPage(imageBytes: data),
+        ),
+      );
+
+      if (editedBytes != null && mounted) {
+        // Replace the original file with the edited version
+        try {
+          // Delete old file
+          await ImageManifest.deleteFile(file.storagePath);
+          await ImageManifest.deleteFile('${file.hash}_thumb.png');
+
+          // Compute new hash and save edited version
+          final newHash = computeImageHash(editedBytes);
+          final newFileName = '$newHash.${file.format}';
+          await ImageManifest.writeFile(newFileName, editedBytes);
+
+          // Generate thumbnail
+          final thumbBytes = await generateThumbnail(editedBytes);
+          if (thumbBytes.isNotEmpty) {
+            await ImageManifest.writeFile('${newHash}_thumb.png', thumbBytes);
+          }
+
+          // Since copyWith doesn't allow changing hash, update via manifest
+          // Delete old record and create new one
+          await ImageManifest.deleteRecord(file.id);
+          await ImageManifest.addRecord(ImageRecord(
+            name: file.name,
+            hash: newHash,
+            format: file.format,
+            createdAt: file.createdAt,
+            size: editedBytes.length,
+            folder: file.folder,
+          ));
+
+          // Refresh
+          await ref.read(imageRecordsProvider.notifier).loadRecords();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('图片已更新'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('保存编辑失败: $e'),
+                backgroundColor: Colors.red,
+              ),
+      );
+        }
+      }
+    }
+  }
+}
   // ====================================================================
   // Import / export
   // ====================================================================
@@ -246,7 +263,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       filePath = await Navigator.push<String>(
         context,
         MaterialPageRoute(
-            builder: (_) => CameraPage(folder: selectedFolder)),
+            builder: (_) => CameraPage(
+                  folder: selectedFolder,
+                  editAfterCapture: result.editAfterCapture,
+                )),
       );
     } else {
       try {
@@ -255,7 +275,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         if (file != null) {
           final bytes = await file.readAsBytes();
           final hash = computeImageHash(bytes);
-          final format = 'jpg';
+          const format = 'jpg';
           final fileName = '$hash.$format';
           await ImageManifest.writeFile(fileName, bytes);
           final thumbnailBytes = await generateThumbnail(bytes);

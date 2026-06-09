@@ -253,7 +253,7 @@ void main() {
     // =========================================================================
     // 6. Switch assistant button → pops back to AssistantSelectionPage
     // =========================================================================
-    testWidgets('switch assistant button returns to assistant selection',
+    testWidgets('back navigation from topic selection returns to assistant selection',
         (tester) async {
       await tester.pumpWidget(createChatFlowTestApp(
         assistants: [
@@ -267,8 +267,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('选择话题'), findsOneWidget);
 
-      // Tap the "切换助手" icon button (Icons.swap_horiz)
-      await tester.tap(find.byIcon(Icons.swap_horiz));
+      // Use system back button to return (the merged page has no explicit
+      // "switch assistant" AppBar button; users rely on system navigation)
+      // Pop the nested Navigator route
+      await tester.pageBack();
       await tester.pumpAndSettle();
 
       // Should be back on assistant selection page

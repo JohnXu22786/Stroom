@@ -44,6 +44,12 @@ class AssistantSettings {
   final bool enableWebSearch;
   final int maxToolCalls;
   final bool enableMaxToolCalls;
+  final double frequencyPenalty;
+  final bool enableFrequencyPenalty;
+  final double presencePenalty;
+  final bool enablePresencePenalty;
+  final int? seed;
+  final bool enableSeed;
   final List<CustomParameter> customParameters;
 
   AssistantSettings({
@@ -58,6 +64,12 @@ class AssistantSettings {
     this.enableWebSearch = false,
     this.maxToolCalls = 20,
     this.enableMaxToolCalls = true,
+    this.frequencyPenalty = 0.0,
+    this.enableFrequencyPenalty = false,
+    this.presencePenalty = 0.0,
+    this.enablePresencePenalty = false,
+    this.seed,
+    this.enableSeed = false,
     this.customParameters = const [],
   });
 
@@ -75,6 +87,12 @@ class AssistantSettings {
         'enableWebSearch': enableWebSearch,
         'maxToolCalls': maxToolCalls,
         'enableMaxToolCalls': enableMaxToolCalls,
+        'frequencyPenalty': frequencyPenalty,
+        'enableFrequencyPenalty': enableFrequencyPenalty,
+        'presencePenalty': presencePenalty,
+        'enablePresencePenalty': enablePresencePenalty,
+        if (seed != null) 'seed': seed,
+        'enableSeed': enableSeed,
         'customParameters':
             customParameters.map((p) => p.toMap()).toList(),
       };
@@ -92,6 +110,16 @@ class AssistantSettings {
         enableWebSearch: (map['enableWebSearch'] as bool?) ?? false,
         maxToolCalls: (map['maxToolCalls'] as int?) ?? 20,
         enableMaxToolCalls: (map['enableMaxToolCalls'] as bool?) ?? true,
+        frequencyPenalty:
+            (map['frequencyPenalty'] as num?)?.toDouble() ?? 0.0,
+        enableFrequencyPenalty:
+            (map['enableFrequencyPenalty'] as bool?) ?? false,
+        presencePenalty:
+            (map['presencePenalty'] as num?)?.toDouble() ?? 0.0,
+        enablePresencePenalty:
+            (map['enablePresencePenalty'] as bool?) ?? false,
+        seed: map['seed'] as int?,
+        enableSeed: (map['enableSeed'] as bool?) ?? false,
         customParameters: (map['customParameters'] as List?)
                 ?.map((e) =>
                     CustomParameter.fromMap(Map<String, dynamic>.from(e)))
@@ -111,6 +139,12 @@ class AssistantSettings {
     bool? enableWebSearch,
     int? maxToolCalls,
     bool? enableMaxToolCalls,
+    double? frequencyPenalty,
+    bool? enableFrequencyPenalty,
+    double? presencePenalty,
+    bool? enablePresencePenalty,
+    int? seed,
+    bool? enableSeed,
     List<CustomParameter>? customParameters,
   }) =>
       AssistantSettings(
@@ -125,6 +159,14 @@ class AssistantSettings {
         enableWebSearch: enableWebSearch ?? this.enableWebSearch,
         maxToolCalls: maxToolCalls ?? this.maxToolCalls,
         enableMaxToolCalls: enableMaxToolCalls ?? this.enableMaxToolCalls,
+        frequencyPenalty: frequencyPenalty ?? this.frequencyPenalty,
+        enableFrequencyPenalty:
+            enableFrequencyPenalty ?? this.enableFrequencyPenalty,
+        presencePenalty: presencePenalty ?? this.presencePenalty,
+        enablePresencePenalty:
+            enablePresencePenalty ?? this.enablePresencePenalty,
+        seed: seed ?? this.seed,
+        enableSeed: enableSeed ?? this.enableSeed,
         customParameters: customParameters ?? this.customParameters,
       );
 }
@@ -139,6 +181,8 @@ class Assistant {
   final String prompt;
   final String emoji;
   final String description;
+  final String avatarType; // 'emoji' | 'image'
+  final String? avatarUrl;
   final AssistantSettings settings;
   final String? modelId;
   final DateTime createdAt;
@@ -150,6 +194,8 @@ class Assistant {
     required this.prompt,
     this.emoji = '🤖',
     this.description = '',
+    this.avatarType = 'emoji',
+    this.avatarUrl,
     AssistantSettings? settings,
     this.modelId,
     DateTime? createdAt,
@@ -165,6 +211,8 @@ class Assistant {
         'prompt': prompt,
         'emoji': emoji,
         'description': description,
+        'avatarType': avatarType,
+        if (avatarUrl != null) 'avatarUrl': avatarUrl,
         'settings': settings.toMap(),
         if (modelId != null) 'modelId': modelId,
         'createdAt': createdAt.toIso8601String(),
@@ -179,6 +227,8 @@ class Assistant {
       prompt: (map['prompt'] as String?) ?? '',
       emoji: (map['emoji'] as String?) ?? '🤖',
       description: (map['description'] as String?) ?? '',
+      avatarType: (map['avatarType'] as String?) ?? 'emoji',
+      avatarUrl: map['avatarUrl'] as String?,
       settings: settingsMap != null
           ? AssistantSettings.fromMap(settingsMap)
           : AssistantSettings.defaults(),
@@ -198,6 +248,8 @@ class Assistant {
     String? prompt,
     String? emoji,
     String? description,
+    String? avatarType,
+    String? avatarUrl,
     AssistantSettings? settings,
     String? modelId,
     DateTime? createdAt,
@@ -209,6 +261,8 @@ class Assistant {
         prompt: prompt ?? this.prompt,
         emoji: emoji ?? this.emoji,
         description: description ?? this.description,
+        avatarType: avatarType ?? this.avatarType,
+        avatarUrl: avatarUrl ?? this.avatarUrl,
         settings: settings ?? this.settings,
         modelId: modelId ?? this.modelId,
         createdAt: createdAt ?? this.createdAt,

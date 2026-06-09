@@ -381,17 +381,27 @@ class ProviderEntry {
 // 供应商类型注册表 — 每种类型可注册默认值，新增类型只需注册一次
 // ============================================================================
 
+/// 模型配置页面的样式
+enum ModelConfigStyle {
+  /// TTS 样式：音色、音量、语速、裁切、流式输出、instruction 等
+  tts,
+  /// LLM 样式：模型ID、上下文长度、自定义参数
+  llm,
+  /// 简洁样式：模型ID、自定义参数（无上下文长度要求），用于 OCR、ASR
+  simple,
+}
+
 class ProviderTypeDefinition {
   final String type;
   final String? defaultHost;
   final List<ModelConfig> defaultModels;
-  final bool useLlmModelConfig;
+  final ModelConfigStyle modelConfigStyle;
 
   const ProviderTypeDefinition({
     required this.type,
     this.defaultHost,
     this.defaultModels = const [],
-    this.useLlmModelConfig = false,
+    this.modelConfigStyle = ModelConfigStyle.tts,
   });
 }
 
@@ -410,16 +420,22 @@ class ProviderTypeRegistry {
 void registerBuiltinProviderTypes() {
   ProviderTypeRegistry.register(const ProviderTypeDefinition(
     type: 'llm',
-    useLlmModelConfig: true,
+    modelConfigStyle: ModelConfigStyle.llm,
   ));
   ProviderTypeRegistry.register(const ProviderTypeDefinition(
     type: 'tts',
+    modelConfigStyle: ModelConfigStyle.tts,
   ));
   ProviderTypeRegistry.register(const ProviderTypeDefinition(
     type: 'ocr',
+    modelConfigStyle: ModelConfigStyle.simple,
   ));
   ProviderTypeRegistry.register(const ProviderTypeDefinition(
     type: 'asr',
+    modelConfigStyle: ModelConfigStyle.simple,
+  ));
+  ProviderTypeRegistry.register(const ProviderTypeDefinition(
+    type: 'mcp',
   ));
 }
 
@@ -474,6 +490,34 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
           );
         }
 
+        // 第5步：确保 ASR（语音识别）条目存在（已有用户升级时自动迁移）
+        final hasAsr = entries.any((e) => e.type == 'asr');
+        if (!hasAsr) {
+          entries.add(ProviderEntry(
+            id: 'builtin_asr',
+            type: 'asr',
+            name: '语音识别供应商',
+          ));
+          await prefs.setString(
+            'provider_entries',
+            jsonEncode(entries.map((e) => e.toMap()).toList()),
+          );
+        }
+
+        // 第6步：确保 MCP 条目存在（已有用户升级时自动迁移）
+        final hasMcp = entries.any((e) => e.type == 'mcp');
+        if (!hasMcp) {
+          entries.add(ProviderEntry(
+            id: 'builtin_mcp',
+            type: 'mcp',
+            name: 'MCP供应商',
+          ));
+          await prefs.setString(
+            'provider_entries',
+            jsonEncode(entries.map((e) => e.toMap()).toList()),
+          );
+        }
+
         state = ProviderEntriesState(entries: entries);
         return;
       }
@@ -502,6 +546,11 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         id: 'builtin_asr',
         type: 'asr',
         name: '语音识别供应商',
+      ),
+      ProviderEntry(
+        id: 'builtin_mcp',
+        type: 'mcp',
+        name: 'MCP供应商',
       ),
     ]);
   }

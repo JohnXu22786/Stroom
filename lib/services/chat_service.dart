@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 
+import '../models/assistant.dart' show CustomParameter;
 import '../models/ai_stream_event.dart';
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
@@ -11,6 +12,7 @@ import '../models/tool_call.dart';
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
 import 'attachment_storage.dart';
+import 'mcp_client.dart';
 
 // ====================================================================
 // ChatService — AI 聊天服务抽象层
@@ -277,7 +279,7 @@ class ChatService {
             // Execute tool
             String result;
             try {
-              result = _executeTool(name, parsedArgs);
+              result = await _executeTool(name, parsedArgs);
             } catch (e) {
               result = 'Error: $e';
             }
@@ -429,6 +431,17 @@ class ChatService {
 
   static final Map<String, Map<String, dynamic>> _toolRegistries = {};
 
+  /// MCP 客户端管理器（可选，用于执行 MCP 工具）
+  static McpClientManager? _mcpClientManager;
+
+  /// 设置 MCP 客户端管理器
+  static void setMcpClientManager(McpClientManager manager) {
+    _mcpClientManager = manager;
+  }
+
+  /// 获取当前 MCP 客户端管理器
+  static McpClientManager? get mcpClientManager => _mcpClientManager;
+
   /// Register a tool handler for a given tool definition.
   /// The handler receives parsed arguments and returns a result string.
   static void registerTool(
@@ -441,30 +454,77 @@ class ChatService {
     };
   }
 
-  String _executeTool(String name, Map<String, dynamic> args) {
+  Future<String> _executeTool(String name, Map<String, dynamic> args) async {
+    // First check locally registered tools
     final entry = _toolRegistries[name];
     if (entry != null) {
       final handler = entry['handler'] as String Function(Map<String, dynamic>);
       return handler(args);
     }
+
+    // Then check MCP clients
+    if (_mcpClientManager != null) {
+      for (final entry in _mcpClientManager!.clients.entries) {
+        final client = entry.value;
+        if (client.isConnected == false && client.isDisposed == false) {
+          await client.connect();
+        }
+        if (client.isConnected) {
+          // Check if this MCP server has the tool
+          final cachedTools = client.cachedTools;
+          final hasTool = cachedTools.any((t) => t.name == name);
+          if (hasTool) {
+            return client.callTool(name, args);
+          }
+        }
+      }
+    }
+
     return 'Error: Unknown tool "$name"';
   }
 
   // ── Extra params helpers ─────────────────────────────────────────
 
-  /// Build extraParams map from customParams for the API call.
-  Map<String, dynamic> _buildExtraParams() {
-    final params = _modelConfig!.customParams;
-    if (params.isEmpty) return {};
+  /// Optional assistant-level custom parameters to merge into the API call.
+  List<CustomParameter>? _assistantCustomParams;
 
-    return {
-      for (final cp in params)
-        cp.paramName: switch (cp.type) {
-          'number' => double.tryParse(cp.defaultValue) ?? 0.0,
-          'boolean' => cp.defaultValue.toLowerCase() == 'true',
-          'string' || _ => cp.defaultValue,
-        },
-    };
+  /// Set assistant-level custom parameters that will be merged into the API
+  /// request body alongside model-level custom params.
+  void setAssistantCustomParams(List<CustomParameter>? params) {
+    _assistantCustomParams = params;
+  }
+
+  /// Build extraParams map from customParams for the API call.
+  /// Merges model-level [ProviderParam]s with assistant-level [CustomParameter]s.
+  /// Assistant-level params take precedence when names collide.
+  Map<String, dynamic> _buildExtraParams() {
+    final result = <String, dynamic>{};
+
+    // Model-level custom params
+    final modelParams = _modelConfig!.customParams;
+    for (final cp in modelParams) {
+      result[cp.paramName] = switch (cp.type) {
+        'number' => double.tryParse(cp.defaultValue) ?? 0.0,
+        'boolean' => cp.defaultValue.toLowerCase() == 'true',
+        'string' || _ => cp.defaultValue,
+      };
+    }
+
+    // Assistant-level custom params (override model-level on name collision)
+    if (_assistantCustomParams != null) {
+      for (final cp in _assistantCustomParams!) {
+        result[cp.name] = switch (cp.type) {
+          'number' => (cp.value is num)
+              ? (cp.value as num).toDouble()
+              : (double.tryParse(cp.value.toString()) ?? 0.0),
+          'boolean' => (cp.value is bool) ? cp.value : (cp.value.toString().toLowerCase() == 'true'),
+          'json' => cp.value,
+          'string' || _ => cp.value?.toString() ?? '',
+        };
+      }
+    }
+
+    return result;
   }
 
   /// Dispose permanently (no more streams possible after this)

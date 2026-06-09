@@ -743,7 +743,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     );
   }
 
-  /// 重新生成按钮：跳转到制作录音页面，预填源文本
+  /// 重新生成按钮：跳转到生成录音页面，预填源文本
   // ignore: unused_element
   void _onRegenerate() {
     Navigator.push(
