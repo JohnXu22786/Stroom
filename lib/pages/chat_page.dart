@@ -29,7 +29,6 @@ import '../providers/provider_config.dart';
 import '../pages/camera_page.dart';
 import '../widgets/llm/jumping_dots.dart';
 import '../widgets/llm/tool_call_card.dart';
-import 'conversations_page.dart';
 import 'message_search_page.dart';
 import 'provider_config_page.dart';
 import '../utils/data_sanitizer.dart';
@@ -279,47 +278,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         if (mounted) _configureAdapter();
       });
     }
-  }
-
-  void _newConversation() {
-    if (ref.read(_isStreamingProvider)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('请等待当前消息生成完成')),
-        );
-      }
-      return;
-    }
-    _saveMessages().then((_) {
-      ref.read(conversationsProvider.notifier).createConversation();
-      _history.clear();
-      _chatSegments.clear();
-      _streamingMsgId = null;
-      _controller?.dispose();
-      final newCtrl = InMemoryChatController();
-      setState(() => _controller = newCtrl);
-    });
-  }
-
-  void _showHistory() {
-    _saveMessages().then((_) {
-      if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).push<String>(
-        MaterialPageRoute(builder: (_) => const ConversationsPage()),
-      ).then((searchQuery) {
-        if (!mounted) return;
-        _loadConversationMessages();
-        // If the user navigated from search results, activate search mode
-        if (searchQuery != null && searchQuery.isNotEmpty) {
-          setState(() {
-            _searchTextController.text = searchQuery;
-            _searchMode = _SearchMode.current;
-            _isSearching = true;
-          });
-          _performSearch(searchQuery);
-        }
-      });
-    });
   }
 
   Future<void> _onMessageSend(String text, List<Attachment> attachments) async {
@@ -1392,16 +1350,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                 'reasoning_enabled', _reasoningEnabled));
                       },
                     ),
-                  IconButton(
-                    icon: const Icon(Icons.history),
-                    tooltip: '历史记录',
-                    onPressed: _showHistory,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.add),
-                    tooltip: '新对话',
-                    onPressed: _newConversation,
-                  ),
                   // ── Stop button ──
                   if (isStreaming)
                     IconButton(
