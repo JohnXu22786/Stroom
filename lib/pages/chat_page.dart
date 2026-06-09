@@ -172,8 +172,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     super.dispose();
   }
 
-  void _initialize() {
+  Future<void> _initialize() async {
     _configureAdapter();
+    // Initialize MCP servers and discover tools
+    final entriesState = ref.read(providerEntriesProvider);
+    await _adapter.initializeMcpServers(entriesState);
     // Restore saved model selection — clear stale index if out of range
     SharedPreferences.getInstance().then((prefs) {
       // Restore saved model selection — clear stale index if out of range
@@ -384,26 +387,31 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
 
     try {
+      // Merge built-in tools with MCP tools
+      final mcpTools = _adapter.getAllToolDefinitions();
+      final allTools = <ToolDefinition>[
+        const ToolDefinition(
+          name: 'calculator',
+          description: 'Evaluate a math expression and return the result',
+          parameters: {
+            'type': 'object',
+            'properties': {
+              'expression': {
+                'type': 'string',
+                'description': 'A math expression to evaluate e.g. 2 + 2',
+              },
+            },
+            'required': ['expression'],
+          },
+        ),
+        ...mcpTools,
+      ];
+
       final stream = _adapter.sendStreamWithTools(
         text,
         history: _history,
         reasoning: _reasoningEnabled,
-        tools: const [
-          ToolDefinition(
-            name: 'calculator',
-            description: 'Evaluate a math expression and return the result',
-            parameters: {
-              'type': 'object',
-              'properties': {
-                'expression': {
-                  'type': 'string',
-                  'description': 'A math expression to evaluate e.g. 2 + 2',
-                },
-              },
-              'required': ['expression'],
-            },
-          ),
-        ],
+        tools: allTools,
       );
 
       await for (final event in stream) {

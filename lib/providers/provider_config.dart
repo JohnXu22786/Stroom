@@ -421,6 +421,9 @@ void registerBuiltinProviderTypes() {
   ProviderTypeRegistry.register(const ProviderTypeDefinition(
     type: 'asr',
   ));
+  ProviderTypeRegistry.register(const ProviderTypeDefinition(
+    type: 'mcp',
+  ));
 }
 
 // ============================================================================
@@ -474,6 +477,20 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
           );
         }
 
+        // 第5步：确保 MCP 条目存在（已有用户升级时自动迁移）
+        final hasMcp = entries.any((e) => e.type == 'mcp');
+        if (!hasMcp) {
+          entries.add(ProviderEntry(
+            id: 'builtin_mcp',
+            type: 'mcp',
+            name: 'MCP供应商',
+          ));
+          await prefs.setString(
+            'provider_entries',
+            jsonEncode(entries.map((e) => e.toMap()).toList()),
+          );
+        }
+
         state = ProviderEntriesState(entries: entries);
         return;
       }
@@ -502,6 +519,11 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         id: 'builtin_asr',
         type: 'asr',
         name: '语音识别供应商',
+      ),
+      ProviderEntry(
+        id: 'builtin_mcp',
+        type: 'mcp',
+        name: 'MCP供应商',
       ),
     ]);
   }
