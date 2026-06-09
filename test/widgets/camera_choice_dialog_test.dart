@@ -9,6 +9,7 @@ void main() {
       const result = CameraChoiceResult(choice: CameraChoice.app);
       expect(result.choice, CameraChoice.app);
       expect(result.folder, '');
+      expect(result.editAfterCapture, false);
     });
 
     test('can be created with custom folder', () {
@@ -18,6 +19,18 @@ void main() {
       );
       expect(result.choice, CameraChoice.system);
       expect(result.folder, 'my_folder');
+      expect(result.editAfterCapture, false);
+    });
+
+    test('can be created with editAfterCapture true', () {
+      const result = CameraChoiceResult(
+        choice: CameraChoice.app,
+        folder: 'f1',
+        editAfterCapture: true,
+      );
+      expect(result.choice, CameraChoice.app);
+      expect(result.folder, 'f1');
+      expect(result.editAfterCapture, true);
     });
 
     test('equality works', () {
@@ -27,10 +40,25 @@ void main() {
       expect(a, b);
       expect(a == c, false);
     });
+
+    test('equality respects editAfterCapture', () {
+      const a = CameraChoiceResult(
+        choice: CameraChoice.app,
+        folder: 'f1',
+        editAfterCapture: true,
+      );
+      const b = CameraChoiceResult(
+        choice: CameraChoice.app,
+        folder: 'f1',
+        editAfterCapture: false,
+      );
+      expect(a == b, false);
+    });
   });
 
   group('showCameraChoiceDialog', () {
-    testWidgets('renders both camera options and folder section', (tester) async {
+    testWidgets('renders both camera options, folder section, and edit toggle',
+        (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
@@ -61,6 +89,12 @@ void main() {
       // Should show folder section
       expect(find.text('添加至文件夹'), findsOneWidget);
 
+      // Should show edit after capture toggle
+      expect(find.text('拍完编辑'), findsOneWidget);
+
+      // Should show the switch widget
+      expect(find.byType(Switch), findsOneWidget);
+
       // App camera card exists
       expect(find.byIcon(Icons.camera_alt), findsOneWidget);
     });
@@ -87,6 +121,54 @@ void main() {
 
       // Default display should show "根目录" (root)
       expect(find.textContaining('根目录'), findsOneWidget);
+    });
+
+    testWidgets('selecting app camera returns result with correct fields',
+        (tester) async {
+      CameraChoiceResult? result;
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () {
+                    showCameraChoiceDialog(context).then((r) => result = r);
+                  },
+                  child: Text('Open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Open the dialog
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Select app camera
+      await tester.tap(find.text('应用相机'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(result, isNotNull);
+      expect(result!.choice, CameraChoice.app);
+      expect(result!.editAfterCapture, false);
+
+      // Open again and select system camera
+      result = null;
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      await tester.tap(find.text('系统相机'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(result, isNotNull);
+      expect(result!.choice, CameraChoice.system);
     });
   });
 }
