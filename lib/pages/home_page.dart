@@ -658,10 +658,10 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   /// 构建页面内容
-  Widget _buildPageContent(AppPage page) {
+  Widget _buildPageContent(AppPage page, int activeTaskCount) {
     switch (page) {
       case AppPage.home:
-        return _buildHomeContent();
+        return _buildHomeContent(activeTaskCount);
       case AppPage.chat:
         return _buildChatOrAssistantPage();
       case AppPage.files:
@@ -672,15 +672,15 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   /// 构建页面内容并附带 Key
-  Widget _buildPageContentWithKey(AppPage page) {
+  Widget _buildPageContentWithKey(AppPage page, int activeTaskCount) {
     return KeyedSubtree(
       key: ValueKey('page_${page.name}'),
-      child: _buildPageContent(page),
+      child: _buildPageContent(page, activeTaskCount),
     );
   }
 
   /// 构建模块化首页内容
-  Widget _buildHomeContent() {
+  Widget _buildHomeContent(int activeTaskCount) {
     final cs = Theme.of(context).colorScheme;
 
     return Padding(
@@ -688,19 +688,41 @@ class _HomePageState extends ConsumerState<HomePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
+          // Header — notification button integrated into the row
+          // so it never overlaps or causes overflow on small screens.
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: Row(
               children: [
                 Icon(Icons.auto_awesome, size: 24, color: cs.primary),
                 const SizedBox(width: 8),
-                Text(
-                  '欢迎使用 Stroom',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: cs.onSurface,
+                Expanded(
+                  child: Text(
+                    '欢迎使用 Stroom',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: cs.onSurface,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const UnifiedTaskListPage()),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Badge(
+                      isLabelVisible: activeTaskCount > 0,
+                      label: Text('$activeTaskCount'),
+                      child: const Icon(Icons.pending_actions, size: 22),
+                    ),
                   ),
                 ),
               ],
@@ -722,7 +744,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 crossAxisCount: 2,
                 mainAxisSpacing: 12,
                 crossAxisSpacing: 12,
-                childAspectRatio: 1.1,
+                childAspectRatio: 0.95,
               ),
               children: [
                 _buildModuleCard(
@@ -783,24 +805,26 @@ class _HomePageState extends ConsumerState<HomePage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 56,
-                height: 56,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, color: color, size: 28),
+                child: Icon(icon, color: color, size: 24),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 6),
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 17,
+                  fontSize: 16,
                   fontWeight: FontWeight.w600,
                   color: cs.onSurface,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text(
                 subtitle,
                 style: TextStyle(
@@ -808,6 +832,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                   color: cs.onSurfaceVariant,
                 ),
                 textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
@@ -822,7 +848,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     ref.watch(main_lib.catcatchStartupProvider);
 
     final isMobile = _isMobile(context);
-    final selectedPage = ref.watch(selectedPageProvider);
+    ref.watch(selectedPageProvider);
     final catcatchTasks = ref.watch(catcatchTasksProvider);
     final synthesisTasks = ref.watch(taskListProvider);
     final lastRead = ref.watch(taskListLastReadProvider);
@@ -853,46 +879,23 @@ class _HomePageState extends ConsumerState<HomePage> {
     });
 
     return Scaffold(
-      body: Stack(
+      body: Row(
         children: [
-          Row(
-            children: [
-              // 桌面端显示侧边栏导航
-              if (!isMobile) _buildNavigationRail(context, activeTaskCount),
-              // 页面内容区域，使用Expanded填充剩余空间
-              Expanded(
-                child: PageView(
-                  controller: _pageController,
-                  onPageChanged: (index) {
-                    ref.read(selectedPageProvider.notifier).state =
-                        AppPage.values[index];
-                  },
-                  children: AppPage.values.map((page) {
-                    return _buildPageContentWithKey(page);
-                  }).toList(),
-                ),
-              ),
-            ],
-          ),
-          // 右上角任务列表入口（仅在首页显示）
-          if (selectedPage == AppPage.home)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 8,
-              right: 16,
-              child: IconButton(
-                icon: Badge(
-                  isLabelVisible: activeTaskCount > 0,
-                  label: Text('$activeTaskCount'),
-                  child: const Icon(Icons.pending_actions),
-                ),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const UnifiedTaskListPage()),
-                  );
-                },
-              ),
+          // 桌面端显示侧边栏导航
+          if (!isMobile) _buildNavigationRail(context, activeTaskCount),
+          // 页面内容区域，使用Expanded填充剩余空间
+          Expanded(
+            child: PageView(
+              controller: _pageController,
+              onPageChanged: (index) {
+                ref.read(selectedPageProvider.notifier).state =
+                    AppPage.values[index];
+              },
+              children: AppPage.values.map((page) {
+                return _buildPageContentWithKey(page, activeTaskCount);
+              }).toList(),
             ),
+          ),
         ],
       ),
       bottomNavigationBar: isMobile ? _buildBottomNavigationBar(context, activeTaskCount) : null,
