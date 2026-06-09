@@ -17,6 +17,7 @@ import '../utils/audio_utils.dart';
 import '../widgets/file_manager_view.dart';
 import 'tts_create_page.dart';
 import 'audio_player_page.dart';
+import 'audio_recording_page.dart';
 
 class TtsPage extends ConsumerStatefulWidget {
   const TtsPage({super.key});
@@ -568,6 +569,30 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
         child: Row(
           children: [
+            // 开始录音按钮
+            Expanded(
+              child: SizedBox(
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const AudioRecordingPage()));
+                  },
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  icon: const Icon(Icons.mic, size: 20),
+                  label: const Text('开始录音',
+                      style: TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // 生成录音按钮
             Expanded(
               child: SizedBox(
                 height: 48,
@@ -583,13 +608,14 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
                         borderRadius: BorderRadius.circular(12)),
                   ),
                   icon: const Icon(Icons.add_circle_outline, size: 20),
-                  label: const Text('制作录音',
-                      style:
-                          TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                  label: const Text('生成录音',
+                      style: TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.w600)),
                 ),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
+            // 导入音频按钮
             Expanded(
               child: SizedBox(
                 height: 48,
@@ -601,8 +627,8 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
                   ),
                   icon: const Icon(Icons.file_download_outlined, size: 20),
                   label: const Text('导入音频',
-                      style:
-                          TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                      style: TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.w600)),
                 ),
               ),
             ),

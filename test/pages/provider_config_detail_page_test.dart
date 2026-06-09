@@ -4,6 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:stroom/pages/provider_config_detail_page.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/pages/llm_model_config_page.dart';
+import 'package:stroom/pages/simple_model_config_page.dart';
+import 'package:stroom/pages/model_config_page.dart';
 
 /// Helper to create a test ProviderEntry with one config
 ProviderEntry _createTestEntry({
@@ -11,11 +14,13 @@ ProviderEntry _createTestEntry({
   String host = 'https://api.test.com',
   String key = 'test-key-123',
   List<ModelConfig> models = const [],
+  String type = 'llm',
+  String name = 'LLM供应商',
 }) {
   return ProviderEntry(
     id: 'test_entry_id',
-    type: 'llm',
-    name: 'LLM供应商',
+    type: type,
+    name: name,
     configs: [
       ProviderConfigItem(
         providerName: providerName,
@@ -29,10 +34,10 @@ ProviderEntry _createTestEntry({
 
 /// Fake notifier that immediately provides test data
 class ProviderEntriesNotifierFake extends ProviderEntriesNotifier {
-  ProviderEntriesNotifierFake() {
+  ProviderEntriesNotifierFake({String type = 'llm', String name = 'LLM供应商'}) {
     state = ProviderEntriesState(
       entries: [
-        _createTestEntry(),
+        _createTestEntry(type: type, name: name),
       ],
     );
   }
@@ -47,12 +52,19 @@ class ProviderEntriesNotifierFake extends ProviderEntriesNotifier {
 
 /// Extension to present the page for testing
 extension on WidgetTester {
-  Future<void> pumpDetailPage({int configIndex = 0}) {
+  Future<void> pumpDetailPage({
+    int configIndex = 0,
+    String entryType = 'llm',
+    String entryName = 'LLM供应商',
+  }) {
     return pumpWidget(
       ProviderScope(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifierFake(),
+            (ref) => ProviderEntriesNotifierFake(
+              type: entryType,
+              name: entryName,
+            ),
           ),
         ],
         child: MaterialApp(
@@ -346,6 +358,93 @@ void main() {
 
       // Should navigate back to the home page
       expect(find.text('Open'), findsOneWidget);
+    });
+  });
+
+  group('Model config page routing by type', () {
+    testWidgets('LLM type renders LlmModelConfigPage when adding model',
+        (tester) async {
+      await tester.pumpDetailPage(entryType: 'llm', entryName: 'LLM供应商');
+      await tester.pumpAndSettle();
+
+      // Enter edit mode
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      // Save/exit edit mode
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      // Now in display mode - see 添加 button
+      await tester.tap(find.text('添加'));
+      await tester.pumpAndSettle();
+
+      // Should navigate to LlmModelConfigPage
+      expect(find.byType(LlmModelConfigPage), findsOneWidget);
+      // SimpleModelConfigPage should not be shown
+      expect(find.byType(SimpleModelConfigPage), findsNothing);
+    });
+
+    testWidgets('OCR type renders SimpleModelConfigPage when adding model',
+        (tester) async {
+      await tester.pumpDetailPage(entryType: 'ocr', entryName: 'OCR供应商');
+      await tester.pumpAndSettle();
+
+      // Enter edit mode and save to transition to display mode
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      // Now in display mode - tap 添加
+      await tester.tap(find.text('添加'));
+      await tester.pumpAndSettle();
+
+      // Should navigate to SimpleModelConfigPage
+      expect(find.byType(SimpleModelConfigPage), findsOneWidget);
+      // LlmModelConfigPage should not be shown
+      expect(find.byType(LlmModelConfigPage), findsNothing);
+    });
+
+    testWidgets('ASR type renders SimpleModelConfigPage when adding model',
+        (tester) async {
+      await tester.pumpDetailPage(entryType: 'asr', entryName: '语音识别供应商');
+      await tester.pumpAndSettle();
+
+      // Enter edit mode and save to transition to display mode
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      // Now in display mode - tap 添加
+      await tester.tap(find.text('添加'));
+      await tester.pumpAndSettle();
+
+      // Should navigate to SimpleModelConfigPage
+      expect(find.byType(SimpleModelConfigPage), findsOneWidget);
+      expect(find.byType(LlmModelConfigPage), findsNothing);
+    });
+
+    testWidgets('TTS type renders ModelConfigPage when adding model',
+        (tester) async {
+      await tester.pumpDetailPage(entryType: 'tts', entryName: 'TTS供应商');
+      await tester.pumpAndSettle();
+
+      // Enter edit mode and save
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      // Now in display mode - tap 添加
+      await tester.tap(find.text('添加'));
+      await tester.pumpAndSettle();
+
+      // Should navigate to ModelConfigPage
+      expect(find.byType(ModelConfigPage), findsOneWidget);
+      expect(find.byType(SimpleModelConfigPage), findsNothing);
+      expect(find.byType(LlmModelConfigPage), findsNothing);
     });
   });
 }

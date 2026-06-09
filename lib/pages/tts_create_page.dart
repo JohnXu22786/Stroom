@@ -309,7 +309,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('制作录音'),
+        title: const Text('生成录音'),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
@@ -938,7 +938,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                 children: [
                   Icon(Icons.audio_file),
                   SizedBox(width: 12),
-                  Text('制作录音', style: TextStyle(fontSize: 16)),
+                  Text('生成录音', style: TextStyle(fontSize: 16)),
                 ],
               ),
       ),

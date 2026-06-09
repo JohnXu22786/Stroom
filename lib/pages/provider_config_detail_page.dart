@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/provider_config.dart';
 import 'llm_model_config_page.dart';
 import 'model_config_page.dart';
+import 'simple_model_config_page.dart';
 
 class ProviderConfigDetailPage extends ConsumerStatefulWidget {
   final String entryId;
@@ -172,158 +173,230 @@ class _ProviderConfigDetailPageState
     final entry = _entry;
     if (entry == null) return;
 
-    final useLlmModel = ProviderTypeRegistry.get(entry.type)?.useLlmModelConfig ?? false;
-    if (useLlmModel) {
-      final result = await Navigator.push<ModelConfig>(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const LlmModelConfigPage(),
-        ),
-      );
-      if (result != null && mounted) {
-        final currentEntry = _entry;
-        if (currentEntry == null) return;
-        if (_isExistingConfig && widget.configIndex < currentEntry.configs.length) {
-          var configs = currentEntry.configs.map((c) => c.copy()).toList();
-          configs[widget.configIndex] = ProviderConfigItem(
-            providerName: configs[widget.configIndex].providerName,
-            host: configs[widget.configIndex].host,
-            key: configs[widget.configIndex].key,
-            models: [
-              ...configs[widget.configIndex].models,
-              result,
-            ],
-          );
-          final updated = ProviderEntry(
-            id: currentEntry.id,
-            type: currentEntry.type,
-            name: currentEntry.name,
-            configs: configs,
-          );
-          await ref
-              .read(providerEntriesProvider.notifier)
-              .update(currentEntry.id, updated);
-        } else {
-          _pendingModels.insert(0, result);
-        }
-        if (mounted) setState(() {});
-      }
-    } else {
-      final result = await Navigator.push<ModelConfig>(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ModelConfigPage(
-            entryId: widget.entryId,
-            configIndex: widget.configIndex >= 0 ? widget.configIndex : 0,
-            modelIndex: -1,
+    final style = ProviderTypeRegistry.get(entry.type)?.modelConfigStyle ??
+        ModelConfigStyle.tts;
+
+    switch (style) {
+      case ModelConfigStyle.llm: {
+        final result = await Navigator.push<ModelConfig>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const LlmModelConfigPage(),
           ),
-        ),
-      );
-      if (mounted) {
-        if (result is ModelConfig) {
-          _pendingModels.insert(0, result);
+        );
+        if (result != null && mounted) {
+          await _insertModelResult(result);
         }
-        ref.invalidate(providerEntriesProvider);
-        setState(() {});
+        break;
+      }
+      case ModelConfigStyle.simple: {
+        final result = await Navigator.push<ModelConfig>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const SimpleModelConfigPage(),
+          ),
+        );
+        if (result != null && mounted) {
+          await _insertModelResult(result);
+        }
+        break;
+      }
+      case ModelConfigStyle.tts: {
+        final result = await Navigator.push<ModelConfig>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ModelConfigPage(
+              entryId: widget.entryId,
+              configIndex: widget.configIndex >= 0 ? widget.configIndex : 0,
+              modelIndex: -1,
+            ),
+          ),
+        );
+        if (mounted) {
+          if (result is ModelConfig) {
+            _pendingModels.insert(0, result);
+          }
+          ref.invalidate(providerEntriesProvider);
+          setState(() {});
+        }
+        break;
       }
     }
+  }
+
+  /// 插入 LLM/Simple 类型的模型结果（共用逻辑）
+  Future<void> _insertModelResult(ModelConfig result) async {
+    final currentEntry = _entry;
+    if (currentEntry == null) return;
+    if (_isExistingConfig &&
+        widget.configIndex < currentEntry.configs.length) {
+      var configs = currentEntry.configs.map((c) => c.copy()).toList();
+      configs[widget.configIndex] = ProviderConfigItem(
+        providerName: configs[widget.configIndex].providerName,
+        host: configs[widget.configIndex].host,
+        key: configs[widget.configIndex].key,
+        models: [
+          ...configs[widget.configIndex].models,
+          result,
+        ],
+      );
+      final updated = ProviderEntry(
+        id: currentEntry.id,
+        type: currentEntry.type,
+        name: currentEntry.name,
+        configs: configs,
+      );
+      await ref
+          .read(providerEntriesProvider.notifier)
+          .update(currentEntry.id, updated);
+    } else {
+      _pendingModels.insert(0, result);
+    }
+    if (mounted) setState(() {});
   }
 
   Future<void> _editModel(int modelIndex) async {
     final entry = _entry;
     if (entry == null) return;
 
-    final useLlmModel = ProviderTypeRegistry.get(entry.type)?.useLlmModelConfig ?? false;
-    if (useLlmModel) {
-      if (widget.configIndex >= 0) {
-        final config = _config;
-        if (config == null ||
-            modelIndex < 0 ||
-            modelIndex >= config.models.length) return;
+    final style = ProviderTypeRegistry.get(entry.type)?.modelConfigStyle ??
+        ModelConfigStyle.tts;
 
-        final result = await Navigator.push<ModelConfig>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => LlmModelConfigPage(
-              model: config.models[modelIndex].copy(),
+    switch (style) {
+      case ModelConfigStyle.llm: {
+        if (widget.configIndex >= 0) {
+          final config = _config;
+          if (config == null ||
+              modelIndex < 0 ||
+              modelIndex >= config.models.length) return;
+
+          final result = await Navigator.push<ModelConfig>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => LlmModelConfigPage(
+                model: config.models[modelIndex].copy(),
+              ),
             ),
-          ),
-        );
-        if (result != null && mounted) {
-          final currentEntry = _entry;
-          if (currentEntry == null) return;
-          var configs = currentEntry.configs.map((c) => c.copy()).toList();
-          if (widget.configIndex >= 0 && widget.configIndex < configs.length) {
-            final models =
-                List<ModelConfig>.from(configs[widget.configIndex].models);
-            models[modelIndex] = result;
-            configs[widget.configIndex] = ProviderConfigItem(
-              providerName: configs[widget.configIndex].providerName,
-              host: configs[widget.configIndex].host,
-              key: configs[widget.configIndex].key,
-              models: models,
-            );
-            final updated = ProviderEntry(
-              id: currentEntry.id,
-              type: currentEntry.type,
-              name: currentEntry.name,
-              configs: configs,
-            );
-            await ref
-                .read(providerEntriesProvider.notifier)
-                .update(currentEntry.id, updated);
+          );
+          if (result != null && mounted) {
+            await _updateModelInConfig(modelIndex, result);
+          }
+        } else {
+          if (modelIndex < 0 || modelIndex >= _pendingModels.length) return;
+          final result = await Navigator.push<ModelConfig>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => LlmModelConfigPage(
+                model: _pendingModels[modelIndex].copy(),
+              ),
+            ),
+          );
+          if (result != null && mounted) {
+            _pendingModels[modelIndex] = result;
             if (mounted) setState(() {});
           }
         }
-      } else {
-        if (modelIndex < 0 || modelIndex >= _pendingModels.length) return;
-        final result = await Navigator.push<ModelConfig>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => LlmModelConfigPage(
-              model: _pendingModels[modelIndex].copy(),
-            ),
-          ),
-        );
-        if (result != null && mounted) {
-          _pendingModels[modelIndex] = result;
-          if (mounted) setState(() {});
-        }
+        break;
       }
-    } else {
-      if (widget.configIndex >= 0) {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ModelConfigPage(
-              entryId: widget.entryId,
-              configIndex: widget.configIndex,
-              modelIndex: modelIndex,
+      case ModelConfigStyle.simple: {
+        if (widget.configIndex >= 0) {
+          final config = _config;
+          if (config == null ||
+              modelIndex < 0 ||
+              modelIndex >= config.models.length) return;
+
+          final result = await Navigator.push<ModelConfig>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => SimpleModelConfigPage(
+                model: config.models[modelIndex].copy(),
+              ),
             ),
-          ),
-        );
-        if (mounted) {
-          ref.invalidate(providerEntriesProvider);
-          setState(() {});
-        }
-      } else {
-        if (modelIndex < 0 || modelIndex >= _pendingModels.length) return;
-        final result = await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ModelConfigPage(
-              entryId: widget.entryId,
-              configIndex: -1,
-              modelIndex: -1,
-              initialModel: _pendingModels[modelIndex].copy(),
+          );
+          if (result != null && mounted) {
+            await _updateModelInConfig(modelIndex, result);
+          }
+        } else {
+          if (modelIndex < 0 || modelIndex >= _pendingModels.length) return;
+          final result = await Navigator.push<ModelConfig>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => SimpleModelConfigPage(
+                model: _pendingModels[modelIndex].copy(),
+              ),
             ),
-          ),
-        );
-        if (result is ModelConfig && mounted) {
-          _pendingModels[modelIndex] = result;
-          if (mounted) setState(() {});
+          );
+          if (result != null && mounted) {
+            _pendingModels[modelIndex] = result;
+            if (mounted) setState(() {});
+          }
         }
+        break;
       }
+      case ModelConfigStyle.tts: {
+        if (widget.configIndex >= 0) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ModelConfigPage(
+                entryId: widget.entryId,
+                configIndex: widget.configIndex,
+                modelIndex: modelIndex,
+              ),
+            ),
+          );
+          if (mounted) {
+            ref.invalidate(providerEntriesProvider);
+            setState(() {});
+          }
+        } else {
+          if (modelIndex < 0 || modelIndex >= _pendingModels.length) return;
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ModelConfigPage(
+                entryId: widget.entryId,
+                configIndex: -1,
+                modelIndex: -1,
+                initialModel: _pendingModels[modelIndex].copy(),
+              ),
+            ),
+          );
+          if (result is ModelConfig && mounted) {
+            _pendingModels[modelIndex] = result;
+            if (mounted) setState(() {});
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  /// 更新 LLM/Simple 类型在已有配置中的模型（共用逻辑）
+  Future<void> _updateModelInConfig(int modelIndex, ModelConfig result) async {
+    final currentEntry = _entry;
+    if (currentEntry == null) return;
+    var configs = currentEntry.configs.map((c) => c.copy()).toList();
+    if (widget.configIndex >= 0 && widget.configIndex < configs.length) {
+      final models =
+          List<ModelConfig>.from(configs[widget.configIndex].models);
+      models[modelIndex] = result;
+      configs[widget.configIndex] = ProviderConfigItem(
+        providerName: configs[widget.configIndex].providerName,
+        host: configs[widget.configIndex].host,
+        key: configs[widget.configIndex].key,
+        models: models,
+      );
+      final updated = ProviderEntry(
+        id: currentEntry.id,
+        type: currentEntry.type,
+        name: currentEntry.name,
+        configs: configs,
+      );
+      await ref
+          .read(providerEntriesProvider.notifier)
+          .update(currentEntry.id, updated);
+      if (mounted) setState(() {});
     }
   }
 
