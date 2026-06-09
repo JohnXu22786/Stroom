@@ -8,7 +8,7 @@ import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import 'package:markdown_widget/markdown_widget.dart';
-import 'package:flutter_highlight/themes/dracula.dart';
+import '../widgets/markdown_extensions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 import '../widgets/camera_choice_dialog.dart';
@@ -1261,8 +1261,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final markdownConfig =
-        isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig;
+    final markdownConfig = buildMarkdownConfig(isDark: isDark);
     final adapterConfigured = _adapter.isConfigured;
     final controller = _controller;
     final isStreaming = ref.watch(_isStreamingProvider);
@@ -1725,9 +1724,8 @@ composerBuilder: (context) => ChatComposerWidget(
                                                     selectable: true,
                                                     shrinkWrap: true,
                                                     physics: const NeverScrollableScrollPhysics(),
-                                                    config: markdownConfig.copy(configs: [
-                                                      PreConfig(theme: draculaTheme),
-                                                    ]),
+                                                    config: markdownConfig,
+                                                    markdownGenerator: markdownGenerator,
                                                   ),
                                             ),
                                             _ToolCallSegment s => ToolCallCard(data: s.data),
@@ -1741,9 +1739,8 @@ composerBuilder: (context) => ChatComposerWidget(
                                         shrinkWrap: true,
                                         physics:
                                             const NeverScrollableScrollPhysics(),
-                                        config: markdownConfig.copy(configs: [
-                                          PreConfig(theme: draculaTheme),
-                                        ]),
+                                        config: markdownConfig,
+                                        markdownGenerator: markdownGenerator,
                                       ),
                                   ],
                                 ),
