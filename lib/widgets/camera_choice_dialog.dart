@@ -7,10 +7,12 @@ enum CameraChoice { app, system }
 class CameraChoiceResult {
   final CameraChoice choice;
   final String folder;
+  final bool editAfterCapture;
 
   const CameraChoiceResult({
     required this.choice,
     this.folder = '',
+    this.editAfterCapture = false,
   });
 
   @override
@@ -18,10 +20,11 @@ class CameraChoiceResult {
       identical(this, other) ||
       other is CameraChoiceResult &&
           choice == other.choice &&
-          folder == other.folder;
+          folder == other.folder &&
+          editAfterCapture == other.editAfterCapture;
 
   @override
-  int get hashCode => Object.hash(choice, folder);
+  int get hashCode => Object.hash(choice, folder, editAfterCapture);
 }
 
 /// 显示拍照方式选择弹窗（含文件夹选择）
@@ -65,6 +68,7 @@ class _CameraChoiceSheet extends StatefulWidget {
 
 class _CameraChoiceSheetState extends State<_CameraChoiceSheet> {
   late String _selectedFolder;
+  bool _editAfterCapture = false;
 
   @override
   void initState() {
@@ -191,6 +195,54 @@ class _CameraChoiceSheetState extends State<_CameraChoiceSheet> {
               ),
             ),
           ),
+          const SizedBox(height: 12),
+          // Edit after capture toggle
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.5),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.edit_outlined,
+                  size: 20,
+                  color: cs.primary,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '拍完编辑',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.w500),
+                      ),
+                      Text(
+                        '拍照后立即进入编辑模式',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: cs.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: _editAfterCapture,
+                  onChanged: (v) => setState(() => _editAfterCapture = v),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     ),
@@ -201,6 +253,7 @@ class _CameraChoiceSheetState extends State<_CameraChoiceSheet> {
     Navigator.of(context).pop(CameraChoiceResult(
       choice: choice,
       folder: _selectedFolder,
+      editAfterCapture: _editAfterCapture,
     ));
   }
 }
