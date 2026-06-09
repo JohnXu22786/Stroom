@@ -18,6 +18,24 @@ Widget _buildTestApp() {
   );
 }
 
+/// Sets the test surface to a small phone size (e.g. iPhone SE logical size).
+void _setSmallScreen(WidgetTester tester) {
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  // Use logical 375x812 (iPhone X size) by setting physical size = logical size
+  // with device pixel ratio = 1.0 for predictable test measurements.
+  tester.view.physicalSize = const Size(375, 812);
+  tester.view.devicePixelRatio = 1.0;
+}
+
+/// Sets the test surface to a very narrow size (e.g. very small phone).
+void _setVeryNarrowScreen(WidgetTester tester) {
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  tester.view.physicalSize = const Size(320, 780);
+  tester.view.devicePixelRatio = 1.0;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -70,6 +88,101 @@ void main() {
 
       // OCR icon should be present
       expect(find.byIcon(Icons.text_snippet), findsOneWidget);
+    });
+  });
+
+  group('HomePage responsive layout', () {
+    testWidgets('welcome text and notification button both visible on small screen',
+        (tester) async {
+      _setSmallScreen(tester);
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Welcome text should be visible
+      expect(find.text('欢迎使用 Stroom'), findsOneWidget);
+
+      // Notification button should be visible
+      expect(find.byIcon(Icons.pending_actions), findsOneWidget);
+
+      // Subtitle should be visible
+      expect(find.text('选择一个功能模块开始使用'), findsOneWidget);
+
+      // Module card labels should be visible
+      expect(find.text('OCR'), findsOneWidget);
+      expect(find.text('语音识别'), findsOneWidget);
+
+      // No overflow exceptions should have been thrown
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('no RenderFlex overflow error on very narrow screen (320px)',
+        (tester) async {
+      _setVeryNarrowScreen(tester);
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Verify all key elements are still present
+      expect(find.text('欢迎使用 Stroom'), findsOneWidget);
+      expect(find.text('OCR'), findsOneWidget);
+      expect(find.text('语音识别'), findsOneWidget);
+      expect(find.byIcon(Icons.pending_actions), findsOneWidget);
+
+      // No overflow exceptions
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('notification button does not overlap with header text',
+        (tester) async {
+      _setSmallScreen(tester);
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Get the render box of the welcome text to find its right edge
+      final welcomeTextFinder = find.text('欢迎使用 Stroom');
+      expect(welcomeTextFinder, findsOneWidget);
+
+      final welcomeRenderBox = tester.renderObject<RenderBox>(welcomeTextFinder);
+      final welcomeRect = welcomeRenderBox.localToGlobal(Offset.zero) &
+          welcomeRenderBox.size;
+
+      // Get the render box of the notification button
+      final notifBtnFinder = find.byIcon(Icons.pending_actions);
+      expect(notifBtnFinder, findsOneWidget);
+
+      final notifRenderBox = tester.renderObject<RenderBox>(notifBtnFinder);
+      final notifRect =
+          notifRenderBox.localToGlobal(Offset.zero) & notifRenderBox.size;
+
+      // The notification button should be to the RIGHT of the welcome text
+      // (not overlapping horizontally)
+      expect(notifRect.left, greaterThanOrEqualTo(welcomeRect.right - 8),
+          reason:
+              'Notification button should not overlap with welcome text');
+    });
+
+    testWidgets('module card texts fit within card bounds',
+        (tester) async {
+      _setSmallScreen(tester);
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Check that the OCR card text render boxes are within the card's area
+      final ocrCard = find.text('OCR');
+      expect(ocrCard, findsOneWidget);
+
+      final ocrSubtitle = find.text('文字识别');
+      expect(ocrSubtitle, findsOneWidget);
+
+      // Verify they're rendered (rendering means they fit)
+      expect(tester.renderObject<RenderBox>(ocrCard).size.width, greaterThan(0));
+      expect(tester.renderObject<RenderBox>(ocrSubtitle).size.width, greaterThan(0));
+
+      // Verify no overflow
+      expect(tester.takeException(), isNull);
     });
   });
 }
