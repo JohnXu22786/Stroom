@@ -19,6 +19,7 @@ import 'package:image_picker/image_picker.dart';
 import '../widgets/camera_choice_dialog.dart';
 import '../widgets/folder_picker_dialog.dart';
 import 'ocr_page.dart';
+import 'asr_page.dart';
 
 /// 页面枚举，定义应用中的主要页面（不含加号按钮）
 enum AppPage {
@@ -733,6 +734,18 @@ class _HomePageState extends ConsumerState<HomePage> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => const OcrPage()),
+                    );
+                  },
+                ),
+                _buildModuleCard(
+                  icon: Icons.multitrack_audio,
+                  label: '语音识别',
+                  subtitle: '语音转文字',
+                  color: Colors.deepPurple,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AsrPage()),
                     );
                   },
                 ),

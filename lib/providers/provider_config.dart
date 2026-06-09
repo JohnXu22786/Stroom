@@ -418,6 +418,9 @@ void registerBuiltinProviderTypes() {
   ProviderTypeRegistry.register(const ProviderTypeDefinition(
     type: 'ocr',
   ));
+  ProviderTypeRegistry.register(const ProviderTypeDefinition(
+    type: 'asr',
+  ));
 }
 
 // ============================================================================
@@ -494,6 +497,11 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         id: 'builtin_ocr',
         type: 'ocr',
         name: 'OCR供应商',
+      ),
+      ProviderEntry(
+        id: 'builtin_asr',
+        type: 'asr',
+        name: '语音识别供应商',
       ),
     ]);
   }
