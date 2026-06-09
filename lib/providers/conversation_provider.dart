@@ -7,88 +7,84 @@ import 'package:uuid/uuid.dart';
 
 import '../models/assistant.dart';
 import '../models/chat_message.dart';
+import 'assistant_provider.dart';
 
 // ============================================================================
-// Helper: migrate old conversations with null assistantId to default assistant
+// Helper: auto-fix conversations with null assistantId
 // ============================================================================
 
-/// Migrates old conversations with null assistantId to the default assistant.
+/// Ensures all conversations have an assigned assistantId.
 ///
-/// Old conversations created before the multi-assistant feature had
-/// null assistantId, making them invisible when filtered by assistant.
-/// This migration assigns them to the default assistant (first in list).
+/// On every load, any conversation with a null assistantId is assigned to the
+/// default assistant. This replaces the old one-time migration flag approach
+/// which failed if new null-assistantId conversations were created after the
+/// migration flag was set, or if the default assistant wasn't persisted yet.
 ///
-/// Guarded by the 'migrated_old_conversations' SharedPreferences flag
-/// to ensure it runs only once.
-///
-/// Returns the list of migrated [Conversation]s (in-memory) so callers can
-/// update their state, or `null` if migration was skipped or no assistants
-/// exist yet.
-Future<List<Conversation>?> migrateConversationsFromPrefs(
-    SharedPreferences prefs) async {
+/// Returns true if any conversations were modified.
+Future<bool> assignNullAssistantConversations(
+    SharedPreferences prefs, List<Conversation> conversations) async {
   try {
-    final alreadyMigrated =
-        prefs.getBool('migrated_old_conversations') ?? false;
-    if (alreadyMigrated) return null;
+    // Check if any conversation has null assistantId
+    final hasNull = conversations.any((c) => c.assistantId == null);
+    if (!hasNull) return false;
 
-    // Read the default assistant from the assistants store.
-    // If no assistants exist yet, create the default assistant right here
-    // so the migration is self-contained and doesn't race with
-    // AssistantsNotifier._load().
-    final assistantsJson = prefs.getString('assistants');
-    List<Map<String, dynamic>> assistantsList;
-    if (assistantsJson == null || assistantsJson.isEmpty) {
-      final defaultAssistant = Assistant(
-        name: '默认助手',
-        prompt: '你是一个有帮助的AI助手。请用中文回答用户的问题。',
-        emoji: '🤖',
-        description: '通用AI助手',
-      );
-      assistantsList = [defaultAssistant.toMap()];
-      await prefs.setString('assistants', jsonEncode(assistantsList));
-      debugPrint(
-          'Created default assistant during migration (${defaultAssistant.id})');
-    } else {
-      assistantsList = (jsonDecode(assistantsJson) as List)
-          .cast<Map<String, dynamic>>();
-    }
-    if (assistantsList.isEmpty) {
-      return null; // Safety: should not happen after creation above
-    }
-    final defaultAssistantId = assistantsList.first['id'] as String;
+    // Resolve the default assistant ID
+    final defaultId = await _resolveDefaultAssistantId(prefs);
+    if (defaultId == null) return false;
 
-    // Read and migrate conversations
-    final conversationsJson = prefs.getString('conversations');
-    if (conversationsJson == null) return null;
-
-    final conversationList = (jsonDecode(conversationsJson) as List)
-        .cast<Map<String, dynamic>>();
+    // Assign the default ID to all null-assistantId conversations
     bool changed = false;
-
-    for (final conv in conversationList) {
-      if (conv['assistantId'] == null) {
-        conv['assistantId'] = defaultAssistantId;
+    for (final conv in conversations) {
+      if (conv.assistantId == null) {
+        conv.assistantId = defaultId;
         changed = true;
       }
     }
 
+    // Persist the fix
     if (changed) {
       await prefs.setString(
-          'conversations', jsonEncode(conversationList));
+          'conversations', jsonEncode(conversations.map((e) => e.toMap()).toList()));
       debugPrint(
-          'Migrated old conversations to default assistant ($defaultAssistantId)');
+          'Auto-assigned null-assistantId conversations to default assistant ($defaultId)');
     }
 
-    await prefs.setBool('migrated_old_conversations', true);
-
-    // Return the migrated conversations for in-memory state update
-    return conversationList
-        .map((m) => Conversation.fromMap(m))
-        .toList();
+    return changed;
   } catch (e) {
-    debugPrint('Failed to migrate old conversations: $e');
-    return null;
+    debugPrint('Failed to auto-assign null-assistantId conversations: $e');
+    return false;
   }
+}
+
+/// Resolves the default assistant ID from in-memory state or SharedPreferences.
+///
+/// Tries in order:
+/// 1. The first assistant from [assistantProvider] (in-memory, if initialized)
+/// 2. The first assistant from SharedPreferences
+/// 3. Creates a new default assistant and persists it
+Future<String?> _resolveDefaultAssistantId(SharedPreferences prefs) async {
+  // Try from SharedPreferences first (safe across provider boundaries)
+  final assistantsJson = prefs.getString('assistants');
+  if (assistantsJson != null && assistantsJson.isNotEmpty) {
+    final list = (jsonDecode(assistantsJson) as List)
+        .cast<Map<String, dynamic>>();
+    if (list.isNotEmpty) {
+      return list.first['id'] as String;
+    }
+  }
+
+  // No assistants exist yet - create a default one
+  final defaultAssistant = Assistant(
+    name: '默认助手',
+    prompt: '你是一个有帮助的AI助手。请用中文回答用户的问题。',
+    emoji: '🤖',
+    description: '通用AI助手',
+  );
+  await prefs.setString('assistants',
+      jsonEncode([defaultAssistant.toMap()]));
+  debugPrint(
+      'Created default assistant during migration (${defaultAssistant.id})');
+  return defaultAssistant.id;
 }
 
 // ============================================================================
@@ -192,13 +188,11 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
         state = [];
       }
 
-      // Migrate old conversations with null assistantId to default assistant.
-      // This runs before the active conversation ID is restored so the UI
-      // sees migrated data from the first frame.
-      final migrated = await migrateConversationsFromPrefs(prefs);
-      if (migrated != null) {
-        state = migrated;
-      }
+      // Auto-fix conversations with null assistantId on every load.
+      // This is more reliable than the old one-time migration flag:
+      // it catches conversations that were created without assistantId
+      // even after the old migration had already "run".
+      await assignNullAssistantConversations(prefs, state);
 
       // Restore last active conversation
       final activeId = prefs.getString('active_conversation_id');

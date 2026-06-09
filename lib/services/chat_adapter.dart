@@ -3,10 +3,12 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import '../models/assistant.dart' show CustomParameter;
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
+import '../models/mcp.dart';
 import '../models/tool_call.dart';
 import '../providers/provider_config.dart';
 import 'chat_service.dart';
 import '../providers/chat_api_provider.dart';
+import 'mcp_client.dart';
 
 /// 表示一个可选的模型项
 class AvailableModel {
@@ -30,6 +32,12 @@ class AvailableModel {
 class ChatAdapter {
   ChatService? _chatService;
 
+  /// MCP 客户端管理器
+  final McpClientManager _mcpClientManager = McpClientManager();
+
+  /// 缓存的 MCP 工具列表
+  List<ToolDefinition> _mcpToolDefinitions = [];
+
   /// 当前选中的配置索引（指向 llmEntry.configs）
   int currentConfigIndex = -1;
 
@@ -37,6 +45,60 @@ class ChatAdapter {
   int currentModelIndex = -1;
 
   bool get isConfigured => _chatService != null;
+
+  /// 获取当前 MCP 工具定义列表
+  List<ToolDefinition> get mcpToolDefinitions =>
+      List.unmodifiable(_mcpToolDefinitions);
+
+  /// 初始化 MCP 客户端并发现工具
+  Future<void> initializeMcpServers(ProviderEntriesState entriesState) async {
+    final mcpEntry =
+        entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
+    if (mcpEntry == null || mcpEntry.configs.isEmpty) return;
+
+    // Build MCP server configs from provider configs
+    final mcpConfigs = <McpServerConfig>[];
+    for (final config in mcpEntry.configs) {
+      final typeConfig =
+          config.models.isNotEmpty ? config.models[0].typeConfig : null;
+      final serverConfig = McpServerConfig.fromProviderConfig(
+        providerName: config.providerName,
+        typeConfig: typeConfig,
+      );
+      if (serverConfig != null) {
+        mcpConfigs.add(serverConfig);
+      }
+    }
+
+    // Set McpClientManager on ChatService for tool routing
+    ChatService.setMcpClientManager(_mcpClientManager);
+
+    // Create clients and discover tools
+    final allTools = <ToolDefinition>[];
+    for (final mcpConfig in mcpConfigs) {
+      try {
+        final client = McpClient(config: mcpConfig);
+        _mcpClientManager.addClient(mcpConfig.name, client);
+
+        // Try to connect and list tools
+        final tools = await client.listTools();
+        final toolDefs = tools.map((t) => t.toToolDefinition()).toList();
+        allTools.addAll(toolDefs);
+
+        debugPrint(
+            'MCP[${mcpConfig.name}]: discovered ${toolDefs.length} tools');
+      } catch (e) {
+        debugPrint('MCP[${mcpConfig.name}]: init error: $e');
+      }
+    }
+    _mcpToolDefinitions = allTools;
+  }
+
+  /// 释放 MCP 资源
+  void disposeMcp() {
+    _mcpClientManager.disposeAll();
+    _mcpToolDefinitions = [];
+  }
 
   /// 从 ProviderEntriesState 解析出所有可选的模型列表
   List<AvailableModel> availableModels(ProviderEntriesState entriesState) {
@@ -152,6 +214,14 @@ class ChatAdapter {
     _chatService = null;
     currentConfigIndex = -1;
     currentModelIndex = -1;
+    disposeMcp();
+  }
+
+  /// 获取所有可用工具定义（内置 + MCP）
+  List<ToolDefinition> getAllToolDefinitions() {
+    // Built-in tools are registered statically via ChatService.registerTool()
+    // MCP tools are discovered dynamically
+    return List.from(_mcpToolDefinitions);
   }
 
   /// Pass assistant-level custom parameters to the underlying ChatService.
