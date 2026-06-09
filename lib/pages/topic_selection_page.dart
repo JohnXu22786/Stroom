@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/assistant.dart';
 import '../providers/assistant_provider.dart';
 import '../providers/conversation_provider.dart';
+import '../widgets/llm/assistant_avatar.dart';
 import '../services/attachment_storage.dart';
 
 /// Helper: count message content matches in a conversation for a query.
@@ -364,8 +365,11 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
               title: Row(
                 children: [
                   if (selectedAssistant != null) ...[
-                    Text(selectedAssistant.emoji,
-                        style: const TextStyle(fontSize: 20)),
+                    AssistantAvatar(
+                      assistant: selectedAssistant,
+                      size: 28,
+                      borderRadius: 8,
+                    ),
                     const SizedBox(width: 8),
                   ],
                   Text(_selectionMode ? '已选 ${_selectedIds.length} 个' : '选择话题'),
@@ -437,17 +441,10 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                   ),
                   child: Row(
                     children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: cs.primaryContainer,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Center(
-                          child: Text(selectedAssistant.emoji,
-                              style: const TextStyle(fontSize: 20)),
-                        ),
+                      AssistantAvatar(
+                        assistant: selectedAssistant,
+                        size: 40,
+                        borderRadius: 12,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -545,6 +542,121 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                   ),
               ],
             ),
+    );
+  }
+
+  void _createNewTopic(BuildContext context, WidgetRef ref) {
+    final assistantId = ref.read(selectedAssistantIdProvider);
+    if (assistantId == null) return;
+
+    // Create a new conversation associated with this assistant
+    ref.read(conversationsProvider.notifier)
+        .createConversation(assistantId: assistantId);
+
+    // Navigate to chat page within the chat tab's nested navigator
+    Navigator.of(context).pushNamed('/chat');
+  }
+
+  void _onTopicSelected(
+      BuildContext context, WidgetRef ref, Conversation topic) {
+    ref.read(conversationsProvider.notifier).selectConversation(topic.id);
+    // Navigate to chat page within the chat tab's nested navigator
+    Navigator.of(context).pushNamed('/chat');
+  }
+
+  void _deleteTopic(
+      BuildContext context, WidgetRef ref, Conversation topic) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除话题'),
+        content: Text('确定要删除话题「${topic.title.isEmpty ? '新话题' : topic.title}」吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              ref
+                  .read(conversationsProvider.notifier)
+                  .deleteConversation(topic.id);
+              Navigator.pop(ctx);
+            },
+            style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showQuickSettings(
+      BuildContext context, WidgetRef ref, Assistant assistant) {
+    double temperature = assistant.settings.temperature;
+    bool enableTemperature = assistant.settings.enableTemperature;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          title: Row(
+            children: [
+              AssistantAvatar(
+                assistant: assistant,
+                size: 24,
+                borderRadius: 6,
+              ),
+              const SizedBox(width: 8),
+              Text('${assistant.name} 参数'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SwitchListTile(
+                  title: const Text('温度 (Temperature)'),
+                  subtitle: Text('$temperature'),
+                  value: enableTemperature,
+                  onChanged: (v) =>
+                      setDlgState(() => enableTemperature = v),
+                ),
+                if (enableTemperature)
+                  Slider(
+                    value: temperature,
+                    min: 0,
+                    max: 2,
+                    divisions: 40,
+                    label: temperature.toStringAsFixed(2),
+                    onChanged: (v) =>
+                        setDlgState(() => temperature = v),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () {
+                ref
+                    .read(assistantProvider.notifier)
+                    .updateAssistantSettings(
+                      assistantId: assistant.id,
+                      temperature: temperature,
+                      enableTemperature: enableTemperature,
+                    );
+                Navigator.pop(ctx);
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
