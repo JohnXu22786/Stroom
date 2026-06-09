@@ -43,18 +43,20 @@ class HomePage extends ConsumerStatefulWidget {
 }
 
 class _HomePageState extends ConsumerState<HomePage> {
-  late PageController _pageController;
   final _chatNavigatorKey = GlobalKey<NavigatorState>();
+
+  /// 页面导航历史栈，用于返回键导航到上一页。
+  /// 每次通过导航栏/侧边栏切换到新页面时，当前页被推入栈中。
+  /// 按下返回键时从栈中弹出上一页并导航到它。
+  final List<AppPage> _pageHistory = [];
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(initialPage: AppPage.home.index);
   }
 
   @override
   void dispose() {
-    _pageController.dispose();
     super.dispose();
   }
 
@@ -459,11 +461,14 @@ class _HomePageState extends ConsumerState<HomePage> {
           return;
         }
         final pageIndex = index > 2 ? index - 1 : index;
-        ref.read(selectedPageProvider.notifier).state =
-            AppPage.values[pageIndex];
-        _pageController.jumpToPage(pageIndex);
-        if (AppPage.values[pageIndex] == AppPage.chat) {
-          _resetChatNavigator();
+        final newPage = AppPage.values[pageIndex];
+        final currentPage = ref.read(selectedPageProvider);
+        if (newPage != currentPage) {
+          _pageHistory.add(currentPage);
+          ref.read(selectedPageProvider.notifier).state = newPage;
+          if (newPage == AppPage.chat) {
+            _resetChatNavigator();
+          }
         }
       },
       labelType: NavigationRailLabelType.all,
@@ -557,11 +562,14 @@ class _HomePageState extends ConsumerState<HomePage> {
           return;
         }
         final pageIndex = index > 2 ? index - 1 : index;
-        ref.read(selectedPageProvider.notifier).state =
-            AppPage.values[pageIndex];
-        _pageController.jumpToPage(pageIndex);
-        if (AppPage.values[pageIndex] == AppPage.chat) {
-          _resetChatNavigator();
+        final newPage = AppPage.values[pageIndex];
+        final currentPage = ref.read(selectedPageProvider);
+        if (newPage != currentPage) {
+          _pageHistory.add(currentPage);
+          ref.read(selectedPageProvider.notifier).state = newPage;
+          if (newPage == AppPage.chat) {
+            _resetChatNavigator();
+          }
         }
       },
       destinations: [
@@ -658,10 +666,10 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   /// 构建页面内容
-  Widget _buildPageContent(AppPage page, int activeTaskCount) {
+  Widget _buildPageContent(AppPage page) {
     switch (page) {
       case AppPage.home:
-        return _buildHomeContent(activeTaskCount);
+        return _buildHomeContent();
       case AppPage.chat:
         return _buildChatOrAssistantPage();
       case AppPage.files:
@@ -671,17 +679,24 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
   }
 
-  /// 构建页面内容并附带 Key
-  Widget _buildPageContentWithKey(AppPage page, int activeTaskCount) {
-    return KeyedSubtree(
-      key: ValueKey('page_${page.name}'),
-      child: _buildPageContent(page, activeTaskCount),
-    );
-  }
-
   /// 构建模块化首页内容
-  Widget _buildHomeContent(int activeTaskCount) {
+  Widget _buildHomeContent() {
     final cs = Theme.of(context).colorScheme;
+    final catcatchTasks = ref.watch(catcatchTasksProvider);
+    final synthesisTasks = ref.watch(taskListProvider);
+    final lastRead = ref.watch(taskListLastReadProvider);
+    final activeTaskCount =
+        catcatchTasks
+            .where((t) =>
+              t.status.name != 'completed' && (
+                (t.statusChangedAt ?? t.createdAt).isAfter(lastRead) ||
+                (t.status.name == 'running' &&
+                 t.steps.any((s) => s.type.name == 'userSelecting' && s.running))
+              )
+            ).length +
+        synthesisTasks
+            .where((t) => t.status.name != 'completed' && (t.statusChangedAt ?? t.createdAt).isAfter(lastRead))
+            .length;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -848,7 +863,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     ref.watch(main_lib.catcatchStartupProvider);
 
     final isMobile = _isMobile(context);
-    ref.watch(selectedPageProvider);
+    final selectedPage = ref.watch(selectedPageProvider);
     final catcatchTasks = ref.watch(catcatchTasksProvider);
     final synthesisTasks = ref.watch(taskListProvider);
     final lastRead = ref.watch(taskListLastReadProvider);
@@ -878,27 +893,45 @@ class _HomePageState extends ConsumerState<HomePage> {
       }
     });
 
-    return Scaffold(
-      body: Row(
-        children: [
-          // 桌面端显示侧边栏导航
-          if (!isMobile) _buildNavigationRail(context, activeTaskCount),
-          // 页面内容区域，使用Expanded填充剩余空间
-          Expanded(
-            child: PageView(
-              controller: _pageController,
-              onPageChanged: (index) {
-                ref.read(selectedPageProvider.notifier).state =
-                    AppPage.values[index];
-              },
-              children: AppPage.values.map((page) {
-                return _buildPageContentWithKey(page, activeTaskCount);
-              }).toList(),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        // 返回键处理：
+        // 1. 如果当前在聊天页且嵌套导航器有历史路由，先弹出嵌套路由
+        final currentPage = ref.read(selectedPageProvider);
+        if (currentPage == AppPage.chat &&
+            _chatNavigatorKey.currentState != null &&
+            _chatNavigatorKey.currentState!.canPop()) {
+          _chatNavigatorKey.currentState!.pop();
+          return;
+        }
+        // 2. 否则在四类主页面之间导航上一页
+        if (_pageHistory.isNotEmpty) {
+          final previousPage = _pageHistory.removeLast();
+          ref.read(selectedPageProvider.notifier).state = previousPage;
+          // 通过返回键回到聊天页时保留对话状态，不重置导航器
+        }
+        // 3. 如果历史栈为空（首页），不做任何操作，不退出桌面
+      },
+      child: Scaffold(
+        body: Row(
+          children: [
+            // 桌面端显示侧边栏导航
+            if (!isMobile) _buildNavigationRail(context, activeTaskCount),
+            // 页面内容区域，使用IndexedStack保持各页面状态
+            Expanded(
+              child: IndexedStack(
+                index: selectedPage.index,
+                children: AppPage.values.map((page) {
+                  return _buildPageContent(page);
+                }).toList(),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
+        bottomNavigationBar: isMobile ? _buildBottomNavigationBar(context, activeTaskCount) : null,
       ),
-      bottomNavigationBar: isMobile ? _buildBottomNavigationBar(context, activeTaskCount) : null,
     );
   }
 }
