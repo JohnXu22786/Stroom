@@ -44,21 +44,26 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
   }
 
   String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final diff = now.difference(date);
-    if (diff.inMinutes < 1) return '刚刚';
-    if (diff.inHours < 1) return '${diff.inMinutes} 分钟前';
-    if (diff.inDays < 1) return '${diff.inHours} 小时前';
-    if (diff.inDays < 7) return '${diff.inDays} 天前';
-    return '${date.month}/${date.day}';
+    // Show detailed date format: yyyy-MM-dd HH:mm
+    final y = date.year.toString();
+    final m = date.month.toString().padLeft(2, '0');
+    final d = date.day.toString().padLeft(2, '0');
+    final h = date.hour.toString().padLeft(2, '0');
+    final min = date.minute.toString().padLeft(2, '0');
+    return '$y-$m-$d $h:$min';
   }
 
+  /// Sorts conversations: pinned items first, then preserves the original list
+  /// order for non-pinned items. This ensures:
+  ///   - Clicking a conversation does NOT auto-move it to the top
+  ///   - User drag-reorder is preserved
+  ///   - New conversations (prepended by createConversation) stay at top
   List<Conversation> _sortedConversations(List<Conversation> conversations) {
     final sorted = List<Conversation>.from(conversations);
     sorted.sort((a, b) {
       if (a.isPinned && !b.isPinned) return -1;
       if (!a.isPinned && b.isPinned) return 1;
-      return b.updatedAt.compareTo(a.updatedAt);
+      return 0; // Preserve list order for non-pinned items
     });
     return sorted;
   }
