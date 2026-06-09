@@ -275,7 +275,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       messages: [],
       assistantId: assistantId,
     );
-    state = [...state, conv];
+    state = [conv, ...state];
     _ref.read(activeConversationIdProvider.notifier).state = conv.id;
     _persistActiveId();
     return conv.id;
