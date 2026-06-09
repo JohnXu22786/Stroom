@@ -8,7 +8,7 @@ import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 import 'package:markdown_widget/markdown_widget.dart';
-import 'package:flutter_highlight/themes/dracula.dart';
+import '../widgets/markdown_extensions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 import '../widgets/camera_choice_dialog.dart';
@@ -29,7 +29,6 @@ import '../providers/provider_config.dart';
 import '../pages/camera_page.dart';
 import '../widgets/llm/jumping_dots.dart';
 import '../widgets/llm/tool_call_card.dart';
-import 'conversations_page.dart';
 import 'message_search_page.dart';
 import 'provider_config_page.dart';
 import '../utils/data_sanitizer.dart';
@@ -172,8 +171,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     super.dispose();
   }
 
-  void _initialize() {
+  Future<void> _initialize() async {
     _configureAdapter();
+    // Initialize MCP servers and discover tools
+    final entriesState = ref.read(providerEntriesProvider);
+    await _adapter.initializeMcpServers(entriesState);
     // Restore saved model selection — clear stale index if out of range
     SharedPreferences.getInstance().then((prefs) {
       // Restore saved model selection — clear stale index if out of range
@@ -281,47 +283,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
   }
 
-  void _newConversation() {
-    if (ref.read(_isStreamingProvider)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('请等待当前消息生成完成')),
-        );
-      }
-      return;
-    }
-    _saveMessages().then((_) {
-      ref.read(conversationsProvider.notifier).createConversation();
-      _history.clear();
-      _chatSegments.clear();
-      _streamingMsgId = null;
-      _controller?.dispose();
-      final newCtrl = InMemoryChatController();
-      setState(() => _controller = newCtrl);
-    });
-  }
-
-  void _showHistory() {
-    _saveMessages().then((_) {
-      if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).push<String>(
-        MaterialPageRoute(builder: (_) => const ConversationsPage()),
-      ).then((searchQuery) {
-        if (!mounted) return;
-        _loadConversationMessages();
-        // If the user navigated from search results, activate search mode
-        if (searchQuery != null && searchQuery.isNotEmpty) {
-          setState(() {
-            _searchTextController.text = searchQuery;
-            _searchMode = _SearchMode.current;
-            _isSearching = true;
-          });
-          _performSearch(searchQuery);
-        }
-      });
-    });
-  }
-
   Future<void> _onMessageSend(String text, List<Attachment> attachments) async {
     if (ref.read(_isStreamingProvider)) return;
 
@@ -384,26 +345,31 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
 
     try {
+      // Merge built-in tools with MCP tools
+      final mcpTools = _adapter.getAllToolDefinitions();
+      final allTools = <ToolDefinition>[
+        const ToolDefinition(
+          name: 'calculator',
+          description: 'Evaluate a math expression and return the result',
+          parameters: {
+            'type': 'object',
+            'properties': {
+              'expression': {
+                'type': 'string',
+                'description': 'A math expression to evaluate e.g. 2 + 2',
+              },
+            },
+            'required': ['expression'],
+          },
+        ),
+        ...mcpTools,
+      ];
+
       final stream = _adapter.sendStreamWithTools(
         text,
         history: _history,
         reasoning: _reasoningEnabled,
-        tools: const [
-          ToolDefinition(
-            name: 'calculator',
-            description: 'Evaluate a math expression and return the result',
-            parameters: {
-              'type': 'object',
-              'properties': {
-                'expression': {
-                  'type': 'string',
-                  'description': 'A math expression to evaluate e.g. 2 + 2',
-                },
-              },
-              'required': ['expression'],
-            },
-          ),
-        ],
+        tools: allTools,
       );
 
       await for (final event in stream) {
@@ -1261,8 +1227,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final markdownConfig =
-        isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig;
+    final markdownConfig = buildMarkdownConfig(isDark: isDark);
     final adapterConfigured = _adapter.isConfigured;
     final controller = _controller;
     final isStreaming = ref.watch(_isStreamingProvider);
@@ -1392,16 +1357,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                 'reasoning_enabled', _reasoningEnabled));
                       },
                     ),
-                  IconButton(
-                    icon: const Icon(Icons.history),
-                    tooltip: '历史记录',
-                    onPressed: _showHistory,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.add),
-                    tooltip: '新对话',
-                    onPressed: _newConversation,
-                  ),
                   // ── Stop button ──
                   if (isStreaming)
                     IconButton(
@@ -1725,9 +1680,8 @@ composerBuilder: (context) => ChatComposerWidget(
                                                     selectable: true,
                                                     shrinkWrap: true,
                                                     physics: const NeverScrollableScrollPhysics(),
-                                                    config: markdownConfig.copy(configs: [
-                                                      PreConfig(theme: draculaTheme),
-                                                    ]),
+                                                    config: markdownConfig,
+                                                    markdownGenerator: markdownGenerator,
                                                   ),
                                             ),
                                             _ToolCallSegment s => ToolCallCard(data: s.data),
@@ -1741,9 +1695,8 @@ composerBuilder: (context) => ChatComposerWidget(
                                         shrinkWrap: true,
                                         physics:
                                             const NeverScrollableScrollPhysics(),
-                                        config: markdownConfig.copy(configs: [
-                                          PreConfig(theme: draculaTheme),
-                                        ]),
+                                        config: markdownConfig,
+                                        markdownGenerator: markdownGenerator,
                                       ),
                                   ],
                                 ),

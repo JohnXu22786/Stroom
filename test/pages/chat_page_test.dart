@@ -56,18 +56,18 @@ void main() {
       expect(find.byIcon(Icons.search), findsOneWidget);
     });
 
-    testWidgets('shows history button', (tester) async {
+    testWidgets('history button is removed from top bar', (tester) async {
       await pumpChatPage(tester);
 
-      // In v0.2.15 the history button exists in the app bar
-      expect(find.byIcon(Icons.history), findsOneWidget);
+      // In merged design, history button has been removed
+      expect(find.byIcon(Icons.history), findsNothing);
     });
 
-    testWidgets('shows new conversation button', (tester) async {
+    testWidgets('new conversation button is removed from top bar', (tester) async {
       await pumpChatPage(tester);
 
-      // In v0.2.15 the new conversation button exists in the app bar
-      expect(find.byIcon(Icons.add), findsOneWidget);
+      // In merged design, new conversation button has been removed
+      expect(find.byIcon(Icons.add), findsNothing);
     });
 
     testWidgets('shows search button', (tester) async {

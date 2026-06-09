@@ -43,18 +43,20 @@ class HomePage extends ConsumerStatefulWidget {
 }
 
 class _HomePageState extends ConsumerState<HomePage> {
-  late PageController _pageController;
   final _chatNavigatorKey = GlobalKey<NavigatorState>();
+
+  /// 页面导航历史栈，用于返回键导航到上一页。
+  /// 每次通过导航栏/侧边栏切换到新页面时，当前页被推入栈中。
+  /// 按下返回键时从栈中弹出上一页并导航到它。
+  final List<AppPage> _pageHistory = [];
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(initialPage: AppPage.home.index);
   }
 
   @override
   void dispose() {
-    _pageController.dispose();
     super.dispose();
   }
 
@@ -363,7 +365,10 @@ class _HomePageState extends ConsumerState<HomePage> {
             if (result.choice == CameraChoice.app) {
               navigator.push(
                 MaterialPageRoute(
-                    builder: (_) => CameraPage(folder: folder)),
+                    builder: (_) => CameraPage(
+                          folder: folder,
+                          editAfterCapture: result.editAfterCapture,
+                        )),
               );
             } else if (result.choice == CameraChoice.system) {
               ImagePicker().pickImage(source: ImageSource.camera).then((file) {
@@ -459,11 +464,14 @@ class _HomePageState extends ConsumerState<HomePage> {
           return;
         }
         final pageIndex = index > 2 ? index - 1 : index;
-        ref.read(selectedPageProvider.notifier).state =
-            AppPage.values[pageIndex];
-        _pageController.jumpToPage(pageIndex);
-        if (AppPage.values[pageIndex] == AppPage.chat) {
-          _resetChatNavigator();
+        final newPage = AppPage.values[pageIndex];
+        final currentPage = ref.read(selectedPageProvider);
+        if (newPage != currentPage) {
+          _pageHistory.add(currentPage);
+          ref.read(selectedPageProvider.notifier).state = newPage;
+          if (newPage == AppPage.chat) {
+            _resetChatNavigator();
+          }
         }
       },
       labelType: NavigationRailLabelType.all,
@@ -557,11 +565,14 @@ class _HomePageState extends ConsumerState<HomePage> {
           return;
         }
         final pageIndex = index > 2 ? index - 1 : index;
-        ref.read(selectedPageProvider.notifier).state =
-            AppPage.values[pageIndex];
-        _pageController.jumpToPage(pageIndex);
-        if (AppPage.values[pageIndex] == AppPage.chat) {
-          _resetChatNavigator();
+        final newPage = AppPage.values[pageIndex];
+        final currentPage = ref.read(selectedPageProvider);
+        if (newPage != currentPage) {
+          _pageHistory.add(currentPage);
+          ref.read(selectedPageProvider.notifier).state = newPage;
+          if (newPage == AppPage.chat) {
+            _resetChatNavigator();
+          }
         }
       },
       destinations: [
@@ -671,36 +682,65 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
   }
 
-  /// 构建页面内容并附带 Key
-  Widget _buildPageContentWithKey(AppPage page) {
-    return KeyedSubtree(
-      key: ValueKey('page_${page.name}'),
-      child: _buildPageContent(page),
-    );
-  }
-
   /// 构建模块化首页内容
   Widget _buildHomeContent() {
     final cs = Theme.of(context).colorScheme;
+    final catcatchTasks = ref.watch(catcatchTasksProvider);
+    final synthesisTasks = ref.watch(taskListProvider);
+    final lastRead = ref.watch(taskListLastReadProvider);
+    final activeTaskCount =
+        catcatchTasks
+            .where((t) =>
+              t.status.name != 'completed' && (
+                (t.statusChangedAt ?? t.createdAt).isAfter(lastRead) ||
+                (t.status.name == 'running' &&
+                 t.steps.any((s) => s.type.name == 'userSelecting' && s.running))
+              )
+            ).length +
+        synthesisTasks
+            .where((t) => t.status.name != 'completed' && (t.statusChangedAt ?? t.createdAt).isAfter(lastRead))
+            .length;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
+          // Header — notification button integrated into the row
+          // so it never overlaps or causes overflow on small screens.
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: Row(
               children: [
                 Icon(Icons.auto_awesome, size: 24, color: cs.primary),
                 const SizedBox(width: 8),
-                Text(
-                  '欢迎使用 Stroom',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: cs.onSurface,
+                Expanded(
+                  child: Text(
+                    '欢迎使用 Stroom',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: cs.onSurface,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const UnifiedTaskListPage()),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Badge(
+                      isLabelVisible: activeTaskCount > 0,
+                      label: Text('$activeTaskCount'),
+                      child: const Icon(Icons.pending_actions, size: 22),
+                    ),
                   ),
                 ),
               ],
@@ -722,7 +762,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 crossAxisCount: 2,
                 mainAxisSpacing: 12,
                 crossAxisSpacing: 12,
-                childAspectRatio: 1.1,
+                childAspectRatio: 0.95,
               ),
               children: [
                 _buildModuleCard(
@@ -783,24 +823,26 @@ class _HomePageState extends ConsumerState<HomePage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 56,
-                height: 56,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, color: color, size: 28),
+                child: Icon(icon, color: color, size: 24),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 6),
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 17,
+                  fontSize: 16,
                   fontWeight: FontWeight.w600,
                   color: cs.onSurface,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text(
                 subtitle,
                 style: TextStyle(
@@ -808,6 +850,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                   color: cs.onSurfaceVariant,
                 ),
                 textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
@@ -852,50 +896,45 @@ class _HomePageState extends ConsumerState<HomePage> {
       }
     });
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          Row(
-            children: [
-              // 桌面端显示侧边栏导航
-              if (!isMobile) _buildNavigationRail(context, activeTaskCount),
-              // 页面内容区域，使用Expanded填充剩余空间
-              Expanded(
-                child: PageView(
-                  controller: _pageController,
-                  onPageChanged: (index) {
-                    ref.read(selectedPageProvider.notifier).state =
-                        AppPage.values[index];
-                  },
-                  children: AppPage.values.map((page) {
-                    return _buildPageContentWithKey(page);
-                  }).toList(),
-                ),
-              ),
-            ],
-          ),
-          // 右上角任务列表入口（仅在首页显示）
-          if (selectedPage == AppPage.home)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 8,
-              right: 16,
-              child: IconButton(
-                icon: Badge(
-                  isLabelVisible: activeTaskCount > 0,
-                  label: Text('$activeTaskCount'),
-                  child: const Icon(Icons.pending_actions),
-                ),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const UnifiedTaskListPage()),
-                  );
-                },
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        // 返回键处理：
+        // 1. 如果当前在聊天页且嵌套导航器有历史路由，先弹出嵌套路由
+        final currentPage = ref.read(selectedPageProvider);
+        if (currentPage == AppPage.chat &&
+            _chatNavigatorKey.currentState != null &&
+            _chatNavigatorKey.currentState!.canPop()) {
+          _chatNavigatorKey.currentState!.pop();
+          return;
+        }
+        // 2. 否则在四类主页面之间导航上一页
+        if (_pageHistory.isNotEmpty) {
+          final previousPage = _pageHistory.removeLast();
+          ref.read(selectedPageProvider.notifier).state = previousPage;
+          // 通过返回键回到聊天页时保留对话状态，不重置导航器
+        }
+        // 3. 如果历史栈为空（首页），不做任何操作，不退出桌面
+      },
+      child: Scaffold(
+        body: Row(
+          children: [
+            // 桌面端显示侧边栏导航
+            if (!isMobile) _buildNavigationRail(context, activeTaskCount),
+            // 页面内容区域，使用IndexedStack保持各页面状态
+            Expanded(
+              child: IndexedStack(
+                index: selectedPage.index,
+                children: AppPage.values.map((page) {
+                  return _buildPageContent(page);
+                }).toList(),
               ),
             ),
-        ],
+          ],
+        ),
+        bottomNavigationBar: isMobile ? _buildBottomNavigationBar(context, activeTaskCount) : null,
       ),
-      bottomNavigationBar: isMobile ? _buildBottomNavigationBar(context, activeTaskCount) : null,
     );
   }
 }

@@ -12,6 +12,7 @@ import '../models/tool_call.dart';
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
 import 'attachment_storage.dart';
+import 'mcp_client.dart';
 
 // ====================================================================
 // ChatService — AI 聊天服务抽象层
@@ -278,7 +279,7 @@ class ChatService {
             // Execute tool
             String result;
             try {
-              result = _executeTool(name, parsedArgs);
+              result = await _executeTool(name, parsedArgs);
             } catch (e) {
               result = 'Error: $e';
             }
@@ -430,6 +431,17 @@ class ChatService {
 
   static final Map<String, Map<String, dynamic>> _toolRegistries = {};
 
+  /// MCP 客户端管理器（可选，用于执行 MCP 工具）
+  static McpClientManager? _mcpClientManager;
+
+  /// 设置 MCP 客户端管理器
+  static void setMcpClientManager(McpClientManager manager) {
+    _mcpClientManager = manager;
+  }
+
+  /// 获取当前 MCP 客户端管理器
+  static McpClientManager? get mcpClientManager => _mcpClientManager;
+
   /// Register a tool handler for a given tool definition.
   /// The handler receives parsed arguments and returns a result string.
   static void registerTool(
@@ -442,12 +454,32 @@ class ChatService {
     };
   }
 
-  String _executeTool(String name, Map<String, dynamic> args) {
+  Future<String> _executeTool(String name, Map<String, dynamic> args) async {
+    // First check locally registered tools
     final entry = _toolRegistries[name];
     if (entry != null) {
       final handler = entry['handler'] as String Function(Map<String, dynamic>);
       return handler(args);
     }
+
+    // Then check MCP clients
+    if (_mcpClientManager != null) {
+      for (final entry in _mcpClientManager!.clients.entries) {
+        final client = entry.value;
+        if (client.isConnected == false && client.isDisposed == false) {
+          await client.connect();
+        }
+        if (client.isConnected) {
+          // Check if this MCP server has the tool
+          final cachedTools = client.cachedTools;
+          final hasTool = cachedTools.any((t) => t.name == name);
+          if (hasTool) {
+            return client.callTool(name, args);
+          }
+        }
+      }
+    }
+
     return 'Error: Unknown tool "$name"';
   }
 
