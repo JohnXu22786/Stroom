@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/assistant.dart';
 import '../models/chat_message.dart';
 
 // ============================================================================
@@ -30,16 +31,29 @@ Future<List<Conversation>?> migrateConversationsFromPrefs(
         prefs.getBool('migrated_old_conversations') ?? false;
     if (alreadyMigrated) return null;
 
-    // Read the default assistant from the assistants store
+    // Read the default assistant from the assistants store.
+    // If no assistants exist yet, create the default assistant right here
+    // so the migration is self-contained and doesn't race with
+    // AssistantsNotifier._load().
     final assistantsJson = prefs.getString('assistants');
+    List<Map<String, dynamic>> assistantsList;
     if (assistantsJson == null || assistantsJson.isEmpty) {
-      return null; // No assistants persisted yet, migration will run next time
+      final defaultAssistant = Assistant(
+        name: '默认助手',
+        prompt: '你是一个有帮助的AI助手。请用中文回答用户的问题。',
+        emoji: '🤖',
+        description: '通用AI助手',
+      );
+      assistantsList = [defaultAssistant.toMap()];
+      await prefs.setString('assistants', jsonEncode(assistantsList));
+      debugPrint(
+          'Created default assistant during migration (${defaultAssistant.id})');
+    } else {
+      assistantsList = (jsonDecode(assistantsJson) as List)
+          .cast<Map<String, dynamic>>();
     }
-
-    final assistantsList = (jsonDecode(assistantsJson) as List)
-        .cast<Map<String, dynamic>>();
     if (assistantsList.isEmpty) {
-      return null; // No assistants, nothing to migrate to
+      return null; // Safety: should not happen after creation above
     }
     final defaultAssistantId = assistantsList.first['id'] as String;
 
@@ -261,7 +275,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       messages: [],
       assistantId: assistantId,
     );
-    state = [...state, conv];
+    state = [conv, ...state];
     _ref.read(activeConversationIdProvider.notifier).state = conv.id;
     _persistActiveId();
     return conv.id;

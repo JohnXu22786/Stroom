@@ -18,6 +18,7 @@ import 'video_capture_page.dart';
 import 'package:image_picker/image_picker.dart';
 import '../widgets/camera_choice_dialog.dart';
 import '../widgets/folder_picker_dialog.dart';
+import 'ocr_page.dart';
 
 /// 页面枚举，定义应用中的主要页面（不含加号按钮）
 enum AppPage {
@@ -659,25 +660,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   Widget _buildPageContent(AppPage page) {
     switch (page) {
       case AppPage.home:
-        return const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.home, size: 64, color: Colors.blue),
-              SizedBox(height: 16),
-              Text(
-                '欢迎使用 Stroom',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 8),
-              Text(
-                '一个结合了 FlClash UI 架构和相机功能的示例应用',
-                style: TextStyle(fontSize: 16, color: Colors.grey),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        );
+        return _buildHomeContent();
       case AppPage.chat:
         return _buildChatOrAssistantPage();
       case AppPage.files:
@@ -692,6 +675,131 @@ class _HomePageState extends ConsumerState<HomePage> {
     return KeyedSubtree(
       key: ValueKey('page_${page.name}'),
       child: _buildPageContent(page),
+    );
+  }
+
+  /// 构建模块化首页内容
+  Widget _buildHomeContent() {
+    final cs = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              children: [
+                Icon(Icons.auto_awesome, size: 24, color: cs.primary),
+                const SizedBox(width: 8),
+                Text(
+                  '欢迎使用 Stroom',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: cs.onSurface,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '选择一个功能模块开始使用',
+            style: TextStyle(
+              fontSize: 14,
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 24),
+          // Module grid
+          Expanded(
+            child: GridView(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 1.1,
+              ),
+              children: [
+                _buildModuleCard(
+                  icon: Icons.text_snippet,
+                  label: 'OCR',
+                  subtitle: '文字识别',
+                  color: Colors.teal,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const OcrPage()),
+                    );
+                  },
+                ),
+                // Future modules can be added here
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 构建模块卡片
+  Widget _buildModuleCard({
+    required IconData icon,
+    required String label,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: cs.outlineVariant, width: 0.5),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(icon, color: color, size: 28),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
