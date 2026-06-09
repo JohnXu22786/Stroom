@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 
+import '../models/assistant.dart' show CustomParameter;
 import '../models/ai_stream_event.dart';
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
@@ -484,19 +485,46 @@ class ChatService {
 
   // ── Extra params helpers ─────────────────────────────────────────
 
-  /// Build extraParams map from customParams for the API call.
-  Map<String, dynamic> _buildExtraParams() {
-    final params = _modelConfig!.customParams;
-    if (params.isEmpty) return {};
+  /// Optional assistant-level custom parameters to merge into the API call.
+  List<CustomParameter>? _assistantCustomParams;
 
-    return {
-      for (final cp in params)
-        cp.paramName: switch (cp.type) {
-          'number' => double.tryParse(cp.defaultValue) ?? 0.0,
-          'boolean' => cp.defaultValue.toLowerCase() == 'true',
-          'string' || _ => cp.defaultValue,
-        },
-    };
+  /// Set assistant-level custom parameters that will be merged into the API
+  /// request body alongside model-level custom params.
+  void setAssistantCustomParams(List<CustomParameter>? params) {
+    _assistantCustomParams = params;
+  }
+
+  /// Build extraParams map from customParams for the API call.
+  /// Merges model-level [ProviderParam]s with assistant-level [CustomParameter]s.
+  /// Assistant-level params take precedence when names collide.
+  Map<String, dynamic> _buildExtraParams() {
+    final result = <String, dynamic>{};
+
+    // Model-level custom params
+    final modelParams = _modelConfig!.customParams;
+    for (final cp in modelParams) {
+      result[cp.paramName] = switch (cp.type) {
+        'number' => double.tryParse(cp.defaultValue) ?? 0.0,
+        'boolean' => cp.defaultValue.toLowerCase() == 'true',
+        'string' || _ => cp.defaultValue,
+      };
+    }
+
+    // Assistant-level custom params (override model-level on name collision)
+    if (_assistantCustomParams != null) {
+      for (final cp in _assistantCustomParams!) {
+        result[cp.name] = switch (cp.type) {
+          'number' => (cp.value is num)
+              ? (cp.value as num).toDouble()
+              : (double.tryParse(cp.value.toString()) ?? 0.0),
+          'boolean' => (cp.value is bool) ? cp.value : (cp.value.toString().toLowerCase() == 'true'),
+          'json' => cp.value,
+          'string' || _ => cp.value?.toString() ?? '',
+        };
+      }
+    }
+
+    return result;
   }
 
   /// Dispose permanently (no more streams possible after this)
