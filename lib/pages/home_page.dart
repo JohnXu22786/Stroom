@@ -682,25 +682,62 @@ class _HomePageState extends ConsumerState<HomePage> {
   /// 构建模块化首页内容
   Widget _buildHomeContent() {
     final cs = Theme.of(context).colorScheme;
+    final catcatchTasks = ref.watch(catcatchTasksProvider);
+    final synthesisTasks = ref.watch(taskListProvider);
+    final lastRead = ref.watch(taskListLastReadProvider);
+    final activeTaskCount =
+        catcatchTasks
+            .where((t) =>
+              t.status.name != 'completed' && (
+                (t.statusChangedAt ?? t.createdAt).isAfter(lastRead) ||
+                (t.status.name == 'running' &&
+                 t.steps.any((s) => s.type.name == 'userSelecting' && s.running))
+              )
+            ).length +
+        synthesisTasks
+            .where((t) => t.status.name != 'completed' && (t.statusChangedAt ?? t.createdAt).isAfter(lastRead))
+            .length;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
+          // Header — notification button integrated into the row
+          // so it never overlaps or causes overflow on small screens.
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: Row(
               children: [
                 Icon(Icons.auto_awesome, size: 24, color: cs.primary),
                 const SizedBox(width: 8),
-                Text(
-                  '欢迎使用 Stroom',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: cs.onSurface,
+                Expanded(
+                  child: Text(
+                    '欢迎使用 Stroom',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: cs.onSurface,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const UnifiedTaskListPage()),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Badge(
+                      isLabelVisible: activeTaskCount > 0,
+                      label: Text('$activeTaskCount'),
+                      child: const Icon(Icons.pending_actions, size: 22),
+                    ),
                   ),
                 ),
               ],
@@ -722,7 +759,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 crossAxisCount: 2,
                 mainAxisSpacing: 12,
                 crossAxisSpacing: 12,
-                childAspectRatio: 1.1,
+                childAspectRatio: 0.95,
               ),
               children: [
                 _buildModuleCard(
@@ -783,24 +820,26 @@ class _HomePageState extends ConsumerState<HomePage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 56,
-                height: 56,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, color: color, size: 28),
+                child: Icon(icon, color: color, size: 24),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 6),
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 17,
+                  fontSize: 16,
                   fontWeight: FontWeight.w600,
                   color: cs.onSurface,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text(
                 subtitle,
                 style: TextStyle(
@@ -808,6 +847,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                   color: cs.onSurfaceVariant,
                 ),
                 textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
@@ -874,42 +915,19 @@ class _HomePageState extends ConsumerState<HomePage> {
         // 3. 如果历史栈为空（首页），不做任何操作，不退出桌面
       },
       child: Scaffold(
-        body: Stack(
+        body: Row(
           children: [
-            Row(
-              children: [
-                // 桌面端显示侧边栏导航
-                if (!isMobile) _buildNavigationRail(context, activeTaskCount),
-                // 页面内容区域，使用IndexedStack保持各页面状态
-                Expanded(
-                  child: IndexedStack(
-                    index: selectedPage.index,
-                    children: AppPage.values.map((page) {
-                      return _buildPageContent(page);
-                    }).toList(),
-                  ),
-                ),
-              ],
-            ),
-            // 右上角任务列表入口（仅在首页显示）
-            if (selectedPage == AppPage.home)
-              Positioned(
-                top: MediaQuery.of(context).padding.top + 8,
-                right: 16,
-                child: IconButton(
-                  icon: Badge(
-                    isLabelVisible: activeTaskCount > 0,
-                    label: Text('$activeTaskCount'),
-                    child: const Icon(Icons.pending_actions),
-                  ),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const UnifiedTaskListPage()),
-                    );
-                  },
-                ),
+            // 桌面端显示侧边栏导航
+            if (!isMobile) _buildNavigationRail(context, activeTaskCount),
+            // 页面内容区域，使用IndexedStack保持各页面状态
+            Expanded(
+              child: IndexedStack(
+                index: selectedPage.index,
+                children: AppPage.values.map((page) {
+                  return _buildPageContent(page);
+                }).toList(),
               ),
+            ),
           ],
         ),
         bottomNavigationBar: isMobile ? _buildBottomNavigationBar(context, activeTaskCount) : null,
