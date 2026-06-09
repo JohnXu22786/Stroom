@@ -160,6 +160,227 @@ void main() {
       expect(assistant.settings.temperature, 1.0);
       expect(assistant.settings.streamOutput, true);
     });
+
+    // ========================================================================
+    // Avatar: emoji + image
+    // ========================================================================
+
+    test('assistant defaults to emoji avatar type', () {
+      final assistant = Assistant(name: '助手', prompt: '你好');
+      expect(assistant.avatarType, 'emoji');
+      expect(assistant.emoji, '🤖');
+      expect(assistant.avatarUrl, isNull);
+    });
+
+    test('assistant with image avatar round-trip', () {
+      final original = Assistant(
+        name: '图片助手',
+        prompt: '你好',
+        avatarType: 'image',
+        emoji: '🤖',
+        avatarUrl: 'https://example.com/avatar.png',
+      );
+
+      final map = original.toMap();
+      final restored = Assistant.fromMap(map);
+
+      expect(restored.avatarType, 'image');
+      expect(restored.avatarUrl, 'https://example.com/avatar.png');
+      expect(restored.emoji, '🤖');
+    });
+
+    test('assistant with emoji avatar type still works', () {
+      final original = Assistant(
+        name: '表情助手',
+        prompt: '你好',
+        avatarType: 'emoji',
+        emoji: '😊',
+      );
+
+      final map = original.toMap();
+      final restored = Assistant.fromMap(map);
+
+      expect(restored.avatarType, 'emoji');
+      expect(restored.emoji, '😊');
+      expect(restored.avatarUrl, isNull);
+    });
+
+    test('assistant fromMap handles legacy data without avatarType', () {
+      final map = <String, dynamic>{
+        'id': 'legacy-1',
+        'name': '旧助手',
+        'prompt': '你好',
+        'emoji': '🧠',
+      };
+
+      final assistant = Assistant.fromMap(map);
+      expect(assistant.avatarType, 'emoji');
+      expect(assistant.emoji, '🧠');
+      expect(assistant.avatarUrl, isNull);
+    });
+
+    test('assistant copyWith preserves avatarType and avatarUrl', () {
+      final original = Assistant(
+        name: '原版',
+        prompt: '你好',
+        avatarType: 'image',
+        avatarUrl: 'https://example.com/old.png',
+      );
+
+      final updated = original.copyWith(
+        avatarUrl: 'https://example.com/new.png',
+      );
+
+      expect(updated.avatarType, 'image');
+      expect(updated.avatarUrl, 'https://example.com/new.png');
+      expect(updated.emoji, original.emoji);
+      expect(updated.id, original.id);
+    });
+
+    test('assistant copyWith changes avatarType', () {
+      final original = Assistant(
+        name: '助手',
+        prompt: '你好',
+        avatarType: 'emoji',
+        emoji: '🎨',
+      );
+
+      final updated = original.copyWith(
+        avatarType: 'image',
+        avatarUrl: 'https://example.com/avatar.jpg',
+      );
+
+      expect(updated.avatarType, 'image');
+      expect(updated.avatarUrl, 'https://example.com/avatar.jpg');
+      expect(updated.emoji, '🎨');
+    });
+
+    // ========================================================================
+    // Extended params (frequencyPenalty, presencePenalty, seed)
+    // ========================================================================
+
+    test('settings defaults include extended params', () {
+      final settings = AssistantSettings.defaults();
+      expect(settings.frequencyPenalty, 0.0);
+      expect(settings.enableFrequencyPenalty, false);
+      expect(settings.presencePenalty, 0.0);
+      expect(settings.enablePresencePenalty, false);
+      expect(settings.seed, isNull);
+      expect(settings.enableSeed, false);
+    });
+
+    test('extended params serialization round-trip', () {
+      final original = AssistantSettings(
+        frequencyPenalty: 0.5,
+        enableFrequencyPenalty: true,
+        presencePenalty: 0.3,
+        enablePresencePenalty: true,
+        seed: 42,
+        enableSeed: true,
+      );
+
+      final map = original.toMap();
+      final restored = AssistantSettings.fromMap(map);
+
+      expect(restored.frequencyPenalty, 0.5);
+      expect(restored.enableFrequencyPenalty, true);
+      expect(restored.presencePenalty, 0.3);
+      expect(restored.enablePresencePenalty, true);
+      expect(restored.seed, 42);
+      expect(restored.enableSeed, true);
+    });
+
+    test('extended params defaults round-trip', () {
+      final original = AssistantSettings.defaults();
+      final map = original.toMap();
+      final restored = AssistantSettings.fromMap(map);
+
+      expect(restored.frequencyPenalty, 0.0);
+      expect(restored.enableFrequencyPenalty, false);
+      expect(restored.presencePenalty, 0.0);
+      expect(restored.enablePresencePenalty, false);
+      expect(restored.seed, isNull);
+      expect(restored.enableSeed, false);
+    });
+
+    test('settings with null seed round-trips correctly', () {
+      final original = AssistantSettings(seed: null, enableSeed: false);
+      final map = original.toMap();
+      final restored = AssistantSettings.fromMap(map);
+
+      expect(restored.seed, isNull);
+      expect(restored.enableSeed, false);
+    });
+
+    test('settings with explicit seed round-trips correctly', () {
+      final original = AssistantSettings(seed: 12345, enableSeed: true);
+      final map = original.toMap();
+      final restored = AssistantSettings.fromMap(map);
+
+      expect(restored.seed, 12345);
+      expect(restored.enableSeed, true);
+    });
+
+    test('settings copyWith preserves extended params', () {
+      final original = AssistantSettings.defaults();
+      final updated = original.copyWith(
+        frequencyPenalty: 0.7,
+        enableFrequencyPenalty: true,
+        presencePenalty: 0.5,
+        enablePresencePenalty: true,
+        seed: 999,
+        enableSeed: true,
+      );
+
+      expect(updated.frequencyPenalty, 0.7);
+      expect(updated.enableFrequencyPenalty, true);
+      expect(updated.presencePenalty, 0.5);
+      expect(updated.enablePresencePenalty, true);
+      expect(updated.seed, 999);
+      expect(updated.enableSeed, true);
+
+      // Original should be unchanged
+      expect(original.frequencyPenalty, 0.0);
+      expect(original.presencePenalty, 0.0);
+      expect(original.seed, isNull);
+    });
+
+    test('complete settings with extended params serialization', () {
+      final original = AssistantSettings(
+        temperature: 0.7,
+        enableTemperature: true,
+        topP: 0.9,
+        enableTopP: true,
+        maxTokens: 2048,
+        enableMaxTokens: true,
+        streamOutput: false,
+        reasoningEffort: 'high',
+        enableWebSearch: true,
+        maxToolCalls: 30,
+        enableMaxToolCalls: true,
+        frequencyPenalty: 0.5,
+        enableFrequencyPenalty: true,
+        presencePenalty: 0.3,
+        enablePresencePenalty: true,
+        seed: 777,
+        enableSeed: true,
+        customParameters: [
+          CustomParameter(name: 'top_k', type: 'number', value: 40),
+        ],
+      );
+
+      final map = original.toMap();
+      final restored = AssistantSettings.fromMap(map);
+
+      expect(restored.frequencyPenalty, 0.5);
+      expect(restored.enableFrequencyPenalty, true);
+      expect(restored.presencePenalty, 0.3);
+      expect(restored.enablePresencePenalty, true);
+      expect(restored.seed, 777);
+      expect(restored.enableSeed, true);
+      expect(restored.temperature, 0.7);
+      expect(restored.customParameters.length, 1);
+    });
   });
 
   group('AssistantProvider', () {
@@ -289,6 +510,119 @@ void main() {
       expect(decoded.length, 2);
       expect(decoded[0]['name'], '助手1');
       expect(decoded[1]['name'], '助手2');
+    });
+
+    test('createAssistant with image avatar', () {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = AssistantsNotifier();
+
+      final assistant = notifier.createAssistant(
+        name: '图片助手',
+        prompt: '你好',
+        avatarType: 'image',
+        avatarUrl: 'https://example.com/avatar.png',
+      );
+
+      expect(assistant.avatarType, 'image');
+      expect(assistant.avatarUrl, 'https://example.com/avatar.png');
+      expect(notifier.state[0].avatarType, 'image');
+      expect(notifier.state[0].avatarUrl, 'https://example.com/avatar.png');
+    });
+
+    test('updateAssistant updates avatarType and avatarUrl', () {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = AssistantsNotifier();
+
+      final assistant = notifier.createAssistant(
+        name: '助手',
+        prompt: '你好',
+      );
+
+      notifier.updateAssistant(
+        id: assistant.id,
+        avatarType: 'image',
+        avatarUrl: 'https://example.com/new.png',
+      );
+
+      final updated = notifier.state.firstWhere((a) => a.id == assistant.id);
+      expect(updated.avatarType, 'image');
+      expect(updated.avatarUrl, 'https://example.com/new.png');
+    });
+
+    test('updateAssistantSettings with extended params', () {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = AssistantsNotifier();
+
+      final assistant = notifier.createAssistant(
+        name: '助手',
+        prompt: '你好',
+      );
+
+      notifier.updateAssistantSettings(
+        assistantId: assistant.id,
+        frequencyPenalty: 0.5,
+        enableFrequencyPenalty: true,
+        presencePenalty: 0.3,
+        enablePresencePenalty: true,
+        seed: 42,
+        enableSeed: true,
+      );
+
+      final updated = notifier.state.firstWhere((a) => a.id == assistant.id);
+      expect(updated.settings.frequencyPenalty, 0.5);
+      expect(updated.settings.enableFrequencyPenalty, true);
+      expect(updated.settings.presencePenalty, 0.3);
+      expect(updated.settings.enablePresencePenalty, true);
+      expect(updated.settings.seed, 42);
+      expect(updated.settings.enableSeed, true);
+
+      // Other settings should remain default
+      expect(updated.settings.temperature, 1.0);
+      expect(updated.settings.topP, 1.0);
+    });
+
+    test('updateAssistantSettings with customParameters', () {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = AssistantsNotifier();
+
+      final assistant = notifier.createAssistant(
+        name: '助手',
+        prompt: '你好',
+      );
+
+      final customParams = [
+        CustomParameter(name: 'top_k', type: 'number', value: 40),
+        CustomParameter(name: 'verbose', type: 'boolean', value: true),
+      ];
+
+      notifier.updateAssistantSettings(
+        assistantId: assistant.id,
+        customParameters: customParams,
+      );
+
+      final updated = notifier.state.firstWhere((a) => a.id == assistant.id);
+      expect(updated.settings.customParameters.length, 2);
+      expect(updated.settings.customParameters[0].name, 'top_k');
+      expect(updated.settings.customParameters[0].value, 40);
+      expect(updated.settings.customParameters[1].name, 'verbose');
+      expect(updated.settings.customParameters[1].value, true);
+    });
+
+    test('toJson includes avatarType and avatarUrl fields', () {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = AssistantsNotifier();
+
+      notifier.createAssistant(
+        name: '图片助手',
+        prompt: '你好',
+        avatarType: 'image',
+        avatarUrl: 'https://example.com/avatar.png',
+      );
+
+      final json = notifier.toJson();
+      final decoded = jsonDecode(json) as List;
+      expect(decoded[0]['avatarType'], 'image');
+      expect(decoded[0]['avatarUrl'], 'https://example.com/avatar.png');
     });
   });
 

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/assistant.dart';
 import '../providers/assistant_provider.dart';
 import '../providers/conversation_provider.dart';
+import '../widgets/llm/assistant_avatar.dart';
 
 /// Second page in the chat flow: after selecting an assistant,
 /// choose or create a topic (conversation).
@@ -34,8 +35,11 @@ class TopicSelectionPage extends ConsumerWidget {
         title: Row(
           children: [
             if (selectedAssistant != null) ...[
-              Text(selectedAssistant.emoji,
-                  style: const TextStyle(fontSize: 20)),
+              AssistantAvatar(
+                assistant: selectedAssistant,
+                size: 28,
+                borderRadius: 8,
+              ),
               const SizedBox(width: 8),
             ],
             const Text('选择话题'),
@@ -99,17 +103,10 @@ class TopicSelectionPage extends ConsumerWidget {
                   ),
                   child: Row(
                     children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: cs.primaryContainer,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Center(
-                          child: Text(selectedAssistant.emoji,
-                              style: const TextStyle(fontSize: 20)),
-                        ),
+                      AssistantAvatar(
+                        assistant: selectedAssistant,
+                        size: 40,
+                        borderRadius: 12,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -269,7 +266,17 @@ class TopicSelectionPage extends ConsumerWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlgState) => AlertDialog(
-          title: Text('${assistant.emoji} ${assistant.name} 参数'),
+          title: Row(
+            children: [
+              AssistantAvatar(
+                assistant: assistant,
+                size: 24,
+                borderRadius: 6,
+              ),
+              const SizedBox(width: 8),
+              Text('${assistant.name} 参数'),
+            ],
+          ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
