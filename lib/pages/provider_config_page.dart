@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/provider_config.dart';
 import 'provider_config_detail_page.dart';
+import 'mcp_server_config_page.dart';
 
 class ProviderConfigPage extends ConsumerStatefulWidget {
   final String entryId;
@@ -22,29 +23,59 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
   }
 
   Future<void> _addConfig() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ProviderConfigDetailPage(
-          entryId: widget.entryId,
-          configIndex: -1,
+    final entry = _entry;
+    if (entry == null) return;
+
+    if (entry.type == 'mcp') {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => McpServerConfigPage(
+            entryId: widget.entryId,
+            configIndex: -1,
+          ),
         ),
-      ),
-    );
+      );
+    } else {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ProviderConfigDetailPage(
+            entryId: widget.entryId,
+            configIndex: -1,
+          ),
+        ),
+      );
+    }
     if (!mounted) return;
     setState(() {});
   }
 
   Future<void> _editConfig(int configIndex) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ProviderConfigDetailPage(
-          entryId: widget.entryId,
-          configIndex: configIndex,
+    final entry = _entry;
+    if (entry == null) return;
+
+    if (entry.type == 'mcp') {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => McpServerConfigPage(
+            entryId: widget.entryId,
+            configIndex: configIndex,
+          ),
         ),
-      ),
-    );
+      );
+    } else {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ProviderConfigDetailPage(
+            entryId: widget.entryId,
+            configIndex: configIndex,
+          ),
+        ),
+      );
+    }
     if (!mounted) return;
     setState(() {});
   }
@@ -182,8 +213,32 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   final providerName = config.providerName.isNotEmpty
                       ? config.providerName
                       : '（未命名）';
-                  final hostPreview =
-                      config.host.isNotEmpty ? config.host : '(未设置 Host)';
+
+                  // For MCP entries, show transport details
+                  String subtitle;
+                  IconData leadIcon;
+                  Color iconColor;
+
+                  if (entry.type == 'mcp') {
+                    final mcpTypeConfig =
+                        config.models.isNotEmpty ? config.models[0].typeConfig : null;
+                    final transport = mcpTypeConfig?['transport'] as String? ?? 'sse';
+                    if (transport == 'stdio') {
+                      final cmd = mcpTypeConfig?['command'] as String? ?? '';
+                      leadIcon = Icons.desktop_windows;
+                      iconColor = Colors.purple;
+                      subtitle = '本地(stdio): $cmd';
+                    } else {
+                      final url = mcpTypeConfig?['url'] as String? ?? config.host;
+                      leadIcon = Icons.cloud;
+                      iconColor = Colors.blue;
+                      subtitle = '远程(SSE): ${url.isNotEmpty ? url : '(未设置 URL)'}';
+                    }
+                  } else {
+                    leadIcon = Icons.dns;
+                    iconColor = Colors.teal;
+                    subtitle = config.host.isNotEmpty ? config.host : '(未设置 Host)';
+                  }
 
                   return Card(
                     key: ValueKey('config_${widget.entryId}_$i'),
@@ -198,12 +253,12 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                                 color: Colors.grey),
                           ),
                           const SizedBox(width: 8),
-                          const Icon(Icons.dns, color: Colors.teal),
+                          Icon(leadIcon, color: iconColor),
                         ],
                       ),
                       title: Text(providerName,
                           style: const TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text(hostPreview,
+                      subtitle: Text(subtitle,
                           style:
                               TextStyle(fontSize: 12, color: Colors.grey[600])),
                       trailing: Row(

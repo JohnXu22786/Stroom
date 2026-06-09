@@ -8,10 +8,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/camera_settings_provider.dart';
 import '../utils/image_manifest.dart';
+import 'image_editor_page.dart';
 
 class CameraPage extends ConsumerStatefulWidget {
   final String folder;
-  const CameraPage({super.key, this.folder = ''});
+  final bool editAfterCapture;
+  const CameraPage({super.key, this.folder = '', this.editAfterCapture = false});
 
   @override
   ConsumerState<CameraPage> createState() => _CameraPageState();
@@ -269,54 +271,78 @@ class _CameraPageState extends ConsumerState<CameraPage>
       );
       if (_discardRequested) return;
 
-      // Step 2: Crop + target quality (in one compressWithList call)
-      final aspectRatio = _aspectRatios[_aspectIndex];
-      final settings = ref.read(cameraSettingsProvider);
-      final quality = (settings.compressionQuality * 100).round();
+      // If edit-after-capture is enabled, show the editor before saving
+      if (widget.editAfterCapture) {
+        setState(() => _isSaving = false);
+        if (!mounted) return;
 
-      if (aspectRatio != _aspectRatios[0]) {
-        final codec = await ui.instantiateImageCodec(bytes);
-        final frame = await codec.getNextFrame();
-        final image = frame.image;
-        final srcWidth = image.width;
-        final srcHeight = image.height;
+        final editedBytes = await Navigator.push<Uint8List>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ImageEditorPage(imageBytes: bytes),
+          ),
+        );
+        if (!mounted || _discardRequested) return;
 
-        double targetW = srcWidth.toDouble();
-        double targetH = targetW / aspectRatio;
-        if (targetH > srcHeight) {
-          targetH = srcHeight.toDouble();
-          targetW = targetH * aspectRatio;
+        if (editedBytes == null) {
+          // User cancelled editing — discard the photo
+          Navigator.pop(context, null);
+          return;
         }
-        final dx = (srcWidth - targetW) / 2;
-        final dy = (srcHeight - targetH) / 2;
-        final recorder = ui.PictureRecorder();
-        final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, targetW, targetH));
-        canvas.drawImageRect(
-          image,
-          Rect.fromLTWH(dx, dy, targetW, targetH),
-          Rect.fromLTWH(0, 0, targetW, targetH),
-          Paint(),
-        );
-        final picture = recorder.endRecording();
-        final croppedImage =
-            await picture.toImage(targetW.round(), targetH.round());
-        final byteData =
-            await croppedImage.toByteData(format: ui.ImageByteFormat.png);
-        if (byteData == null) return;
-        final pngBytes = byteData.buffer.asUint8List();
-        bytes = await FlutterImageCompress.compressWithList(
-          pngBytes,
-          minWidth: targetW.round(),
-          minHeight: targetH.round(),
-          quality: quality < 100 ? quality : 100,
-          format: CompressFormat.jpeg,
-        );
-      } else if (quality < 100) {
-        bytes = await FlutterImageCompress.compressWithList(
-          bytes,
-          quality: quality,
-          format: CompressFormat.jpeg,
-        );
+
+        // Save the edited image
+        setState(() => _isSaving = true);
+        bytes = editedBytes;
+      } else {
+        // Step 2: Crop + target quality (in one compressWithList call)
+        final aspectRatio = _aspectRatios[_aspectIndex];
+        final settings = ref.read(cameraSettingsProvider);
+        final quality = (settings.compressionQuality * 100).round();
+
+        if (aspectRatio != _aspectRatios[0]) {
+          final codec = await ui.instantiateImageCodec(bytes);
+          final frame = await codec.getNextFrame();
+          final image = frame.image;
+          final srcWidth = image.width;
+          final srcHeight = image.height;
+
+          double targetW = srcWidth.toDouble();
+          double targetH = targetW / aspectRatio;
+          if (targetH > srcHeight) {
+            targetH = srcHeight.toDouble();
+            targetW = targetH * aspectRatio;
+          }
+          final dx = (srcWidth - targetW) / 2;
+          final dy = (srcHeight - targetH) / 2;
+          final recorder = ui.PictureRecorder();
+          final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, targetW, targetH));
+          canvas.drawImageRect(
+            image,
+            Rect.fromLTWH(dx, dy, targetW, targetH),
+            Rect.fromLTWH(0, 0, targetW, targetH),
+            Paint(),
+          );
+          final picture = recorder.endRecording();
+          final croppedImage =
+              await picture.toImage(targetW.round(), targetH.round());
+          final byteData =
+              await croppedImage.toByteData(format: ui.ImageByteFormat.png);
+          if (byteData == null) return;
+          final pngBytes = byteData.buffer.asUint8List();
+          bytes = await FlutterImageCompress.compressWithList(
+            pngBytes,
+            minWidth: targetW.round(),
+            minHeight: targetH.round(),
+            quality: quality < 100 ? quality : 100,
+            format: CompressFormat.jpeg,
+          );
+        } else if (quality < 100) {
+          bytes = await FlutterImageCompress.compressWithList(
+            bytes,
+            quality: quality,
+            format: CompressFormat.jpeg,
+          );
+        }
       }
       if (_discardRequested) return;
 
