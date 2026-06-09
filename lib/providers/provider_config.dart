@@ -456,6 +456,21 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       if (json != null) {
         final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
         final entries = list.map((m) => ProviderEntry.fromMap(m)).toList();
+
+        // 第4步：确保 OCR 条目存在（已有用户升级时自动迁移）
+        final hasOcr = entries.any((e) => e.type == 'ocr');
+        if (!hasOcr) {
+          entries.add(ProviderEntry(
+            id: 'builtin_ocr',
+            type: 'ocr',
+            name: 'OCR供应商',
+          ));
+          await prefs.setString(
+            'provider_entries',
+            jsonEncode(entries.map((e) => e.toMap()).toList()),
+          );
+        }
+
         state = ProviderEntriesState(entries: entries);
         return;
       }
