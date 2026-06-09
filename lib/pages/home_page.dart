@@ -363,7 +363,10 @@ class _HomePageState extends ConsumerState<HomePage> {
             if (result.choice == CameraChoice.app) {
               navigator.push(
                 MaterialPageRoute(
-                    builder: (_) => CameraPage(folder: folder)),
+                    builder: (_) => CameraPage(
+                          folder: folder,
+                          editAfterCapture: result.editAfterCapture,
+                        )),
               );
             } else if (result.choice == CameraChoice.system) {
               ImagePicker().pickImage(source: ImageSource.camera).then((file) {
