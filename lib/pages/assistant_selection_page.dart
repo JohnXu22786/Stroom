@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/assistant.dart';
 import '../providers/assistant_provider.dart';
+import '../utils/emojis.dart';
+import '../widgets/llm/assistant_avatar.dart';
 
 /// First page in the chat flow: select an assistant.
 /// Displays assistants in a grid of cards, similar to Cherry Studio's design.
@@ -90,6 +92,8 @@ class AssistantSelectionPage extends ConsumerWidget {
     final promptController = TextEditingController(
         text: '你是一个有帮助的AI助手。请用中文回答用户的问题。');
     String selectedEmoji = '🤖';
+    String avatarType = 'emoji';
+    final avatarUrlController = TextEditingController();
     final descriptionController = TextEditingController();
 
     showDialog(
@@ -101,36 +105,36 @@ class AssistantSelectionPage extends ConsumerWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Emoji picker
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    '🤖', '😊', '🎨', '📝', '🔍', '📊', '🎵', '🧮',
-                    '🌐', '⚡', '💡', '🎯', '📚', '🛠️', '🧠', '🌟',
-                  ].map((e) {
-                    final isSelected = e == selectedEmoji;
-                    return GestureDetector(
-                      onTap: () => setDlgState(() => selectedEmoji = e),
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? Theme.of(ctx)
-                                  .colorScheme
-                                  .primaryContainer
-                              : null,
-                          borderRadius: BorderRadius.circular(8),
-                          border: isSelected
-                              ? Border.all(
-                                  color: Theme.of(ctx).colorScheme.primary)
-                              : null,
-                        ),
-                        child: Text(e, style: const TextStyle(fontSize: 24)),
-                      ),
-                    );
-                  }).toList(),
+                // Avatar type toggle
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'emoji', label: Text('表情')),
+                    ButtonSegment(value: 'image', label: Text('图片')),
+                  ],
+                  selected: {avatarType},
+                  onSelectionChanged: (v) =>
+                      setDlgState(() => avatarType = v.first),
                 ),
+                const SizedBox(height: 12),
+                if (avatarType == 'emoji') ...[
+                  // Categorized emoji picker
+                  _CategorizedEmojiPicker(
+                    selectedEmoji: selectedEmoji,
+                    onEmojiSelected: (e) =>
+                        setDlgState(() => selectedEmoji = e),
+                  ),
+                ] else ...[
+                  // Image URL input
+                  TextField(
+                    controller: avatarUrlController,
+                    decoration: const InputDecoration(
+                      labelText: '头像图片URL（可选）',
+                      hintText: 'https://example.com/avatar.png',
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 1,
+                  ),
+                ],
                 const SizedBox(height: 12),
                 TextField(
                   controller: nameController,
@@ -172,15 +176,22 @@ class AssistantSelectionPage extends ConsumerWidget {
               onPressed: () {
                 final name = nameController.text.trim();
                 if (name.isEmpty) return;
-                ref.read(assistantProvider.notifier).createAssistant(
-                      name: name,
-                      prompt: promptController.text.trim(),
-                      emoji: selectedEmoji,
-                      description: descriptionController.text.trim(),
+                  ref.read(assistantProvider.notifier).createAssistant(
+                        name: name,
+                        prompt: promptController.text.trim(),
+                        emoji: selectedEmoji,
+                        description: descriptionController.text.trim(),
+                        avatarType: avatarType,
+                        avatarUrl: avatarType == 'image'
+                            ? (avatarUrlController.text.trim().isEmpty
+                                ? null
+                                : avatarUrlController.text.trim())
+                            : null,
                     );
                 nameController.dispose();
                 promptController.dispose();
                 descriptionController.dispose();
+                avatarUrlController.dispose();
                 Navigator.pop(ctx);
               },
               child: const Text('创建'),
@@ -240,6 +251,9 @@ class AssistantSelectionPage extends ConsumerWidget {
     final nameController = TextEditingController(text: assistant.name);
     final promptController = TextEditingController(text: assistant.prompt);
     String selectedEmoji = assistant.emoji;
+    String avatarType = assistant.avatarType;
+    final avatarUrlController =
+        TextEditingController(text: assistant.avatarUrl ?? '');
     final descriptionController =
         TextEditingController(text: assistant.description);
 
@@ -252,35 +266,34 @@ class AssistantSelectionPage extends ConsumerWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    '🤖', '😊', '🎨', '📝', '🔍', '📊', '🎵', '🧮',
-                    '🌐', '⚡', '💡', '🎯', '📚', '🛠️', '🧠', '🌟',
-                  ].map((e) {
-                    final isSelected = e == selectedEmoji;
-                    return GestureDetector(
-                      onTap: () => setDlgState(() => selectedEmoji = e),
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? Theme.of(ctx)
-                                  .colorScheme
-                                  .primaryContainer
-                              : null,
-                          borderRadius: BorderRadius.circular(8),
-                          border: isSelected
-                              ? Border.all(
-                                  color: Theme.of(ctx).colorScheme.primary)
-                              : null,
-                        ),
-                        child: Text(e, style: const TextStyle(fontSize: 24)),
-                      ),
-                    );
-                  }).toList(),
+                // Avatar type toggle
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'emoji', label: Text('表情')),
+                    ButtonSegment(value: 'image', label: Text('图片')),
+                  ],
+                  selected: {avatarType},
+                  onSelectionChanged: (v) =>
+                      setDlgState(() => avatarType = v.first),
                 ),
+                const SizedBox(height: 12),
+                if (avatarType == 'emoji') ...[
+                  _CategorizedEmojiPicker(
+                    selectedEmoji: selectedEmoji,
+                    onEmojiSelected: (e) =>
+                        setDlgState(() => selectedEmoji = e),
+                  ),
+                ] else ...[
+                  TextField(
+                    controller: avatarUrlController,
+                    decoration: const InputDecoration(
+                      labelText: '头像图片URL',
+                      hintText: 'https://example.com/avatar.png',
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 1,
+                  ),
+                ],
                 const SizedBox(height: 12),
                 TextField(
                   controller: nameController,
@@ -325,10 +338,17 @@ class AssistantSelectionPage extends ConsumerWidget {
                       prompt: promptController.text.trim(),
                       emoji: selectedEmoji,
                       description: descriptionController.text.trim(),
+                      avatarType: avatarType,
+                      avatarUrl: avatarType == 'image'
+                          ? (avatarUrlController.text.trim().isEmpty
+                              ? null
+                              : avatarUrlController.text.trim())
+                          : null,
                     );
                 nameController.dispose();
                 promptController.dispose();
                 descriptionController.dispose();
+                avatarUrlController.dispose();
                 Navigator.pop(ctx);
               },
               child: const Text('保存'),
@@ -350,115 +370,290 @@ class AssistantSelectionPage extends ConsumerWidget {
     bool streamOutput = assistant.settings.streamOutput;
     String reasoningEffort = assistant.settings.reasoningEffort;
     bool enableWebSearch = assistant.settings.enableWebSearch;
+    double frequencyPenalty = assistant.settings.frequencyPenalty;
+    bool enableFrequencyPenalty = assistant.settings.enableFrequencyPenalty;
+    double presencePenalty = assistant.settings.presencePenalty;
+    bool enablePresencePenalty = assistant.settings.enablePresencePenalty;
+    int? seed = assistant.settings.seed;
+    bool enableSeed = assistant.settings.enableSeed;
+    final seedController = TextEditingController(
+      text: seed?.toString() ?? '',
+    );
+    List<CustomParameter> customParameters =
+        List.from(assistant.settings.customParameters);
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlgState) => AlertDialog(
           title: const Text('助手参数设置'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Temperature
-                SwitchListTile(
-                  title: const Text('温度 (Temperature)'),
-                  subtitle: Text('$temperature'),
-                  value: enableTemperature,
-                  onChanged: (v) =>
-                      setDlgState(() => enableTemperature = v),
-                ),
-                if (enableTemperature)
-                  Slider(
-                    value: temperature,
-                    min: 0,
-                    max: 2,
-                    divisions: 40,
-                    label: temperature.toStringAsFixed(2),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Temperature
+                  SwitchListTile(
+                    title: const Text('温度 (Temperature)'),
+                    subtitle: Text('$temperature'),
+                    value: enableTemperature,
                     onChanged: (v) =>
-                        setDlgState(() => temperature = v),
+                        setDlgState(() => enableTemperature = v),
                   ),
-                const Divider(),
+                  if (enableTemperature)
+                    Slider(
+                      value: temperature,
+                      min: 0,
+                      max: 2,
+                      divisions: 40,
+                      label: temperature.toStringAsFixed(2),
+                      onChanged: (v) =>
+                          setDlgState(() => temperature = v),
+                    ),
+                  const Divider(),
 
-                // Top P
-                SwitchListTile(
-                  title: const Text('Top P'),
-                  subtitle: Text('$topP'),
-                  value: enableTopP,
-                  onChanged: (v) => setDlgState(() => enableTopP = v),
-                ),
-                if (enableTopP)
-                  Slider(
-                    value: topP,
-                    min: 0,
-                    max: 1,
-                    divisions: 20,
-                    label: topP.toStringAsFixed(2),
-                    onChanged: (v) => setDlgState(() => topP = v),
+                  // Top P
+                  SwitchListTile(
+                    title: const Text('Top P'),
+                    subtitle: Text('$topP'),
+                    value: enableTopP,
+                    onChanged: (v) => setDlgState(() => enableTopP = v),
                   ),
-                const Divider(),
+                  if (enableTopP)
+                    Slider(
+                      value: topP,
+                      min: 0,
+                      max: 1,
+                      divisions: 20,
+                      label: topP.toStringAsFixed(2),
+                      onChanged: (v) => setDlgState(() => topP = v),
+                    ),
+                  const Divider(),
 
-                // Max Tokens
-                SwitchListTile(
-                  title: const Text('最大Token数 (Max Tokens)'),
-                  subtitle: Text('$maxTokens'),
-                  value: enableMaxTokens,
-                  onChanged: (v) =>
-                      setDlgState(() => enableMaxTokens = v),
-                ),
-                if (enableMaxTokens)
-                  Slider(
-                    value: maxTokens.toDouble(),
-                    min: 256,
-                    max: 32768,
-                    divisions: 127,
-                    label: '$maxTokens',
+                  // Max Tokens
+                  SwitchListTile(
+                    title: const Text('最大Token数 (Max Tokens)'),
+                    subtitle: Text('$maxTokens'),
+                    value: enableMaxTokens,
                     onChanged: (v) =>
-                        setDlgState(() => maxTokens = v.round()),
+                        setDlgState(() => enableMaxTokens = v),
                   ),
-                const Divider(),
+                  if (enableMaxTokens)
+                    Slider(
+                      value: maxTokens.toDouble(),
+                      min: 256,
+                      max: 32768,
+                      divisions: 127,
+                      label: '$maxTokens',
+                      onChanged: (v) =>
+                          setDlgState(() => maxTokens = v.round()),
+                    ),
+                  const Divider(),
 
-                // Stream Output
-                SwitchListTile(
-                  title: const Text('流式输出 (Stream Output)'),
-                  value: streamOutput,
-                  onChanged: (v) =>
-                      setDlgState(() => streamOutput = v),
-                ),
-                const Divider(),
-
-                // Reasoning Effort
-                ListTile(
-                  title: const Text('推理努力度'),
-                  subtitle: Text(reasoningEffort),
-                  trailing: DropdownButton<String>(
-                    value: reasoningEffort,
-                    underline: const SizedBox.shrink(),
-                    items: const [
-                      DropdownMenuItem(
-                          value: 'default', child: Text('默认')),
-                      DropdownMenuItem(
-                          value: 'low', child: Text('低')),
-                      DropdownMenuItem(
-                          value: 'high', child: Text('高')),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) {
-                        setDlgState(() => reasoningEffort = v);
-                      }
-                    },
+                  // Stream Output
+                  SwitchListTile(
+                    title: const Text('流式输出 (Stream Output)'),
+                    value: streamOutput,
+                    onChanged: (v) =>
+                        setDlgState(() => streamOutput = v),
                   ),
-                ),
-                const Divider(),
+                  const Divider(),
 
-                // Web Search
-                SwitchListTile(
-                  title: const Text('联网搜索'),
-                  value: enableWebSearch,
-                  onChanged: (v) =>
-                      setDlgState(() => enableWebSearch = v),
-                ),
-              ],
+                  // Reasoning Effort
+                  ListTile(
+                    title: const Text('推理努力度'),
+                    subtitle: Text(reasoningEffort),
+                    trailing: DropdownButton<String>(
+                      value: reasoningEffort,
+                      underline: const SizedBox.shrink(),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'default', child: Text('默认')),
+                        DropdownMenuItem(
+                            value: 'low', child: Text('低')),
+                        DropdownMenuItem(
+                            value: 'high', child: Text('高')),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) {
+                          setDlgState(() => reasoningEffort = v);
+                        }
+                      },
+                    ),
+                  ),
+                  const Divider(),
+
+                  // Frequency Penalty (extended)
+                  SwitchListTile(
+                    title: const Text('频率惩罚 (Frequency Penalty)'),
+                    subtitle: Text('$frequencyPenalty'),
+                    value: enableFrequencyPenalty,
+                    onChanged: (v) => setDlgState(
+                        () => enableFrequencyPenalty = v),
+                  ),
+                  if (enableFrequencyPenalty)
+                    Slider(
+                      value: frequencyPenalty,
+                      min: -2,
+                      max: 2,
+                      divisions: 40,
+                      label: frequencyPenalty.toStringAsFixed(2),
+                      onChanged: (v) =>
+                          setDlgState(() => frequencyPenalty = v),
+                    ),
+                  const Divider(),
+
+                  // Presence Penalty (extended)
+                  SwitchListTile(
+                    title: const Text('存在惩罚 (Presence Penalty)'),
+                    subtitle: Text('$presencePenalty'),
+                    value: enablePresencePenalty,
+                    onChanged: (v) => setDlgState(
+                        () => enablePresencePenalty = v),
+                  ),
+                  if (enablePresencePenalty)
+                    Slider(
+                      value: presencePenalty,
+                      min: -2,
+                      max: 2,
+                      divisions: 40,
+                      label: presencePenalty.toStringAsFixed(2),
+                      onChanged: (v) =>
+                          setDlgState(() => presencePenalty = v),
+                    ),
+                  const Divider(),
+
+                  // Seed (extended)
+                  SwitchListTile(
+                    title: const Text('随机种子 (Seed)'),
+                    subtitle: Text(seed?.toString() ?? '未设置'),
+                    value: enableSeed,
+                    onChanged: (v) =>
+                        setDlgState(() => enableSeed = v),
+                  ),
+                  if (enableSeed)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: TextField(
+                        decoration: const InputDecoration(
+                          labelText: '种子值',
+                          hintText: '输入整数种子',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        keyboardType: TextInputType.number,
+                        controller: seedController,
+                        onChanged: (v) => setDlgState(() {
+                          seed = int.tryParse(v);
+                        }),
+                      ),
+                    ),
+                  const Divider(),
+
+                  // Web Search
+                  SwitchListTile(
+                    title: const Text('联网搜索'),
+                    value: enableWebSearch,
+                    onChanged: (v) =>
+                        setDlgState(() => enableWebSearch = v),
+                  ),
+                  const Divider(),
+
+                  // Custom Parameters section
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        const Text(
+                          '自定义参数',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                          ),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.add_circle_outline,
+                              size: 20),
+                          tooltip: '添加参数',
+                          onPressed: () {
+                            _showAddCustomParameterDialog(
+                              context,
+                              (name, type, value) {
+                                setDlgState(() {
+                                  customParameters.add(CustomParameter(
+                                    name: name,
+                                    type: type,
+                                    value: value,
+                                  ));
+                                });
+                              },
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (customParameters.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      child: Text(
+                        '暂无自定义参数',
+                        style: TextStyle(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurfaceVariant,
+                          fontSize: 13,
+                        ),
+                      ),
+                    )
+                  else
+                    ...customParameters.asMap().entries.map((entry) {
+                      final i = entry.key;
+                      final cp = entry.value;
+                      return ListTile(
+                        dense: true,
+                        title: Text(
+                          cp.name,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w500),
+                        ),
+                        subtitle: Text(
+                            '${cp.type}: ${cp.value?.toString() ?? 'null'}'),
+                        trailing: IconButton(
+                          icon: Icon(Icons.delete_outline,
+                              size: 18,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .error),
+                          onPressed: () {
+                            setDlgState(() {
+                              customParameters.removeAt(i);
+                            });
+                          },
+                        ),
+                        onTap: () {
+                          _showEditCustomParameterDialog(
+                            context,
+                            cp,
+                            (name, type, value) {
+                              setDlgState(() {
+                                customParameters[i] = CustomParameter(
+                                  name: name,
+                                  type: type,
+                                  value: value,
+                                );
+                              });
+                            },
+                          );
+                        },
+                      );
+                    }),
+                ],
+              ),
             ),
           ),
           actions: [
@@ -479,7 +674,183 @@ class AssistantSelectionPage extends ConsumerWidget {
                       streamOutput: streamOutput,
                       reasoningEffort: reasoningEffort,
                       enableWebSearch: enableWebSearch,
+                      frequencyPenalty: frequencyPenalty,
+                      enableFrequencyPenalty: enableFrequencyPenalty,
+                      presencePenalty: presencePenalty,
+                      enablePresencePenalty: enablePresencePenalty,
+                      seed: seed,
+                      enableSeed: enableSeed,
+                      customParameters: customParameters,
                     );
+                Navigator.pop(ctx);
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAddCustomParameterDialog(
+    BuildContext context,
+    void Function(String name, String type, dynamic value) onAdd,
+  ) {
+    final nameController = TextEditingController();
+    String type = 'string';
+    final valueController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          title: const Text('添加自定义参数'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: '参数名',
+                  hintText: '如: top_k',
+                  border: OutlineInputBorder(),
+                ),
+                autofocus: true,
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: type,
+                decoration: const InputDecoration(
+                  labelText: '类型',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'string', child: Text('字符串')),
+                  DropdownMenuItem(value: 'number', child: Text('数字')),
+                  DropdownMenuItem(value: 'boolean', child: Text('布尔')),
+                  DropdownMenuItem(value: 'json', child: Text('JSON')),
+                ],
+                onChanged: (v) {
+                  if (v != null) setDlgState(() => type = v);
+                },
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: valueController,
+                decoration: InputDecoration(
+                  labelText: '值',
+                  hintText: type == 'boolean'
+                      ? 'true 或 false'
+                      : type == 'number'
+                          ? '输入数字'
+                          : '输入值',
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final name = nameController.text.trim();
+                if (name.isEmpty) return;
+                dynamic value = valueController.text.trim();
+                if (type == 'number') {
+                  value = double.tryParse(value as String) ??
+                      int.tryParse(value as String) ??
+                      value;
+                } else if (type == 'boolean') {
+                  value = (value as String).toLowerCase() == 'true';
+                }
+                onAdd(name, type, value);
+                nameController.dispose();
+                valueController.dispose();
+                Navigator.pop(ctx);
+              },
+              child: const Text('添加'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditCustomParameterDialog(
+    BuildContext context,
+    CustomParameter cp,
+    void Function(String name, String type, dynamic value) onEdit,
+  ) {
+    final nameController = TextEditingController(text: cp.name);
+    String type = cp.type;
+    final valueController =
+        TextEditingController(text: cp.value?.toString() ?? '');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          title: const Text('编辑自定义参数'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: '参数名',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: type,
+                decoration: const InputDecoration(
+                  labelText: '类型',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'string', child: Text('字符串')),
+                  DropdownMenuItem(value: 'number', child: Text('数字')),
+                  DropdownMenuItem(value: 'boolean', child: Text('布尔')),
+                  DropdownMenuItem(value: 'json', child: Text('JSON')),
+                ],
+                onChanged: (v) {
+                  if (v != null) setDlgState(() => type = v);
+                },
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: valueController,
+                decoration: const InputDecoration(
+                  labelText: '值',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final name = nameController.text.trim();
+                if (name.isEmpty) return;
+                dynamic value = valueController.text.trim();
+                if (type == 'number') {
+                  value = double.tryParse(value as String) ??
+                      int.tryParse(value as String) ??
+                      value;
+                } else if (type == 'boolean') {
+                  value = (value as String).toLowerCase() == 'true';
+                }
+                onEdit(name, type, value);
+                nameController.dispose();
+                valueController.dispose();
                 Navigator.pop(ctx);
               },
               child: const Text('保存'),
@@ -558,27 +929,14 @@ class _AssistantCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Emoji
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: cs.primaryContainer.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Center(
-                  child: Text(
-                    assistant.emoji,
-                    style: const TextStyle(fontSize: 28),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Avatar (emoji or image)
+                AssistantAvatar(assistant: assistant, size: 56),
+                const SizedBox(height: 12),
               // Name
               Text(
                 assistant.name,
@@ -625,8 +983,103 @@ class _AssistantCard extends StatelessWidget {
                   ),
                 ),
               ),
-            ],
+              ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// Categorized emoji picker widget
+// ============================================================================
+
+/// A tabbed emoji picker that displays emojis organized by category.
+/// Used in create/edit assistant dialogs when avatar type is emoji.
+class _CategorizedEmojiPicker extends StatelessWidget {
+  final String selectedEmoji;
+  final ValueChanged<String> onEmojiSelected;
+
+  const _CategorizedEmojiPicker({
+    required this.selectedEmoji,
+    required this.onEmojiSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final categories = EmojiCategories.categories;
+
+    return SizedBox(
+      width: 320,
+      child: DefaultTabController(
+        length: categories.length,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+          // Category tabs
+          SizedBox(
+            height: 36,
+            child: TabBar(
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+              indicatorSize: TabBarIndicatorSize.label,
+              tabs: categories.map((cat) {
+                return Tab(
+                  child: Text(
+                    cat.label,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          // Emoji grid
+          SizedBox(
+            height: 180,
+            child: TabBarView(
+              children: categories.map((cat) {
+                return GridView.builder(
+                  padding: const EdgeInsets.only(top: 4),
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 8,
+                    mainAxisSpacing: 2,
+                    crossAxisSpacing: 2,
+                    childAspectRatio: 1,
+                  ),
+                  itemCount: cat.emojis.length,
+                  itemBuilder: (ctx, index) {
+                    final e = cat.emojis[index];
+                    final isSelected = e == selectedEmoji;
+                    return GestureDetector(
+                      onTap: () => onEmojiSelected(e),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? cs.primaryContainer
+                              : null,
+                          borderRadius: BorderRadius.circular(6),
+                          border: isSelected
+                              ? Border.all(color: cs.primary)
+                              : null,
+                        ),
+                        child: Center(
+                          child: Text(
+                            e,
+                            style: const TextStyle(fontSize: 22),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              }).toList(),
+            ),
+          ),
+        ],
         ),
       ),
     );

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint;
+import '../models/assistant.dart' show CustomParameter;
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
 import '../models/tool_call.dart';
@@ -151,6 +152,12 @@ class ChatAdapter {
     _chatService = null;
     currentConfigIndex = -1;
     currentModelIndex = -1;
+  }
+
+  /// Pass assistant-level custom parameters to the underlying ChatService.
+  /// These will be merged into the API request body alongside model-level params.
+  void setAssistantCustomParams(List<CustomParameter>? params) {
+    _chatService?.setAssistantCustomParams(params);
   }
 
   Stream<String> sendStream(String text, {required List<ChatMessage> history, bool reasoning = false}) {
