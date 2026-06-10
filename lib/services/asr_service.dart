@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import '../providers/chat_api_provider.dart';
 
 // ============================================================================
 // ASR Config
@@ -95,10 +96,14 @@ class AsrService {
               headers: {
                 if (config.apiKey.isNotEmpty)
                   'Authorization': 'Bearer ${config.apiKey}',
+                ...openRouterAppHeaders,
               },
               connectTimeout: const Duration(seconds: 30),
               receiveTimeout: const Duration(seconds: 120),
             ));
+
+  /// Dio default headers, exposed for testing.
+  Map<String, dynamic> get defaultHeaders => _dio.options.headers;
 
   /// Transcribe audio bytes into text.
   ///

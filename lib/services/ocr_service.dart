@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import '../providers/chat_api_provider.dart';
 
 // ============================================================================
 // OCR Config
@@ -90,10 +91,14 @@ class OcrService {
                 'Content-Type': 'application/json',
                 if (config.apiKey.isNotEmpty)
                   'Authorization': 'Bearer ${config.apiKey}',
+                ...openRouterAppHeaders,
               },
               connectTimeout: const Duration(seconds: 30),
               receiveTimeout: const Duration(seconds: 120),
             ));
+
+  /// Dio default headers, exposed for testing.
+  Map<String, dynamic> get defaultHeaders => _dio.options.headers;
 
   /// The chat completions endpoint URL.
   String get _chatUrl => '${config.normalizedHost}/chat/completions';
