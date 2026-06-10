@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
@@ -92,6 +93,22 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   bool _developerMode = false;
   final Map<String, bool> _expandedErrors = {};
+
+  // ── Infinite Scroll / Lazy Load pagination state ──
+  /// Number of messages to load per page.
+  static const int _pageSize = 20;
+
+  /// Index in [_history] pointing to the first message that is loaded into
+  /// the chat controller. All messages from [_loadedUpToIndex] to the end of
+  /// [_history] are visible. When [_loadedUpToIndex] is 0, all messages are
+  /// already loaded.
+  int _loadedUpToIndex = 0;
+
+  /// Whether a pagination load is currently in progress.
+  bool _isLoadingMore = false;
+
+  /// Whether there are more older messages to load.
+  bool get _hasMoreMessages => _loadedUpToIndex > 0;
 
   static bool _toolsRegistered = false;
 
@@ -201,6 +218,47 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _loadConversationMessages();
   }
 
+  /// Loads the previous page of older messages and prepends them to the
+  /// chat controller. Called by [ChatAnimatedList.onEndReached] when the user
+  /// scrolls near the top of the message list.
+  Future<void> _loadMoreMessages() async {
+    if (_isLoadingMore || !_hasMoreMessages) return;
+
+    _isLoadingMore = true;
+    if (mounted) setState(() {});
+
+    try {
+      final newStart = max(0, _loadedUpToIndex - _pageSize);
+      final batchMessages = _history.sublist(newStart, _loadedUpToIndex);
+
+      // Convert ChatMessage list to flutter_chat_ui Message list
+      final msgs = batchMessages.map((m) => Message.text(
+        id: m.id,
+        authorId: m.role == 'user' ? _currentUser.id : _aiUser.id,
+        text: m.content,
+        createdAt: m.createdAt,
+      )).toList();
+
+      // Guard: controller might have been disposed during the async gap
+      // (e.g., conversation switched). Only update state if still valid
+      // and the load hasn't been invalidated by a conversation switch.
+      if (_controller != null && _isLoadingMore) {
+        // Prepend all messages at the beginning (index 0) of the controller
+        await _controller!.insertAllMessages(msgs, index: 0);
+        // Re-check after await: conversation might have switched during the
+        // insertion, which would have reset _isLoadingMore to false.
+        if (_isLoadingMore) {
+          _loadedUpToIndex = newStart;
+        }
+      }
+    } catch (e, s) {
+      debugPrint('[ChatPage] _loadMoreMessages error: $e\n$s');
+    } finally {
+      _isLoadingMore = false;
+      if (mounted) setState(() {});
+    }
+  }
+
   void _configureAdapter() {
     final entriesState = ref.read(providerEntriesProvider);
     _adapter.configure(entriesState);
@@ -238,10 +296,22 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       _searchQuery = '';
       _searchMatches.clear();
       _currentMatchIndex = 0;
+
+      // Initialize pagination state: reset any in-flight load and
+      // let the loop below set the correct loaded index.
+      _isLoadingMore = false;
+
       final newCtrl = InMemoryChatController();
       _controller = newCtrl;
+      // Load all messages into _history (needed for full context in API calls
+      // and search), but only insert the last _pageSize messages into the
+      // controller for display (lazy loading).
       for (final msg in conv.messages) {
         _history.add(msg);
+      }
+      _loadedUpToIndex = max(0, _history.length - _pageSize);
+      for (var i = _loadedUpToIndex; i < _history.length; i++) {
+        final msg = _history[i];
         await _controller?.insertMessage(Message.text(
           id: msg.id,
           authorId: msg.role == 'user' ? _currentUser.id : _aiUser.id,
@@ -600,6 +670,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             await _controller?.removeMessage(ctrlMsg);
           }
         }
+        // Safety: keep pagination index within bounds
+        _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
       }
     } catch (e) {
       debugPrint('[ChatPage] _editUserMessage remove failed: $e');
@@ -695,6 +767,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             await _controller?.removeMessage(ctrlMsg);
           }
         }
+        // Safety: keep pagination index within bounds
+        _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
       }
     } catch (e) {
       debugPrint('[ChatPage] _editUserMessageWithText remove failed: $e');
@@ -720,6 +794,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             await _controller?.removeMessage(ctrlMsg);
           }
         }
+        // Safety: keep pagination index within bounds
+        _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
       }
     } catch (e) {
       debugPrint('[ChatPage] _retryAssistantMessage remove failed: $e');
@@ -748,6 +824,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     setState(() {
       _history.removeAt(index);
+      // Adjust pagination state: if the deleted message was before the loaded
+      // region, shift _loadedUpToIndex to keep it pointing at the same messages.
+      if (index < _loadedUpToIndex && _loadedUpToIndex > 0) {
+        _loadedUpToIndex = max(0, _loadedUpToIndex - 1);
+      }
     });
 
     final msgToRemove = _controller?.messages.where((m) => m.id == messageId).firstOrNull;
@@ -1548,6 +1629,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
                       theme: isDark ? ChatTheme.dark() : ChatTheme.light(),
                       builders: Builders(
+                        chatAnimatedListBuilder: (context, itemBuilder) =>
+                            ChatAnimatedList(
+                          itemBuilder: itemBuilder,
+                          onEndReached: _loadMoreMessages,
+                        ),
 composerBuilder: (context) => ChatComposerWidget(
   onSend: _onMessageSend,
   onStop: _stopStreaming,
