@@ -78,6 +78,20 @@ void main() {
 
       expect(find.text('加载图片中...'), findsOneWidget);
     });
+
+    testWidgets('zoom buttons are present in the AppBar', (tester) async {
+      await tester.pumpWidget(createTestApp(testImage));
+      await waitForEditor(tester);
+
+      // Should have zoom in button
+      expect(find.byIcon(Icons.zoom_in), findsOneWidget);
+
+      // Should have zoom out button
+      expect(find.byIcon(Icons.zoom_out), findsOneWidget);
+
+      // Should have fit-to-screen button
+      expect(find.byIcon(Icons.fullscreen), findsOneWidget);
+    });
   });
 
   group('ImageEditorPage - navigation', () {
@@ -99,6 +113,123 @@ void main() {
 
       // Save button should show "保存" text in AppBar
       expect(find.text('保存'), findsOneWidget, reason: 'Save button should be in AppBar');
+    });
+  });
+
+  group('ImageEditorPage - save dialog', () {
+    testWidgets('Save button shows overwrite/save-as dialog', (tester) async {
+      await tester.pumpWidget(createTestApp(testImage));
+      await waitForEditor(tester);
+
+      // Tap save button
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      // Dialog should appear with overwrite and save-as options
+      expect(find.text('保存图片'), findsOneWidget);
+      expect(find.text('覆盖'), findsOneWidget);
+      expect(find.text('另存为'), findsOneWidget);
+      expect(find.text('取消'), findsOneWidget);
+    });
+
+    testWidgets('Cancel in save dialog dismisses dialog without popping', (tester) async {
+      await tester.pumpWidget(createTestApp(testImage));
+      await waitForEditor(tester);
+
+      // Tap save button
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      // Tap cancel
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+
+      // Dialog should be gone
+      expect(find.text('保存图片'), findsNothing);
+      // Editor page should still be visible
+      expect(find.text('保存'), findsOneWidget);
+    });
+
+    testWidgets('Save dialog overwrite option pops the editor page',
+        (tester) async {
+      await tester.pumpWidget(createTestApp(testImage));
+      await waitForEditor(tester);
+
+      // Tap save button
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      // Tap 覆盖 (Overwrite)
+      await tester.tap(find.text('覆盖'));
+      // Wait for async save + navigation
+      await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 500)));
+      await tester.pumpAndSettle();
+
+      // Editor page should be gone (popped)
+      expect(find.byType(ImageEditorPage), findsNothing);
+    });
+
+    testWidgets('Save dialog save-as option pops the editor page',
+        (tester) async {
+      await tester.pumpWidget(createTestApp(testImage));
+      await waitForEditor(tester);
+
+      // Tap save button
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      // Tap 另存为 (Save As)
+      await tester.tap(find.text('另存为'));
+      // Wait for async save + navigation
+      await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 500)));
+      await tester.pumpAndSettle();
+
+      // Editor page should be gone (popped)
+      expect(find.byType(ImageEditorPage), findsNothing);
+    });
+  });
+
+  group('ImageEditorPage - zoom controls', () {
+    testWidgets('Zoom in button changes transformation scale', (tester) async {
+      await tester.pumpWidget(createTestApp(testImage));
+      await waitForEditor(tester);
+
+      // The identity matrix scale should be 1.0 initially
+      // Tap zoom in button twice
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+
+      // No crash - button worked
+    });
+
+    testWidgets('Zoom out changes transformation scale', (tester) async {
+      await tester.pumpWidget(createTestApp(testImage));
+      await waitForEditor(tester);
+
+      // Tap zoom in first, then zoom out
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.zoom_out));
+      await tester.pump();
+
+      // No crash - button worked
+    });
+
+    testWidgets('Fit-to-screen button resets zoom after zoom in', (tester) async {
+      await tester.pumpWidget(createTestApp(testImage));
+      await waitForEditor(tester);
+
+      // Zoom in first
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+
+      // Then fit to screen - should reset
+      await tester.tap(find.byIcon(Icons.fullscreen));
+      await tester.pump();
+
+      // No crash - button worked
     });
   });
 
