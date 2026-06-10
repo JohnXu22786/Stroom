@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:dynamic_color/dynamic_color.dart';
@@ -25,9 +26,12 @@ class _ApplicationState extends ConsumerState<Application> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkForUpdatesOnStartup();
-    });
+    // Web端不提供更新功能
+    if (!kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _checkForUpdatesOnStartup();
+      });
+    }
   }
 
   Future<void> _checkForUpdatesOnStartup() async {

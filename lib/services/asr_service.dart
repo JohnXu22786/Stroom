@@ -1,6 +1,9 @@
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import '../providers/chat_api_provider.dart';
+
+import '../utils/http_utils.dart';
 
 // ============================================================================
 // ASR Config
@@ -87,6 +90,25 @@ class AsrService {
   final AsrConfig config;
   final Dio _dio;
 
+  // ── Diagnostic capture (mirrors chat_api_provider pattern) ───────────
+  /// The last request body sent to the API.
+  Map<String, dynamic>? lastRequestBody;
+
+  /// The last response data received from the API (or null on error).
+  Map<String, dynamic>? lastResponseData;
+
+  /// The last request headers sent.
+  Map<String, String>? lastRequestHeaders;
+
+  /// The last response headers received.
+  Map<String, List<String>>? lastResponseHeaders;
+
+  /// The last request URL.
+  String? lastRequestUrl;
+
+  /// The last HTTP response status code.
+  int? lastResponseStatusCode;
+
   AsrService({
     required this.config,
     Dio? dio,
@@ -95,10 +117,14 @@ class AsrService {
               headers: {
                 if (config.apiKey.isNotEmpty)
                   'Authorization': 'Bearer ${config.apiKey}',
+                ...openRouterAppHeaders,
               },
               connectTimeout: const Duration(seconds: 30),
               receiveTimeout: const Duration(seconds: 120),
             ));
+
+  /// Dio default headers, exposed for testing.
+  Map<String, dynamic> get defaultHeaders => _dio.options.headers;
 
   /// Transcribe audio bytes into text.
   ///
@@ -127,22 +153,66 @@ class AsrService {
         'language': config.language,
     });
 
-    final response = await _dio.post(
-      config.transcribeUrl,
-      data: formData,
-      options: Options(
-        contentType: 'multipart/form-data',
-      ),
-    );
+    // Capture request diagnostics
+    lastRequestBody = {
+      'file': 'audio.$audioFormat (${audioBytes.length} bytes)',
+      'model': config.model,
+      'response_format': 'json',
+      if (config.language != null && config.language!.isNotEmpty)
+        'language': config.language,
+    };
+    lastRequestUrl = config.transcribeUrl;
+    lastRequestHeaders = {
+      if (config.apiKey.isNotEmpty) 'Authorization': 'Bearer ${config.apiKey}',
+    };
+    lastResponseData = null;
+    lastResponseStatusCode = null;
+    lastResponseHeaders = null;
 
-    stopwatch.stop();
+    try {
+      final response = await _dio.post(
+        config.transcribeUrl,
+        data: formData,
+        options: Options(
+          contentType: 'multipart/form-data',
+        ),
+      );
 
-    final text = _extractText(response.data);
+      stopwatch.stop();
 
-    return AsrResult(
-      text: text,
-      processingTimeMs: stopwatch.elapsedMilliseconds,
-    );
+      // Capture response diagnostics
+      lastResponseStatusCode = response.statusCode;
+      lastResponseData = response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : <String, dynamic>{'raw': '$response.data'};
+      lastResponseHeaders = response.headers.map;
+
+      final text = _extractText(response.data);
+
+      return AsrResult(
+        text: text,
+        processingTimeMs: stopwatch.elapsedMilliseconds,
+      );
+    } on DioException catch (e) {
+      // Capture response diagnostics from exception
+      _captureDioExceptionDiagnostics(e);
+      throwWrappedDioException(e);
+    }
+  }
+
+  /// Capture response-level diagnostic fields from a [DioException].
+  void _captureDioExceptionDiagnostics(DioException e) {
+    if (e.response?.data is Map) {
+      lastResponseData =
+          Map<String, dynamic>.from(e.response!.data as Map);
+    } else if (e.response?.data is String) {
+      lastResponseData =
+          <String, dynamic>{'raw': e.response!.data as String};
+    } else {
+      lastResponseData = null;
+    }
+    lastResponseStatusCode = e.response?.statusCode;
+    lastResponseHeaders = e.response?.headers?.map;
   }
 
   /// Extract text from the standard OpenAI transcription response.

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 
+import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
 import '../providers/tts_config.dart';
 import '../utils/audio_playback.dart';
@@ -499,6 +500,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $key',
+          ...openRouterAppHeaders,
         },
         connectTimeout: const Duration(seconds: 10),
         receiveTimeout: const Duration(seconds: 30),

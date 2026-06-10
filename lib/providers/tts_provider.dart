@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'provider_config.dart';
+import 'chat_api_provider.dart';
 
 import '../utils/audio_utils.dart';
 
@@ -93,6 +94,7 @@ class CustomTTSProvider extends BaseTTSProvider {
           headers: {
             'Content-Type': 'application/json',
             if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
+            ...openRouterAppHeaders,
           },
           connectTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 30),
@@ -100,6 +102,9 @@ class CustomTTSProvider extends BaseTTSProvider {
 
   @override
   String get name => _name;
+
+  /// Dio default headers, exposed for testing.
+  Map<String, dynamic> get defaultHeaders => _dio.options.headers;
 
   @override
   List<String> get supportedModels => [];
