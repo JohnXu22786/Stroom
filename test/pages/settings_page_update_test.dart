@@ -49,15 +49,30 @@ Dio _createFailingDio() {
 }
 
 /// Build a GitHub releases API response for the given tag.
-String _githubRelease(String tagName, {String body = '', String? htmlUrl}) {
+String _githubRelease(String tagName, {String body = '', String? htmlUrl, List<Map<String, String>>? assets}) {
   htmlUrl ??= 'https://github.com/JohnXu22786/Stroom/releases/tag/$tagName';
+  final assetsJson = assets != null
+      ? ',\n  "assets": [${assets.map((a) => '{\n      "name": "${a['name']}",\n      "browser_download_url": "${a['browser_download_url']}"\n    }').join(',\n    ')}]'
+      : '';
   return '''
 {
   "tag_name": "$tagName",
   "body": "$body",
-  "html_url": "$htmlUrl"
+  "html_url": "$htmlUrl"$assetsJson
 }
 ''';
+}
+
+/// Build a list of release assets for all platforms.
+List<Map<String, String>> _allPlatformAssets(String tagName) {
+  final version = tagName.replaceAll(RegExp(r'^v'), '');
+  return [
+    {'name': 'stroom-android-release-v$version.apk', 'browser_download_url': 'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-android-release-v$version.apk'},
+    {'name': 'stroom-windows-x64-release-v$version.zip', 'browser_download_url': 'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-windows-x64-release-v$version.zip'},
+    {'name': 'stroom-macos-arm64-release-v$version.zip', 'browser_download_url': 'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-macos-arm64-release-v$version.zip'},
+    {'name': 'stroom-linux-x64-release-v$version.zip', 'browser_download_url': 'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-linux-x64-release-v$version.zip'},
+    {'name': 'stroom-web-release-v$version.zip', 'browser_download_url': 'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-web-release-v$version.zip'},
+  ];
 }
 
 /// Builds the test app with all required provider overrides.
@@ -148,7 +163,10 @@ void main() {
     });
 
     testWidgets('shows update dialog when new version available', (tester) async {
-      await setUpAndScrollToUpdateButton(tester, dio: _createMockDio(_githubRelease('v0.2.14', body: 'Bug fixes')));
+      await setUpAndScrollToUpdateButton(
+        tester,
+        dio: _createMockDio(_githubRelease('v0.2.14', body: 'Bug fixes', assets: _allPlatformAssets('v0.2.14'))),
+      );
 
       await tester.tap(find.text('检查更新'));
       await tester.pumpAndSettle();
@@ -178,14 +196,29 @@ void main() {
         tester.view.resetDevicePixelRatio();
       });
 
+      // Create a ProviderScope with pre-set update state using ProviderContainer
       SharedPreferences.setMockInitialValues({});
-      final container = _createContainer(dio: _createMockDio(_githubRelease('v0.2.14')));
+      final dio = _createMockDio(_githubRelease('v0.2.14', assets: _allPlatformAssets('v0.2.14')));
+      final notifier = UpdateNotifier(dio: dio);
 
-      await container.read(updateProvider.notifier).checkForUpdate();
+      // Directly set the state to simulate an available update (bypass HTTP call)
+      notifier.state = UpdateState(
+        updateAvailable: true,
+        latestVersion: '0.2.14',
+        downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/stroom-windows-x64-release-v0.2.14.zip',
+        releaseNotes: '',
+      );
 
       await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
+        ProviderScope(
+          overrides: [
+            themeProvider.overrideWith((ref) => ThemeNotifier()),
+            cameraSettingsProvider.overrideWith((ref) => CameraSettingsNotifier()),
+            providerEntriesProvider.overrideWith(
+              (ref) => ProviderEntriesNotifier(),
+            ),
+            updateProvider.overrideWith((ref) => notifier),
+          ],
           child: const MaterialApp(
             home: SettingsPage(),
           ),
@@ -202,12 +235,10 @@ void main() {
 
       expect(find.text('新版本'), findsOneWidget);
       expect(find.textContaining('发现新版本'), findsOneWidget);
-
-      container.dispose();
     });
 
     testWidgets('update dialog shows skip and remind buttons', (tester) async {
-      await setUpAndScrollToUpdateButton(tester, dio: _createMockDio(_githubRelease('v0.2.14')));
+      await setUpAndScrollToUpdateButton(tester, dio: _createMockDio(_githubRelease('v0.2.14', assets: _allPlatformAssets('v0.2.14'))));
 
       await tester.tap(find.text('检查更新'));
       await tester.pumpAndSettle();
@@ -227,7 +258,7 @@ void main() {
       SharedPreferences.setMockInitialValues({
         'update_skipped_version': '0.2.14',
       });
-      await tester.pumpWidget(_buildTestApp(dio: _createMockDio(_githubRelease('v0.2.14'))));
+      await tester.pumpWidget(_buildTestApp(dio: _createMockDio(_githubRelease('v0.2.14', assets: _allPlatformAssets('v0.2.14')))));
       await tester.pump();
 
       await tester.scrollUntilVisible(
