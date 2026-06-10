@@ -361,6 +361,108 @@ void main() {
     });
   });
 
+  group('API host input field hint text by type', () {
+    /// Helper to get the host TextField widget via its key
+    TextField _hostField(WidgetTester tester) {
+      return tester.widget<TextField>(find.byKey(const ValueKey('host_field')));
+    }
+
+    testWidgets('LLM type shows hintText and type-specific helperText',
+        (tester) async {
+      await tester.pumpDetailPage(entryType: 'llm', configIndex: -1);
+      await tester.pumpAndSettle();
+
+      final hostTextField = _hostField(tester);
+      final decoration = hostTextField.decoration;
+
+      // hintText should be a short generic prompt (disappears on typing)
+      expect(decoration!.hintText, contains('输入完整的'));
+
+      // helperText should contain instruction + type-specific example
+      expect(decoration.helperText, contains('请填写完整的 API 端点地址'));
+      expect(decoration.helperText, contains('chat/completions'));
+      expect(decoration.helperMaxLines, equals(3));
+    });
+
+    testWidgets('TTS type shows type-specific helperText with audio/speech',
+        (tester) async {
+      await tester.pumpDetailPage(entryType: 'tts', configIndex: -1);
+      await tester.pumpAndSettle();
+
+      final decoration = _hostField(tester).decoration;
+      expect(decoration!.helperText, contains('请填写完整的 API 端点地址'));
+      expect(decoration.helperText, contains('audio/speech'));
+    });
+
+    testWidgets('ASR type shows type-specific helperText with audio/transcriptions',
+        (tester) async {
+      await tester.pumpDetailPage(entryType: 'asr', configIndex: -1);
+      await tester.pumpAndSettle();
+
+      final decoration = _hostField(tester).decoration;
+      expect(decoration!.helperText, contains('请填写完整的 API 端点地址'));
+      expect(decoration.helperText, contains('audio/transcriptions'));
+    });
+
+    testWidgets('OCR type shows type-specific helperText with chat/completions',
+        (tester) async {
+      await tester.pumpDetailPage(entryType: 'ocr', configIndex: -1);
+      await tester.pumpAndSettle();
+
+      final decoration = _hostField(tester).decoration;
+      expect(decoration!.helperText, contains('请填写完整的 API 端点地址'));
+      expect(decoration.helperText, contains('chat/completions'));
+    });
+
+    testWidgets('MCP type shows type-specific helperText with URL example',
+        (tester) async {
+      await tester.pumpDetailPage(entryType: 'mcp', configIndex: -1);
+      await tester.pumpAndSettle();
+
+      final decoration = _hostField(tester).decoration;
+      expect(decoration!.helperText, contains('请填写完整的 API 端点地址'));
+      expect(decoration.helperText, contains('localhost'));
+    });
+
+    testWidgets('host input field does NOT auto-fill with any value',
+        (tester) async {
+      await tester.pumpDetailPage(entryType: 'llm', configIndex: -1);
+      await tester.pumpAndSettle();
+
+      final hostTextField = _hostField(tester);
+      // The host field should be empty on new config
+      expect(hostTextField.controller?.text, isEmpty);
+    });
+
+    testWidgets('helperText is null when no type definition available',
+        (tester) async {
+      // Use an unregistered type to test null helperText
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            providerEntriesProvider.overrideWith(
+              (ref) => ProviderEntriesNotifierFake(
+                type: 'unknown_type',
+                name: '未知供应商',
+              ),
+            ),
+          ],
+          child: const MaterialApp(
+            home: ProviderConfigDetailPage(
+              entryId: 'test_entry_id',
+              configIndex: -1,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final decoration = _hostField(tester).decoration;
+      // helperText should be null (no layout gap) for unregistered types
+      expect(decoration!.helperText, isNull);
+    });
+  });
+
   group('Model config page routing by type', () {
     testWidgets('LLM type renders LlmModelConfigPage when adding model',
         (tester) async {
