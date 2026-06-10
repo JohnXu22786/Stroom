@@ -188,8 +188,7 @@ void main() {
       expect(find.text('头像图片URL（可选）'), findsOneWidget);
     });
 
-    testWidgets('settings dialog has extended params sections',
-        (tester) async {
+    testWidgets('long press menu shows only 编辑 and 设置 (no 删除)', (tester) async {
       await tester.pumpWidget(createTestApp(
         assistants: [
           Assistant(
@@ -205,13 +204,59 @@ void main() {
       await tester.longPress(find.byType(AssistantAvatar));
       await tester.pumpAndSettle();
 
+      // Should show 编辑 and 设置
+      expect(find.text('编辑'), findsOneWidget);
+      expect(find.text('设置'), findsOneWidget);
+      // Should NOT show 删除
+      expect(find.text('删除'), findsNothing);
+    });
+
+    testWidgets('long press menu edit opens edit dialog', (tester) async {
+      await tester.pumpWidget(createTestApp(
+        assistants: [
+          Assistant(
+            name: '助手编辑',
+            prompt: 'P1',
+            emoji: '🤖',
+          ),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      // Long-press to open menu
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+
+      // Tap 编辑
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      // Should open edit dialog
+      expect(find.text('编辑助手'), findsOneWidget);
+    });
+
+    testWidgets('long press menu settings opens settings dialog', (tester) async {
+      await tester.pumpWidget(createTestApp(
+        assistants: [
+          Assistant(
+            name: '助手设置',
+            prompt: 'P1',
+            emoji: '🤖',
+          ),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      // Long-press to open menu
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+
       // Tap 设置
       await tester.tap(find.text('设置'));
       await tester.pumpAndSettle();
 
-      // Should see the extended param labels
-      expect(find.text('频率惩罚 (Frequency Penalty)'), findsOneWidget);
-      expect(find.text('存在惩罚 (Presence Penalty)'), findsOneWidget);
+      // Should open settings dialog
+      expect(find.text('助手参数设置'), findsOneWidget);
     });
   });
 }

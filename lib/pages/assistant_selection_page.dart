@@ -229,17 +229,6 @@ class AssistantSelectionPage extends ConsumerWidget {
                 _showAssistantSettingsDialog(context, ref, assistant);
               },
             ),
-            ListTile(
-              leading: Icon(Icons.delete_outline,
-                  color: Theme.of(context).colorScheme.error),
-              title: Text('删除',
-                  style:
-                      TextStyle(color: Theme.of(context).colorScheme.error)),
-              onTap: () {
-                Navigator.pop(ctx);
-                _confirmDeleteAssistant(context, ref, assistant);
-              },
-            ),
           ],
         ),
       ),
@@ -861,38 +850,6 @@ class AssistantSelectionPage extends ConsumerWidget {
     );
   }
 
-  void _confirmDeleteAssistant(
-      BuildContext context, WidgetRef ref, Assistant assistant) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('删除助手'),
-        content: Text('确定要删除助手「${assistant.name}」吗？此操作无法撤销。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () {
-              ref
-                  .read(assistantProvider.notifier)
-                  .deleteAssistant(assistant.id);
-              // Clear selected assistant if it was the deleted one
-              final currentId = ref.read(selectedAssistantIdProvider);
-              if (currentId == assistant.id) {
-                ref.read(selectedAssistantIdProvider.notifier).state = null;
-              }
-              Navigator.pop(ctx);
-            },
-            style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 // ============================================================================

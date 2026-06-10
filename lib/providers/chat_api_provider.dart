@@ -6,6 +6,25 @@ import '../models/ai_stream_event.dart';
 import '../services/sse_client.dart';
 
 // ============================================================================
+// OpenRouter-format app identification headers
+// ============================================================================
+
+/// HTTP-Referer header value identifying this application, following the
+/// OpenRouter convention for app attribution on leaderboards.
+const String kHttpReferer = 'https://github.com/JohnXu22786/Stroom';
+
+/// X-Title header value identifying this application, following the
+/// OpenRouter convention for app attribution on leaderboards.
+const String kXTitle = 'Stroom';
+
+/// Map of application identification headers following OpenRouter format.
+/// These are added to all outgoing API requests to identify the app.
+Map<String, String> get openRouterAppHeaders => {
+      'HTTP-Referer': kHttpReferer,
+      'X-Title': kXTitle,
+    };
+
+// ============================================================================
 // 抽象基类 — BaseChatProvider
 // ============================================================================
 
@@ -25,6 +44,9 @@ abstract class BaseChatProvider {
   Map<String, List<String>>? get lastResponseHeaders => null;
   String? get lastRequestUrl => null;
   int? get lastResponseStatusCode => null;
+
+  /// Dio default headers, exposed for testing.
+  Map<String, dynamic> get defaultHeaders => {};
 
   Future<String> chat(
     List<Map<String, dynamic>> messages, {
@@ -82,6 +104,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
           headers: {
             'Content-Type': 'application/json',
             if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
+            ...openRouterAppHeaders,
           },
           connectTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 60),
@@ -112,6 +135,9 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   // 使用其 defaultValue?.split(',') 作为模型列表。目前暂无可信数据源，留空。
   @override
   List<String> get supportedModelIds => [];
+
+  @override
+  Map<String, dynamic> get defaultHeaders => _dio.options.headers;
 
   /// 构建请求体
   ///
@@ -194,6 +220,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       _lastRequestHeaders = {
         'Content-Type': 'application/json',
         if (_apiKey.isNotEmpty) 'Authorization': 'Bearer ${_maskApiKey(_apiKey)}',
+        ...openRouterAppHeaders,
       };
       _lastResponseStatusCode = null;
       _lastResponseData = null;
@@ -277,6 +304,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       'Content-Type': 'application/json',
       if (_apiKey.isNotEmpty) 'Authorization': 'Bearer ${_maskApiKey(_apiKey)}',
       'Accept': 'text/event-stream',
+      ...openRouterAppHeaders,
     };
     _lastResponseStatusCode = null;
     _lastResponseData = null;
@@ -296,6 +324,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
           'Content-Type': 'application/json',
           if (_apiKey.isNotEmpty) 'Authorization': 'Bearer $_apiKey',
           'Accept': 'text/event-stream',
+          ...openRouterAppHeaders,
         },
         jsonEncode(body),
         cancelToken: cancelToken,

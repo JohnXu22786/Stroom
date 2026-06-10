@@ -229,7 +229,7 @@ void main() {
       expect(find.byIcon(Icons.more_vert), findsOneWidget);
     });
 
-    testWidgets('shows "新话题" buttons (empty state + bottom)', (tester) async {
+    testWidgets('shows only ONE "新话题" button (bottom only, not in empty state)', (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
           Assistant(id: 'test-id-8', name: '助手H', prompt: 'P8', emoji: '🤖', description: 'HH'),
@@ -239,8 +239,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // There are 2 "新话题" buttons: one in the empty state and one at the bottom
-      expect(find.widgetWithText(FilledButton, '新话题'), findsAtLeast(1));
+      // Only 1 "新话题" button: the bottom one (empty state one was removed)
+      expect(find.widgetWithText(FilledButton, '新话题'), findsOneWidget);
     });
 
     testWidgets('tapping bottom new topic button navigates to chat', (tester) async {
@@ -291,7 +291,7 @@ void main() {
       expect(find.text('一个智能助手'), findsOneWidget);
     });
 
-    testWidgets('assistant info bar has settings (tune) button', (tester) async {
+    testWidgets('assistant info bar tune button navigates to assistant selection page (pops back)', (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
           Assistant(id: 'test-id-10', name: '助手J', prompt: 'P10', emoji: '🤖', description: 'JJ'),
@@ -301,8 +301,17 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Settings button should be in the assistant bar
+      // Tune button should still exist (now navigates back to assistant selection)
       expect(find.byIcon(Icons.tune), findsOneWidget);
+
+      // Tap the tune button - should pop back to assistant selection
+      await tester.tap(find.byIcon(Icons.tune));
+      await tester.pumpAndSettle();
+
+      // Verify we navigated back: the tune icon should be gone since TopicSelectionPage is popped
+      expect(find.byIcon(Icons.tune), findsNothing);
+      // Topic selection title should also be gone
+      expect(find.text('选择话题'), findsNothing);
     });
   });
 

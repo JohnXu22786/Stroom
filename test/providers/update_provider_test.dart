@@ -58,15 +58,30 @@ Dio _createNon200Dio(int statusCode) {
 }
 
 /// Build a GitHub releases API response for the given tag.
-String _githubRelease(String tagName, {String body = '', String? htmlUrl}) {
+String _githubRelease(String tagName, {String body = '', String? htmlUrl, List<Map<String, String>>? assets}) {
   htmlUrl ??= 'https://github.com/JohnXu22786/Stroom/releases/tag/$tagName';
+  final assetsJson = assets != null
+      ? ',\n  "assets": [${assets.map((a) => '{\n      "name": "${a['name']}",\n      "browser_download_url": "${a['browser_download_url']}"\n    }').join(',\n    ')}]'
+      : '';
   return '''
 {
   "tag_name": "$tagName",
   "body": "$body",
-  "html_url": "$htmlUrl"
+  "html_url": "$htmlUrl"$assetsJson
 }
 ''';
+}
+
+/// Build a list of release assets for all platforms.
+List<Map<String, String>> _allPlatformAssets(String tagName) {
+  final version = tagName.replaceAll(RegExp(r'^v'), '');
+  return [
+    {'name': 'stroom-android-release-v$version.apk', 'browser_download_url': 'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-android-release-v$version.apk'},
+    {'name': 'stroom-windows-x64-release-v$version.zip', 'browser_download_url': 'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-windows-x64-release-v$version.zip'},
+    {'name': 'stroom-macos-arm64-release-v$version.zip', 'browser_download_url': 'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-macos-arm64-release-v$version.zip'},
+    {'name': 'stroom-linux-x64-release-v$version.zip', 'browser_download_url': 'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-linux-x64-release-v$version.zip'},
+    {'name': 'stroom-web-release-v$version.zip', 'browser_download_url': 'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-web-release-v$version.zip'},
+  ];
 }
 
 void main() {
@@ -342,6 +357,86 @@ void main() {
       final pending = await notifier.getPendingUpdate();
       expect(pending, isNotNull);
       expect(pending!['latest_version'], '0.2.14');
+    });
+
+    test('downloadUrl is browser_download_url when asset found for platform', () async {
+      SharedPreferences.setMockInitialValues({});
+      final assets = _allPlatformAssets('v0.2.14');
+      final dio = _createMockDio(_githubRelease('v0.2.14', body: 'Bug fixes', assets: assets));
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.downloadUrl, isNotNull);
+      // Should be a direct download URL, not the html_url
+      expect(notifier.state.downloadUrl, contains('github.com/JohnXu22786/Stroom/releases/download'));
+      expect(notifier.state.downloadUrl, isNot(contains('releases/tag')));
+    });
+
+    test('downloadUrl falls back to html_url when no assets provided', () async {
+      SharedPreferences.setMockInitialValues({});
+      final dio = _createMockDio(_githubRelease('v0.2.14'));
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.downloadUrl, isNotNull);
+      // Fallback to html_url when no assets
+      expect(notifier.state.downloadUrl, contains('releases/tag'));
+    });
+
+    test('downloadUrl falls back to html_url when assets list is empty', () async {
+      SharedPreferences.setMockInitialValues({});
+      final dio = _createMockDio(_githubRelease('v0.2.14', assets: []));
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.downloadUrl, isNotNull);
+      expect(notifier.state.downloadUrl, contains('releases/tag'));
+    });
+
+    test('finds android asset when name contains android', () async {
+      final assets = _allPlatformAssets('v0.2.14');
+      final url = UpdateNotifier.findAssetDownloadUrl(assets, 'android');
+      expect(url, isNotNull);
+      expect(url, contains('.apk'));
+      expect(url, contains('android'));
+    });
+
+    test('finds windows asset when name contains windows', () async {
+      final assets = _allPlatformAssets('v0.2.14');
+      final url = UpdateNotifier.findAssetDownloadUrl(assets, 'windows');
+      expect(url, isNotNull);
+      expect(url, contains('windows'));
+    });
+
+    test('finds macos asset when name contains macos', () async {
+      final assets = _allPlatformAssets('v0.2.14');
+      final url = UpdateNotifier.findAssetDownloadUrl(assets, 'macos');
+      expect(url, isNotNull);
+      expect(url, contains('macos'));
+    });
+
+    test('finds linux asset when name contains linux', () async {
+      final assets = _allPlatformAssets('v0.2.14');
+      final url = UpdateNotifier.findAssetDownloadUrl(assets, 'linux');
+      expect(url, isNotNull);
+      expect(url, contains('linux'));
+    });
+
+    test('returns null when no asset matches platform key', () async {
+      final assets = _allPlatformAssets('v0.2.14');
+      final url = UpdateNotifier.findAssetDownloadUrl(assets, 'nonexistent');
+      expect(url, isNull);
+    });
+
+    test('returns null when assets list is empty', () async {
+      final url = UpdateNotifier.findAssetDownloadUrl([], 'windows');
+      expect(url, isNull);
     });
   });
 }
