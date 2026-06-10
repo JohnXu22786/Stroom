@@ -1301,7 +1301,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
                       theme: isDark ? ChatTheme.dark() : ChatTheme.light(),
                       builders: Builders(
-                      builders: Builders(
                         chatAnimatedListBuilder: (context, itemBuilder) =>
                             ChatAnimatedList(
                           itemBuilder: itemBuilder,

@@ -2,6 +2,16 @@ settingsEvaluated { settings ->
     settings.pluginManagement {
         repositories {
             gradlePluginPortal()
+            mavenCentral()
+            google()
+        }
+    }
+}
+
+gradle.projectsLoaded { g ->
+    g.rootProject.allprojects { p ->
+        p.buildscript.repositories {
+            mavenCentral()
         }
     }
 }
