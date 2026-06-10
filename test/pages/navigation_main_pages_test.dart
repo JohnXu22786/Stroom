@@ -56,17 +56,20 @@ void main() {
     TextManifest.invalidateCache();
   });
 
-  group('Main page navigation (no swipe, back-button history)', () {
-    testWidgets('renders four nav destinations on mobile', (tester) async {
+  group('Main page navigation (4 buttons, state preservation)', () {
+    testWidgets('renders four nav destinations on mobile, no plus button', (tester) async {
       // Use mobile width so bottom nav bar is shown
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
       await tester.pumpAndSettle();
 
-      // Bottom nav bar should contain the 4 main destinations
+      // Bottom nav bar should contain exactly the 4 main destinations
       expect(find.text('主页'), findsOneWidget);
       expect(find.text('对话'), findsOneWidget);
       expect(find.text('文件'), findsOneWidget);
       expect(find.text('设置'), findsOneWidget);
+
+      // No plus button should exist
+      expect(find.byIcon(Icons.add), findsNothing);
 
       // Home page content should be visible by default
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
@@ -220,6 +223,44 @@ void main() {
       // Back: should return to Home (history = [Home])
       await _simulateBackButton(tester);
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
+    });
+
+    testWidgets('double-tap Chat tab stays on assistant selection (already at home)',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
+      await tester.pumpAndSettle();
+
+      // First tap: go to Chat
+      await tester.tap(find.text('对话'));
+      await tester.pumpAndSettle();
+      expect(find.text('选择助手'), findsOneWidget);
+
+      // Second tap on same Chat tab: stay at assistant selection (already at home)
+      await tester.tap(find.text('对话'));
+      await tester.pumpAndSettle();
+      expect(find.text('选择助手'), findsOneWidget);
+    });
+
+    testWidgets('chat state preserved when switching away and back',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
+      await tester.pumpAndSettle();
+
+      // Enter chat page
+      await tester.tap(find.text('对话'));
+      await tester.pumpAndSettle();
+      expect(find.text('选择助手'), findsOneWidget);
+
+      // Switch to files
+      await tester.tap(find.text('文件'));
+      await tester.pumpAndSettle();
+      expect(find.text('文件'), findsWidgets);
+
+      // Switch back to chat - should still show assistant selection (state preserved)
+      // Since we never navigated deeper into chat, it should still show assistant selection
+      await tester.tap(find.text('对话'));
+      await tester.pumpAndSettle();
+      expect(find.text('选择助手'), findsOneWidget);
     });
 
     testWidgets('home page module cards still work after navigation changes',
