@@ -58,7 +58,7 @@ jobs:
       - name: Configure CocoaPods
         run: |
           pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
-      - run: flutter build macos --release --universal --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
+      - run: flutter build macos --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
       - name: Create macOS archive
         shell: bash
         run: |
