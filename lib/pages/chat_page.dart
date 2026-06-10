@@ -59,6 +59,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   bool _cancelledByUser = false;
   final Map<String, String> _reasoningContents = {};
   final Map<String, List<MessageSegment>> _chatSegments = {};
+  /// Tracks how many characters of [_history] text have been rendered as
+  /// [TextSegment] entries in [_chatSegments] for each streaming message.
+  /// Used for incremental markdown rendering: only new text chunks are
+  /// added as new [TextSegment]s, avoiding full re-render of the entire
+  /// accumulated content on each throttle cycle.
+  final Map<String, int> _streamingRenderedLengths = {};
   String? _streamingMsgId;
 
   bool _isSearching = false;
@@ -89,6 +95,40 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   bool get _hasMoreMessages => _loadedUpToIndex > 0;
 
   static bool _toolsRegistered = false;
+
+  /// Returns true if [text] ends with an unclosed LaTeX math delimiter.
+  ///
+  /// Checks for:
+  /// - Unclosed inline math (`$...$` with an odd number of `$`).
+  /// - Unclosed block math (`$$...$$` where `$$` count is odd).
+  ///
+  /// Used during streaming to avoid splitting math formulas across
+  /// segment boundaries. If the last segment ends with unclosed math,
+  /// new text is merged into it instead of creating a new segment.
+  static bool _hasUnclosedMath(String text) {
+    if (text.isEmpty) return false;
+    int i = 0;
+    int inlineCount = 0;
+    int blockCount = 0;
+    while (i < text.length) {
+      if (text[i] == r'\' && i + 1 < text.length) {
+        i += 2; // skip escaped character (e.g. \$)
+        continue;
+      }
+      if (text[i] == r'$') {
+        if (i + 1 < text.length && text[i + 1] == r'$') {
+          blockCount++;
+          i += 2;
+        } else {
+          inlineCount++;
+          i++;
+        }
+      } else {
+        i++;
+      }
+    }
+    return (inlineCount % 2 == 1) || (blockCount % 2 == 1);
+  }
 
   @override
   void initState() {
@@ -271,6 +311,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
       _history.clear();
       _chatSegments.clear();
+      _streamingRenderedLengths.clear();
       _streamingMsgId = null;
       _controller?.dispose();
       _messageKeys.clear();
@@ -368,7 +409,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final aiMsgId = 'a${DateTime.now().millisecondsSinceEpoch}';
     _streamingMsgId = aiMsgId;
     _chatSegments[aiMsgId] = [];
-    String textBeforeToolCall = '';
+    _streamingRenderedLengths[aiMsgId] = 0;
 
     final placeholder = Message.textStream(
       id: aiMsgId,
@@ -439,20 +480,46 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               if (mounted) setState(() {});
             }
             fullReply += e.text;
-            textBeforeToolCall += e.text;
             final now = DateTime.now();
             if (now.difference(lastUpdate) >= minInterval) {
               lastUpdate = now;
+              // Keep the controller updated so the Chat widget re-renders
+              // the streaming message. The textMessageBuilder will read
+              // from _chatSegments (incremental segments) for the actual
+              // markdown rendering, not from message.text directly.
               updateMessage(fullReply);
+              // Incremental rendering: add only the new text chunk as a
+              // TextSegment, so MarkdownWidget only parses new content
+              // instead of re-rendering the entire accumulated text.
+              final renderedLen = _streamingRenderedLengths[aiMsgId]!;
+              if (fullReply.length > renderedLen) {
+                final newChunk = fullReply.substring(renderedLen);
+                final segments = _chatSegments[aiMsgId]!;
+                final lastSeg =
+                    segments.isNotEmpty ? segments.last : null;
+                if (lastSeg is TextSegment &&
+                    _hasUnclosedMath(lastSeg.text)) {
+                  // Merge into the last segment to avoid splitting math
+                  // formulas ($...$ or $$...$$) across segment boundaries.
+                  // The merged segment's MarkdownWidget will re-parse the
+                  // combined text and can render the now-complete formula.
+                  segments[segments.length - 1] =
+                      TextSegment(lastSeg.text + newChunk);
+                } else {
+                  segments.add(TextSegment(newChunk));
+                }
+                _streamingRenderedLengths[aiMsgId] = fullReply.length;
+              }
             }
 
           case ToolCallStartEvent e:
-            // Flush accumulated text before tool call as a segment
-            if (textBeforeToolCall.isNotEmpty) {
+            // Flush any text not yet rendered as segments before tool call
+            final renderedLen = _streamingRenderedLengths[aiMsgId]!;
+            if (fullReply.length > renderedLen) {
               _chatSegments[aiMsgId]!.add(
-                TextSegment(textBeforeToolCall),
+                TextSegment(fullReply.substring(renderedLen)),
               );
-              textBeforeToolCall = '';
+              _streamingRenderedLengths[aiMsgId] = fullReply.length;
             }
             _chatSegments[aiMsgId]!.add(
               ToolCallSegment(
@@ -493,6 +560,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           );
         }
         fullReply = errorMsg;
+        // Clear segments since error overrides the accumulated content.
+        // The error path in textMessageBuilder reads message.text directly,
+        // not _chatSegments, so segments are not used for error display.
+        _chatSegments[aiMsgId]?.clear();
+        _streamingRenderedLengths[aiMsgId] = 0;
         // Capture full request/response raw data for error detail display
         final reqBody = _adapter.lastRequestBody;
         final headers = _adapter.lastRequestHeaders;
@@ -520,9 +592,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         }
       }
     } finally {
-      // Flush remaining text after last tool call as a segment
-      if (textBeforeToolCall.isNotEmpty) {
-        _chatSegments[aiMsgId]!.add(TextSegment(textBeforeToolCall));
+      // Flush any remaining text not yet rendered as segments
+      final renderedLen = _streamingRenderedLengths[aiMsgId]!;
+      if (fullReply.length > renderedLen) {
+        _chatSegments[aiMsgId]!.add(
+          TextSegment(fullReply.substring(renderedLen)),
+        );
+        _streamingRenderedLengths[aiMsgId] = fullReply.length;
       }
       // Mark any still-running tool calls as cancelled
       for (var i = 0; i < (_chatSegments[aiMsgId]?.length ?? 0); i++) {
@@ -539,6 +615,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       // Final update — ensure last chunk is shown
       if (fullReply.isNotEmpty) {
         updateMessage(fullReply);
+      }
+      // After streaming completes, clear segments for messages without
+      // tool calls. This allows the normal MarkdownWidget path to render
+      // the full text correctly, avoiding visual artifacts from markdown
+      // constructs (paragraphs, inline code, etc.) that were split across
+      // arbitrary throttle-boundary segments. Segments containing tool
+      // calls are retained since they are naturally delimited at tool
+      // call boundaries and the ToolCallCards must still be displayed.
+      if (_chatSegments[aiMsgId] != null &&
+          _chatSegments[aiMsgId]!.every((s) => s is TextSegment)) {
+        _chatSegments[aiMsgId]!.clear();
       }
       if (ref.read(reasoningEnabledProvider)) {
         reasoningBuffer = _adapter.reasoningContent;
