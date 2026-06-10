@@ -12,12 +12,6 @@ import '../providers/task_provider.dart';
 import 'chat_page.dart';
 import 'files_page.dart';
 import 'settings_page.dart';
-import 'camera_page.dart';
-import 'tts_create_page.dart';
-import 'video_capture_page.dart';
-import 'package:image_picker/image_picker.dart';
-import '../widgets/camera_choice_dialog.dart';
-import '../widgets/folder_picker_dialog.dart';
 import 'ocr_page.dart';
 import 'asr_page.dart';
 
@@ -33,8 +27,9 @@ enum AppPage {
 final selectedPageProvider = StateProvider<AppPage>((ref) => AppPage.home);
 
 /// 主页，采用 FlClash 风格的响应式布局：
-/// - 移动端：底部导航栏（主页、对话、+、文件、设置）
+/// - 移动端：底部导航栏（主页、对话、文件、设置）
 /// - 桌面端：侧边栏导航
+/// 导航逻辑：切换页面时保留状态，再次点击同一项回到该页面的首页。
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
@@ -249,228 +244,28 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  /// 显示加号弹出的菜单
-  void _showPlusMenu(BuildContext context) {
-    final navigator = Navigator.of(context);
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (overlay == null) return;
-
-    final isMobile = _isMobile(context);
-    final screenSize = MediaQuery.of(context).size;
-    final padding = MediaQuery.of(context).padding;
-
-    RelativeRect position;
-
-    if (isMobile) {
-      // 底部导航栏：从"+"按钮位置向上弹出
-      final centerX = screenSize.width / 2;
-      const navBarHeight = 80.0;
-      final navBarTop = screenSize.height - navBarHeight;
-
-      position = RelativeRect.fromLTRB(
-        centerX - 20,
-        navBarTop - 10,
-        centerX + 20,
-        navBarTop + 10,
-      );
-    } else {
-      // 侧边栏：从"+"按钮位置向右弹出
-      const railWidth = 80.0;
-      final availableHeight =
-          screenSize.height - padding.top - padding.bottom;
-      final itemHeight = availableHeight / 5;
-      final plusCenterY = itemHeight * 2 + itemHeight / 2 + padding.top;
-
-      position = RelativeRect.fromLTRB(
-        railWidth,
-        plusCenterY - 20,
-        railWidth + 10,
-        plusCenterY + 20,
-      );
-    }
-
-    showMenu<String>(
-      context: context,
-      position: position,
-      items: [
-        PopupMenuItem(
-          value: 'catcatch',
-          child: SizedBox(
-            width: 200,
-            child: _buildMenuItem(
-              icon: Icons.language,
-              color: Colors.purple,
-              title: '获取网页视频',
-              subtitle: '下载网页中的视频资源',
-            ),
-          ),
-        ),
-        PopupMenuItem(
-          value: 'record',
-          child: SizedBox(
-            width: 200,
-            child: _buildMenuItem(
-              icon: Icons.mic,
-              color: Colors.blue,
-              title: '录音',
-              subtitle: '录制音频内容',
-            ),
-          ),
-        ),
-        PopupMenuItem(
-          value: 'capture',
-          child: SizedBox(
-            width: 200,
-            child: _buildMenuItem(
-              icon: Icons.camera_alt,
-              color: Colors.green,
-              title: '拍摄',
-              subtitle: '拍照记录精彩瞬间',
-            ),
-          ),
-        ),
-        PopupMenuItem(
-          value: 'capture_video',
-          child: SizedBox(
-            width: 200,
-            child: _buildMenuItem(
-              icon: Icons.videocam,
-              color: Colors.red,
-              title: '录像',
-              subtitle: '录制视频内容',
-            ),
-          ),
-        ),
-      ],
-    ).then((value) {
-      if (!mounted) return;
-      if (value == null) return;
-
-      switch (value) {
-        case 'catcatch':
-          navigator.push(
-            MaterialPageRoute(builder: (_) => const CatCatchPage()),
-          );
-          break;
-        case 'record':
-          navigator.push(
-            MaterialPageRoute(builder: (_) => const TTSCreatePage()),
-          );
-          break;
-        case 'capture':
-          showCameraChoiceDialog(context).then((result) {
-            if (result == null) return;
-            final folder = result.folder;
-            if (result.choice == CameraChoice.app) {
-              navigator.push(
-                MaterialPageRoute(
-                    builder: (_) => CameraPage(
-                          folder: folder,
-                          editAfterCapture: result.editAfterCapture,
-                        )),
-              );
-            } else if (result.choice == CameraChoice.system) {
-              ImagePicker().pickImage(source: ImageSource.camera).then((file) {
-                if (file != null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('照片已选择'), duration: Duration(seconds: 2)),
-                  );
-                }
-              });
-            }
-          });
-          break;
-        case 'capture_video':
-          FolderPickerDialog.show(
-            context,
-            title: '录像添加至文件夹',
-          ).then((folder) {
-            if (folder == null || !mounted) return;
-            navigator.push(
-              MaterialPageRoute(
-                  builder: (_) => VideoCapturePage(folder: folder)),
-            );
-          });
-          break;
-      }
-    });
-  }
-
-  Widget _buildMenuItem({
-    required IconData icon,
-    required Color color,
-    required String title,
-    String? subtitle,
-  }) {
-    return Row(
-      children: [
-        Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, color: color, size: 20),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              if (subtitle != null) ...[
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[500],
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
   /// 构建侧边栏导航（用于桌面端）
   Widget _buildNavigationRail(BuildContext context, int activeTaskCount) {
     final selectedPage = ref.watch(selectedPageProvider);
 
-    int selectedIndex;
-    if (selectedPage.index >= 2) {
-      selectedIndex = selectedPage.index + 1;
-    } else {
-      selectedIndex = selectedPage.index;
-    }
-
     return NavigationRail(
       groupAlignment: 0.0,
-      selectedIndex: selectedIndex,
+      selectedIndex: selectedPage.index,
       onDestinationSelected: (index) {
-        if (index == 2) {
-          _showPlusMenu(context);
-          return;
-        }
-        final pageIndex = index > 2 ? index - 1 : index;
-        final newPage = AppPage.values[pageIndex];
+        final newPage = AppPage.values[index];
         final currentPage = ref.read(selectedPageProvider);
-        if (newPage != currentPage) {
-          _pageHistory.add(currentPage);
-          ref.read(selectedPageProvider.notifier).state = newPage;
+        if (newPage == currentPage) {
+          // Double-tap on same page → go to page's home/main state
           if (newPage == AppPage.chat) {
             _resetChatNavigator();
+          }
+        } else {
+          // Different page → switch, preserving state
+          _pageHistory.add(currentPage);
+          ref.read(selectedPageProvider.notifier).state = newPage;
+          // Auto-refresh when entering files page
+          if (newPage == AppPage.files) {
+            ref.read(filesRefreshSignalProvider.notifier).state++;
           }
         }
       },
@@ -497,40 +292,6 @@ class _HomePageState extends ConsumerState<HomePage> {
           label: Text(_getPageTitle(AppPage.chat)),
         ),
         NavigationRailDestination(
-          icon: Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Theme.of(context)
-                  .colorScheme
-                  .primary
-                  .withValues(alpha: 0.85),
-            ),
-            child: const Icon(Icons.add, color: Colors.white, size: 20),
-          ),
-          selectedIcon: Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Theme.of(context).colorScheme.primary,
-              boxShadow: [
-                BoxShadow(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .primary
-                      .withValues(alpha: 0.3),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: const Icon(Icons.add, color: Colors.white, size: 20),
-          ),
-          label: const Text(''),
-        ),
-        NavigationRailDestination(
           icon: Icon(_getPageIcon(AppPage.files)),
           selectedIcon: Icon(_getPageIcon(AppPage.files),
               color: Theme.of(context).colorScheme.primary),
@@ -550,28 +311,23 @@ class _HomePageState extends ConsumerState<HomePage> {
   Widget _buildBottomNavigationBar(BuildContext context, int activeTaskCount) {
     final selectedPage = ref.watch(selectedPageProvider);
 
-    int selectedIndex;
-    if (selectedPage.index >= 2) {
-      selectedIndex = selectedPage.index + 1;
-    } else {
-      selectedIndex = selectedPage.index;
-    }
-
     return NavigationBar(
-      selectedIndex: selectedIndex,
+      selectedIndex: selectedPage.index,
       onDestinationSelected: (index) {
-        if (index == 2) {
-          _showPlusMenu(context);
-          return;
-        }
-        final pageIndex = index > 2 ? index - 1 : index;
-        final newPage = AppPage.values[pageIndex];
+        final newPage = AppPage.values[index];
         final currentPage = ref.read(selectedPageProvider);
-        if (newPage != currentPage) {
-          _pageHistory.add(currentPage);
-          ref.read(selectedPageProvider.notifier).state = newPage;
+        if (newPage == currentPage) {
+          // Double-tap on same page → go to page's home/main state
           if (newPage == AppPage.chat) {
             _resetChatNavigator();
+          }
+        } else {
+          // Different page → switch, preserving state
+          _pageHistory.add(currentPage);
+          ref.read(selectedPageProvider.notifier).state = newPage;
+          // Auto-refresh when entering files page
+          if (newPage == AppPage.files) {
+            ref.read(filesRefreshSignalProvider.notifier).state++;
           }
         }
       },
@@ -587,40 +343,6 @@ class _HomePageState extends ConsumerState<HomePage> {
         NavigationDestination(
           icon: Icon(_getPageIcon(AppPage.chat)),
           label: _getPageTitle(AppPage.chat),
-        ),
-        NavigationDestination(
-          icon: Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Theme.of(context)
-                  .colorScheme
-                  .primary
-                  .withValues(alpha: 0.85),
-            ),
-            child: const Icon(Icons.add, color: Colors.white, size: 16),
-          ),
-          selectedIcon: Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Theme.of(context).colorScheme.primary,
-              boxShadow: [
-                BoxShadow(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .primary
-                      .withValues(alpha: 0.3),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: const Icon(Icons.add, color: Colors.white, size: 16),
-          ),
-          label: '',
         ),
         NavigationDestination(
           icon: Icon(_getPageIcon(AppPage.files)),
@@ -764,7 +486,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 crossAxisCount: 2,
                 mainAxisSpacing: 12,
                 crossAxisSpacing: 12,
-                childAspectRatio: 0.95,
+                childAspectRatio: 1.2,
               ),
               children: [
                 _buildModuleCard(
@@ -791,7 +513,18 @@ class _HomePageState extends ConsumerState<HomePage> {
                     );
                   },
                 ),
-                // Future modules can be added here
+                _buildModuleCard(
+                  icon: Icons.language,
+                  label: '获取网页资源',
+                  subtitle: '下载网页中的视频资源',
+                  color: Colors.purple,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const CatCatchPage()),
+                    );
+                  },
+                ),
               ],
             ),
           ),
@@ -821,39 +554,39 @@ class _HomePageState extends ConsumerState<HomePage> {
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 44,
-                height: 44,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, color: color, size: 24),
+                child: Icon(icon, color: color, size: 20),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: cs.onSurface,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 1),
               Text(
                 subtitle,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   color: cs.onSurfaceVariant,
                 ),
                 textAlign: TextAlign.center,
-                maxLines: 2,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ],
@@ -904,19 +637,19 @@ class _HomePageState extends ConsumerState<HomePage> {
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         // 返回键处理：
-        // 1. 如果当前在聊天页且嵌套导航器有历史路由，先弹出嵌套路由
+        // 1. 优先在四类主页面之间导航上一页
+        if (_pageHistory.isNotEmpty) {
+          final previousPage = _pageHistory.removeLast();
+          ref.read(selectedPageProvider.notifier).state = previousPage;
+          return;
+        }
+        // 2. 如果当前在聊天页且嵌套导航器有历史路由，先弹出嵌套路由
         final currentPage = ref.read(selectedPageProvider);
         if (currentPage == AppPage.chat &&
             _chatNavigatorKey.currentState != null &&
             _chatNavigatorKey.currentState!.canPop()) {
           _chatNavigatorKey.currentState!.pop();
           return;
-        }
-        // 2. 否则在四类主页面之间导航上一页
-        if (_pageHistory.isNotEmpty) {
-          final previousPage = _pageHistory.removeLast();
-          ref.read(selectedPageProvider.notifier).state = previousPage;
-          // 通过返回键回到聊天页时保留对话状态，不重置导航器
         }
         // 3. 如果历史栈为空（首页），不做任何操作，不退出桌面
       },
