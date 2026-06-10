@@ -165,6 +165,17 @@ class _ProviderConfigDetailPageState
     });
   }
 
+  /// 构建 API 地址输入框底部的灰色提示文本
+  /// 显示"请填写完整的 API 端点地址"以及当前供应商类型的示例
+  String? _buildHostHelperText() {
+    final entry = _entry;
+    if (entry == null) return null;
+    final def = ProviderTypeRegistry.get(entry.type);
+    final hostHint = def?.hostHint;
+    if (hostHint == null) return null;
+    return '请填写完整的 API 端点地址\n$hostHint';
+  }
+
   // ----------------------------------------------------------------
   // 模型管理
   // ----------------------------------------------------------------
@@ -594,12 +605,15 @@ class _ProviderConfigDetailPageState
               ),
               const SizedBox(height: 12),
               TextField(
+                key: const ValueKey('host_field'),
                 controller: _hostController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'API 地址',
-                  hintText: 'https://api.openai.com/v1/chat/completions（填写完整 API 端点地址）',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.link, color: Colors.orange),
+                  hintText: '输入完整的 API 端点地址',
+                  helperText: _buildHostHelperText(),
+                  helperMaxLines: 3,
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.link, color: Colors.orange),
                 ),
                 onChanged: (_) => _checkUnsavedChanges(),
               ),

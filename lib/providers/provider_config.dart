@@ -394,12 +394,14 @@ enum ModelConfigStyle {
 class ProviderTypeDefinition {
   final String type;
   final String? defaultHost;
+  final String? hostHint;
   final List<ModelConfig> defaultModels;
   final ModelConfigStyle modelConfigStyle;
 
   const ProviderTypeDefinition({
     required this.type,
     this.defaultHost,
+    this.hostHint,
     this.defaultModels = const [],
     this.modelConfigStyle = ModelConfigStyle.tts,
   });
@@ -420,22 +422,27 @@ class ProviderTypeRegistry {
 void registerBuiltinProviderTypes() {
   ProviderTypeRegistry.register(const ProviderTypeDefinition(
     type: 'llm',
+    hostHint: '例如: https://api.openai.com/v1/chat/completions',
     modelConfigStyle: ModelConfigStyle.llm,
   ));
   ProviderTypeRegistry.register(const ProviderTypeDefinition(
     type: 'tts',
+    hostHint: '例如: https://api.openai.com/v1/audio/speech',
     modelConfigStyle: ModelConfigStyle.tts,
   ));
   ProviderTypeRegistry.register(const ProviderTypeDefinition(
     type: 'ocr',
+    hostHint: '例如: https://api.openai.com/v1/chat/completions',
     modelConfigStyle: ModelConfigStyle.simple,
   ));
   ProviderTypeRegistry.register(const ProviderTypeDefinition(
     type: 'asr',
+    hostHint: '例如: https://api.openai.com/v1/audio/transcriptions',
     modelConfigStyle: ModelConfigStyle.simple,
   ));
   ProviderTypeRegistry.register(const ProviderTypeDefinition(
     type: 'mcp',
+    hostHint: '例如: http://localhost:3001/sse',
   ));
 }
 
