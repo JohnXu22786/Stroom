@@ -103,6 +103,31 @@ void main() {
       // OCR icon should be present
       expect(find.byIcon(Icons.text_snippet), findsOneWidget);
     });
+
+    testWidgets('获取网页资源 card exists on home page', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Should show 获取网页资源 as a module card
+      expect(find.text('获取网页资源'), findsOneWidget);
+    });
+
+    testWidgets('获取网页资源 card navigates to CatCatchPage', (tester) async {
+      _setSmallScreen(tester);
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Tap the 获取网页资源 card - scroll down to find it if needed
+      final cardFinder = find.text('获取网页资源');
+      await tester.ensureVisible(cardFinder);
+      await tester.pumpAndSettle();
+      await tester.tap(cardFinder);
+      await tester.pumpAndSettle();
+
+      // Should navigate to CatCatchPage with new title
+      expect(find.text('获取网页资源'), findsOneWidget);
+    });
   });
 
   group('HomePage responsive layout', () {

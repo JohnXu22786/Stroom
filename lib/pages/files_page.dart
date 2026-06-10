@@ -9,6 +9,9 @@ import 'video_gallery_page.dart';
 /// Tab order provider - allows reordering the tabs
 final fileTabOrderProvider = StateProvider<List<int>>((ref) => [0, 1, 2, 3]);
 
+/// Refresh signal provider - increment to trigger refresh of files sub-pages
+final filesRefreshSignalProvider = StateProvider<int>((ref) => 0);
+
 /// 文件页面 - 包含文本、图片、视频和音频四个标签页，支持左右滑动切换和标签排序
 class FilesPage extends ConsumerStatefulWidget {
   const FilesPage({super.key});
@@ -38,6 +41,7 @@ class _FilesPageState extends ConsumerState<FilesPage>
   @override
   Widget build(BuildContext context) {
     final tabOrder = ref.watch(fileTabOrderProvider);
+    final refreshSignal = ref.watch(filesRefreshSignalProvider);
 
     return SafeArea(
       top: true,
@@ -63,13 +67,13 @@ class _FilesPageState extends ConsumerState<FilesPage>
               children: tabOrder.map((i) {
                 switch (i) {
                   case 0:
-                    return const TextStoragePage();
+                    return TextStoragePage(key: ValueKey('text_storage_$refreshSignal'));
                   case 1:
-                    return const GalleryPage();
+                    return GalleryPage(key: ValueKey('gallery_$refreshSignal'));
                   case 2:
-                    return const VideoGalleryPage();
+                    return VideoGalleryPage(key: ValueKey('video_gallery_$refreshSignal'));
                   case 3:
-                    return const TtsPage();
+                    return TtsPage(key: ValueKey('tts_$refreshSignal'));
                   default:
                     return const SizedBox.shrink();
                 }

@@ -14,6 +14,7 @@ import '../utils/manifest_bridge.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
 import '../widgets/file_manager_view.dart';
+import 'text_preview_edit_page.dart';
 
 /// 文本储存区页面 - 管理文本文件，支持导入、创建、预览和导出
 class TextStoragePage extends ConsumerStatefulWidget {
@@ -224,31 +225,19 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       return;
     }
 
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-        child: Scaffold(
-          appBar: AppBar(
-            title: Text('${file.name}.${file.format}',
-                style: const TextStyle(fontSize: 16)),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.pop(ctx),
-              ),
-            ],
-          ),
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: SelectableText(
-              content,
-              style: const TextStyle(fontSize: 14, height: 1.5),
-            ),
-          ),
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TextPreviewEditPage(
+          file: file,
+          initialContent: content,
         ),
       ),
     );
+
+    if (mounted) {
+      await ref.read(textRecordsProvider.notifier).loadRecords();
+    }
   }
 
   // ====================================================================
@@ -271,7 +260,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       }
 
       final exportName = '${file.name}.${file.format}';
-      final data = Uint8List.fromList(content.codeUnits);
+      final data = Uint8List.fromList(utf8.encode(content));
       final outputPath = await FilePicker.saveFile(
         dialogTitle: '导出文本',
         fileName: exportName,
@@ -327,7 +316,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         final exportName = '${file.name}.${file.format}';
 
         if (kIsWeb) {
-          final data = Uint8List.fromList(content.codeUnits);
+          final data = Uint8List.fromList(utf8.encode(content));
           await FilePicker.saveFile(
             dialogTitle: '导出文本',
             fileName: exportName,
@@ -399,7 +388,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
             final content = await TextManifest.readText(file.storagePath);
             if (content == null || content.isEmpty) continue;
             final exportName = '${file.name}.${file.format}';
-            final data = Uint8List.fromList(content.codeUnits);
+            final data = Uint8List.fromList(utf8.encode(content));
             await FilePicker.saveFile(
               dialogTitle: '导出文本',
               fileName: exportName,
@@ -789,7 +778,7 @@ class _TextCreatePageState extends State<_TextCreatePage> {
     setState(() => _isSaving = true);
 
     try {
-      final bytes = Uint8List.fromList(content.codeUnits);
+      final bytes = Uint8List.fromList(utf8.encode(content));
       final hash = computeTextHash(bytes);
       final storageFileName = '$hash.txt';
 
