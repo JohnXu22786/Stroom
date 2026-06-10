@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
@@ -42,13 +43,49 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
   final Map<String, Uint8List> _pendingImageBytes = {};
   final GlobalKey _composerKey = GlobalKey();
 
+  /// Whether the current platform is mobile (Android/iOS) where the soft
+  /// keyboard should show a "newline" button. On desktop/web, the keyboard
+  /// shows a "send" action and Enter is intercepted via [onKeyEvent].
+  bool _isMobile(BuildContext context) {
+    switch (Theme.of(context).platform) {
+      case TargetPlatform.iOS:
+      case TargetPlatform.android:
+        return true;
+      case TargetPlatform.macOS:
+      case TargetPlatform.linux:
+      case TargetPlatform.windows:
+      case TargetPlatform.fuchsia:
+        return false;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _focusNode.onKeyEvent = (node, event) {
+      // Only intercept Enter key for desktop platforms.
+      // On mobile, soft keyboard events don't trigger
+      // onKeyEvent, so TextInputAction.newline applies.
+      if (!_isMobile(context) &&
+          event is KeyDownEvent &&
+          event.logicalKey == LogicalKeyboardKey.enter) {
+        final isShift = HardwareKeyboard.instance.isShiftPressed;
+        if (isShift) {
+          // Shift+Enter: let default behavior insert newline
+          return KeyEventResult.ignored;
+        } else {
+          // Enter without Shift: send the message
+          _handleSubmitted(_textController.text);
+          return KeyEventResult.handled;
+        }
+      }
+      return KeyEventResult.ignored;
+    };
   }
 
   @override
   void dispose() {
+    _focusNode.onKeyEvent = null;
     _textController.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -84,6 +121,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
                   IconButton(
                     icon: const Icon(Icons.close),
                     onPressed: () {
+                      // Preserve content back to the main input field
+                      // instead of discarding it.
+                      _textController.text = editingController.text;
                       editingController.dispose();
                       Navigator.pop(ctx);
                     },
@@ -420,8 +460,15 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
                     child: TextField(
                       controller: _textController,
                       focusNode: _focusNode,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: _handleSubmitted,
+                      // On mobile (Android/iOS): keyboard shows "newline" button,
+                      // Enter inserts newline. On desktop: Enter is handled via
+                      // FocusNode.onKeyEvent to send, Shift+Enter inserts newline.
+                      textInputAction: _isMobile(context)
+                          ? TextInputAction.newline
+                          : TextInputAction.send,
+                      // onSubmitted is not used because FocusNode.onKeyEvent
+                      // handles keyboard actions on all platforms where it applies.
+                      onSubmitted: null,
                       onChanged: (_) => setState(() {}),
                       minLines: 1,
                       maxLines: 4,
