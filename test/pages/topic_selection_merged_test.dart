@@ -291,7 +291,7 @@ void main() {
       expect(find.text('一个智能助手'), findsOneWidget);
     });
 
-    testWidgets('assistant info bar tune button navigates to assistant selection page (pops back)', (tester) async {
+    testWidgets('assistant info bar tune button opens combined edit dialog', (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
           Assistant(id: 'test-id-10', name: '助手J', prompt: 'P10', emoji: '🤖', description: 'JJ'),
@@ -301,17 +301,20 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Tune button should still exist (now navigates back to assistant selection)
+      // Tune button should exist
       expect(find.byIcon(Icons.tune), findsOneWidget);
 
-      // Tap the tune button - should pop back to assistant selection
+      // Tap the tune button - should open combined edit dialog instead of popping back
       await tester.tap(find.byIcon(Icons.tune));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
-      // Verify we navigated back: the tune icon should be gone since TopicSelectionPage is popped
-      expect(find.byIcon(Icons.tune), findsNothing);
-      // Topic selection title should also be gone
-      expect(find.text('选择话题'), findsNothing);
+      // Should open combined edit dialog with basics and settings
+      expect(find.text('助手名称'), findsOneWidget);
+      expect(find.text('温度 (Temperature)'), findsOneWidget);
+
+      // Dialog should have save button
+      expect(find.text('保存'), findsOneWidget);
     });
   });
 
