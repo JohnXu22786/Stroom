@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/assistant.dart';
+import '../pages/assistant_selection_page.dart';
 import '../providers/assistant_provider.dart';
 import '../providers/conversation_provider.dart';
 import '../widgets/llm/assistant_avatar.dart';
@@ -410,8 +411,11 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.tune, size: 20),
-                        tooltip: '选择助手',
-                        onPressed: () => Navigator.of(context).pop(),
+                        tooltip: '编辑助手',
+                        onPressed: () {
+                          showAssistantFullEditDialog(
+                              context, ref, selectedAssistant);
+                        },
                       ),
                     ],
                   ),

@@ -188,7 +188,8 @@ void main() {
       expect(find.text('头像图片URL（可选）'), findsOneWidget);
     });
 
-    testWidgets('long press menu shows only 编辑 and 设置 (no 删除)', (tester) async {
+    testWidgets('long press menu shows 编辑 (combined) and 删除, no separate 设置',
+        (tester) async {
       await tester.pumpWidget(createTestApp(
         assistants: [
           Assistant(
@@ -204,14 +205,16 @@ void main() {
       await tester.longPress(find.byType(AssistantAvatar));
       await tester.pumpAndSettle();
 
-      // Should show 编辑 and 设置
+      // Should show 编辑 (combined)
       expect(find.text('编辑'), findsOneWidget);
-      expect(find.text('设置'), findsOneWidget);
-      // Should NOT show 删除
-      expect(find.text('删除'), findsNothing);
+      // Should show 删除
+      expect(find.text('删除'), findsOneWidget);
+      // Should NOT show separate 设置 menu item
+      expect(find.text('设置'), findsNothing);
     });
 
-    testWidgets('long press menu edit opens edit dialog', (tester) async {
+    testWidgets('long press menu 编辑 opens combined dialog with both basics and settings',
+        (tester) async {
       await tester.pumpWidget(createTestApp(
         assistants: [
           Assistant(
@@ -231,17 +234,122 @@ void main() {
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
 
-      // Should open edit dialog
-      expect(find.text('编辑助手'), findsOneWidget);
+      // Should show combined dialog with basics
+      expect(find.text('助手名称'), findsOneWidget);
+      expect(find.text('系统提示词'), findsOneWidget);
+      // Should show settings sections
+      expect(find.text('温度 (Temperature)'), findsOneWidget);
+      expect(find.text('流式输出 (Stream Output)'), findsOneWidget);
+      // Save button should be there
+      expect(find.text('保存'), findsOneWidget);
     });
 
-    testWidgets('long press menu settings opens settings dialog', (tester) async {
+    testWidgets('long press menu 删除 shows confirmation dialog',
+        (tester) async {
       await tester.pumpWidget(createTestApp(
         assistants: [
           Assistant(
-            name: '助手设置',
+            name: '助手删除',
             prompt: 'P1',
             emoji: '🤖',
+          ),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      // Verify assistant exists
+      expect(find.text('助手删除'), findsOneWidget);
+
+      // Long-press to open menu
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+
+      // Tap 删除
+      await tester.tap(find.text('删除'));
+      await tester.pumpAndSettle();
+
+      // Should show confirmation dialog
+      expect(find.text('删除助手'), findsOneWidget);
+      expect(find.text('确定要删除助手「助手删除」吗？此操作无法撤销。'), findsOneWidget);
+      // Should have cancel and delete buttons
+      expect(find.text('取消'), findsOneWidget);
+      expect(find.text('删除'), findsOneWidget);
+    });
+
+    testWidgets('confirming delete removes assistant from grid',
+        (tester) async {
+      await tester.pumpWidget(createTestApp(
+        assistants: [
+          Assistant(
+            name: '要删除的助手',
+            prompt: 'P1',
+            emoji: '🤖',
+          ),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      // Verify assistant exists before deletion
+      expect(find.text('要删除的助手'), findsOneWidget);
+
+      // Long-press to open menu
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+
+      // Tap 删除
+      await tester.tap(find.text('删除'));
+      await tester.pumpAndSettle();
+
+      // Confirm delete
+      await tester.tap(find.text('删除').last);
+      await tester.pumpAndSettle();
+
+      // Assistant should be removed
+      expect(find.text('要删除的助手'), findsNothing);
+      // Should show empty state
+      expect(find.text('暂无助手，请先创建'), findsOneWidget);
+    });
+
+    testWidgets('cancelling delete keeps assistant in grid',
+        (tester) async {
+      await tester.pumpWidget(createTestApp(
+        assistants: [
+          Assistant(
+            name: '保留的助手',
+            prompt: 'P1',
+            emoji: '🤖',
+          ),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      // Verify assistant exists
+      expect(find.text('保留的助手'), findsOneWidget);
+
+      // Long-press to open menu
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+
+      // Tap 删除
+      await tester.tap(find.text('删除'));
+      await tester.pumpAndSettle();
+
+      // Cancel delete
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+
+      // Assistant should still exist
+      expect(find.text('保留的助手'), findsOneWidget);
+    });
+
+    testWidgets('combined dialog save button updates assistant', (tester) async {
+      await tester.pumpWidget(createTestApp(
+        assistants: [
+          Assistant(
+            name: '原名',
+            prompt: '旧提示词',
+            emoji: '🤖',
+            description: '旧描述',
           ),
         ],
       ));
@@ -251,12 +359,23 @@ void main() {
       await tester.longPress(find.byType(AssistantAvatar));
       await tester.pumpAndSettle();
 
-      // Tap 设置
-      await tester.tap(find.text('设置'));
+      // Tap 编辑 to open combined dialog
+      await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
 
-      // Should open settings dialog
-      expect(find.text('助手参数设置'), findsOneWidget);
+      // Find name field and change it - use the first TextField
+      final nameField = find.widgetWithText(TextField, '原名');
+      await tester.tap(nameField);
+      await tester.enterText(nameField, '新名');
+      await tester.pumpAndSettle();
+
+      // Save
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      // The assistant card should show the new name
+      expect(find.text('新名'), findsOneWidget);
+      expect(find.text('原名'), findsNothing);
     });
   });
 }
