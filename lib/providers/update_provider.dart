@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/app_version.dart';
@@ -92,8 +94,55 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
             ),
         super(const UpdateState());
 
+  /// Finds the download URL for the given [platformKey] from the release [assets].
+  ///
+  /// Matches by checking if the asset name contains the platform key (e.g., 'android',
+  /// 'windows', 'macos', 'linux'). Returns the [browser_download_url] of the first match,
+  /// or `null` if no asset matches.
+  static String? findAssetDownloadUrl(List<dynamic> assets, String platformKey) {
+    final key = platformKey.toLowerCase();
+    for (final asset in assets) {
+      final name = (asset['name'] as String?)?.toLowerCase() ?? '';
+      if (name.contains(key)) {
+        return asset['browser_download_url'] as String?;
+      }
+    }
+    return null;
+  }
+
+  /// Determines the current platform and returns the matching download URL from [assets].
+  ///
+  /// On Web, returns `null` since updates are not supported.
+  /// Falls back to `null` if no matching asset is found for the current platform.
+  static String? getPlatformDownloadUrl(List<dynamic> assets) {
+    if (kIsWeb) return null;
+
+    String platformKey;
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      platformKey = 'android';
+    } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+      platformKey = 'ios';
+    } else if (Platform.isWindows) {
+      platformKey = 'windows';
+    } else if (Platform.isMacOS) {
+      platformKey = 'macos';
+    } else if (Platform.isLinux) {
+      platformKey = 'linux';
+    } else {
+      return null;
+    }
+
+    return findAssetDownloadUrl(assets, platformKey);
+  }
+
   Future<void> checkForUpdate({bool silent = false}) async {
     if (state.isChecking) return;
+
+    // Web platform does not support direct download updates
+    if (kIsWeb) {
+      state = const UpdateState();
+      return;
+    }
 
     state = state.copyWith(isChecking: true, error: null);
 
@@ -104,7 +153,12 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         final tagName = data['tag_name'] as String? ?? '';
         final latestVersion = tagName.replaceAll(RegExp(r'^v'), '');
         final releaseNotes = data['body'] as String? ?? '';
-        final downloadUrl = data['html_url'] as String? ?? '';
+        final htmlUrl = data['html_url'] as String? ?? '';
+        final assets = data['assets'] as List<dynamic>? ?? [];
+
+        // Find direct download URL for current platform, fall back to html_url
+        final directDownloadUrl = getPlatformDownloadUrl(assets);
+        final downloadUrl = directDownloadUrl ?? htmlUrl;
 
         final current = Version.parse(appVersion);
         final latest = Version.parse(latestVersion);
