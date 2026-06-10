@@ -237,63 +237,6 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     Navigator.of(context).pushNamed('/chat');
   }
 
-  void _showQuickSettings(Assistant assistant) {
-    double temperature = assistant.settings.temperature;
-    bool enableTemperature = assistant.settings.enableTemperature;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlgState) => AlertDialog(
-          title: Text('${assistant.emoji} ${assistant.name} 参数'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SwitchListTile(
-                  title: const Text('温度 (Temperature)'),
-                  subtitle: Text('$temperature'),
-                  value: enableTemperature,
-                  onChanged: (v) =>
-                      setDlgState(() => enableTemperature = v),
-                ),
-                if (enableTemperature)
-                  Slider(
-                    value: temperature,
-                    min: 0,
-                    max: 2,
-                    divisions: 40,
-                    label: temperature.toStringAsFixed(2),
-                    onChanged: (v) =>
-                        setDlgState(() => temperature = v),
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () {
-                ref
-                    .read(assistantProvider.notifier)
-                    .updateAssistantSettings(
-                      assistantId: assistant.id,
-                      temperature: temperature,
-                      enableTemperature: enableTemperature,
-                    );
-                Navigator.pop(ctx);
-              },
-              child: const Text('保存'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildEmptyState(ColorScheme cs) {
     final query = _searchController.text.trim();
     return Center(
@@ -313,12 +256,6 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                 style: TextStyle(
                     fontSize: 13,
                     color: cs.onSurfaceVariant.withOpacity(0.7))),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              icon: const Icon(Icons.add),
-              label: const Text('新话题'),
-              onPressed: _createNewTopic,
-            ),
           ],
         ],
       ),
@@ -473,8 +410,8 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.tune, size: 20),
-                        tooltip: '参数设置',
-                        onPressed: () => _showQuickSettings(selectedAssistant),
+                        tooltip: '选择助手',
+                        onPressed: () => Navigator.of(context).pop(),
                       ),
                     ],
                   ),
