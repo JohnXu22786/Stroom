@@ -701,9 +701,11 @@ class _HomePageState extends ConsumerState<HomePage> {
             .where((t) => t.status.name != 'completed' && (t.statusChangedAt ?? t.createdAt).isAfter(lastRead))
             .length;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: Column(
+    return SafeArea(
+      top: true,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header — notification button integrated into the row
@@ -795,8 +797,9 @@ class _HomePageState extends ConsumerState<HomePage> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   /// 构建模块卡片
   Widget _buildModuleCard({
