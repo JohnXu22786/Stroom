@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -309,37 +310,40 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Column(
           children: [
-            _buildListTile(
-              leading: updateState.isChecking
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.update, color: Colors.blue),
-              title: '检查更新',
-              subtitle: updateState.updateAvailable
-                  ? '发现新版本 ${updateState.latestVersion}'
-                  : null,
-              trailing: updateState.updateAvailable
-                  ? Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Text(
-                        '新版本',
-                        style: TextStyle(color: Colors.white, fontSize: 12),
-                      ),
-                    )
-                  : const Icon(Icons.chevron_right),
-              onTap: updateState.isChecking
-                  ? () {}
-                  : () => _checkForUpdate(),
-            ),
-            const Divider(height: 1),
+            // Web端不提供更新功能
+            if (!kIsWeb) ...[
+              _buildListTile(
+                leading: updateState.isChecking
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.update, color: Colors.blue),
+                title: '检查更新',
+                subtitle: updateState.updateAvailable
+                    ? '发现新版本 ${updateState.latestVersion}'
+                    : null,
+                trailing: updateState.updateAvailable
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Text(
+                          '新版本',
+                          style: TextStyle(color: Colors.white, fontSize: 12),
+                        ),
+                      )
+                    : const Icon(Icons.chevron_right),
+                onTap: updateState.isChecking
+                    ? () {}
+                    : () => _checkForUpdate(),
+              ),
+              const Divider(height: 1),
+            ],
             _buildListTile(
               leading: const Icon(Icons.code, color: Colors.teal),
               title: '开源许可',
