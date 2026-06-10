@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import '../providers/chat_api_provider.dart';
 
+import '../utils/http_utils.dart';
+
 // ============================================================================
 // OCR Config
 // ============================================================================
@@ -82,6 +84,25 @@ class OcrService {
   final OcrConfig config;
   final Dio _dio;
 
+  // ── Diagnostic capture (mirrors chat_api_provider pattern) ───────────
+  /// The last request body sent to the API.
+  Map<String, dynamic>? lastRequestBody;
+
+  /// The last response data received from the API (or null on error).
+  Map<String, dynamic>? lastResponseData;
+
+  /// The last request headers sent.
+  Map<String, String>? lastRequestHeaders;
+
+  /// The last response headers received.
+  Map<String, List<String>>? lastResponseHeaders;
+
+  /// The last request URL.
+  String? lastRequestUrl;
+
+  /// The last HTTP response status code.
+  int? lastResponseStatusCode;
+
   OcrService({
     required this.config,
     Dio? dio,
@@ -121,20 +142,44 @@ class OcrService {
       _buildImageContent(dataUri),
     ]);
 
-    final response = await _dio.post(
-      _chatUrl,
-      data: body,
-    );
+    // Capture request diagnostics
+    lastRequestBody = body;
+    lastRequestUrl = _chatUrl;
+    lastRequestHeaders = {
+      'Content-Type': 'application/json',
+      if (config.apiKey.isNotEmpty) 'Authorization': 'Bearer ${config.apiKey}',
+    };
+    lastResponseData = null;
+    lastResponseStatusCode = null;
+    lastResponseHeaders = null;
 
-    stopwatch.stop();
+    try {
+      final response = await _dio.post(
+        _chatUrl,
+        data: body,
+      );
 
-    final text = _extractText(response.data);
+      stopwatch.stop();
 
-    return OcrResult(
-      text: text,
-      processingTimeMs: stopwatch.elapsedMilliseconds,
-      imageCount: 1,
-    );
+      // Capture response diagnostics
+      lastResponseStatusCode = response.statusCode;
+      lastResponseData = response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : <String, dynamic>{'raw': '$response.data'};
+      lastResponseHeaders = response.headers.map;
+
+      final text = _extractText(response.data);
+
+      return OcrResult(
+        text: text,
+        processingTimeMs: stopwatch.elapsedMilliseconds,
+        imageCount: 1,
+      );
+    } on DioException catch (e) {
+      // Capture response diagnostics from exception
+      _captureDioExceptionDiagnostics(e);
+      throwWrappedDioException(e);
+    }
   }
 
   /// Perform OCR on multiple images.
@@ -165,20 +210,60 @@ class OcrService {
 
     final body = _buildRequestBody(contents);
 
-    final response = await _dio.post(
-      _chatUrl,
-      data: body,
-    );
+    // Capture request diagnostics
+    lastRequestBody = body;
+    lastRequestUrl = _chatUrl;
+    lastRequestHeaders = {
+      'Content-Type': 'application/json',
+      if (config.apiKey.isNotEmpty) 'Authorization': 'Bearer ${config.apiKey}',
+    };
+    lastResponseData = null;
+    lastResponseStatusCode = null;
+    lastResponseHeaders = null;
 
-    stopwatch.stop();
+    try {
+      final response = await _dio.post(
+        _chatUrl,
+        data: body,
+      );
 
-    final text = _extractText(response.data);
+      stopwatch.stop();
 
-    return OcrResult(
-      text: text,
-      processingTimeMs: stopwatch.elapsedMilliseconds,
-      imageCount: imageBytesList.length,
-    );
+      // Capture response diagnostics
+      lastResponseStatusCode = response.statusCode;
+      lastResponseData = response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : <String, dynamic>{'raw': '$response.data'};
+      lastResponseHeaders = response.headers.map;
+
+      final text = _extractText(response.data);
+
+      return OcrResult(
+        text: text,
+        processingTimeMs: stopwatch.elapsedMilliseconds,
+        imageCount: imageBytesList.length,
+      );
+    } on DioException catch (e) {
+      // Capture response diagnostics from exception
+      _captureDioExceptionDiagnostics(e);
+      throwWrappedDioException(e);
+    }
+  }
+
+  /// Capture response-level diagnostic fields from a [DioException].
+  /// Mirrors the pattern in [OpenAICompatibleChatProvider.chatStream].
+  void _captureDioExceptionDiagnostics(DioException e) {
+    if (e.response?.data is Map) {
+      lastResponseData =
+          Map<String, dynamic>.from(e.response!.data as Map);
+    } else if (e.response?.data is String) {
+      lastResponseData =
+          <String, dynamic>{'raw': e.response!.data as String};
+    } else {
+      lastResponseData = null;
+    }
+    lastResponseStatusCode = e.response?.statusCode;
+    lastResponseHeaders = e.response?.headers?.map;
   }
 
   /// Build the standard OpenAI-compatible request body.
