@@ -6,10 +6,25 @@ import '../utils/image_editor_utils.dart';
 /// Editor tool selection
 enum _EditorTool { none, crop, rotate, adjust, filter, draw }
 
+/// Result returned by the image editor.
+///
+/// [editedBytes] contains the edited image bytes.
+/// [isSaveAs] is `true` when the user chose "另存为" (save as new copy),
+/// and `false` when the user chose "覆盖" (overwrite original).
+class ImageEditorResult {
+  final Uint8List editedBytes;
+  final bool isSaveAs;
+
+  const ImageEditorResult({
+    required this.editedBytes,
+    required this.isSaveAs,
+  });
+}
+
 /// Image editor page.
 ///
-/// Takes [imageBytes] as input, applies edits, and pops with the edited bytes
-/// (or pops with `null` if cancelled).
+/// Takes [imageBytes] as input, applies edits, and pops with an
+/// [ImageEditorResult] (or pops with `null` if cancelled).
 class ImageEditorPage extends StatefulWidget {
   final Uint8List imageBytes;
 
@@ -53,12 +68,22 @@ class _ImageEditorPageState extends State<ImageEditorPage> {
   _EditorTool _currentTool = _EditorTool.none;
   bool _isSaving = false;
 
+  // ======== Zoom state ========
+  final TransformationController _transformController =
+      TransformationController();
+
   // ======== Lifecycle ========
 
   @override
   void initState() {
     super.initState();
     _initImage();
+  }
+
+  @override
+  void dispose() {
+    _transformController.dispose();
+    super.dispose();
   }
 
   Future<void> _initImage() async {
@@ -104,9 +129,80 @@ class _ImageEditorPageState extends State<ImageEditorPage> {
     return null;
   }
 
+  // ======== Zoom helpers ========
+
+  void _zoomIn() {
+    final current = _transformController.value;
+    final scale = current.getMaxScaleOnAxis();
+    final newScale = (scale * 1.25).clamp(0.5, 4.0);
+    // Preserve the current translation so zoom doesn't reset pan position
+    final translationX = current[12];
+    final translationY = current[13];
+    final matrix = Matrix4.diagonal3Values(newScale, newScale, 1);
+    matrix.setTranslationRaw(translationX, translationY, 0);
+    _transformController.value = matrix;
+  }
+
+  void _zoomOut() {
+    final current = _transformController.value;
+    final scale = current.getMaxScaleOnAxis();
+    final newScale = (scale / 1.25).clamp(0.5, 4.0);
+    // Preserve the current translation so zoom doesn't reset pan position
+    final translationX = current[12];
+    final translationY = current[13];
+    final matrix = Matrix4.diagonal3Values(newScale, newScale, 1);
+    matrix.setTranslationRaw(translationX, translationY, 0);
+    _transformController.value = matrix;
+  }
+
+  void _fitToScreen() {
+    _transformController.value = Matrix4.identity();
+  }
+
   // ======== Actions ========
 
-  Future<void> _save() async {
+  Future<void> _showSaveDialog() async {
+    final result = await showDialog<_SaveAction>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: const Text(
+          '保存图片',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          '请选择保存方式：',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _SaveAction.cancel),
+            child: const Text(
+              '取消',
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _SaveAction.overwrite),
+            child: const Text(
+              '覆盖',
+              style: TextStyle(color: Colors.blue),
+            ),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, _SaveAction.saveAs),
+            child: const Text('另存为'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == null || result == _SaveAction.cancel) return;
+
+    await _save(result == _SaveAction.saveAs);
+  }
+
+  Future<void> _save(bool isSaveAs) async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
 
@@ -126,7 +222,10 @@ class _ImageEditorPageState extends State<ImageEditorPage> {
         },
       );
       if (mounted) {
-        Navigator.pop(context, edited);
+        Navigator.pop(
+          context,
+          ImageEditorResult(editedBytes: edited, isSaveAs: isSaveAs),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -160,6 +259,7 @@ class _ImageEditorPageState extends State<ImageEditorPage> {
       _undoStack = [];
       _currentPoints = [];
     });
+    _fitToScreen();
   }
 
   // ======== Rotate helpers ========
@@ -245,6 +345,22 @@ class _ImageEditorPageState extends State<ImageEditorPage> {
         style: TextStyle(color: Colors.white),
       ),
       actions: [
+        // Zoom controls
+        IconButton(
+          icon: const Icon(Icons.zoom_out, color: Colors.white),
+          onPressed: _zoomOut,
+          tooltip: '缩小',
+        ),
+        IconButton(
+          icon: const Icon(Icons.zoom_in, color: Colors.white),
+          onPressed: _zoomIn,
+          tooltip: '放大',
+        ),
+        IconButton(
+          icon: const Icon(Icons.fullscreen, color: Colors.white),
+          onPressed: _fitToScreen,
+          tooltip: '适应屏幕',
+        ),
         TextButton(
           onPressed: _hasEdits ? _resetAll : null,
           child: Text(
@@ -258,7 +374,7 @@ class _ImageEditorPageState extends State<ImageEditorPage> {
         Padding(
           padding: const EdgeInsets.only(right: 8),
           child: FilledButton(
-            onPressed: _isSaving ? null : _save,
+            onPressed: _isSaving ? null : _showSaveDialog,
             child: _isSaving
                 ? const SizedBox(
                     width: 20,
@@ -345,86 +461,128 @@ class _ImageEditorPageState extends State<ImageEditorPage> {
       );
     }
 
-    // Wrap in InteractiveViewer for pinch-to-zoom
-    imageWidget = InteractiveViewer(
-      minScale: 0.5,
-      maxScale: 4.0,
-      constrained: false,
-      child: SizedBox(
-        width: displayW,
-        height: displayH,
-        child: imageWidget,
-      ),
-    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final viewW = constraints.maxWidth;
+        final viewH = constraints.maxHeight;
 
-    return Stack(
-      children: [
-        imageWidget,
-        // Crop overlay
-        if (_currentTool == _EditorTool.crop)
-          _buildCropOverlay(cs),
-        // Drawing overlay
-        if (_currentTool == _EditorTool.draw)
-          GestureDetector(
-            onPanStart: _onDrawStart,
-            onPanUpdate: _onDrawUpdate,
-            onPanEnd: _onDrawEnd,
-            child: CustomPaint(
-              painter: _DrawingOverlayPainter(
-                drawings: _drawings,
-                currentPoints: _currentPoints,
-                currentColor: _drawColor,
-                currentStrokeWidth: _drawStrokeWidth,
-              ),
-              size: Size(displayW, displayH),
-            ),
+        // Calculate fitting dimensions so the image fits within the viewport
+        final aspectRatio = displayW / displayH;
+        double fitW, fitH;
+        if (viewW / viewH > aspectRatio) {
+          // Viewport is wider than image aspect — height constrained
+          fitH = viewH;
+          fitW = fitH * aspectRatio;
+        } else {
+          // Viewport is taller than image aspect — width constrained
+          fitW = viewW;
+          fitH = fitW / aspectRatio;
+        }
+
+        final zoomedImage = InteractiveViewer(
+          transformationController: _transformController,
+          minScale: 0.5,
+          maxScale: 4.0,
+          constrained: false,
+          child: SizedBox(
+            width: fitW,
+            height: fitH,
+            child: imageWidget,
           ),
-      ],
+        );
+
+        return Stack(
+          children: [
+            zoomedImage,
+            // Crop overlay
+            if (_currentTool == _EditorTool.crop)
+              _buildCropOverlay(cs, Size(viewW, viewH)),
+            // Drawing overlay
+            if (_currentTool == _EditorTool.draw)
+              GestureDetector(
+                onPanStart: _onDrawStart,
+                onPanUpdate: _onDrawUpdate,
+                onPanEnd: _onDrawEnd,
+                child: CustomPaint(
+                  painter: _DrawingOverlayPainter(
+                    drawings: _drawings,
+                    currentPoints: _currentPoints,
+                    currentColor: _drawColor,
+                    currentStrokeWidth: _drawStrokeWidth,
+                  ),
+                  size: Size(displayW, displayH),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 
   // ======== Crop overlay ========
 
-  Widget _buildCropOverlay(ColorScheme cs) {
-    return Positioned.fill(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final overlaySize = Size(constraints.maxWidth, constraints.maxHeight);
-          return GestureDetector(
-            onPanStart: (details) {
-              setState(() {
-                _cropStart = details.localPosition;
-                _cropRect = CropRect(x: 0, y: 0, width: 1, height: 1);
-              });
-            },
-            onPanUpdate: (details) {
-              if (_cropStart == null || overlaySize.width <= 0 || overlaySize.height <= 0) return;
-              final dx = details.localPosition.dx / overlaySize.width;
-              final dy = details.localPosition.dy / overlaySize.height;
-              setState(() {
-                final startX = (_cropStart!.dx / overlaySize.width).clamp(0.0, 1.0);
-                final startY = (_cropStart!.dy / overlaySize.height).clamp(0.0, 1.0);
-                final endX = dx.clamp(0.0, 1.0);
-                final endY = dy.clamp(0.0, 1.0);
-                _cropRect = CropRect(
-                  x: startX < endX ? startX : endX,
-                  y: startY < endY ? startY : endY,
-                  width: (endX - startX).abs().clamp(0.05, 1.0),
-                  height: (endY - startY).abs().clamp(0.05, 1.0),
-                );
-              });
-            },
-            onPanEnd: (_) {
-              setState(() => _cropStart = null);
-            },
-            child: CustomPaint(
-              painter: _CropOverlayPainter(
-                cropRect: _cropRect,
-                aspectRatio: _origWidth / _origHeight,
-              ),
-            ),
+  Widget _buildCropOverlay(ColorScheme cs, Size overlaySize) {
+    // Calculate image position within the viewport (inverse of painter logic)
+    final displayAspect = overlaySize.width / overlaySize.height;
+    final aspectRatio = _rotation % 180 == 0
+        ? _origWidth / _origHeight
+        : _origHeight / _origWidth;
+    double imgW, imgH, imgX, imgY;
+    if (displayAspect > aspectRatio) {
+      imgH = overlaySize.height;
+      imgW = imgH * aspectRatio;
+      imgX = (overlaySize.width - imgW) / 2;
+      imgY = 0;
+    } else {
+      imgW = overlaySize.width;
+      imgH = imgW / aspectRatio;
+      imgX = 0;
+      imgY = (overlaySize.height - imgH) / 2;
+    }
+
+    return GestureDetector(
+      onPanStart: (details) {
+        setState(() {
+          _cropStart = details.localPosition;
+          _cropRect = CropRect(x: 0, y: 0, width: 1, height: 1);
+        });
+      },
+      onPanUpdate: (details) {
+        if (_cropStart == null ||
+            overlaySize.width <= 0 ||
+            overlaySize.height <= 0 ||
+            imgW <= 0 ||
+            imgH <= 0) {
+          return;
+        }
+        // Convert viewport coordinates to image-relative normalized (0..1)
+        final relDx = (details.localPosition.dx - imgX) / imgW;
+        final relDy = (details.localPosition.dy - imgY) / imgH;
+        setState(() {
+          final startRelX =
+              ((_cropStart!.dx - imgX) / imgW).clamp(0.0, 1.0);
+          final startRelY =
+              ((_cropStart!.dy - imgY) / imgH).clamp(0.0, 1.0);
+          final endX = relDx.clamp(0.0, 1.0);
+          final endY = relDy.clamp(0.0, 1.0);
+          _cropRect = CropRect(
+            x: startRelX < endX ? startRelX : endX,
+            y: startRelY < endY ? startRelY : endY,
+            width: (endX - startRelX).abs().clamp(0.05, 1.0),
+            height: (endY - startRelY).abs().clamp(0.05, 1.0),
           );
-        },
+        });
+      },
+      onPanEnd: (_) {
+        setState(() => _cropStart = null);
+      },
+      child: CustomPaint(
+        painter: _CropOverlayPainter(
+          cropRect: _cropRect,
+          aspectRatio: aspectRatio,
+          overlaySize: overlaySize,
+        ),
+        size: overlaySize,
       ),
     );
   }
@@ -863,32 +1021,43 @@ class _DrawingOverlayPainter extends CustomPainter {
 }
 
 // ====================================================================
+// Enum for save dialog action
+// ====================================================================
+
+enum _SaveAction { overwrite, saveAs, cancel }
+
+// ====================================================================
 // Crop overlay painter
 // ====================================================================
 
 class _CropOverlayPainter extends CustomPainter {
   final CropRect cropRect;
   final double aspectRatio;
+  final Size overlaySize;
 
-  _CropOverlayPainter({required this.cropRect, required this.aspectRatio});
+  _CropOverlayPainter({
+    required this.cropRect,
+    required this.aspectRatio,
+    required this.overlaySize,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     // Calculate the crop area in pixels based on the display size
-    final displayAspect = size.width / size.height;
+    final displayAspect = overlaySize.width / overlaySize.height;
     double imgW, imgH, imgX, imgY;
     if (displayAspect > aspectRatio) {
       // Display is wider than image — image is height-constrained
-      imgH = size.height;
+      imgH = overlaySize.height;
       imgW = imgH * aspectRatio;
-      imgX = (size.width - imgW) / 2;
+      imgX = (overlaySize.width - imgW) / 2;
       imgY = 0;
     } else {
       // Display is taller than image — image is width-constrained
-      imgW = size.width;
+      imgW = overlaySize.width;
       imgH = imgW / aspectRatio;
       imgX = 0;
-      imgY = (size.height - imgH) / 2;
+      imgY = (overlaySize.height - imgH) / 2;
     }
 
     final cropX = imgX + cropRect.x * imgW;
@@ -901,13 +1070,13 @@ class _CropOverlayPainter extends CustomPainter {
 
     // Top
     if (cropY > 0) {
-      canvas.drawRect(Rect.fromLTWH(0, 0, size.width, cropY), fillPaint);
+      canvas.drawRect(Rect.fromLTWH(0, 0, overlaySize.width, cropY), fillPaint);
     }
     // Bottom
     final bottom = cropY + cropH;
-    if (bottom < size.height) {
+    if (bottom < overlaySize.height) {
       canvas.drawRect(
-        Rect.fromLTWH(0, bottom, size.width, size.height - bottom),
+        Rect.fromLTWH(0, bottom, overlaySize.width, overlaySize.height - bottom),
         fillPaint,
       );
     }
@@ -941,5 +1110,7 @@ class _CropOverlayPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_CropOverlayPainter oldDelegate) =>
-      oldDelegate.cropRect != cropRect || oldDelegate.aspectRatio != aspectRatio;
+      oldDelegate.cropRect != cropRect ||
+      oldDelegate.aspectRatio != aspectRatio ||
+      oldDelegate.overlaySize != overlaySize;
 }
