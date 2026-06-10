@@ -32,6 +32,7 @@ abstract class BaseChatProvider {
     int? maxTokens,
     double? temperature,
     bool reasoning = false,
+    String reasoningEffort = 'medium',
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
   });
@@ -42,6 +43,7 @@ abstract class BaseChatProvider {
     int? maxTokens,
     double? temperature,
     bool reasoning = false,
+    String reasoningEffort = 'medium',
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
@@ -123,6 +125,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     int? maxTokens,
     double? temperature,
     bool reasoning = false,
+    String reasoningEffort = 'medium',
     bool stream = false,
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
@@ -133,20 +136,20 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       'max_tokens': maxTokens ?? defaultParams['max_tokens'],
       'temperature': temperature ?? defaultParams['temperature'],
       'stream': stream,
-      if (reasoning) ..._reasoningParams(model),
+      if (reasoning) ..._reasoningParams(model, reasoningEffort),
       if (tools != null && tools.isNotEmpty) 'tools': tools,
       if (extraParams != null) ...extraParams,
     };
   }
 
-  Map<String, dynamic> _reasoningParams(String? model) {
+  Map<String, dynamic> _reasoningParams(String? model, String reasoningEffort) {
     if (model != null) {
       final lower = model.toLowerCase();
       if (lower.contains('deepseek') || lower.contains('r1')) {
         return {'thinking': {'type': 'enabled'}};
       }
     }
-    return {'reasoning_effort': 'medium'};
+    return {'reasoning_effort': reasoningEffort};
   }
 
   /// Mask API key for display, showing only first 8 chars and last 4 chars.
@@ -173,6 +176,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     int? maxTokens,
     double? temperature,
     bool reasoning = false,
+    String reasoningEffort = 'medium',
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
   }) async {
@@ -183,6 +187,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         maxTokens: maxTokens,
         temperature: temperature,
         reasoning: reasoning,
+        reasoningEffort: reasoningEffort,
         extraParams: extraParams);
 
     debugPrint(
@@ -254,6 +259,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     int? maxTokens,
     double? temperature,
     bool reasoning = false,
+    String reasoningEffort = 'medium',
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
@@ -267,6 +273,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         maxTokens: maxTokens,
         temperature: temperature,
         reasoning: reasoning,
+        reasoningEffort: reasoningEffort,
         stream: true,
         tools: tools,
         extraParams: extraParams);

@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' hide Consumer;
 import 'package:markdown_widget/markdown_widget.dart';
 import '../widgets/markdown_extensions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,6 +17,7 @@ import 'package:mime/mime.dart';
 import '../services/attachment_storage.dart';
 import '../widgets/file_preview.dart';
 import '../widgets/message_attachment_preview.dart';
+import '../widgets/chat_attachment_panel.dart';
 import '../utils/format_file_size.dart';
 
 import '../models/chat_event.dart';
@@ -53,6 +54,9 @@ class _SearchMatch {
 }
 
 final _isStreamingProvider = StateProvider<bool>((ref) => false);
+final _reasoningEnabledProvider = StateProvider<bool>((ref) => false);
+final _reasoningEffortProvider = StateProvider<String>((ref) => 'medium');
+final _enabledToolNamesProvider = StateProvider<Set<String>>((ref) => {});
 
 /// Search mode: within current conversation or across all conversations.
 enum _SearchMode { current, global }
@@ -77,7 +81,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   final List<ChatMessage> _history = [];
   int _selectedModelIndex = 0;
   bool _cancelledByUser = false;
-  bool _reasoningEnabled = false;
   final Map<String, String> _reasoningContents = {};
   final Map<String, List<_MessageSegment>> _chatSegments = {};
   String? _streamingMsgId;
@@ -195,7 +198,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       // Restore saved reasoning toggle
       final savedReasoning = prefs.getBool('reasoning_enabled');
       if (savedReasoning != null) {
-        setState(() => _reasoningEnabled = savedReasoning);
+        ref.read(_reasoningEnabledProvider.notifier).state = savedReasoning;
+      }
+      // Restore saved reasoning effort
+      final savedEffort = prefs.getString('reasoning_effort');
+      if (savedEffort != null &&
+          ['low', 'medium', 'high'].contains(savedEffort)) {
+        ref.read(_reasoningEffortProvider.notifier).state = savedEffort;
       }
     });
     _loadConversationMessages();
@@ -347,6 +356,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     try {
       // Merge built-in tools with MCP tools
       final mcpTools = _adapter.getAllToolDefinitions();
+      final enabledTools = ref.read(_enabledToolNamesProvider);
       final allTools = <ToolDefinition>[
         const ToolDefinition(
           name: 'calculator',
@@ -362,13 +372,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             'required': ['expression'],
           },
         ),
-        ...mcpTools,
+        // Only include enabled MCP tools
+        ...mcpTools.where((t) => enabledTools.contains(t.name)),
       ];
 
       final stream = _adapter.sendStreamWithTools(
         text,
         history: _history,
-        reasoning: _reasoningEnabled,
+        reasoning: ref.read(_reasoningEnabledProvider),
+        reasoningEffort: ref.read(_reasoningEffortProvider),
         tools: allTools,
       );
 
@@ -483,7 +495,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (fullReply.isNotEmpty) {
         updateMessage(fullReply);
       }
-      if (_reasoningEnabled) {
+      if (ref.read(_reasoningEnabledProvider)) {
         reasoningBuffer = _adapter.reasoningContent;
       }
     }
@@ -1341,20 +1353,24 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   if (adapterConfigured) _buildModelSelector(),
                   // ── Reasoning toggle ──
                   if (adapterConfigured)
-                    IconButton(
-                      icon: Icon(
-                        Icons.psychology,
-                        color: _reasoningEnabled
-                            ? Theme.of(context).colorScheme.primary
-                            : null,
-                      ),
-                      tooltip: _reasoningEnabled ? '推理已开启' : '推理',
-                      onPressed: () {
-                        setState(() =>
-                            _reasoningEnabled = !_reasoningEnabled);
-                        SharedPreferences.getInstance().then((prefs) =>
-                            prefs.setBool(
-                                'reasoning_enabled', _reasoningEnabled));
+                    Consumer(
+                      builder: (context, ref, child) {
+                        final reasoningEnabled = ref.watch(_reasoningEnabledProvider);
+                        return IconButton(
+                          icon: Icon(
+                            Icons.psychology,
+                            color: reasoningEnabled
+                                ? Theme.of(context).colorScheme.primary
+                                : null,
+                          ),
+                          tooltip: reasoningEnabled ? '推理已开启' : '推理',
+                          onPressed: () {
+                            final newValue = !reasoningEnabled;
+                            ref.read(_reasoningEnabledProvider.notifier).state = newValue;
+                            SharedPreferences.getInstance().then((prefs) =>
+                                prefs.setBool('reasoning_enabled', newValue));
+                          },
+                        );
                       },
                     ),
                   // ── Stop button ──
@@ -1548,10 +1564,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
                       theme: isDark ? ChatTheme.dark() : ChatTheme.light(),
                       builders: Builders(
-composerBuilder: (context) => ChatComposerWidget(
-  onSend: _onMessageSend,
-  onStop: _stopStreaming,
-),
+                  composerBuilder: (context) => ChatComposerWidget(
+                    onSend: _onMessageSend,
+                    onStop: _stopStreaming,
+                    mcpTools: _adapter.getAllToolDefinitions(),
+                    enabledTools: ref.watch(_enabledToolNamesProvider),
+                    onEnabledToolsChanged: (tools) {
+                      ref.read(_enabledToolNamesProvider.notifier).state = tools;
+                    },
+                  ),
                         textMessageBuilder: (context, message, index,
                             {required bool isSentByMe,
                             MessageGroupStatus? groupStatus}) {
@@ -2185,10 +2206,16 @@ class _InfoRow extends StatelessWidget {
 class ChatComposerWidget extends ConsumerStatefulWidget {
   final void Function(String text, List<Attachment> attachments) onSend;
   final VoidCallback onStop;
+  final List<ToolDefinition> mcpTools;
+  final Set<String> enabledTools;
+  final ValueChanged<Set<String>> onEnabledToolsChanged;
 
   const ChatComposerWidget({
     required this.onSend,
     required this.onStop,
+    this.mcpTools = const [],
+    this.enabledTools = const {},
+    required this.onEnabledToolsChanged,
   });
 
   @override
@@ -2300,54 +2327,38 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
   }
 
   void _showAttachmentPicker() {
-    showModalBottomSheet(
+    final reasoningEnabled = ref.read(_reasoningEnabledProvider);
+    final reasoningEffort = ref.read(_reasoningEffortProvider);
+    final enabledTools = widget.enabledTools;
+
+    showChatAttachmentPanel(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.camera_alt_outlined),
-                title: const Text('拍照'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _pickFromCamera();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library_outlined),
-                title: const Text('相册'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _showGalleryPicker();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.insert_drive_file_outlined),
-                title: const Text('文件'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _pickFromFilePicker();
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
+      tools: widget.mcpTools,
+      reasoningEnabled: reasoningEnabled,
+      reasoningEffort: reasoningEffort,
+      enabledTools: enabledTools,
+      onReasoningToggle: (value) {
+        ref.read(_reasoningEnabledProvider.notifier).state = value;
+        SharedPreferences.getInstance()
+            .then((prefs) => prefs.setBool('reasoning_enabled', value));
+      },
+      onReasoningEffortChange: (value) {
+        ref.read(_reasoningEffortProvider.notifier).state = value;
+        SharedPreferences.getInstance()
+            .then((prefs) => prefs.setString('reasoning_effort', value));
+      },
+      onToolToggle: (toolName, enabled) {
+        final current = Set<String>.from(widget.enabledTools);
+        if (enabled) {
+          current.add(toolName);
+        } else {
+          current.remove(toolName);
+        }
+        widget.onEnabledToolsChanged(current);
+      },
+      onPickFromCamera: _pickFromCamera,
+      onPickFromGallery: _showGalleryPicker,
+      onPickFromFilePicker: _pickFromFilePicker,
     );
   }
 
