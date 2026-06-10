@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../providers/provider_config.dart';
 import '../services/ocr_service.dart';
+import '../utils/data_sanitizer.dart';
 import '../utils/text_manifest.dart';
 
 // ============================================================================
@@ -52,6 +53,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   final List<SelectedImage> _selectedImages = [];
   bool _isProcessing = false;
   String? _errorMessage;
+
+  /// Captured raw request data from the last failed OCR call.
+  Map<String, dynamic>? _lastRawRequest;
+
+  /// Captured raw response data from the last failed OCR call.
+  Map<String, dynamic>? _lastRawResponse;
 
   @override
   Widget build(BuildContext context) {
@@ -242,18 +249,50 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       color: cs.errorContainer,
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.error_outline, color: cs.onErrorContainer, size: 18),
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(Icons.error_outline, color: cs.onErrorContainer, size: 18),
+          ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              _errorMessage!,
-              style: TextStyle(color: cs.onErrorContainer, fontSize: 13),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _errorMessage!,
+                  style: TextStyle(color: cs.onErrorContainer, fontSize: 13),
+                ),
+                if (_lastRawRequest != null || _lastRawResponse != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: TextButton.icon(
+                      icon: const Icon(Icons.preview, size: 14),
+                      label: const Text(
+                        '查看详细错误',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      onPressed: () => _showErrorDetailDialog(context),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        foregroundColor: cs.onErrorContainer,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
           IconButton(
             icon: Icon(Icons.close, color: cs.onErrorContainer, size: 18),
-            onPressed: () => setState(() => _errorMessage = null),
+            onPressed: () => setState(() {
+              _errorMessage = null;
+              _lastRawRequest = null;
+              _lastRawResponse = null;
+            }),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
           ),
@@ -417,8 +456,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       _errorMessage = null;
     });
 
+    late final OcrService service;
     try {
-      final service = OcrService(config: ocrConfig);
+      service = OcrService(config: ocrConfig);
       OcrResult result;
 
       if (_selectedImages.length == 1) {
@@ -453,9 +493,45 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       }
     } catch (e) {
       if (mounted) {
+        // Capture full request/response diagnostics from the service
+        Map<String, dynamic>? rawReq;
+        Map<String, dynamic>? rawResp;
+        if (service.lastRequestBody != null ||
+            service.lastRequestHeaders != null ||
+            service.lastRequestUrl != null) {
+          rawReq = {};
+          if (service.lastRequestUrl != null) {
+            rawReq['url'] = service.lastRequestUrl;
+          }
+          if (service.lastRequestHeaders != null) {
+            rawReq['headers'] = service.lastRequestHeaders;
+          }
+          if (service.lastRequestBody != null) {
+            rawReq['body'] = service.lastRequestBody;
+          }
+        }
+        if (service.lastResponseData != null ||
+            service.lastResponseStatusCode != null ||
+            service.lastResponseHeaders != null) {
+          rawResp = {};
+          if (service.lastResponseStatusCode != null) {
+            rawResp['statusCode'] = service.lastResponseStatusCode;
+          }
+          if (service.lastResponseHeaders != null) {
+            rawResp['headers'] = service.lastResponseHeaders;
+          }
+          if (service.lastResponseData != null) {
+            rawResp['data'] = service.lastResponseData;
+          }
+        } else {
+          rawResp = {'error': e.toString()};
+        }
+
         setState(() {
           _isProcessing = false;
           _errorMessage = '识别失败: $e';
+          _lastRawRequest = rawReq;
+          _lastRawResponse = rawResp;
         });
       }
     }
@@ -482,6 +558,127 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       folder: '',
       textLength: text.length,
     ));
+  }
+
+  // ==================================================================
+  // Error Detail Dialog
+  // ==================================================================
+
+  /// Show a dialog with full request/response details for the last error.
+  /// Mirrors the chat page's _showErrorDetailDialog pattern.
+  void _showErrorDetailDialog(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: 600,
+            maxHeight: MediaQuery.of(ctx).size.height * 0.8,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(4),
+                    topRight: Radius.circular(4),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.error_outline, size: 18, color: Colors.red[700]),
+                    const SizedBox(width: 8),
+                    Text(
+                      '错误详情',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.red[700],
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+              ),
+              // Body with scrollable content
+              Flexible(
+                child: _lastRawRequest != null || _lastRawResponse != null
+                    ? ListView(
+                        padding: const EdgeInsets.all(16),
+                        shrinkWrap: true,
+                        children: [
+                          if (_lastRawRequest != null) ...[
+                            _buildJsonBlock('请求 (Request)', _lastRawRequest, isDark),
+                            const SizedBox(height: 12),
+                          ],
+                          if (_lastRawResponse != null)
+                            _buildJsonBlock('响应 (Response)', _lastRawResponse, isDark),
+                        ],
+                      )
+                    : const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Center(
+                          child: Text(
+                            '无详细数据',
+                            style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+                          ),
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Render a JSON data block with monospace text.
+  Widget _buildJsonBlock(String label, dynamic data, bool isDark) {
+    final encoder = const JsonEncoder.withIndent('  ');
+    final sanitized = DataSanitizer.sanitizeForDisplay(data);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$label:',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: isDark ? Colors.grey[400] : Colors.grey[700],
+          ),
+        ),
+        const SizedBox(height: 2),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.black : Colors.grey[300],
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: SelectableText(
+            encoder.convert(sanitized),
+            style: TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 11,
+              color: isDark ? Colors.grey[300] : Colors.grey[800],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   // ==================================================================
