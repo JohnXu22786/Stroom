@@ -312,8 +312,11 @@ class ManifestOperations<T extends FileRecord> {
 
   // ---- File I/O ---------------------------------------------------------
 
+  /// 是否应使用 WebFileStore（包括纯内存测试模式）
+  bool get _useWebFileStore => kIsWeb || WebFileStore.isTestMode;
+
   Future<String> writeFile(String fileName, Uint8List data) async {
-    if (kIsWeb) {
+    if (_useWebFileStore) {
       await WebFileStore.write(_webKey(fileName), data);
       return fileName;
     }
@@ -324,7 +327,7 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   Future<Uint8List?> readFile(String fileName) async {
-    if (kIsWeb) {
+    if (_useWebFileStore) {
       return WebFileStore.read(_webKey(fileName));
     }
     final dir = await _storageDir;
@@ -335,13 +338,13 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   Future<bool> fileExists(String fileName) async {
-    if (kIsWeb) return WebFileStore.exists(_webKey(fileName));
+    if (_useWebFileStore) return WebFileStore.exists(_webKey(fileName));
     final dir = await _storageDir;
     return await File(p.join(dir, fileName)).exists();
   }
 
   Future<bool> deleteFile(String fileName) async {
-    if (kIsWeb) {
+    if (_useWebFileStore) {
       await WebFileStore.delete(_webKey(fileName));
       return true;
     }
@@ -356,13 +359,13 @@ class ManifestOperations<T extends FileRecord> {
 
   /// Get the storage directory path (Native only).
   Future<String> get storageDirPath async {
-    if (kIsWeb) return '';
+    if (_useWebFileStore) return '';
     return _storageDir;
   }
 
   /// Get a file's absolute path on disk (Native only).
   Future<String?> readFilePath(String fileName) async {
-    if (kIsWeb) {
+    if (_useWebFileStore) {
       final exists = await WebFileStore.exists(_webKey(fileName));
       return exists ? _webKey(fileName) : null;
     }
