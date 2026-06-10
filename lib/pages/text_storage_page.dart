@@ -271,7 +271,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       }
 
       final exportName = '${file.name}.${file.format}';
-      final data = Uint8List.fromList(content.codeUnits);
+      final data = Uint8List.fromList(utf8.encode(content));
       final outputPath = await FilePicker.saveFile(
         dialogTitle: '导出文本',
         fileName: exportName,
@@ -327,7 +327,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         final exportName = '${file.name}.${file.format}';
 
         if (kIsWeb) {
-          final data = Uint8List.fromList(content.codeUnits);
+          final data = Uint8List.fromList(utf8.encode(content));
           await FilePicker.saveFile(
             dialogTitle: '导出文本',
             fileName: exportName,
@@ -399,7 +399,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
             final content = await TextManifest.readText(file.storagePath);
             if (content == null || content.isEmpty) continue;
             final exportName = '${file.name}.${file.format}';
-            final data = Uint8List.fromList(content.codeUnits);
+            final data = Uint8List.fromList(utf8.encode(content));
             await FilePicker.saveFile(
               dialogTitle: '导出文本',
               fileName: exportName,
@@ -789,7 +789,7 @@ class _TextCreatePageState extends State<_TextCreatePage> {
     setState(() => _isSaving = true);
 
     try {
-      final bytes = Uint8List.fromList(content.codeUnits);
+      final bytes = Uint8List.fromList(utf8.encode(content));
       final hash = computeTextHash(bytes);
       final storageFileName = '$hash.txt';
 

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
@@ -155,7 +156,7 @@ class TextManifest {
 
   /// 写入文本内容到文件
   static Future<String> writeText(String fileName, String text) async {
-    final bytes = Uint8List.fromList(text.codeUnits);
+    final bytes = Uint8List.fromList(utf8.encode(text));
     return writeFile(fileName, bytes);
   }
 
@@ -163,7 +164,7 @@ class TextManifest {
   static Future<String?> readText(String fileName) async {
     final bytes = await readFile(fileName);
     if (bytes == null || bytes.isEmpty) return null;
-    return String.fromCharCodes(bytes);
+    return utf8.decode(bytes);
   }
 
   // Folder management
