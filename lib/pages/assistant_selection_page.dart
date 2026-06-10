@@ -218,15 +218,18 @@ class AssistantSelectionPage extends ConsumerWidget {
               title: const Text('编辑'),
               onTap: () {
                 Navigator.pop(ctx);
-                _showEditAssistantDialog(context, ref, assistant);
+                showAssistantFullEditDialog(context, ref, assistant);
               },
             ),
             ListTile(
-              leading: const Icon(Icons.settings_outlined),
-              title: const Text('设置'),
+              leading: const Icon(Icons.delete_outline),
+              title: Text('删除',
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.error)),
               onTap: () {
                 Navigator.pop(ctx);
-                _showAssistantSettingsDialog(context, ref, assistant);
+                _showDeleteAssistantConfirmation(
+                    context, ref, assistant);
               },
             ),
           ],
@@ -235,26 +238,97 @@ class AssistantSelectionPage extends ConsumerWidget {
     );
   }
 
-  void _showEditAssistantDialog(
+  void _showDeleteAssistantConfirmation(
       BuildContext context, WidgetRef ref, Assistant assistant) {
-    final nameController = TextEditingController(text: assistant.name);
-    final promptController = TextEditingController(text: assistant.prompt);
-    String selectedEmoji = assistant.emoji;
-    String avatarType = assistant.avatarType;
-    final avatarUrlController =
-        TextEditingController(text: assistant.avatarUrl ?? '');
-    final descriptionController =
-        TextEditingController(text: assistant.description);
-
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlgState) => AlertDialog(
-          title: const Text('编辑助手'),
-          content: SingleChildScrollView(
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除助手'),
+        content: Text(
+            '确定要删除助手「${assistant.name}」吗？此操作无法撤销。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              ref.read(assistantProvider.notifier)
+                  .deleteAssistant(assistant.id);
+              Navigator.pop(ctx);
+            },
+            style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+  }
+
+}
+
+// ============================================================================
+// Public dialog functions for assistant editing, settings, and custom params
+// ============================================================================
+
+/// Shows a combined dialog to edit both basic info and model settings
+/// of an assistant. Used from both [AssistantSelectionPage] and
+/// [TopicSelectionPage].
+void showAssistantFullEditDialog(
+    BuildContext context, WidgetRef ref, Assistant assistant) {
+  final nameController = TextEditingController(text: assistant.name);
+  final promptController = TextEditingController(text: assistant.prompt);
+  String selectedEmoji = assistant.emoji;
+  String avatarType = assistant.avatarType;
+  final avatarUrlController =
+      TextEditingController(text: assistant.avatarUrl ?? '');
+  final descriptionController =
+      TextEditingController(text: assistant.description);
+
+  // Settings state
+  double temperature = assistant.settings.temperature;
+  bool enableTemperature = assistant.settings.enableTemperature;
+  double topP = assistant.settings.topP;
+  bool enableTopP = assistant.settings.enableTopP;
+  int maxTokens = assistant.settings.maxTokens;
+  bool enableMaxTokens = assistant.settings.enableMaxTokens;
+  bool streamOutput = assistant.settings.streamOutput;
+  String reasoningEffort = assistant.settings.reasoningEffort;
+  bool enableWebSearch = assistant.settings.enableWebSearch;
+  double frequencyPenalty = assistant.settings.frequencyPenalty;
+  bool enableFrequencyPenalty = assistant.settings.enableFrequencyPenalty;
+  double presencePenalty = assistant.settings.presencePenalty;
+  bool enablePresencePenalty = assistant.settings.enablePresencePenalty;
+  int? seed = assistant.settings.seed;
+  bool enableSeed = assistant.settings.enableSeed;
+  final seedController = TextEditingController(
+    text: seed?.toString() ?? '',
+  );
+  List<CustomParameter> customParameters =
+      List.from(assistant.settings.customParameters);
+
+  showDialog(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setDlgState) => AlertDialog(
+        title: const Text('编辑助手'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // ==================== Basic Info Section ====================
+                Text('基本信息',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                      color: Theme.of(context).colorScheme.primary,
+                    )),
+                const SizedBox(height: 12),
+
                 // Avatar type toggle
                 SegmentedButton<String>(
                   segments: const [
@@ -309,552 +383,507 @@ class AssistantSelectionPage extends ConsumerWidget {
                   ),
                   maxLines: 4,
                 ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final name = nameController.text.trim();
-                if (name.isEmpty) return;
-                ref.read(assistantProvider.notifier).updateAssistant(
-                      id: assistant.id,
-                      name: name,
-                      prompt: promptController.text.trim(),
-                      emoji: selectedEmoji,
-                      description: descriptionController.text.trim(),
-                      avatarType: avatarType,
-                      avatarUrl: avatarType == 'image'
-                          ? (avatarUrlController.text.trim().isEmpty
-                              ? null
-                              : avatarUrlController.text.trim())
-                          : null,
-                    );
-                nameController.dispose();
-                promptController.dispose();
-                descriptionController.dispose();
-                avatarUrlController.dispose();
-                Navigator.pop(ctx);
-              },
-              child: const Text('保存'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 8),
 
-  void _showAssistantSettingsDialog(
-      BuildContext context, WidgetRef ref, Assistant assistant) {
-    double temperature = assistant.settings.temperature;
-    bool enableTemperature = assistant.settings.enableTemperature;
-    double topP = assistant.settings.topP;
-    bool enableTopP = assistant.settings.enableTopP;
-    int maxTokens = assistant.settings.maxTokens;
-    bool enableMaxTokens = assistant.settings.enableMaxTokens;
-    bool streamOutput = assistant.settings.streamOutput;
-    String reasoningEffort = assistant.settings.reasoningEffort;
-    bool enableWebSearch = assistant.settings.enableWebSearch;
-    double frequencyPenalty = assistant.settings.frequencyPenalty;
-    bool enableFrequencyPenalty = assistant.settings.enableFrequencyPenalty;
-    double presencePenalty = assistant.settings.presencePenalty;
-    bool enablePresencePenalty = assistant.settings.enablePresencePenalty;
-    int? seed = assistant.settings.seed;
-    bool enableSeed = assistant.settings.enableSeed;
-    final seedController = TextEditingController(
-      text: seed?.toString() ?? '',
-    );
-    List<CustomParameter> customParameters =
-        List.from(assistant.settings.customParameters);
+                // ==================== Settings Section ====================
+                Text('参数设置',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                      color: Theme.of(context).colorScheme.primary,
+                    )),
+                const SizedBox(height: 8),
 
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlgState) => AlertDialog(
-          title: const Text('助手参数设置'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Temperature
-                  SwitchListTile(
-                    title: const Text('温度 (Temperature)'),
-                    subtitle: Text('$temperature'),
-                    value: enableTemperature,
+                // Temperature
+                SwitchListTile(
+                  title: const Text('温度 (Temperature)'),
+                  subtitle: Text('$temperature'),
+                  value: enableTemperature,
+                  onChanged: (v) =>
+                      setDlgState(() => enableTemperature = v),
+                ),
+                if (enableTemperature)
+                  Slider(
+                    value: temperature,
+                    min: 0,
+                    max: 2,
+                    divisions: 40,
+                    label: temperature.toStringAsFixed(2),
                     onChanged: (v) =>
-                        setDlgState(() => enableTemperature = v),
+                        setDlgState(() => temperature = v),
                   ),
-                  if (enableTemperature)
-                    Slider(
-                      value: temperature,
-                      min: 0,
-                      max: 2,
-                      divisions: 40,
-                      label: temperature.toStringAsFixed(2),
-                      onChanged: (v) =>
-                          setDlgState(() => temperature = v),
-                    ),
-                  const Divider(),
+                const Divider(),
 
-                  // Top P
-                  SwitchListTile(
-                    title: const Text('Top P'),
-                    subtitle: Text('$topP'),
-                    value: enableTopP,
-                    onChanged: (v) => setDlgState(() => enableTopP = v),
+                // Top P
+                SwitchListTile(
+                  title: const Text('Top P'),
+                  subtitle: Text('$topP'),
+                  value: enableTopP,
+                  onChanged: (v) => setDlgState(() => enableTopP = v),
+                ),
+                if (enableTopP)
+                  Slider(
+                    value: topP,
+                    min: 0,
+                    max: 1,
+                    divisions: 20,
+                    label: topP.toStringAsFixed(2),
+                    onChanged: (v) => setDlgState(() => topP = v),
                   ),
-                  if (enableTopP)
-                    Slider(
-                      value: topP,
-                      min: 0,
-                      max: 1,
-                      divisions: 20,
-                      label: topP.toStringAsFixed(2),
-                      onChanged: (v) => setDlgState(() => topP = v),
-                    ),
-                  const Divider(),
+                const Divider(),
 
-                  // Max Tokens
-                  SwitchListTile(
-                    title: const Text('最大Token数 (Max Tokens)'),
-                    subtitle: Text('$maxTokens'),
-                    value: enableMaxTokens,
+                // Max Tokens
+                SwitchListTile(
+                  title: const Text('最大Token数 (Max Tokens)'),
+                  subtitle: Text('$maxTokens'),
+                  value: enableMaxTokens,
+                  onChanged: (v) =>
+                      setDlgState(() => enableMaxTokens = v),
+                ),
+                if (enableMaxTokens)
+                  Slider(
+                    value: maxTokens.toDouble(),
+                    min: 256,
+                    max: 32768,
+                    divisions: 127,
+                    label: '$maxTokens',
                     onChanged: (v) =>
-                        setDlgState(() => enableMaxTokens = v),
+                        setDlgState(() => maxTokens = v.round()),
                   ),
-                  if (enableMaxTokens)
-                    Slider(
-                      value: maxTokens.toDouble(),
-                      min: 256,
-                      max: 32768,
-                      divisions: 127,
-                      label: '$maxTokens',
-                      onChanged: (v) =>
-                          setDlgState(() => maxTokens = v.round()),
-                    ),
-                  const Divider(),
+                const Divider(),
 
-                  // Stream Output
-                  SwitchListTile(
-                    title: const Text('流式输出 (Stream Output)'),
-                    value: streamOutput,
+                // Stream Output
+                SwitchListTile(
+                  title: const Text('流式输出 (Stream Output)'),
+                  value: streamOutput,
+                  onChanged: (v) =>
+                      setDlgState(() => streamOutput = v),
+                ),
+                const Divider(),
+
+                // Reasoning Effort
+                ListTile(
+                  title: const Text('推理努力度'),
+                  subtitle: Text(reasoningEffort),
+                  trailing: DropdownButton<String>(
+                    value: reasoningEffort,
+                    underline: const SizedBox.shrink(),
+                    items: const [
+                      DropdownMenuItem(
+                          value: 'default', child: Text('默认')),
+                      DropdownMenuItem(
+                          value: 'low', child: Text('低')),
+                      DropdownMenuItem(
+                          value: 'high', child: Text('高')),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) {
+                        setDlgState(() => reasoningEffort = v);
+                      }
+                    },
+                  ),
+                ),
+                const Divider(),
+
+                // Frequency Penalty
+                SwitchListTile(
+                  title: const Text('频率惩罚 (Frequency Penalty)'),
+                  subtitle: Text('$frequencyPenalty'),
+                  value: enableFrequencyPenalty,
+                  onChanged: (v) => setDlgState(
+                      () => enableFrequencyPenalty = v),
+                ),
+                if (enableFrequencyPenalty)
+                  Slider(
+                    value: frequencyPenalty,
+                    min: -2,
+                    max: 2,
+                    divisions: 40,
+                    label: frequencyPenalty.toStringAsFixed(2),
                     onChanged: (v) =>
-                        setDlgState(() => streamOutput = v),
+                        setDlgState(() => frequencyPenalty = v),
                   ),
-                  const Divider(),
+                const Divider(),
 
-                  // Reasoning Effort
-                  ListTile(
-                    title: const Text('推理努力度'),
-                    subtitle: Text(reasoningEffort),
-                    trailing: DropdownButton<String>(
-                      value: reasoningEffort,
-                      underline: const SizedBox.shrink(),
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'default', child: Text('默认')),
-                        DropdownMenuItem(
-                            value: 'low', child: Text('低')),
-                        DropdownMenuItem(
-                            value: 'high', child: Text('高')),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) {
-                          setDlgState(() => reasoningEffort = v);
-                        }
-                      },
-                    ),
-                  ),
-                  const Divider(),
-
-                  // Frequency Penalty (extended)
-                  SwitchListTile(
-                    title: const Text('频率惩罚 (Frequency Penalty)'),
-                    subtitle: Text('$frequencyPenalty'),
-                    value: enableFrequencyPenalty,
-                    onChanged: (v) => setDlgState(
-                        () => enableFrequencyPenalty = v),
-                  ),
-                  if (enableFrequencyPenalty)
-                    Slider(
-                      value: frequencyPenalty,
-                      min: -2,
-                      max: 2,
-                      divisions: 40,
-                      label: frequencyPenalty.toStringAsFixed(2),
-                      onChanged: (v) =>
-                          setDlgState(() => frequencyPenalty = v),
-                    ),
-                  const Divider(),
-
-                  // Presence Penalty (extended)
-                  SwitchListTile(
-                    title: const Text('存在惩罚 (Presence Penalty)'),
-                    subtitle: Text('$presencePenalty'),
-                    value: enablePresencePenalty,
-                    onChanged: (v) => setDlgState(
-                        () => enablePresencePenalty = v),
-                  ),
-                  if (enablePresencePenalty)
-                    Slider(
-                      value: presencePenalty,
-                      min: -2,
-                      max: 2,
-                      divisions: 40,
-                      label: presencePenalty.toStringAsFixed(2),
-                      onChanged: (v) =>
-                          setDlgState(() => presencePenalty = v),
-                    ),
-                  const Divider(),
-
-                  // Seed (extended)
-                  SwitchListTile(
-                    title: const Text('随机种子 (Seed)'),
-                    subtitle: Text(seed?.toString() ?? '未设置'),
-                    value: enableSeed,
+                // Presence Penalty
+                SwitchListTile(
+                  title: const Text('存在惩罚 (Presence Penalty)'),
+                  subtitle: Text('$presencePenalty'),
+                  value: enablePresencePenalty,
+                  onChanged: (v) => setDlgState(
+                      () => enablePresencePenalty = v),
+                ),
+                if (enablePresencePenalty)
+                  Slider(
+                    value: presencePenalty,
+                    min: -2,
+                    max: 2,
+                    divisions: 40,
+                    label: presencePenalty.toStringAsFixed(2),
                     onChanged: (v) =>
-                        setDlgState(() => enableSeed = v),
+                        setDlgState(() => presencePenalty = v),
                   ),
-                  if (enableSeed)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: TextField(
-                        decoration: const InputDecoration(
-                          labelText: '种子值',
-                          hintText: '输入整数种子',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        keyboardType: TextInputType.number,
-                        controller: seedController,
-                        onChanged: (v) => setDlgState(() {
-                          seed = int.tryParse(v);
-                        }),
-                      ),
-                    ),
-                  const Divider(),
+                const Divider(),
 
-                  // Web Search
-                  SwitchListTile(
-                    title: const Text('联网搜索'),
-                    value: enableWebSearch,
-                    onChanged: (v) =>
-                        setDlgState(() => enableWebSearch = v),
-                  ),
-                  const Divider(),
-
-                  // Custom Parameters section
+                // Seed
+                SwitchListTile(
+                  title: const Text('随机种子 (Seed)'),
+                  subtitle: Text(seed?.toString() ?? '未设置'),
+                  value: enableSeed,
+                  onChanged: (v) =>
+                      setDlgState(() => enableSeed = v),
+                ),
+                if (enableSeed)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      children: [
-                        const Text(
-                          '自定义参数',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 15,
-                          ),
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          icon: const Icon(Icons.add_circle_outline,
-                              size: 20),
-                          tooltip: '添加参数',
-                          onPressed: () {
-                            _showAddCustomParameterDialog(
-                              context,
-                              (name, type, value) {
-                                setDlgState(() {
-                                  customParameters.add(CustomParameter(
-                                    name: name,
-                                    type: type,
-                                    value: value,
-                                  ));
-                                });
-                              },
-                            );
-                          },
-                        ),
-                      ],
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        labelText: '种子值',
+                        hintText: '输入整数种子',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      keyboardType: TextInputType.number,
+                      controller: seedController,
+                      onChanged: (v) => setDlgState(() {
+                        seed = int.tryParse(v);
+                      }),
                     ),
                   ),
-                  if (customParameters.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      child: Text(
-                        '暂无自定义参数',
+                const Divider(),
+
+                // Web Search
+                SwitchListTile(
+                  title: const Text('联网搜索'),
+                  value: enableWebSearch,
+                  onChanged: (v) =>
+                      setDlgState(() => enableWebSearch = v),
+                ),
+                const Divider(),
+
+                // Custom Parameters section
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      const Text(
+                        '自定义参数',
                         style: TextStyle(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant,
-                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
                         ),
                       ),
-                    )
-                  else
-                    ...customParameters.asMap().entries.map((entry) {
-                      final i = entry.key;
-                      final cp = entry.value;
-                      return ListTile(
-                        dense: true,
-                        title: Text(
-                          cp.name,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w500),
-                        ),
-                        subtitle: Text(
-                            '${cp.type}: ${cp.value?.toString() ?? 'null'}'),
-                        trailing: IconButton(
-                          icon: Icon(Icons.delete_outline,
-                              size: 18,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .error),
-                          onPressed: () {
-                            setDlgState(() {
-                              customParameters.removeAt(i);
-                            });
-                          },
-                        ),
-                        onTap: () {
-                          _showEditCustomParameterDialog(
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.add_circle_outline,
+                            size: 20),
+                        tooltip: '添加参数',
+                        onPressed: () {
+                          showAddCustomParameterDialog(
                             context,
-                            cp,
                             (name, type, value) {
                               setDlgState(() {
-                                customParameters[i] = CustomParameter(
+                                customParameters.add(CustomParameter(
                                   name: name,
                                   type: type,
                                   value: value,
-                                );
+                                ));
                               });
                             },
                           );
                         },
-                      );
-                    }),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () {
-                ref.read(assistantProvider.notifier).updateAssistantSettings(
-                      assistantId: assistant.id,
-                      temperature: temperature,
-                      enableTemperature: enableTemperature,
-                      topP: topP,
-                      enableTopP: enableTopP,
-                      maxTokens: maxTokens,
-                      enableMaxTokens: enableMaxTokens,
-                      streamOutput: streamOutput,
-                      reasoningEffort: reasoningEffort,
-                      enableWebSearch: enableWebSearch,
-                      frequencyPenalty: frequencyPenalty,
-                      enableFrequencyPenalty: enableFrequencyPenalty,
-                      presencePenalty: presencePenalty,
-                      enablePresencePenalty: enablePresencePenalty,
-                      seed: seed,
-                      enableSeed: enableSeed,
-                      customParameters: customParameters,
+                      ),
+                    ],
+                  ),
+                ),
+                if (customParameters.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 8),
+                    child: Text(
+                      '暂无自定义参数',
+                      style: TextStyle(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant,
+                        fontSize: 13,
+                      ),
+                    ),
+                  )
+                else
+                  ...customParameters.asMap().entries.map((entry) {
+                    final i = entry.key;
+                    final cp = entry.value;
+                    return ListTile(
+                      dense: true,
+                      title: Text(
+                        cp.name,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w500),
+                      ),
+                      subtitle: Text(
+                          '${cp.type}: ${cp.value?.toString() ?? 'null'}'),
+                      trailing: IconButton(
+                        icon: Icon(Icons.delete_outline,
+                            size: 18,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .error),
+                        onPressed: () {
+                          setDlgState(() {
+                            customParameters.removeAt(i);
+                          });
+                        },
+                      ),
+                      onTap: () {
+                        showEditCustomParameterDialog(
+                          context,
+                          cp,
+                          (name, type, value) {
+                            setDlgState(() {
+                              customParameters[i] = CustomParameter(
+                                name: name,
+                                type: type,
+                                value: value,
+                              );
+                            });
+                          },
+                        );
+                      },
                     );
-                Navigator.pop(ctx);
-              },
-              child: const Text('保存'),
+                  }),
+              ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showAddCustomParameterDialog(
-    BuildContext context,
-    void Function(String name, String type, dynamic value) onAdd,
-  ) {
-    final nameController = TextEditingController();
-    String type = 'string';
-    final valueController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlgState) => AlertDialog(
-          title: const Text('添加自定义参数'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: '参数名',
-                  hintText: '如: top_k',
-                  border: OutlineInputBorder(),
-                ),
-                autofocus: true,
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: type,
-                decoration: const InputDecoration(
-                  labelText: '类型',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'string', child: Text('字符串')),
-                  DropdownMenuItem(value: 'number', child: Text('数字')),
-                  DropdownMenuItem(value: 'boolean', child: Text('布尔')),
-                  DropdownMenuItem(value: 'json', child: Text('JSON')),
-                ],
-                onChanged: (v) {
-                  if (v != null) setDlgState(() => type = v);
-                },
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: valueController,
-                decoration: InputDecoration(
-                  labelText: '值',
-                  hintText: type == 'boolean'
-                      ? 'true 或 false'
-                      : type == 'number'
-                          ? '输入数字'
-                          : '输入值',
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final name = nameController.text.trim();
-                if (name.isEmpty) return;
-                dynamic value = valueController.text.trim();
-                if (type == 'number') {
-                  value = double.tryParse(value as String) ??
-                      int.tryParse(value as String) ??
-                      value;
-                } else if (type == 'boolean') {
-                  value = (value as String).toLowerCase() == 'true';
-                }
-                onAdd(name, type, value);
-                nameController.dispose();
-                valueController.dispose();
-                Navigator.pop(ctx);
-              },
-              child: const Text('添加'),
-            ),
-          ],
         ),
-      ),
-    );
-  }
-
-  void _showEditCustomParameterDialog(
-    BuildContext context,
-    CustomParameter cp,
-    void Function(String name, String type, dynamic value) onEdit,
-  ) {
-    final nameController = TextEditingController(text: cp.name);
-    String type = cp.type;
-    final valueController =
-        TextEditingController(text: cp.value?.toString() ?? '');
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlgState) => AlertDialog(
-          title: const Text('编辑自定义参数'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: '参数名',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: type,
-                decoration: const InputDecoration(
-                  labelText: '类型',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'string', child: Text('字符串')),
-                  DropdownMenuItem(value: 'number', child: Text('数字')),
-                  DropdownMenuItem(value: 'boolean', child: Text('布尔')),
-                  DropdownMenuItem(value: 'json', child: Text('JSON')),
-                ],
-                onChanged: (v) {
-                  if (v != null) setDlgState(() => type = v);
-                },
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: valueController,
-                decoration: const InputDecoration(
-                  labelText: '值',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final name = nameController.text.trim();
-                if (name.isEmpty) return;
-                dynamic value = valueController.text.trim();
-                if (type == 'number') {
-                  value = double.tryParse(value as String) ??
-                      int.tryParse(value as String) ??
-                      value;
-                } else if (type == 'boolean') {
-                  value = (value as String).toLowerCase() == 'true';
-                }
-                onEdit(name, type, value);
-                nameController.dispose();
-                valueController.dispose();
-                Navigator.pop(ctx);
-              },
-              child: const Text('保存'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+          FilledButton(
+            onPressed: () {
+              final name = nameController.text.trim();
+              if (name.isEmpty) return;
 
+              // Update basic info
+              ref.read(assistantProvider.notifier).updateAssistant(
+                    id: assistant.id,
+                    name: name,
+                    prompt: promptController.text.trim(),
+                    emoji: selectedEmoji,
+                    description: descriptionController.text.trim(),
+                    avatarType: avatarType,
+                    avatarUrl: avatarType == 'image'
+                        ? (avatarUrlController.text.trim().isEmpty
+                            ? null
+                            : avatarUrlController.text.trim())
+                        : null,
+                  );
+
+              // Update settings
+              ref.read(assistantProvider.notifier).updateAssistantSettings(
+                    assistantId: assistant.id,
+                    temperature: temperature,
+                    enableTemperature: enableTemperature,
+                    topP: topP,
+                    enableTopP: enableTopP,
+                    maxTokens: maxTokens,
+                    enableMaxTokens: enableMaxTokens,
+                    streamOutput: streamOutput,
+                    reasoningEffort: reasoningEffort,
+                    enableWebSearch: enableWebSearch,
+                    frequencyPenalty: frequencyPenalty,
+                    enableFrequencyPenalty: enableFrequencyPenalty,
+                    presencePenalty: presencePenalty,
+                    enablePresencePenalty: enablePresencePenalty,
+                    seed: seed,
+                    enableSeed: enableSeed,
+                    customParameters: customParameters,
+                  );
+
+              Navigator.pop(ctx);
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
-// ============================================================================
-// Assistant card widget
-// ============================================================================
+/// Shows a dialog to add a custom parameter to an assistant.
+void showAddCustomParameterDialog(
+  BuildContext context,
+  void Function(String name, String type, dynamic value) onAdd,
+) {
+  final nameController = TextEditingController();
+  String type = 'string';
+  final valueController = TextEditingController();
+
+  showDialog(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setDlgState) => AlertDialog(
+        title: const Text('添加自定义参数'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(
+                labelText: '参数名',
+                hintText: '如: top_k',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: type,
+              decoration: const InputDecoration(
+                labelText: '类型',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'string', child: Text('字符串')),
+                DropdownMenuItem(value: 'number', child: Text('数字')),
+                DropdownMenuItem(value: 'boolean', child: Text('布尔')),
+                DropdownMenuItem(value: 'json', child: Text('JSON')),
+              ],
+              onChanged: (v) {
+                if (v != null) setDlgState(() => type = v);
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: valueController,
+              decoration: InputDecoration(
+                labelText: '值',
+                hintText: type == 'boolean'
+                    ? 'true 或 false'
+                    : type == 'number'
+                        ? '输入数字'
+                        : '输入值',
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final name = nameController.text.trim();
+              if (name.isEmpty) return;
+              dynamic value = valueController.text.trim();
+              if (type == 'number') {
+                value = double.tryParse(value as String) ??
+                    int.tryParse(value as String) ??
+                    value;
+              } else if (type == 'boolean') {
+                value = (value as String).toLowerCase() == 'true';
+              }
+              onAdd(name, type, value);
+              nameController.dispose();
+              valueController.dispose();
+              Navigator.pop(ctx);
+            },
+            child: const Text('添加'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// Shows a dialog to edit an existing custom parameter.
+void showEditCustomParameterDialog(
+  BuildContext context,
+  CustomParameter cp,
+  void Function(String name, String type, dynamic value) onEdit,
+) {
+  final nameController = TextEditingController(text: cp.name);
+  String type = cp.type;
+  final valueController =
+      TextEditingController(text: cp.value?.toString() ?? '');
+
+  showDialog(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setDlgState) => AlertDialog(
+        title: const Text('编辑自定义参数'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(
+                labelText: '参数名',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: type,
+              decoration: const InputDecoration(
+                labelText: '类型',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'string', child: Text('字符串')),
+                DropdownMenuItem(value: 'number', child: Text('数字')),
+                DropdownMenuItem(value: 'boolean', child: Text('布尔')),
+                DropdownMenuItem(value: 'json', child: Text('JSON')),
+              ],
+              onChanged: (v) {
+                if (v != null) setDlgState(() => type = v);
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: valueController,
+              decoration: const InputDecoration(
+                labelText: '值',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final name = nameController.text.trim();
+              if (name.isEmpty) return;
+              dynamic value = valueController.text.trim();
+              if (type == 'number') {
+                value = double.tryParse(value as String) ??
+                    int.tryParse(value as String) ??
+                    value;
+              } else if (type == 'boolean') {
+                value = (value as String).toLowerCase() == 'true';
+              }
+              onEdit(name, type, value);
+              nameController.dispose();
+              valueController.dispose();
+              Navigator.pop(ctx);
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
 class _AssistantCard extends StatelessWidget {
   final Assistant assistant;
