@@ -57,7 +57,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   final List<ChatMessage> _history = [];
   int _selectedModelIndex = 0;
   bool _cancelledByUser = false;
-  bool _reasoningEnabled = false;
   final Map<String, String> _reasoningContents = {};
   final Map<String, List<MessageSegment>> _chatSegments = {};
   String? _streamingMsgId;
@@ -191,7 +190,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       // Restore saved reasoning toggle
       final savedReasoning = prefs.getBool('reasoning_enabled');
       if (savedReasoning != null) {
-        setState(() => _reasoningEnabled = savedReasoning);
+        ref.read(reasoningEnabledProvider.notifier).state = savedReasoning;
+      }
+      // Restore saved reasoning effort
+      final savedEffort = prefs.getString('reasoning_effort');
+      if (savedEffort != null &&
+          ['low', 'medium', 'high'].contains(savedEffort)) {
+        ref.read(reasoningEffortProvider.notifier).state = savedEffort;
       }
     });
     _loadConversationMessages();
@@ -396,6 +401,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     try {
       // Merge built-in tools with MCP tools
       final mcpTools = _adapter.getAllToolDefinitions();
+      final enabledTools = ref.read(enabledToolNamesProvider);
       final allTools = <ToolDefinition>[
         const ToolDefinition(
           name: 'calculator',
@@ -411,13 +417,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             'required': ['expression'],
           },
         ),
-        ...mcpTools,
+        // Only include enabled MCP tools
+        ...mcpTools.where((t) => enabledTools.contains(t.name)),
       ];
 
       final stream = _adapter.sendStreamWithTools(
         text,
         history: _history,
-        reasoning: _reasoningEnabled,
+        reasoning: ref.read(reasoningEnabledProvider),
+        reasoningEffort: ref.read(reasoningEffortProvider),
         tools: allTools,
       );
 
@@ -532,7 +540,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (fullReply.isNotEmpty) {
         updateMessage(fullReply);
       }
-      if (_reasoningEnabled) {
+      if (ref.read(reasoningEnabledProvider)) {
         reasoningBuffer = _adapter.reasoningContent;
       }
     }
@@ -1082,20 +1090,24 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   if (adapterConfigured) _buildModelSelector(),
                   // ── Reasoning toggle ──
                   if (adapterConfigured)
-                    IconButton(
-                      icon: Icon(
-                        Icons.psychology,
-                        color: _reasoningEnabled
-                            ? Theme.of(context).colorScheme.primary
-                            : null,
-                      ),
-                      tooltip: _reasoningEnabled ? '推理已开启' : '推理',
-                      onPressed: () {
-                        setState(() =>
-                            _reasoningEnabled = !_reasoningEnabled);
-                        SharedPreferences.getInstance().then((prefs) =>
-                            prefs.setBool(
-                                'reasoning_enabled', _reasoningEnabled));
+                    Consumer(
+                      builder: (context, ref, child) {
+                        final reasoningEnabled = ref.watch(reasoningEnabledProvider);
+                        return IconButton(
+                          icon: Icon(
+                            Icons.psychology,
+                            color: reasoningEnabled
+                                ? Theme.of(context).colorScheme.primary
+                                : null,
+                          ),
+                          tooltip: reasoningEnabled ? '推理已开启' : '推理',
+                          onPressed: () {
+                            final newValue = !reasoningEnabled;
+                            ref.read(reasoningEnabledProvider.notifier).state = newValue;
+                            SharedPreferences.getInstance().then((prefs) =>
+                                prefs.setBool('reasoning_enabled', newValue));
+                          },
+                        );
                       },
                     ),
                   // ── Stop button ──
@@ -1289,15 +1301,21 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
                       theme: isDark ? ChatTheme.dark() : ChatTheme.light(),
                       builders: Builders(
+                      builders: Builders(
                         chatAnimatedListBuilder: (context, itemBuilder) =>
                             ChatAnimatedList(
                           itemBuilder: itemBuilder,
                           onEndReached: _loadMoreMessages,
                         ),
-composerBuilder: (context) => ChatComposerWidget(
-  onSend: _onMessageSend,
-  onStop: _stopStreaming,
-),
+                        composerBuilder: (context) => ChatComposerWidget(
+                          onSend: _onMessageSend,
+                          onStop: _stopStreaming,
+                          mcpTools: _adapter.getAllToolDefinitions(),
+                          enabledTools: ref.watch(enabledToolNamesProvider),
+                          onEnabledToolsChanged: (tools) {
+                            ref.read(enabledToolNamesProvider.notifier).state = tools;
+                          },
+                        ),
                         textMessageBuilder: (context, message, index,
                             {required bool isSentByMe,
                             MessageGroupStatus? groupStatus}) {

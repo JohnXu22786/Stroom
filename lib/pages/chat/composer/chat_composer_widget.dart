@@ -5,21 +5,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:mime/mime.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/services/attachment_storage.dart';
 import 'package:stroom/pages/camera_page.dart';
 import 'package:stroom/widgets/camera_choice_dialog.dart';
 import 'package:stroom/widgets/file_preview.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
+import 'package:stroom/widgets/chat_attachment_panel.dart';
+import 'package:stroom/models/tool_call.dart';
 
 class ChatComposerWidget extends ConsumerStatefulWidget {
   final void Function(String text, List<Attachment> attachments) onSend;
   final VoidCallback onStop;
+  final List<ToolDefinition> mcpTools;
+  final Set<String> enabledTools;
+  final ValueChanged<Set<String>> onEnabledToolsChanged;
 
   const ChatComposerWidget({
     super.key,
     required this.onSend,
     required this.onStop,
+    this.mcpTools = const [],
+    this.enabledTools = const {},
+    required this.onEnabledToolsChanged,
   });
 
   @override
@@ -119,54 +128,38 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
   }
 
   void _showAttachmentPicker() {
-    showModalBottomSheet(
+    final reasoningEnabled = ref.read(reasoningEnabledProvider);
+    final reasoningEffort = ref.read(reasoningEffortProvider);
+    final enabledTools = widget.enabledTools;
+
+    showChatAttachmentPanel(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.camera_alt_outlined),
-                title: const Text('拍照'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _pickFromCamera();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library_outlined),
-                title: const Text('相册'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _showGalleryPicker();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.insert_drive_file_outlined),
-                title: const Text('文件'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _pickFromFilePicker();
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
+      tools: widget.mcpTools,
+      reasoningEnabled: reasoningEnabled,
+      reasoningEffort: reasoningEffort,
+      enabledTools: enabledTools,
+      onReasoningToggle: (value) {
+        ref.read(reasoningEnabledProvider.notifier).state = value;
+        SharedPreferences.getInstance()
+            .then((prefs) => prefs.setBool('reasoning_enabled', value));
+      },
+      onReasoningEffortChange: (value) {
+        ref.read(reasoningEffortProvider.notifier).state = value;
+        SharedPreferences.getInstance()
+            .then((prefs) => prefs.setString('reasoning_effort', value));
+      },
+      onToolToggle: (toolName, enabled) {
+        final current = Set<String>.from(widget.enabledTools);
+        if (enabled) {
+          current.add(toolName);
+        } else {
+          current.remove(toolName);
+        }
+        widget.onEnabledToolsChanged(current);
+      },
+      onPickFromCamera: _pickFromCamera,
+      onPickFromGallery: _showGalleryPicker,
+      onPickFromFilePicker: _pickFromFilePicker,
     );
   }
 

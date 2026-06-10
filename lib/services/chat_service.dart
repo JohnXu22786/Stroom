@@ -77,7 +77,7 @@ class ChatService {
   /// caller before calling this method). Attachments are converted to the
   /// OpenAI multimodal content‑array format (base64 inline images).
   Stream<String> sendStream(String userMessage,
-      {required List<ChatMessage> history, bool reasoning = false}) {
+      {required List<ChatMessage> history, bool reasoning = false, String reasoningEffort = 'medium'}) {
     cancel();
     _isCancelledByUser = false;
     _reasoningBuffer = '';
@@ -112,6 +112,7 @@ class ChatService {
           apiMessages,
           model: _modelConfig!.modelId,
           reasoning: reasoning,
+          reasoningEffort: reasoningEffort,
           maxTokens: (_modelConfig!.typeConfig['context'] as num?)
                   ?.toInt()
               ?? (_modelConfig!.typeConfig['maxTokens'] as num?)?.toInt()
@@ -168,6 +169,7 @@ class ChatService {
     String userMessage, {
     required List<ChatMessage> history,
     bool reasoning = false,
+    String reasoningEffort = 'medium',
     List<ToolDefinition> tools = const [],
   }) {
     _isCancelledByUser = false;
@@ -211,6 +213,7 @@ class ChatService {
             messages,
             model: _modelConfig!.modelId,
             reasoning: reasoning,
+            reasoningEffort: reasoningEffort,
             maxTokens:
                 (_modelConfig!.typeConfig['context'] as num?)?.toInt() ??
                     (_modelConfig!.typeConfig['maxTokens'] as num?)?.toInt() ??
@@ -400,9 +403,9 @@ class ChatService {
 
   /// Non-streaming version - collects stream into a single string.
   Future<String> send(String userMessage,
-      {required List<ChatMessage> history, bool reasoning = false}) async {
+      {required List<ChatMessage> history, bool reasoning = false, String reasoningEffort = 'medium'}) async {
     final chunks = <String>[];
-    await for (final chunk in sendStream(userMessage, history: history, reasoning: reasoning)) {
+    await for (final chunk in sendStream(userMessage, history: history, reasoning: reasoning, reasoningEffort: reasoningEffort)) {
       chunks.add(chunk);
     }
     return chunks.join('');

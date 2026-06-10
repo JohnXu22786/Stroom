@@ -230,11 +230,11 @@ class ChatAdapter {
     _chatService?.setAssistantCustomParams(params);
   }
 
-  Stream<String> sendStream(String text, {required List<ChatMessage> history, bool reasoning = false}) {
+  Stream<String> sendStream(String text, {required List<ChatMessage> history, bool reasoning = false, String reasoningEffort = 'medium'}) {
     if (_chatService == null) {
       return Stream.error('请先配置聊天供应商');
     }
-    return _chatService!.sendStream(text, history: history, reasoning: reasoning);
+    return _chatService!.sendStream(text, history: history, reasoning: reasoning, reasoningEffort: reasoningEffort);
   }
 
   /// Send a message with tool call support.
@@ -243,6 +243,7 @@ class ChatAdapter {
     String text, {
     required List<ChatMessage> history,
     bool reasoning = false,
+    String reasoningEffort = 'medium',
     List<ToolDefinition> tools = const [],
   }) {
     if (_chatService == null) {
@@ -252,6 +253,7 @@ class ChatAdapter {
       text,
       history: history,
       reasoning: reasoning,
+      reasoningEffort: reasoningEffort,
       tools: tools,
     );
   }
