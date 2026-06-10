@@ -1,23 +1,14 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import '../widgets/markdown_extensions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:image_picker/image_picker.dart';
-import '../widgets/camera_choice_dialog.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:mime/mime.dart';
-import '../services/attachment_storage.dart';
-import '../widgets/file_preview.dart';
 import '../widgets/message_attachment_preview.dart';
-import '../utils/format_file_size.dart';
+import '../services/attachment_storage.dart';
 
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
@@ -26,36 +17,24 @@ import '../services/chat_adapter.dart';
 import '../services/chat_service.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/provider_config.dart';
-import '../pages/camera_page.dart';
 import '../widgets/llm/jumping_dots.dart';
 import '../widgets/llm/tool_call_card.dart';
 import 'message_search_page.dart';
 import 'provider_config_page.dart';
-import '../utils/data_sanitizer.dart';
 
-sealed class _MessageSegment {}
+import 'chat/chat_types.dart';
+import 'chat/utils/format_chat_error.dart';
 
-class _TextSegment extends _MessageSegment {
-  final String text;
-  _TextSegment(this.text);
-}
-
-class _ToolCallSegment extends _MessageSegment {
-  final ToolCallData data;
-  _ToolCallSegment(this.data);
-}
-
-class _SearchMatch {
-  final String messageId;
-  final int matchStart;
-  final int matchEnd;
-  _SearchMatch(this.messageId, this.matchStart, this.matchEnd);
-}
-
-final _isStreamingProvider = StateProvider<bool>((ref) => false);
-
-/// Search mode: within current conversation or across all conversations.
-enum _SearchMode { current, global }
+export 'chat/utils/format_chat_error.dart' show formatChatErrorMessage;
+import 'chat/widgets/action_button.dart';
+import 'chat/widgets/reasoning_section.dart';
+import 'chat/dialogs/error_detail_dialog.dart';
+import 'chat/dialogs/confirm_dialog.dart';
+import 'chat/dialogs/edit_message_dialog.dart';
+import 'chat/dialogs/image_preview_dialog.dart';
+import 'chat/dialogs/file_info_dialog.dart';
+import 'chat/dialogs/json_inspection_dialog.dart';
+import 'chat/composer/chat_composer_widget.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
   /// Optional search query to auto-activate search mode with.
@@ -79,13 +58,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   bool _cancelledByUser = false;
   bool _reasoningEnabled = false;
   final Map<String, String> _reasoningContents = {};
-  final Map<String, List<_MessageSegment>> _chatSegments = {};
+  final Map<String, List<MessageSegment>> _chatSegments = {};
   String? _streamingMsgId;
 
   bool _isSearching = false;
-  _SearchMode _searchMode = _SearchMode.current;
+  SearchMode _searchMode = SearchMode.current;
   String _searchQuery = '';
-  final List<_SearchMatch> _searchMatches = [];
+  final List<SearchMatch> _searchMatches = [];
   int _currentMatchIndex = 0;
   final TextEditingController _searchTextController = TextEditingController();
   final Map<String, GlobalKey> _messageKeys = {};
@@ -284,7 +263,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   Future<void> _onMessageSend(String text, List<Attachment> attachments) async {
-    if (ref.read(_isStreamingProvider)) return;
+    if (ref.read(isStreamingProvider)) return;
 
     final convId = ref.read(activeConversationIdProvider);
     if (convId == null) {
@@ -306,8 +285,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   Future<void> _startStreaming(String text) async {
-    if (ref.read(_isStreamingProvider)) return;
-    ref.read(_isStreamingProvider.notifier).state = true;
+    if (ref.read(isStreamingProvider)) return;
+    ref.read(isStreamingProvider.notifier).state = true;
     if (mounted) setState(() {});
     _cancelledByUser = false;
 
@@ -393,12 +372,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             // Flush accumulated text before tool call as a segment
             if (textBeforeToolCall.isNotEmpty) {
               _chatSegments[aiMsgId]!.add(
-                _TextSegment(textBeforeToolCall),
+                TextSegment(textBeforeToolCall),
               );
               textBeforeToolCall = '';
             }
             _chatSegments[aiMsgId]!.add(
-              _ToolCallSegment(
+              ToolCallSegment(
                 e.toolCall.copyWith(status: ToolCallStatus.running),
               ),
             );
@@ -408,8 +387,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             final segs = _chatSegments[aiMsgId] ?? [];
             for (var i = segs.length - 1; i >= 0; i--) {
               final seg = segs[i];
-              if (seg is _ToolCallSegment && seg.data.id == e.toolCallId) {
-                segs[i] = _ToolCallSegment(
+              if (seg is ToolCallSegment && seg.data.id == e.toolCallId) {
+                segs[i] = ToolCallSegment(
                   seg.data.copyWith(
                     status: ToolCallStatus.completed,
                     result: e.result,
@@ -465,13 +444,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     } finally {
       // Flush remaining text after last tool call as a segment
       if (textBeforeToolCall.isNotEmpty) {
-        _chatSegments[aiMsgId]!.add(_TextSegment(textBeforeToolCall));
+        _chatSegments[aiMsgId]!.add(TextSegment(textBeforeToolCall));
       }
       // Mark any still-running tool calls as cancelled
       for (var i = 0; i < (_chatSegments[aiMsgId]?.length ?? 0); i++) {
         final seg = _chatSegments[aiMsgId]![i];
-        if (seg is _ToolCallSegment && seg.data.status == ToolCallStatus.running) {
-          _chatSegments[aiMsgId]![i] = _ToolCallSegment(
+        if (seg is ToolCallSegment && seg.data.status == ToolCallStatus.running) {
+          _chatSegments[aiMsgId]![i] = ToolCallSegment(
             seg.data.copyWith(
               status: ToolCallStatus.error,
               result: 'Cancelled',
@@ -488,7 +467,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       }
     }
 
-    // Wrap post-stream processing in try-catch so that _isStreamingProvider
+    // Wrap post-stream processing in try-catch so that isStreamingProvider
     // is ALWAYS reset to false, even if an unexpected error occurs here.
     // Without this, a stuck streaming flag would permanently block new messages.
     try {
@@ -513,7 +492,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       debugPrint('[ChatPage] post-stream error: $e\n$s');
     } finally {
       _streamingMsgId = null;
-      ref.read(_isStreamingProvider.notifier).state = false;
+      ref.read(isStreamingProvider.notifier).state = false;
       _cancelledByUser = false;
       if (mounted) setState(() {});
     }
@@ -524,63 +503,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void _confirmRetryOrEdit(String messageId) {
     final index = _history.indexWhere((m) => m.id == messageId);
     if (index == -1) return;
-    if (ref.read(_isStreamingProvider)) return;
+    if (ref.read(isStreamingProvider)) return;
 
     final msg = _history[index];
     final isUser = msg.role == 'user';
     final newerMessagesExist = index < _history.length - 1;
 
-    if (isUser) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('编辑消息'),
-          content: Text(
-            newerMessagesExist
-                ? '确定要编辑这条消息吗？此操作将删除此消息及之后的所有消息。'
-                : '确定要重新发送这条消息吗？',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _editUserMessage(messageId);
-              },
-              child: const Text('确定'),
-            ),
-          ],
-        ),
-      );
-    } else {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('重试'),
-          content: Text(
-            newerMessagesExist
-                ? '确定要重试这条回复吗？此操作将删除此消息及之后的所有消息。'
-                : '确定要重新生成回复吗？',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _retryAssistantMessage(messageId);
-              },
-              child: const Text('确定'),
-            ),
-          ],
-        ),
-      );
-    }
+    showRetryEditConfirmDialog(
+      context: context,
+      isUser: isUser,
+      newerMessagesExist: newerMessagesExist,
+      onEdit: () => _editUserMessage(messageId),
+      onRetry: () => _retryAssistantMessage(messageId),
+    );
   }
 
   Future<void> _editUserMessage(String messageId) async {
@@ -613,69 +548,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final index = _history.indexWhere((m) => m.id == messageId);
     if (index == -1) return;
     final msg = _history[index];
-    final editingController = TextEditingController(text: msg.content);
 
-    showDialog(
+    showEditMessageDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        insetPadding: const EdgeInsets.all(8),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  const Text(
-                    '编辑消息',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () {
-                      editingController.dispose();
-                      Navigator.pop(ctx);
-                    },
-                    tooltip: '关闭',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: TextField(
-                  controller: editingController,
-                  maxLines: null,
-                  expands: true,
-                  textAlignVertical: TextAlignVertical.top,
-                  autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: '编辑消息...',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.all(12),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton.icon(
-                  icon: const Icon(Icons.send_rounded, size: 18),
-                  label: const Text('发送'),
-                  onPressed: () {
-                    final newText = editingController.text.trim();
-                    editingController.dispose();
-                    Navigator.pop(ctx);
-                    if (newText.isEmpty) return;
-                    // Replace message content and re-send
-                    _editUserMessageWithText(messageId, newText);
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+      currentText: msg.content,
+    ).then((newText) {
+      if (newText != null && newText.isNotEmpty && mounted) {
+        _editUserMessageWithText(messageId, newText);
+      }
+    });
   }
 
   Future<void> _editUserMessageWithText(String messageId, String newText) async {
@@ -759,28 +640,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   void _confirmDeleteMessage(String messageId) {
-    showDialog(
+    showDeleteConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('删除消息'),
-        content: const Text('确定要删除这条消息吗？此操作无法撤销。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _deleteMessage(messageId);
-            },
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.error,
-            ),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
+      onDelete: () => _deleteMessage(messageId),
     );
   }
 
@@ -812,150 +674,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   /// Full-screen dark dialog with pinch-to-zoom image preview.
   void _showImagePreview(Attachment att, Uint8List data) {
-    showDialog(
+    showImagePreviewDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.black,
-        insetPadding: EdgeInsets.zero,
-        child: Stack(
-          children: [
-            Center(
-              child: InteractiveViewer(
-                minScale: 0.5,
-                maxScale: 4.0,
-                child: Image.memory(
-                  data,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => const Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.broken_image,
-                            size: 48, color: Colors.white54),
-                        SizedBox(height: 8),
-                        Text('无法加载图片', style: TextStyle(color: Colors.white54)),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 8,
-              right: 8,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                onPressed: () => Navigator.pop(ctx),
-              ),
-            ),
-            Positioned(
-              bottom: 16,
-              left: 16,
-              right: 16,
-              child: Text(
-                att.fileName,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white70, fontSize: 14),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
+      fileName: att.fileName,
+      data: data,
     );
   }
 
   /// Full-screen dark preview for non-image files (documents, audio, video).
   /// Shows file icon, name, type, size, and action buttons.
   void _showFileInfoPreview(Attachment att) {
-    final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    IconData fileIcon;
-    switch (att.fileType) {
-      case 'audio':
-        fileIcon = Icons.audiotrack_outlined;
-        break;
-      case 'video':
-        fileIcon = Icons.videocam_outlined;
-        break;
-      default:
-        fileIcon = Icons.insert_drive_file_outlined;
-    }
-
-    String typeLabel;
-    switch (att.fileType) {
-      case 'audio':
-        typeLabel = '音频文件';
-        break;
-      case 'video':
-        typeLabel = '视频文件';
-        break;
-      case 'document':
-        typeLabel = '文档';
-        break;
-      default:
-        typeLabel = '文件';
-    }
-
-    showDialog(
+    showFileInfoPreviewDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Large file icon
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Icon(fileIcon, size: 48, color: cs.onSurfaceVariant),
-              ),
-              const SizedBox(height: 20),
-              // File name
-              Text(
-                att.fileName,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: cs.onSurface,
-                ),
-              ),
-              const SizedBox(height: 12),
-              // File info rows
-              _InfoRow(label: '类型', value: '$typeLabel (${att.mimeType})'),
-              const SizedBox(height: 6),
-              _InfoRow(label: '大小', value: formatFileSize(att.fileSize)),
-              const SizedBox(height: 6),
-              _InfoRow(label: '路径', value: att.storagePath),
-              const SizedBox(height: 24),
-              // Action buttons
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  TextButton.icon(
-                    onPressed: () => Navigator.pop(ctx),
-                    icon: const Icon(Icons.close, size: 18),
-                    label: const Text('关闭'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
+      attachment: att,
     );
   }
 
@@ -966,7 +697,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     } catch (e) {
       debugPrint('[ChatPage] cancel error: $e');
     }
-    ref.read(_isStreamingProvider.notifier).state = false;
+    ref.read(isStreamingProvider.notifier).state = false;
   }
 
   /// 格式化错误信息，分类显示友好的提示并保留原始错误
@@ -988,7 +719,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         while (true) {
           final idx = lowerContent.indexOf(lowerQuery, start);
           if (idx == -1) break;
-          _searchMatches.add(_SearchMatch(msg.id, idx, idx + query.length));
+          _searchMatches.add(SearchMatch(msg.id, idx, idx + query.length));
           start = idx + query.length;
         }
       }
@@ -1026,7 +757,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void _closeSearch() {
     setState(() {
       _isSearching = false;
-      _searchMode = _SearchMode.current;
+      _searchMode = SearchMode.current;
       _searchQuery = '';
       _searchMatches.clear();
       _currentMatchIndex = 0;
@@ -1145,82 +876,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void _showJsonInspection(String msgId) {
     final chatMsg = _history.where((m) => m.id == msgId).firstOrNull;
     if (chatMsg == null) return;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final encoder = const JsonEncoder.withIndent('  ');
 
-    showDialog(
+    showJsonInspectionDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        insetPadding: const EdgeInsets.all(16),
-        child: DefaultTabController(
-          length: 2,
-          child: Container(
-            width: double.maxFinite,
-            constraints: const BoxConstraints(maxHeight: 500),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
-                  child: Row(
-                    children: [
-                      const Text(
-                        'JSON 审查',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(ctx),
-                      ),
-                    ],
-                  ),
-                ),
-                const TabBar(
-                  tabs: [
-                    Tab(text: 'Request'),
-                    Tab(text: 'Response'),
-                  ],
-                ),
-                Flexible(
-                  child: TabBarView(
-                    children: [
-                      SingleChildScrollView(
-                        padding: const EdgeInsets.all(12),
-                        child: SelectableText(
-                          chatMsg.rawRequest != null
-                              ? encoder.convert(
-                                  DataSanitizer.sanitizeForDisplay(chatMsg.rawRequest))
-                              : '无请求数据',
-                          style: TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 12,
-                            color: isDark ? Colors.grey[300] : Colors.grey[800],
-                          ),
-                        ),
-                      ),
-                      SingleChildScrollView(
-                        padding: const EdgeInsets.all(12),
-                        child: SelectableText(
-                          chatMsg.rawResponse != null
-                              ? encoder.convert(
-                                  DataSanitizer.sanitizeForDisplay(chatMsg.rawResponse))
-                              : '无响应数据',
-                          style: TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 12,
-                            color: isDark ? Colors.grey[300] : Colors.grey[800],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      rawRequest: chatMsg.rawRequest,
+      rawResponse: chatMsg.rawResponse,
     );
   }
 
@@ -1230,7 +890,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final markdownConfig = buildMarkdownConfig(isDark: isDark);
     final adapterConfigured = _adapter.isConfigured;
     final controller = _controller;
-    final isStreaming = ref.watch(_isStreamingProvider);
+    final isStreaming = ref.watch(isStreamingProvider);
 
     // Reactively load messages when the active conversation changes
     ref.listen(activeConversationIdProvider, (prev, next) {
@@ -1334,7 +994,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     tooltip: '搜索消息',
                     onPressed: () => setState(() {
                       _isSearching = !_isSearching;
-                      if (!_isSearching) _searchMode = _SearchMode.current;
+                      if (!_isSearching) _searchMode = SearchMode.current;
                     }),
                   ),
                   // ── Model selector ──
@@ -1397,7 +1057,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                               controller: _searchTextController,
                               autofocus: true,
                               onChanged: (query) {
-                                if (_searchMode == _SearchMode.current) {
+                                if (_searchMode == SearchMode.current) {
                                   _performSearch(query);
                                 } else if (query.isNotEmpty) {
                                   // Global mode: defer to full search page
@@ -1405,7 +1065,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                 }
                               },
                               decoration: InputDecoration(
-                                hintText: _searchMode == _SearchMode.current
+                                hintText: _searchMode == SearchMode.current
                                     ? '搜索当前对话...'
                                     : '搜索所有对话...',
                                 isDense: true,
@@ -1416,7 +1076,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                             ),
                           ),
                         ),
-                        if (_searchMode == _SearchMode.current && _searchMatches.isNotEmpty) ...[
+                        if (_searchMode == SearchMode.current && _searchMatches.isNotEmpty) ...[
                           const SizedBox(width: 8),
                           Text(
                             '${_currentMatchIndex + 1}/${_searchMatches.length}',
@@ -1426,7 +1086,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                             ),
                           ),
                         ],
-                        if (_searchMode == _SearchMode.current) ...[
+                        if (_searchMode == SearchMode.current) ...[
                           IconButton(
                             icon: const Icon(Icons.keyboard_arrow_up, size: 20),
                             tooltip: '上一个',
@@ -1460,11 +1120,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       children: [
                         _buildModeChip(
                           label: '当前对话',
-                          selected: _searchMode == _SearchMode.current,
+                          selected: _searchMode == SearchMode.current,
                           onTap: () {
-                            if (_searchMode != _SearchMode.current) {
+                            if (_searchMode != SearchMode.current) {
                               setState(() {
-                                _searchMode = _SearchMode.current;
+                                _searchMode = SearchMode.current;
                                 _searchTextController.clear();
                                 _performSearch('');
                               });
@@ -1474,10 +1134,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         const SizedBox(width: 8),
                         _buildModeChip(
                           label: '所有对话',
-                          selected: _searchMode == _SearchMode.global,
+                          selected: _searchMode == SearchMode.global,
                           onTap: () {
-                            if (_searchMode != _SearchMode.global) {
-                              setState(() => _searchMode = _SearchMode.global);
+                            if (_searchMode != SearchMode.global) {
+                              setState(() => _searchMode = SearchMode.global);
                               _openGlobalSearch();
                             }
                           },
@@ -1658,7 +1318,7 @@ composerBuilder: (context) => ChatComposerWidget(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     if (reasoningText != null)
-                                      _ReasoningSection(reasoningText: reasoningText),
+                                      ReasoningSection(reasoningText: reasoningText),
                                     // Show JumpingDots while waiting for first token
                                     if (isWaitingForFirstToken)
                                       const Padding(
@@ -1671,7 +1331,7 @@ composerBuilder: (context) => ChatComposerWidget(
                                     else if (segments != null && segments.isNotEmpty)
                                       // Segments: text and tool calls in order
                                       ...segments.map((seg) => switch (seg) {
-                                            _TextSegment s => Padding(
+                                            TextSegment s => Padding(
                                               padding: const EdgeInsets.only(bottom: 4),
                                               child: hasSearchMatch
                                                 ? _buildHighlightedText(s.text, message.id)
@@ -1684,7 +1344,7 @@ composerBuilder: (context) => ChatComposerWidget(
                                                     markdownGenerator: markdownGenerator,
                                                   ),
                                             ),
-                                            _ToolCallSegment s => ToolCallCard(data: s.data),
+                                            ToolCallSegment s => ToolCallCard(data: s.data),
                                           })
                                     else if (hasSearchMatch)
                                       _buildHighlightedText(message.text, message.id)
@@ -1748,7 +1408,7 @@ composerBuilder: (context) => ChatComposerWidget(
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    _ActionButton(
+                                    ActionButton(
                                       icon: Icons.copy,
                                       tooltip: '复制',
                                       onPressed: () {
@@ -1765,14 +1425,14 @@ composerBuilder: (context) => ChatComposerWidget(
                                     ),
                                     const SizedBox(width: 2),
                                     if (isAi)
-                                      _ActionButton(
+                                      ActionButton(
                                         icon: Icons.refresh,
                                         tooltip: '重试',
                                         onPressed: () =>
                                             _confirmRetryOrEdit(message.id),
                                       )
                                     else
-                                      _ActionButton(
+                                      ActionButton(
                                         icon: Icons.edit_outlined,
                                         tooltip: '编辑',
                                         onPressed: () =>
@@ -1780,13 +1440,13 @@ composerBuilder: (context) => ChatComposerWidget(
                                       ),
                                     const SizedBox(width: 2),
                                     if (_developerMode && isAi && _history.any((m) => m.id == message.id && (m.rawRequest != null || m.rawResponse != null)))
-                                      _ActionButton(
+                                      ActionButton(
                                         icon: Icons.code,
                                         tooltip: 'JSON 审查',
                                         onPressed: () => _showJsonInspection(message.id),
                                       ),
                                     const SizedBox(width: 2),
-                                    _ActionButton(
+                                    ActionButton(
                                       icon: Icons.delete_outline,
                                       tooltip: '删除',
                                       onPressed: () =>
@@ -1819,136 +1479,14 @@ composerBuilder: (context) => ChatComposerWidget(
     );
   }
 
-  Widget _buildJsonBlock(String label, dynamic data, bool isDark) {
-    final encoder = const JsonEncoder.withIndent('  ');
-    final sanitized = DataSanitizer.sanitizeForDisplay(data);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          '$label:',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: isDark ? Colors.grey[400] : Colors.grey[700],
-          ),
-        ),
-        const SizedBox(height: 2),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: isDark ? Colors.black : Colors.grey[300],
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: SelectableText(
-            encoder.convert(sanitized),
-            style: TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 11,
-              color: isDark ? Colors.grey[300] : Colors.grey[800],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   void _showErrorDetailDialog(BuildContext context, String messageId) {
     final chatMsg = _history.where((m) => m.id == messageId).firstOrNull;
     if (chatMsg == null) return;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final rawRequest = chatMsg.rawRequest;
-    final rawResponse = chatMsg.rawResponse;
 
-    showDialog(
+    showErrorDetailDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        child: Container(
-          constraints: BoxConstraints(
-            maxWidth: 600,
-            maxHeight: MediaQuery.of(ctx).size.height * 0.8,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Header
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(4),
-                    topRight: Radius.circular(4),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.error_outline, size: 18, color: Colors.red[700]),
-                    const SizedBox(width: 8),
-                    Text(
-                      '错误详情',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.red[700],
-                      ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 18),
-                      onPressed: () => Navigator.pop(ctx),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  ],
-                ),
-              ),
-              // Body with tabs or scrollable content
-              Flexible(
-                child: rawRequest != null || rawResponse != null
-                    ? ListView(
-                        padding: const EdgeInsets.all(16),
-                        shrinkWrap: true,
-                        children: [
-                          if (rawRequest != null) ...[
-                            _buildJsonBlock('请求 (Request)', rawRequest, isDark),
-                            const SizedBox(height: 12),
-                          ],
-                          if (rawResponse != null)
-                            _buildJsonBlock('响应 (Response)', rawResponse, isDark),
-                        ],
-                      )
-                    : const Padding(
-                        padding: EdgeInsets.all(24),
-                        child: Center(
-                          child: Text(
-                            '无详细数据',
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        ),
-                      ),
-              ),
-              // Close button
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('关闭'),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+      rawRequest: chatMsg.rawRequest,
+      rawResponse: chatMsg.rawResponse,
     );
   }
 
@@ -2007,641 +1545,6 @@ composerBuilder: (context) => ChatComposerWidget(
             );
           }),
         ),
-      ),
-    );
-  }
-}
-
-/// 格式化聊天错误信息，分类显示友好的提示并保留原始错误
-String formatChatErrorMessage(Object error) {
-  final errorStr = error.toString();
-
-  if (errorStr.contains('请先配置聊天供应商')) {
-    return '错误: 聊天 API 未配置，请先前往设置页面配置';
-  }
-
-  if (errorStr.contains('API key not configured')) {
-    return '错误: API Key 未配置，请检查设置';
-  }
-
-  if (errorStr.contains('无法连接到服务器') ||
-      errorStr.contains('连接错误')) {
-    return '错误: 无法连接到服务器，请检查网络连接和 API 地址\n$errorStr';
-  }
-
-  if (errorStr.contains('SocketException') ||
-      errorStr.contains('Connection refused') ||
-      errorStr.contains('连接失败')) {
-    return '错误: 网络连接失败，请检查网络连接\n$errorStr';
-  }
-
-  if (errorStr.contains('timeout') || errorStr.contains('超时')) {
-    return '错误: 连接超时，服务器无响应\n$errorStr';
-  }
-
-  if (errorStr.contains('HTTP ')) {
-    return '错误: $errorStr';
-  }
-
-  return '错误: $errorStr';
-}
-
-class _ActionButton extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onPressed;
-
-  const _ActionButton({
-    required this.icon,
-    required this.tooltip,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      icon: Icon(icon, size: 16),
-      tooltip: tooltip,
-      style: IconButton.styleFrom(
-        foregroundColor: Colors.grey[500],
-        padding: const EdgeInsets.all(4),
-        minimumSize: const Size(28, 28),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        visualDensity: VisualDensity.compact,
-      ),
-      onPressed: onPressed,
-    );
-  }
-}
-
-class _ReasoningSection extends StatefulWidget {
-  final String reasoningText;
-  const _ReasoningSection({required this.reasoningText});
-
-  @override
-  State<_ReasoningSection> createState() => _ReasoningSectionState();
-}
-
-class _ReasoningSectionState extends State<_ReasoningSection> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _expanded ? Icons.expand_less : Icons.chevron_right,
-                  size: 16,
-                  color: Colors.orange[700],
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '推理过程',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.orange[700],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (_expanded)
-            Container(
-              margin: const EdgeInsets.only(top: 4),
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: isDark ? Colors.grey[800] : Colors.orange[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: Colors.orange.withOpacity(0.3),
-                ),
-              ),
-              child: Text(
-                widget.reasoningText,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isDark ? Colors.grey[400] : Colors.grey[600],
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// A simple info row label: value pair used in the file info preview dialog.
-class _InfoRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _InfoRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 40,
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: cs.onSurfaceVariant,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: TextStyle(
-              fontSize: 13,
-              color: cs.onSurface,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class ChatComposerWidget extends ConsumerStatefulWidget {
-  final void Function(String text, List<Attachment> attachments) onSend;
-  final VoidCallback onStop;
-
-  const ChatComposerWidget({
-    required this.onSend,
-    required this.onStop,
-  });
-
-  @override
-  ConsumerState<ChatComposerWidget> createState() => ChatComposerWidgetState();
-}
-
-class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
-  final _textController = TextEditingController();
-  final _focusNode = FocusNode();
-  final List<Attachment> _pendingAttachments = [];
-  final Map<String, Uint8List> _pendingImageBytes = {};
-  final GlobalKey _composerKey = GlobalKey();
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _reportComposerHeight());
-  }
-
-  @override
-  void dispose() {
-    _textController.dispose();
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  void _reportComposerHeight() {
-    if (!mounted) return;
-    final renderBox = _composerKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox != null) {
-      final height = renderBox.size.height;
-      final bottomSafeArea = MediaQuery.of(context).padding.bottom;
-      try {
-        context.read<ComposerHeightNotifier>().setHeight(height - bottomSafeArea);
-      } catch (_) {}
-    }
-  }
-
-  void _handleSubmitted(String text) {
-    if (text.trim().isEmpty && _pendingAttachments.isEmpty) return;
-    widget.onSend(text.trim(), [..._pendingAttachments]);
-    _pendingAttachments.clear();
-    _pendingImageBytes.clear();
-    _textController.clear();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _reportComposerHeight());
-  }
-
-  void _showComposerFullscreenEditor() {
-    final editingController = TextEditingController(text: _textController.text);
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        insetPadding: const EdgeInsets.all(8),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  const Text(
-                    '编辑消息',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () {
-                      editingController.dispose();
-                      Navigator.pop(ctx);
-                    },
-                    tooltip: '关闭',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: TextField(
-                  controller: editingController,
-                  maxLines: null,
-                  expands: true,
-                  textAlignVertical: TextAlignVertical.top,
-                  autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: '输入消息...',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.all(12),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton.icon(
-                  icon: const Icon(Icons.send_rounded, size: 18),
-                  label: const Text('发送'),
-                  onPressed: () {
-                    final text = editingController.text;
-                    editingController.dispose();
-                    Navigator.pop(ctx);
-                    _handleSubmitted(text);
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showAttachmentPicker() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.camera_alt_outlined),
-                title: const Text('拍照'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _pickFromCamera();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library_outlined),
-                title: const Text('相册'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _showGalleryPicker();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.insert_drive_file_outlined),
-                title: const Text('文件'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _pickFromFilePicker();
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showGalleryPicker() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_album_outlined),
-                title: const Text('系统相册'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _pickFromGallery();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.folder_outlined),
-                title: const Text('应用相册'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _pickFromAppGallery();
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _pickFromCamera() async {
-    final choice = await showCameraChoiceDialog(context);
-    if (choice == null) return;
-    try {
-      if (choice == CameraChoice.app) {
-        final result = await Navigator.of(context, rootNavigator: true).push<String>(
-          MaterialPageRoute(builder: (_) => const CameraPage()),
-        );
-        if (result != null && result.isNotEmpty) {
-          final file = File(result);
-          final bytes = await file.readAsBytes();
-          final fileName = result.split(RegExp(r'[/\\]')).last;
-          await _addPendingAttachment(fileName, bytes);
-        }
-      } else {
-        final picker = ImagePicker();
-        final file = await picker.pickImage(source: ImageSource.camera);
-        if (file == null) return;
-        final bytes = await file.readAsBytes();
-        await _addPendingAttachment(file.name, bytes);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('拍照失败: $e'), duration: const Duration(seconds: 2)),
-        );
-      }
-    }
-  }
-
-  Future<void> _pickFromGallery() async {
-    try {
-      final picker = ImagePicker();
-      final files = await picker.pickMultiImage();
-      if (files.isEmpty) return;
-      for (final file in files) {
-        final bytes = await file.readAsBytes();
-        await _addPendingAttachment(file.name, bytes);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导入失败: $e'), duration: const Duration(seconds: 2)),
-        );
-      }
-    }
-  }
-
-  Future<void> _pickFromAppGallery() async {
-    try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'],
-        withData: true,
-      );
-      if (result == null || result.files.isEmpty) return;
-      final file = result.files.first;
-      final bytes = file.bytes;
-      if (bytes == null || bytes.isEmpty) return;
-      await _addPendingAttachment(file.name, bytes);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导入失败: $e'), duration: const Duration(seconds: 2)),
-        );
-      }
-    }
-  }
-
-  Future<void> _pickFromFilePicker() async {
-    try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.any,
-        withData: true,
-      );
-      if (result == null || result.files.isEmpty) return;
-      final file = result.files.first;
-      final bytes = file.bytes;
-      if (bytes == null || bytes.isEmpty) return;
-      await _addPendingAttachment(file.name, bytes);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导入失败: $e'), duration: const Duration(seconds: 2)),
-        );
-      }
-    }
-  }
-
-  Future<void> _addPendingAttachment(String fileName, Uint8List bytes) async {
-    final mimeType = lookupMimeType(fileName) ?? 'application/octet-stream';
-    final fileType = mimeType.startsWith('image/')
-        ? 'image'
-        : mimeType.startsWith('video/')
-            ? 'video'
-            : mimeType.startsWith('audio/')
-                ? 'audio'
-                : 'document';
-    final storagePath = await AttachmentStorage.saveFile(fileName, bytes);
-    final hash = AttachmentStorage.computeHash(bytes);
-    final att = Attachment(
-      fileName: fileName,
-      mimeType: mimeType,
-      fileType: fileType,
-      hash: hash,
-      storagePath: storagePath,
-      fileSize: bytes.length,
-    );
-    if (fileType == 'image') {
-      _pendingImageBytes[att.id] = bytes;
-    }
-    setState(() {
-      _pendingAttachments.add(att);
-    });
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('已导入 $fileName'),
-          behavior: SnackBarBehavior.floating,
-          margin: EdgeInsets.only(
-            top: 8,
-            left: 16,
-            right: 16,
-            bottom: MediaQuery.of(context).padding.top + 48,
-          ),
-          duration: const Duration(seconds: 2),
-          dismissDirection: DismissDirection.up,
-        ),
-      );
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) => _reportComposerHeight());
-  }
-
-  void _removePendingAttachment(int index) {
-    final att = _pendingAttachments[index];
-    _pendingImageBytes.remove(att.id);
-    setState(() {
-      _pendingAttachments.removeAt(index);
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _reportComposerHeight());
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isStreaming = ref.watch(_isStreamingProvider);
-    final hasText = _textController.text.trim().isNotEmpty;
-    final hasAttachments = _pendingAttachments.isNotEmpty;
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-
-    return Positioned(
-      left: 0,
-      right: 0,
-      bottom: 0,
-      child: Container(
-        key: _composerKey,
-        decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        border: Border(
-          top: BorderSide(color: cs.outlineVariant, width: 0.5),
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (hasAttachments)
-            Container(
-              height: 80,
-              padding: const EdgeInsets.only(left: 12, top: 8),
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: _pendingAttachments.length,
-                itemBuilder: (ctx, i) {
-                  final att = _pendingAttachments[i];
-                  return FilePreviewChip(
-                    attachment: att,
-                    imageBytes: _pendingImageBytes[att.id],
-                    onRemove: () => _removePendingAttachment(i),
-                  );
-                },
-              ),
-            ),
-          Padding(
-            padding: EdgeInsets.only(
-              left: 4,
-              right: 4,
-              top: hasAttachments ? 4 : 8,
-              bottom: 8 + MediaQuery.of(context).padding.bottom,
-            ),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: Icon(Icons.attach_file_outlined, color: cs.onSurfaceVariant),
-                  tooltip: '附件',
-                  onPressed: isStreaming ? null : _showAttachmentPicker,
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: TextField(
-                    controller: _textController,
-                    focusNode: _focusNode,
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: _handleSubmitted,
-                    onChanged: (_) => setState(() {}),
-                    minLines: 1,
-                    maxLines: 4,
-                    decoration: InputDecoration(
-                      hintText: '输入消息...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide.none,
-                      ),
-                      filled: true,
-                      fillColor: cs.surfaceContainerHigh.withOpacity(0.8),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      suffixIcon: IconButton(
-                        icon: Icon(Icons.fullscreen, size: 20, color: cs.onSurfaceVariant),
-                        tooltip: '全屏编辑',
-                        onPressed: _showComposerFullscreenEditor,
-                      ),
-                      suffixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 0),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                if (isStreaming)
-                  IconButton(
-                    icon: Icon(Icons.stop_circle_outlined, color: Colors.red[400]),
-                    tooltip: '停止生成',
-                    onPressed: widget.onStop,
-                  )
-                else
-                  IconButton(
-                    icon: Icon(Icons.send_rounded, color: cs.primary),
-                    tooltip: '发送',
-                    onPressed: (hasText || hasAttachments)
-                        ? () => _handleSubmitted(_textController.text)
-                        : null,
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
       ),
     );
   }
