@@ -12,8 +12,9 @@ import '../utils/http_utils.dart';
 /// Configuration for an OpenAI-compatible Automatic Speech Recognition (ASR)
 /// service using the Whisper API.
 ///
-/// The API follows the OpenAI audio/transcriptions format:
-///   POST {host}/audio/transcriptions
+/// The user provides the full endpoint URL (e.g. https://api.openai.com/v1/audio/transcriptions),
+/// which is used directly without appending any path. The request is sent as:
+///   POST {host}
 ///   Content-Type: multipart/form-data
 ///   Body: file, model, language (optional), response_format=json
 class AsrConfig {
@@ -39,8 +40,9 @@ class AsrConfig {
   }
 
   /// The full transcription endpoint URL.
-  String get transcribeUrl =>
-      '${normalizedHost}/audio/transcriptions';
+  /// The user provides the full endpoint URL including the path,
+  /// so normalizedHost is used directly without appending /audio/transcriptions.
+  String get transcribeUrl => normalizedHost;
 
   AsrConfig copyWith({
     String? model,

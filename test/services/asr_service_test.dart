@@ -74,13 +74,13 @@ void main() {
         expect(config.normalizedHost, equals('https://api.openai.com/v1'));
       });
 
-      test('transcribeUrl is correctly constructed', () {
+      test('transcribeUrl returns normalizedHost directly (no auto-append)', () {
         const config = AsrConfig(
           apiKey: 'key',
           host: 'https://api.openai.com/v1',
         );
         expect(config.transcribeUrl,
-            equals('https://api.openai.com/v1/audio/transcriptions'));
+            equals('https://api.openai.com/v1'));
       });
 
       test('transcribeUrl handles trailing slash in host', () {
@@ -89,7 +89,7 @@ void main() {
           host: 'https://api.openai.com/v1/',
         );
         expect(config.transcribeUrl,
-            equals('https://api.openai.com/v1/audio/transcriptions'));
+            equals('https://api.openai.com/v1'));
       });
     });
 
