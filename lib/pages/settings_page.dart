@@ -8,6 +8,7 @@ import '../providers/provider_config.dart';
 import '../providers/camera_settings_provider.dart';
 import '../providers/update_provider.dart';
 import '../utils/app_version.dart';
+import '../widgets/update_dialog.dart';
 import 'provider_config_page.dart';
 import 'backup_restore_page.dart';
 
@@ -421,7 +422,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     if (state.error != null) {
       _showSnackBar(state.error!);
     } else if (state.updateAvailable) {
-      _showUpdateDialog(state);
+      _showUpdateDialog();
     } else {
       _showSnackBar('已是最新版本');
     }
@@ -433,58 +434,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-  void _showUpdateDialog(UpdateState state) {
+  void _showUpdateDialog() {
     showDialog(
       context: context,
       barrierDismissible: true,
-      builder: (context) {
-        return AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.system_update, color: Colors.blue),
-              SizedBox(width: 8),
-              Expanded(child: Text('发现新版本')),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('最新版本: ${state.latestVersion}'),
-                if (state.releaseNotes != null &&
-                    state.releaseNotes!.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  const Text('更新内容:',
-                      style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Text(state.releaseNotes!),
-                ],
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                ref.read(updateProvider.notifier).skipVersion(state.latestVersion!);
-                Navigator.of(context).pop();
-              },
-              child: const Text('跳过此版本'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('稍后提醒'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _openUrl(state.downloadUrl ?? 'https://github.com/JohnXu22786/Stroom/releases');
-              },
-              child: const Text('立即更新'),
-            ),
-          ],
-        );
-      },
+      builder: (context) => const UpdateDialog(),
     );
   }
 
