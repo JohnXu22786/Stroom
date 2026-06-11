@@ -1519,8 +1519,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                         ),
                                       )
                                     else if (segments != null && segments.isNotEmpty)
-                                      // Segments: text and tool calls in order
-                                      ...segments.map((seg) => switch (seg) {
+                                      // Merge consecutive TextSegments to avoid visual breaks
+                                      // between arbitrary streaming chunk boundaries (e.g.
+                                      // throttle intervals). Each text block renders in a
+                                      // single MarkdownWidget for continuity.
+                                      ...mergeConsecutiveTextSegments(segments).map((seg) => switch (seg) {
                                             TextSegment s => Padding(
                                               padding: const EdgeInsets.only(bottom: 4),
                                               child: hasSearchMatch
