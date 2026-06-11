@@ -182,6 +182,7 @@ class ModelConfig {
   bool hasVolume; // 是否设置了音量范围
   bool hasSpeed; // 是否设置了语速范围
   List<CustomParam> customParams; // 自定义参数列表
+  List<CustomParam> reasoningParams; // 推理参数（仅推理开启时发送）
   int maxWordsPerRequest; // 单次最长音频字数
   bool supportStream; // 是否支持流式输出
   bool supportInstruction; // 是否支持 instruction 参数
@@ -199,13 +200,15 @@ class ModelConfig {
     this.hasVolume = false,
     this.hasSpeed = false,
     List<CustomParam>? customParams,
+    List<CustomParam>? reasoningParams,
     this.maxWordsPerRequest = 0,
     this.supportStream = false,
     this.supportInstruction = false,
     this.typeConfig = const {},
     this.selectedTrimPresetId,
   })  : voices = voices ?? [],
-        customParams = customParams ?? [];
+        customParams = customParams ?? [],
+        reasoningParams = reasoningParams ?? [];
 
   Map<String, dynamic> toMap() => {
         'name': name,
@@ -218,6 +221,7 @@ class ModelConfig {
         'hasVolume': hasVolume,
         'hasSpeed': hasSpeed,
         'customParams': customParams.map((p) => p.toMap()).toList(),
+        'reasoningParams': reasoningParams.map((p) => p.toMap()).toList(),
         'maxWordsPerRequest': maxWordsPerRequest,
         'supportStream': supportStream,
         'supportInstruction': supportInstruction,
@@ -244,6 +248,11 @@ class ModelConfig {
                     CustomParam.fromMap(Map<String, dynamic>.from(e as Map)))
                 .toList() ??
             [],
+        reasoningParams: (map['reasoningParams'] as List?)
+                ?.map((e) =>
+                    CustomParam.fromMap(Map<String, dynamic>.from(e as Map)))
+                .toList() ??
+            [],
         maxWordsPerRequest: (map['maxWordsPerRequest'] as num?)?.toInt() ?? 0,
         supportStream: map['supportStream'] as bool? ?? false,
         supportInstruction: map['supportInstruction'] == true,
@@ -262,6 +271,7 @@ class ModelConfig {
         hasVolume: hasVolume,
         hasSpeed: hasSpeed,
         customParams: customParams.map((p) => p.copy()).toList(),
+        reasoningParams: reasoningParams.map((p) => p.copy()).toList(),
         maxWordsPerRequest: maxWordsPerRequest,
         supportStream: supportStream,
         supportInstruction: supportInstruction,

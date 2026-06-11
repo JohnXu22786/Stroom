@@ -1,92 +1,254 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dio/dio.dart';
-import '../lib/providers/chat_api_provider.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/models/ai_stream_event.dart';
+import 'package:stroom/providers/chat_api_provider.dart';
+import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/services/chat_service.dart';
 
-void main() {
-  late OpenAICompatibleChatProvider provider;
+/// Mock provider that captures the request body for inspection.
+class _MockProvider extends BaseChatProvider {
+  Map<String, dynamic>? lastRequestBody;
 
-  setUp(() {
-    provider = OpenAICompatibleChatProvider(
-      baseUrl: 'http://invalid-host-test/chat/completions',
-      apiKey: 'test-key',
-      name: 'test',
-    );
-  });
+  @override
+  String get name => 'Mock';
 
-  Future<Map<String, dynamic>?> getRequestBody({
-    bool reasoning = false,
+  @override
+  List<String> get supportedModelIds => [];
+
+  @override
+  Map<String, dynamic> get defaultParams => {
+        'model': 'test',
+        'max_tokens': 4096,
+        'temperature': 0.7,
+      };
+
+  @override
+  Future<String> chat(
+    List<Map<String, dynamic>> messages, {
     String? model,
+    int? maxTokens,
+    double? temperature,
+    bool reasoning = false,
+    String reasoningEffort = 'medium',
+    CancelToken? cancelToken,
+    Map<String, dynamic>? extraParams,
   }) async {
-    try {
-      await provider.chat(
-        [{'role': 'user', 'content': 'hi'}],
-        reasoning: reasoning,
-        model: model,
-      );
-    } catch (_) {
-      // Expected to fail — request body is captured before the call
-    }
-    return provider.lastRequestBody;
+    throw UnimplementedError();
   }
 
-  group('reasoning params', () {
-    test('sends BOTH thinking and reasoning_effort for all models', () async {
-      // Now sends both simultaneously - API ignores unsupported params
-      final body = await getRequestBody(reasoning: true, model: 'deepseek-chat');
+  @override
+  Stream<AIStreamEvent> chatStream(
+    List<Map<String, dynamic>> messages, {
+    String? model,
+    int? maxTokens,
+    double? temperature,
+    bool reasoning = false,
+    String reasoningEffort = 'medium',
+    List<Map<String, dynamic>>? tools,
+    Map<String, dynamic>? extraParams,
+    CancelToken? cancelToken,
+  }) async* {
+    // Capture extraParams which contain the reasoning params
+    lastRequestBody = {
+      'model': model ?? defaultParams['model'],
+      'messages': messages,
+      'max_tokens': maxTokens ?? defaultParams['max_tokens'],
+      'temperature': temperature ?? defaultParams['temperature'],
+      'stream': true,
+      if (extraParams != null) ...extraParams,
+    };
+    yield AIStreamEvent('');
+  }
+}
+
+void main() {
+  group('reasoning params - user configurable, no hardcoding', () {
+    test('reasoning params come from model config, not provider', () async {
+      final provider = _MockProvider();
+      final modelConfig = ModelConfig(
+        name: 'Test',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          CustomParam(
+              paramName: 'thinking.type',
+              defaultValue: 'enabled',
+              type: 'string'),
+          CustomParam(
+              paramName: 'reasoning_effort',
+              defaultValue: 'high',
+              type: 'string'),
+        ],
+      );
+
+      final service = ChatService(provider: provider, modelConfig: modelConfig);
+
+      await for (final _ in service.sendStream('Hi',
+          history: [], reasoning: true)) {}
+
+      final body = provider.lastRequestBody;
       expect(body, isNotNull);
       expect(body!['thinking'], {'type': 'enabled'});
-      expect(body['reasoning_effort'], 'medium');
+      expect(body['reasoning_effort'], 'high');
     });
 
-    test('sends both params for DeepSeek R1 model', () async {
-      final body = await getRequestBody(reasoning: true, model: 'deepseek-r1');
+    test('dot-notation creates nested objects', () async {
+      final provider = _MockProvider();
+      final modelConfig = ModelConfig(
+        name: 'Test',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          CustomParam(
+              paramName: 'thinking.type',
+              defaultValue: 'enabled',
+              type: 'string'),
+          CustomParam(
+              paramName: 'thinking.budget_tokens',
+              defaultValue: '10000',
+              type: 'number'),
+        ],
+      );
+
+      final service = ChatService(provider: provider, modelConfig: modelConfig);
+
+      await for (final _ in service.sendStream('Hi',
+          history: [], reasoning: true)) {}
+
+      final body = provider.lastRequestBody;
       expect(body, isNotNull);
-      expect(body!['thinking'], {'type': 'enabled'});
-      expect(body['reasoning_effort'], 'medium');
+      expect(body!['thinking'], isA<Map>());
+      expect(body['thinking']['type'], 'enabled');
+      expect(body['thinking']['budget_tokens'], 10000.0);
     });
 
-    test('sends both params for OpenAI o1 model', () async {
-      final body = await getRequestBody(reasoning: true, model: 'o1-mini');
-      expect(body, isNotNull);
-      expect(body!['thinking'], {'type': 'enabled'});
-      expect(body['reasoning_effort'], 'medium');
-    });
+    test('no reasoning params sent when reasoning is disabled', () async {
+      final provider = _MockProvider();
+      final modelConfig = ModelConfig(
+        name: 'Test',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          CustomParam(
+              paramName: 'thinking.type',
+              defaultValue: 'enabled',
+              type: 'string'),
+        ],
+      );
 
-    test('sends both params for OpenAI o3 model', () async {
-      final body = await getRequestBody(reasoning: true, model: 'o3-mini');
-      expect(body, isNotNull);
-      expect(body!['thinking'], {'type': 'enabled'});
-      expect(body['reasoning_effort'], 'medium');
-    });
+      final service = ChatService(provider: provider, modelConfig: modelConfig);
 
-    test('sends both params for GPT model', () async {
-      final body = await getRequestBody(reasoning: true, model: 'gpt-4o');
-      expect(body, isNotNull);
-      expect(body!['thinking'], {'type': 'enabled'});
-      expect(body['reasoning_effort'], 'medium');
-    });
+      await for (final _ in service.sendStream('Hi',
+          history: [], reasoning: false)) {}
 
-    test('sends both params for OpenRouter models', () async {
-      // OpenRouter model naming: provider/model format
-      final body = await getRequestBody(
-          reasoning: true, model: 'openrouter/deepseek/deepseek-v4');
-      expect(body, isNotNull);
-      expect(body!['thinking'], {'type': 'enabled'});
-      expect(body['reasoning_effort'], 'medium');
-    });
-
-    test('No reasoning params when reasoning is false', () async {
-      final body = await getRequestBody(reasoning: false, model: 'deepseek-chat');
+      final body = provider.lastRequestBody;
       expect(body, isNotNull);
       expect(body!.containsKey('thinking'), false);
       expect(body.containsKey('reasoning_effort'), false);
     });
 
-    test('sends both params even with null model', () async {
-      final body = await getRequestBody(reasoning: true, model: null);
+    test('empty reasoning params sends nothing extra', () async {
+      final provider = _MockProvider();
+      final modelConfig = ModelConfig(
+        name: 'Test',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [],
+      );
+
+      final service = ChatService(provider: provider, modelConfig: modelConfig);
+
+      await for (final _ in service.sendStream('Hi',
+          history: [], reasoning: true)) {}
+
+      final body = provider.lastRequestBody;
       expect(body, isNotNull);
-      expect(body!['thinking'], {'type': 'enabled'});
-      expect(body['reasoning_effort'], 'medium');
+      expect(body!.containsKey('thinking'), false);
+      expect(body.containsKey('reasoning_effort'), false);
+    });
+
+    test('supports different param types (number, boolean)', () async {
+      final provider = _MockProvider();
+      final modelConfig = ModelConfig(
+        name: 'Test',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          CustomParam(
+              paramName: 'temperature',
+              defaultValue: '0.8',
+              type: 'number'),
+          CustomParam(
+              paramName: 'stream',
+              defaultValue: 'true',
+              type: 'boolean'),
+        ],
+      );
+
+      final service = ChatService(provider: provider, modelConfig: modelConfig);
+
+      await for (final _ in service.sendStream('Hi',
+          history: [], reasoning: true)) {}
+
+      final body = provider.lastRequestBody;
+      expect(body, isNotNull);
+      expect(body!['temperature'], 0.8);
+      expect(body['stream'], true);
+    });
+
+    test('supports Anthropic thinking format', () async {
+      final provider = _MockProvider();
+      final modelConfig = ModelConfig(
+        name: 'Claude',
+        modelId: 'claude-sonnet-4-6',
+        typeConfig: {'context': 128000},
+        reasoningParams: [
+          CustomParam(
+              paramName: 'thinking.type',
+              defaultValue: 'enabled',
+              type: 'string'),
+          CustomParam(
+              paramName: 'thinking.budget_tokens',
+              defaultValue: '10000',
+              type: 'number'),
+        ],
+      );
+
+      final service = ChatService(provider: provider, modelConfig: modelConfig);
+
+      await for (final _ in service.sendStream('Hi',
+          history: [], reasoning: true)) {}
+
+      final body = provider.lastRequestBody;
+      expect(body, isNotNull);
+      // Anthropic format: {"thinking": {"type": "enabled", "budget_tokens": 10000}}
+      expect(body!['thinking']['type'], 'enabled');
+      expect(body['thinking']['budget_tokens'], 10000.0);
+    });
+
+    test('supports Google Gemini deep nesting format', () async {
+      final provider = _MockProvider();
+      final modelConfig = ModelConfig(
+        name: 'Gemini',
+        modelId: 'gemini-3-pro',
+        typeConfig: {'context': 128000},
+        reasoningParams: [
+          CustomParam(
+              paramName: 'config.thinkingConfig.thinkingLevel',
+              defaultValue: 'HIGH',
+              type: 'string'),
+        ],
+      );
+
+      final service = ChatService(provider: provider, modelConfig: modelConfig);
+
+      await for (final _ in service.sendStream('Hi',
+          history: [], reasoning: true)) {}
+
+      final body = provider.lastRequestBody;
+      expect(body, isNotNull);
+      // Gemini format: {"config": {"thinkingConfig": {"thinkingLevel": "HIGH"}}}
+      expect(body!['config']['thinkingConfig']['thinkingLevel'], 'HIGH');
     });
   });
 }
