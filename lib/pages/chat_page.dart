@@ -441,33 +441,20 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     try {
       // Merge built-in tools with MCP tools
-      final mcpTools = _adapter.getAllToolDefinitions();
+      final allTools = _adapter.getAllToolDefinitions();
       final enabledTools = ref.read(enabledToolNamesProvider);
-      final allTools = <ToolDefinition>[
-        const ToolDefinition(
-          name: 'calculator',
-          description: 'Evaluate a math expression and return the result',
-          parameters: {
-            'type': 'object',
-            'properties': {
-              'expression': {
-                'type': 'string',
-                'description': 'A math expression to evaluate e.g. 2 + 2',
-              },
-            },
-            'required': ['expression'],
-          },
-        ),
-        // Only include enabled MCP tools
-        ...mcpTools.where((t) => enabledTools.contains(t.name)),
-      ];
+      final filteredTools = allTools.where((t) {
+        // Built-in tools are always enabled; MCP tools follow the toggle
+        final isMcp = _adapter.mcpToolDefinitions.any((m) => m.name == t.name);
+        return !isMcp || enabledTools.contains(t.name);
+      }).toList();
 
       final stream = _adapter.sendStreamWithTools(
         text,
         history: _history,
         reasoning: ref.read(reasoningEnabledProvider),
         reasoningEffort: ref.read(reasoningEffortProvider),
-        tools: allTools,
+        tools: filteredTools,
       );
 
       await for (final event in stream) {
@@ -627,9 +614,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           _chatSegments[aiMsgId]!.every((s) => s is TextSegment)) {
         _chatSegments[aiMsgId]!.clear();
       }
-      if (ref.read(reasoningEnabledProvider)) {
-        reasoningBuffer = _adapter.reasoningContent;
-      }
+      // Always capture reasoning content from the response.
+      // The SSE parser now yields reasoning_content unconditionally;
+      // the reasoning toggle only controls whether the params are SENT.
+      reasoningBuffer = _adapter.reasoningContent;
     }
 
     // Wrap post-stream processing in try-catch so that isStreamingProvider
@@ -1173,8 +1161,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       if (!_isSearching) _searchMode = SearchMode.current;
                     }),
                   ),
-                  // ── Model selector ──
-                  if (adapterConfigured) _buildModelSelector(),
                   // ── Reasoning toggle ──
                   if (adapterConfigured)
                     Consumer(
@@ -1401,6 +1387,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           onEnabledToolsChanged: (tools) {
                             ref.read(enabledToolNamesProvider.notifier).state = tools;
                           },
+                          modelNames: _getModelNames(),
+                          selectedModelIndex: _selectedModelIndex,
+                          onModelSelected: _onModelSelected,
                         ),
                         textMessageBuilder: (context, message, index,
                             {required bool isSentByMe,
@@ -1683,62 +1672,26 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
   }
 
-  // ── Model selector widget ──
-  Widget _buildModelSelector() {
+  /// Returns the list of model display names for the attachment panel.
+  List<String> _getModelNames() {
+    final entriesState = ref.read(providerEntriesProvider);
+    return _adapter
+        .availableModels(entriesState)
+        .map((m) => m.displayName)
+        .toList();
+  }
+
+  /// Called when model is selected from the attachment panel.
+  void _onModelSelected(int idx) {
     final entriesState = ref.read(providerEntriesProvider);
     final models = _adapter.availableModels(entriesState);
-    if (models.length <= 1) return const SizedBox.shrink();
-
-    final clampedIndex = _selectedModelIndex.clamp(0, models.length - 1);
-    // Re-sync if clampedIndex differs from selected (e.g. models changed)
-    if (clampedIndex != _selectedModelIndex) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          final model = models.length > clampedIndex ? models[clampedIndex] : null;
-          if (model != null) {
-            _adapter.selectModel(
-                entriesState, model.configIndex, model.modelIndex);
-            setState(() => _selectedModelIndex = clampedIndex);
-          }
-        }
-      });
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(right: 4),
-      child: SizedBox(
-        height: 32,
-        child: DropdownButton<int>(
-          value: clampedIndex,
-          isDense: true,
-          underline: const SizedBox.shrink(),
-          style: TextStyle(
-            fontSize: 13,
-            color: Theme.of(context).colorScheme.onSurface,
-          ),
-          onChanged: (idx) {
-            if (idx == null || idx >= models.length) return;
-            final model = models[idx];
-            _adapter.selectModel(
-                entriesState, model.configIndex, model.modelIndex);
-            setState(() => _selectedModelIndex = idx);
-            // Persist selection
-            SharedPreferences.getInstance().then((prefs) {
-              prefs.setInt('selected_model_index', idx);
-            });
-          },
-          items: List.generate(models.length, (i) {
-            final model = models[i];
-            return DropdownMenuItem<int>(
-              value: i,
-              child: Text(
-                model.displayName,
-                overflow: TextOverflow.ellipsis,
-              ),
-            );
-          }),
-        ),
-      ),
-    );
+    if (idx < 0 || idx >= models.length) return;
+    final model = models[idx];
+    _adapter.selectModel(
+        entriesState, model.configIndex, model.modelIndex);
+    setState(() => _selectedModelIndex = idx);
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setInt('selected_model_index', idx);
+    });
   }
 }

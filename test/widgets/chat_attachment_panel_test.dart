@@ -17,6 +17,9 @@ Future<void> openPanel(WidgetTester tester) async {
 /// Builds the test app and opens the panel.
 Future<void> showPanelForTest(
   WidgetTester tester, {
+  List<String> models = const [],
+  int selectedModelIndex = 0,
+  void Function(int)? onModelSelected,
   List<ToolDefinition> tools = const [],
   bool reasoningEnabled = false,
   String reasoningEffort = 'medium',
@@ -34,6 +37,9 @@ Future<void> showPanelForTest(
               onPressed: () {
                 showChatAttachmentPanel(
                   context: context,
+                  models: models,
+                  selectedModelIndex: selectedModelIndex,
+                  onModelSelected: onModelSelected ?? (_) {},
                   tools: tools,
                   reasoningEnabled: reasoningEnabled,
                   reasoningEffort: reasoningEffort,
@@ -83,6 +89,24 @@ void main() {
       // File action buttons should be visible at the top of the scrollable panel
       expect(find.text('拍照'), findsOneWidget);
       expect(find.text('相册'), findsOneWidget);
+    });
+
+    testWidgets('Model section shows when models provided', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await showPanelForTest(tester, models: ['GPT-4o | OpenRouter', 'Claude | OpenRouter']);
+
+      // Model section header should be visible
+      expect(find.text('模型'), findsOneWidget);
+      // Model names should appear in the dropdown
+      expect(find.text('GPT-4o | OpenRouter'), findsOneWidget);
+    });
+
+    testWidgets('Model section hidden when no models', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await showPanelForTest(tester, models: []);
+
+      // Model section header should NOT be visible when empty
+      expect(find.text('模型'), findsNothing);
     });
 
     testWidgets('Reasoning section header visible after scroll',
