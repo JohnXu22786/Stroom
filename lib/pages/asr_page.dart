@@ -11,6 +11,7 @@ import '../services/asr_service.dart';
 import '../utils/data_sanitizer.dart';
 import '../utils/file_manifest.dart';
 import '../utils/text_manifest.dart';
+import '../widgets/folder_picker_dialog.dart';
 
 // ============================================================================
 // Provider: Get the first configured ASR config from provider entries
@@ -36,6 +37,20 @@ AsrConfig? _resolveAsrConfig(WidgetRef ref) {
     }
   }
   return null;
+}
+
+/// Collect all available model names from the first ASR provider config.
+List<ModelConfig> _getAsrModels(WidgetRef ref) {
+  final state = ref.read(providerEntriesProvider);
+  for (final entry in state.entries) {
+    if (entry.type == 'asr' && entry.configs.isNotEmpty) {
+      final config = entry.configs.first;
+      if (config.host.isNotEmpty && config.key.isNotEmpty) {
+        return config.models;
+      }
+    }
+  }
+  return [];
 }
 
 // ============================================================================
@@ -73,6 +88,10 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   bool _isProcessing = false;
   String? _errorMessage;
   String? _transcriptionResult;
+  int _selectedModelIndex = 0;
+
+  /// Save-to folder selection
+  String _saveFolder = '';
 
   /// Captured raw request data from the last failed ASR call.
   Map<String, dynamic>? _lastRawRequest;
@@ -99,6 +118,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       ),
       body: Column(
         children: [
+          // Model selector (nicely styled)
+          _buildModelSelector(cs),
+
           // Audio source buttons
           _buildAudioSourceBar(cs),
 
@@ -122,9 +144,113 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     );
   }
 
+  // ==================================================================
+  // Model Selector — nicely styled, pill-shaped dropdown
+  // ==================================================================
+
+  Widget _buildModelSelector(ColorScheme cs) {
+    final models = _getAsrModels(ref);
+    if (models.isEmpty) return const SizedBox.shrink();
+
+    final clampedIndex = _selectedModelIndex.clamp(0, models.length - 1);
+    if (clampedIndex != _selectedModelIndex) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _selectedModelIndex = clampedIndex);
+      });
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              cs.primaryContainer.withValues(alpha: 0.6),
+              cs.secondaryContainer.withValues(alpha: 0.3),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: cs.outlineVariant.withValues(alpha: 0.4),
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        child: Row(
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: cs.primary.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.tune, size: 16, color: cs.primary),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              '识别模型',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Container(
+                height: 34,
+                decoration: BoxDecoration(
+                  color: cs.surface.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: cs.outlineVariant.withValues(alpha: 0.3),
+                  ),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    value: clampedIndex,
+                    isDense: true,
+                    isExpanded: true,
+                    icon: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 20,
+                      color: cs.primary,
+                    ),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface,
+                    ),
+                    onChanged: (idx) {
+                      if (idx == null || idx >= models.length) return;
+                      setState(() => _selectedModelIndex = idx);
+                    },
+                    items: List.generate(models.length, (i) {
+                      final model = models[i];
+                      return DropdownMenuItem<int>(
+                        value: i,
+                        child: Text(
+                          model.name.isNotEmpty ? model.name : model.modelId,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildAudioSourceBar(ColorScheme cs) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: SizedBox(
         width: double.infinity,
         height: 48,
@@ -342,32 +468,105 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             top: BorderSide(color: cs.outlineVariant, width: 0.5),
           ),
         ),
-        child: SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: FilledButton.icon(
-            onPressed: _selectedAudio == null || _isProcessing
-                ? null
-                : _startTranscription,
-            icon: _isProcessing
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.transcribe, size: 20),
-            label: Text(
-              _isProcessing ? '识别中...' : '开始识别',
-              style: const TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w600),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Save-to folder selector (above start button)
+            _buildSaveToSelector(cs),
+            const SizedBox(height: 4),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton.icon(
+                onPressed: _selectedAudio == null || _isProcessing
+                    ? null
+                    : _startTranscription,
+                icon: _isProcessing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.transcribe, size: 20),
+                label: Text(
+                  _isProcessing ? '识别中...' : '开始识别',
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+              ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ==================================================================
+  // Save-to Folder Selector
+  // ==================================================================
+
+  Widget _buildSaveToSelector(ColorScheme cs) {
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.4),
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: _pickSaveFolder,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              Icon(Icons.folder_outlined, size: 16, color: cs.primary),
+              const SizedBox(width: 8),
+              Text(
+                '保存至',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _saveFolder.isEmpty ? '根目录' : _saveFolder,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.primary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const Spacer(),
+              Icon(
+                Icons.chevron_right,
+                size: 16,
+                color: cs.onSurfaceVariant,
+              ),
+            ],
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _pickSaveFolder() async {
+    final folders = await TextManifest.getAllFolders();
+    if (!mounted) return;
+    final result = await FolderPickerDialog.show(
+      context,
+      currentFolder: _saveFolder,
+      availableFolders: folders,
+      title: '选择保存文件夹',
+    );
+    if (result != null && mounted) {
+      setState(() => _saveFolder = result);
+    }
   }
 
   // ==================================================================
@@ -624,6 +823,16 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       return;
     }
 
+    // Use the selected model from dropdown
+    final models = _getAsrModels(ref);
+    AsrConfig effectiveConfig;
+    if (_selectedModelIndex < models.length) {
+      final selectedModel = models[_selectedModelIndex];
+      effectiveConfig = asrConfig.copyWith(model: selectedModel.modelId);
+    } else {
+      effectiveConfig = asrConfig;
+    }
+
     setState(() {
       _isProcessing = true;
       _errorMessage = null;
@@ -632,7 +841,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
     late final AsrService service;
     try {
-      service = AsrService(config: asrConfig);
+      service = AsrService(config: effectiveConfig);
       final result = await service.transcribe(
         audioBytes: _selectedAudio!.bytes,
         audioFormat: _selectedAudio!.format,
@@ -718,12 +927,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       format: 'txt',
       createdAt: now,
       size: bytes.length,
-      folder: '',
+      folder: _saveFolder,
       textLength: text.length,
     ));
   }
 
-  // ==================================================================
   // ==================================================================
   // Error Detail Dialog
   // ==================================================================
@@ -748,7 +956,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
+                  color: Colors.red.withValues(alpha: 0.1),
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(4),
                     topRight: Radius.circular(4),
