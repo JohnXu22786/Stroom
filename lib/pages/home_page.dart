@@ -14,6 +14,7 @@ import 'files_page.dart';
 import 'settings_page.dart';
 import 'ocr_page.dart';
 import 'asr_page.dart';
+import 'audio_separation_page.dart';
 
 /// 页面枚举，定义应用中的主要页面（不含加号按钮）
 enum AppPage {
@@ -522,6 +523,19 @@ class _HomePageState extends ConsumerState<HomePage> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => const CatCatchPage()),
+                    );
+                  },
+                ),
+                _buildModuleCard(
+                  icon: Icons.music_note,
+                  label: '音频分离',
+                  subtitle: '从视频中提取音频',
+                  color: Colors.indigo,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const AudioSeparationPage()),
                     );
                   },
                 ),
