@@ -299,17 +299,63 @@ class OcrService {
   }
 
   /// Extract text from the standard OpenAI chat completion response.
-  String _extractText(Map<String, dynamic> responseData) {
+  ///
+  /// Handles:
+  /// - `content` as a plain `String` (standard format)
+  /// - `content` as a `List` of content blocks (e.g. `[{"type": "text", "text": "..."}]`)
+  ///   — concatenates all `text` fields from blocks of type "text"
+  /// - Detects garbled JSON-bracket content (e.g. `}}]}}]...`) and throws.
+  String _extractText(dynamic responseData) {
     try {
-      final choices = responseData['choices'] as List?;
+      if (responseData is! Map) {
+        throw Exception('API 返回格式异常（非 JSON 对象）');
+      }
+      final data = Map<String, dynamic>.from(responseData);
+
+      final choices = data['choices'] as List?;
       if (choices == null || choices.isEmpty) {
         throw Exception('API 返回了空的 choices 列表');
       }
-      final content = choices[0]['message']?['content'] as String?;
-      if (content == null || content.trim().isEmpty) {
+      final message = choices[0]['message'] as Map?;
+      if (message == null) {
+        throw Exception('API 返回中缺少 message 字段');
+      }
+      final content = message['content'];
+      if (content == null) {
         throw Exception('OCR 未识别到文字内容');
       }
-      return content;
+
+      String text;
+      if (content is String) {
+        text = content;
+      } else if (content is List) {
+        // Some providers return content as a list of text blocks
+        final parts = <String>[];
+        for (final block in content) {
+          if (block is Map && block['type'] == 'text' && block['text'] is String) {
+            parts.add(block['text'] as String);
+          }
+        }
+        if (parts.isEmpty) {
+          throw Exception('OCR 未识别到文字内容（content 列表为空）');
+        }
+        text = parts.join('\n');
+      } else {
+        throw Exception('OCR 返回了未知格式的内容');
+      }
+
+      if (text.trim().isEmpty) {
+        throw Exception('OCR 未识别到文字内容');
+      }
+
+      // Detect garbled content that looks like JSON closing brackets (e.g. }}]}}]...)
+      // This can happen when the API returns streamed chunks that are misinterpreted.
+      final bracketPattern = RegExp(r'^[}\]]+$');
+      if (bracketPattern.hasMatch(text.trim())) {
+        throw Exception('OCR 返回了异常内容（仅包含 JSON 括号），请检查 API 返回格式或更换模型');
+      }
+
+      return text;
     } on Exception {
       rethrow;
     } catch (e) {
