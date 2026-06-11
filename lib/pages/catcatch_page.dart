@@ -420,7 +420,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('获取网页资源'),
+        title: const Text('下载网页资源'),
         backgroundColor: colorScheme.surface,
         foregroundColor: colorScheme.onSurface,
         elevation: 0,
