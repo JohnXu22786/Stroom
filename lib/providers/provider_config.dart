@@ -398,6 +398,8 @@ class ProviderTypeDefinition {
   final List<ModelConfig> defaultModels;
   final ModelConfigStyle modelConfigStyle;
 
+  bool get useLlmModelConfig => modelConfigStyle == ModelConfigStyle.llm;
+
   const ProviderTypeDefinition({
     required this.type,
     this.defaultHost,
