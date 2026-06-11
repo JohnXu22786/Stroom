@@ -8,6 +8,13 @@ settingsEvaluated { settings ->
     }
 }
 
+// Gradle 8.14+ removed jcenter(). Some Flutter plugins (e.g. video_thumbnail 0.5.6)
+// still call jcenter() in their build.gradle. This provides a no-op fallback.
+try {
+    def clazz = org.gradle.api.internal.artifacts.dsl.DefaultRepositoryHandler
+    clazz.metaClass.jcenter = { Object... args -> delegate }
+} catch (ignored) {}
+
 gradle.projectsLoaded { g ->
     g.rootProject.allprojects { p ->
         p.buildscript.repositories {

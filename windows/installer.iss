@@ -5,7 +5,7 @@
 #define MyAppVersion "0.2.14"
 #define MyAppPublisher "JohnTsui"
 #define MyAppURL "https://github.com/JohnXu22786/Stroom"
-#define SourceDir "build\windows\runner\Release"
+#define SourceDir "..\build\windows\runner\Release"
 #define OutputDir "artifacts"
 
 [Setup]
@@ -18,7 +18,7 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir={#OutputDir}
 OutputBaseFilename=stroom-windows-x64-installer-{#MyAppVersion}
-SetupIconFile=windows\runner\resources\app_icon.ico
+SetupIconFile=runner\resources\app_icon.ico
 UninstallDisplayIcon={app}\stroom.exe
 Compression=lzma2
 SolidCompression=yes
