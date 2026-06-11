@@ -83,11 +83,6 @@ macos/Runner.xcworkspace/
 macos/Runner.xcworkspace/contents.xcworkspacedata
 macos/Runner/Assets.car
 macos/Runner/AppIcon.appiconset/
-macos/Runner/Base.lproj/MainMenu.xib
-macos/Runner/Info.plist
-macos/Runner/Runner-Bridging-Header.h
-macos/Runner/Runner.entitlements
-macos/Runner/main.m
 macos/Runner/Runner.app
 
 # Windows
