@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -7,9 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
-import '../catcatch/engine/ffmpeg_converter.dart';
+import '../utils/audio_separation.dart';
 import '../providers/tts_state_provider.dart';
 import '../providers/background_task_provider.dart';
 import '../utils/file_manifest.dart';
@@ -29,6 +27,9 @@ class AudioSeparationPage extends ConsumerStatefulWidget {
 }
 
 class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
+  // 音频分离引擎
+  final AudioSeparationEngine _engine = AudioSeparationEngine();
+
   // 选中的视频文件信息
   Uint8List? _videoBytes;
   String? _videoName;
@@ -37,8 +38,8 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   bool _isProcessing = false;
   bool _hasError = false;
   String _errorMessage = '';
-  bool _ffmpegChecked = false;
-  bool _ffmpegAvailable = false;
+  bool _engineChecked = false;
+  bool _engineAvailable = false;
   bool _success = false;
 
   /// Save-to folder selection
@@ -47,31 +48,23 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   @override
   void initState() {
     super.initState();
-    _checkFfmpeg();
+    _checkEngine();
   }
 
-  Future<void> _checkFfmpeg() async {
-    if (kIsWeb) {
-      setState(() {
-        _ffmpegChecked = true;
-        _ffmpegAvailable = false;
-      });
-      return;
-    }
-
+  Future<void> _checkEngine() async {
     try {
-      final available = await FFmpegConverter.isFFmpegAvailable();
+      final available = await _engine.isAvailable();
       if (mounted) {
         setState(() {
-          _ffmpegChecked = true;
-          _ffmpegAvailable = available;
+          _engineChecked = true;
+          _engineAvailable = available;
         });
       }
     } catch (_) {
       if (mounted) {
         setState(() {
-          _ffmpegChecked = true;
-          _ffmpegAvailable = false;
+          _engineChecked = true;
+          _engineAvailable = false;
         });
       }
     }
@@ -100,8 +93,8 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
           _buildVideoSourceBar(cs),
 
           // FFmpeg status
-          if (_ffmpegChecked && !_ffmpegAvailable && !kIsWeb)
-            _buildFfmpegWarning(cs),
+          if (_engineChecked && !_engineAvailable && !kIsWeb)
+            _buildEngineWarning(cs),
 
           // Content area
           Expanded(child: _buildContent(cs)),
@@ -219,7 +212,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     }
   }
 
-  Widget _buildFfmpegWarning(ColorScheme cs) {
+  Widget _buildEngineWarning(ColorScheme cs) {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -229,14 +222,30 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.warning_amber_rounded, size: 18, color: Colors.orange),
-          const SizedBox(width: 8),
-          Expanded(
+          Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded,
+                  size: 18, color: Colors.orange),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '未检测到 FFmpeg，部分功能不可用',
+                  style:
+                      TextStyle(fontSize: 12, color: Colors.orange[800]),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(left: 26),
             child: Text(
-              '未检测到 FFmpeg，请安装后使用此功能',
-              style: TextStyle(fontSize: 12, color: Colors.orange[800]),
+              '请安装 FFmpeg 后重启应用，或使用桌面版应用。',
+              style:
+                  TextStyle(fontSize: 11, color: Colors.orange[600]),
             ),
           ),
         ],
@@ -568,15 +577,15 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     if (kIsWeb) {
       setState(() {
         _hasError = true;
-        _errorMessage = 'Web 端暂不支持音频提取功能，请使用桌面版应用';
+        _errorMessage = 'Web 端暂不支持音频提取功能，请使用桌面版或移动版应用';
       });
       return;
     }
 
-    if (!_ffmpegAvailable) {
+    if (!_engineAvailable) {
       setState(() {
         _hasError = true;
-        _errorMessage = '未检测到 FFmpeg，请先安装 FFmpeg 后重试';
+        _errorMessage = '音频分离引擎不可用，请确保设备支持此功能';
       });
       return;
     }
@@ -593,41 +602,12 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       Navigator.pop(context);
     }
 
-    // Continue processing in the background
+    // Continue processing in the background using the engine
     try {
-      final tempDir = await getTemporaryDirectory();
-
-      // 写入临时视频文件
-      final videoExt = _videoFormat ?? 'mp4';
-      final tempVideoPath =
-          p.join(tempDir.path, 'input_video.$videoExt');
-      await File(tempVideoPath).writeAsBytes(_videoBytes!);
-
-      // 输出音频文件路径
-      final outputName =
-          '${p.basenameWithoutExtension(_videoName ?? 'audio')}.mp3';
-      final tempAudioPath = p.join(tempDir.path, outputName);
-
-      // 使用 FFmpeg 提取音频
-      await FFmpegConverter.extractAudio(
-        inputPath: tempVideoPath,
-        outputPath: tempAudioPath,
+      final audioBytes = await _engine.extractAudio(
+        videoBytes: _videoBytes!,
+        videoFormat: _videoFormat ?? 'mp4',
       );
-
-      // 读取提取的音频数据
-      final audioFile = File(tempAudioPath);
-      if (!await audioFile.exists()) {
-        throw Exception('音频提取失败：输出文件不存在');
-      }
-      final audioBytes = await audioFile.readAsBytes();
-
-      // 清理临时文件
-      try {
-        await File(tempVideoPath).delete();
-      } catch (_) {}
-      try {
-        await audioFile.delete();
-      } catch (_) {}
 
       // 保存到音频库
       await _saveAudioToLibrary(audioBytes);
