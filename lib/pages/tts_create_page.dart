@@ -187,8 +187,6 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
   @override
   void dispose() {
-    // 退出页面时清除合成错误
-    ref.read(ttsStateProvider.notifier).clearError();
     _textController.removeListener(_onTextChanged);
     _textController.dispose();
     _titleController.dispose();

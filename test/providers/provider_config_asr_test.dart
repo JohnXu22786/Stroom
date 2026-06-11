@@ -276,12 +276,13 @@ void main() {
       await container.read(providerEntriesProvider.notifier).load();
 
       final state = container.read(providerEntriesProvider);
-      // Verify existing entries are still present
-      expect(state.entries.length, equals(4));
+      // Verify existing entries are still present (includes MCP auto-migration)
+      expect(state.entries.length, equals(5));
       expect(state.entries[0].type, equals('tts'));
       expect(state.entries[1].type, equals('llm'));
       expect(state.entries[2].type, equals('ocr'));
       expect(state.entries[3].type, equals('asr'));
+      expect(state.entries[4].type, equals('mcp'));
     });
 
     test('saved ASR config is preserved through load', () async {
