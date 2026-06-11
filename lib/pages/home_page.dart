@@ -488,8 +488,8 @@ class _HomePageState extends ConsumerState<HomePage> {
           // Module grid
           Expanded(
             child: GridView(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 180,
                 mainAxisSpacing: 12,
                 crossAxisSpacing: 12,
                 childAspectRatio: 1.2,
@@ -521,8 +521,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                 ),
                 _buildModuleCard(
                   icon: Icons.language,
-                  label: '获取网页资源',
-                  subtitle: '下载网页中的视频资源',
+                  label: '下载网页资源',
+                  subtitle: '下载网页中的资源',
                   color: Colors.purple,
                   onTap: () {
                     Navigator.push(
