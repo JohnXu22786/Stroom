@@ -19,6 +19,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   late final TextEditingController _maxTokensController;
   late final TextEditingController _seedController;
   late List<CustomParam> _customParams;
+  late List<CustomParam> _reasoningParams;
 
   // Slider values
   double _temperature = 0.7;
@@ -58,6 +59,20 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         text: seed != null ? seed.toString() : '');
 
     _customParams = (m?.customParams ?? []).map((p) => p.copy()).toList();
+    _reasoningParams = (m?.reasoningParams ?? []).map((p) => p.copy()).toList();
+    if (m == null && _reasoningParams.isEmpty) {
+      // 新模型提供一些默认推理参数作为示例
+      _reasoningParams = [
+        CustomParam(
+            paramName: 'thinking.type',
+            defaultValue: 'enabled',
+            type: 'string'),
+        CustomParam(
+            paramName: 'reasoning_effort',
+            defaultValue: 'medium',
+            type: 'string'),
+      ];
+    }
   }
 
   @override
@@ -83,6 +98,23 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   void _removeCustomParam(int index) {
     setState(() {
       _customParams.removeAt(index);
+    });
+  }
+
+  // ===================================================================
+  // 推理参数
+  // ===================================================================
+
+  void _addReasoningParam() {
+    setState(() {
+      _reasoningParams.insert(
+          0, CustomParam(paramName: '', defaultValue: '', type: 'string'));
+    });
+  }
+
+  void _removeReasoningParam(int index) {
+    setState(() {
+      _reasoningParams.removeAt(index);
     });
   }
 
@@ -203,6 +235,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       modelId: modelId,
       typeConfig: typeConfig,
       customParams: _customParams.map((p) => p.copy()).toList(),
+      reasoningParams: _reasoningParams.map((p) => p.copy()).toList(),
     );
 
     Navigator.pop(context, result);
@@ -448,7 +481,130 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           const SizedBox(height: 24),
 
           // ==========================================================
-          // 自定义参数
+          // 推理参数（仅推理开启时发送）
+          // ==========================================================
+          Text('推理参数',
+              style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                  color: cs.primary)),
+          const SizedBox(height: 4),
+          Text(
+            '这些参数只在推理开关开启时发送到 API。'
+            '参数名支持点号嵌套（如 thinking.type 会展开为 {"thinking": {"type": "enabled"}}）',
+            style: TextStyle(
+              fontSize: 12,
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Spacer(),
+              TextButton.icon(
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('添加推理参数'),
+                onPressed: _addReasoningParam,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          if (_reasoningParams.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: Text('暂无推理参数',
+                    style: TextStyle(color: Colors.grey)),
+              ),
+            )
+          else
+            ...List.generate(_reasoningParams.length, (i) {
+              final param = _reasoningParams[i];
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                color: cs.primaryContainer.withOpacity(0.3),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              initialValue: param.paramName,
+                              decoration: InputDecoration(
+                                labelText: '参数名（支持点号嵌套）',
+                                border: const OutlineInputBorder(),
+                                isDense: true,
+                                hintText: '如 thinking.type 或 reasoning_effort',
+                              ),
+                              onChanged: (v) {
+                                param.paramName = v;
+                                setState(() {});
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // 类型选择
+                          Container(
+                            width: 110,
+                            decoration: BoxDecoration(
+                              border:
+                                  Border.all(color: Colors.grey.shade400),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 8),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: param.type,
+                                isDense: true,
+                                items: ParamType.values
+                                    .map((t) => DropdownMenuItem(
+                                          value: t.value,
+                                          child: Text(t.label,
+                                              style: const TextStyle(
+                                                  fontSize: 13)),
+                                        ))
+                                    .toList(),
+                                onChanged: (v) {
+                                  if (v != null) {
+                                    setState(() => param.type = v);
+                                  }
+                                },
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          IconButton(
+                            icon: const Icon(Icons.delete,
+                                color: Colors.red, size: 20),
+                            onPressed: () => _removeReasoningParam(i),
+                            tooltip: '删除参数',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        initialValue: param.defaultValue,
+                        decoration: InputDecoration(
+                          labelText: '参数值',
+                          hintText: param.paramType.defaultValueHint,
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: (v) => param.defaultValue = v,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          const SizedBox(height: 24),
+
+          // ==========================================================
+          // 自定义参数（总是发送）
           // ==========================================================
           Row(
             children: [

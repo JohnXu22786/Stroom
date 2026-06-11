@@ -150,8 +150,6 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     String? model,
     int? maxTokens,
     double? temperature,
-    bool reasoning = false,
-    String reasoningEffort = 'medium',
     bool stream = false,
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
@@ -162,19 +160,8 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       'max_tokens': maxTokens ?? defaultParams['max_tokens'],
       'temperature': temperature ?? defaultParams['temperature'],
       'stream': stream,
-      if (reasoning) ..._reasoningParams(model, reasoningEffort),
       if (tools != null && tools.isNotEmpty) 'tools': tools,
       if (extraParams != null) ...extraParams,
-    };
-  }
-
-  Map<String, dynamic> _reasoningParams(String? model, String reasoningEffort) {
-    // Send both `thinking` (DeepSeek) and `reasoning_effort` (OpenAI o-series)
-    // so that reasoning works regardless of which model/provider is used.
-    // Unsupported parameters are silently ignored by the API.
-    return {
-      'thinking': {'type': 'enabled'},
-      'reasoning_effort': reasoningEffort,
     };
   }
 
@@ -212,8 +199,6 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         model: model,
         maxTokens: maxTokens,
         temperature: temperature,
-        reasoning: reasoning,
-        reasoningEffort: reasoningEffort,
         extraParams: extraParams);
 
     debugPrint(
@@ -299,8 +284,6 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         model: model,
         maxTokens: maxTokens,
         temperature: temperature,
-        reasoning: reasoning,
-        reasoningEffort: reasoningEffort,
         stream: true,
         tools: tools,
         extraParams: extraParams);
