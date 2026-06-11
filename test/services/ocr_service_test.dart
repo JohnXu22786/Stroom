@@ -1,6 +1,63 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/services/ocr_service.dart';
+import 'package:dio/dio.dart';
 import 'dart:typed_data';
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/// Create a mock Dio that returns a successful response with the given data.
+Dio _mockDioWithSuccess(dynamic data) {
+  return Dio()..interceptors.add(_SuccessInterceptor(data));
+}
+
+/// An interceptor that always returns a successful response with the given data.
+class _SuccessInterceptor extends Interceptor {
+  final dynamic _data;
+  _SuccessInterceptor(this._data);
+
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    handler.resolve(Response(
+      requestOptions: options,
+      statusCode: 200,
+      data: _data,
+    ));
+  }
+}
+
+/// Create a mock Dio that throws a [DioException].
+Dio _mockDioWithError({int statusCode = 400, dynamic data}) {
+  final response = Response(
+    requestOptions: RequestOptions(path: 'http://example.com/chat/completions'),
+    statusCode: statusCode,
+    data: data,
+  );
+  final exception = DioException(
+    type: DioExceptionType.badResponse,
+    requestOptions: RequestOptions(path: 'http://example.com/chat/completions'),
+    response: response,
+    message: 'Bad response',
+  );
+  return Dio()..interceptors.add(_ThrowingInterceptor(exception));
+}
+
+class _ThrowingInterceptor extends Interceptor {
+  final DioException _exception;
+  _ThrowingInterceptor(this._exception);
+
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    handler.reject(_exception);
+  }
+}
+
+const _testOcrConfig = OcrConfig(
+  model: 'gpt-4o',
+  apiKey: 'test-key',
+  host: 'https://api.test.com/v1',
+);
 
 void main() {
   group('OcrService', () {
@@ -135,6 +192,225 @@ void main() {
         expect(service.config.model, equals('gpt-4o'));
         expect(service.config.apiKey, equals('key'));
         expect(service.config.host, equals('https://api.test.com'));
+      });
+    });
+
+    group('OcrService response parsing', () {
+      test('recognize extracts text from standard response with String content', () async {
+        final dio = _mockDioWithSuccess({
+          'choices': [
+            {
+              'message': {
+                'content': '这是图片中的文字内容',
+              },
+            },
+          ],
+        });
+        final service = OcrService(config: _testOcrConfig, dio: dio);
+
+        final result = await service.recognize(
+          imageBytes: Uint8List.fromList([1, 2, 3]),
+          imageFormat: 'jpeg',
+        );
+
+        expect(result.text, equals('这是图片中的文字内容'));
+        expect(result.processingTimeMs, greaterThan(0));
+        expect(result.imageCount, equals(1));
+      });
+
+      test('recognize extracts text when content is a List of text blocks', () async {
+        final dio = _mockDioWithSuccess({
+          'choices': [
+            {
+              'message': {
+                'content': [
+                  {'type': 'text', 'text': '第一行文字'},
+                  {'type': 'text', 'text': '第二行文字'},
+                ],
+              },
+            },
+          ],
+        });
+        final service = OcrService(config: _testOcrConfig, dio: dio);
+
+        final result = await service.recognize(
+          imageBytes: Uint8List.fromList([1, 2, 3]),
+          imageFormat: 'jpeg',
+        );
+
+        expect(result.text, contains('第一行文字'));
+        expect(result.text, contains('第二行文字'));
+      });
+
+      test('recognize extracts text when content is a List with single text block', () async {
+        final dio = _mockDioWithSuccess({
+          'choices': [
+            {
+              'message': {
+                'content': [
+                  {'type': 'text', 'text': '这是识别出的文字'},
+                ],
+              },
+            },
+          ],
+        });
+        final service = OcrService(config: _testOcrConfig, dio: dio);
+
+        final result = await service.recognize(
+          imageBytes: Uint8List.fromList([1, 2, 3]),
+          imageFormat: 'jpeg',
+        );
+
+        expect(result.text, equals('这是识别出的文字'));
+      });
+
+      test('recognize throws on garbled JSON-bracket content', () async {
+        final dio = _mockDioWithSuccess({
+          'choices': [
+            {
+              'message': {
+                'content': '}}]}}]}}]}}]}}]}}]}}]}}]}}]}',
+              },
+            },
+          ],
+        });
+        final service = OcrService(config: _testOcrConfig, dio: dio);
+
+        expect(
+          () => service.recognize(
+            imageBytes: Uint8List.fromList([1, 2, 3]),
+            imageFormat: 'jpeg',
+          ),
+          throwsA(isA<Exception>()),
+        );
+      });
+
+      test('recognize throws on empty content', () async {
+        final dio = _mockDioWithSuccess({
+          'choices': [
+            {
+              'message': {
+                'content': '',
+              },
+            },
+          ],
+        });
+        final service = OcrService(config: _testOcrConfig, dio: dio);
+
+        expect(
+          () => service.recognize(
+            imageBytes: Uint8List.fromList([1, 2, 3]),
+            imageFormat: 'jpeg',
+          ),
+          throwsA(isA<Exception>()),
+        );
+      });
+
+      test('recognize throws on missing choices', () async {
+        final dio = _mockDioWithSuccess({});
+        final service = OcrService(config: _testOcrConfig, dio: dio);
+
+        expect(
+          () => service.recognize(
+            imageBytes: Uint8List.fromList([1, 2, 3]),
+            imageFormat: 'jpeg',
+          ),
+          throwsA(isA<Exception>()),
+        );
+      });
+
+      test('recognizeBatch extracts text from standard response', () async {
+        final dio = _mockDioWithSuccess({
+          'choices': [
+            {
+              'message': {
+                'content': '批量识别的文字结果',
+              },
+            },
+          ],
+        });
+        final service = OcrService(config: _testOcrConfig, dio: dio);
+
+        final result = await service.recognizeBatch(
+          imageBytesList: [
+            (Uint8List.fromList([1, 2, 3]), 'jpeg'),
+            (Uint8List.fromList([4, 5, 6]), 'png'),
+          ],
+        );
+
+        expect(result.text, equals('批量识别的文字结果'));
+        expect(result.imageCount, equals(2));
+      });
+
+      test('recognizeBatch extracts text when content is a List', () async {
+        final dio = _mockDioWithSuccess({
+          'choices': [
+            {
+              'message': {
+                'content': [
+                  {'type': 'text', 'text': '批量结果第一部分'},
+                  {'type': 'text', 'text': '批量结果第二部分'},
+                ],
+              },
+            },
+          ],
+        });
+        final service = OcrService(config: _testOcrConfig, dio: dio);
+
+        final result = await service.recognizeBatch(
+          imageBytesList: [
+            (Uint8List.fromList([1, 2, 3]), 'jpeg'),
+          ],
+        );
+
+        expect(result.text, contains('批量结果第一部分'));
+        expect(result.text, contains('批量结果第二部分'));
+      });
+
+      test('recognizeBatch throws on garbled content', () async {
+        final dio = _mockDioWithSuccess({
+          'choices': [
+            {
+              'message': {
+                'content': '}}]}}]}}]',
+              },
+            },
+          ],
+        });
+        final service = OcrService(config: _testOcrConfig, dio: dio);
+
+        expect(
+          () => service.recognizeBatch(
+            imageBytesList: [
+              (Uint8List.fromList([1, 2, 3]), 'jpeg'),
+            ],
+          ),
+          throwsA(isA<Exception>()),
+        );
+      });
+
+      test('diagnostics are captured on successful response', () async {
+        final dio = _mockDioWithSuccess({
+          'choices': [
+            {
+              'message': {
+                'content': 'test text',
+              },
+            },
+          ],
+        });
+        final service = OcrService(config: _testOcrConfig, dio: dio);
+
+        await service.recognize(
+          imageBytes: Uint8List.fromList([1, 2, 3]),
+          imageFormat: 'jpeg',
+        );
+
+        expect(service.lastRequestBody, isNotNull);
+        expect(service.lastRequestUrl, isNotNull);
+        expect(service.lastRequestHeaders, isNotNull);
+        expect(service.lastResponseData, isNotNull);
+        expect(service.lastResponseStatusCode, equals(200));
       });
     });
   });
