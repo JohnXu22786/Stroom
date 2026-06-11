@@ -351,4 +351,61 @@ void main() {
       expect(find.text('返回选择助手'), findsOneWidget);
     });
   });
+
+  group('Merged TopicSelectionPage - Pinned topic preserves original time', () {
+    testWidgets('pinned topic shows original updatedAt date, not modified time', (tester) async {
+      final originalTime = DateTime(2026, 5, 15, 10, 30, 0);
+      final conv = Conversation(
+        id: 'pinned-conv',
+        title: '置顶话题',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: originalTime,
+        isPinned: true,
+        assistantId: 'test-pin-time',
+      );
+
+      await tester.pumpWidget(createMergedTopicTestApp(
+        assistants: [
+          Assistant(id: 'test-pin-time', name: '时间助手', prompt: 'P', emoji: '⏰', description: '测试'),
+        ],
+        selectedAssistantId: 'test-pin-time',
+        conversations: [conv],
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Should show the original date: 2026-05-15 10:30
+      expect(find.textContaining('2026-05-15'), findsOneWidget);
+      expect(find.textContaining('10:30'), findsOneWidget);
+      // Pinned icon should be visible
+      expect(find.byIcon(Icons.push_pin), findsAtLeast(1));
+    });
+
+    testWidgets('non-pinned topic shows its own updatedAt date', (tester) async {
+      final conv = Conversation(
+        id: 'normal-conv',
+        title: '普通话题',
+        createdAt: DateTime(2026, 2, 1),
+        updatedAt: DateTime(2026, 3, 20, 14, 45),
+        isPinned: false,
+        assistantId: 'test-non-pin-time',
+      );
+
+      await tester.pumpWidget(createMergedTopicTestApp(
+        assistants: [
+          Assistant(id: 'test-non-pin-time', name: '普通助手', prompt: 'P', emoji: '📋', description: '测试'),
+        ],
+        selectedAssistantId: 'test-non-pin-time',
+        conversations: [conv],
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Should show the original date: 2026-03-20 14:45
+      expect(find.textContaining('2026-03-20'), findsOneWidget);
+      expect(find.textContaining('14:45'), findsOneWidget);
+      // Should NOT show pin icon (pin_outlined may be present as action button)
+      expect(find.text('普通话题'), findsOneWidget);
+    });
+  });
 }
