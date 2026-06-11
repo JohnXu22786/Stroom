@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show Directory;
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -437,6 +438,113 @@ void main() {
     test('returns null when assets list is empty', () async {
       final url = UpdateNotifier.findAssetDownloadUrl([], 'windows');
       expect(url, isNull);
+    });
+  });
+
+  group('UpdateNotifier - Download', () {
+    late Dio dio;
+    late String tempDir;
+
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      dio = Dio(BaseOptions());
+      // Create a real temp directory for download tests
+      tempDir = Directory.systemTemp.createTempSync('stroom_test_').path;
+    });
+
+    tearDown(() {
+      // Clean up temp directory
+      try {
+        Directory(tempDir).deleteSync(recursive: true);
+      } catch (_) {}
+    });
+
+    test('downloadUpdate returns error when downloadUrl is null', () async {
+      final notifier = UpdateNotifier(dio: dio);
+      // No downloadUrl set
+      await notifier.downloadUpdate(downloadDir: tempDir);
+      expect(notifier.state.downloadError, isNotNull);
+      expect(notifier.state.isDownloading, false);
+    });
+
+    test('downloadUpdate sets isDownloading and completes download', () async {
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          // Simulate download by resolving immediately
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: <int>[1, 2, 3], // minimal binary data
+            ),
+          );
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = UpdateState(
+        updateAvailable: true,
+        latestVersion: '0.2.14',
+        downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+        releaseNotes: '',
+      );
+
+      await notifier.downloadUpdate(downloadDir: tempDir);
+
+      expect(notifier.state.isDownloading, false);
+      expect(notifier.state.downloadError, isNull);
+      expect(notifier.state.downloadComplete, true);
+      expect(notifier.state.downloadedFilePath, isNotNull);
+    });
+
+    test('downloadUpdate handles network error', () async {
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.reject(DioException(
+            requestOptions: options,
+            message: 'Connection refused',
+            type: DioExceptionType.connectionTimeout,
+          ));
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = UpdateState(
+        updateAvailable: true,
+        latestVersion: '0.2.14',
+        downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+        releaseNotes: '',
+      );
+
+      await notifier.downloadUpdate(downloadDir: tempDir);
+
+      expect(notifier.state.isDownloading, false);
+      expect(notifier.state.downloadError, isNotNull);
+      expect(notifier.state.downloadError, contains('下载失败'));
+    });
+
+    test('downloadUpdate handles non-200 response', () async {
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 404,
+              data: 'Not Found',
+            ),
+          );
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = UpdateState(
+        updateAvailable: true,
+        latestVersion: '0.2.14',
+        downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+        releaseNotes: '',
+      );
+
+      await notifier.downloadUpdate(downloadDir: tempDir);
+
+      expect(notifier.state.isDownloading, false);
+      expect(notifier.state.downloadError, isNotNull);
     });
   });
 }
