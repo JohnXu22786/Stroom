@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 
 import '../providers/provider_config.dart';
 import '../providers/tts_state_provider.dart';
+import '../providers/background_task_provider.dart';
 import '../services/asr_service.dart';
 import '../utils/data_sanitizer.dart';
 import '../utils/file_manifest.dart';
@@ -624,12 +625,19 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       return;
     }
 
-    setState(() {
-      _isProcessing = true;
-      _errorMessage = null;
-      _transcriptionResult = null;
-    });
+    // Create a background task for tracking
+    final timestamp = _currentTimestamp();
+    final taskId = ref.read(backgroundTasksProvider.notifier).addTask(
+      type: BackgroundTaskType.asr,
+      title: 'ASR_$timestamp',
+    );
 
+    // Pop back to home page immediately so user can see task progress
+    if (mounted) {
+      Navigator.pop(context);
+    }
+
+    // Continue processing in the background
     late final AsrService service;
     try {
       service = AsrService(config: asrConfig);
@@ -641,63 +649,20 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       // Save the transcription result as a text file
       await _saveTranscriptionResult(result.text);
 
-      if (mounted) {
-        setState(() {
-          _isProcessing = false;
-          _transcriptionResult = result.text;
-          _selectedAudio = null;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('识别完成，已保存到文本页'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      // Mark task as completed
+      ref.read(backgroundTasksProvider.notifier).completeTask(taskId);
     } catch (e) {
-      if (mounted) {
-        // Capture full request/response diagnostics from the service
-        Map<String, dynamic>? rawReq;
-        Map<String, dynamic>? rawResp;
-        if (service.lastRequestBody != null ||
-            service.lastRequestHeaders != null ||
-            service.lastRequestUrl != null) {
-          rawReq = {};
-          if (service.lastRequestUrl != null) {
-            rawReq['url'] = service.lastRequestUrl;
-          }
-          if (service.lastRequestHeaders != null) {
-            rawReq['headers'] = service.lastRequestHeaders;
-          }
-          if (service.lastRequestBody != null) {
-            rawReq['body'] = service.lastRequestBody;
-          }
-        }
-        if (service.lastResponseData != null ||
-            service.lastResponseStatusCode != null ||
-            service.lastResponseHeaders != null) {
-          rawResp = {};
-          if (service.lastResponseStatusCode != null) {
-            rawResp['statusCode'] = service.lastResponseStatusCode;
-          }
-          if (service.lastResponseHeaders != null) {
-            rawResp['headers'] = service.lastResponseHeaders;
-          }
-          if (service.lastResponseData != null) {
-            rawResp['data'] = service.lastResponseData;
-          }
-        } else {
-          rawResp = {'error': e.toString()};
-        }
-
-        setState(() {
-          _isProcessing = false;
-          _errorMessage = '识别失败: $e';
-          _lastRawRequest = rawReq;
-          _lastRawResponse = rawResp;
-        });
-      }
+      // Mark task as failed (widget may be gone, but notifier is independent)
+      ref.read(backgroundTasksProvider.notifier).failTask(
+        taskId,
+        error: 'ASR识别失败: $e',
+      );
     }
+  }
+
+  String _currentTimestamp() {
+    final now = DateTime.now();
+    return '${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}';
   }
 
   /// Save the transcription result as a text record, named by current datetime.
