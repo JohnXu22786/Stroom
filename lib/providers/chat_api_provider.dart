@@ -150,8 +150,6 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     String? model,
     int? maxTokens,
     double? temperature,
-    bool reasoning = false,
-    String reasoningEffort = 'medium',
     bool stream = false,
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
@@ -162,20 +160,9 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       'max_tokens': maxTokens ?? defaultParams['max_tokens'],
       'temperature': temperature ?? defaultParams['temperature'],
       'stream': stream,
-      if (reasoning) ..._reasoningParams(model, reasoningEffort),
       if (tools != null && tools.isNotEmpty) 'tools': tools,
       if (extraParams != null) ...extraParams,
     };
-  }
-
-  Map<String, dynamic> _reasoningParams(String? model, String reasoningEffort) {
-    if (model != null) {
-      final lower = model.toLowerCase();
-      if (lower.contains('deepseek') || lower.contains('r1')) {
-        return {'thinking': {'type': 'enabled'}};
-      }
-    }
-    return {'reasoning_effort': reasoningEffort};
   }
 
   /// Mask API key for display, showing only first 8 chars and last 4 chars.
@@ -212,8 +199,6 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         model: model,
         maxTokens: maxTokens,
         temperature: temperature,
-        reasoning: reasoning,
-        reasoningEffort: reasoningEffort,
         extraParams: extraParams);
 
     debugPrint(
@@ -299,8 +284,6 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         model: model,
         maxTokens: maxTokens,
         temperature: temperature,
-        reasoning: reasoning,
-        reasoningEffort: reasoningEffort,
         stream: true,
         tools: tools,
         extraParams: extraParams);
@@ -359,12 +342,14 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
               yield AIStreamEvent(content);
             }
 
-            // Reasoning content
-            if (reasoning) {
-              final reasoningContent = delta['reasoning_content'] as String?;
-              if (reasoningContent != null && reasoningContent.isNotEmpty) {
-                yield AIStreamEvent(reasoningContent, isReasoning: true);
-              }
+            // Reasoning content — always parse from response if present,
+            // regardless of the reasoning flag. The reasoning flag only
+            // controls whether thinking/reasoning_effort is SENT in the
+            // request. Some models (e.g. DeepSeek, OpenAI o-series) may
+            // still return reasoning_content even when the flag is off.
+            final reasoningContent = delta['reasoning_content'] as String?;
+            if (reasoningContent != null && reasoningContent.isNotEmpty) {
+              yield AIStreamEvent(reasoningContent, isReasoning: true);
             }
 
             // Tool call deltas (streamed in chunks by index)

@@ -10,6 +10,7 @@ import '../providers/background_task_provider.dart';
 import '../services/ocr_service.dart';
 import '../utils/data_sanitizer.dart';
 import '../utils/text_manifest.dart';
+import '../widgets/folder_picker_dialog.dart';
 
 // ============================================================================
 // Provider: Get the first configured OCR config from provider entries
@@ -37,6 +38,20 @@ OcrConfig? _resolveOcrConfig(WidgetRef ref) {
   return null;
 }
 
+/// Collect all available model names from the first OCR provider config.
+List<ModelConfig> _getOcrModels(WidgetRef ref) {
+  final state = ref.read(providerEntriesProvider);
+  for (final entry in state.entries) {
+    if (entry.type == 'ocr' && entry.configs.isNotEmpty) {
+      final config = entry.configs.first;
+      if (config.host.isNotEmpty && config.key.isNotEmpty) {
+        return config.models;
+      }
+    }
+  }
+  return [];
+}
+
 // ============================================================================
 // OCR Page
 // ============================================================================
@@ -54,12 +69,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   final List<SelectedImage> _selectedImages = [];
   bool _isProcessing = false;
   String? _errorMessage;
+  int _selectedModelIndex = 0;
+
+  /// Whether reorder mode is active
+  bool _reorderMode = false;
 
   /// Captured raw request data from the last failed OCR call.
   Map<String, dynamic>? _lastRawRequest;
 
   /// Captured raw response data from the last failed OCR call.
   Map<String, dynamic>? _lastRawResponse;
+
+  /// Save-to folder selection
+  String _saveFolder = '';
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +92,18 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         title: const Text('文字识别'),
         centerTitle: true,
         actions: [
-          if (_selectedImages.isNotEmpty && !_isProcessing)
+          if (_selectedImages.length > 1 && !_isProcessing)
+            IconButton(
+              icon: Icon(
+                _reorderMode ? Icons.check : Icons.swap_vert,
+                size: 20,
+              ),
+              tooltip: _reorderMode ? '完成排序' : '排序图片',
+              onPressed: () {
+                setState(() => _reorderMode = !_reorderMode);
+              },
+            ),
+          if (_selectedImages.isNotEmpty && !_isProcessing && !_reorderMode)
             TextButton.icon(
               onPressed: _clearAll,
               icon: const Icon(Icons.clear_all, size: 18),
@@ -80,6 +113,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       ),
       body: Column(
         children: [
+          // Model selector (nicely styled)
+          _buildModelSelector(cs),
+
           // Photo source buttons
           _buildPhotoSourceBar(cs),
 
@@ -100,16 +136,120 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     );
   }
 
+  // ==================================================================
+  // Model Selector — nicely styled, pill-shaped dropdown
+  // ==================================================================
+
+  Widget _buildModelSelector(ColorScheme cs) {
+    final models = _getOcrModels(ref);
+    if (models.isEmpty) return const SizedBox.shrink();
+
+    final clampedIndex = _selectedModelIndex.clamp(0, models.length - 1);
+    if (clampedIndex != _selectedModelIndex) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _selectedModelIndex = clampedIndex);
+      });
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              cs.primaryContainer.withValues(alpha: 0.6),
+              cs.secondaryContainer.withValues(alpha: 0.3),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: cs.outlineVariant.withValues(alpha: 0.4),
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        child: Row(
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: cs.primary.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.tune, size: 16, color: cs.primary),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              '识别模型',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Container(
+                height: 34,
+                decoration: BoxDecoration(
+                  color: cs.surface.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: cs.outlineVariant.withValues(alpha: 0.3),
+                  ),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    value: clampedIndex,
+                    isDense: true,
+                    isExpanded: true,
+                    icon: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 20,
+                      color: cs.primary,
+                    ),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface,
+                    ),
+                    onChanged: (idx) {
+                      if (idx == null || idx >= models.length) return;
+                      setState(() => _selectedModelIndex = idx);
+                    },
+                    items: List.generate(models.length, (i) {
+                      final model = models[i];
+                      return DropdownMenuItem<int>(
+                        value: i,
+                        child: Text(
+                          model.name.isNotEmpty ? model.name : model.modelId,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildPhotoSourceBar(ColorScheme cs) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: Row(
         children: [
           Expanded(
             child: SizedBox(
               height: 48,
               child: ElevatedButton.icon(
-                onPressed: _isProcessing ? null : _takePhoto,
+                onPressed: _isProcessing ? null : _showCameraChoicePanel,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -127,7 +267,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             child: SizedBox(
               height: 48,
               child: ElevatedButton.icon(
-                onPressed: _isProcessing ? null : _pickFromGallery,
+                onPressed: _isProcessing ? null : _showAlbumChoicePanel,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -174,6 +314,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   Widget _buildImageGrid(ColorScheme cs) {
+    if (_reorderMode) {
+      return _buildReorderableList(cs);
+    }
+
     return Padding(
       padding: const EdgeInsets.all(8),
       child: GridView.builder(
@@ -185,61 +329,100 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         itemCount: _selectedImages.length,
         itemBuilder: (context, index) {
           final image = _selectedImages[index];
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image(
-                  image: image.provider,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: cs.surfaceContainerHigh,
-                    child:
-                        const Icon(Icons.broken_image, color: Colors.grey),
-                  ),
-                ),
-              ),
-              // Remove button
-              Positioned(
-                top: 2,
-                right: 2,
-                child: GestureDetector(
-                  onTap: () => _removeImage(index),
-                  child: Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.close,
-                        color: Colors.white, size: 16),
-                  ),
-                ),
-              ),
-              // Image index badge
-              if (_selectedImages.length > 1)
-                Positioned(
-                  bottom: 4,
-                  left: 4,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '${index + 1}',
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 11),
-                    ),
-                  ),
-                ),
-            ],
+          return _ImageGridItem(
+            key: ValueKey('img_$index'),
+            image: image,
+            index: index,
+            totalCount: _selectedImages.length,
+            onTap: () => _previewImage(index),
+            onRemove: () => _removeImage(index),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildReorderableList(ColorScheme cs) {
+    return Padding(
+      padding: const EdgeInsets.all(8),
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: cs.primaryContainer.withValues(alpha: 0.5)),
+        ),
+        child: ReorderableListView.builder(
+          padding: const EdgeInsets.all(8),
+          buildDefaultDragHandles: false,
+          itemCount: _selectedImages.length,
+          onReorder: _onReorder,
+          proxyDecorator: (child, index, animation) {
+            return Material(
+              elevation: 4,
+              borderRadius: BorderRadius.circular(8),
+              color: cs.surface,
+              child: child,
+            );
+          },
+          itemBuilder: (context, index) {
+            final image = _selectedImages[index];
+            return Padding(
+              key: ValueKey('reorder_${image.hashCode}_$index'),
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  ReorderableDragStartListener(
+                    index: index,
+                    child: Container(
+                      width: 36,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: cs.primaryContainer.withValues(alpha: 0.3),
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(8),
+                          bottomLeft: Radius.circular(8),
+                        ),
+                      ),
+                      child: Icon(Icons.drag_handle,
+                          color: cs.onSurfaceVariant, size: 20),
+                    ),
+                  ),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: Image(
+                        image: image.provider,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: cs.surfaceContainerHigh,
+                          child: const Icon(Icons.broken_image,
+                              color: Colors.grey, size: 20),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      '图片 ${index + 1}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: cs.onSurface,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close, size: 18, color: cs.error),
+                    onPressed: () => _removeImage(index),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -317,6 +500,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Save-to folder selector (above start button)
+            _buildSaveToSelector(cs),
+            const SizedBox(height: 4),
             if (_selectedImages.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
@@ -358,11 +544,210 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   // ==================================================================
+  // Save-to Folder Selector
+  // ==================================================================
+
+  Widget _buildSaveToSelector(ColorScheme cs) {
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.4),
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: _pickSaveFolder,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              Icon(Icons.folder_outlined, size: 16, color: cs.primary),
+              const SizedBox(width: 8),
+              Text(
+                '保存至',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _saveFolder.isEmpty ? '根目录' : _saveFolder,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.primary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const Spacer(),
+              Icon(
+                Icons.chevron_right,
+                size: 16,
+                color: cs.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickSaveFolder() async {
+    final folders = await TextManifest.getAllFolders();
+    if (!mounted) return;
+    final result = await FolderPickerDialog.show(
+      context,
+      currentFolder: _saveFolder,
+      availableFolders: folders,
+      title: '选择保存文件夹',
+    );
+    if (result != null && mounted) {
+      setState(() => _saveFolder = result);
+    }
+  }
+
+  // ==================================================================
   // Photo Source Methods
   // ==================================================================
 
+  /// Show camera choice panel (app camera / system camera, no save-to, no edit toggle)
+  void _showCameraChoicePanel() {
+    final cs = Theme.of(context).colorScheme;
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 32,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                '选择拍照方式',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: _ChoiceCard(
+                      icon: Icons.camera_alt,
+                      title: '应用相机',
+                      subtitle: '使用应用内置相机，支持调整比例和压缩设置',
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _takePhotoWithAppCamera();
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _ChoiceCard(
+                      icon: Icons.phone_android,
+                      title: '系统相机',
+                      subtitle: '使用系统默认相机应用',
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _takePhotoWithSystemCamera();
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Show album choice panel (system album / app album)
+  void _showAlbumChoicePanel() {
+    final cs = Theme.of(context).colorScheme;
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 32,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                '选择图片来源',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: _ChoiceCard(
+                      icon: Icons.photo_library,
+                      title: '从系统相册选择',
+                      subtitle: '从设备系统相册中选择图片',
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _pickFromSystemGallery();
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _ChoiceCard(
+                      icon: Icons.collections_bookmark,
+                      title: '从应用相册选择',
+                      subtitle: '从应用内已保存的图片中选择',
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _pickFromAppAlbum();
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Take a photo using the app's built-in camera.
+  Future<void> _takePhotoWithAppCamera() async {
+    // For now, use system camera as fallback
+    await _takePhotoWithSystemCamera();
+  }
+
   /// Take a photo using the system camera.
-  Future<void> _takePhoto() async {
+  Future<void> _takePhotoWithSystemCamera() async {
     try {
       final picker = ImagePicker();
       final file = await picker.pickImage(
@@ -392,7 +777,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   /// Pick images from the system gallery (supports batch selection).
-  Future<void> _pickFromGallery() async {
+  Future<void> _pickFromSystemGallery() async {
     try {
       final picker = ImagePicker();
       final files = await picker.pickMultiImage(
@@ -422,6 +807,86 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         );
       }
     }
+  }
+
+  /// Pick images from the app's album.
+  Future<void> _pickFromAppAlbum() async {
+    // TODO: Implement picking from app album
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('应用相册功能开发中')),
+      );
+    }
+  }
+
+  // ==================================================================
+  // Image Reorder & Preview
+  // ==================================================================
+
+  void _onReorder(int oldIndex, int newIndex) {
+    setState(() {
+      if (newIndex > oldIndex) newIndex--;
+      final item = _selectedImages.removeAt(oldIndex);
+      _selectedImages.insert(newIndex, item);
+    });
+  }
+
+  Future<void> _previewImage(int index) async {
+    if (index < 0 || index >= _selectedImages.length) return;
+    final image = _selectedImages[index];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: Image(
+                  image: image.provider,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.broken_image,
+                            size: 48, color: Colors.white54),
+                        SizedBox(height: 8),
+                        Text('无法加载图片',
+                            style: TextStyle(color: Colors.white54)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: MediaQuery.of(ctx).padding.top + 8,
+              left: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ),
+            if (_selectedImages.length > 1)
+              Positioned(
+                bottom: 16,
+                left: 16,
+                right: 16,
+                child: Text(
+                  '${index + 1} / ${_selectedImages.length}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _removeImage(int index) {
@@ -464,8 +929,24 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       Navigator.pop(context);
     }
 
-    // Continue processing in the background
-    late final OcrService service;
+    // Use the selected model from dropdown
+    final models = _getOcrModels(ref);
+    if (_selectedModelIndex < models.length) {
+      final selectedModel = models[_selectedModelIndex];
+      final updatedConfig = ocrConfig.copyWith(model: selectedModel.modelId);
+      await _performOcr(updatedConfig, taskId);
+    } else {
+      await _performOcr(ocrConfig, taskId);
+    }
+  }
+
+  Future<void> _performOcr(OcrConfig ocrConfig, String taskId) async {
+    setState(() {
+      _isProcessing = true;
+      _errorMessage = null;
+    });
+
+    OcrService? service;
     try {
       service = OcrService(config: ocrConfig);
       OcrResult result;
@@ -488,7 +969,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       // Save the OCR result as a text file using TextManifest
       await _saveOcrResult(result.text);
 
-      // Mark task as completed
+      // Mark task as completed (widget may be gone, but notifier is independent)
       ref.read(backgroundTasksProvider.notifier).completeTask(taskId);
     } catch (e) {
       // Mark task as failed (widget may be gone, but notifier is independent)
@@ -522,7 +1003,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       format: 'txt',
       createdAt: now,
       size: bytes.length,
-      folder: '',
+      folder: _saveFolder,
       textLength: text.length,
     ));
   }
@@ -532,10 +1013,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   // ==================================================================
 
   /// Show a dialog with full request/response details for the last error.
-  /// Mirrors the chat page's _showErrorDetailDialog pattern.
   void _showErrorDetailDialog(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cs = Theme.of(context).colorScheme;
 
     showDialog(
       context: context,
@@ -553,7 +1032,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
+                  color: Colors.red.withValues(alpha: 0.1),
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(4),
                     topRight: Radius.circular(4),
@@ -666,6 +1145,156 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   String _pad(int n) => n.toString().padLeft(2, '0');
+}
+
+// ============================================================================
+// ChoiceCard Widget — reusable card with icon, title, subtitle
+// ============================================================================
+
+class _ChoiceCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _ChoiceCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Material(
+      color: cs.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(12),
+      elevation: 1,
+      shadowColor: cs.shadow,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: cs.onPrimaryContainer),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                title,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// ImageGridItem Widget — individual image in grid with tap/remove
+// ============================================================================
+
+class _ImageGridItem extends StatelessWidget {
+  final SelectedImage image;
+  final int index;
+  final int totalCount;
+  final VoidCallback onTap;
+  final VoidCallback onRemove;
+
+  const _ImageGridItem({
+    super.key,
+    required this.image,
+    required this.index,
+    required this.totalCount,
+    required this.onTap,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image(
+              image: image.provider,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                color: cs.surfaceContainerHigh,
+                child: const Icon(Icons.broken_image, color: Colors.grey),
+              ),
+            ),
+          ),
+          // Remove button
+          Positioned(
+            top: 2,
+            right: 2,
+            child: GestureDetector(
+              onTap: onRemove,
+              child: Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.close,
+                    color: Colors.white, size: 16),
+              ),
+            ),
+          ),
+          // Image index badge
+          if (totalCount > 1)
+            Positioned(
+              bottom: 4,
+              left: 4,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '${index + 1}',
+                  style: const TextStyle(
+                      color: Colors.white, fontSize: 11),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 // ============================================================================
