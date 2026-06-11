@@ -185,4 +185,59 @@ void main() {
       expect(notifier.state[1].id, 'conv-pin');
     });
   });
+
+  group('ConversationsNotifier - togglePin preserves updatedAt', () {
+    testWidgets('togglePin does NOT change updatedAt', (tester) async {
+      final originalTime = DateTime(2026, 5, 15, 10, 30, 0);
+      final conv = Conversation(
+        id: 'test-conv',
+        title: 'Test',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: originalTime,
+        isPinned: false,
+      );
+      final container = _createContainer(initialState: [conv]);
+      final notifier = container.read(conversationsProvider.notifier);
+
+      // Pin the conversation
+      notifier.togglePin('test-conv');
+      expect(notifier.state[0].isPinned, isTrue);
+      // CLIENT REQUIREMENT: pinning should NOT change updatedAt
+      expect(notifier.state[0].updatedAt, originalTime);
+
+      // Unpin the conversation
+      notifier.togglePin('test-conv');
+      expect(notifier.state[0].isPinned, isFalse);
+      // CLIENT REQUIREMENT: unpinning should NOT change updatedAt
+      expect(notifier.state[0].updatedAt, originalTime);
+
+      // Flush the persist timer to avoid "pending timer" error
+      await tester.pump(const Duration(milliseconds: 600));
+    });
+
+    testWidgets('togglePin correctly toggles isPinned state', (tester) async {
+      final conv = Conversation(
+        id: 'test-conv-2',
+        title: 'Test 2',
+        updatedAt: DateTime(2026, 6, 1),
+        isPinned: false,
+      );
+      final container = _createContainer(initialState: [conv]);
+      final notifier = container.read(conversationsProvider.notifier);
+
+      // Initially not pinned
+      expect(notifier.state[0].isPinned, isFalse);
+
+      // Toggle to pinned
+      notifier.togglePin('test-conv-2');
+      expect(notifier.state[0].isPinned, isTrue);
+
+      // Toggle back to not pinned
+      notifier.togglePin('test-conv-2');
+      expect(notifier.state[0].isPinned, isFalse);
+
+      // Flush the persist timer to avoid "pending timer" error
+      await tester.pump(const Duration(milliseconds: 600));
+    });
+  });
 }
