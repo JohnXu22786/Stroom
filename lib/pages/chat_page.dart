@@ -1197,14 +1197,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         );
                       },
                     ),
-                  // ── Stop button ──
-                  if (isStreaming)
-                    IconButton(
-                      icon: Icon(Icons.stop_circle_outlined,
-                          color: Colors.red[400]),
-                      tooltip: '停止生成',
-                      onPressed: _stopStreaming,
-                    ),
                 ],
               ),
             ),
