@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../providers/provider_config.dart';
+import '../providers/background_task_provider.dart';
 import '../services/ocr_service.dart';
 import '../utils/data_sanitizer.dart';
 import '../utils/text_manifest.dart';
@@ -451,11 +452,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       return;
     }
 
-    setState(() {
-      _isProcessing = true;
-      _errorMessage = null;
-    });
+    // Create a background task for tracking
+    final timestamp = _currentTimestamp();
+    final taskId = ref.read(backgroundTasksProvider.notifier).addTask(
+      type: BackgroundTaskType.ocr,
+      title: 'OCR_$timestamp',
+    );
 
+    // Pop back to home page immediately so user can see task progress
+    if (mounted) {
+      Navigator.pop(context);
+    }
+
+    // Continue processing in the background
     late final OcrService service;
     try {
       service = OcrService(config: ocrConfig);
@@ -479,62 +488,20 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       // Save the OCR result as a text file using TextManifest
       await _saveOcrResult(result.text);
 
-      if (mounted) {
-        setState(() {
-          _isProcessing = false;
-          _selectedImages.clear();
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('识别完成，已保存到文本页'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      // Mark task as completed
+      ref.read(backgroundTasksProvider.notifier).completeTask(taskId);
     } catch (e) {
-      if (mounted) {
-        // Capture full request/response diagnostics from the service
-        Map<String, dynamic>? rawReq;
-        Map<String, dynamic>? rawResp;
-        if (service.lastRequestBody != null ||
-            service.lastRequestHeaders != null ||
-            service.lastRequestUrl != null) {
-          rawReq = {};
-          if (service.lastRequestUrl != null) {
-            rawReq['url'] = service.lastRequestUrl;
-          }
-          if (service.lastRequestHeaders != null) {
-            rawReq['headers'] = service.lastRequestHeaders;
-          }
-          if (service.lastRequestBody != null) {
-            rawReq['body'] = service.lastRequestBody;
-          }
-        }
-        if (service.lastResponseData != null ||
-            service.lastResponseStatusCode != null ||
-            service.lastResponseHeaders != null) {
-          rawResp = {};
-          if (service.lastResponseStatusCode != null) {
-            rawResp['statusCode'] = service.lastResponseStatusCode;
-          }
-          if (service.lastResponseHeaders != null) {
-            rawResp['headers'] = service.lastResponseHeaders;
-          }
-          if (service.lastResponseData != null) {
-            rawResp['data'] = service.lastResponseData;
-          }
-        } else {
-          rawResp = {'error': e.toString()};
-        }
-
-        setState(() {
-          _isProcessing = false;
-          _errorMessage = '识别失败: $e';
-          _lastRawRequest = rawReq;
-          _lastRawResponse = rawResp;
-        });
-      }
+      // Mark task as failed (widget may be gone, but notifier is independent)
+      ref.read(backgroundTasksProvider.notifier).failTask(
+        taskId,
+        error: 'OCR识别失败: $e',
+      );
     }
+  }
+
+  String _currentTimestamp() {
+    final now = DateTime.now();
+    return '${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}';
   }
 
   /// Save the OCR result as a text record, named by current datetime.
