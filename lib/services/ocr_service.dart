@@ -122,7 +122,9 @@ class OcrService {
   Map<String, dynamic> get defaultHeaders => _dio.options.headers;
 
   /// The chat completions endpoint URL.
-  String get _chatUrl => '${config.normalizedHost}/chat/completions';
+  /// The user provides the full endpoint URL including the path,
+  /// so normalizedHost is used directly without appending /chat/completions.
+  String get _chatUrl => config.normalizedHost;
 
   /// Perform OCR on a single image.
   ///
