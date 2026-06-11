@@ -11,6 +11,7 @@ import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/services/attachment_storage.dart';
 import 'package:stroom/pages/camera_page.dart';
 import 'package:stroom/widgets/camera_choice_dialog.dart';
+import 'package:stroom/widgets/gallery_choice_dialog.dart';
 import 'package:stroom/widgets/file_preview.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/widgets/chat_attachment_panel.dart';
@@ -204,54 +205,24 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
   }
 
   void _showGalleryPicker() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_album_outlined),
-                title: const Text('系统相册'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _pickFromGallery();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.folder_outlined),
-                title: const Text('应用相册'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _pickFromAppGallery();
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    showGalleryChoiceDialog(context).then((result) {
+      if (result == null) return;
+      if (result.choice == GalleryChoice.system) {
+        _pickFromGallery();
+      } else {
+        _pickFromAppGallery();
+      }
+    });
   }
 
   Future<void> _pickFromCamera() async {
-    final choice = await showCameraChoiceDialog(context);
+    final choice = await showCameraChoiceDialog(
+      context,
+      showFolderSection: false,
+    );
     if (choice == null) return;
     try {
-      if (choice == CameraChoice.app) {
+      if (choice.choice == CameraChoice.app) {
         final result =
             await Navigator.of(context, rootNavigator: true).push<String>(
           MaterialPageRoute(builder: (_) => const CameraPage()),
@@ -408,10 +379,8 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
     final hasAttachments = _pendingAttachments.isNotEmpty;
     final cs = Theme.of(context).colorScheme;
 
-    return Positioned(
-      left: 0,
-      right: 0,
-      bottom: 0,
+    return Material(
+      type: MaterialType.transparency,
       child: Container(
         key: _composerKey,
         decoration: BoxDecoration(
