@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 
 import '../providers/provider_config.dart';
+import '../providers/tts_state_provider.dart';
 import '../services/asr_service.dart';
 import '../utils/data_sanitizer.dart';
+import '../utils/file_manifest.dart';
 import '../utils/text_manifest.dart';
 
 // ============================================================================
@@ -123,26 +125,21 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   Widget _buildAudioSourceBar(ColorScheme cs) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: SizedBox(
-              height: 48,
-              child: ElevatedButton.icon(
-                onPressed: _isProcessing ? null : _pickAudioFile,
-                style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                icon: const Icon(Icons.audio_file_outlined, size: 20),
-                label: const Text('选择音频文件',
-                    style:
-                        TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-              ),
+      child: SizedBox(
+        width: double.infinity,
+        height: 48,
+        child: ElevatedButton.icon(
+          onPressed: _isProcessing ? null : _showAudioSourceSheet,
+          style: ElevatedButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
             ),
           ),
-        ],
+          icon: const Icon(Icons.add_circle_outline, size: 20),
+          label: const Text('选择音频来源',
+              style:
+                  TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+        ),
       ),
     );
   }
@@ -214,7 +211,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: _isProcessing ? null : _pickAudioFile,
+                  onPressed: _isProcessing ? null : _showAudioSourceSheet,
                   icon: const Icon(Icons.refresh, size: 18),
                   label: const Text('重新选择'),
                 ),
@@ -377,6 +374,71 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   // Audio Source Methods
   // ==================================================================
 
+  /// Show a bottom sheet with available audio source options.
+  void _showAudioSourceSheet() {
+    final cs = Theme.of(context).colorScheme;
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 32,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '选择音频来源',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: cs.primaryContainer,
+                  child: Icon(Icons.library_music_outlined,
+                      color: cs.onPrimaryContainer),
+                ),
+                title: const Text('应用内录音'),
+                subtitle: const Text('从已生成的录音中选择'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await _showInAppAudioPicker();
+                },
+              ),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: cs.primaryContainer,
+                  child: Icon(Icons.audio_file_outlined,
+                      color: cs.onPrimaryContainer),
+                ),
+                title: const Text('系统音频文件'),
+                subtitle: const Text('从设备文件中选择'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickAudioFile();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Pick an audio file from the device storage.
   Future<void> _pickAudioFile() async {
     try {
@@ -411,6 +473,129 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('选择音频文件失败: $e')),
+        );
+      }
+    }
+  }
+
+  /// Show a dialog to pick from in-app audio recordings.
+  Future<void> _showInAppAudioPicker() async {
+    // Load latest records
+    await ref.read(audioRecordsProvider.notifier).loadRecords();
+    final records = ref.read(audioRecordsProvider);
+
+    if (!mounted) return;
+
+    if (records.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('暂无可用的应用内录音')),
+      );
+      return;
+    }
+
+    final cs = Theme.of(context).colorScheme;
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: 500,
+            maxHeight: MediaQuery.of(ctx).size.height * 0.6,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.library_music_outlined,
+                        size: 18, color: cs.primary),
+                    const SizedBox(width: 8),
+                    Text(
+                      '选择应用内录音',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: cs.onSurface,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              // List
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: records.length,
+                  itemBuilder: (context, index) {
+                    final record = records[index];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: cs.primaryContainer,
+                        child: Icon(Icons.audiotrack,
+                            color: cs.onPrimaryContainer, size: 20),
+                      ),
+                      title: Text(
+                        record.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                      subtitle: Text(
+                        '${record.format.toUpperCase()}  ${_formatFileSize(record.size)}  ${record.duration > 0 ? '${record.duration}秒' : ''}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      onTap: () async {
+                        Navigator.pop(ctx);
+                        await _selectFromInAppAudio(record);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Select an in-app audio record and read its bytes.
+  Future<void> _selectFromInAppAudio(AudioRecord record) async {
+    try {
+      final bytes = await FileManifest.readFile(record.storagePath);
+      if (bytes == null || bytes.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('无法读取录音文件')),
+          );
+        }
+        return;
+      }
+
+      setState(() {
+        _selectedAudio = SelectedAudio(
+          bytes: bytes,
+          name: record.name,
+          format: record.format,
+        );
+        _errorMessage = null;
+        _transcriptionResult = null;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('读取录音失败: $e')),
         );
       }
     }
