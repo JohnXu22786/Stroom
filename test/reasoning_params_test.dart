@@ -30,42 +30,49 @@ void main() {
   }
 
   group('reasoning params', () {
-    test('DeepSeek model uses thinking format', () async {
+    test('sends BOTH thinking and reasoning_effort for all models', () async {
+      // Now sends both simultaneously - API ignores unsupported params
       final body = await getRequestBody(reasoning: true, model: 'deepseek-chat');
       expect(body, isNotNull);
       expect(body!['thinking'], {'type': 'enabled'});
-      expect(body.containsKey('reasoning_effort'), false);
+      expect(body['reasoning_effort'], 'medium');
     });
 
-    test('DeepSeek R1 model uses thinking format', () async {
+    test('sends both params for DeepSeek R1 model', () async {
       final body = await getRequestBody(reasoning: true, model: 'deepseek-r1');
       expect(body, isNotNull);
       expect(body!['thinking'], {'type': 'enabled'});
+      expect(body['reasoning_effort'], 'medium');
     });
 
-    test('OpenAI model uses reasoning_effort format', () async {
+    test('sends both params for OpenAI o1 model', () async {
       final body = await getRequestBody(reasoning: true, model: 'o1-mini');
       expect(body, isNotNull);
-      expect(body!['reasoning_effort'], 'medium');
-      expect(body.containsKey('thinking'), false);
+      expect(body!['thinking'], {'type': 'enabled'});
+      expect(body['reasoning_effort'], 'medium');
     });
 
-    test('OpenAI o3 model uses reasoning_effort format', () async {
+    test('sends both params for OpenAI o3 model', () async {
       final body = await getRequestBody(reasoning: true, model: 'o3-mini');
       expect(body, isNotNull);
-      expect(body!['reasoning_effort'], 'medium');
+      expect(body!['thinking'], {'type': 'enabled'});
+      expect(body['reasoning_effort'], 'medium');
     });
 
-    test('GPT model uses reasoning_effort format', () async {
+    test('sends both params for GPT model', () async {
       final body = await getRequestBody(reasoning: true, model: 'gpt-4o');
       expect(body, isNotNull);
-      expect(body!['reasoning_effort'], 'medium');
+      expect(body!['thinking'], {'type': 'enabled'});
+      expect(body['reasoning_effort'], 'medium');
     });
 
-    test('Unknown model defaults to reasoning_effort', () async {
-      final body = await getRequestBody(reasoning: true, model: 'claude-3-opus');
+    test('sends both params for OpenRouter models', () async {
+      // OpenRouter model naming: provider/model format
+      final body = await getRequestBody(
+          reasoning: true, model: 'openrouter/deepseek/deepseek-v4');
       expect(body, isNotNull);
-      expect(body!['reasoning_effort'], 'medium');
+      expect(body!['thinking'], {'type': 'enabled'});
+      expect(body['reasoning_effort'], 'medium');
     });
 
     test('No reasoning params when reasoning is false', () async {
@@ -75,10 +82,11 @@ void main() {
       expect(body.containsKey('reasoning_effort'), false);
     });
 
-    test('Null model defaults to reasoning_effort', () async {
+    test('sends both params even with null model', () async {
       final body = await getRequestBody(reasoning: true, model: null);
       expect(body, isNotNull);
-      expect(body!['reasoning_effort'], 'medium');
+      expect(body!['thinking'], {'type': 'enabled'});
+      expect(body['reasoning_effort'], 'medium');
     });
   });
 }

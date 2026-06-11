@@ -169,13 +169,13 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   }
 
   Map<String, dynamic> _reasoningParams(String? model, String reasoningEffort) {
-    if (model != null) {
-      final lower = model.toLowerCase();
-      if (lower.contains('deepseek') || lower.contains('r1')) {
-        return {'thinking': {'type': 'enabled'}};
-      }
-    }
-    return {'reasoning_effort': reasoningEffort};
+    // Send both `thinking` (DeepSeek) and `reasoning_effort` (OpenAI o-series)
+    // so that reasoning works regardless of which model/provider is used.
+    // Unsupported parameters are silently ignored by the API.
+    return {
+      'thinking': {'type': 'enabled'},
+      'reasoning_effort': reasoningEffort,
+    };
   }
 
   /// Mask API key for display, showing only first 8 chars and last 4 chars.
@@ -359,12 +359,14 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
               yield AIStreamEvent(content);
             }
 
-            // Reasoning content
-            if (reasoning) {
-              final reasoningContent = delta['reasoning_content'] as String?;
-              if (reasoningContent != null && reasoningContent.isNotEmpty) {
-                yield AIStreamEvent(reasoningContent, isReasoning: true);
-              }
+            // Reasoning content — always parse from response if present,
+            // regardless of the reasoning flag. The reasoning flag only
+            // controls whether thinking/reasoning_effort is SENT in the
+            // request. Some models (e.g. DeepSeek, OpenAI o-series) may
+            // still return reasoning_content even when the flag is off.
+            final reasoningContent = delta['reasoning_content'] as String?;
+            if (reasoningContent != null && reasoningContent.isNotEmpty) {
+              yield AIStreamEvent(reasoningContent, isReasoning: true);
             }
 
             // Tool call deltas (streamed in chunks by index)

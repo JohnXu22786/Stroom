@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../providers/provider_config.dart';
 
-/// LLM 模型配置编辑页面（简化版）
+/// LLM 模型配置编辑页面
+/// 包含基本设置和 LLM 专有参数（温度、Top P 等）
 class LlmModelConfigPage extends StatefulWidget {
   final ModelConfig? model; // null = 新建, non-null = 编辑
 
@@ -15,7 +16,16 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _modelIdController;
   late final TextEditingController _contextController;
+  late final TextEditingController _maxTokensController;
+  late final TextEditingController _seedController;
   late List<CustomParam> _customParams;
+
+  // Slider values
+  double _temperature = 0.7;
+  double _topP = 1.0;
+  double _frequencyPenalty = 0.0;
+  double _presencePenalty = 0.0;
+
   bool _isSaving = false;
 
   bool get _isEditing => widget.model != null;
@@ -30,6 +40,23 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         ?? (m?.typeConfig['maxTokens'] as num?)?.toInt();
     _contextController = TextEditingController(
         text: context != null ? context.toString() : '');
+
+    // Initialize LLM-specific params from typeConfig
+    _temperature = (m?.typeConfig['temperature'] as num?)?.toDouble() ?? 0.7;
+    _topP = (m?.typeConfig['topP'] as num?)?.toDouble() ?? 1.0;
+    _frequencyPenalty =
+        (m?.typeConfig['frequencyPenalty'] as num?)?.toDouble() ?? 0.0;
+    _presencePenalty =
+        (m?.typeConfig['presencePenalty'] as num?)?.toDouble() ?? 0.0;
+
+    final maxTokens = (m?.typeConfig['maxTokens'] as num?)?.toInt();
+    _maxTokensController = TextEditingController(
+        text: maxTokens != null ? maxTokens.toString() : '');
+
+    final seed = m?.typeConfig['seed'];
+    _seedController = TextEditingController(
+        text: seed != null ? seed.toString() : '');
+
     _customParams = (m?.customParams ?? []).map((p) => p.copy()).toList();
   }
 
@@ -38,6 +65,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     _nameController.dispose();
     _modelIdController.dispose();
     _contextController.dispose();
+    _maxTokensController.dispose();
+    _seedController.dispose();
     super.dispose();
   }
 
@@ -126,14 +155,148 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       name = modelId;
     }
 
+    // Build typeConfig with context and all LLM-specific params
+    final typeConfig = <String, dynamic>{
+      'context': contextValue,
+      'temperature': _temperature,
+      'topP': _topP,
+      'frequencyPenalty': _frequencyPenalty,
+      'presencePenalty': _presencePenalty,
+    };
+
+    // Parse optional maxTokens
+    final maxTokensStr = _maxTokensController.text.trim();
+    if (maxTokensStr.isNotEmpty) {
+      final maxTokens = int.tryParse(maxTokensStr);
+      if (maxTokens == null || maxTokens <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('最大输出 Token 数必须为正整数'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        setState(() => _isSaving = false);
+        return;
+      }
+      typeConfig['maxTokens'] = maxTokens;
+    }
+
+    // Parse optional seed
+    final seedStr = _seedController.text.trim();
+    if (seedStr.isNotEmpty) {
+      final seed = int.tryParse(seedStr);
+      if (seed == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('随机种子必须为整数'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        setState(() => _isSaving = false);
+        return;
+      }
+      typeConfig['seed'] = seed;
+    }
+
     final result = ModelConfig(
       name: name,
       modelId: modelId,
-      typeConfig: {'context': contextValue},
+      typeConfig: typeConfig,
       customParams: _customParams.map((p) => p.copy()).toList(),
     );
 
     Navigator.pop(context, result);
+  }
+
+  // ===================================================================
+  // UI Helpers
+  // ===================================================================
+
+  Widget _buildSliderField({
+    required String label,
+    required double value,
+    required double min,
+    required double max,
+    required int divisions,
+    required ValueChanged<double> onChanged,
+    String? description,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+            const Spacer(),
+            Text(
+              value.toStringAsFixed(2),
+              style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        if (description != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              description,
+              style: TextStyle(
+                fontSize: 11,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        Slider(
+          value: value,
+          min: min,
+          max: max,
+          divisions: divisions,
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTextField({
+    required String label,
+    required TextEditingController controller,
+    String? hintText,
+    bool required = false,
+    TextInputType keyboardType = TextInputType.text,
+    String? description,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '$label${required ? ' *' : ''}',
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        if (description != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2, bottom: 4),
+            child: Text(
+              description,
+              style: TextStyle(
+                fontSize: 11,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        const SizedBox(height: 4),
+        TextField(
+          controller: controller,
+          decoration: InputDecoration(
+            hintText: hintText,
+            border: const OutlineInputBorder(),
+          ),
+          keyboardType: keyboardType,
+        ),
+      ],
+    );
   }
 
   // ===================================================================
@@ -145,6 +308,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     final title = _isEditing
         ? (widget.model!.name.isNotEmpty ? widget.model!.name : '编辑模型')
         : '添加模型';
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -160,48 +324,128 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         padding: const EdgeInsets.all(16),
         children: [
           // ==========================================================
+          // 基本设置
+          // ==========================================================
+          Text('基本设置',
+              style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                  color: cs.primary)),
+          const SizedBox(height: 12),
+
           // 模型名称
-          // ==========================================================
-          const Text('模型名称', style: TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          TextField(
+          _buildTextField(
+            label: '模型名称',
             controller: _nameController,
-            decoration: const InputDecoration(
-              hintText: '输入显示名称（可选）',
-              border: OutlineInputBorder(),
-            ),
+            hintText: '输入显示名称（可选）',
           ),
           const SizedBox(height: 16),
 
-          // ==========================================================
           // 模型 ID
-          // ==========================================================
-          const Text('模型 ID *', style: TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          TextField(
+          _buildTextField(
+            label: '模型 ID',
             controller: _modelIdController,
-            decoration: const InputDecoration(
-              hintText: '如 gpt-4o',
-              border: OutlineInputBorder(),
-            ),
+            hintText: '如 gpt-4o',
+            required: true,
           ),
           const SizedBox(height: 16),
 
-          // ==========================================================
           // 上下文长度
-          // ==========================================================
-          const Text('上下文长度 (Context) *',
-              style: TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          TextField(
+          _buildTextField(
+            label: '上下文长度',
             controller: _contextController,
-            decoration: const InputDecoration(
-              hintText: '输入上下文长度',
-              border: OutlineInputBorder(),
-            ),
+            hintText: '输入上下文长度',
+            required: true,
             keyboardType: TextInputType.number,
+            description: '模型的最大上下文窗口大小（token 数）',
+          ),
+          const SizedBox(height: 24),
+
+          // ==========================================================
+          // LLM 参数设置
+          // ==========================================================
+          Text('LLM 参数',
+              style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                  color: cs.primary)),
+          const SizedBox(height: 4),
+          Text(
+            '这些参数将作为默认值发送到 API 请求中',
+            style: TextStyle(
+              fontSize: 12,
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Temperature
+          _buildSliderField(
+            label: '温度 (Temperature)',
+            value: _temperature,
+            min: 0.0,
+            max: 2.0,
+            divisions: 40,
+            onChanged: (v) => setState(() => _temperature = v),
+            description: '控制输出的随机性，值越高越有创造性',
+          ),
+          const SizedBox(height: 8),
+
+          // Top P
+          _buildSliderField(
+            label: 'Top P',
+            value: _topP,
+            min: 0.0,
+            max: 1.0,
+            divisions: 20,
+            onChanged: (v) => setState(() => _topP = v),
+            description: '核采样参数，控制词汇选择的累积概率',
+          ),
+          const SizedBox(height: 8),
+
+          // Frequency Penalty
+          _buildSliderField(
+            label: '频率惩罚 (Frequency Penalty)',
+            value: _frequencyPenalty,
+            min: -2.0,
+            max: 2.0,
+            divisions: 40,
+            onChanged: (v) => setState(() => _frequencyPenalty = v),
+            description: '减少重复词的频率，负值增加重复',
+          ),
+          const SizedBox(height: 8),
+
+          // Presence Penalty
+          _buildSliderField(
+            label: '存在惩罚 (Presence Penalty)',
+            value: _presencePenalty,
+            min: -2.0,
+            max: 2.0,
+            divisions: 40,
+            onChanged: (v) => setState(() => _presencePenalty = v),
+            description: '鼓励讨论新话题，负值鼓励重复话题',
           ),
           const SizedBox(height: 16),
+
+          // Max Tokens
+          _buildTextField(
+            label: '最大输出 Token 数',
+            controller: _maxTokensController,
+            hintText: '可选，如 4096',
+            keyboardType: TextInputType.number,
+            description: '每次响应最多生成的 token 数',
+          ),
+          const SizedBox(height: 16),
+
+          // Seed
+          _buildTextField(
+            label: '随机种子 (Seed)',
+            controller: _seedController,
+            hintText: '可选，如 42',
+            keyboardType: TextInputType.number,
+            description: '设置后可使输出结果可复现',
+          ),
+          const SizedBox(height: 24),
 
           // ==========================================================
           // 自定义参数
@@ -224,7 +468,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
               child: Center(
-                child: Text('暂无自定义参数', style: TextStyle(color: Colors.grey)),
+                child: Text('暂无自定义参数',
+                    style: TextStyle(color: Colors.grey)),
               ),
             )
           else
@@ -232,7 +477,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
               final param = _customParams[i];
               final name = param.paramName.trim();
               final isDuplicate = name.isNotEmpty &&
-                  _customParams.indexWhere((p) => p.paramName.trim() == name) !=
+                  _customParams
+                          .indexWhere((p) => p.paramName.trim() == name) !=
                       i;
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
@@ -263,10 +509,12 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                           Container(
                             width: 110,
                             decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey.shade400),
+                              border:
+                                  Border.all(color: Colors.grey.shade400),
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 8),
                             child: DropdownButtonHideUnderline(
                               child: DropdownButton<String>(
                                 value: param.type,

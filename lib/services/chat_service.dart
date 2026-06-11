@@ -434,6 +434,13 @@ class ChatService {
 
   static final Map<String, Map<String, dynamic>> _toolRegistries = {};
 
+  /// Returns the list of all registered built-in tool definitions.
+  static List<ToolDefinition> getRegisteredToolDefinitions() {
+    return _toolRegistries.values
+        .map((entry) => entry['definition'] as ToolDefinition)
+        .toList(growable: false);
+  }
+
   /// MCP 客户端管理器（可选，用于执行 MCP 工具）
   static McpClientManager? _mcpClientManager;
 
@@ -497,11 +504,33 @@ class ChatService {
     _assistantCustomParams = params;
   }
 
-  /// Build extraParams map from customParams for the API call.
-  /// Merges model-level [ProviderParam]s with assistant-level [CustomParameter]s.
+  /// Build extraParams map from typeConfig and customParams for the API call.
+  /// Merges model-level standard LLM params + [ProviderParam]s with
+  /// assistant-level [CustomParameter]s.
   /// Assistant-level params take precedence when names collide.
   Map<String, dynamic> _buildExtraParams() {
     final result = <String, dynamic>{};
+
+    // Standard LLM parameters from typeConfig (set via LlmModelConfigPage)
+    final tc = _modelConfig!.typeConfig;
+    // Top P
+    if (tc.containsKey('topP')) {
+      result['top_p'] = (tc['topP'] as num).toDouble();
+    }
+    // Frequency penalty
+    if (tc.containsKey('frequencyPenalty')) {
+      result['frequency_penalty'] =
+          (tc['frequencyPenalty'] as num).toDouble();
+    }
+    // Presence penalty
+    if (tc.containsKey('presencePenalty')) {
+      result['presence_penalty'] =
+          (tc['presencePenalty'] as num).toDouble();
+    }
+    // Seed
+    if (tc.containsKey('seed')) {
+      result['seed'] = (tc['seed'] as num).toInt();
+    }
 
     // Model-level custom params
     final modelParams = _modelConfig!.customParams;
