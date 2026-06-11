@@ -47,6 +47,20 @@ void main() {
         expect(config.normalizedHost, equals('https://api.openai.com/v1'));
       });
 
+      test('normalizedHost preserves full endpoint path (no stripping of /chat/completions)', () {
+        // The service uses normalizedHost as the request URL directly.
+        // Users enter the full endpoint URL (e.g. .../chat/completions),
+        // and normalizedHost preserves it without stripping or appending.
+        const config = OcrConfig(
+          model: 'gpt-4o',
+          apiKey: 'key',
+          host: 'https://api.openai.com/v1/chat/completions',
+        );
+        expect(config.normalizedHost,
+            equals('https://api.openai.com/v1/chat/completions'));
+        expect(config.normalizedHost.endsWith('/chat/completions'), isTrue);
+      });
+
       test('effectiveSystemPrompt uses default when null', () {
         const config = OcrConfig(
           model: 'gpt-4o',
