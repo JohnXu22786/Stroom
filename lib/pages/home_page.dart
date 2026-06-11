@@ -9,6 +9,7 @@ import 'unified_task_list_page.dart';
 import '../catcatch/providers/catcatch_provider.dart';
 import '../catcatch/models/catcatch_task.dart' as catcatch_task;
 import '../providers/task_provider.dart';
+import '../providers/background_task_provider.dart';
 import 'chat_page.dart';
 import 'files_page.dart';
 import 'settings_page.dart';
@@ -410,6 +411,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final cs = Theme.of(context).colorScheme;
     final catcatchTasks = ref.watch(catcatchTasksProvider);
     final synthesisTasks = ref.watch(taskListProvider);
+    final backgroundTasks = ref.watch(backgroundTasksProvider);
     final lastRead = ref.watch(taskListLastReadProvider);
     final activeTaskCount =
         catcatchTasks
@@ -422,6 +424,9 @@ class _HomePageState extends ConsumerState<HomePage> {
             ).length +
         synthesisTasks
             .where((t) => t.status.name != 'completed' && (t.statusChangedAt ?? t.createdAt).isAfter(lastRead))
+            .length +
+        backgroundTasks
+            .where((t) => t.status != TaskStatus.completed && (t.statusChangedAt ?? t.createdAt).isAfter(lastRead))
             .length;
 
     return SafeArea(
@@ -619,6 +624,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final selectedPage = ref.watch(selectedPageProvider);
     final catcatchTasks = ref.watch(catcatchTasksProvider);
     final synthesisTasks = ref.watch(taskListProvider);
+    final backgroundTasks = ref.watch(backgroundTasksProvider);
     final lastRead = ref.watch(taskListLastReadProvider);
     final activeTaskCount =
         catcatchTasks
@@ -631,6 +637,9 @@ class _HomePageState extends ConsumerState<HomePage> {
             ).length +
         synthesisTasks
             .where((t) => t.status.name != 'completed' && (t.statusChangedAt ?? t.createdAt).isAfter(lastRead))
+            .length +
+        backgroundTasks
+            .where((t) => t.status != TaskStatus.completed && (t.statusChangedAt ?? t.createdAt).isAfter(lastRead))
             .length;
 
     ref.listen(catcatchTasksProvider, (prev, next) {
