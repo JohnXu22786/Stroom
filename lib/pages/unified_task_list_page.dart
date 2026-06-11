@@ -13,6 +13,7 @@ import '../catcatch/models/catcatch_task.dart' as catcatch;
 import '../services/storage_service.dart';
 import '../catcatch/providers/catcatch_provider.dart';
 import '../providers/task_provider.dart';
+import '../providers/background_task_provider.dart';
 import 'catcatch_page.dart';
 import 'tts_create_page.dart';
 
@@ -400,7 +401,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     // 打开列表即标记已读
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -421,6 +422,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
   Widget build(BuildContext context) {
     final catcatchTasks = ref.watch(catcatchTasksProvider);
     final synthesisTasks = ref.watch(taskListProvider);
+    final backgroundTasks = ref.watch(backgroundTasksProvider);
 
     final allTasks = <_UnifiedTaskItem>[
       for (final t in catcatchTasks)
@@ -428,6 +430,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
           id: t.id,
           createdAt: t.createdAt,
           isCatCatch: true,
+          isBackground: false,
           catCatchTask: t,
         ),
       for (final t in synthesisTasks)
@@ -435,7 +438,16 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
           id: t.id,
           createdAt: t.createdAt,
           isCatCatch: false,
+          isBackground: false,
           synthesisTask: t,
+        ),
+      for (final t in backgroundTasks)
+        _UnifiedTaskItem(
+          id: t.id,
+          createdAt: t.createdAt,
+          isCatCatch: false,
+          isBackground: true,
+          backgroundTask: t,
         ),
     ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
@@ -456,6 +468,11 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                 for (final t in synthesisTasks) {
                   if (t.status.name == 'completed') {
                     ref.read(taskListProvider.notifier).removeTask(t.id);
+                  }
+                }
+                for (final t in backgroundTasks) {
+                  if (t.status == TaskStatus.completed) {
+                    ref.read(backgroundTasksProvider.notifier).removeTask(t.id);
                   }
                 }
               } else if (value == 'clear_failed') {
@@ -483,6 +500,13 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                             if (t.status.name == 'failed') {
                               ref
                                   .read(taskListProvider.notifier)
+                                  .removeTask(t.id);
+                            }
+                          }
+                          for (final t in backgroundTasks) {
+                            if (t.status == TaskStatus.failed) {
+                              ref
+                                  .read(backgroundTasksProvider.notifier)
                                   .removeTask(t.id);
                             }
                           }
@@ -515,6 +539,11 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                           for (final t in synthesisTasks) {
                             ref
                                 .read(taskListProvider.notifier)
+                                .removeTask(t.id);
+                          }
+                          for (final t in backgroundTasks) {
+                            ref
+                                .read(backgroundTasksProvider.notifier)
                                 .removeTask(t.id);
                           }
                         },
@@ -566,6 +595,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
             Tab(text: '全部'),
             Tab(text: '下载'),
             Tab(text: '合成'),
+            Tab(text: '其他'),
           ],
         ),
       ),
@@ -578,8 +608,12 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
             '下载',
           ),
           _buildTabContent(
-            allTasks.where((t) => !t.isCatCatch).toList(),
+            allTasks.where((t) => !t.isCatCatch && !t.isBackground).toList(),
             '合成',
+          ),
+          _buildTabContent(
+            allTasks.where((t) => t.isBackground).toList(),
+            '其他',
           ),
         ],
       ),
@@ -597,7 +631,9 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                   ? Icons.cloud_download_outlined
                   : tabLabel == '合成'
                       ? Icons.graphic_eq
-                      : Icons.pending_actions,
+                      : tabLabel == '其他'
+                          ? Icons.miscellaneous_services
+                          : Icons.pending_actions,
               size: 64,
               color: Theme.of(context)
                   .colorScheme
@@ -628,6 +664,11 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
           final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
           return _CatCatchTaskCard(task: t, isUnread: isUnread);
         }
+        if (item.isBackground) {
+          final t = item.backgroundTask!;
+          final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
+          return _BackgroundTaskCard(task: t, isUnread: isUnread);
+        }
         final t = item.synthesisTask!;
         final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
         return _SynthesisTaskCard(task: t, isUnread: isUnread);
@@ -640,15 +681,19 @@ class _UnifiedTaskItem {
   final String id;
   final DateTime createdAt;
   final bool isCatCatch;
+  final bool isBackground;
   final catcatch.CatCatchTask? catCatchTask;
   final SynthesisTask? synthesisTask;
+  final BackgroundTask? backgroundTask;
 
   const _UnifiedTaskItem({
     required this.id,
     required this.createdAt,
     required this.isCatCatch,
+    this.isBackground = false,
     this.catCatchTask,
     this.synthesisTask,
+    this.backgroundTask,
   });
 }
 
@@ -2251,4 +2296,255 @@ class _SynthesisTaskCard extends ConsumerWidget {
       ),
     );
   }
+}
+
+// =============================================================================
+// 后台任务卡片（OCR / ASR / 音频分离）
+// =============================================================================
+
+class _BackgroundTaskCard extends ConsumerWidget {
+  final BackgroundTask task;
+  final bool isUnread;
+
+  const _BackgroundTaskCard({required this.task, this.isUnread = false});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: colorScheme.outlineVariant, width: 0.5),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            if (isUnread)
+              Container(
+                width: 6,
+                height: 6,
+                margin: const EdgeInsets.only(right: 4),
+                decoration: BoxDecoration(
+                  color: colorScheme.primary,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            _buildStatusIcon(task.status),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        _taskTypeIcon(task.type),
+                        size: 14,
+                        color: _taskTypeColor(task.type),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _taskTypeLabel(task.type),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: _taskTypeColor(task.type),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    task.title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      _buildStatusChip(task.status),
+                      const SizedBox(width: 8),
+                      Text(
+                        _formatRelativeTime(task.createdAt),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (task.status == TaskStatus.failed &&
+                      task.error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: Colors.red.withValues(alpha: 0.25),
+                          ),
+                        ),
+                        child: Text(
+                          task.error!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.red,
+                            height: 1.4,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, size: 20),
+              onSelected: (value) {
+                if (value == 'remove') {
+                  ref.read(backgroundTasksProvider.notifier).removeTask(task.id);
+                }
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'remove',
+                  child: ListTile(
+                    leading: Icon(Icons.delete_outline,
+                        size: 20, color: Colors.grey),
+                    title: Text('从列表移除'),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static Widget _buildStatusIcon(TaskStatus status) {
+    switch (status) {
+      case TaskStatus.running:
+        return const SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.5,
+            color: Colors.blue,
+          ),
+        );
+      case TaskStatus.completed:
+        return const Icon(Icons.check_circle, color: Colors.green, size: 24);
+      case TaskStatus.failed:
+        return const Icon(Icons.error, color: Colors.red, size: 24);
+      case TaskStatus.paused:
+        return const Icon(Icons.pause_circle, color: Colors.orange, size: 24);
+    }
+  }
+
+  static Widget _buildStatusChip(TaskStatus status) {
+    switch (status) {
+      case TaskStatus.running:
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.blue.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Text(
+            '进行中',
+            style: TextStyle(fontSize: 11, color: Colors.blue),
+          ),
+        );
+      case TaskStatus.completed:
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.green.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Text(
+            '已完成',
+            style: TextStyle(fontSize: 11, color: Colors.green),
+          ),
+        );
+      case TaskStatus.failed:
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.red.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Text(
+            '失败',
+            style: TextStyle(fontSize: 11, color: Colors.red),
+          ),
+        );
+      case TaskStatus.paused:
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.orange.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Text(
+            '已暂停',
+            style: TextStyle(fontSize: 11, color: Colors.orange),
+          ),
+        );
+    }
+  }
+
+  static IconData _taskTypeIcon(BackgroundTaskType type) {
+    switch (type) {
+      case BackgroundTaskType.ocr:
+        return Icons.text_snippet;
+      case BackgroundTaskType.asr:
+        return Icons.multitrack_audio;
+      case BackgroundTaskType.audioSeparation:
+        return Icons.music_note;
+    }
+  }
+
+  static Color _taskTypeColor(BackgroundTaskType type) {
+    switch (type) {
+      case BackgroundTaskType.ocr:
+        return Colors.teal;
+      case BackgroundTaskType.asr:
+        return Colors.deepPurple;
+      case BackgroundTaskType.audioSeparation:
+        return Colors.indigo;
+    }
+  }
+
+  static String _taskTypeLabel(BackgroundTaskType type) {
+    return type.label;
+  }
+}
+
+String _formatRelativeTime(DateTime dt) {
+  final now = DateTime.now();
+  final diff = now.difference(dt);
+  if (diff.inMinutes < 1) return '刚刚';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}分钟前';
+  if (diff.inHours < 24) return '${diff.inHours}小时前';
+  return '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
 }

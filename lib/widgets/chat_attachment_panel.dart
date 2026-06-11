@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import '../models/tool_call.dart';
 
 /// Shows the Chat Attachment Panel — a modal bottom sheet that consolidates
-/// file attachment options, MCP tool toggles, and reasoning settings.
+/// model selection, file attachment options, MCP tool toggles, and reasoning settings.
 ///
+/// [models] — list of available model display names for selection.
+/// [selectedModelIndex] — index of currently selected model.
+/// [onModelSelected] — called when a model is selected (new index).
 /// [tools] — list of available MCP tool definitions to display.
 /// [reasoningEnabled] — current reasoning toggle state.
 /// [reasoningEffort] — current reasoning effort level ('low', 'medium', 'high').
@@ -16,6 +19,9 @@ import '../models/tool_call.dart';
 /// [onPickFromFilePicker] — called when the file picker option is tapped.
 void showChatAttachmentPanel({
   required BuildContext context,
+  required List<String> models,
+  required int selectedModelIndex,
+  required ValueChanged<int> onModelSelected,
   required List<ToolDefinition> tools,
   required bool reasoningEnabled,
   required String reasoningEffort,
@@ -38,8 +44,7 @@ void showChatAttachmentPanel({
       final cs = theme.colorScheme;
 
       // Local mutable state that persists across StatefulBuilder rebuilds.
-      // These must be OUTSIDE the StatefulBuilder's builder function so they
-      // are not re-initialized on every setSheetState call.
+      var localSelectedModelIndex = selectedModelIndex;
       var localReasoningEnabled = reasoningEnabled;
       var localReasoningEffort = reasoningEffort;
       var localEnabledTools = Set<String>.from(enabledTools);
@@ -80,6 +85,24 @@ void showChatAttachmentPanel({
                         ),
                       ),
                       const SizedBox(height: 20),
+
+                      // ═══════════════════════════════════════════
+                      // SECTION: 模型 (placed first as requested)
+                      // ═══════════════════════════════════════════
+                      if (models.isNotEmpty) ...[
+                        _buildModelSection(
+                          cs: cs,
+                          models: models,
+                          selectedIndex: localSelectedModelIndex,
+                          onChanged: (idx) {
+                            setSheetState(() {
+                              localSelectedModelIndex = idx;
+                              onModelSelected(idx);
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 24),
+                      ],
 
                       // ═══════════════════════════════════════════
                       // SECTION: 文件
@@ -273,6 +296,125 @@ void showChatAttachmentPanel({
 // ═══════════════════════════════════════════════════════════════
 // Private helper widgets
 // ═══════════════════════════════════════════════════════════════
+
+/// Builds the model selection section with a styled dropdown card.
+Widget _buildModelSection({
+  required ColorScheme cs,
+  required List<String> models,
+  required int selectedIndex,
+  required ValueChanged<int> onChanged,
+}) {
+  final clampedIndex = selectedIndex.clamp(0, models.length - 1);
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _SectionHeader(
+        icon: Icons.smart_toy_outlined,
+        title: '模型',
+        color: Colors.teal,
+      ),
+      const SizedBox(height: 12),
+      Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHighest.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: cs.outlineVariant,
+            width: 1,
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<int>(
+            value: clampedIndex,
+            isExpanded: true,
+            isDense: false,
+            icon: Icon(
+              Icons.unfold_more,
+              color: cs.onSurfaceVariant,
+              size: 22,
+            ),
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              color: cs.onSurface,
+            ),
+            selectedItemBuilder: (context) {
+              return List.generate(models.length, (i) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: cs.primary,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          models[i],
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              });
+            },
+            onChanged: (idx) {
+              if (idx != null && idx < models.length) {
+                onChanged(idx);
+              }
+            },
+            items: List.generate(models.length, (i) {
+              return DropdownMenuItem<int>(
+                value: i,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: clampedIndex == i
+                              ? cs.primary
+                              : cs.outlineVariant,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          models[i],
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (clampedIndex == i)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: Icon(
+                            Icons.check,
+                            size: 18,
+                            color: cs.primary,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+      ),
+    ],
+  );
+}
 
 /// Section header with leading icon and title text.
 class _SectionHeader extends StatelessWidget {

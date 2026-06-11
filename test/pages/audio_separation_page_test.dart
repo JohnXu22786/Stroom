@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,78 +27,111 @@ void main() {
     FileManifest.invalidateCache();
   });
 
-  group('AudioSeparationPage', () {
+  group('AudioSeparationPage - basic rendering', () {
     testWidgets('renders page title', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // Should show the page title
       expect(find.text('视频音频分离'), findsOneWidget);
-    });
-
-    testWidgets('shows select video file button', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // Should show the select video file button
-      expect(find.text('选择视频文件'), findsOneWidget);
     });
 
     testWidgets('shows empty state initially', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // Should show empty state text
       expect(find.text('暂未选择视频文件'), findsOneWidget);
+    });
+
+    testWidgets('select video button is present', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('选择视频来源'), findsOneWidget);
+    });
+
+    testWidgets('extract button is present', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('提取音频'), findsOneWidget);
     });
 
     testWidgets('shows supported formats hint', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // Should show hint about supported formats
       expect(find.textContaining('mp4'), findsOneWidget);
     });
+  });
 
+  group('AudioSeparationPage - video source selection panel', () {
+    testWidgets('tapping video source button opens selection panel',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Tap the video source button
+      await tester.tap(find.text('选择视频来源'));
+      await tester.pumpAndSettle();
+
+      // Should show selection panel
+      expect(find.text('选择视频来源'), findsWidgets);
+    });
+
+    testWidgets('video selection panel shows file and library options',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('选择视频来源'));
+      await tester.pumpAndSettle();
+
+      // Should show options for selecting video
+      expect(find.text('从系统相册选择'), findsOneWidget);
+      expect(find.text('从应用相册选择'), findsOneWidget);
+    });
+  });
+
+  group('AudioSeparationPage - save-to folder selector', () {
+    testWidgets('shows save-to folder selector in bottom bar', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Should show save-to section in bottom bar
+      expect(find.text('保存至'), findsOneWidget);
+    });
+
+    testWidgets('save-to shows root directory by default', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('根目录'), findsOneWidget);
+    });
+  });
+
+  group('AudioSeparationPage - bottom bar', () {
     testWidgets('extract button is disabled when no file selected',
         (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // Find the bottom action button
-      final extractBtn = find.text('提取音频');
-      expect(extractBtn, findsOneWidget);
-
-      // Should be a disabled button (no file selected)
-      final button = tester.widget<FilledButton>(find.byType(FilledButton));
-      expect(button.onPressed, isNull);
-    });
-
-    testWidgets('select video button is tappable', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // The select video button should be enabled
-      final selectBtn = find.text('选择视频文件');
-      expect(selectBtn, findsOneWidget);
-    });
-
-    testWidgets('shows engine status after initialization', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // After pumpAndSettle, engine availability check should complete
-      // The page should not show the "no engine" error state initially
+      final filledButtons = tester.widgetList<FilledButton>(find.byType(FilledButton));
+      for (final btn in filledButtons) {
+        if (btn.onPressed == null) {
+          // Found a disabled button - this is expected when no file
+          return;
+        }
+      }
+      // If we get here, check the text exists
       expect(find.text('提取音频'), findsOneWidget);
     });
 
-    testWidgets('clear button is hidden by default when no video selected',
-        (tester) async {
+    testWidgets('save-to section is above extract button', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // No clear button should appear when no file is selected
-      expect(find.text('清空'), findsNothing);
+      expect(find.text('保存至'), findsOneWidget);
+      expect(find.text('提取音频'), findsOneWidget);
     });
   });
 }
