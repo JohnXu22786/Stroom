@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../catcatch/engine/ffmpeg_converter.dart';
 import '../providers/tts_state_provider.dart';
+import '../providers/background_task_provider.dart';
 import '../utils/file_manifest.dart';
 import '../widgets/folder_picker_dialog.dart';
 import 'tts_page.dart';
@@ -580,13 +581,19 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       return;
     }
 
-    setState(() {
-      _isProcessing = true;
-      _hasError = false;
-      _errorMessage = '';
-      _success = false;
-    });
+    // Create a background task for tracking
+    final videoName = _videoName ?? '视频音频';
+    final taskId = ref.read(backgroundTasksProvider.notifier).addTask(
+      type: BackgroundTaskType.audioSeparation,
+      title: '音频分离_${p.basenameWithoutExtension(videoName)}',
+    );
 
+    // Pop back to home page immediately so user can see task progress
+    if (mounted) {
+      Navigator.pop(context);
+    }
+
+    // Continue processing in the background
     try {
       final tempDir = await getTemporaryDirectory();
 
@@ -625,23 +632,14 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       // 保存到音频库
       await _saveAudioToLibrary(audioBytes);
 
-      if (mounted) {
-        setState(() {
-          _isProcessing = false;
-          _success = true;
-          _videoBytes = null;
-          _videoName = null;
-          _videoFormat = null;
-        });
-      }
+      // Mark task as completed
+      ref.read(backgroundTasksProvider.notifier).completeTask(taskId);
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isProcessing = false;
-          _hasError = true;
-          _errorMessage = '音频提取失败: $e';
-        });
-      }
+      // Mark task as failed (widget may be gone, but notifier is independent)
+      ref.read(backgroundTasksProvider.notifier).failTask(
+        taskId,
+        error: '音频提取失败: $e',
+      );
     }
   }
 
