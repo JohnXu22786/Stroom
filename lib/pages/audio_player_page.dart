@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
+import 'package:file_picker/file_picker.dart';
 
 import '../providers/provider_config.dart';
 import '../providers/tts_state_provider.dart';
@@ -121,7 +123,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
       final textData = await FileManifest.readFile(textFilePath);
       if (textData != null && textData.isNotEmpty) {
-        _sourceText = utf8.decode(textData);
+        _sourceText = utf8.decode(textData, allowMalformed: true);
       }
     } catch (_) {
       // 老录音可能没有 companion text，忽略
@@ -131,6 +133,99 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       setState(() {
         _textLoading = false;
       });
+    }
+  }
+
+  /// 上传或修改源文本文件
+  Future<void> _uploadSourceText() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['txt'],
+        allowMultiple: false,
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.first;
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('无法读取文本文件')),
+          );
+        }
+        return;
+      }
+
+      String textContent;
+      try {
+        textContent = utf8.decode(bytes);
+      } catch (_) {
+        // 尝试其他常见编码
+        try {
+          textContent = utf8.decode(bytes, allowMalformed: true);
+        } catch (_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('无法解析文本文件编码，请使用 UTF-8 格式')),
+            );
+          }
+          return;
+        }
+      }
+      if (textContent.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('文本文件内容为空')),
+          );
+        }
+        return;
+      }
+
+      // 保存源文本
+      await _saveSourceText(textContent);
+
+      if (mounted) {
+        final wasEmpty = _sourceText.isEmpty;
+        setState(() {
+          _sourceText = textContent;
+          _textController.text = textContent;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(wasEmpty ? '源文本已上传' : '源文本已更新'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('上传源文本失败: $e')),
+        );
+      }
+    }
+  }
+
+  /// 保存源文本到伴生文件并更新 AudioRecord
+  Future<void> _saveSourceText(String text) async {
+    // 从 audio filePath 推导 hash
+    final withoutExt = path.withoutExtension(widget.filePath);
+    final hash = path.basename(withoutExt);
+
+    // 保存伴生 .txt 文件
+    final textBytes = Uint8List.fromList(utf8.encode(text));
+    await FileManifest.writeFile('$hash.txt', textBytes);
+
+    // 更新 AudioRecord 中的 sourceText 字段
+    final record = await FileManifest.getRecordByHash(hash);
+    if (record != null) {
+      final updated = record.copyWith(sourceText: text);
+      await FileManifest.updateRecord(updated);
+    } else {
+      // 如果找不到记录（创建新记录），仍然保存了文本文件
+      debugPrint('AudioPlayerPage: 未找到 hash=$hash 对应的 AudioRecord');
     }
   }
 
@@ -408,17 +503,100 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                         ),
                         const Spacer(),
                         if (_sourceText.isEmpty)
-                          Text(
-                            '（无源文本）',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[400],
-                            ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '（无源文本）',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[400],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              InkWell(
+                                onTap: _uploadSourceText,
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .primary
+                                        .withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.upload_file,
+                                        size: 14,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '上传源文本',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         if (_sourceText.isNotEmpty)
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
+                              InkWell(
+                                onTap: _uploadSourceText,
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .primary
+                                        .withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.edit,
+                                        size: 14,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '修改源文本',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
                               Text(
                                 '${_fontSize.toInt()}',
                                 style: TextStyle(

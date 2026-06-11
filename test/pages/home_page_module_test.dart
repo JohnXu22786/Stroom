@@ -128,6 +128,37 @@ void main() {
       // Should navigate to CatCatchPage with new title
       expect(find.text('获取网页资源'), findsOneWidget);
     });
+
+    testWidgets('音频分离 card exists on home page', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Should show 音频分离 as a module card
+      expect(find.text('音频分离'), findsOneWidget);
+    });
+
+    testWidgets('音频分离 card has correct icon', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Should have the music note icon
+      expect(find.byIcon(Icons.music_note), findsOneWidget);
+    });
+
+    testWidgets('音频分离 card navigates to AudioSeparationPage', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Tap the 音频分离 card
+      final cardFinder = find.text('音频分离');
+      await tester.ensureVisible(cardFinder);
+      await tester.pumpAndSettle();
+      await tester.tap(cardFinder);
+      await tester.pumpAndSettle();
+
+      // Should navigate to AudioSeparationPage (check for its title)
+      expect(find.text('视频音频分离'), findsOneWidget);
+    });
   });
 
   group('HomePage responsive layout', () {
