@@ -23,6 +23,9 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   final List<ToolDefinition> mcpTools;
   final Set<String> enabledTools;
   final ValueChanged<Set<String>> onEnabledToolsChanged;
+  final List<String> modelNames;
+  final int selectedModelIndex;
+  final ValueChanged<int> onModelSelected;
 
   const ChatComposerWidget({
     super.key,
@@ -31,6 +34,9 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     this.mcpTools = const [],
     this.enabledTools = const {},
     required this.onEnabledToolsChanged,
+    this.modelNames = const [],
+    this.selectedModelIndex = 0,
+    required this.onModelSelected,
   });
 
   @override
@@ -175,6 +181,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
 
     showChatAttachmentPanel(
       context: context,
+      models: widget.modelNames,
+      selectedModelIndex: widget.selectedModelIndex,
+      onModelSelected: widget.onModelSelected,
       tools: widget.mcpTools,
       reasoningEnabled: reasoningEnabled,
       reasoningEffort: reasoningEffort,
