@@ -248,4 +248,106 @@ throw FileSystemException('下载源文件不存在，请重新下载', inputPat
     debugPrint('[FFmpegConverter] Conversion complete: $outputPath');
     return outputPath;
   }
+
+  /// 从视频文件中提取音频
+  ///
+  /// [inputPath] 输入视频文件路径
+  /// [outputPath] 输出音频文件路径（建议 .mp3）
+  /// [onProgress] 进度回调 0-100
+  /// [cancelToken] 取消令牌
+  ///
+  /// 返回输出文件路径。
+  static Future<String> extractAudio({
+    required String inputPath,
+    required String outputPath,
+    void Function(int progress)? onProgress,
+    CancelToken? cancelToken,
+  }) async {
+    // 确保输出目录存在
+    final outDir = Directory(File(outputPath).parent.path);
+    if (!await outDir.exists()) {
+      await outDir.create(recursive: true);
+    }
+
+    // 检查输入
+    final inputFile = File(inputPath);
+    if (!await inputFile.exists()) {
+      throw FileSystemException('Input file not found', inputPath);
+    }
+
+    final args = <String>[
+      '-i', inputPath,
+      '-vn', // 不包含视频流
+      '-acodec', 'libmp3lame',
+      '-q:a', '2', // 高质量
+      '-y', // 覆盖输出
+      '-progress', 'pipe:1',
+      outputPath,
+    ];
+
+    debugPrint('[FFmpegConverter] Running ffmpeg audio extraction: '
+        'ffmpeg ${args.join(' ')}');
+
+    final process = await Process.start('ffmpeg', args);
+    cancelToken?.whenCancel.then((_) {
+      process.kill();
+    });
+
+    int? totalDurationUs;
+
+    // 读取 stdout 获取 FFmpeg 进度
+    process.stdout
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen((line) {
+      if (cancelToken?.isCancelled ?? false) {
+        process.kill();
+        return;
+      }
+      if (line.startsWith('out_time_us=')) {
+        final us = int.tryParse(line.substring('out_time_us='.length));
+        if (us != null && totalDurationUs != null && totalDurationUs! > 0) {
+          final p = (us * 100 ~/ totalDurationUs!).clamp(0, 100);
+          onProgress?.call(p);
+        }
+      }
+    });
+
+    // 读取 stderr 获取总时长
+    final stderrLines = <String>[];
+    process.stderr
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen((line) {
+      stderrLines.add(line);
+      final durationMatch =
+          RegExp(r'Duration:\s*(\d+):(\d+):(\d+\.\d+)').firstMatch(line);
+      if (durationMatch != null) {
+        final h = int.parse(durationMatch.group(1)!);
+        final m = int.parse(durationMatch.group(2)!);
+        final s = double.parse(durationMatch.group(3)!);
+        totalDurationUs = ((h * 3600 + m * 60 + s) * 1000000).round();
+      }
+    });
+
+    final exitCode = await process.exitCode;
+
+    if (cancelToken?.isCancelled ?? false) {
+      process.kill();
+      throw Exception('Task was cancelled during audio extraction');
+    }
+
+    if (exitCode != 0) {
+      final error = stderrLines.join('\n');
+      throw ProcessException(
+        'ffmpeg',
+        args,
+        'Exit code: $exitCode\n$error',
+      );
+    }
+
+    onProgress?.call(100);
+    debugPrint('[FFmpegConverter] Audio extraction complete: $outputPath');
+    return outputPath;
+  }
 }

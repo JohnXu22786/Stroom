@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:dynamic_color/dynamic_color.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'pages/home_page.dart';
 import 'pages/camera_page.dart';
@@ -13,7 +12,7 @@ import 'pages/files_page.dart';
 import 'pages/settings_page.dart';
 import 'providers/theme_provider.dart';
 import 'providers/update_provider.dart';
-import 'utils/app_version.dart';
+import 'widgets/update_dialog.dart';
 
 class Application extends ConsumerStatefulWidget {
   const Application({super.key});
@@ -36,102 +35,26 @@ class _ApplicationState extends ConsumerState<Application> {
 
   Future<void> _checkForUpdatesOnStartup() async {
     final notifier = ref.read(updateProvider.notifier);
-    final pendingUpdate = await notifier.getPendingUpdate();
-    if (pendingUpdate != null) {
-      if (mounted) {
-        _showUpdateDialog(
-          latestVersion: pendingUpdate['latest_version'] as String? ?? '',
-          mandatory: pendingUpdate['mandatory'] as bool? ?? false,
-          releaseNotes: pendingUpdate['release_notes'] as String? ?? '',
-          downloadUrl: pendingUpdate['download_url'] as String? ?? '',
-        );
+
+    // 直接请求 GitHub API 检查最新版本
+    // silent=true 表示启动时不把网络错误暴露给用户
+    await notifier.checkForUpdate(silent: true);
+
+    // 如果发现有新版本，弹出更新面板
+    if (mounted) {
+      final state = ref.read(updateProvider);
+      if (state.updateAvailable) {
+        _showUpdateDialog();
       }
     }
-    await notifier.checkForUpdate(silent: true);
   }
 
-  void _showUpdateDialog({
-    required String latestVersion,
-    required bool mandatory,
-    required String releaseNotes,
-    required String downloadUrl,
-  }) {
+  void _showUpdateDialog() {
     showDialog(
       context: context,
-      barrierDismissible: !mandatory,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: Row(
-            children: [
-              Icon(
-                mandatory ? Icons.warning_amber_rounded : Icons.system_update,
-                color: mandatory ? Colors.red : Colors.blue,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(mandatory ? '强制更新' : '发现新版本'),
-              ),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('最新版本: $latestVersion'),
-                Text('当前版本: $appVersion'),
-                if (mandatory) ...[
-                  const SizedBox(height: 8),
-                  const Text(
-                    '此版本为强制更新，请立即升级以继续使用。',
-                    style: TextStyle(color: Colors.red),
-                  ),
-                ],
-                if (releaseNotes.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  const Text('更新内容:',
-                      style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Text(releaseNotes),
-                ],
-              ],
-            ),
-          ),
-          actions: [
-            if (!mandatory)
-              TextButton(
-                onPressed: () {
-                  ref.read(updateProvider.notifier).skipVersion(latestVersion);
-                  Navigator.of(dialogContext).pop();
-                },
-                child: const Text('跳过此版本'),
-              ),
-            if (!mandatory)
-              TextButton(
-                onPressed: () {
-                  Navigator.of(dialogContext).pop();
-                },
-                child: const Text('稍后提醒'),
-              ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-                _openUrl(downloadUrl);
-              },
-              child: const Text('立即更新'),
-            ),
-          ],
-        );
-      },
+      barrierDismissible: true,
+      builder: (context) => const UpdateDialog(),
     );
-  }
-
-  Future<void> _openUrl(String urlString) async {
-    final uri = Uri.tryParse(urlString);
-    if (uri == null) return;
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
   }
 
   @override
