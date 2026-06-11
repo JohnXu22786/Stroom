@@ -250,13 +250,13 @@ void main() {
       await container.read(providerEntriesProvider.notifier).load();
 
       final state = container.read(providerEntriesProvider);
-      // Verify existing entries are still present
-      // Now 4 because ASR is also auto-migrated
-      expect(state.entries.length, equals(4));
+      // Verify existing entries are still present (includes ASR and MCP auto-migration)
+      expect(state.entries.length, equals(5));
       expect(state.entries[0].type, equals('tts'));
       expect(state.entries[1].type, equals('llm'));
       expect(state.entries[2].type, equals('ocr'));
       expect(state.entries[3].type, equals('asr'));
+      expect(state.entries[4].type, equals('mcp'));
     });
 
     test('saved OCR config is preserved through load', () async {
