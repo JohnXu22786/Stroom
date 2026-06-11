@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path/path.dart' as p;
 import 'package:dio/dio.dart' show CancelToken;
+import '../../utils/ffmpeg_resolver.dart';
 
 /// 格式转换器
 ///
@@ -14,17 +15,9 @@ class FFmpegConverter {
   /// 检查系统是否安装了 FFmpeg
   ///
   /// 执行 `ffmpeg -version` 验证。
-  static Future<bool> isFFmpegAvailable() async {
-    try {
-      final result = await Process.run(
-        Platform.isWindows ? 'where' : 'which',
-        ['ffmpeg'],
-      );
-      return result.exitCode == 0;
-    } catch (e) {
-      debugPrint('[FFmpegConverter] FFmpeg not found: $e');
-      return false;
-    }
+  /// 保留此方法以保持向后兼容性。
+  static Future<bool> isFFmpegAvailable() {
+    return FFmpegResolver.isFFmpegAvailable();
   }
 
   /// 将输入媒体转换为 MP4
