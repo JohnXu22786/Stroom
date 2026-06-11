@@ -27,16 +27,18 @@ class CameraChoiceResult {
   int get hashCode => Object.hash(choice, folder, editAfterCapture);
 }
 
-/// 显示拍照方式选择弹窗（含文件夹选择）
+/// 显示拍照方式选择弹窗（含可选的文件夹选择）
 ///
 /// [initialFolder] 初始选中的文件夹（默认根目录）
 /// [availableFolders] 可选文件夹列表
 /// [onCreateFolder] 创建新文件夹的回调（返回错误信息或 null 表示成功）
+/// [showFolderSection] 是否显示文件夹选择和「拍完编辑」部分（在对话页面中隐藏）
 Future<CameraChoiceResult?> showCameraChoiceDialog(
   BuildContext context, {
   String initialFolder = '',
   Set<String> availableFolders = const {},
   Future<String?> Function(String name)? onCreateFolder,
+  bool showFolderSection = true,
 }) {
   return showModalBottomSheet<CameraChoiceResult>(
     context: context,
@@ -47,6 +49,7 @@ Future<CameraChoiceResult?> showCameraChoiceDialog(
       initialFolder: initialFolder,
       availableFolders: availableFolders,
       onCreateFolder: onCreateFolder,
+      showFolderSection: showFolderSection,
     ),
   );
 }
@@ -55,11 +58,13 @@ class _CameraChoiceSheet extends StatefulWidget {
   final String initialFolder;
   final Set<String> availableFolders;
   final Future<String?> Function(String name)? onCreateFolder;
+  final bool showFolderSection;
 
   const _CameraChoiceSheet({
     this.initialFolder = '',
     this.availableFolders = const {},
     this.onCreateFolder,
+    this.showFolderSection = true,
   });
 
   @override
@@ -139,24 +144,79 @@ class _CameraChoiceSheetState extends State<_CameraChoiceSheet> {
             ],
           ),
           const SizedBox(height: 20),
-          // Folder selection section
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: cs.outlineVariant.withValues(alpha: 0.5),
+          // Folder selection section (hidden when showFolderSection is false)
+          if (widget.showFolderSection) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: cs.outlineVariant.withValues(alpha: 0.5),
+                ),
+              ),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: _pickFolder,
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.folder_outlined,
+                      size: 20,
+                      color: cs.primary,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '添加至文件夹',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelMedium
+                                ?.copyWith(color: cs.onSurfaceVariant),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _selectedFolder.isEmpty ? '根目录' : _selectedFolder,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                  color: cs.primary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 20,
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ],
+                ),
               ),
             ),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: _pickFolder,
+            const SizedBox(height: 12),
+            // Edit after capture toggle
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: cs.outlineVariant.withValues(alpha: 0.5),
+                ),
+              ),
               child: Row(
                 children: [
                   Icon(
-                    Icons.folder_outlined,
+                    Icons.edit_outlined,
                     size: 20,
                     color: cs.primary,
                   ),
@@ -166,83 +226,30 @@ class _CameraChoiceSheetState extends State<_CameraChoiceSheet> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '添加至文件夹',
+                          '拍完编辑',
                           style: Theme.of(context)
                               .textTheme
-                              .labelMedium
-                              ?.copyWith(color: cs.onSurfaceVariant),
+                              .bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w500),
                         ),
-                        const SizedBox(height: 2),
                         Text(
-                          _selectedFolder.isEmpty ? '根目录' : _selectedFolder,
+                          '拍照后立即进入编辑模式',
                           style: Theme.of(context)
                               .textTheme
                               .bodySmall
-                              ?.copyWith(
-                                color: cs.primary,
-                                fontWeight: FontWeight.w500,
-                              ),
+                              ?.copyWith(color: cs.onSurfaceVariant),
                         ),
                       ],
                     ),
                   ),
-                  Icon(
-                    Icons.chevron_right,
-                    size: 20,
-                    color: cs.onSurfaceVariant,
+                  Switch(
+                    value: _editAfterCapture,
+                    onChanged: (v) => setState(() => _editAfterCapture = v),
                   ),
                 ],
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          // Edit after capture toggle
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: cs.outlineVariant.withValues(alpha: 0.5),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.edit_outlined,
-                  size: 20,
-                  color: cs.primary,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '拍完编辑',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium
-                            ?.copyWith(fontWeight: FontWeight.w500),
-                      ),
-                      Text(
-                        '拍照后立即进入编辑模式',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(color: cs.onSurfaceVariant),
-                      ),
-                    ],
-                  ),
-                ),
-                Switch(
-                  value: _editAfterCapture,
-                  onChanged: (v) => setState(() => _editAfterCapture = v),
-                ),
-              ],
-            ),
-          ),
+          ],
         ],
       ),
     ),

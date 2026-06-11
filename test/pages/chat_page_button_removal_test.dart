@@ -49,6 +49,24 @@ void main() {
       expect(find.byIcon(Icons.add), findsNothing);
     });
 
+    testWidgets('NO stop button (Icons.stop_circle_outlined) in top bar',
+        (tester) async {
+      await pumpChatPage(tester);
+
+      // The stop_circle_outlined icon should NOT exist in the top bar
+      // (it's redundant with the one in the composer)
+      expect(find.byIcon(Icons.stop_circle_outlined), findsNothing);
+    });
+
+    testWidgets('NO back button (Icons.arrow_back) in top bar',
+        (tester) async {
+      await pumpChatPage(tester);
+
+      // The arrow_back icon should NOT exist in the top bar
+      // (exit button removed as redundant)
+      expect(find.byIcon(Icons.arrow_back), findsNothing);
+    });
+
     testWidgets('search button still exists', (tester) async {
       await pumpChatPage(tester);
 
