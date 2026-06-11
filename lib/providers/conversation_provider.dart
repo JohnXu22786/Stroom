@@ -304,11 +304,12 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   }
 
   /// Toggles the pinned state of a conversation.
+  /// Does NOT modify [updatedAt] — pinning is a metadata operation that should
+  /// preserve the conversation's original last-updated time.
   void togglePin(String id) {
     state = state.map((c) {
       if (c.id != id) return c;
       c.isPinned = !c.isPinned;
-      c.updatedAt = DateTime.now();
       return c;
     }).toList();
     _persist();
