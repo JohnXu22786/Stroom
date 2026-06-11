@@ -221,7 +221,10 @@ class ChatAdapter {
   List<ToolDefinition> getAllToolDefinitions() {
     // Built-in tools are registered statically via ChatService.registerTool()
     // MCP tools are discovered dynamically
-    return List.from(_mcpToolDefinitions);
+    return [
+      ...ChatService.getRegisteredToolDefinitions(),
+      ..._mcpToolDefinitions,
+    ];
   }
 
   /// Pass assistant-level custom parameters to the underlying ChatService.

@@ -93,7 +93,7 @@ class ChatService {
       },
     );
 
-    final extraParams = _buildExtraParams();
+    final extraParams = _buildExtraParams(reasoning: reasoning, reasoningEffort: reasoningEffort);
 
     Future.microtask(() async {
       try {
@@ -182,10 +182,10 @@ class ChatService {
         _streamSubscription?.cancel();
         _streamSubscription = null;
       },
-    );
+      );
 
-    final extraParams = _buildExtraParams();
-    final toolDefs = tools.map((t) => t.toJson()).toList();
+      final extraParams = _buildExtraParams(reasoning: reasoning, reasoningEffort: reasoningEffort);
+      final toolDefs = tools.map((t) => t.toJson()).toList();
 
     Future.microtask(() async {
       try {
@@ -434,6 +434,13 @@ class ChatService {
 
   static final Map<String, Map<String, dynamic>> _toolRegistries = {};
 
+  /// Returns the list of all registered built-in tool definitions.
+  static List<ToolDefinition> getRegisteredToolDefinitions() {
+    return _toolRegistries.values
+        .map((entry) => entry['definition'] as ToolDefinition)
+        .toList(growable: false);
+  }
+
   /// MCP 客户端管理器（可选，用于执行 MCP 工具）
   static McpClientManager? _mcpClientManager;
 
@@ -497,11 +504,38 @@ class ChatService {
     _assistantCustomParams = params;
   }
 
-  /// Build extraParams map from customParams for the API call.
-  /// Merges model-level [ProviderParam]s with assistant-level [CustomParameter]s.
+  /// Build extraParams map from typeConfig and customParams for the API call.
+  /// Merges model-level standard LLM params + [ProviderParam]s with
+  /// assistant-level [CustomParameter]s.
   /// Assistant-level params take precedence when names collide.
-  Map<String, dynamic> _buildExtraParams() {
+  /// When [reasoning] is true, also includes user-configured reasoning params
+  /// from the model config (sent only when reasoning is enabled).
+  Map<String, dynamic> _buildExtraParams({
+    bool reasoning = false,
+    String reasoningEffort = 'medium',
+  }) {
     final result = <String, dynamic>{};
+
+    // Standard LLM parameters from typeConfig (set via LlmModelConfigPage)
+    final tc = _modelConfig!.typeConfig;
+    // Top P
+    if (tc.containsKey('topP')) {
+      result['top_p'] = (tc['topP'] as num).toDouble();
+    }
+    // Frequency penalty
+    if (tc.containsKey('frequencyPenalty')) {
+      result['frequency_penalty'] =
+          (tc['frequencyPenalty'] as num).toDouble();
+    }
+    // Presence penalty
+    if (tc.containsKey('presencePenalty')) {
+      result['presence_penalty'] =
+          (tc['presencePenalty'] as num).toDouble();
+    }
+    // Seed
+    if (tc.containsKey('seed')) {
+      result['seed'] = (tc['seed'] as num).toInt();
+    }
 
     // Model-level custom params
     final modelParams = _modelConfig!.customParams;
@@ -520,14 +554,46 @@ class ChatService {
           'number' => (cp.value is num)
               ? (cp.value as num).toDouble()
               : (double.tryParse(cp.value.toString()) ?? 0.0),
-          'boolean' => (cp.value is bool) ? cp.value : (cp.value.toString().toLowerCase() == 'true'),
+          'boolean' => cp.value is bool ? cp.value : (cp.value.toString().toLowerCase() == 'true'),
           'json' => cp.value,
           'string' || _ => cp.value?.toString() ?? '',
         };
       }
     }
 
+    // Reasoning params — only injected when reasoning is enabled.
+    // Users configure these per-model in the LLM config page.
+    // Each param can be a top-level string, nested object (dot notation),
+    // or numeric/boolean literal.
+    if (reasoning) {
+      for (final rp in _modelConfig!.reasoningParams) {
+        final value = switch (rp.type) {
+          'number' => double.tryParse(rp.defaultValue) ?? 0.0,
+          'boolean' => rp.defaultValue.toLowerCase() == 'true',
+          'string' || _ => rp.defaultValue,
+        };
+        _setNestedParam(result, rp.paramName, value);
+      }
+    }
+
     return result;
+  }
+
+  /// Set a value at a dot-notation path in the given map.
+  /// E.g. _setNestedParam(map, 'thinking.type', 'enabled')
+  ///   → map['thinking']['type'] = 'enabled'
+  void _setNestedParam(Map<String, dynamic> map, String path, dynamic value) {
+    final parts = path.split('.');
+    if (parts.length == 1) {
+      map[parts[0]] = value;
+      return;
+    }
+    var current = map;
+    for (int i = 0; i < parts.length - 1; i++) {
+      current.putIfAbsent(parts[i], () => <String, dynamic>{});
+      current = current[parts[i]] as Map<String, dynamic>;
+    }
+    current[parts.last] = value;
   }
 
   /// Dispose permanently (no more streams possible after this)

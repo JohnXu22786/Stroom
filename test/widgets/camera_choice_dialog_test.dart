@@ -99,6 +99,46 @@ void main() {
       expect(find.byIcon(Icons.camera_alt), findsOneWidget);
     });
 
+    testWidgets('showFolderSection:false hides folder and edit toggle',
+        (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () => showCameraChoiceDialog(
+                    context,
+                    showFolderSection: false,
+                  ),
+                  child: Text('Open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Open the dialog
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Should show title and camera choices
+      expect(find.text('选择拍照方式'), findsOneWidget);
+      expect(find.text('应用相机'), findsOneWidget);
+      expect(find.text('系统相机'), findsOneWidget);
+
+      // Should NOT show folder section
+      expect(find.text('添加至文件夹'), findsNothing);
+      // Should NOT show edit after capture toggle
+      expect(find.text('拍完编辑'), findsNothing);
+      // Should NOT show the switch widget
+      expect(find.byType(Switch), findsNothing);
+      // Should NOT show folder icon
+      expect(find.byIcon(Icons.folder_outlined), findsNothing);
+    });
+
     testWidgets('default folder is root (empty)', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
@@ -169,6 +209,45 @@ void main() {
 
       expect(result, isNotNull);
       expect(result!.choice, CameraChoice.system);
+    });
+
+    testWidgets('selecting app camera with showFolderSection:false returns result',
+        (tester) async {
+      CameraChoiceResult? result;
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () {
+                    showCameraChoiceDialog(
+                      context,
+                      showFolderSection: false,
+                    ).then((r) => result = r);
+                  },
+                  child: Text('Open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Open the dialog
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Select app camera
+      await tester.tap(find.text('应用相机'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(result, isNotNull);
+      expect(result!.choice, CameraChoice.app);
+      // When showFolderSection is false, folder/editaftercapture are irrelevant
+      // but the result should still have default values
     });
   });
 }
