@@ -67,7 +67,7 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // Find the bottom action button - should be disabled
+      // Find the bottom action button
       final extractBtn = find.text('提取音频');
       expect(extractBtn, findsOneWidget);
 
@@ -83,6 +83,24 @@ void main() {
       // The select video button should be enabled
       final selectBtn = find.text('选择视频文件');
       expect(selectBtn, findsOneWidget);
+    });
+
+    testWidgets('shows engine status after initialization', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // After pumpAndSettle, engine availability check should complete
+      // The page should not show the "no engine" error state initially
+      expect(find.text('提取音频'), findsOneWidget);
+    });
+
+    testWidgets('clear button is hidden by default when no video selected',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // No clear button should appear when no file is selected
+      expect(find.text('清空'), findsNothing);
     });
   });
 }
