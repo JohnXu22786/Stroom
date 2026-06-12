@@ -14,9 +14,11 @@ if (keystorePropsFile.exists()) {
 }
 
 fun prop(key: String, env: String): String {
+    val envValue = System.getenv(env)
+    if (envValue != null && envValue.isNotEmpty()) return envValue
     val v = keystoreProps.getProperty(key)
     if (v != null && v.isNotEmpty()) return v
-    return System.getenv(env) ?: ""
+    return ""
 }
 
 android {
@@ -44,7 +46,7 @@ android {
     signingConfigs {
         create("release") {
             val sf = prop("storeFile", "KEYSTORE_PATH")
-            if (sf.isNotEmpty()) storeFile = file(sf)
+            if (sf.isNotEmpty() && file(sf).exists()) storeFile = file(sf)
             storePassword = prop("storePassword", "KEYSTORE_PASSWORD")
             keyAlias = prop("keyAlias", "KEY_ALIAS")
             keyPassword = prop("keyPassword", "KEY_PASSWORD")
