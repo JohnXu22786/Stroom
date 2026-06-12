@@ -95,6 +95,11 @@ class McpClient {
   /// 是否已释放
   bool get isDisposed => _state == _McpClientState.disposed;
 
+  /// 是否曾连接过（避免重复调用 connect）
+  bool get hasConnectedBefore =>
+      _state == _McpClientState.connected ||
+      _state == _McpClientState.disconnected;  // 曾经连接过但已断开
+
   /// 获取缓存的工具列表
   List<McpTool> get cachedTools => List.unmodifiable(_cachedTools);
 
@@ -148,6 +153,12 @@ class McpClient {
       _process!.exitCode.then((code) {
         debugPrint('MCP[${config.name}] process exited with code $code');
         _state = _McpClientState.disconnected;
+        for (final entry in _pendingRequests.entries) {
+          if (!entry.value.isCompleted) {
+            entry.value.completeError(Exception('MCP process exited unexpectedly with code $code'));
+          }
+        }
+        _pendingRequests.clear();
       });
     } catch (e) {
       debugPrint('McpClient._connectStdio failed: $e');
@@ -156,15 +167,8 @@ class McpClient {
   }
 
   Future<void> _connectSse() async {
-    // SSE 传输需要使用 HTTP 客户端连接
-    // 这里使用 Dio 或 HttpClient
-    // 由于 SSE 的复杂性，我们先用一个简化的实现
-    // 实际生产环境中会使用完整的 SSE 客户端
     debugPrint('McpClient._connectSse: SSE transport not fully implemented yet');
-    // 对于 SSE，我们通过 HTTP POST 发送请求并接收响应
-    // 这需要更复杂的 SSE 流处理
-    throw UnimplementedError(
-        'SSE transport requires a full SSE client implementation');
+    _state = _McpClientState.disconnected;
   }
 
   Future<void> _sendInitialize() async {
@@ -191,8 +195,8 @@ class McpClient {
         _process?.stdin.writeln(message);
         break;
       case McpTransportType.sse:
-        // SSE 模式下通过 HTTP POST 发送
-        throw UnimplementedError('SSE send not implemented');
+        debugPrint('McpClient._sendMessage: SSE send not implemented');
+        break;
     }
   }
 

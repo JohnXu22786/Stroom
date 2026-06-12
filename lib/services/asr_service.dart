@@ -111,6 +111,14 @@ class AsrService {
   /// The last HTTP response status code.
   int? lastResponseStatusCode;
 
+  /// Mask API key for display, showing only first 8 chars and last 4 chars.
+  static String _maskApiKey(String key) {
+    if (key.isEmpty) return '****';
+    if (key.length <= 4) return '${key.substring(0, 1)}***';
+    if (key.length <= 16) return '${key.substring(0, 4)}****';
+    return '${key.substring(0, 8)}...${key.substring(key.length - 4)}';
+  }
+
   AsrService({
     required this.config,
     Dio? dio,
@@ -165,7 +173,7 @@ class AsrService {
     };
     lastRequestUrl = config.transcribeUrl;
     lastRequestHeaders = {
-      if (config.apiKey.isNotEmpty) 'Authorization': 'Bearer ${config.apiKey}',
+      if (config.apiKey.isNotEmpty) 'Authorization': 'Bearer ${_maskApiKey(config.apiKey)}',
     };
     lastResponseData = null;
     lastResponseStatusCode = null;
