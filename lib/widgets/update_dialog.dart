@@ -9,8 +9,13 @@ import '../providers/update_provider.dart';
 /// application startup flow.
 ///
 /// Shows update version info, release notes, and action buttons.
-/// The "立即更新" button downloads the update file within the app
-/// and allows the user to open/install it when complete.
+///
+/// # Behavior
+/// - 发现新版本: Shows version info + "跳过此版本"/"稍后提醒"/"立即更新" buttons.
+/// - 立即更新: Downloads the update and auto-installs immediately.
+///   During download, a prominent progress bar is shown.
+///   After download, installation starts automatically and the dialog closes.
+/// - If auto-install fails, a fallback "打开/安装" button is shown.
 class UpdateDialog extends ConsumerStatefulWidget {
   const UpdateDialog({super.key});
 
@@ -27,10 +32,41 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
     return url.contains('/releases/tag/');
   }
 
+  /// Tracks whether we have already attempted to auto-close the dialog
+  /// after a successful install, to avoid repeated close attempts.
+  bool _autoClosed = false;
+
+  @override
+  void dispose() {
+    _autoClosed = false;
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(updateProvider);
     final theme = Theme.of(context);
+
+    // Auto-close dialog after successful auto-install (intent fired).
+    // Conditions: download complete, install finished (isInstalling false),
+    // no error, not currently downloading.
+    final shouldAutoClose = state.downloadComplete &&
+        !state.isInstalling &&
+        !state.isDownloading &&
+        state.downloadedFilePath != null &&
+        state.downloadError == null &&
+        !_autoClosed;
+
+    if (shouldAutoClose) {
+      _autoClosed = true;
+      // Use post-frame callback to close the dialog after the current
+      // build frame is complete.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+      });
+    }
 
     return AlertDialog(
       title: const Row(
@@ -54,14 +90,89 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
               const SizedBox(height: 4),
               Text(state.releaseNotes!),
             ],
-            // Download progress section
+            // Download progress section — prominent card-style UI
             if (state.isDownloading) ...[
               const SizedBox(height: 16),
-              LinearProgressIndicator(value: state.downloadProgress),
-              const SizedBox(height: 8),
-              Text(
-                '正在下载... ${(state.downloadProgress * 100).toInt()}%',
-                style: theme.textTheme.bodySmall,
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.download, size: 18, color: Colors.blue),
+                        SizedBox(width: 6),
+                        Text('正在下载更新...',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: state.downloadProgress,
+                        minHeight: 10,
+                        backgroundColor: Colors.blue.shade100,
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        '${(state.downloadProgress * 100).toInt()}%',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            // Installing state — shown briefly while the app auto-installs
+            if (state.isInstalling) ...[
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.green.shade200),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.green.shade700),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      '正在安装...',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.green.shade700,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
             // Download error section
@@ -80,8 +191,8 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                 ],
               ),
             ],
-            // Download complete section
-            if (state.downloadComplete) ...[
+            // Download complete section (fallback when auto-install didn't happen)
+            if (state.downloadComplete && !state.isInstalling) ...[
               const SizedBox(height: 12),
               Row(
                 children: [
@@ -89,7 +200,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                       color: Colors.green, size: 18),
                   const SizedBox(width: 4),
                   const Text(
-                    '下载完成，点击下方按钮进行安装',
+                    '下载完成',
                     style: TextStyle(color: Colors.green),
                   ),
                 ],
@@ -116,16 +227,36 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
       ];
     }
 
-    // After download complete, show install button
+    // During auto-install, no action buttons needed (auto-proceeding)
+    if (state.isInstalling) {
+      return [];
+    }
+
+    // After download complete: if there was no auto-install error,
+    // the dialog will auto-close. If there IS a download error,
+    // show the fallback install button.
     if (state.downloadComplete) {
+      // If auto-install failed (downloadError set), show fallback
+      if (state.downloadError != null) {
+        return [
+          FilledButton(
+            onPressed: () {
+              // 跳转至 GitHub Releases 页面，让用户手动下载安装
+              final releaseUrl =
+                  'https://github.com/JohnXu22786/Stroom/releases/tag/v${state.latestVersion ?? ''}';
+              _openInBrowser(releaseUrl);
+              Navigator.of(context).pop();
+            },
+            child: const Text('手动安装'),
+          ),
+        ];
+      }
+      // If no error and auto-install finished, dialog will auto-close.
+      // But show a brief "已完成" status until auto-close triggers.
       return [
         TextButton(
-          onPressed: () async {
-            await notifier.installDownloadedFile();
-            if (!mounted) return;
-            Navigator.of(context).pop();
-          },
-          child: const Text('打开/安装'),
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('关闭'),
         ),
       ];
     }
