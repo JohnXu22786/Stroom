@@ -61,7 +61,7 @@ jobs:
         shell: pwsh
         run: |
           $TAG = "$env:GITHUB_REF_NAME"
-          Compress-Archive -Path "build\windows\runner\Release\*" -DestinationPath "artifacts\stroom-windows-x64-release-$TAG.zip"
+          Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "artifacts\stroom-windows-x64-release-$TAG.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: windows-build
