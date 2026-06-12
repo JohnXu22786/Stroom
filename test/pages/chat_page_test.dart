@@ -93,6 +93,48 @@ void main() {
     // This is a pre-existing limitation in v0.2.15.
   });
 
+  group('ChatPage composer layout (bottom of Column, not Stack overlay)', () {
+    Future<void> pumpChatPage(WidgetTester tester) async {
+      await tester.pumpWidget(createChatTestApp());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+    }
+
+    testWidgets('composer is visible at the bottom of the page', (tester) async {
+      await pumpChatPage(tester);
+
+      // Verify the composer's icon buttons exist (attach file and send)
+      expect(find.byIcon(Icons.attach_file_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.send_rounded), findsWidgets);
+    });
+
+    testWidgets('composer is rendered below the top bar', (tester) async {
+      await pumpChatPage(tester);
+
+      // Find the top bar row and the composer elements
+      final topBar = find.text('新对话');
+      final sendButton = find.byIcon(Icons.send_rounded);
+
+      // Verify the top bar title is above the send button on the page
+      // (top bar has smaller y coordinate than the composer)
+      final topBarRect = tester.getRect(topBar);
+      final sendRect = tester.getRect(sendButton.first);
+      expect(topBarRect.bottom, lessThan(sendRect.top));
+    });
+
+    testWidgets('composer is not positioned at the top of the page', (tester) async {
+      await pumpChatPage(tester);
+
+      // The composer (send button) should be in the lower portion of the screen
+      final sendButton = find.byIcon(Icons.send_rounded);
+      final sendRect = tester.getRect(sendButton.first);
+      final screenSize = tester.getSize(find.byType(MaterialApp));
+      // Send button should be in bottom third of screen
+      expect(sendRect.center.dy, greaterThan(screenSize.height * 0.7));
+    });
+  });
+
   group('ChatPage JSON error detail dialog data structure', () {
     test('DataSanitizer handles raw request data structure correctly', () {
       // Simulate rawRequest structure built by _startStreaming()

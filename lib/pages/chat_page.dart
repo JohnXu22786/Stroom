@@ -1372,18 +1372,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           itemBuilder: itemBuilder,
                           onEndReached: _loadMoreMessages,
                         ),
-                        composerBuilder: (context) => ChatComposerWidget(
-                          onSend: _onMessageSend,
-                          onStop: _stopStreaming,
-                          mcpTools: _adapter.getAllToolDefinitions(),
-                          enabledTools: ref.watch(enabledToolNamesProvider),
-                          onEnabledToolsChanged: (tools) {
-                            ref.read(enabledToolNamesProvider.notifier).state = tools;
-                          },
-                          modelNames: _getModelNames(),
-                          selectedModelIndex: _selectedModelIndex,
-                          onModelSelected: _onModelSelected,
-                        ),
+                        // Empty composer builder — the actual composer is
+                        // rendered below the Chat widget so it participates
+                        // in the Column layout flow instead of overlaying
+                        // the message list via the internal Stack. This
+                        // ensures the scroll area auto-adjusts as the
+                        // composer height changes (e.g. multi-line input).
+                        composerBuilder: (_) => const SizedBox.shrink(),
                         textMessageBuilder: (context, message, index,
                             {required bool isSentByMe,
                             MessageGroupStatus? groupStatus}) {
@@ -1647,12 +1642,29 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         },
                       ),
                     ),
+                  ),
+                // ── Chat composer (below chat, in Column flow) ──
+                // Rendered as a direct Column child so it participates in the
+                // layout flow instead of overlaying the message list via a
+                // Stack. This lets the scroll area auto-adjust as the
+                // composer height changes (e.g. multi-line input).
+                ChatComposerWidget(
+                  onSend: _onMessageSend,
+                  onStop: _stopStreaming,
+                  mcpTools: _adapter.getAllToolDefinitions(),
+                  enabledTools: ref.watch(enabledToolNamesProvider),
+                  onEnabledToolsChanged: (tools) {
+                    ref.read(enabledToolNamesProvider.notifier).state = tools;
+                  },
+                  modelNames: _getModelNames(),
+                  selectedModelIndex: _selectedModelIndex,
+                  onModelSelected: _onModelSelected,
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
+          ),
+        );
+      }
 
   void _showErrorDetailDialog(BuildContext context, String messageId) {
     final chatMsg = _history.where((m) => m.id == messageId).firstOrNull;
