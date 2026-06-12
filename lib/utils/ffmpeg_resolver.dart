@@ -17,6 +17,18 @@ class FFmpegResolver {
   /// 捆绑的 FFmpeg 在 asset 中的路径（不含平台后缀）
   static const _bundledAssetBase = 'assets/ffmpeg/ffmpeg';
 
+  /// 检查系统是否安装了 FFmpeg（通过 PATH 查找）
+  ///
+  /// 仅在桌面端有效，移动端和 macOS 使用 ffmpeg_kit_flutter。
+  /// Web 端始终返回 false。
+  static Future<bool> isFFmpegAvailable() async {
+    if (kIsWeb) return false;
+    // 移动端和 macOS 使用 ffmpeg_kit_flutter，不需要系统 FFmpeg
+    if (Platform.isAndroid || Platform.isIOS || Platform.isMacOS) return false;
+
+    return await _findSystemFFmpeg() != null;
+  }
+
   /// 确保 FFmpeg 就绪，返回可执行文件的路径
   ///
   /// 桌面端（Windows/Linux）：
