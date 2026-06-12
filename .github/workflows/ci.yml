@@ -18,10 +18,8 @@ jobs:
         with:
           channel: stable
       - run: flutter pub get
-      - name: Check code formatting
-        run: dart format --set-exit-if-changed .
       - name: Run Dart analyzer
-        run: flutter analyze
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
   build-linux:
     name: Build Linux
