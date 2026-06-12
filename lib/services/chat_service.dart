@@ -203,6 +203,8 @@ class ChatService {
 
         while (!_isCancelledByUser && loopProtection < 10) {
           loopProtection++;
+          _streamSubscription?.cancel();
+          _cancelToken?.cancel();
           _cancelToken = CancelToken();
 
           final completer = Completer<void>();
@@ -476,7 +478,7 @@ class ChatService {
     if (_mcpClientManager != null) {
       for (final entry in _mcpClientManager!.clients.entries) {
         final client = entry.value;
-        if (client.isConnected == false && client.isDisposed == false) {
+        if (client.isConnected == false && client.isDisposed == false && !client.hasConnectedBefore) {
           await client.connect();
         }
         if (client.isConnected) {

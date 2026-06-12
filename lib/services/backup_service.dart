@@ -161,7 +161,12 @@ class BackupService {
   }) async {
     onProgress?.call(0.0);
 
-    final archive = ZipDecoder().decodeBytes(bytes);
+    Archive? archive;
+    try {
+      archive = ZipDecoder().decodeBytes(bytes);
+    } catch (e) {
+      throw Exception('无效的备份文件：无法解压 ($e)');
+    }
     onProgress?.call(0.1);
 
     // 读取所有文件内容到内存 Map

@@ -128,7 +128,7 @@ class _BrowserPageState extends State<BrowserPage> {
               initialSettings: InAppWebViewSettings(
                 javaScriptEnabled: true,
                 domStorageEnabled: true,
-                mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
+                mixedContentMode: MixedContentMode.MIXED_CONTENT_COMPATIBILITY_MODE,
                 useWideViewPort: true,
                 supportZoom: true,
               ),
