@@ -29,13 +29,15 @@ Future<void> initializeBackgroundService() async {
 
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) {
+  Timer? _timer;
   if (service is AndroidServiceInstance) {
     service.on('stopService').listen((_) {
+      _timer?.cancel();
       service.stopSelf();
     });
   }
 
-  Timer.periodic(const Duration(seconds: 10), (timer) async {
+  _timer = Timer.periodic(const Duration(seconds: 10), (timer) async {
     if (service is AndroidServiceInstance) {
       service.setForegroundNotificationInfo(
         title: _serviceTitle,

@@ -200,6 +200,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   @override
   void dispose() {
+    _adapter.cancel();
     _controller?.dispose();
     _adapter.dispose();
     _searchTextController.dispose();

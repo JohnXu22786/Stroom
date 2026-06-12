@@ -312,7 +312,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         _baseUrl,
         {
           'Content-Type': 'application/json',
-          if (_apiKey.isNotEmpty) 'Authorization': 'Bearer $_apiKey',
+          if (_apiKey.isNotEmpty) 'Authorization': 'Bearer ${_maskApiKey(_apiKey)}',
           'Accept': 'text/event-stream',
           ...openRouterAppHeaders,
         },

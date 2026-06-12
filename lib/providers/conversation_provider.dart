@@ -233,13 +233,13 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     });
   }
 
-  void _persistNow() {
+  Future<void> _persistNow() async {
     _persistTimer?.cancel();
     _persistTimer = null;
     try {
-      final prefs = SharedPreferences.getInstance();
+      final prefs = await SharedPreferences.getInstance();
       final json = jsonEncode(state.map((e) => e.toMap()).toList());
-      prefs.then((p) => p.setString('conversations', json));
+      await prefs.setString('conversations', json);
     } catch (e) {
       debugPrint('Failed to persist conversations synchronously: $e');
     }
