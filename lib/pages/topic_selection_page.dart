@@ -26,9 +26,18 @@ int _countMessageMatches(Conversation conv, String query) {
   return count;
 }
 
-/// Merged page: after selecting an assistant, choose or create a topic (conversation).
-/// Combines the card-based UI of TopicSelectionPage with the features from
-/// ConversationsPage (search, selection mode, pin, rename, reorder, etc.).
+/// Helper: format a DateTime to a readable string.
+String _formatDate(DateTime date) {
+  final y = date.year.toString();
+  final m = date.month.toString().padLeft(2, '0');
+  final d = date.day.toString().padLeft(2, '0');
+  final h = date.hour.toString().padLeft(2, '0');
+  final min = date.minute.toString().padLeft(2, '0');
+  return '$y-$m-$d $h:$min';
+}
+
+/// Merged page: after selecting an assistant, choose or create a conversation.
+/// Features: card-based UI, selection mode, pin, rename, reorder, search panel.
 class TopicSelectionPage extends ConsumerStatefulWidget {
   const TopicSelectionPage({super.key});
 
@@ -37,17 +46,8 @@ class TopicSelectionPage extends ConsumerStatefulWidget {
 }
 
 class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
-  bool _showSearch = false;
   bool _selectionMode = false;
   final Set<String> _selectedIds = {};
-  final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
 
   List<Conversation> _sortedConversations(List<Conversation> conversations) {
     final sorted = List<Conversation>.from(conversations);
@@ -59,19 +59,11 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     return sorted;
   }
 
-  List<Conversation> _getFilteredTopics(List<Conversation> assistantTopics) {
-    final query = _searchController.text.trim().toLowerCase();
-    _searchQuery = query;
-    var result = _sortedConversations(assistantTopics);
-    if (query.isNotEmpty) {
-      result = result.where((c) {
-        final displayTitle = c.title.isEmpty ? '新对话' : c.title;
-        if (displayTitle.toLowerCase().contains(query)) return true;
-        if (_countMessageMatches(c, query) > 0) return true;
-        return false;
-      }).toList();
-    }
-    return result;
+  List<Conversation> _getAssistantTopics(List<Conversation> allConversations) {
+    final assistantId = ref.watch(selectedAssistantIdProvider);
+    return allConversations
+        .where((c) => c.assistantId == assistantId || c.assistantId == null)
+        .toList();
   }
 
   void _toggleSelectionMode() {
@@ -143,8 +135,8 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除话题'),
-        content: Text('确定要删除话题「${topic.title.isEmpty ? '新话题' : topic.title}」吗？'),
+        title: const Text('删除对话'),
+        content: Text('确定要删除对话「${topic.title.isEmpty ? '新对话' : topic.title}」吗？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -179,7 +171,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('重命名话题'),
+        title: const Text('重命名对话'),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -238,8 +230,28 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     Navigator.of(context).pushNamed('/chat');
   }
 
+  void _showSearchPanel() {
+    final conversations = ref.read(conversationsProvider);
+    final assistantTopics = _getAssistantTopics(conversations);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => _SearchPanel(
+        conversations: assistantTopics,
+        onConversationSelected: (conv) {
+          Navigator.of(ctx).pop();
+          _onTopicSelected(conv);
+        },
+      ),
+    );
+  }
+
   Widget _buildEmptyState(ColorScheme cs) {
-    final query = _searchController.text.trim();
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -248,16 +260,14 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
               size: 48, color: cs.onSurfaceVariant.withOpacity(0.4)),
           const SizedBox(height: 16),
           Text(
-            query.isNotEmpty ? '没有找到匹配的话题' : '暂无话题',
+            '暂无对话',
             style: TextStyle(color: cs.onSurfaceVariant),
           ),
-          if (query.isEmpty) ...[
-            const SizedBox(height: 8),
-            Text('创建一个新话题开始对话',
-                style: TextStyle(
-                    fontSize: 13,
-                    color: cs.onSurfaceVariant.withOpacity(0.7))),
-          ],
+          const SizedBox(height: 8),
+          Text('创建一个新对话开始对话',
+              style: TextStyle(
+                  fontSize: 13,
+                  color: cs.onSurfaceVariant.withOpacity(0.7))),
         ],
       ),
     );
@@ -269,78 +279,41 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     final conversations = ref.watch(conversationsProvider);
     final cs = Theme.of(context).colorScheme;
 
-    final assistantId = ref.watch(selectedAssistantIdProvider);
-    final assistantTopics = conversations
-        .where((c) => c.assistantId == assistantId || c.assistantId == null)
-        .toList();
-    final filtered = _getFilteredTopics(assistantTopics);
+    final assistantTopics = _getAssistantTopics(conversations);
+    final sorted = _sortedConversations(assistantTopics);
 
     return Scaffold(
       backgroundColor: cs.surface,
-      appBar: _showSearch
-          ? AppBar(
-              leading: IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () {
-                  setState(() {
-                    _showSearch = false;
-                    _searchController.clear();
-                  });
-                },
-              ),
-              title: TextField(
-                controller: _searchController,
-                autofocus: true,
-                decoration: InputDecoration(
-                  hintText: '搜索话题...',
-                  border: InputBorder.none,
-                  hintStyle: TextStyle(color: cs.onSurfaceVariant),
-                ),
-                onChanged: (value) => setState(() {}),
-              ),
-            )
-          : AppBar(
-              title: Row(
-                children: [
-                  if (selectedAssistant != null) ...[
-                    AssistantAvatar(
-                      assistant: selectedAssistant,
-                      size: 28,
-                      borderRadius: 8,
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                  Text(_selectionMode ? '已选 ${_selectedIds.length} 个' : '选择话题'),
-                ],
-              ),
-              centerTitle: false,
-              elevation: 0,
-              backgroundColor: cs.surface,
-              actions: [
-                if (!_selectionMode)
-                  IconButton(
-                    icon: const Icon(Icons.search),
-                    tooltip: '搜索',
-                    onPressed: () => setState(() => _showSearch = true),
-                  ),
-                if (_selectionMode)
-                  IconButton(
-                    icon: const Icon(Icons.delete),
-                    tooltip: '删除选中',
-                    onPressed:
-                        _selectedIds.isNotEmpty ? _batchDelete : null,
-                  ),
-                IconButton(
-                  icon: Icon(
-                    _selectionMode
-                        ? Icons.close
-                        : Icons.checklist,
-                  ),
-                  tooltip: _selectionMode ? '取消选择' : '选择',
-                  onPressed: _toggleSelectionMode,
-                ),
-              ],
+      appBar: AppBar(
+        title: Text(_selectionMode ? '已选 ${_selectedIds.length} 个' : '选择对话'),
+        centerTitle: false,
+        elevation: 0,
+        backgroundColor: cs.surface,
+        actions: [
+          if (!_selectionMode)
+            IconButton(
+              icon: const Icon(Icons.search),
+              tooltip: '搜索',
+              onPressed: _showSearchPanel,
             ),
+          if (_selectionMode)
+            IconButton(
+              icon: const Icon(Icons.delete),
+              tooltip: '删除选中',
+              onPressed:
+                  _selectedIds.isNotEmpty ? _batchDelete : null,
+            ),
+          IconButton(
+            icon: Icon(
+              _selectionMode
+                  ? Icons.close
+                  : Icons.checklist,
+            ),
+            tooltip: _selectionMode ? '取消选择' : '选择',
+            onPressed: _toggleSelectionMode,
+          ),
+        ],
+      ),
       body: selectedAssistant == null
           ? Center(
               child: Column(
@@ -421,22 +394,21 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                   ),
                 ),
 
-                // Topic list
+                // Conversation list
                 Expanded(
-                  child: filtered.isEmpty
+                  child: sorted.isEmpty
                       ? _buildEmptyState(cs)
                       : ListView.builder(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 8),
-                          itemCount: filtered.length,
+                          itemCount: sorted.length,
                           itemBuilder: (context, index) {
-                            final topic = filtered[index];
+                            final topic = sorted[index];
                             return _TopicItem(
                               topic: topic,
                               selectionMode: _selectionMode,
                               isSelected: _selectedIds.contains(topic.id),
                               isActive: topic.id == ref.watch(activeConversationIdProvider),
-                              searchQuery: _searchQuery,
                               onTap: () {
                                 if (_selectionMode) {
                                   _toggleSelection(topic.id);
@@ -466,7 +438,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                         ),
                 ),
 
-                // Bottom: create new topic button
+                // Bottom: create new conversation button
                 if (!_selectionMode)
                   SafeArea(
                     child: Padding(
@@ -485,11 +457,344 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
             ),
     );
   }
-
 }
 
 // ============================================================================
-// Topic item widget - Card-based UI with ConversationsPage features
+// Search Panel - Bottom Sheet for searching conversations
+// ============================================================================
+
+class _SearchPanel extends StatefulWidget {
+  final List<Conversation> conversations;
+  final void Function(Conversation) onConversationSelected;
+
+  const _SearchPanel({
+    required this.conversations,
+    required this.onConversationSelected,
+  });
+
+  @override
+  State<_SearchPanel> createState() => _SearchPanelState();
+}
+
+class _SearchPanelState extends State<_SearchPanel> {
+  final TextEditingController _searchController = TextEditingController();
+  bool _searchByContent = false;
+  String _query = '';
+
+  List<Conversation> get _filteredConversations {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return [];
+
+    final sorted = List<Conversation>.from(widget.conversations);
+    sorted.sort((a, b) {
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      return 0;
+    });
+
+    return sorted.where((c) {
+      final displayTitle = c.title.isEmpty ? '新对话' : c.title;
+      if (!_searchByContent) {
+        // Search by title only
+        return displayTitle.toLowerCase().contains(query);
+      } else {
+        // Search by title OR content
+        if (displayTitle.toLowerCase().contains(query)) return true;
+        return _countMessageMatches(c, query) > 0;
+      }
+    }).toList();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final filtered = _filteredConversations;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.85,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (context, scrollController) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: Column(
+            children: [
+              // Drag handle
+              Container(
+                margin: const EdgeInsets.only(top: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: cs.onSurfaceVariant.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Title
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Icon(Icons.search, size: 20, color: cs.onSurface),
+                    const SizedBox(width: 8),
+                    Text(
+                      '搜索对话',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: cs.onSurface,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Search text field
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: '输入关键词...',
+                    prefixIcon: const Icon(Icons.search),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: cs.surfaceContainerHighest.withOpacity(0.3),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                  onChanged: (value) => setState(() => _query = value),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Toggle: search by title or content
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    FilterChip(
+                      label: const Text('搜标题'),
+                      selected: !_searchByContent,
+                      onSelected: (_) => setState(() => _searchByContent = false),
+                      visualDensity: VisualDensity.compact,
+                      showCheckmark: false,
+                    ),
+                    const SizedBox(width: 8),
+                    FilterChip(
+                      label: const Text('搜内容'),
+                      selected: _searchByContent,
+                      onSelected: (_) => setState(() => _searchByContent = true),
+                      visualDensity: VisualDensity.compact,
+                      showCheckmark: false,
+                    ),
+                    const Spacer(),
+                    if (_query.isNotEmpty)
+                      Text(
+                        '${filtered.length} 个结果',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // Results list
+              Expanded(
+                child: filtered.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.search_off,
+                                size: 40,
+                                color: cs.onSurfaceVariant.withOpacity(0.4)),
+                            const SizedBox(height: 12),
+                            Text(
+                              _query.isEmpty
+                                  ? '输入关键词开始搜索'
+                                  : '没有找到匹配的对话',
+                              style: TextStyle(color: cs.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: scrollController,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 4),
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final conv = filtered[index];
+                          return _buildSearchResultCard(conv, cs);
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSearchResultCard(Conversation conv, ColorScheme cs) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final title = conv.title.isEmpty ? '新对话' : conv.title;
+    final matchCount = _countMessageMatches(conv, _query);
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 8),
+      color: isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: cs.outlineVariant.withOpacity(0.5),
+          width: 0.5,
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => widget.onConversationSelected(conv),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  conv.isPinned
+                      ? Icons.push_pin
+                      : Icons.chat_bubble_outline_rounded,
+                  size: 20,
+                  color: conv.isPinned
+                      ? cs.primary
+                      : cs.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        if (conv.isPinned)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: Icon(Icons.push_pin,
+                                size: 12, color: cs.primary),
+                          ),
+                        Expanded(
+                          child: Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                              color: cs.onSurface,
+                            ),
+                          ),
+                        ),
+                        // Show match count badge when searching by content
+                        if (_searchByContent && matchCount > 0)
+                          _buildMatchBadge(cs, matchCount),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Text(
+                          _formatDate(conv.updatedAt),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                        if (conv.messages.length > 0) ...[
+                          const SizedBox(width: 8),
+                          Icon(Icons.message_outlined,
+                              size: 12, color: cs.onSurfaceVariant),
+                          const SizedBox(width: 2),
+                          Text(
+                            '${conv.messages.length}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: cs.onSurfaceVariant.withOpacity(0.5),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMatchBadge(ColorScheme cs, int matchCount) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        decoration: BoxDecoration(
+          color: cs.primaryContainer,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          '$matchCount',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: cs.onPrimaryContainer,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// Conversation item widget - Card-based UI with conversations page features
 // ============================================================================
 
 class _TopicItem extends StatelessWidget {
@@ -497,7 +802,6 @@ class _TopicItem extends StatelessWidget {
   final bool selectionMode;
   final bool isSelected;
   final bool isActive;
-  final String searchQuery;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final VoidCallback onDelete;
@@ -511,7 +815,6 @@ class _TopicItem extends StatelessWidget {
     required this.selectionMode,
     required this.isSelected,
     required this.isActive,
-    required this.searchQuery,
     required this.onTap,
     required this.onLongPress,
     required this.onDelete,
@@ -601,9 +904,6 @@ class _TopicItem extends StatelessWidget {
                             ),
                           ),
                         ),
-                        // Match count badge when searching
-                        if (searchQuery.isNotEmpty)
-                          _buildMatchBadge(cs),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -699,37 +999,5 @@ class _TopicItem extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Widget _buildMatchBadge(ColorScheme cs) {
-    final matchCount = _countMessageMatches(topic, searchQuery);
-    if (matchCount == 0) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(left: 4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-        decoration: BoxDecoration(
-          color: cs.primaryContainer,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          '$matchCount',
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            color: cs.onPrimaryContainer,
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _formatDate(DateTime date) {
-    final y = date.year.toString();
-    final m = date.month.toString().padLeft(2, '0');
-    final d = date.day.toString().padLeft(2, '0');
-    final h = date.hour.toString().padLeft(2, '0');
-    final min = date.minute.toString().padLeft(2, '0');
-    return '$y-$m-$d $h:$min';
   }
 }
