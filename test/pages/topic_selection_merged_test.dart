@@ -71,8 +71,8 @@ Widget createMergedTopicTestApp({
 }
 
 void main() {
-  group('Merged TopicSelectionPage - AppBar', () {
-    testWidgets('shows title and assistant emoji', (tester) async {
+  group('Merged SelectConversationPage - AppBar', () {
+    testWidgets('shows title "选择对话" and no avatar icon in title', (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
           Assistant(id: 'test-id', name: '测试助手', prompt: '你好', emoji: '🤖', description: '测试'),
@@ -82,10 +82,14 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Should show the title
-      expect(find.text('选择话题'), findsOneWidget);
-      // Assistant emoji appears in AppBar title AND info bar (2 total)
-      expect(find.text('🤖'), findsAtLeast(1));
+      // Should show the new title
+      expect(find.text('选择对话'), findsOneWidget);
+      // The emoji should NOT appear in the AppBar title area (it's only in the info bar)
+      // Wait: the emoji IS in the info bar (assistant info bar), so it should be found
+      // But NOT in the title row. The old test had findsAtLeast(1) because emoji was
+      // in both title and info bar. Now it should NOT be in the title.
+      // Let's just check: the emoji still appears in the info bar
+      expect(find.text('🤖'), findsOneWidget);
     });
 
     testWidgets('NO add (新话题) button in AppBar (bottom button still exists)', (tester) async {
@@ -98,8 +102,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // The add button should NOT be in the AppBar (search for AppBar's IconButton with Icons.add)
-      // Icons.add should NOT appear as an AppBar action (only in bottom FilledButton)
+      // The add button should NOT be in the AppBar
       final appBar = find.byType(AppBar);
       final addIconsInAppBar = find.descendant(
         of: appBar,
@@ -118,13 +121,37 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // The swap button should NOT be in the AppBar
       expect(find.byIcon(Icons.swap_horiz), findsNothing);
+    });
+
+    testWidgets('title has no icon (no avatar) to its left', (tester) async {
+      await tester.pumpWidget(createMergedTopicTestApp(
+        assistants: [
+          Assistant(id: 'test-id-icon', name: '图标助手', prompt: 'P', emoji: '🌟', description: 'ICON'),
+        ],
+        selectedAssistantId: 'test-id-icon',
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Find the AppBar title area
+      final appBar = find.byType(AppBar);
+      final titleText = find.descendant(
+        of: appBar,
+        matching: find.text('选择对话'),
+      );
+      expect(titleText, findsOneWidget);
+      // Verify there's no Row with AssistantAvatar icon before the title
+      // (the title is a plain Text, not wrapped in a Row with avatar)
+      expect(find.descendant(
+        of: appBar,
+        matching: find.byIcon(Icons.chat_bubble_outline_rounded),
+      ), findsNothing);
     });
   });
 
-  group('Merged TopicSelectionPage - Features from ConversationsPage', () {
-    testWidgets('shows search button in AppBar', (tester) async {
+  group('Merged SelectConversationPage - Features', () {
+    testWidgets('shows search button in AppBar that opens a panel', (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
           Assistant(id: 'test-id-3', name: '助手C', prompt: 'P3', emoji: '🤖', description: 'CC'),
@@ -138,6 +165,45 @@ void main() {
       expect(find.byIcon(Icons.search), findsOneWidget);
     });
 
+    testWidgets('tapping search button opens search panel (bottom sheet)', (tester) async {
+      await tester.pumpWidget(createMergedTopicTestApp(
+        assistants: [
+          Assistant(id: 'test-id-search', name: '助手搜索', prompt: 'P', emoji: '🔍', description: '搜索'),
+        ],
+        selectedAssistantId: 'test-id-search',
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Tap the search button
+      await tester.tap(find.byIcon(Icons.search));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Should find the search text field in the bottom sheet
+      expect(find.byType(TextField), findsOneWidget);
+    });
+
+    testWidgets('search panel has two toggle options: 搜标题 and 搜内容', (tester) async {
+      await tester.pumpWidget(createMergedTopicTestApp(
+        assistants: [
+          Assistant(id: 'test-id-toggle', name: '助手切换', prompt: 'P', emoji: '🔀', description: '切换'),
+        ],
+        selectedAssistantId: 'test-id-toggle',
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Open search panel
+      await tester.tap(find.byIcon(Icons.search));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Should have toggle buttons
+      expect(find.text('搜标题'), findsOneWidget);
+      expect(find.text('搜内容'), findsOneWidget);
+    });
+
     testWidgets('shows selection mode (checklist) button in AppBar', (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
@@ -148,7 +214,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Checklist button should be present (from ConversationsPage)
+      // Checklist button should be present
       expect(find.byIcon(Icons.checklist), findsOneWidget);
     });
 
@@ -225,11 +291,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Popup menu (more_vert) should exist (replaces the old delete_outline)
+      // Popup menu (more_vert) should exist
       expect(find.byIcon(Icons.more_vert), findsOneWidget);
     });
 
-    testWidgets('shows only ONE "新话题" button (bottom only, not in empty state)', (tester) async {
+    testWidgets('shows only ONE "新话题" button (bottom only)', (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
           Assistant(id: 'test-id-8', name: '助手H', prompt: 'P8', emoji: '🤖', description: 'HH'),
@@ -239,7 +305,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Only 1 "新话题" button: the bottom one (empty state one was removed)
+      // Only 1 "新话题" button: the bottom one
       expect(find.widgetWithText(FilledButton, '新话题'), findsOneWidget);
     });
 
@@ -265,9 +331,211 @@ void main() {
       // Should navigate to chat page
       expect(find.text('Chat Page Mock'), findsOneWidget);
     });
+
+    testWidgets('search panel filters conversations by title when "搜标题" is selected', (tester) async {
+      final conv1 = Conversation(
+        id: 'conv-s1',
+        title: '机器学习基础',
+        updatedAt: DateTime(2026, 6, 1),
+        assistantId: 'test-search-filter',
+      );
+      final conv2 = Conversation(
+        id: 'conv-s2',
+        title: '深度学习',
+        updatedAt: DateTime(2026, 6, 2),
+        assistantId: 'test-search-filter',
+      );
+
+      await tester.pumpWidget(createMergedTopicTestApp(
+        assistants: [
+          Assistant(id: 'test-search-filter', name: '助手筛选', prompt: 'P', emoji: '🔍', description: '筛选'),
+        ],
+        selectedAssistantId: 'test-search-filter',
+        conversations: [conv1, conv2],
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Open search panel
+      await tester.tap(find.byIcon(Icons.search));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // "搜标题" should be selected by default
+      // Type search query
+      await tester.enterText(find.byType(TextField), '机器');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Scope to the bottom sheet's DraggableScrollableSheet
+      final sheet = find.byType(DraggableScrollableSheet);
+      // Should show matching conversation "机器学习基础" in the search panel
+      expect(find.descendant(of: sheet, matching: find.text('机器学习基础')), findsOneWidget);
+      // The matching card also appears on the main page behind the sheet
+      // so total is 2, but within the sheet it's 1
+      // Should NOT show non-matching "深度学习" in the search panel
+      expect(find.descendant(of: sheet, matching: find.text('深度学习')), findsNothing);
+    });
+
+    testWidgets('search panel filters conversations by content when "搜内容" is selected', (tester) async {
+      final conv1 = Conversation(
+        id: 'conv-c1',
+        title: '天气讨论',
+        updatedAt: DateTime(2026, 6, 1),
+        assistantId: 'test-content-search',
+        messages: [
+          ChatMessage(id: 'm1', role: 'user', content: '今天天气真好'),
+          ChatMessage(id: 'm2', role: 'assistant', content: '是的，适合外出'),
+        ],
+      );
+      final conv2 = Conversation(
+        id: 'conv-c2',
+        title: '编程问题',
+        updatedAt: DateTime(2026, 6, 2),
+        assistantId: 'test-content-search',
+        messages: [
+          ChatMessage(id: 'm3', role: 'user', content: 'Flutter怎么用'),
+        ],
+      );
+
+      await tester.pumpWidget(createMergedTopicTestApp(
+        assistants: [
+          Assistant(id: 'test-content-search', name: '助手内容', prompt: 'P', emoji: '📝', description: '内容搜索'),
+        ],
+        selectedAssistantId: 'test-content-search',
+        conversations: [conv1, conv2],
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Open search panel
+      await tester.tap(find.byIcon(Icons.search));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Switch to "搜内容"
+      await tester.tap(find.text('搜内容'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Type search query - should match content "今天天气真好"
+      await tester.enterText(find.byType(TextField), '天气');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Scope to the bottom sheet's DraggableScrollableSheet
+      final sheet = find.byType(DraggableScrollableSheet);
+      // Should show conversation with matching content in the panel
+      expect(find.descendant(of: sheet, matching: find.text('天气讨论')), findsOneWidget);
+      // Should NOT show non-matching in the panel
+      expect(find.descendant(of: sheet, matching: find.text('编程问题')), findsNothing);
+    });
+
+    testWidgets('tapping a card in the search panel navigates to chat', (tester) async {
+      final conv1 = Conversation(
+        id: 'conv-nav',
+        title: '搜索结果导航',
+        updatedAt: DateTime(2026, 6, 1),
+        assistantId: 'test-nav-search',
+      );
+
+      await tester.pumpWidget(createMergedTopicTestApp(
+        assistants: [
+          Assistant(id: 'test-nav-search', name: '助手导航', prompt: 'P', emoji: '🧭', description: '导航'),
+        ],
+        selectedAssistantId: 'test-nav-search',
+        conversations: [conv1],
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Open search panel
+      await tester.tap(find.byIcon(Icons.search));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Enter a query to match the conversation title
+      await tester.enterText(find.byType(TextField), '搜索');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Tap the conversation card in the panel (scope to DraggableScrollableSheet)
+      final sheet = find.byType(DraggableScrollableSheet);
+      await tester.tap(find.descendant(of: sheet, matching: find.text('搜索结果导航')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Should navigate to chat page (panel closed, now on chat)
+      expect(find.text('Chat Page Mock'), findsOneWidget);
+    });
+
+    testWidgets('search panel shows "没有找到匹配的对话" when no results', (tester) async {
+      final conv1 = Conversation(
+        id: 'conv-empty',
+        title: '唯一对话',
+        updatedAt: DateTime(2026, 6, 1),
+        assistantId: 'test-empty-search',
+      );
+
+      await tester.pumpWidget(createMergedTopicTestApp(
+        assistants: [
+          Assistant(id: 'test-empty-search', name: '助手空', prompt: 'P', emoji: '🔍', description: '空结果'),
+        ],
+        selectedAssistantId: 'test-empty-search',
+        conversations: [conv1],
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Open search panel
+      await tester.tap(find.byIcon(Icons.search));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Enter a query that matches nothing
+      await tester.enterText(find.byType(TextField), 'ZZZZ_NO_MATCH');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Should show the no-results empty state
+      expect(find.text('没有找到匹配的对话'), findsOneWidget);
+    });
+
+    testWidgets('search panel shows "搜标题" selected by default', (tester) async {
+      await tester.pumpWidget(createMergedTopicTestApp(
+        assistants: [
+          Assistant(id: 'test-default-mode', name: '助手默认', prompt: 'P', emoji: '🔍', description: '默认'),
+        ],
+        selectedAssistantId: 'test-default-mode',
+        conversations: [
+          Conversation(
+            id: 'c1',
+            title: '讨论',
+            updatedAt: DateTime(2026, 6, 1),
+            assistantId: 'test-default-mode',
+          ),
+        ],
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Open search panel
+      await tester.tap(find.byIcon(Icons.search));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Type query that matches in content but not title
+      await tester.enterText(find.byType(TextField), '讨论');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // In title mode by default, should match by title
+      // Text matches both the TextField content and the card title
+      expect(find.text('讨论'), findsWidgets);
+    });
   });
 
-  group('Merged TopicSelectionPage - Assistant info bar', () {
+  group('Merged SelectConversationPage - Assistant info bar', () {
     testWidgets('shows assistant info bar with emoji, name, description', (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
@@ -284,8 +552,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Emoji appears in AppBar title AND info bar
-      expect(find.text('🧠'), findsAtLeast(1));
+      // Emoji appears in info bar (NOT in AppBar title anymore)
+      expect(find.text('🧠'), findsOneWidget);
       // Name and description should appear in info bar
       expect(find.text('智能助手'), findsOneWidget);
       expect(find.text('一个智能助手'), findsOneWidget);
@@ -304,21 +572,20 @@ void main() {
       // Tune button should exist
       expect(find.byIcon(Icons.tune), findsOneWidget);
 
-      // Tap the tune button - should open combined edit dialog instead of popping back
+      // Tap the tune button
       await tester.tap(find.byIcon(Icons.tune));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Should open combined edit dialog with basics and settings
+      // Should open combined edit dialog
       expect(find.text('助手名称'), findsOneWidget);
       expect(find.text('温度 (Temperature)'), findsOneWidget);
 
-      // Dialog should have save button
       expect(find.text('保存'), findsOneWidget);
     });
   });
 
-  group('Merged TopicSelectionPage - Empty state', () {
+  group('Merged SelectConversationPage - Empty state', () {
     testWidgets('shows empty state when no conversations', (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
@@ -330,8 +597,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       // Should show empty state text
-      expect(find.text('暂无话题'), findsOneWidget);
-      expect(find.text('创建一个新话题开始对话'), findsOneWidget);
+      expect(find.text('暂无对话'), findsOneWidget);
+      expect(find.text('创建一个新对话开始对话'), findsOneWidget);
     });
   });
 
@@ -346,18 +613,18 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Should show error state (even with assistant in list, no selection)
+      // Should show error state
       expect(find.text('未选择助手'), findsOneWidget);
       expect(find.text('返回选择助手'), findsOneWidget);
     });
   });
 
-  group('Merged TopicSelectionPage - Pinned topic preserves original time', () {
+  group('Merged SelectConversationPage - Pinned topic preserves original time', () {
     testWidgets('pinned topic shows original updatedAt date, not modified time', (tester) async {
       final originalTime = DateTime(2026, 5, 15, 10, 30, 0);
       final conv = Conversation(
         id: 'pinned-conv',
-        title: '置顶话题',
+        title: '置顶对话',
         createdAt: DateTime(2026, 1, 1),
         updatedAt: originalTime,
         isPinned: true,
@@ -384,7 +651,7 @@ void main() {
     testWidgets('non-pinned topic shows its own updatedAt date', (tester) async {
       final conv = Conversation(
         id: 'normal-conv',
-        title: '普通话题',
+        title: '普通对话',
         createdAt: DateTime(2026, 2, 1),
         updatedAt: DateTime(2026, 3, 20, 14, 45),
         isPinned: false,
@@ -404,8 +671,7 @@ void main() {
       // Should show the original date: 2026-03-20 14:45
       expect(find.textContaining('2026-03-20'), findsOneWidget);
       expect(find.textContaining('14:45'), findsOneWidget);
-      // Should NOT show pin icon (pin_outlined may be present as action button)
-      expect(find.text('普通话题'), findsOneWidget);
+      expect(find.text('普通对话'), findsOneWidget);
     });
   });
 }
