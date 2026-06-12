@@ -41,11 +41,6 @@ class HomePage extends ConsumerStatefulWidget {
 class _HomePageState extends ConsumerState<HomePage> {
   final _chatNavigatorKey = GlobalKey<NavigatorState>();
 
-  /// 页面导航历史栈，用于返回键导航到上一页。
-  /// 每次通过导航栏/侧边栏切换到新页面时，当前页被推入栈中。
-  /// 按下返回键时从栈中弹出上一页并导航到它。
-  final List<AppPage> _pageHistory = [];
-
   @override
   void initState() {
     super.initState();
@@ -262,7 +257,6 @@ class _HomePageState extends ConsumerState<HomePage> {
           }
         } else {
           // Different page → switch, preserving state
-          _pageHistory.add(currentPage);
           ref.read(selectedPageProvider.notifier).state = newPage;
           // Auto-refresh when entering files page
           if (newPage == AppPage.files) {
@@ -324,7 +318,6 @@ class _HomePageState extends ConsumerState<HomePage> {
           }
         } else {
           // Different page → switch, preserving state
-          _pageHistory.add(currentPage);
           ref.read(selectedPageProvider.notifier).state = newPage;
           // Auto-refresh when entering files page
           if (newPage == AppPage.files) {
@@ -650,22 +643,25 @@ class _HomePageState extends ConsumerState<HomePage> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        // 返回键处理：
-        // 1. 优先在四类主页面之间导航上一页
-        if (_pageHistory.isNotEmpty) {
-          final previousPage = _pageHistory.removeLast();
-          ref.read(selectedPageProvider.notifier).state = previousPage;
-          return;
-        }
-        // 2. 如果当前在聊天页且嵌套导航器有历史路由，先弹出嵌套路由
+        // 返回键处理 — 层次导航（非历史导航）：
+        // 1. 如果当前在聊天页且嵌套导航器有历史路由，先弹出嵌套路由（上一级页面）
         final currentPage = ref.read(selectedPageProvider);
         if (currentPage == AppPage.chat &&
-            _chatNavigatorKey.currentState != null &&
-            _chatNavigatorKey.currentState!.canPop()) {
-          _chatNavigatorKey.currentState!.pop();
+            _chatNavigatorKey.currentState != null) {
+          _chatNavigatorKey.currentState!.maybePop().then((popped) {
+            if (!popped && mounted) {
+              // 嵌套导航器已在根路由 → 跳转到主页
+              ref.read(selectedPageProvider.notifier).state = AppPage.home;
+            }
+          });
           return;
         }
-        // 3. 如果历史栈为空（首页），不做任何操作，不退出桌面
+        // 2. 如果在非主页标签页（对话根路由、文件、设置），跳转到主页（上一级页面）
+        if (currentPage != AppPage.home) {
+          ref.read(selectedPageProvider.notifier).state = AppPage.home;
+          return;
+        }
+        // 3. 如果在主页，不做任何操作，不退出应用
       },
       child: Scaffold(
         body: Row(

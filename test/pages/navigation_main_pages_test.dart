@@ -144,26 +144,7 @@ void main() {
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
     });
 
-    testWidgets('back button on Chat page returns to Home',
-        (tester) async {
-      await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
-      await tester.pumpAndSettle();
-
-      // Navigate to Chat page via nav bar
-      await tester.tap(find.text('对话'));
-      await tester.pumpAndSettle();
-
-      // Verify we're on Chat page (assistant selection)
-      expect(find.text('选择助手'), findsOneWidget);
-
-      // Simulate system back button via outer Navigator
-      await _simulateBackButton(tester);
-
-      // Should now be back on Home page
-      expect(find.text('欢迎使用 Stroom'), findsOneWidget);
-    });
-
-    testWidgets('back button on Files page returns to Home',
+    testWidgets('back from Files page returns to Home',
         (tester) async {
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
       await tester.pumpAndSettle();
@@ -182,7 +163,7 @@ void main() {
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
     });
 
-    testWidgets('back button on Settings page returns to Home',
+    testWidgets('back from Settings page returns to Home',
         (tester) async {
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
       await tester.pumpAndSettle();
@@ -198,29 +179,66 @@ void main() {
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
     });
 
-    testWidgets('navigates through page history correctly',
+    testWidgets('back from Home page does not pop the app (stays on Home)',
         (tester) async {
+      await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
+      await tester.pumpAndSettle();
+
+      // We're on home page with empty history
+      expect(find.text('欢迎使用 Stroom'), findsOneWidget);
+
+      // Simulate system back — should NOT pop the route
+      await _simulateBackButton(tester);
+
+      // Should still be on home page (not popped)
+      expect(find.text('欢迎使用 Stroom'), findsOneWidget);
+
+      // HomePage should still be displayed (the outer navigator did not pop it)
+      expect(find.byType(HomePage), findsOneWidget);
+    });
+
+    testWidgets('hierarchical back: Home→Chat→Files→Back→Home, not Chat',
+        (tester) async {
+      // The back button should navigate to the parent page (Home),
+      // not the previously visited tab (Chat).
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
       await tester.pumpAndSettle();
 
       // Start on Home
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
 
-      // Go to Chat: history = [Home, Chat]
+      // Go to Chat
       await tester.tap(find.text('对话'));
       await tester.pumpAndSettle();
       expect(find.text('选择助手'), findsOneWidget);
 
-      // Go to Files: history = [Home, Chat, Files]
+      // Go to Files
       await tester.tap(find.text('文件'));
       await tester.pumpAndSettle();
       expect(find.text('文件'), findsWidgets);
 
-      // Back: should return to Chat (history = [Home, Chat])
+      // Press back — should go to Home (parent), NOT Chat (previous step)
       await _simulateBackButton(tester);
-      expect(find.text('选择助手'), findsOneWidget);
+      expect(find.text('欢迎使用 Stroom'), findsOneWidget);
+    });
 
-      // Back: should return to Home (history = [Home])
+    testWidgets('hierarchical back: Home→Chat→Files→Settings→Back→Home',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
+      await tester.pumpAndSettle();
+
+      // Go through multiple tabs
+      await tester.tap(find.text('对话'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('文件'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('设置'));
+      await tester.pumpAndSettle();
+      expect(find.text('设置'), findsWidgets);
+
+      // Press back — should go to Home (parent), not Files (previous step)
       await _simulateBackButton(tester);
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
     });
@@ -275,24 +293,6 @@ void main() {
 
       // Should navigate to OCR page
       expect(find.text('文字识别'), findsOneWidget);
-    });
-
-    testWidgets('back from Home page does not pop the app (stays on Home)',
-        (tester) async {
-      await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
-      await tester.pumpAndSettle();
-
-      // We're on home page with empty history
-      expect(find.text('欢迎使用 Stroom'), findsOneWidget);
-
-      // Simulate system back — should NOT pop the route
-      await _simulateBackButton(tester);
-
-      // Should still be on home page (not popped)
-      expect(find.text('欢迎使用 Stroom'), findsOneWidget);
-
-      // HomePage should still be displayed (the outer navigator did not pop it)
-      expect(find.byType(HomePage), findsOneWidget);
     });
   });
 }
