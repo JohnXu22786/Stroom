@@ -90,7 +90,7 @@ void main() {
       expect(find.text('😊'), findsOneWidget);
     });
 
-    testWidgets('tapping assistant navigates to topic selection',
+    testWidgets('tapping assistant navigates to select conversation page',
         (tester) async {
       await tester.pumpWidget(createTestApp(
         assistants: [
@@ -107,13 +107,13 @@ void main() {
       await tester.tap(find.text('助手1'));
       await tester.pumpAndSettle();
 
-      // Should navigate to topic selection
-      expect(find.text('选择话题'), findsOneWidget);
+      // Should navigate to topic selection page (now titled "选择对话")
+      expect(find.text('选择对话'), findsOneWidget);
     });
   });
 
-  group('TopicSelectionPage', () {
-    testWidgets('shows topic selection title', (tester) async {
+  group('SelectConversationPage', () {
+    testWidgets('shows select conversation title', (tester) async {
       SharedPreferences.setMockInitialValues({});
       await tester.pumpWidget(
         ProviderScope(
@@ -134,8 +134,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Should show the title
-      expect(find.text('选择话题'), findsOneWidget);
+      // Should show the new title
+      expect(find.text('选择对话'), findsOneWidget);
     });
   });
 
