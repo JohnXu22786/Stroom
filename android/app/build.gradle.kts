@@ -46,10 +46,12 @@ android {
     signingConfigs {
         create("release") {
             val sf = prop("storeFile", "KEYSTORE_PATH")
-            if (sf.isNotEmpty() && file(sf).exists()) storeFile = file(sf)
-            storePassword = prop("storePassword", "KEYSTORE_PASSWORD")
-            keyAlias = prop("keyAlias", "KEY_ALIAS")
-            keyPassword = prop("keyPassword", "KEY_PASSWORD")
+            if (sf.isNotEmpty() && file(sf).exists()) {
+                storeFile = file(sf)
+                storePassword = prop("storePassword", "KEYSTORE_PASSWORD")
+                keyAlias = prop("keyAlias", "KEY_ALIAS")
+                keyPassword = prop("keyPassword", "KEY_PASSWORD")
+            }
         }
     }
 
@@ -61,7 +63,10 @@ android {
             }
         }
         release {
-            signingConfig = signingConfigs.getByName("release")
+            val hasStore = signingConfigs.getByName("release").storeFile != null
+            if (hasStore) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 }
