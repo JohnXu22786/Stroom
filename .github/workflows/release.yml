@@ -133,6 +133,10 @@ jobs:
       - run: flutter pub get
       - name: Decode keystore
         run: echo "${{ secrets.KEYSTORE }}" | base64 -d > ${{ runner.temp }}/keystore.jks
+      - name: Copy Gradle init script for jcenter() compatibility
+        run: |
+          mkdir -p ~/.gradle/init.d
+          cp android/gradle-init-scripts/plugin-repos.gradle ~/.gradle/init.d/
       - name: Build APK
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/keystore.jks
