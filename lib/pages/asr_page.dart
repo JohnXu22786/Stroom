@@ -826,9 +826,10 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
     // Create a background task for tracking
     final timestamp = _currentTimestamp();
+    final title = 'ASR_$timestamp';
     final taskId = ref.read(backgroundTasksProvider.notifier).addTask(
       type: BackgroundTaskType.asr,
-      title: 'ASR_$timestamp',
+      title: title,
     );
 
     // Pop back to home page immediately so user can see task progress
@@ -856,7 +857,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       );
 
       // Save the transcription result as a text file
-      await _saveTranscriptionResult(result.text);
+      await _saveTranscriptionResult(result.text, title: title);
 
       // Mark task as completed
       ref.read(backgroundTasksProvider.notifier).completeTask(taskId);
@@ -874,12 +875,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     return '${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}';
   }
 
-  /// Save the transcription result as a text record, named by current datetime.
-  Future<void> _saveTranscriptionResult(String text) async {
+  /// Save the transcription result as a text record, named by the task title.
+  Future<void> _saveTranscriptionResult(String text, {String? title}) async {
     final now = DateTime.now();
-    final timestamp =
-        '${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}';
-    final title = 'ASR_$timestamp';
 
     final bytes = Uint8List.fromList(utf8.encode(text));
     final hash = computeTextHash(bytes);
@@ -887,7 +885,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
     await TextManifest.writeText(storageFileName, text);
     await TextManifest.addRecord(TextRecord(
-      name: title,
+      name: title ?? 'ASR_${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}',
       hash: hash,
       format: 'txt',
       createdAt: now,
