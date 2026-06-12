@@ -2,9 +2,6 @@
 
 A new Flutter project.
 
-<!-- ci-trigger -->
-
-
 ## Getting Started
 
 This project is a starting point for a Flutter application.
