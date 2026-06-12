@@ -574,14 +574,6 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   Future<void> _startSeparation() async {
     if (_videoBytes == null) return;
 
-    if (kIsWeb) {
-      setState(() {
-        _hasError = true;
-        _errorMessage = 'Web 端暂不支持音频提取功能，请使用桌面版或移动版应用';
-      });
-      return;
-    }
-
     if (!_engineAvailable) {
       setState(() {
         _hasError = true;
