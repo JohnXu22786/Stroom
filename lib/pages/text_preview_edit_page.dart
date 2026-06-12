@@ -5,8 +5,9 @@ import 'package:stroom/utils/text_manifest.dart';
 
 /// 文本预览/编辑页面 - 查看和编辑文本内容
 ///
-/// 查看模式：展示只读文本，右上角显示「编辑」按钮
-/// 编辑模式：展示可编辑文本，右上角显示「保存」和「放弃」按钮
+/// 查看模式：展示只读文本，右上角显示「编辑」图标按钮
+/// 编辑模式：展示可编辑文本，右上角显示「撤销」「重做」「保存」「放弃」图标按钮
+/// 未产生修改时直接返回，有修改才弹出二次确认对话框
 class TextPreviewEditPage extends StatefulWidget {
   final TextRecord file;
   final String? initialContent;
@@ -26,18 +27,47 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
   bool _isSaving = false;
   late TextEditingController _contentController;
   late String _originalContent;
+  bool _hasChanges = false;
+
+  // 撤销/重做栈
+  final List<String> _undoStack = [];
+  final List<String> _redoStack = [];
+  bool _isUndoingOrRedoing = false;
 
   @override
   void initState() {
     super.initState();
     _originalContent = widget.initialContent ?? '';
     _contentController = TextEditingController(text: _originalContent);
+    _contentController.addListener(_onContentChanged);
   }
 
   @override
   void dispose() {
+    _contentController.removeListener(_onContentChanged);
     _contentController.dispose();
     super.dispose();
+  }
+
+  /// 文本内容变化监听
+  void _onContentChanged() {
+    if (_isUndoingOrRedoing) return;
+
+    final currentText = _contentController.text;
+    // 仅在文本实际发生变化时记录到撤销栈
+    if (_isEditMode && (_undoStack.isEmpty || currentText != _undoStack.last)) {
+      _undoStack.add(currentText);
+      _redoStack.clear();
+    }
+    _updateHasChanges();
+  }
+
+  /// 更新是否有未保存的更改
+  void _updateHasChanges() {
+    final changed = _contentController.text != _originalContent;
+    if (changed != _hasChanges) {
+      setState(() => _hasChanges = changed);
+    }
   }
 
   /// 进入编辑模式，保存当前内容作为原始备份
@@ -45,6 +75,50 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
     setState(() {
       _originalContent = _contentController.text;
       _isEditMode = true;
+      _hasChanges = false;
+      _undoStack.clear();
+      _redoStack.clear();
+      // 将初始状态推入撤销栈
+      _undoStack.add(_originalContent);
+    });
+  }
+
+  /// 撤销：回到上一个文本状态
+  void _undo() {
+    if (_undoStack.length <= 1) return;
+
+    _isUndoingOrRedoing = true;
+    // 当前状态出栈，推入重做栈
+    final currentState = _undoStack.removeLast();
+    _redoStack.add(currentState);
+    // 恢复到上一个状态
+    _contentController.text = _undoStack.last;
+    _contentController.selection = TextSelection.fromPosition(
+      TextPosition(offset: _contentController.text.length),
+    );
+    _isUndoingOrRedoing = false;
+
+    setState(() {
+      _hasChanges = _contentController.text != _originalContent;
+    });
+  }
+
+  /// 重做：恢复被撤销的文本状态
+  void _redo() {
+    if (_redoStack.isEmpty) return;
+
+    _isUndoingOrRedoing = true;
+    // 从重做栈取出，推入撤销栈
+    final nextState = _redoStack.removeLast();
+    _undoStack.add(nextState);
+    _contentController.text = nextState;
+    _contentController.selection = TextSelection.fromPosition(
+      TextPosition(offset: _contentController.text.length),
+    );
+    _isUndoingOrRedoing = false;
+
+    setState(() {
+      _hasChanges = _contentController.text != _originalContent;
     });
   }
 
@@ -53,6 +127,9 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
     setState(() {
       _contentController.text = _originalContent;
       _isEditMode = false;
+      _hasChanges = false;
+      _undoStack.clear();
+      _redoStack.clear();
     });
   }
 
@@ -103,33 +180,48 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
     }
   }
 
-  /// 构建 AppBar 操作按钮
+  /// 构建 AppBar 操作按钮（仅图标）
   List<Widget> _buildAppBarActions() {
     if (_isEditMode) {
       return [
-        TextButton.icon(
-          onPressed: _isSaving ? null : _save,
-          icon: _isSaving
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.save, size: 20),
-          label: Text(_isSaving ? '保存中...' : '保存'),
+        // 撤销按钮
+        IconButton(
+          icon: const Icon(Icons.undo, size: 20),
+          tooltip: '撤销',
+          onPressed: (_undoStack.length > 1) && !_isSaving ? _undo : null,
         ),
-        TextButton.icon(
-          onPressed: _isSaving ? null : _discardChanges,
+        // 重做按钮
+        IconButton(
+          icon: const Icon(Icons.redo, size: 20),
+          tooltip: '重做',
+          onPressed: _redoStack.isNotEmpty && !_isSaving ? _redo : null,
+        ),
+        // 保存按钮（仅图标）
+        if (_isSaving)
+          const SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        else
+          IconButton(
+            icon: const Icon(Icons.save, size: 20),
+            tooltip: '保存',
+            onPressed: _save,
+          ),
+        // 放弃按钮（仅图标）
+        IconButton(
           icon: const Icon(Icons.close, size: 20),
-          label: const Text('放弃'),
+          tooltip: '放弃',
+          onPressed: (_hasChanges && !_isSaving) ? _discardChanges : null,
         ),
       ];
     }
-    // 查看模式：编辑按钮
+    // 查看模式：编辑按钮（仅图标）
     return [
-      TextButton.icon(
+      IconButton(
         icon: const Icon(Icons.edit, size: 20),
-        label: const Text('编辑'),
+        tooltip: '编辑',
         onPressed: _enterEditMode,
       ),
     ];
@@ -140,10 +232,10 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
     final title = '${widget.file.name}.${widget.file.format}';
 
     return PopScope(
-      canPop: !_isEditMode,
+      canPop: !_hasChanges,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
-        // 编辑模式下有未保存的更改，询问用户
+        // 有未保存的更改，询问用户
         final navigator = Navigator.of(context);
         final shouldDiscard = await showDialog<bool>(
           context: context,
@@ -167,6 +259,8 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
           setState(() {
             _isEditMode = false;
             _contentController.text = _originalContent;
+            _undoStack.clear();
+            _redoStack.clear();
           });
           navigator.pop();
         }
