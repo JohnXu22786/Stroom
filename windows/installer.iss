@@ -5,7 +5,7 @@
 #define MyAppVersion "0.2.14"
 #define MyAppPublisher "JohnTsui"
 #define MyAppURL "https://github.com/JohnXu22786/Stroom"
-#define SourceDir "..\build\windows\runner\Release"
+#define SourceDir "..\build\windows\x64\runner\Release"
 #define OutputDir "artifacts"
 
 [Setup]
