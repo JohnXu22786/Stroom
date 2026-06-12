@@ -92,9 +92,13 @@ class AssistantSelectionPage extends ConsumerWidget {
     final promptController = TextEditingController(
         text: '你是一个有帮助的AI助手。请用中文回答用户的问题。');
     String selectedEmoji = '🤖';
-    String avatarType = 'emoji';
-    final avatarUrlController = TextEditingController();
     final descriptionController = TextEditingController();
+
+    void disposeControllers() {
+      nameController.dispose();
+      promptController.dispose();
+      descriptionController.dispose();
+    }
 
     showDialog(
       context: context,
@@ -105,36 +109,12 @@ class AssistantSelectionPage extends ConsumerWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Avatar type toggle
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'emoji', label: Text('表情')),
-                    ButtonSegment(value: 'image', label: Text('图片')),
-                  ],
-                  selected: {avatarType},
-                  onSelectionChanged: (v) =>
-                      setDlgState(() => avatarType = v.first),
+                // Emoji picker (only emoji avatar supported)
+                _CategorizedEmojiPicker(
+                  selectedEmoji: selectedEmoji,
+                  onEmojiSelected: (e) =>
+                      setDlgState(() => selectedEmoji = e),
                 ),
-                const SizedBox(height: 12),
-                if (avatarType == 'emoji') ...[
-                  // Categorized emoji picker
-                  _CategorizedEmojiPicker(
-                    selectedEmoji: selectedEmoji,
-                    onEmojiSelected: (e) =>
-                        setDlgState(() => selectedEmoji = e),
-                  ),
-                ] else ...[
-                  // Image URL input
-                  TextField(
-                    controller: avatarUrlController,
-                    decoration: const InputDecoration(
-                      labelText: '头像图片URL（可选）',
-                      hintText: 'https://example.com/avatar.png',
-                      border: OutlineInputBorder(),
-                    ),
-                    maxLines: 1,
-                  ),
-                ],
                 const SizedBox(height: 12),
                 TextField(
                   controller: nameController,
@@ -169,7 +149,10 @@ class AssistantSelectionPage extends ConsumerWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: () {
+                disposeControllers();
+                Navigator.pop(ctx);
+              },
               child: const Text('取消'),
             ),
             FilledButton(
@@ -181,17 +164,8 @@ class AssistantSelectionPage extends ConsumerWidget {
                         prompt: promptController.text.trim(),
                         emoji: selectedEmoji,
                         description: descriptionController.text.trim(),
-                        avatarType: avatarType,
-                        avatarUrl: avatarType == 'image'
-                            ? (avatarUrlController.text.trim().isEmpty
-                                ? null
-                                : avatarUrlController.text.trim())
-                            : null,
                     );
-                nameController.dispose();
-                promptController.dispose();
-                descriptionController.dispose();
-                avatarUrlController.dispose();
+                disposeControllers();
                 Navigator.pop(ctx);
               },
               child: const Text('创建'),
@@ -280,9 +254,6 @@ void showAssistantFullEditDialog(
   final nameController = TextEditingController(text: assistant.name);
   final promptController = TextEditingController(text: assistant.prompt);
   String selectedEmoji = assistant.emoji;
-  String avatarType = assistant.avatarType;
-  final avatarUrlController =
-      TextEditingController(text: assistant.avatarUrl ?? '');
   final descriptionController =
       TextEditingController(text: assistant.description);
 
@@ -329,34 +300,12 @@ void showAssistantFullEditDialog(
                     )),
                 const SizedBox(height: 12),
 
-                // Avatar type toggle
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'emoji', label: Text('表情')),
-                    ButtonSegment(value: 'image', label: Text('图片')),
-                  ],
-                  selected: {avatarType},
-                  onSelectionChanged: (v) =>
-                      setDlgState(() => avatarType = v.first),
+                // Emoji picker (only emoji avatar supported)
+                _CategorizedEmojiPicker(
+                  selectedEmoji: selectedEmoji,
+                  onEmojiSelected: (e) =>
+                      setDlgState(() => selectedEmoji = e),
                 ),
-                const SizedBox(height: 12),
-                if (avatarType == 'emoji') ...[
-                  _CategorizedEmojiPicker(
-                    selectedEmoji: selectedEmoji,
-                    onEmojiSelected: (e) =>
-                        setDlgState(() => selectedEmoji = e),
-                  ),
-                ] else ...[
-                  TextField(
-                    controller: avatarUrlController,
-                    decoration: const InputDecoration(
-                      labelText: '头像图片URL',
-                      hintText: 'https://example.com/avatar.png',
-                      border: OutlineInputBorder(),
-                    ),
-                    maxLines: 1,
-                  ),
-                ],
                 const SizedBox(height: 12),
                 TextField(
                   controller: nameController,
@@ -675,12 +624,6 @@ void showAssistantFullEditDialog(
                     prompt: promptController.text.trim(),
                     emoji: selectedEmoji,
                     description: descriptionController.text.trim(),
-                    avatarType: avatarType,
-                    avatarUrl: avatarType == 'image'
-                        ? (avatarUrlController.text.trim().isEmpty
-                            ? null
-                            : avatarUrlController.text.trim())
-                        : null,
                   );
 
               // Update settings
