@@ -940,75 +940,80 @@ class _CategorizedEmojiPicker extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final categories = EmojiCategories.categories;
 
-    return SizedBox(
-      width: 320,
-      child: DefaultTabController(
-        length: categories.length,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-          // Category tabs
-          SizedBox(
-            height: 36,
-            child: TabBar(
-              isScrollable: true,
-              tabAlignment: TabAlignment.start,
-              labelPadding: const EdgeInsets.symmetric(horizontal: 8),
-              indicatorSize: TabBarIndicatorSize.label,
-              tabs: categories.map((cat) {
-                return Tab(
-                  child: Text(
-                    cat.label,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          // Emoji grid
-          SizedBox(
-            height: 180,
-            child: TabBarView(
-              children: categories.map((cat) {
-                return GridView.builder(
-                  padding: const EdgeInsets.only(top: 4),
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 8,
-                    mainAxisSpacing: 2,
-                    crossAxisSpacing: 2,
-                    childAspectRatio: 1,
-                  ),
-                  itemCount: cat.emojis.length,
-                  itemBuilder: (ctx, index) {
-                    final e = cat.emojis[index];
-                    final isSelected = e == selectedEmoji;
-                    return GestureDetector(
-                      onTap: () => onEmojiSelected(e),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? cs.primaryContainer
-                              : null,
-                          borderRadius: BorderRadius.circular(6),
-                          border: isSelected
-                              ? Border.all(color: cs.primary)
-                              : null,
-                        ),
-                        child: Center(
-                          child: Text(
-                            e,
-                            style: const TextStyle(fontSize: 22),
-                          ),
-                        ),
+    return Center(
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: SizedBox(
+          width: 320,
+          child: DefaultTabController(
+            length: categories.length,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+              // Category tabs
+              SizedBox(
+                height: 36,
+                child: TabBar(
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+                  indicatorSize: TabBarIndicatorSize.label,
+                  tabs: categories.map((cat) {
+                    return Tab(
+                      child: Text(
+                        cat.label,
+                        style: const TextStyle(fontSize: 12),
                       ),
                     );
-                  },
-                );
-              }).toList(),
+                  }).toList(),
+                ),
+              ),
+              // Emoji grid
+              SizedBox(
+                height: 180,
+                child: TabBarView(
+                  children: categories.map((cat) {
+                    return GridView.builder(
+                      padding: const EdgeInsets.only(top: 4),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 8,
+                        mainAxisSpacing: 2,
+                        crossAxisSpacing: 2,
+                        childAspectRatio: 1,
+                      ),
+                      itemCount: cat.emojis.length,
+                      itemBuilder: (ctx, index) {
+                        final e = cat.emojis[index];
+                        final isSelected = e == selectedEmoji;
+                        return GestureDetector(
+                          onTap: () => onEmojiSelected(e),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? cs.primaryContainer
+                                  : null,
+                              borderRadius: BorderRadius.circular(6),
+                              border: isSelected
+                                  ? Border.all(color: cs.primary)
+                                  : null,
+                            ),
+                            child: Center(
+                              child: Text(
+                                e,
+                                style: const TextStyle(fontSize: 22),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
             ),
           ),
-        ],
         ),
       ),
     );
