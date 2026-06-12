@@ -41,7 +41,7 @@ class AudioSeparationEngine {
 
     throw UnsupportedError(
       'Web 端暂不支持从视频文件中提取音频。\n'
-      '请使用桌面版或移动版应用进行音频分离。',
+      '请使用移动版或桌面版应用进行音频分离。',
     );
   }
 }
