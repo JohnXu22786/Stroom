@@ -95,7 +95,6 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
       prompt: '你是一个有帮助的AI助手。请用中文回答用户的问题。',
       emoji: '🤖',
       description: '通用AI助手',
-      avatarType: 'emoji',
     );
   }
 
@@ -109,8 +108,6 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
     required String prompt,
     String emoji = '🤖',
     String description = '',
-    String avatarType = 'emoji',
-    String? avatarUrl,
     AssistantSettings? settings,
     String? modelId,
   }) {
@@ -119,8 +116,6 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
       prompt: prompt,
       emoji: emoji,
       description: description,
-      avatarType: avatarType,
-      avatarUrl: avatarUrl,
       settings: settings,
       modelId: modelId,
     );
@@ -136,8 +131,6 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
     String? prompt,
     String? emoji,
     String? description,
-    String? avatarType,
-    String? avatarUrl,
     AssistantSettings? settings,
     String? modelId,
   }) {
@@ -148,8 +141,6 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
         prompt: prompt,
         emoji: emoji,
         description: description,
-        avatarType: avatarType,
-        avatarUrl: avatarUrl,
         settings: settings,
         modelId: modelId,
       );

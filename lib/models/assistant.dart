@@ -181,8 +181,6 @@ class Assistant {
   final String prompt;
   final String emoji;
   final String description;
-  final String avatarType; // 'emoji' | 'image'
-  final String? avatarUrl;
   final AssistantSettings settings;
   final String? modelId;
   final DateTime createdAt;
@@ -194,8 +192,6 @@ class Assistant {
     required this.prompt,
     this.emoji = '🤖',
     this.description = '',
-    this.avatarType = 'emoji',
-    this.avatarUrl,
     AssistantSettings? settings,
     this.modelId,
     DateTime? createdAt,
@@ -211,14 +207,16 @@ class Assistant {
         'prompt': prompt,
         'emoji': emoji,
         'description': description,
-        'avatarType': avatarType,
-        if (avatarUrl != null) 'avatarUrl': avatarUrl,
         'settings': settings.toMap(),
         if (modelId != null) 'modelId': modelId,
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
       };
 
+  /// Creates an Assistant from a map, e.g. from stored JSON.
+  ///
+  /// Handles legacy data that may include old `avatarType`/`avatarUrl` fields —
+  /// those are ignored since emoji is the only avatar mode now.
   factory Assistant.fromMap(Map<String, dynamic> map) {
     final settingsMap = map['settings'] as Map<String, dynamic>?;
     return Assistant(
@@ -227,8 +225,6 @@ class Assistant {
       prompt: (map['prompt'] as String?) ?? '',
       emoji: (map['emoji'] as String?) ?? '🤖',
       description: (map['description'] as String?) ?? '',
-      avatarType: (map['avatarType'] as String?) ?? 'emoji',
-      avatarUrl: map['avatarUrl'] as String?,
       settings: settingsMap != null
           ? AssistantSettings.fromMap(settingsMap)
           : AssistantSettings.defaults(),
@@ -248,8 +244,6 @@ class Assistant {
     String? prompt,
     String? emoji,
     String? description,
-    String? avatarType,
-    String? avatarUrl,
     AssistantSettings? settings,
     String? modelId,
     DateTime? createdAt,
@@ -261,8 +255,6 @@ class Assistant {
         prompt: prompt ?? this.prompt,
         emoji: emoji ?? this.emoji,
         description: description ?? this.description,
-        avatarType: avatarType ?? this.avatarType,
-        avatarUrl: avatarUrl ?? this.avatarUrl,
         settings: settings ?? this.settings,
         modelId: modelId ?? this.modelId,
         createdAt: createdAt ?? this.createdAt,

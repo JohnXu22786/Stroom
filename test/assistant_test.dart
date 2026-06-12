@@ -162,97 +162,80 @@ void main() {
     });
 
     // ========================================================================
-    // Avatar: emoji + image
+    // Avatar: emoji only (image avatar feature removed)
     // ========================================================================
 
-    test('assistant defaults to emoji avatar type', () {
+    test('assistant defaults with emoji', () {
       final assistant = Assistant(name: '助手', prompt: '你好');
-      expect(assistant.avatarType, 'emoji');
       expect(assistant.emoji, '🤖');
-      expect(assistant.avatarUrl, isNull);
     });
 
-    test('assistant with image avatar round-trip', () {
-      final original = Assistant(
-        name: '图片助手',
-        prompt: '你好',
-        avatarType: 'image',
-        emoji: '🤖',
-        avatarUrl: 'https://example.com/avatar.png',
-      );
-
-      final map = original.toMap();
-      final restored = Assistant.fromMap(map);
-
-      expect(restored.avatarType, 'image');
-      expect(restored.avatarUrl, 'https://example.com/avatar.png');
-      expect(restored.emoji, '🤖');
-    });
-
-    test('assistant with emoji avatar type still works', () {
+    test('assistant with custom emoji works', () {
       final original = Assistant(
         name: '表情助手',
         prompt: '你好',
-        avatarType: 'emoji',
         emoji: '😊',
       );
 
       final map = original.toMap();
       final restored = Assistant.fromMap(map);
 
-      expect(restored.avatarType, 'emoji');
       expect(restored.emoji, '😊');
-      expect(restored.avatarUrl, isNull);
     });
 
-    test('assistant fromMap handles legacy data without avatarType', () {
+    test('assistant fromMap handles legacy data gracefully', () {
       final map = <String, dynamic>{
         'id': 'legacy-1',
         'name': '旧助手',
         'prompt': '你好',
         'emoji': '🧠',
+        'avatarType': 'image',
+        'avatarUrl': 'https://example.com/old.png',
       };
 
       final assistant = Assistant.fromMap(map);
-      expect(assistant.avatarType, 'emoji');
+      // Legacy avatarType and avatarUrl should be ignored, emoji takes precedence
       expect(assistant.emoji, '🧠');
-      expect(assistant.avatarUrl, isNull);
     });
 
-    test('assistant copyWith preserves avatarType and avatarUrl', () {
+    test('assistant copyWith preserves emoji', () {
       final original = Assistant(
         name: '原版',
         prompt: '你好',
-        avatarType: 'image',
-        avatarUrl: 'https://example.com/old.png',
-      );
-
-      final updated = original.copyWith(
-        avatarUrl: 'https://example.com/new.png',
-      );
-
-      expect(updated.avatarType, 'image');
-      expect(updated.avatarUrl, 'https://example.com/new.png');
-      expect(updated.emoji, original.emoji);
-      expect(updated.id, original.id);
-    });
-
-    test('assistant copyWith changes avatarType', () {
-      final original = Assistant(
-        name: '助手',
-        prompt: '你好',
-        avatarType: 'emoji',
         emoji: '🎨',
       );
 
       final updated = original.copyWith(
-        avatarType: 'image',
-        avatarUrl: 'https://example.com/avatar.jpg',
+        emoji: '🌟',
       );
 
-      expect(updated.avatarType, 'image');
-      expect(updated.avatarUrl, 'https://example.com/avatar.jpg');
+      expect(updated.emoji, '🌟');
+      expect(updated.id, original.id);
+    });
+
+    test('assistant toMap does not include avatarType field', () {
+      final original = Assistant(
+        name: '助手',
+        prompt: '你好',
+        emoji: '😊',
+      );
+
+      final map = original.toMap();
+      expect(map.containsKey('avatarType'), false);
+      expect(map.containsKey('avatarUrl'), false);
+    });
+
+    test('assistant copyWith defaults to original emoji when not changed', () {
+      final original = Assistant(
+        name: '助手',
+        prompt: '你好',
+        emoji: '🎨',
+      );
+
+      final updated = original.copyWith(name: '新名称');
+
       expect(updated.emoji, '🎨');
+      expect(updated.name, '新名称');
     });
 
     // ========================================================================
@@ -512,41 +495,20 @@ void main() {
       expect(decoded[1]['name'], '助手2');
     });
 
-    test('createAssistant with image avatar', () {
+    test('toJson does not include avatarType field', () {
       SharedPreferences.setMockInitialValues({});
       final notifier = AssistantsNotifier();
 
-      final assistant = notifier.createAssistant(
-        name: '图片助手',
-        prompt: '你好',
-        avatarType: 'image',
-        avatarUrl: 'https://example.com/avatar.png',
-      );
-
-      expect(assistant.avatarType, 'image');
-      expect(assistant.avatarUrl, 'https://example.com/avatar.png');
-      expect(notifier.state[0].avatarType, 'image');
-      expect(notifier.state[0].avatarUrl, 'https://example.com/avatar.png');
-    });
-
-    test('updateAssistant updates avatarType and avatarUrl', () {
-      SharedPreferences.setMockInitialValues({});
-      final notifier = AssistantsNotifier();
-
-      final assistant = notifier.createAssistant(
+      notifier.createAssistant(
         name: '助手',
         prompt: '你好',
+        emoji: '😊',
       );
 
-      notifier.updateAssistant(
-        id: assistant.id,
-        avatarType: 'image',
-        avatarUrl: 'https://example.com/new.png',
-      );
-
-      final updated = notifier.state.firstWhere((a) => a.id == assistant.id);
-      expect(updated.avatarType, 'image');
-      expect(updated.avatarUrl, 'https://example.com/new.png');
+      final json = notifier.toJson();
+      final decoded = jsonDecode(json) as List;
+      expect(decoded[0].containsKey('avatarType'), false);
+      expect(decoded[0].containsKey('avatarUrl'), false);
     });
 
     test('updateAssistantSettings with extended params', () {
@@ -606,23 +568,6 @@ void main() {
       expect(updated.settings.customParameters[0].value, 40);
       expect(updated.settings.customParameters[1].name, 'verbose');
       expect(updated.settings.customParameters[1].value, true);
-    });
-
-    test('toJson includes avatarType and avatarUrl fields', () {
-      SharedPreferences.setMockInitialValues({});
-      final notifier = AssistantsNotifier();
-
-      notifier.createAssistant(
-        name: '图片助手',
-        prompt: '你好',
-        avatarType: 'image',
-        avatarUrl: 'https://example.com/avatar.png',
-      );
-
-      final json = notifier.toJson();
-      final decoded = jsonDecode(json) as List;
-      expect(decoded[0]['avatarType'], 'image');
-      expect(decoded[0]['avatarUrl'], 'https://example.com/avatar.png');
     });
   });
 
