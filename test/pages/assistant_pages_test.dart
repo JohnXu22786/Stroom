@@ -159,7 +159,7 @@ void main() {
       expect(find.text('🤖'), findsOneWidget);
     });
 
-    testWidgets('create dialog has avatar type toggle and image URL input',
+    testWidgets('create dialog has emoji picker and no image toggle',
         (tester) async {
       await tester.pumpWidget(createTestApp(
         assistants: [
@@ -176,16 +176,13 @@ void main() {
       await tester.tap(find.byIcon(Icons.add));
       await tester.pumpAndSettle();
 
-      // Should have the SegmentedButton for avatar type selection
-      expect(find.text('表情'), findsAtLeastNWidgets(1));
-      expect(find.text('图片'), findsOneWidget);
+      // Should still show "表情" in the dialog (emoji picker is shown by default)
+      // But should NOT have any "图片" segment button or image URL field
+      expect(find.text('图片'), findsNothing);
+      expect(find.text('头像图片URL（可选）'), findsNothing);
 
-      // Switch to image mode
-      await tester.tap(find.text('图片'));
-      await tester.pumpAndSettle();
-
-      // Now the image URL field should be visible
-      expect(find.text('头像图片URL（可选）'), findsOneWidget);
+      // The dialog should still have basic fields
+      expect(find.text('助手名称'), findsOneWidget);
     });
 
     testWidgets('long press menu shows 编辑 (combined) and 删除, no separate 设置',
@@ -242,6 +239,31 @@ void main() {
       expect(find.text('流式输出 (Stream Output)'), findsOneWidget);
       // Save button should be there
       expect(find.text('保存'), findsOneWidget);
+    });
+
+    testWidgets('combined edit dialog has no image toggle', (tester) async {
+      await tester.pumpWidget(createTestApp(
+        assistants: [
+          Assistant(
+            name: '助手编辑',
+            prompt: 'P1',
+            emoji: '🤖',
+          ),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      // Long-press to open menu
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+
+      // Tap 编辑
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      // Should NOT have '图片' segment button or image URL field
+      expect(find.text('图片'), findsNothing);
+      expect(find.text('头像图片URL'), findsNothing);
     });
 
     testWidgets('long press menu 删除 shows confirmation dialog',
