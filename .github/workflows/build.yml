@@ -16,6 +16,8 @@ jobs:
         with:
           flutter-version: '3.x'
       - run: flutter pub get
+      - name: Copy Gradle init script for jcenter() compatibility
+        run: mkdir -p ~/.gradle/init.d && cp android/gradle-init-scripts/plugin-repos.gradle ~/.gradle/init.d/
       - run: flutter build apk --release --split-per-abi
       - name: Rename APKs
         run: |
@@ -71,6 +73,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.x'
+      - run: flutter create --platforms=macos .
       - run: flutter pub get
       - run: flutter build macos --release
       - name: Package artifacts
