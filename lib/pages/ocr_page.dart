@@ -919,9 +919,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
     // Create a background task for tracking
     final timestamp = _currentTimestamp();
+    final title = 'OCR_$timestamp';
     final taskId = ref.read(backgroundTasksProvider.notifier).addTask(
       type: BackgroundTaskType.ocr,
-      title: 'OCR_$timestamp',
+      title: title,
     );
 
     // Pop back to home page immediately so user can see task progress
@@ -934,13 +935,14 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (_selectedModelIndex < models.length) {
       final selectedModel = models[_selectedModelIndex];
       final updatedConfig = ocrConfig.copyWith(model: selectedModel.modelId);
-      await _performOcr(updatedConfig, taskId);
+      await _performOcr(updatedConfig, taskId, title: title);
     } else {
-      await _performOcr(ocrConfig, taskId);
+      await _performOcr(ocrConfig, taskId, title: title);
     }
   }
 
-  Future<void> _performOcr(OcrConfig ocrConfig, String taskId) async {
+  Future<void> _performOcr(OcrConfig ocrConfig, String taskId,
+      {String? title}) async {
     setState(() {
       _isProcessing = true;
       _errorMessage = null;
@@ -967,7 +969,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       }
 
       // Save the OCR result as a text file using TextManifest
-      await _saveOcrResult(result.text);
+      await _saveOcrResult(result.text, title: title);
 
       // Mark task as completed (widget may be gone, but notifier is independent)
       ref.read(backgroundTasksProvider.notifier).completeTask(taskId);
@@ -985,12 +987,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     return '${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}';
   }
 
-  /// Save the OCR result as a text record, named by current datetime.
-  Future<void> _saveOcrResult(String text) async {
+  /// Save the OCR result as a text record, named by the task title.
+  Future<void> _saveOcrResult(String text, {String? title}) async {
     final now = DateTime.now();
-    final timestamp =
-        '${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}';
-    final title = 'OCR_$timestamp';
 
     final bytes = Uint8List.fromList(utf8.encode(text));
     final hash = computeTextHash(bytes);
@@ -998,7 +997,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
     await TextManifest.writeText(storageFileName, text);
     await TextManifest.addRecord(TextRecord(
-      name: title,
+      name: title ?? 'OCR_${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}',
       hash: hash,
       format: 'txt',
       createdAt: now,

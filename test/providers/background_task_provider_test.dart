@@ -34,31 +34,45 @@ void main() {
       expect(notifier.state[2].type, BackgroundTaskType.ocr);
     });
 
-    test('completeTask updates status to completed', () {
+    test('completeTask removes completed task from state (auto-remove)', () {
       final notifier = BackgroundTaskNotifier();
       
       final id = notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR');
+      expect(notifier.state.length, 1);
+
       notifier.completeTask(id);
 
-      expect(notifier.state.length, 1);
-      expect(notifier.state[0].status, TaskStatus.completed);
-      expect(notifier.state[0].completedAt, isNotNull);
-      expect(notifier.state[0].statusChangedAt, isNotNull);
+      // Completed task should be auto-removed
+      expect(notifier.state.length, 0);
     });
 
-    test('failTask updates status to failed with error', () {
+    test('completeTask removes only the specified task', () {
+      final notifier = BackgroundTaskNotifier();
+      
+      final id1 = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
+      final id2 = notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR1');
+      expect(notifier.state.length, 2);
+
+      notifier.completeTask(id1);
+
+      expect(notifier.state.length, 1);
+      expect(notifier.state[0].id, id2);
+    });
+
+    test('failTask keeps failed task in state with error (no auto-remove)', () {
       final notifier = BackgroundTaskNotifier();
       
       final id = notifier.addTask(type: BackgroundTaskType.asr, title: '测试ASR');
       notifier.failTask(id, error: '网络连接超时');
 
+      // Failed task should stay in list so user can see error
       expect(notifier.state.length, 1);
       expect(notifier.state[0].status, TaskStatus.failed);
       expect(notifier.state[0].error, '网络连接超时');
       expect(notifier.state[0].completedAt, isNotNull);
     });
 
-    test('removeTask removes task from list', () {
+    test('removeTask removes task from list (manual removal)', () {
       final notifier = BackgroundTaskNotifier();
       
       notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
@@ -125,11 +139,12 @@ void main() {
       expect(notifier.state[2].title, 'First');
     });
 
-    test('toMap/fromMap round-trip preserves all fields', () {
+    test('toMap/fromMap round-trip preserves all fields (using failed task)', () {
       final notifier = BackgroundTaskNotifier();
       
+      notifier.addTask(type: BackgroundTaskType.asr, title: '测试ASR任务');
       final id = notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR任务');
-      notifier.completeTask(id);
+      notifier.failTask(id, error: '处理失败');
       
       final task = notifier.state[0];
       final map = task.toMap();
@@ -167,6 +182,42 @@ void main() {
 
       expect(notifier.state[0].status, TaskStatus.failed);
       expect(notifier.state[0].error, isNull);
+    });
+
+    test('multiple completed tasks all get auto-removed', () {
+      final notifier = BackgroundTaskNotifier();
+      
+      final id1 = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
+      final id2 = notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR1');
+      final id3 = notifier.addTask(type: BackgroundTaskType.audioSeparation, title: 'Sep1');
+      expect(notifier.state.length, 3);
+
+      notifier.completeTask(id1);
+      expect(notifier.state.length, 2);
+      expect(notifier.state.every((t) => t.id != id1), isTrue);
+
+      notifier.completeTask(id2);
+      expect(notifier.state.length, 1);
+      expect(notifier.state[0].id, id3);
+
+      notifier.completeTask(id3);
+      expect(notifier.state.length, 0);
+    });
+
+    test('completed tasks are removed but failed tasks stay', () {
+      final notifier = BackgroundTaskNotifier();
+      
+      final id1 = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
+      final id2 = notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR1');
+      final id3 = notifier.addTask(type: BackgroundTaskType.audioSeparation, title: 'Sep1');
+
+      notifier.completeTask(id1);  // Should be removed
+      notifier.failTask(id2, error: 'ASR失败');  // Should stay
+
+      expect(notifier.state.length, 2);
+      expect(notifier.state.any((t) => t.id == id2), isTrue);
+      expect(notifier.state.any((t) => t.id == id3), isTrue);
+      expect(notifier.state.any((t) => t.id == id1), isFalse);
     });
   });
 }

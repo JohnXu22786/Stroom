@@ -59,11 +59,11 @@ BackgroundTask _createRunningOcrTask({required String id, String title = 'OCR任
   );
 }
 
-BackgroundTask _createCompletedAsrTask({required String id}) {
+BackgroundTask _createCompletedOcrTask({required String id, String title = 'OCR已完成'}) {
   return BackgroundTask(
     id: id,
-    type: BackgroundTaskType.asr,
-    title: 'ASR任务',
+    type: BackgroundTaskType.ocr,
+    title: title,
     status: TaskStatus.completed,
     createdAt: DateTime(2025, 6, 1),
     completedAt: DateTime(2025, 6, 1, 0, 5),
@@ -125,20 +125,50 @@ void main() {
           reason: '进行中的任务应显示"进行中"状态');
     });
 
-    testWidgets('background tasks tab shows completed task', (tester) async {
-      await pumpPageWithBackground(tester, [
-        _createCompletedAsrTask(id: 'asr-1'),
-      ]);
+    testWidgets(
+        'completed background task that was auto-removed via completeTask is not shown',
+        (tester) async {
+      // Create a notifier and add a running task, then complete it (which removes it)
+      final bgNotifier = BackgroundTaskNotifier();
+      final taskId = bgNotifier.addTask(
+        type: BackgroundTaskType.ocr,
+        title: 'OCR已完成',
+      );
+      bgNotifier.completeTask(taskId); // Auto-removes the task
+      // Now the notifier state is empty
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            catcatchTasksProvider.overrideWith((ref) {
+              final notifier = CatCatchNotifier(ref);
+              notifier.state = [];
+              return notifier;
+            }),
+            taskListProvider.overrideWith((ref) {
+              final notifier = TaskListNotifier(ref);
+              notifier.state = [];
+              return notifier;
+            }),
+            backgroundTasksProvider.overrideWith((ref) => bgNotifier),
+            taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
+          ],
+          child: const MaterialApp(
+            home: UnifiedTaskListPage(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       // Switch to "其他" tab
       await tester.tap(find.text('其他'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      expect(find.text('ASR任务'), findsOneWidget,
-          reason: '"其他"标签页应显示已完成的ASR任务');
-      expect(find.text('已完成'), findsOneWidget,
-          reason: '已完成的任务应显示"已完成"状态');
+      // Completed task was auto-removed by completeTask, so it shouldn't appear
+      expect(find.text('OCR已完成'), findsNothing,
+          reason: '通过completeTask自动移除的任务不应显示在列表中');
     });
 
     testWidgets('background tasks tab shows failed task with error',
@@ -172,9 +202,9 @@ void main() {
           reason: '空任务列表应显示"暂无任务"占位符');
     });
 
-    testWidgets('background task can be deleted via menu', (tester) async {
+    testWidgets('failed background task can be deleted via menu', (tester) async {
       await pumpPageWithBackground(tester, [
-        _createCompletedAsrTask(id: 'asr-1'),
+        _createFailedAudioTask(id: 'audio-1'),
       ]);
 
       // Switch to "其他" tab
@@ -183,15 +213,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
 
       // Find the popup menu button in the task card (not the AppBar)
-      // The card has "ASR任务" text, and its popup menu is the last one
-      final popupButtons = find.byIcon(Icons.more_vert);
-      // Find the one inside the card area (the card contains "ASR任务")
       final cardPopup = find.descendant(
         of: find.byType(Card),
         matching: find.byIcon(Icons.more_vert),
       );
       expect(cardPopup, findsOneWidget,
-          reason: '已完成任务卡片内应显示更多操作按钮');
+          reason: '失败任务卡片内应显示更多操作按钮');
 
       // Tap the task card's popup menu
       await tester.tap(cardPopup);
@@ -203,10 +230,10 @@ void main() {
           reason: '弹出菜单应包含"从列表移除"选项');
     });
 
-    testWidgets('multiple background task types all display', (tester) async {
+    testWidgets('multiple background task types all display (running + failed)',
+        (tester) async {
       await pumpPageWithBackground(tester, [
         _createRunningOcrTask(id: 'ocr-1', title: '图片文字识别'),
-        _createCompletedAsrTask(id: 'asr-1'),
         _createFailedAudioTask(id: 'audio-1'),
       ]);
 
@@ -216,11 +243,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.text('图片文字识别'), findsOneWidget);
-      expect(find.text('ASR任务'), findsOneWidget);
       expect(find.text('音频分离任务'), findsOneWidget);
     });
 
-    testWidgets('background task cards show correct icons', (tester) async {
+    testWidgets('background task cards show correct icons for running',
+        (tester) async {
       await pumpPageWithBackground(tester, [
         _createRunningOcrTask(id: 'ocr-1'),
       ]);
