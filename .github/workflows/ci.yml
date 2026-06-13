@@ -72,10 +72,8 @@ jobs:
         with:
           gradle-version: "8.14"
       - run: flutter pub get
-      - name: Copy Gradle init script for jcenter() compatibility
-        run: |
-          mkdir -p ~/.gradle/init.d
-          cp android/gradle-init-scripts/plugin-repos.gradle ~/.gradle/init.d/
+      # JitPack repository is configured directly in android/settings.gradle.kts
+      # under pluginManagement.repositories — no init script needed.
       - name: Create dummy keystore for CI
         run: keytool -genkey -v -keystore android/upload-keystore.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=CI, OU=Build, O=Stroom, L=Unknown, ST=Unknown, C=XX"
       - run: flutter build apk --release
