@@ -232,7 +232,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  '未检测到 FFmpeg，部分功能不可用',
+                  '未检测到 FFmpeg，音频分离功能不可用',
                   style:
                       TextStyle(fontSize: 12, color: Colors.orange[800]),
                 ),
@@ -243,7 +243,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
           Padding(
             padding: const EdgeInsets.only(left: 26),
             child: Text(
-              '请安装 FFmpeg 后重启应用，或使用桌面版应用。',
+              '请重启应用或检查应用资源完整性。',
               style:
                   TextStyle(fontSize: 11, color: Colors.orange[600]),
             ),
@@ -574,18 +574,10 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   Future<void> _startSeparation() async {
     if (_videoBytes == null) return;
 
-    if (kIsWeb) {
-      setState(() {
-        _hasError = true;
-        _errorMessage = 'Web 端暂不支持音频提取功能，请使用桌面版或移动版应用';
-      });
-      return;
-    }
-
     if (!_engineAvailable) {
       setState(() {
         _hasError = true;
-        _errorMessage = '音频分离引擎不可用，请确保设备支持此功能';
+        _errorMessage = '音频分离引擎不可用，请重启应用或检查资源完整性。';
       });
       return;
     }
