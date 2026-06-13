@@ -60,5 +60,6 @@ final reasoningEnabledProvider = StateProvider<bool>((ref) => false);
 /// Shared state provider tracking reasoning effort level ('low', 'medium', 'high').
 final reasoningEffortProvider = StateProvider<String>((ref) => 'medium');
 
-/// Shared state provider tracking which MCP tool names are enabled by the user.
+/// Shared state provider tracking which tool names are enabled by the user.
+/// Applies to both built-in and MCP tools uniformly.
 final enabledToolNamesProvider = StateProvider<Set<String>>((ref) => {});
