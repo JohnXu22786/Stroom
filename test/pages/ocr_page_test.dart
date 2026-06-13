@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/ocr_page.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/utils/text_manifest.dart';
 
 // ============================================================================
@@ -104,6 +105,7 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
+    ImageManifest.invalidateCache();
     TextManifest.invalidateCache();
   });
 
@@ -632,6 +634,144 @@ void main() {
       // After drag cancel, items should return to normal
       expect(find.byKey(const Key('ocr_grid_item_0')), findsOneWidget);
       expect(find.byKey(const Key('ocr_grid_item_1')), findsOneWidget);
+    });
+  });
+
+  // ====================================================================
+  // NEW TESTS: In-app album picker dialog
+  // ====================================================================
+
+  group('OcrPage - in-app album picker dialog', () {
+    testWidgets('tapping 从应用相册选择 opens in-app album picker dialog',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Add a record so the dialog can open (not empty state)
+      await ImageManifest.addRecord(ImageRecord(
+        name: '测试图片',
+        hash: 'test_hash_abc',
+        format: 'png',
+        createdAt: DateTime.now(),
+        size: 1024,
+      ));
+
+      // Tap the album button
+      await tester.tap(find.text('相册选择'));
+      await tester.pumpAndSettle();
+
+      // Tap "从应用相册选择"
+      await tester.tap(find.text('从应用相册选择'));
+      await tester.pumpAndSettle();
+
+      // Should show the in-app album picker dialog title
+      expect(find.text('选择应用内图片'), findsOneWidget);
+    });
+
+    testWidgets('in-app album picker shows empty state when no images',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Ensure image records are empty
+      final records = await ImageManifest.loadRecords();
+      expect(records, isEmpty);
+
+      // Navigate to the in-app album picker
+      await tester.tap(find.text('相册选择'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('从应用相册选择'));
+      await tester.pumpAndSettle();
+
+      // Should show empty state text
+      expect(find.text('暂无可用的应用内图片'), findsOneWidget);
+    });
+
+    testWidgets('in-app album picker shows records when images exist',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Add a test image record to the manifest
+      await ImageManifest.addRecord(ImageRecord(
+        name: '测试图片',
+        hash: 'test_hash_123',
+        format: 'png',
+        createdAt: DateTime.now(),
+        size: 1024,
+      ));
+      // Verify the record was added
+      final records = await ImageManifest.loadRecords();
+      expect(records.length, equals(1));
+
+      // Navigate to the in-app album picker
+      await tester.tap(find.text('相册选择'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('从应用相册选择'));
+      await tester.pumpAndSettle();
+
+      // Should show the record name
+      expect(find.text('测试图片'), findsOneWidget);
+    });
+
+    testWidgets(
+        'in-app album picker tapping record with missing file shows error snackbar',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Add a test image record (file won't exist in test environment)
+      await ImageManifest.addRecord(ImageRecord(
+        name: '缺失图片',
+        hash: 'missing_hash',
+        format: 'png',
+        createdAt: DateTime.now(),
+        size: 1024,
+      ));
+
+      // Navigate to the in-app album picker
+      await tester.tap(find.text('相册选择'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('从应用相册选择'));
+      await tester.pumpAndSettle();
+
+      // Tap on the record
+      await tester.tap(find.text('缺失图片'));
+      await tester.pumpAndSettle();
+
+      // Should show error snackbar since the file doesn't exist
+      expect(find.textContaining('无法读取'), findsOneWidget);
+    });
+
+    testWidgets('in-app album picker close button dismisses the dialog',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Add a record so the dialog opens
+      await ImageManifest.addRecord(ImageRecord(
+        name: '测试图片',
+        hash: 'test_hash_close',
+        format: 'png',
+        createdAt: DateTime.now(),
+        size: 1024,
+      ));
+
+      // Navigate to the in-app album picker
+      await tester.tap(find.text('相册选择'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('从应用相册选择'));
+      await tester.pumpAndSettle();
+
+      // Dialog should be visible
+      expect(find.text('选择应用内图片'), findsOneWidget);
+
+      // Tap the close button
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+
+      // Dialog should be dismissed
+      expect(find.text('选择应用内图片'), findsNothing);
     });
   });
 }
