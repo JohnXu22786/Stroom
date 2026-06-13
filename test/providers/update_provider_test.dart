@@ -474,7 +474,7 @@ void main() {
       expect(notifier.state.isDownloading, false);
     });
 
-    test('downloadUpdate sets isDownloading, completes download, and auto-installs', () async {
+    test('downloadUpdate sets isDownloading, completes download without auto-install', () async {
       dio.interceptors.add(InterceptorsWrapper(
         onRequest: (options, handler) {
           // Simulate download by resolving immediately
@@ -498,15 +498,14 @@ void main() {
       await notifier.downloadUpdate(downloadDir: tempDir);
 
       expect(notifier.state.isDownloading, false);
-      // On test environment (iOS override), auto-install may fail gracefully
-      // but download itself should be complete
       expect(notifier.state.downloadComplete, true);
       expect(notifier.state.downloadedFilePath, isNotNull);
-      // downloadError might be set due to auto-install failure in test environment
-      // but that is acceptable - the key is download completed
+      // No auto-install — isInstalling should remain false, no downloadError
+      expect(notifier.state.isInstalling, false);
+      expect(notifier.state.downloadError, isNull);
     });
 
-    test('downloadUpdate transitions through download lifecycle states', () async {
+    test('downloadUpdate transitions through download lifecycle states without auto-install', () async {
       // Use Completer to control when download resolves
       final completer = Completer<Response>();
       dio.interceptors.add(InterceptorsWrapper(
@@ -542,8 +541,9 @@ void main() {
 
       expect(notifier.state.isDownloading, false);
       expect(notifier.state.downloadComplete, true);
-      // After auto-install completes, isInstalling should be false
+      // No auto-install — isInstalling remains false throughout
       expect(notifier.state.isInstalling, false);
+      expect(notifier.state.downloadError, isNull);
     });
 
     test('downloadUpdate handles network error', () async {
