@@ -81,11 +81,14 @@ void main() {
       expect(find.text('语音识别'), findsOneWidget);
     });
 
-    testWidgets('shows audio source selection button', (tester) async {
+    testWidgets('shows two audio source buttons matching OCR design',
+        (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      expect(find.text('选择音频来源'), findsOneWidget);
+      // Should show two buttons side by side (matching OCR pattern)
+      expect(find.text('录音选择'), findsOneWidget);
+      expect(find.text('音频文件'), findsOneWidget);
     });
 
     testWidgets('shows empty state initially', (tester) async {
@@ -93,6 +96,15 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('暂未选择音频文件'), findsOneWidget);
+    });
+
+    testWidgets('shows clear button only when audio is selected',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Initially no clear button
+      expect(find.text('清空'), findsNothing);
     });
   });
 
@@ -168,16 +180,50 @@ void main() {
   });
 
   group('AsrPage - audio source selection', () {
-    testWidgets('tapping button opens bottom sheet with source options',
+    testWidgets('tapping "录音选择" opens bottom sheet with ChoiceCards',
         (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('选择音频来源'));
+      await tester.tap(find.text('录音选择'));
       await tester.pumpAndSettle();
 
+      // Should show bottom sheet title (matching OCR panel style)
+      expect(find.text('选择音频来源'), findsOneWidget);
+
+      // Should show source options as ChoiceCards
       expect(find.text('应用内录音'), findsOneWidget);
       expect(find.text('系统音频文件'), findsOneWidget);
+    });
+
+    testWidgets('tapping "音频文件" opens bottom sheet with ChoiceCards',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('音频文件'));
+      await tester.pumpAndSettle();
+
+      // Should show bottom sheet title
+      expect(find.text('选择音频来源'), findsOneWidget);
+
+      // Should show source options as ChoiceCards
+      expect(find.text('应用内录音'), findsOneWidget);
+      expect(find.text('系统音频文件'), findsOneWidget);
+    });
+
+    testWidgets('audio source bottom sheet shows ChoiceCard icons',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('录音选择'));
+      await tester.pumpAndSettle();
+
+      // ChoiceCards should have icons (matching OCR design)
+      expect(find.byIcon(Icons.library_music_outlined), findsOneWidget);
+      // audio_file_outlined appears in the bar button AND in the ChoiceCard
+      expect(find.byIcon(Icons.audio_file_outlined), findsNWidgets(2));
     });
   });
 }
