@@ -12,13 +12,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.x'
-      - run: flutter create --platforms=android .
+      - uses: actions/cache@v4
+        with:
+          path: ~/.gradle
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*') }}
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14"
       - run: flutter pub get
-      - name: Copy Gradle init script for jcenter() compatibility
-        run: mkdir -p ~/.gradle/init.d && cp android/gradle-init-scripts/plugin-repos.gradle ~/.gradle/init.d/
       - name: Create dummy keystore for build
         run: keytool -genkey -v -keystore android/upload-keystore.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=CI, OU=Build, O=Stroom, L=Unknown, ST=Unknown, C=XX"
       - run: flutter build apk --release --split-per-abi
@@ -37,7 +45,7 @@ jobs:
           path: artifacts/*.apk
 
   build-windows:
-    name: Build Windows (σ«ëΦúàσîà + ZIP)
+    name: Build Windows (安装包 + ZIP)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,24 +53,17 @@ jobs:
         with:
           flutter-version: '3.x'
       - run: flutter pub get
-      # Fix ffmpeg_kit_flutter_new Windows plugin include path (package bug: _full suffix mismatch)
-      - name: Patch ffmpeg_kit_flutter_new Windows plugin header path
-        shell: pwsh
-        run: |
-          $file = Resolve-Path "$env:PUB_CACHE\hosted\pub.dev\ffmpeg_kit_flutter_new-*\windows\ffmpeg_kit_flutter_plugin_c_api.cpp"
-          (Get-Content $file) -replace 'ffmpeg_kit_flutter_new_full', 'ffmpeg_kit_flutter_new' | Set-Content $file
-          Write-Output "Patched: $file"
       - run: flutter build windows --release
       - name: Create installer
         shell: pwsh
         run: |
           $TAG = "$env:GITHUB_REF_NAME"
           $version = $TAG -replace '^v', ''
-          # µèè tag τëêµ£¼σåÖσàÑ installer.iss
+          # 把 tag 版本写入 installer.iss
           (Get-Content "windows\installer.iss") -replace '0\.2\.14', $version | Set-Content "windows\installer.iss"
-          # σ«ëΦúà Inno Setup
+          # 安装 Inno Setup
           choco install innosetup --no-progress -y
-          # τ╝ûΦ»æσ«ëΦúàσîà
+          # 编译安装包
           mkdir artifacts -Force
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "windows\installer.iss"
       - name: Package ZIP (fallback)
@@ -85,17 +86,17 @@ jobs:
           flutter-version: '3.x'
       - run: flutter create --platforms=macos .
       - run: flutter pub get
-      - run: flutter build macos --release --no-pub
+      - run: flutter build macos --release
       - name: Package artifacts
         run: |
           TAG="${{ github.ref_name }}"
           mkdir -p artifacts
           APP="build/macos/Build/Products/Release/Stroom.app"
-          # ZIP σîà∩╝êzip-based update fallback∩╝ë
+          # ZIP 包（zip-based update fallback）
           cd build/macos/Build/Products/Release
           zip -r "$OLDPWD/artifacts/stroom-macos-arm64-release-$TAG.zip" "Stroom.app"
           cd "$OLDPWD"
-          # DMG σ«ëΦúàσîà∩╝êmacOS µáçσçåµá╝σ╝Å∩╝ë
+          # DMG 安装包（macOS 标准格式）
           hdiutil create -volname "Stroom" \
             -srcfolder "$APP" \
             -ov -format UDZO \
@@ -130,39 +131,9 @@ jobs:
           name: linux-build
           path: artifacts/*
 
-  build-ios:
-    name: Build iOS (IPA, unsigned)
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.x'
-      - run: flutter create --platforms=ios .
-      - run: flutter pub get
-      # Set iOS deployment target to 14.0 for ffmpeg_kit_flutter_new compatibility
-      - name: Set iOS deployment target
-        shell: bash
-        run: |
-          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*/IPHONEOS_DEPLOYMENT_TARGET = 14.0;/' ios/Runner.xcodeproj/project.pbxproj
-      - run: flutter build ios --release --no-codesign --no-pub
-      - name: Package IPA (unsigned)
-        shell: bash
-        run: |
-          TAG="${{ github.ref_name }}"
-          mkdir -p artifacts
-          cd build/ios/iphoneos
-          mkdir -p Payload
-          cp -R Runner.app Payload/
-          zip -r "$OLDPWD/artifacts/stroom-ios-release-$TAG.ipa" Payload/
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ios-build
-          path: artifacts/*
-
   create-release:
     name: Create GitHub Release
-    needs: [build-android, build-windows, build-macos, build-linux, build-ios]
+    needs: [build-android, build-windows, build-macos, build-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -179,6 +150,5 @@ jobs:
             *.apk
             *.exe
             *.dmg
-            *.ipa
             *.zip
           generate_release_notes: true
