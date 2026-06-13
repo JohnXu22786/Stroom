@@ -62,8 +62,7 @@ dependencies:
   flutter_background_service_android: ^6.0.0
   flutter_math_fork: ^0.7.4
 
-  # FFmpeg for cross-platform audio/video processing (mobile: Android/iOS)
-  ffmpeg_kit_flutter_min_gpl: ^6.0.3
+  # FFmpeg is not currently bundled. Audio separation is unavailable.
 
 dev_dependencies:
   flutter_test:
@@ -80,6 +79,5 @@ flutter:
 
   assets:
     - assets/images/
-    - assets/ffmpeg/
 
   generate: true
