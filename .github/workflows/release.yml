@@ -34,13 +34,6 @@ jobs:
         with:
           channel: stable
       - run: flutter pub get
-      # Fix ffmpeg_kit_flutter_new Windows plugin include path (package bug: _full suffix mismatch)
-      - name: Patch ffmpeg_kit_flutter_new Windows plugin header path
-        shell: pwsh
-        run: |
-          $file = Resolve-Path "$env:PUB_CACHE\hosted\pub.dev\ffmpeg_kit_flutter_new-*\windows\ffmpeg_kit_flutter_plugin_c_api.cpp"
-          (Get-Content $file) -replace 'ffmpeg_kit_flutter_new_full', 'ffmpeg_kit_flutter_new' | Set-Content $file
-          Write-Output "Patched: $file"
       - run: flutter build windows --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
       - name: Create Windows archive
         shell: pwsh
@@ -62,7 +55,10 @@ jobs:
           channel: stable
       - run: flutter create --platforms=macos .
       - run: flutter pub get
-      - run: flutter build macos --release --no-pub
+      - name: Configure CocoaPods
+        run: |
+          pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
+      - run: flutter build macos --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
       - name: Create macOS archive
         shell: bash
         run: |
@@ -134,14 +130,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.14"
-      - run: flutter create --platforms=android .
       - run: flutter pub get
       - name: Decode keystore
         run: echo "${{ secrets.KEYSTORE }}" | base64 -d > ${{ runner.temp }}/keystore.jks
-      - name: Copy Gradle init script for jcenter() compatibility
-        run: |
-          mkdir -p ~/.gradle/init.d
-          cp android/gradle-init-scripts/plugin-repos.gradle ~/.gradle/init.d/
       - name: Build APK
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/keystore.jks
@@ -155,32 +146,3 @@ jobs:
         with:
           tag_name: ${{ env.TAG }}
           files: stroom-android-release-*.apk
-
-  ios:
-    needs: prepare-version
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-      - run: flutter create --platforms=ios .
-      - run: flutter pub get
-      # Set iOS deployment target to 14.0 for ffmpeg_kit_flutter_new compatibility
-      - name: Set iOS deployment target
-        shell: bash
-        run: |
-          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*/IPHONEOS_DEPLOYMENT_TARGET = 14.0;/' ios/Runner.xcodeproj/project.pbxproj
-      - run: flutter build ios --release --no-codesign --no-pub --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
-      - name: Create IPA (unsigned)
-        shell: bash
-        run: |
-          TAG="${{ env.TAG }}"
-          cd build/ios/iphoneos
-          mkdir -p Payload
-          cp -R Runner.app Payload/
-          zip -r "$GITHUB_WORKSPACE/stroom-ios-release-$TAG.ipa" Payload/
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.TAG }}
-          files: stroom-ios-release-*.ipa
