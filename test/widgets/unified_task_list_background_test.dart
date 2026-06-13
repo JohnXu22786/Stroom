@@ -126,16 +126,16 @@ void main() {
     });
 
     testWidgets(
-        'completed background task that was auto-removed via completeTask is not shown',
+        'completed background task via completeTask is shown with completed status',
         (tester) async {
-      // Create a notifier and add a running task, then complete it (which removes it)
+      // Create a notifier and add a running task, then complete it (which keeps it with status=completed)
       final bgNotifier = BackgroundTaskNotifier();
       final taskId = bgNotifier.addTask(
         type: BackgroundTaskType.ocr,
         title: 'OCR已完成',
       );
-      bgNotifier.completeTask(taskId); // Auto-removes the task
-      // Now the notifier state is empty
+      bgNotifier.completeTask(taskId); // Updates status to completed, keeps task visible
+      // Now the notifier state has 1 task with status=completed
 
       await tester.pumpWidget(
         ProviderScope(
@@ -166,9 +166,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      // Completed task was auto-removed by completeTask, so it shouldn't appear
-      expect(find.text('OCR已完成'), findsNothing,
-          reason: '通过completeTask自动移除的任务不应显示在列表中');
+      // Completed task should appear with "已完成" status
+      expect(find.text('OCR已完成'), findsOneWidget,
+          reason: '已完成的任务应显示在列表中');
+      expect(find.text('已完成'), findsOneWidget,
+          reason: '已完成的任务应显示"已完成"状态');
     });
 
     testWidgets('background tasks tab shows failed task with error',
