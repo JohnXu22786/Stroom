@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -59,7 +60,11 @@ List<ModelConfig> _getOcrModels(WidgetRef ref) {
 /// Main OCR page — allows taking photos or selecting from gallery,
 /// then performing OCR and saving results to text storage.
 class OcrPage extends ConsumerStatefulWidget {
-  const OcrPage({super.key});
+  const OcrPage({super.key, this.testImages});
+
+  /// Test-only: pre-populate images for widget testing.
+  @visibleForTesting
+  final List<SelectedImage>? testImages;
 
   @override
   ConsumerState<OcrPage> createState() => _OcrPageState();
@@ -74,6 +79,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   /// Whether reorder mode is active
   bool _reorderMode = false;
 
+  /// Index of the image currently being long-press-dragged in grid, or null.
+  int? _dragIndex;
+
+  /// Index over which the dragged image is hovering, or null.
+  int? _dragTargetIndex;
+
   /// Captured raw request data from the last failed OCR call.
   Map<String, dynamic>? _lastRawRequest;
 
@@ -82,6 +93,14 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   /// Save-to folder selection
   String _saveFolder = '';
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.testImages != null) {
+      _selectedImages.addAll(widget.testImages!);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -93,15 +112,16 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         centerTitle: true,
         actions: [
           if (_selectedImages.length > 1 && !_isProcessing)
-            IconButton(
-              icon: Icon(
-                _reorderMode ? Icons.check : Icons.swap_vert,
-                size: 20,
-              ),
-              tooltip: _reorderMode ? '完成排序' : '排序图片',
+            TextButton.icon(
+              key: const Key('ocr_sort_btn'),
               onPressed: () {
                 setState(() => _reorderMode = !_reorderMode);
               },
+              icon: Icon(
+                _reorderMode ? Icons.check : Icons.swap_vert,
+                size: 18,
+              ),
+              label: Text(_reorderMode ? '完成' : '排序'),
             ),
           if (_selectedImages.isNotEmpty && !_isProcessing && !_reorderMode)
             TextButton.icon(
@@ -318,6 +338,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       return _buildReorderableList(cs);
     }
 
+    final isDragging = _dragIndex != null;
+
     return Padding(
       padding: const EdgeInsets.all(8),
       child: GridView.builder(
@@ -329,17 +351,149 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         itemCount: _selectedImages.length,
         itemBuilder: (context, index) {
           final image = _selectedImages[index];
-          return _ImageGridItem(
-            key: ValueKey('img_$index'),
-            image: image,
-            index: index,
-            totalCount: _selectedImages.length,
-            onTap: () => _previewImage(index),
-            onRemove: () => _removeImage(index),
+          final isThisDragging = _dragIndex == index;
+          final isDimmed = isDragging && !isThisDragging;
+          final isHoverTarget = _dragTargetIndex == index && !isThisDragging;
+
+          // Wrap each item with DragTarget + LongPressDraggable
+          return DragTarget<int>(
+            key: ValueKey('drag_target_$index'),
+            onWillAcceptWithDetails: (details) {
+              if (details.data != index) {
+                setState(() => _dragTargetIndex = index);
+                return true;
+              }
+              return false;
+            },
+            onLeave: (_) {
+              setState(() {
+                if (_dragTargetIndex == index) _dragTargetIndex = null;
+              });
+            },
+            onAcceptWithDetails: (details) {
+              _onGridReorder(details.data, index);
+            },
+            builder: (context, candidateData, rejectedData) {
+              final isCandidate = candidateData.isNotEmpty;
+              return LongPressDraggable<int>(
+                data: index,
+                delay: const Duration(milliseconds: 500),
+                onDragStarted: () {
+                  setState(() => _dragIndex = index);
+                },
+                onDraggableCanceled: (_, __) {
+                  setState(() {
+                    _dragIndex = null;
+                    _dragTargetIndex = null;
+                  });
+                },
+                onDragEnd: (_) {
+                  setState(() {
+                    _dragIndex = null;
+                    _dragTargetIndex = null;
+                  });
+                },
+                ignoringFeedbackSemantics: false,
+                feedback: SizedBox(
+                  // Match grid item dimensions
+                  width: (MediaQuery.of(context).size.width - 32) / 3,
+                  height: (MediaQuery.of(context).size.width - 32) / 3,
+                  child: Material(
+                    elevation: 8,
+                    borderRadius: BorderRadius.circular(8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Image(
+                            image: image.provider,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              color: cs.surfaceContainerHigh,
+                              child: const Icon(Icons.broken_image,
+                                  color: Colors.grey),
+                            ),
+                          ),
+                          if (_selectedImages.length > 1)
+                            Positioned(
+                              bottom: 4,
+                              left: 4,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: cs.primary,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  '${index + 1}',
+                                  style: const TextStyle(
+                                      color: Colors.white, fontSize: 11),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                childWhenDragging: _buildDimmedPlaceholder(
+                  image, index, cs, isCandidate || isHoverTarget),
+                child: _ImageGridItem(
+                  key: ValueKey('ocr_grid_item_$index'),
+                  image: image,
+                  index: index,
+                  totalCount: _selectedImages.length,
+                  isDimmed: isDimmed,
+                  isHoverTarget: isCandidate || isHoverTarget,
+                  onTap: () => _previewImage(index),
+                  onRemove: () => _removeImage(index),
+                ),
+              );
+            },
           );
         },
       ),
     );
+  }
+
+  /// Placeholder shown at original position while item is being dragged.
+  Widget _buildDimmedPlaceholder(
+      SelectedImage image, int index, ColorScheme cs, bool isTarget) {
+    return Opacity(
+      opacity: 0.3,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: isTarget
+              ? Border.all(color: cs.primary, width: 2)
+              : null,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image(
+            image: image.provider,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              color: cs.surfaceContainerHigh,
+              child: const Icon(Icons.broken_image, color: Colors.grey),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _onGridReorder(int oldIndex, int newIndex) {
+    setState(() {
+      if (oldIndex == newIndex) return;
+      if (newIndex > oldIndex) newIndex--;
+      final item = _selectedImages.removeAt(oldIndex);
+      _selectedImages.insert(newIndex, item);
+      _dragIndex = null;
+      _dragTargetIndex = null;
+    });
   }
 
   Widget _buildReorderableList(ColorScheme cs) {
@@ -846,19 +1000,23 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               child: InteractiveViewer(
                 minScale: 0.5,
                 maxScale: 4.0,
-                child: Image(
-                  image: image.provider,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => const Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.broken_image,
-                            size: 48, color: Colors.white54),
-                        SizedBox(height: 8),
-                        Text('无法加载图片',
-                            style: TextStyle(color: Colors.white54)),
-                      ],
+                child: GestureDetector(
+                  onTap: () => Navigator.pop(ctx),
+                  child: Image(
+                    key: const Key('preview_tap_to_close'),
+                    image: image.provider,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.broken_image,
+                              size: 48, color: Colors.white54),
+                          SizedBox(height: 8),
+                          Text('无法加载图片',
+                              style: TextStyle(color: Colors.white54)),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -868,6 +1026,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               top: MediaQuery.of(ctx).padding.top + 8,
               left: 8,
               child: IconButton(
+                key: const Key('preview_close_btn'),
                 icon: const Icon(Icons.close, color: Colors.white, size: 28),
                 onPressed: () => Navigator.pop(ctx),
               ),
@@ -1223,6 +1382,8 @@ class _ImageGridItem extends StatelessWidget {
   final int totalCount;
   final VoidCallback onTap;
   final VoidCallback onRemove;
+  final bool isDimmed;
+  final bool isHoverTarget;
 
   const _ImageGridItem({
     super.key,
@@ -1231,6 +1392,8 @@ class _ImageGridItem extends StatelessWidget {
     required this.totalCount,
     required this.onTap,
     required this.onRemove,
+    this.isDimmed = false,
+    this.isHoverTarget = false,
   });
 
   @override
@@ -1239,58 +1402,70 @@ class _ImageGridItem extends StatelessWidget {
 
     return GestureDetector(
       onTap: onTap,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          ClipRRect(
+      child: Opacity(
+        opacity: isDimmed ? 0.5 : 1.0,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            child: Image(
-              image: image.provider,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
-                color: cs.surfaceContainerHigh,
-                child: const Icon(Icons.broken_image, color: Colors.grey),
-              ),
+            border: isHoverTarget
+                ? Border.all(color: cs.primary, width: 2.5)
+                : null,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image(
+                  image: image.provider,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: cs.surfaceContainerHigh,
+                    child: const Icon(Icons.broken_image, color: Colors.grey),
+                  ),
+                ),
+                // Remove button
+                Positioned(
+                  top: 2,
+                  right: 2,
+                  child: GestureDetector(
+                    onTap: onRemove,
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.close,
+                          color: Colors.white, size: 16),
+                    ),
+                  ),
+                ),
+                // Image index badge
+                if (totalCount > 1)
+                  Positioned(
+                    bottom: 4,
+                    left: 4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '${index + 1}',
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 11),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
-          // Remove button
-          Positioned(
-            top: 2,
-            right: 2,
-            child: GestureDetector(
-              onTap: onRemove,
-              child: Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.close,
-                    color: Colors.white, size: 16),
-              ),
-            ),
-          ),
-          // Image index badge
-          if (totalCount > 1)
-            Positioned(
-              bottom: 4,
-              left: 4,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '${index + 1}',
-                  style: const TextStyle(
-                      color: Colors.white, fontSize: 11),
-                ),
-              ),
-            ),
-        ],
+        ),
       ),
     );
   }
