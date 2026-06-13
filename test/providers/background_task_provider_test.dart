@@ -34,19 +34,22 @@ void main() {
       expect(notifier.state[2].type, BackgroundTaskType.ocr);
     });
 
-    test('completeTask removes completed task from state (auto-remove)', () {
+    test('completeTask updates task status to completed (keeps task visible)', () {
       final notifier = BackgroundTaskNotifier();
       
       final id = notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR');
       expect(notifier.state.length, 1);
+      expect(notifier.state[0].status, TaskStatus.running);
 
       notifier.completeTask(id);
 
-      // Completed task should be auto-removed
-      expect(notifier.state.length, 0);
+      // Completed task should stay in list with status=completed
+      expect(notifier.state.length, 1);
+      expect(notifier.state[0].status, TaskStatus.completed);
+      expect(notifier.state[0].completedAt, isNotNull);
     });
 
-    test('completeTask removes only the specified task', () {
+    test('completeTask updates only the specified task, keeps others', () {
       final notifier = BackgroundTaskNotifier();
       
       final id1 = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
@@ -55,8 +58,11 @@ void main() {
 
       notifier.completeTask(id1);
 
-      expect(notifier.state.length, 1);
-      expect(notifier.state[0].id, id2);
+      expect(notifier.state.length, 2);
+      expect(notifier.state[0].id, id2); // newest first
+      expect(notifier.state[0].status, TaskStatus.running);
+      expect(notifier.state[1].id, id1);
+      expect(notifier.state[1].status, TaskStatus.completed);
     });
 
     test('failTask keeps failed task in state with error (no auto-remove)', () {
@@ -184,7 +190,7 @@ void main() {
       expect(notifier.state[0].error, isNull);
     });
 
-    test('multiple completed tasks all get auto-removed', () {
+    test('multiple completed tasks all get status completed', () {
       final notifier = BackgroundTaskNotifier();
       
       final id1 = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
@@ -193,31 +199,33 @@ void main() {
       expect(notifier.state.length, 3);
 
       notifier.completeTask(id1);
-      expect(notifier.state.length, 2);
-      expect(notifier.state.every((t) => t.id != id1), isTrue);
+      expect(notifier.state.length, 3);
+      expect(notifier.state.where((t) => t.id == id1).single.status, TaskStatus.completed);
 
       notifier.completeTask(id2);
-      expect(notifier.state.length, 1);
-      expect(notifier.state[0].id, id3);
+      expect(notifier.state.length, 3);
+      expect(notifier.state.where((t) => t.id == id1).single.status, TaskStatus.completed);
+      expect(notifier.state.where((t) => t.id == id2).single.status, TaskStatus.completed);
 
       notifier.completeTask(id3);
-      expect(notifier.state.length, 0);
+      expect(notifier.state.length, 3);
+      expect(notifier.state.where((t) => t.id == id3).single.status, TaskStatus.completed);
     });
 
-    test('completed tasks are removed but failed tasks stay', () {
+    test('completed tasks and failed tasks coexist in state', () {
       final notifier = BackgroundTaskNotifier();
       
       final id1 = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
       final id2 = notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR1');
       final id3 = notifier.addTask(type: BackgroundTaskType.audioSeparation, title: 'Sep1');
 
-      notifier.completeTask(id1);  // Should be removed
-      notifier.failTask(id2, error: 'ASR失败');  // Should stay
+      notifier.completeTask(id1);  // Should stay with status=completed
+      notifier.failTask(id2, error: 'ASR失败');  // Should stay with status=failed
 
-      expect(notifier.state.length, 2);
-      expect(notifier.state.any((t) => t.id == id2), isTrue);
-      expect(notifier.state.any((t) => t.id == id3), isTrue);
-      expect(notifier.state.any((t) => t.id == id1), isFalse);
+      expect(notifier.state.length, 3);
+      expect(notifier.state.where((t) => t.id == id1).single.status, TaskStatus.completed);
+      expect(notifier.state.where((t) => t.id == id2).single.status, TaskStatus.failed);
+      expect(notifier.state.where((t) => t.id == id3).single.status, TaskStatus.running);
     });
   });
 }
