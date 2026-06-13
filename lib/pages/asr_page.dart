@@ -252,21 +252,44 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   Widget _buildAudioSourceBar(ColorScheme cs) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: SizedBox(
-        width: double.infinity,
-        height: 48,
-        child: ElevatedButton.icon(
-          onPressed: _isProcessing ? null : _showAudioSourceSheet,
-          style: ElevatedButton.styleFrom(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+      child: Row(
+        children: [
+          Expanded(
+            child: SizedBox(
+              height: 48,
+              child: ElevatedButton.icon(
+                onPressed: _isProcessing ? null : _showAudioSourceSheet,
+                style: ElevatedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: const Icon(Icons.mic, size: 20),
+                label: const Text('录音选择',
+                    style: TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w600)),
+              ),
             ),
           ),
-          icon: const Icon(Icons.add_circle_outline, size: 20),
-          label: const Text('选择音频来源',
-              style:
-                  TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-        ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: SizedBox(
+              height: 48,
+              child: ElevatedButton.icon(
+                onPressed: _isProcessing ? null : _showAudioSourceSheet,
+                style: ElevatedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: const Icon(Icons.audio_file_outlined, size: 20),
+                label: const Text('音频文件',
+                    style: TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w600)),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -574,17 +597,17 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   // Audio Source Methods
   // ==================================================================
 
-  /// Show a bottom sheet with available audio source options.
+  /// Show a bottom sheet with available audio source options as ChoiceCards.
   void _showAudioSourceSheet() {
     final cs = Theme.of(context).colorScheme;
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+        child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -592,45 +615,44 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                 width: 32,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: cs.onSurfaceVariant.withValues(alpha: 0.3),
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.4),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 24),
               Text(
                 '选择音频来源',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: cs.onSurface,
-                ),
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
               ),
-              const SizedBox(height: 16),
-              ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: cs.primaryContainer,
-                  child: Icon(Icons.library_music_outlined,
-                      color: cs.onPrimaryContainer),
-                ),
-                title: const Text('应用内录音'),
-                subtitle: const Text('从已生成的录音中选择'),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  await _showInAppAudioPicker();
-                },
-              ),
-              ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: cs.primaryContainer,
-                  child: Icon(Icons.audio_file_outlined,
-                      color: cs.onPrimaryContainer),
-                ),
-                title: const Text('系统音频文件'),
-                subtitle: const Text('从设备文件中选择'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _pickAudioFile();
-                },
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: _ChoiceCard(
+                      icon: Icons.library_music_outlined,
+                      title: '应用内录音',
+                      subtitle: '从已生成的录音中选择',
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _showInAppAudioPicker();
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _ChoiceCard(
+                      icon: Icons.audio_file_outlined,
+                      title: '系统音频文件',
+                      subtitle: '从设备文件中选择',
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _pickAudioFile();
+                      },
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1039,4 +1061,71 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   }
 
   String _pad(int n) => n.toString().padLeft(2, '0');
+}
+
+// ============================================================================
+// ChoiceCard Widget — reusable card with icon, title, subtitle
+// ============================================================================
+
+class _ChoiceCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _ChoiceCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Material(
+      color: cs.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(12),
+      elevation: 1,
+      shadowColor: cs.shadow,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: cs.onPrimaryContainer),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                title,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
