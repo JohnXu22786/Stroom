@@ -59,8 +59,7 @@ jobs:
         run: |
           # ffmpeg_kit_flutter_min_gpl's CocoaPods dependency
           # ffmpeg-kit-macos-min-gpl:6.0 is no longer available.
-          # macOS uses auto-download FFmpeg via Process.run instead.
-          sed -i '' '/ffmpeg_kit_flutter_min_gpl/d' .flutter-plugins
+          # Remove it from .flutter-plugins-dependencies to skip CocoaPods install.
           python3 -c "import json,pathlib;f=pathlib.Path('.flutter-plugins-dependencies');d=json.loads(f.read_text());p=d.get('plugins',{}).get('macos',[]);d['plugins']['macos']=[x for x in p if 'ffmpeg_kit_flutter_min_gpl' not in x.get('name','')];f.write_text(json.dumps(d,indent=2));print('removed ffmpeg_kit_flutter_min_gpl from macos plugins')"
       - run: flutter build macos --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
       - name: Create macOS archive
