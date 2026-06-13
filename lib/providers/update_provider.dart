@@ -286,19 +286,17 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     state = const UpdateState();
   }
 
-  /// Downloads the update file to a local temp directory, then
-  /// automatically installs it.
+  /// Downloads the update file to a local temp directory.
   ///
   /// Uses [dio.get] with [ResponseType.bytes] to download the file,
   /// then writes the bytes to a local file. Tracks download progress
   /// through [UpdateState.downloadProgress].
   ///
-  /// After the file is saved, [installDownloadedFile] is called
-  /// automatically so the user does not need to click a separate
-  /// install button.
+  /// After the file is saved, sets [UpdateState.downloadedFilePath]
+  /// and [UpdateState.downloadComplete] to true.
+  /// The caller (e.g. dialog) should then prompt the user to install
+  /// by calling [installDownloadedFile] manually — no auto-install.
   ///
-  /// On success, saves the file path to [UpdateState.downloadedFilePath]
-  /// and sets [UpdateState.downloadComplete] to true.
   /// On failure, sets [UpdateState.downloadError] with an error message.
   ///
   /// The [downloadDir] parameter is optional and used primarily for testing
@@ -364,20 +362,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
           downloadProgress: 1.0,
           downloadComplete: true,
           downloadedFilePath: filePath,
-          isInstalling: true,
         );
-
-        // 自动安装：下载完成后立即安装，无需用户点击安装按钮
-        try {
-          await installDownloadedFile();
-        } catch (e) {
-          // 捕获 installDownloadedFile 未处理到的异常
-          state = state.copyWith(
-            downloadError: '自动安装失败: $e',
-          );
-        } finally {
-          state = state.copyWith(isInstalling: false);
-        }
       } else {
         state = state.copyWith(
           isDownloading: false,
@@ -412,6 +397,9 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     final filePath = state.downloadedFilePath;
     if (filePath == null || filePath.isEmpty) return;
     if (kIsWeb) return;
+
+    // Clear previous error before attempting installation
+    state = state.copyWith(downloadError: null);
 
     if (defaultTargetPlatform == TargetPlatform.android) {
       try {
