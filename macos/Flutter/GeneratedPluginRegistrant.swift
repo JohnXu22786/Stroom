@@ -7,7 +7,7 @@ import Foundation
 
 import audio_session
 import dynamic_color
-import ffmpeg_kit_flutter_min_gpl
+import ffmpeg_kit_flutter_new
 import file_picker
 import file_selector_macos
 import flutter_image_compress_macos
