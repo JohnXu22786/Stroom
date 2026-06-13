@@ -29,6 +29,10 @@ class UpdateState {
   final String? downloadError;
   final String? downloadedFilePath;
 
+  // Auto-install field: true while the app is auto-installing
+  // the downloaded update immediately after download completes.
+  final bool isInstalling;
+
   const UpdateState({
     this.isChecking = false,
     this.latestVersion,
@@ -41,6 +45,7 @@ class UpdateState {
     this.downloadComplete = false,
     this.downloadError,
     this.downloadedFilePath,
+    this.isInstalling = false,
   });
 
   UpdateState copyWith({
@@ -55,6 +60,7 @@ class UpdateState {
     bool? downloadComplete,
     String? downloadError,
     String? downloadedFilePath,
+    bool? isInstalling,
   }) {
     return UpdateState(
       isChecking: isChecking ?? this.isChecking,
@@ -68,6 +74,7 @@ class UpdateState {
       downloadComplete: downloadComplete ?? this.downloadComplete,
       downloadError: downloadError ?? this.downloadError,
       downloadedFilePath: downloadedFilePath ?? this.downloadedFilePath,
+      isInstalling: isInstalling ?? this.isInstalling,
     );
   }
 }
@@ -279,11 +286,16 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     state = const UpdateState();
   }
 
-  /// Downloads the update file to a local temp directory.
+  /// Downloads the update file to a local temp directory, then
+  /// automatically installs it.
   ///
   /// Uses [dio.get] with [ResponseType.bytes] to download the file,
   /// then writes the bytes to a local file. Tracks download progress
   /// through [UpdateState.downloadProgress].
+  ///
+  /// After the file is saved, [installDownloadedFile] is called
+  /// automatically so the user does not need to click a separate
+  /// install button.
   ///
   /// On success, saves the file path to [UpdateState.downloadedFilePath]
   /// and sets [UpdateState.downloadComplete] to true.
@@ -301,12 +313,16 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       return;
     }
 
+    // 防止重复下载
+    if (state.isDownloading) return;
+
     state = state.copyWith(
       isDownloading: true,
       downloadProgress: 0.0,
       downloadError: null,
       downloadComplete: false,
       downloadedFilePath: null,
+      isInstalling: false,
     );
 
     // Check if the URL is a GitHub release page (html_url fallback) rather than a direct download
@@ -348,7 +364,20 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
           downloadProgress: 1.0,
           downloadComplete: true,
           downloadedFilePath: filePath,
+          isInstalling: true,
         );
+
+        // 自动安装：下载完成后立即安装，无需用户点击安装按钮
+        try {
+          await installDownloadedFile();
+        } catch (e) {
+          // 捕获 installDownloadedFile 未处理到的异常
+          state = state.copyWith(
+            downloadError: '自动安装失败: $e',
+          );
+        } finally {
+          state = state.copyWith(isInstalling: false);
+        }
       } else {
         state = state.copyWith(
           isDownloading: false,
@@ -404,12 +433,18 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       }
     } else {
       // Fallback: use system default handler
-      final uri = Uri.file(filePath);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
+      try {
+        final uri = Uri.file(filePath);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        } else {
+          state = state.copyWith(
+            downloadError: '无法打开文件，请手动安装: $filePath',
+          );
+        }
+      } catch (e) {
         state = state.copyWith(
-          downloadError: '无法打开文件，请手动安装: $filePath',
+          downloadError: '安装失败: $e',
         );
       }
     }

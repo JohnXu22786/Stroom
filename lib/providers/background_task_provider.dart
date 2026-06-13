@@ -138,9 +138,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     return id;
   }
 
-  /// Mark a task as completed.
+  /// Auto-remove a completed task from the list.
   void completeTask(String taskId) {
-    _updateTask(taskId, TaskStatus.completed);
+    state = state.where((t) => t.id != taskId).toList();
+    _persistTasks();
   }
 
   /// Mark a task as failed with an optional error message.
