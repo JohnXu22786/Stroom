@@ -592,9 +592,11 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
 
     // Create a background task for tracking
     final videoName = _videoName ?? '视频音频';
+    final now = DateTime.now();
+    final title = '音频分离_${p.basenameWithoutExtension(videoName)}_${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     final taskId = ref.read(backgroundTasksProvider.notifier).addTask(
       type: BackgroundTaskType.audioSeparation,
-      title: '音频分离_${p.basenameWithoutExtension(videoName)}',
+      title: title,
     );
 
     // Pop back to home page immediately so user can see task progress
@@ -610,7 +612,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       );
 
       // 保存到音频库
-      await _saveAudioToLibrary(audioBytes);
+      await _saveAudioToLibrary(audioBytes, displayName: title);
 
       // Mark task as completed
       ref.read(backgroundTasksProvider.notifier).completeTask(taskId);
@@ -623,14 +625,15 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     }
   }
 
-  Future<void> _saveAudioToLibrary(Uint8List audioBytes) async {
+  Future<void> _saveAudioToLibrary(Uint8List audioBytes,
+      {String? displayName}) async {
     if (audioBytes.isEmpty) {
       throw Exception('提取的音频数据为空');
     }
 
     final timestamp = DateTime.now();
-    final displayName =
-        '${p.basenameWithoutExtension(_videoName ?? '视频音频')}_${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}';
+    final name =
+        displayName ?? '音频分离_${p.basenameWithoutExtension(_videoName ?? '视频音频')}_${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}';
 
     final hash = computeAudioHash(audioBytes);
     final format = 'mp3';
@@ -640,7 +643,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
 
     // 创建记录
     final record = AudioRecord(
-      name: displayName,
+      name: name,
       hash: hash,
       format: format,
       createdAt: timestamp,
