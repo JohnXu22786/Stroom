@@ -59,9 +59,9 @@ jobs:
         run: |
           # ffmpeg_kit_flutter_min_gpl's CocoaPods dependency
           # ffmpeg-kit-macos-min-gpl:6.0 is no longer available.
-          # Remove it from .flutter-plugins-dependencies and delete symlink.
+          # macOS uses auto-download FFmpeg via Process.run instead.
+          sed -i '' '/ffmpeg_kit_flutter_min_gpl/d' .flutter-plugins
           python3 -c "import json,pathlib;f=pathlib.Path('.flutter-plugins-dependencies');d=json.loads(f.read_text());p=d.get('plugins',{}).get('macos',[]);d['plugins']['macos']=[x for x in p if 'ffmpeg_kit_flutter_min_gpl' not in x.get('name','')];f.write_text(json.dumps(d,indent=2));print('removed ffmpeg_kit_flutter_min_gpl from macos plugins')"
-          rm -rf Flutter/ephemeral/.symlinks/plugins/ffmpeg_kit_flutter_min_gpl
       - run: flutter build macos --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
       - name: Create macOS archive
         shell: bash
@@ -138,9 +138,6 @@ jobs:
       - run: flutter pub get
       - name: Decode keystore
         run: echo "${{ secrets.KEYSTORE }}" | base64 -d > ${{ runner.temp }}/keystore.jks
-      - name: Add JitPack repo for ffmpeg_kit native library
-        run: |
-          sed -i 's|gradlePluginPortal()|gradlePluginPortal()\n        maven { url '\''https://jitpack.io'\'' }|' android/settings.gradle.kts
       - name: Copy Gradle init script for jcenter() compatibility
         run: |
           mkdir -p ~/.gradle/init.d
@@ -168,7 +165,6 @@ jobs:
         with:
           channel: stable
       - run: flutter pub get
-      - run: flutter create --platforms=ios .
       - run: flutter build ios --release --no-codesign --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
       - name: Create IPA (unsigned)
         shell: bash

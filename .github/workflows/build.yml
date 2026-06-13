@@ -17,8 +17,8 @@ jobs:
           flutter-version: '3.x'
       - run: flutter create --platforms=android .
       - run: flutter pub get
-      - name: Add JitPack repo for ffmpeg_kit native library
-        run: python3 -c "import re;c=open('android/settings.gradle.kts').read();c=c.replace('gradlePluginPortal()','gradlePluginPortal()\n        maven { url \"https://jitpack.io\" }',1);open('android/settings.gradle.kts','w').write(c);print('added jitpack')"
+      - name: Copy Gradle init script for jcenter() compatibility
+        run: mkdir -p ~/.gradle/init.d && cp android/gradle-init-scripts/plugin-repos.gradle ~/.gradle/init.d/
       - name: Create dummy keystore for build
         run: keytool -genkey -v -keystore android/upload-keystore.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=CI, OU=Build, O=Stroom, L=Unknown, ST=Unknown, C=XX"
       - run: flutter build apk --release --split-per-abi
@@ -80,11 +80,11 @@ jobs:
       - run: flutter pub get
       - name: Remove discontinued ffmpeg_kit pod from macOS
         run: |
-          # ffmpeg_kit_flutter_min_gpl's CocoaPods dependency is discontinued.
-          # Remove plugin from .flutter-plugins-dependencies and delete its
-          # podspec so CocoaPods won't try to download the unavailable binary.
-          python3 -c "import json,pathlib;f=pathlib.Path('.flutter-plugins-dependencies');d=json.loads(f.read_text());p=d.get('plugins',{}).get('macos',[]);d['plugins']['macos']=[x for x in p if 'ffmpeg_kit_flutter_min_gpl' not in x.get('name','')];f.write_text(json.dumps(d,indent=2));print('removed from plugin list')"
-          rm -rf macos/.symlinks/plugins/ffmpeg_kit_flutter_min_gpl Flutter/ephemeral/.symlinks/plugins/ffmpeg_kit_flutter_min_gpl .symlinks/plugins/ffmpeg_kit_flutter_min_gpl 2>/dev/null || true
+          # ffmpeg_kit_flutter_min_gpl's CocoaPods dependency
+          # ffmpeg-kit-macos-min-gpl:6.0 is no longer available.
+          # macOS uses auto-download FFmpeg via Process.run instead.
+          sed -i '' '/ffmpeg_kit_flutter_min_gpl/d' .flutter-plugins
+          python3 -c "import json,pathlib;f=pathlib.Path('.flutter-plugins-dependencies');d=json.loads(f.read_text());p=d.get('plugins',{}).get('macos',[]);d['plugins']['macos']=[x for x in p if 'ffmpeg_kit_flutter_min_gpl' not in x.get('name','')];f.write_text(json.dumps(d,indent=2));print('removed ffmpeg_kit_flutter_min_gpl from macos plugins')"
       - run: flutter build macos --release
       - name: Package artifacts
         run: |
@@ -139,11 +139,6 @@ jobs:
         with:
           flutter-version: '3.x'
       - run: flutter pub get
-      - run: flutter create --platforms=ios .
-      - name: Remove discontinued ffmpeg_kit pod from iOS
-        run: |
-          python3 -c "import json,pathlib;f=pathlib.Path('.flutter-plugins-dependencies');d=json.loads(f.read_text());p=d.get('plugins',{}).get('ios',[]);d['plugins']['ios']=[x for x in p if 'ffmpeg_kit_flutter_min_gpl' not in x.get('name','')];f.write_text(json.dumps(d,indent=2));print('removed ffmpeg_kit from ios plugin list')"
-          rm -rf ios/.symlinks/plugins/ffmpeg_kit_flutter_min_gpl Flutter/ephemeral/.symlinks/plugins/ffmpeg_kit_flutter_min_gpl .symlinks/plugins/ffmpeg_kit_flutter_min_gpl 2>/dev/null || true
       - run: flutter build ios --release --no-codesign
       - name: Package IPA (unsigned)
         shell: bash
