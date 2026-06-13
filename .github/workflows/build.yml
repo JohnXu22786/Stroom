@@ -53,6 +53,12 @@ jobs:
         with:
           flutter-version: '3.x'
       - run: flutter pub get
+      - name: Patch ffmpeg_kit_flutter_new Windows plugin header path
+        shell: pwsh
+        run: |
+          $file = Resolve-Path "$env:PUB_CACHE\hosted\pub.dev\ffmpeg_kit_flutter_new-*\windows\ffmpeg_kit_flutter_plugin_c_api.cpp"
+          (Get-Content $file) -replace 'ffmpeg_kit_flutter_new_full', 'ffmpeg_kit_flutter_new' | Set-Content $file
+          Write-Output "Patched: $file"
       - run: flutter build windows --release
       - name: Create installer
         shell: pwsh
