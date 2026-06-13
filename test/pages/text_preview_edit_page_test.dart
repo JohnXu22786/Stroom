@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -55,7 +56,8 @@ void main() {
 
     setUp(() async {
       // Create a test text file in the manifest
-      final bytes = Uint8List.fromList(testContent.codeUnits);
+      // Use utf8.encode instead of codeUnits to properly handle non-ASCII text
+      final bytes = Uint8List.fromList(utf8.encode(testContent));
       final hash = computeTextHash(bytes);
       final storageFileName = '$hash.txt';
       await TextManifest.writeText(storageFileName, testContent);
@@ -68,6 +70,9 @@ void main() {
         size: bytes.length,
         textLength: testContent.length,
       );
+      // Insert the record into the manifest database so that save
+      // operations can update it via updateRecord.
+      await TextManifest.addRecord(testFile);
     });
 
     /// 导航到编辑页面
@@ -274,11 +279,57 @@ void main() {
       expect(oldContent, isNull);
 
       // The new content should be saved under the new hash filename
-      final newBytes = Uint8List.fromList(newContent.codeUnits);
+      // Use utf8.encode to properly compute hash (same as fixed save logic)
+      final newBytes = Uint8List.fromList(utf8.encode(newContent));
       final newHash = computeTextHash(newBytes);
       final newStorageFileName = '$newHash.txt';
       final savedContent = await TextManifest.readText(newStorageFileName);
       expect(savedContent, equals(newContent));
+    });
+
+    testWidgets('save with Chinese text preserves content correctly',
+        (tester) async {
+      await enterEditMode(tester);
+
+      // Modify with Chinese content (non-ASCII)
+      const chineseContent = '你好世界！这是一段中文测试文本。Hello! 123';
+      final textField = tester.widget<TextField>(find.byType(TextField));
+      final controller = textField.controller;
+      controller?.text = chineseContent;
+      await tester.pump();
+
+      // Tap save
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+
+      // Compute expected hash using utf8.encode (same as fixed save logic)
+      final expectedBytes = Uint8List.fromList(utf8.encode(chineseContent));
+      final expectedHash = computeTextHash(expectedBytes);
+      final newStorageFileName = '$expectedHash.txt';
+
+      // Verify the saved content can be read back correctly
+      final savedContent = await TextManifest.readText(newStorageFileName);
+      expect(savedContent, equals(chineseContent),
+          reason:
+              'Chinese text saved via TextPreviewEditPage must roundtrip correctly. '
+              'If this fails, the save logic may still use codeUnits instead of utf8.encode.');
+
+      // Verify the old test file (ASCII only) was deleted
+      final oldContent = await TextManifest.readText(testFile.storagePath);
+      expect(oldContent, isNull);
+
+      // Verify the hash computed by the page matches our expected hash
+      // by comparing the stored file hash from the database
+      final records = await TextManifest.loadRecords();
+      final updatedRecord = records.first;
+      expect(updatedRecord.hash, equals(expectedHash),
+          reason:
+              'Database record hash must match utf8-based hash for Chinese text. '
+              'Bug: codeUnits truncation produces wrong hash for non-ASCII text.');
+      expect(updatedRecord.size, equals(expectedBytes.length),
+          reason:
+              'Database record size must match utf8 byte count for Chinese text. '
+              'Bug: codeUnits truncation produces wrong byte count.');
     });
 
     // ==================== Title ====================

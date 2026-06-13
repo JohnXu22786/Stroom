@@ -34,31 +34,51 @@ void main() {
       expect(notifier.state[2].type, BackgroundTaskType.ocr);
     });
 
-    test('completeTask updates status to completed', () {
+    test('completeTask updates task status to completed (keeps task visible)', () {
       final notifier = BackgroundTaskNotifier();
       
       final id = notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR');
+      expect(notifier.state.length, 1);
+      expect(notifier.state[0].status, TaskStatus.running);
+
       notifier.completeTask(id);
 
+      // Completed task should stay in list with status=completed
       expect(notifier.state.length, 1);
       expect(notifier.state[0].status, TaskStatus.completed);
       expect(notifier.state[0].completedAt, isNotNull);
-      expect(notifier.state[0].statusChangedAt, isNotNull);
     });
 
-    test('failTask updates status to failed with error', () {
+    test('completeTask updates only the specified task, keeps others', () {
+      final notifier = BackgroundTaskNotifier();
+      
+      final id1 = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
+      final id2 = notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR1');
+      expect(notifier.state.length, 2);
+
+      notifier.completeTask(id1);
+
+      expect(notifier.state.length, 2);
+      expect(notifier.state[0].id, id2); // newest first
+      expect(notifier.state[0].status, TaskStatus.running);
+      expect(notifier.state[1].id, id1);
+      expect(notifier.state[1].status, TaskStatus.completed);
+    });
+
+    test('failTask keeps failed task in state with error (no auto-remove)', () {
       final notifier = BackgroundTaskNotifier();
       
       final id = notifier.addTask(type: BackgroundTaskType.asr, title: '测试ASR');
       notifier.failTask(id, error: '网络连接超时');
 
+      // Failed task should stay in list so user can see error
       expect(notifier.state.length, 1);
       expect(notifier.state[0].status, TaskStatus.failed);
       expect(notifier.state[0].error, '网络连接超时');
       expect(notifier.state[0].completedAt, isNotNull);
     });
 
-    test('removeTask removes task from list', () {
+    test('removeTask removes task from list (manual removal)', () {
       final notifier = BackgroundTaskNotifier();
       
       notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
@@ -125,11 +145,12 @@ void main() {
       expect(notifier.state[2].title, 'First');
     });
 
-    test('toMap/fromMap round-trip preserves all fields', () {
+    test('toMap/fromMap round-trip preserves all fields (using failed task)', () {
       final notifier = BackgroundTaskNotifier();
       
+      notifier.addTask(type: BackgroundTaskType.asr, title: '测试ASR任务');
       final id = notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR任务');
-      notifier.completeTask(id);
+      notifier.failTask(id, error: '处理失败');
       
       final task = notifier.state[0];
       final map = task.toMap();
@@ -167,6 +188,44 @@ void main() {
 
       expect(notifier.state[0].status, TaskStatus.failed);
       expect(notifier.state[0].error, isNull);
+    });
+
+    test('multiple completed tasks all get status completed', () {
+      final notifier = BackgroundTaskNotifier();
+      
+      final id1 = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
+      final id2 = notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR1');
+      final id3 = notifier.addTask(type: BackgroundTaskType.audioSeparation, title: 'Sep1');
+      expect(notifier.state.length, 3);
+
+      notifier.completeTask(id1);
+      expect(notifier.state.length, 3);
+      expect(notifier.state.where((t) => t.id == id1).single.status, TaskStatus.completed);
+
+      notifier.completeTask(id2);
+      expect(notifier.state.length, 3);
+      expect(notifier.state.where((t) => t.id == id1).single.status, TaskStatus.completed);
+      expect(notifier.state.where((t) => t.id == id2).single.status, TaskStatus.completed);
+
+      notifier.completeTask(id3);
+      expect(notifier.state.length, 3);
+      expect(notifier.state.where((t) => t.id == id3).single.status, TaskStatus.completed);
+    });
+
+    test('completed tasks and failed tasks coexist in state', () {
+      final notifier = BackgroundTaskNotifier();
+      
+      final id1 = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
+      final id2 = notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR1');
+      final id3 = notifier.addTask(type: BackgroundTaskType.audioSeparation, title: 'Sep1');
+
+      notifier.completeTask(id1);  // Should stay with status=completed
+      notifier.failTask(id2, error: 'ASR失败');  // Should stay with status=failed
+
+      expect(notifier.state.length, 3);
+      expect(notifier.state.where((t) => t.id == id1).single.status, TaskStatus.completed);
+      expect(notifier.state.where((t) => t.id == id2).single.status, TaskStatus.failed);
+      expect(notifier.state.where((t) => t.id == id3).single.status, TaskStatus.running);
     });
   });
 }

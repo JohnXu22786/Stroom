@@ -46,6 +46,129 @@ Widget createTestApp({
 }
 
 void main() {
+  group('EmojiPicker adaptive width', () {
+    /// Find the emoji GridView inside the dialog (padding EdgeInsets.only(top: 4))
+    Finder _findEmojiGrid() {
+      return find.byWidgetPredicate(
+        (w) => w is GridView && w.padding == const EdgeInsets.only(top: 4),
+      );
+    }
+
+    testWidgets('emoji picker is centered on wide screen (not stuck at 320px)',
+        (tester) async {
+      // Set a wide surface (simulating a tablet/desktop)
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(createTestApp(
+        assistants: [
+          Assistant(
+              name: '测试助手', prompt: 'P1', emoji: '🤖'),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      // Open edit dialog
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      // Find the emoji grid inside the dialog
+      final gridFinder = _findEmojiGrid();
+      expect(gridFinder, findsOneWidget);
+
+      // The picker is wrapped in Center + FittedBox, so on a wide screen
+      // the emoji grid should be centered within the dialog content.
+      expect(find.text('编辑助手'), findsOneWidget);
+      expect(find.text('保存'), findsOneWidget);
+
+      // Verify the emoji grid is within the screen bounds (not overflowed)
+      final gridRect = tester.getRect(gridFinder);
+      expect(gridRect.left, greaterThanOrEqualTo(0));
+      expect(gridRect.right, lessThanOrEqualTo(800));
+
+      // Verify the grid is horizontally centered by checking
+      // left and right margins are roughly equal
+      final screenCenterX = 800 / 2;
+      final gridCenterX = gridRect.center.dx;
+      // Grid center should be within 5px of screen center
+      expect((gridCenterX - screenCenterX).abs(), lessThan(5),
+          reason: 'Emoji grid should be centered horizontally on wide screens');
+    });
+
+    testWidgets('emoji picker scales down on narrow screens',
+        (tester) async {
+      // Set a narrow surface (simulating a small phone)
+      await tester.binding.setSurfaceSize(const Size(360, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(createTestApp(
+        assistants: [
+          Assistant(
+              name: '测试助手', prompt: 'P1', emoji: '🤖'),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      // Open create dialog (it uses the emoji picker too)
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pumpAndSettle();
+
+      // The dialog should be visible
+      expect(find.text('新建助手'), findsOneWidget);
+      // Emoji picker should be visible
+      expect(find.text('表情'), findsOneWidget);
+
+      // The grid should fit within the screen width (FittedBox scales it down)
+      final gridFinder = _findEmojiGrid();
+      expect(gridFinder, findsOneWidget);
+      final gridRect = tester.getRect(gridFinder);
+      expect(gridRect.width, greaterThan(0),
+          reason: 'Emoji grid should have positive width');
+      expect(gridRect.right, lessThanOrEqualTo(360),
+          reason: 'Emoji grid should fit within narrow screen (right edge)');
+    });
+
+    testWidgets('emoji selection still works with adaptive sizing',
+        (tester) async {
+      // Use medium screen size
+      await tester.binding.setSurfaceSize(const Size(400, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(createTestApp(
+        assistants: [
+          Assistant(
+              name: '测试助手', prompt: 'P1', emoji: '😊'),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      // Open edit dialog
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      // The current emoji '😊' should be shown
+      // Tap a different emoji in the grid to change selection
+      // First tap the emoji tab to make sure we're on the right category
+      await tester.tap(find.text('表情').first);
+      await tester.pumpAndSettle();
+
+      // Try to find and tap '😀' in the grid (first emoji in the first category)
+      final emojiFinder = find.text('😀');
+      expect(emojiFinder, findsAtLeast(1),
+          reason: '😀 should be visible in the emoji grid');
+      await tester.tap(emojiFinder.first);
+      await tester.pumpAndSettle();
+
+      // Verify the dialog is still working (not crashed)
+      expect(find.text('编辑助手'), findsOneWidget);
+      expect(find.text('保存'), findsOneWidget);
+    });
+  });
+
   group('AssistantSelectionPage', () {
     testWidgets('renders with title', (tester) async {
       SharedPreferences.setMockInitialValues({});

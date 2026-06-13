@@ -11,6 +11,7 @@ import '../utils/audio_separation.dart';
 import '../providers/tts_state_provider.dart';
 import '../providers/background_task_provider.dart';
 import '../utils/file_manifest.dart';
+import '../utils/video_manifest.dart';
 import '../widgets/folder_picker_dialog.dart';
 import 'tts_page.dart';
 
@@ -203,12 +204,131 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     );
   }
 
-  /// Pick from video library (placeholder)
-  void _pickFromVideoLibrary() {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('视频库功能开发中')),
+  /// Pick from video library - shows in-app video picker dialog.
+  Future<void> _pickFromVideoLibrary() async {
+    try {
+      final records = await VideoManifest.loadRecords();
+
+      if (!mounted) return;
+
+      if (records.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('暂无可用的应用内视频')),
+        );
+        return;
+      }
+
+      final cs = Theme.of(context).colorScheme;
+      showDialog(
+        context: context,
+        builder: (ctx) => Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: 500,
+              maxHeight: MediaQuery.of(ctx).size.height * 0.6,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.video_library,
+                          size: 18, color: cs.primary),
+                      const SizedBox(width: 8),
+                      Text(
+                        '选择应用内视频',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                // List
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: records.length,
+                    itemBuilder: (_, index) {
+                      final record = records[index];
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: cs.primaryContainer,
+                          child: Icon(Icons.videocam,
+                              color: cs.onPrimaryContainer, size: 20),
+                        ),
+                        title: Text(
+                          record.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                        subtitle: Text(
+                          '${record.format.toUpperCase()}  ${_formatFileSize(record.size)}  ${record.duration > 0 ? '${(record.duration / 1000).toStringAsFixed(1)}秒' : ''}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        onTap: () async {
+                          Navigator.pop(ctx);
+                          await _selectFromVideoLibrary(record);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('加载视频列表失败: $e')),
+        );
+      }
+    }
+  }
+
+  /// Select an in-app video record and read its bytes.
+  Future<void> _selectFromVideoLibrary(VideoRecord record) async {
+    try {
+      final bytes = await VideoManifest.readFile(record.storagePath);
+      if (bytes == null || bytes.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('无法读取视频文件')),
+          );
+        }
+        return;
+      }
+
+      setState(() {
+        _videoBytes = bytes;
+        _videoName = record.name;
+        _videoFormat = record.format;
+        _hasError = false;
+        _errorMessage = '';
+        _success = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('读取视频失败: $e')),
+        );
+      }
     }
   }
 
@@ -232,7 +352,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  '未检测到 FFmpeg，部分功能不可用',
+                  '未检测到 FFmpeg，音频分离功能不可用',
                   style:
                       TextStyle(fontSize: 12, color: Colors.orange[800]),
                 ),
@@ -243,7 +363,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
           Padding(
             padding: const EdgeInsets.only(left: 26),
             child: Text(
-              '请安装 FFmpeg 后重启应用，或使用桌面版应用。',
+              '请重启应用或检查应用资源完整性。',
               style:
                   TextStyle(fontSize: 11, color: Colors.orange[600]),
             ),
@@ -574,27 +694,21 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   Future<void> _startSeparation() async {
     if (_videoBytes == null) return;
 
-    if (kIsWeb) {
-      setState(() {
-        _hasError = true;
-        _errorMessage = 'Web 端暂不支持音频提取功能，请使用桌面版或移动版应用';
-      });
-      return;
-    }
-
     if (!_engineAvailable) {
       setState(() {
         _hasError = true;
-        _errorMessage = '音频分离引擎不可用，请确保设备支持此功能';
+        _errorMessage = '音频分离引擎不可用，请重启应用或检查资源完整性。';
       });
       return;
     }
 
     // Create a background task for tracking
     final videoName = _videoName ?? '视频音频';
+    final now = DateTime.now();
+    final title = '音频分离_${p.basenameWithoutExtension(videoName)}_${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     final taskId = ref.read(backgroundTasksProvider.notifier).addTask(
       type: BackgroundTaskType.audioSeparation,
-      title: '音频分离_${p.basenameWithoutExtension(videoName)}',
+      title: title,
     );
 
     // Pop back to home page immediately so user can see task progress
@@ -610,7 +724,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       );
 
       // 保存到音频库
-      await _saveAudioToLibrary(audioBytes);
+      await _saveAudioToLibrary(audioBytes, displayName: title);
 
       // Mark task as completed
       ref.read(backgroundTasksProvider.notifier).completeTask(taskId);
@@ -623,14 +737,15 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     }
   }
 
-  Future<void> _saveAudioToLibrary(Uint8List audioBytes) async {
+  Future<void> _saveAudioToLibrary(Uint8List audioBytes,
+      {String? displayName}) async {
     if (audioBytes.isEmpty) {
       throw Exception('提取的音频数据为空');
     }
 
     final timestamp = DateTime.now();
-    final displayName =
-        '${p.basenameWithoutExtension(_videoName ?? '视频音频')}_${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}';
+    final name =
+        displayName ?? '音频分离_${p.basenameWithoutExtension(_videoName ?? '视频音频')}_${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}';
 
     final hash = computeAudioHash(audioBytes);
     final format = 'mp3';
@@ -640,7 +755,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
 
     // 创建记录
     final record = AudioRecord(
-      name: displayName,
+      name: name,
       hash: hash,
       format: format,
       createdAt: timestamp,

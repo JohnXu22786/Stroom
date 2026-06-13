@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/audio_separation_page.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/file_manifest.dart';
+import 'package:stroom/utils/video_manifest.dart';
 
 Widget _buildTestApp() {
   return const ProviderScope(
@@ -25,6 +26,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     FileManifest.invalidateCache();
+    VideoManifest.invalidateCache();
   });
 
   group('AudioSeparationPage - basic rendering', () {
@@ -132,6 +134,148 @@ void main() {
 
       expect(find.text('保存至'), findsOneWidget);
       expect(find.text('提取音频'), findsOneWidget);
+    });
+  });
+
+  // ====================================================================
+  // NEW TESTS: In-app video picker dialog
+  // ====================================================================
+
+  group('AudioSeparationPage - in-app video picker dialog', () {
+    testWidgets('tapping 从应用相册选择 opens in-app video picker dialog',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Add a record so the dialog can open (not empty state)
+      await VideoManifest.addRecord(VideoRecord(
+        name: '测试视频',
+        hash: 'test_hash_vid',
+        format: 'mp4',
+        createdAt: DateTime.now(),
+        size: 2048,
+        duration: 5000,
+      ));
+
+      // Tap the video source button
+      await tester.tap(find.text('选择视频来源'));
+      await tester.pumpAndSettle();
+
+      // Tap "从应用相册选择"
+      await tester.tap(find.text('从应用相册选择'));
+      await tester.pumpAndSettle();
+
+      // Should show the in-app video picker dialog title
+      expect(find.text('选择应用内视频'), findsOneWidget);
+    });
+
+    testWidgets('in-app video picker shows empty state when no videos',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Ensure video records are empty
+      VideoManifest.invalidateCache();
+      final records = await VideoManifest.loadRecords();
+      expect(records, isEmpty);
+
+      // Navigate to the in-app video picker
+      await tester.tap(find.text('选择视频来源'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('从应用相册选择'));
+      await tester.pumpAndSettle();
+
+      // Should show empty state text
+      expect(find.text('暂无可用的应用内视频'), findsOneWidget);
+    });
+
+    testWidgets('in-app video picker shows records when videos exist',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Add a test video record to the manifest
+      await VideoManifest.addRecord(VideoRecord(
+        name: '测试视频',
+        hash: 'test_video_hash',
+        format: 'mp4',
+        createdAt: DateTime.now(),
+        size: 2048,
+        duration: 5000,
+      ));
+      // Verify the record was added
+      final records = await VideoManifest.loadRecords();
+      expect(records.length, equals(1));
+
+      // Navigate to the in-app video picker
+      await tester.tap(find.text('选择视频来源'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('从应用相册选择'));
+      await tester.pumpAndSettle();
+
+      // Should show the record name
+      expect(find.text('测试视频'), findsOneWidget);
+    });
+
+    testWidgets('in-app video picker tapping record with missing file shows error snackbar',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Add a test video record (file won't exist in test environment)
+      await VideoManifest.addRecord(VideoRecord(
+        name: '缺失视频',
+        hash: 'missing_video_hash',
+        format: 'mp4',
+        createdAt: DateTime.now(),
+        size: 2048,
+        duration: 5000,
+      ));
+
+      // Navigate to the in-app video picker
+      await tester.tap(find.text('选择视频来源'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('从应用相册选择'));
+      await tester.pumpAndSettle();
+
+      // Tap on the record
+      await tester.tap(find.text('缺失视频'));
+      await tester.pumpAndSettle();
+
+      // Should show error snackbar since the file doesn't exist
+      expect(find.textContaining('无法读取'), findsOneWidget);
+    });
+
+    testWidgets('in-app video picker close button dismisses the dialog',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Add a record so the dialog is not empty
+      await VideoManifest.addRecord(VideoRecord(
+        name: '测试视频',
+        hash: 'test_hash',
+        format: 'mp4',
+        createdAt: DateTime.now(),
+        size: 1024,
+        duration: 3000,
+      ));
+
+      // Navigate to the in-app video picker
+      await tester.tap(find.text('选择视频来源'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('从应用相册选择'));
+      await tester.pumpAndSettle();
+
+      // Dialog should be visible
+      expect(find.text('选择应用内视频'), findsOneWidget);
+
+      // Tap the close button
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+
+      // Dialog should be dismissed
+      expect(find.text('选择应用内视频'), findsNothing);
     });
   });
 }

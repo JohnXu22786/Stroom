@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -139,7 +140,7 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
 
     try {
       final newContent = _contentController.text;
-      final bytes = Uint8List.fromList(newContent.codeUnits);
+      final bytes = Uint8List.fromList(utf8.encode(newContent));
       final newHash = computeTextHash(bytes);
       final oldStorageFileName = widget.file.storageFileName;
       final newStorageFileName = '$newHash.txt';

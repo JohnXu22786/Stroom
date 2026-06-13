@@ -1,9 +1,9 @@
 /// 音频分离引擎
 ///
-/// 跨平台音频分离功能：
-/// - 桌面端 (Win/Mac/Linux)：使用系统 FFmpeg 或内置 FFmpeg
-/// - 移动端 (Android/iOS)：使用系统 FFmpeg 或内置 FFmpeg
-/// - Web 端：使用纯 Dart 方式（仅支持音频格式转换）
+/// 跨平台音频分离功能，无需用户额外安装 FFmpeg：
+/// - Android/iOS/macOS/Windows：使用 ffmpeg_kit_flutter_new 内置 FFmpeg
+/// - Linux：使用 asset 中捆绑的 FFmpeg 二进制文件
+/// - Web：使用 ffmpeg.wasm（WebAssembly，首次需从 CDN 下载约 31MB）
 ///
 /// 使用条件导出实现平台适配：
 /// - `dart.library.io` (原生平台): `audio_separation_native.dart`

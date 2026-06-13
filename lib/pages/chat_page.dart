@@ -211,7 +211,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _configureAdapter();
     // Initialize MCP servers and discover tools
     final entriesState = ref.read(providerEntriesProvider);
-    await _adapter.initializeMcpServers(entriesState);
+    try {
+      await _adapter.initializeMcpServers(entriesState);
+    } finally {
+      // Always initialize enabled tool names with all available tools.
+      // Using finally ensures the provider is populated even if MCP
+      // discovery fails, so built-in tools (registered in initState)
+      // still work by default.
+      final allToolNames =
+          _adapter.getAllToolDefinitions().map((t) => t.name).toSet();
+      if (allToolNames.isNotEmpty) {
+        ref.read(enabledToolNamesProvider.notifier).state = allToolNames;
+      }
+    }
     // Restore saved model selection — clear stale index if out of range
     SharedPreferences.getInstance().then((prefs) {
       // Restore saved model selection — clear stale index if out of range
@@ -444,11 +456,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       // Merge built-in tools with MCP tools
       final allTools = _adapter.getAllToolDefinitions();
       final enabledTools = ref.read(enabledToolNamesProvider);
-      final filteredTools = allTools.where((t) {
-        // Built-in tools are always enabled; MCP tools follow the toggle
-        final isMcp = _adapter.mcpToolDefinitions.any((m) => m.name == t.name);
-        return !isMcp || enabledTools.contains(t.name);
-      }).toList();
+      // All tools uniformly respect the user's toggle state from the settings panel.
+      final filteredTools =
+          allTools.where((t) => enabledTools.contains(t.name)).toList();
 
       final stream = _adapter.sendStreamWithTools(
         text,
@@ -1372,18 +1382,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           itemBuilder: itemBuilder,
                           onEndReached: _loadMoreMessages,
                         ),
-                        composerBuilder: (context) => ChatComposerWidget(
-                          onSend: _onMessageSend,
-                          onStop: _stopStreaming,
-                          mcpTools: _adapter.getAllToolDefinitions(),
-                          enabledTools: ref.watch(enabledToolNamesProvider),
-                          onEnabledToolsChanged: (tools) {
-                            ref.read(enabledToolNamesProvider.notifier).state = tools;
-                          },
-                          modelNames: _getModelNames(),
-                          selectedModelIndex: _selectedModelIndex,
-                          onModelSelected: _onModelSelected,
-                        ),
+                        // Empty composer builder — the actual composer is
+                        // rendered below the Chat widget so it participates
+                        // in the Column layout flow instead of overlaying
+                        // the message list via the internal Stack. This
+                        // ensures the scroll area auto-adjusts as the
+                        // composer height changes (e.g. multi-line input).
+                        composerBuilder: (_) => const SizedBox.shrink(),
                         textMessageBuilder: (context, message, index,
                             {required bool isSentByMe,
                             MessageGroupStatus? groupStatus}) {
@@ -1647,12 +1652,29 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         },
                       ),
                     ),
+                  ),
+                // ── Chat composer (below chat, in Column flow) ──
+                // Rendered as a direct Column child so it participates in the
+                // layout flow instead of overlaying the message list via a
+                // Stack. This lets the scroll area auto-adjust as the
+                // composer height changes (e.g. multi-line input).
+                ChatComposerWidget(
+                  onSend: _onMessageSend,
+                  onStop: _stopStreaming,
+                  mcpTools: _adapter.getAllToolDefinitions(),
+                  enabledTools: ref.watch(enabledToolNamesProvider),
+                  onEnabledToolsChanged: (tools) {
+                    ref.read(enabledToolNamesProvider.notifier).state = tools;
+                  },
+                  modelNames: _getModelNames(),
+                  selectedModelIndex: _selectedModelIndex,
+                  onModelSelected: _onModelSelected,
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
+          ),
+        );
+      }
 
   void _showErrorDetailDialog(BuildContext context, String messageId) {
     final chatMsg = _history.where((m) => m.id == messageId).firstOrNull;
