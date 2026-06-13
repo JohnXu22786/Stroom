@@ -1,8 +1,8 @@
 /// 音频分离引擎
 ///
 /// 跨平台音频分离功能，无需用户额外安装 FFmpeg：
-/// - Android/iOS/macOS/Windows：使用 ffmpeg_kit_flutter_new 内置 FFmpeg
-/// - Linux：使用 asset 中捆绑的 FFmpeg 二进制文件
+/// - Android/iOS/macOS：使用 ffmpeg_kit_flutter 内置 FFmpeg
+/// - Windows/Linux：使用 asset 中捆绑的 FFmpeg 二进制文件
 /// - Web：使用 ffmpeg.wasm（WebAssembly，首次需从 CDN 下载约 31MB）
 ///
 /// 使用条件导出实现平台适配：
