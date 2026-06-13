@@ -22,6 +22,16 @@ class Application extends ConsumerStatefulWidget {
 }
 
 class _ApplicationState extends ConsumerState<Application> {
+  /// Global key for the MaterialApp's Navigator, used to show the
+  /// update dialog from a context that is INSIDE the navigator.
+  ///
+  /// This is necessary because [_checkForUpdatesOnStartup] runs from
+  /// [initState], whose BuildContext lives ABOVE the MaterialApp's
+  /// Navigator. Using [navigatorKey.currentContext] ensures
+  /// [showDialog] can find [MaterialLocalizations] and the
+  /// [NavigatorState] it needs.
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
   @override
   void initState() {
     super.initState();
@@ -36,25 +46,25 @@ class _ApplicationState extends ConsumerState<Application> {
   Future<void> _checkForUpdatesOnStartup() async {
     final notifier = ref.read(updateProvider.notifier);
 
+    // 在 HTTP 请求之前捕获 Navigator context，
+    // 确保异步等待后 context 仍然有效。
+    final navigatorContext = _navigatorKey.currentContext;
+
     // 直接请求 GitHub API 检查最新版本
     // silent=true 表示启动时不把网络错误暴露给用户
     await notifier.checkForUpdate(silent: true);
 
     // 如果发现有新版本，弹出更新面板
-    if (mounted) {
+    if (mounted && navigatorContext != null && navigatorContext.mounted) {
       final state = ref.read(updateProvider);
       if (state.updateAvailable) {
-        _showUpdateDialog();
+        showDialog(
+          context: navigatorContext,
+          barrierDismissible: true,
+          builder: (context) => const UpdateDialog(),
+        );
       }
     }
-  }
-
-  void _showUpdateDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) => const UpdateDialog(),
-    );
   }
 
   @override
@@ -88,6 +98,7 @@ class _ApplicationState extends ConsumerState<Application> {
 
         return MaterialApp(
           title: 'Stroom',
+          navigatorKey: _navigatorKey,
           theme: ThemeData(
             useMaterial3: true,
             colorScheme: colorScheme,
