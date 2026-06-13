@@ -138,7 +138,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     return id;
   }
 
-  /// Mark a task as completed.
+  /// Mark a task as completed and keep it in the list (visible to user).
   void completeTask(String taskId) {
     _updateTask(taskId, TaskStatus.completed);
   }

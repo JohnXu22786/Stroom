@@ -5,7 +5,7 @@ import 'package:stroom/utils/audio_separation.dart'
     show AudioSeparationEngine;
 
 void main() {
-  // Ensure Flutter bindings are initialized for ffmpeg_kit_flutter
+  // Ensure Flutter bindings are initialized for platform plugin testing
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('AudioSeparationEngine', () {
@@ -17,8 +17,8 @@ void main() {
 
     test('isAvailable returns a boolean', () async {
       final available = await engine.isAvailable();
-      // In test environment (native/stub), it should return false
-      // since no actual FFmpeg binary is available
+      // In test environment, no actual FFmpeg binary is available,
+      // but the method should always return a boolean
       expect(available, isA<bool>());
     });
 
@@ -74,6 +74,7 @@ void main() {
 
     test('isAvailable returns false when ffmpeg not found', () async {
       // In test environment, FFmpeg should not be available
+      // This applies to both mobile (ffmpeg_kit_flutter) and desktop (Process.run) paths
       final available = await engine.isAvailable();
       expect(available, isFalse);
     });

@@ -198,5 +198,146 @@ void main() {
       // Panel should dismiss
       expect(find.text('Chat 设置'), findsNothing);
     });
+
+    testWidgets('tool switch reflects initial enabledTools set', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final tools = [
+        ToolDefinition(
+          name: 'calculator',
+          description: 'Math tool',
+          parameters: {},
+        ),
+      ];
+
+      await showPanelForTest(
+        tester,
+        tools: tools,
+        enabledTools: {'calculator'},
+      );
+
+      // Scroll down to the tools section
+      await scrollPanel(tester, const Offset(0, -200));
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Find the SwitchListTile (used only for tool toggles, not for reasoning)
+      final toolTile = find.byType(SwitchListTile);
+      expect(toolTile, findsOneWidget);
+
+      // The SwitchListTile's value reflects the toggle state
+      final tile = tester.widget<SwitchListTile>(toolTile);
+      expect(tile.value, isTrue);
+    });
+
+    testWidgets('tool switch is OFF when tool not in enabledTools',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final tools = [
+        ToolDefinition(
+          name: 'calculator',
+          description: 'Math tool',
+          parameters: {},
+        ),
+      ];
+
+      await showPanelForTest(
+        tester,
+        tools: tools,
+        enabledTools: <String>{}, // Start with all OFF
+      );
+
+      // Scroll down to the tools section
+      await scrollPanel(tester, const Offset(0, -200));
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Find the SwitchListTile (used only for tool toggles)
+      final toolTile = find.byType(SwitchListTile);
+      expect(toolTile, findsOneWidget);
+
+      // The SwitchListTile's value should be false
+      final tile = tester.widget<SwitchListTile>(toolTile);
+      expect(tile.value, isFalse);
+    });
+
+    testWidgets('toggling a tool ON fires onToolToggle callback',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final tools = [
+        ToolDefinition(
+          name: 'web_search',
+          description: 'Search tool',
+          parameters: {},
+        ),
+      ];
+
+      String? toggledToolName;
+      bool? toggledValue;
+
+      await showPanelForTest(
+        tester,
+        tools: tools,
+        enabledTools: <String>{}, // Start with all OFF
+        onToolToggle: (name, enabled) {
+          toggledToolName = name;
+          toggledValue = enabled;
+        },
+      );
+
+      // Scroll down to the tools section
+      await scrollPanel(tester, const Offset(0, -200));
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Find the SwitchListTile (used only for tool toggles)
+      final toolTile = find.byType(SwitchListTile);
+      expect(toolTile, findsOneWidget);
+
+      // Tap the SwitchListTile to toggle ON
+      await tester.tap(toolTile);
+      await tester.pump();
+
+      // Verify the callback was fired with correct values
+      expect(toggledToolName, equals('web_search'));
+      expect(toggledValue, isTrue);
+    });
+
+    testWidgets('toggling a tool OFF fires onToolToggle callback',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final tools = [
+        ToolDefinition(
+          name: 'web_search',
+          description: 'Search tool',
+          parameters: {},
+        ),
+      ];
+
+      String? toggledToolName;
+      bool? toggledValue;
+
+      await showPanelForTest(
+        tester,
+        tools: tools,
+        enabledTools: {'web_search'}, // Start with ON
+        onToolToggle: (name, enabled) {
+          toggledToolName = name;
+          toggledValue = enabled;
+        },
+      );
+
+      // Scroll down to the tools section
+      await scrollPanel(tester, const Offset(0, -200));
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Find the SwitchListTile (used only for tool toggles)
+      final toolTile = find.byType(SwitchListTile);
+      expect(toolTile, findsOneWidget);
+
+      // Tap the SwitchListTile to toggle OFF
+      await tester.tap(toolTile);
+      await tester.pump();
+
+      // Verify the callback was fired with correct values
+      expect(toggledToolName, equals('web_search'));
+      expect(toggledValue, isFalse);
+    });
   });
 }
