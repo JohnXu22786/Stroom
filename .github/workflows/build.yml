@@ -78,13 +78,7 @@ jobs:
           flutter-version: '3.x'
       - run: flutter create --platforms=macos .
       - run: flutter pub get
-      - name: Remove discontinued ffmpeg_kit pod from macOS
-        run: |
-          # Modify Podfile to remove ffmpeg CocoaPods dependencies before install
-          python3 -c "import json,pathlib;f=pathlib.Path('.flutter-plugins-dependencies');d=json.loads(f.read_text());p=d.get('plugins',{}).get('macos',[]);d['plugins']['macos']=[x for x in p if 'ffmpeg_kit_flutter_min_gpl' not in x.get('name','')];p=d.get('plugins',{}).get('ios',[]);d['plugins']['ios']=[x for x in p if 'ffmpeg_kit_flutter_min_gpl' not in x.get('name','')];f.write_text(json.dumps(d,indent=2))"
-          rm -rf macos/Flutter/ephemeral
-          sed -i '' 's/^end$/pre_install do |installer|\n  installer.pod_targets.delete_if { |p| p.name.include?("ffmpeg") }\nend\n\nend/' macos/Podfile
-          flutter build macos --release --no-pub
+      - run: flutter build macos --release --no-pub
       - name: Package artifacts
         run: |
           TAG="${{ github.ref_name }}"
@@ -139,13 +133,7 @@ jobs:
           flutter-version: '3.x'
       - run: flutter create --platforms=ios .
       - run: flutter pub get
-      - name: Remove discontinued ffmpeg_kit pod from iOS
-        run: |
-          # Modify Podfile to remove ffmpeg CocoaPods dependencies before install
-          python3 -c "import json,pathlib;f=pathlib.Path('.flutter-plugins-dependencies');d=json.loads(f.read_text());p=d.get('plugins',{}).get('ios',[]);d['plugins']['ios']=[x for x in p if 'ffmpeg_kit_flutter_min_gpl' not in x.get('name','')];p=d.get('plugins',{}).get('macos',[]);d['plugins']['macos']=[x for x in p if 'ffmpeg_kit_flutter_min_gpl' not in x.get('name','')];f.write_text(json.dumps(d,indent=2))"
-          rm -rf ios/Flutter/ephemeral
-          sed -i '' 's/^end$/pre_install do |installer|\n  installer.pod_targets.delete_if { |p| p.name.include?("ffmpeg") }\nend\n\nend/' ios/Podfile
-          flutter build ios --release --no-codesign --no-pub
+      - run: flutter build ios --release --no-codesign --no-pub
       - name: Package IPA (unsigned)
         shell: bash
         run: |

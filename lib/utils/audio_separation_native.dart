@@ -8,10 +8,10 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:dio/dio.dart' show CancelToken;
 
-// macOS/Android/iOS：使用 ffmpeg_kit_flutter 的内置 FFmpeg
-// Windows/Linux：使用 asset 中捆绑的 FFmpeg 二进制 → Process.run
-import 'package:ffmpeg_kit_flutter_min_gpl/ffmpeg_kit.dart';
-import 'package:ffmpeg_kit_flutter_min_gpl/return_code.dart';
+// macOS/Android/iOS/Windows：使用 ffmpeg_kit_flutter_new 的内置 FFmpeg
+// Linux：使用 asset 中捆绑的 FFmpeg 二进制 → Process.run
+import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'ffmpeg_resolver.dart';
 
 const _supportedVideoFormats = [
@@ -31,10 +31,10 @@ class AudioSeparationEngine {
   /// 缓存 Windows/Linux 上 FFmpeg 可执行文件的路径
   String? _resolvedFfmpegPath;
 
-  /// 当前平台是否应使用 ffmpeg_kit_flutter（而非 Process.run）
+  /// 当前平台是否应使用 ffmpeg_kit_flutter_new（而非 Process.run）
   ///
-  /// ffmpeg_kit_flutter_min_gpl 支持：Android、iOS、macOS
-  /// Windows/Linux 需要从 assets 中提取二进制并通过 Process.run 调用
+  /// ffmpeg_kit_flutter_new 支持：Android、iOS、macOS、Windows
+  /// Linux 需要从 assets 中提取二进制并通过 Process.run 调用
   static bool get _useFfmpegKitFlutter =>
       Platform.isAndroid || Platform.isIOS || Platform.isMacOS;
 
