@@ -1,17 +1,7 @@
-# FFmpeg 二进制文件
+此目录可选。将 FFmpeg 二进制文件放在此处可在构建时打包进应用，
+避免首次使用时从网络下载。参见 lib/utils/ffmpeg_resolver.dart。
 
-此目录用于存放各平台的 FFmpeg 可执行文件。
+Windows: ffmpeg_windows.exe
+Linux:   ffmpeg_linux
 
-下载脚本：
-- Windows: `scripts/download-ffmpeg.ps1`
-- Linux/Mac: `scripts/download-ffmpeg.sh`
-
-自动下载后，文件会放置到此处。
-
-Windows 签名：
-- `ffmpeg_windows.exe`
-
-Linux 签名：
-- `ffmpeg_linux`
-
-注意：macOS 不需要此文件，其使用 ffmpeg_kit_flutter 内置 FFmpeg。
+若不留在此处，应用会在首次使用时自动从 CDN 下载。
