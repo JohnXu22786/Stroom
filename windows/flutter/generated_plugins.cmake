@@ -4,7 +4,6 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   dynamic_color
-  ffmpeg_kit_flutter_new
   file_selector_windows
   flutter_inappwebview_windows
   permission_handler_windows
