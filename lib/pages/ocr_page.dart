@@ -10,6 +10,7 @@ import '../providers/provider_config.dart';
 import '../providers/background_task_provider.dart';
 import '../services/ocr_service.dart';
 import '../utils/data_sanitizer.dart';
+import '../utils/image_manifest.dart';
 import '../utils/text_manifest.dart';
 import '../widgets/folder_picker_dialog.dart';
 
@@ -965,11 +966,128 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   /// Pick images from the app's album.
   Future<void> _pickFromAppAlbum() async {
-    // TODO: Implement picking from app album
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('应用相册功能开发中')),
+    try {
+      final records = await ImageManifest.loadRecords();
+
+      if (!mounted) return;
+
+      if (records.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('暂无可用的应用内图片')),
+        );
+        return;
+      }
+
+      final cs = Theme.of(context).colorScheme;
+      showDialog(
+        context: context,
+        builder: (ctx) => Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: 500,
+              maxHeight: MediaQuery.of(ctx).size.height * 0.6,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.collections_bookmark,
+                          size: 18, color: cs.primary),
+                      const SizedBox(width: 8),
+                      Text(
+                        '选择应用内图片',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                // List
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: records.length,
+                    itemBuilder: (_, index) {
+                      final record = records[index];
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: cs.primaryContainer,
+                          child: Icon(Icons.image,
+                              color: cs.onPrimaryContainer, size: 20),
+                        ),
+                        title: Text(
+                          record.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                        subtitle: Text(
+                          '${record.format.toUpperCase()}  ${_formatFileSize(record.size)}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        onTap: () async {
+                          Navigator.pop(ctx);
+                          await _selectFromAppAlbum(record);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('加载图片列表失败: $e')),
+        );
+      }
+    }
+  }
+
+  /// Select an in-app image record and read its bytes.
+  Future<void> _selectFromAppAlbum(ImageRecord record) async {
+    try {
+      final bytes = await ImageManifest.readFile(record.storagePath);
+      if (bytes == null || bytes.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('无法读取图片文件')),
+          );
+        }
+        return;
+      }
+
+      setState(() {
+        _selectedImages.add(SelectedImage(
+          bytes: bytes,
+          provider: MemoryImage(bytes),
+          format: record.format,
+        ));
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('读取图片失败: $e')),
+        );
+      }
     }
   }
 
@@ -1300,6 +1418,17 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   ImageProvider _createProvider(Uint8List bytes) {
     return MemoryImage(bytes);
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    }
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
   String _pad(int n) => n.toString().padLeft(2, '0');
