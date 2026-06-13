@@ -15,6 +15,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.x'
+      - run: flutter create --platforms=android .
       - run: flutter pub get
       - name: Copy Gradle init script for jcenter() compatibility
         run: mkdir -p ~/.gradle/init.d && cp android/gradle-init-scripts/plugin-repos.gradle ~/.gradle/init.d/
@@ -77,6 +78,21 @@ jobs:
           flutter-version: '3.x'
       - run: flutter create --platforms=macos .
       - run: flutter pub get
+      - name: Remove discontinued ffmpeg_kit pod from macOS
+        run: |
+          # ffmpeg_kit_flutter_min_gpl's CocoaPods dependency
+          # ffmpeg-kit-macos-min-gpl:6.0 is no longer available.
+          # macOS uses auto-download FFmpeg via Process.run instead.
+          sed -i '' '/ffmpeg_kit_flutter_min_gpl/d' .flutter-plugins
+          python3 -c "
+import json,pathlib
+f=pathlib.Path('.flutter-plugins-dependencies')
+d=json.loads(f.read_text())
+p=d.get('plugins',{}).get('macos',[])
+d['plugins']['macos']=[x for x in p if 'ffmpeg_kit_flutter_min_gpl' not in x.get('name','')]
+f.write_text(json.dumps(d,indent=2))
+print('removed ffmpeg_kit_flutter_min_gpl from macos plugins')
+"
       - run: flutter build macos --release
       - name: Package artifacts
         run: |
@@ -122,9 +138,33 @@ jobs:
           name: linux-build
           path: artifacts/*
 
+  build-ios:
+    name: Build iOS (IPA, unsigned)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+      - run: flutter pub get
+      - run: flutter build ios --release --no-codesign
+      - name: Package IPA (unsigned)
+        shell: bash
+        run: |
+          TAG="${{ github.ref_name }}"
+          mkdir -p artifacts
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -R Runner.app Payload/
+          zip -r "$OLDPWD/artifacts/stroom-ios-release-$TAG.ipa" Payload/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-build
+          path: artifacts/*
+
   create-release:
     name: Create GitHub Release
-    needs: [build-android, build-windows, build-macos, build-linux]
+    needs: [build-android, build-windows, build-macos, build-linux, build-ios]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -141,5 +181,6 @@ jobs:
             *.apk
             *.exe
             *.dmg
+            *.ipa
             *.zip
           generate_release_notes: true
