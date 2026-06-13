@@ -55,9 +55,21 @@ jobs:
           channel: stable
       - run: flutter create --platforms=macos .
       - run: flutter pub get
-      - name: Configure CocoaPods
+      - name: Remove discontinued ffmpeg_kit pod from macOS
         run: |
-          pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
+          # ffmpeg_kit_flutter_min_gpl's CocoaPods dependency
+          # ffmpeg-kit-macos-min-gpl:6.0 is no longer available.
+          # macOS uses auto-download FFmpeg via Process.run instead.
+          sed -i '' '/ffmpeg_kit_flutter_min_gpl/d' .flutter-plugins
+          python3 -c "
+import json,pathlib
+f=pathlib.Path('.flutter-plugins-dependencies')
+d=json.loads(f.read_text())
+p=d.get('plugins',{}).get('macos',[])
+d['plugins']['macos']=[x for x in p if 'ffmpeg_kit_flutter_min_gpl' not in x.get('name','')]
+f.write_text(json.dumps(d,indent=2))
+print('removed ffmpeg_kit_flutter_min_gpl from macos plugins')
+"
       - run: flutter build macos --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
       - name: Create macOS archive
         shell: bash
@@ -130,6 +142,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.14"
+      - run: flutter create --platforms=android .
       - run: flutter pub get
       - name: Decode keystore
         run: echo "${{ secrets.KEYSTORE }}" | base64 -d > ${{ runner.temp }}/keystore.jks
@@ -150,3 +163,26 @@ jobs:
         with:
           tag_name: ${{ env.TAG }}
           files: stroom-android-release-*.apk
+
+  ios:
+    needs: prepare-version
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - run: flutter build ios --release --no-codesign --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
+      - name: Create IPA (unsigned)
+        shell: bash
+        run: |
+          TAG="${{ env.TAG }}"
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -R Runner.app Payload/
+          zip -r "$GITHUB_WORKSPACE/stroom-ios-release-$TAG.ipa" Payload/
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          files: stroom-ios-release-*.ipa
