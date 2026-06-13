@@ -12,10 +12,10 @@ import '../providers/update_provider.dart';
 ///
 /// # Behavior
 /// - 发现新版本: Shows version info + "跳过此版本"/"稍后提醒"/"立即更新" buttons.
-/// - 立即更新: Downloads the update.
+/// - 立即更新: Downloads the update and auto-installs immediately.
 ///   During download, a prominent progress bar is shown in the button area.
-///   After download, a "安装" button appears so the user can install manually.
-/// - 安装: Installs the downloaded file via [installDownloadedFile].
+///   After download, installation starts automatically and the dialog closes.
+/// - If auto-install fails, a fallback "手动安装" button is shown.
 class UpdateDialog extends ConsumerStatefulWidget {
   const UpdateDialog({super.key});
 
@@ -32,10 +32,40 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
     return url.contains('/releases/tag/');
   }
 
+  /// Tracks whether we have already attempted to auto-close the dialog
+  /// after a successful install, to avoid repeated close attempts.
+  bool _autoClosed = false;
+
+  @override
+  void dispose() {
+    _autoClosed = false;
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(updateProvider);
-    final theme = Theme.of(context);
+
+    // Auto-close dialog after successful auto-install (intent fired).
+    // Conditions: download complete, install finished (isInstalling false),
+    // no error, not currently downloading.
+    final shouldAutoClose = state.downloadComplete &&
+        !state.isInstalling &&
+        !state.isDownloading &&
+        state.downloadedFilePath != null &&
+        state.downloadError == null &&
+        !_autoClosed;
+
+    if (shouldAutoClose) {
+      _autoClosed = true;
+      // Use post-frame callback to close the dialog after the current
+      // build frame is complete.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+      });
+    }
 
     return AlertDialog(
       title: const Row(
@@ -59,6 +89,42 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
               const SizedBox(height: 4),
               Text(state.releaseNotes!),
             ],
+            // Installing state — shown briefly while the app auto-installs
+            if (state.isInstalling) ...[
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.green.shade200),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.green.shade700),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      '正在安装...',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.green.shade700,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             // Download error section
             if (state.downloadError != null) ...[
               const SizedBox(height: 12),
@@ -75,8 +141,8 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                 ],
               ),
             ],
-            // Download complete section
-            if (state.downloadComplete && !state.isDownloading) ...[
+            // Download complete section (shown briefly before auto-close triggers)
+            if (state.downloadComplete && !state.isInstalling) ...[
               const SizedBox(height: 12),
               Row(
                 children: [
@@ -113,38 +179,37 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
       ];
     }
 
-    // After download complete
+    // During auto-install, no action buttons needed (auto-proceeding)
+    if (state.isInstalling) {
+      return [];
+    }
+
+    // After download complete: if auto-install failed (downloadError set),
+    // show the fallback manual install button.
     if (state.downloadComplete) {
       if (state.downloadError != null) {
-        // Download succeeded but install failed — show retry
         return [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('关闭'),
           ),
           FilledButton(
-            onPressed: () => notifier.installDownloadedFile(),
-            child: const Text('重试安装'),
+            onPressed: () {
+              // 跳转至 GitHub Releases 页面，让用户手动下载安装
+              final releaseUrl =
+                  'https://github.com/JohnXu22786/Stroom/releases/tag/v${state.latestVersion ?? ''}';
+              _openInBrowser(releaseUrl);
+              Navigator.of(context).pop();
+            },
+            child: const Text('手动安装'),
           ),
         ];
       }
-      // Download succeeded, ready to install
+      // No error — auto-close will handle it. Show a backup close button.
       return [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('关闭'),
-        ),
-        FilledButton(
-          onPressed: () async {
-            await notifier.installDownloadedFile();
-            if (!mounted) return;
-            final currentState = ref.read(updateProvider);
-            if (currentState.downloadError == null) {
-              Navigator.of(context).pop();
-            }
-            // If error, dialog rebuilds with error state automatically
-          },
-          child: const Text('安装'),
         ),
       ];
     }

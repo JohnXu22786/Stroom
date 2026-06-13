@@ -256,7 +256,7 @@ void main() {
       expect(find.text('稍后提醒'), findsNothing);
     });
 
-    testWidgets('shows install button when download completes', (tester) async {
+    testWidgets('shows installing state UI when isInstalling is true', (tester) async {
       SharedPreferences.setMockInitialValues({});
       final dio = _createMockDio(
         _githubRelease('v0.2.14'),
@@ -273,9 +273,8 @@ void main() {
         latestVersion: '0.2.14',
         downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
         downloadComplete: true,
-        isDownloading: false,
-        downloadProgress: 1.0,
-        downloadedFilePath: '/tmp/test.zip',
+        isInstalling: true,
+        downloadedFilePath: '/tmp/test.apk',
       );
 
       await tester.pumpWidget(
@@ -301,17 +300,14 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Should show download complete message in content
-      expect(find.text('下载完成'), findsOneWidget);
-      // Should show install button (NOT auto-closing / auto-installing)
-      expect(find.text('安装'), findsOneWidget);
-      // Should NOT show "手动安装" (that's for error fallback)
+      // Should show installing text
+      expect(find.text('正在安装...'), findsOneWidget);
+      // Should NOT show any action buttons (auto-installing)
+      expect(find.text('关闭'), findsNothing);
       expect(find.text('手动安装'), findsNothing);
-      // Should NOT show "正在安装..."
-      expect(find.text('正在安装...'), findsNothing);
     });
 
-    testWidgets('shows retry install button when installation fails', (tester) async {
+    testWidgets('shows fallback install button when auto-install fails', (tester) async {
       SharedPreferences.setMockInitialValues({});
       final dio = _createMockDio(
         _githubRelease('v0.2.14'),
@@ -328,7 +324,7 @@ void main() {
         latestVersion: '0.2.14',
         downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
         downloadComplete: true,
-        isDownloading: false,
+        isInstalling: false,
         downloadError: '安装失败，请手动打开 APK 安装',
         downloadedFilePath: '/tmp/test.apk',
       );
@@ -358,9 +354,9 @@ void main() {
 
       // Should show download complete message
       expect(find.text('下载完成'), findsOneWidget);
-      // Should show retry install button
-      expect(find.text('重试安装'), findsOneWidget);
-      // Should show the error
+      // Should show manual install button that opens browser (because auto-install failed)
+      expect(find.text('手动安装'), findsOneWidget);
+      // Should also show the error
       expect(find.text('安装失败，请手动打开 APK 安装'), findsOneWidget);
     });
   });
