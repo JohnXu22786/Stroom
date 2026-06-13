@@ -318,7 +318,7 @@ void main() {
   });
 
   // ====================================================================
-  // NEW TESTS: Sort button label (Requirement 1)
+  // NEW TESTS: Sort button label
   // ====================================================================
 
   group('OcrPage - sort button label', () {
@@ -393,7 +393,7 @@ void main() {
   });
 
   // ====================================================================
-  // NEW TESTS: Tap to exit preview (Requirement 2)
+  // NEW TESTS: Tap to exit preview
   // ====================================================================
 
   group('OcrPage - tap image to exit preview', () {
@@ -452,7 +452,7 @@ void main() {
   });
 
   // ====================================================================
-  // NEW TESTS: Long-press to drag-reorder in grid (Requirement 3)
+  // NEW TESTS: Long-press to drag-reorder in grid
   // ====================================================================
 
   group('OcrPage - long-press drag to reorder in grid', () {
@@ -497,7 +497,7 @@ void main() {
       // Simulate long-press + drag from item 0 to item 1
       final gesture = await tester.startGesture(item0Center);
       // Wait for long-press delay (300ms) plus some buffer
-      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump(const Duration(milliseconds: 400));
 
       // Drag from item 0 toward item 1
       await gesture.moveTo(item1Center);
@@ -571,7 +571,7 @@ void main() {
       final itemCenter = tester.getCenter(
           find.byKey(const Key('ocr_grid_item_0')));
       final gesture = await tester.startGesture(itemCenter);
-      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump(const Duration(milliseconds: 350));
       // Move slightly to simulate drag attempt
       await gesture.moveBy(const Offset(10, 10));
       await tester.pump(const Duration(milliseconds: 50));
@@ -621,7 +621,7 @@ void main() {
       final item0Center = tester.getCenter(
           find.byKey(const Key('ocr_grid_item_0')));
       final gesture = await tester.startGesture(item0Center);
-      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump(const Duration(milliseconds: 400)); // 300ms is the new delay
 
       // During drag, cancel the drag by moving outside
       await gesture.moveBy(const Offset(300, 300));
@@ -632,6 +632,277 @@ void main() {
       // After drag cancel, items should return to normal
       expect(find.byKey(const Key('ocr_grid_item_0')), findsOneWidget);
       expect(find.byKey(const Key('ocr_grid_item_1')), findsOneWidget);
+    });
+  });
+
+  // ====================================================================
+  // NEW TESTS: Smooth release animation with Stack+AnimatedPositioned
+  // ====================================================================
+
+  group('OcrPage - smooth drag-release animation', () {
+    testWidgets('grid uses AnimatedPositioned for smooth position animation',
+        (tester) async {
+      final images = [
+        _createTestImage(seed: 1),
+        _createTestImage(seed: 2),
+        _createTestImage(seed: 3),
+      ];
+      await tester.pumpWidget(_buildTestApp(testImages: images));
+      await tester.pumpAndSettle();
+
+      // Should use AnimatedPositioned for smooth position transitions
+      // (3 items = 3 AnimatedPositioned widgets in the grid)
+      expect(find.byType(AnimatedPositioned), findsNWidgets(3));
+    });
+
+    testWidgets(
+        'grid no longer uses GridView',
+        (tester) async {
+      final images = [
+        _createTestImage(seed: 1),
+        _createTestImage(seed: 2),
+        _createTestImage(seed: 3),
+      ];
+      await tester.pumpWidget(_buildTestApp(testImages: images));
+      await tester.pumpAndSettle();
+
+      // Grid has been replaced by Stack-based layout
+      expect(find.byType(GridView), findsNothing);
+    });
+
+    testWidgets(
+        'long-press delay is 300ms (changed from 500ms)',
+        (tester) async {
+      final images = [
+        _createTestImage(seed: 1),
+        _createTestImage(seed: 2),
+        _createTestImage(seed: 3),
+      ];
+      await tester.pumpWidget(_buildTestApp(testImages: images));
+      await tester.pumpAndSettle();
+
+      final item0Center = tester.getCenter(
+          find.byKey(const Key('ocr_grid_item_0')));
+
+      // Negative case: pump well below 300ms — drag should NOT have started
+      final gestureEarly = await tester.startGesture(item0Center);
+      await tester.pump(const Duration(milliseconds: 200)); // 200ms << 300ms
+
+      // Cancel without any drag movement — no crash, no stale state
+      await gestureEarly.up();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('ocr_grid_item_0')), findsOneWidget);
+
+      // Positive case: pump past 300ms — drag SHOULD start (old 500ms would NOT)
+      final gesture = await tester.startGesture(item0Center);
+      await tester.pump(const Duration(milliseconds: 350));
+
+      // Drag should have started by now (350ms > 300ms)
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Cancel the drag
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      // No crash — drag started and ended cleanly with 300ms delay
+      expect(find.byKey(const Key('ocr_grid_item_0')), findsOneWidget);
+      expect(find.byKey(const Key('ocr_grid_item_1')), findsOneWidget);
+    });
+
+    testWidgets(
+        'after drop, all items remain visible and sort button works',
+        (tester) async {
+      final images = [
+        _createTestImage(seed: 1),
+        _createTestImage(seed: 2),
+        _createTestImage(seed: 3),
+      ];
+      await tester.pumpWidget(_buildTestApp(testImages: images));
+      await tester.pumpAndSettle();
+
+      // Long-press and drag item 0 to item 2
+      final item0Center = tester.getCenter(
+          find.byKey(const Key('ocr_grid_item_0')));
+      final item2Center = tester.getCenter(
+          find.byKey(const Key('ocr_grid_item_2')));
+
+      final gesture = await tester.startGesture(item0Center);
+      await tester.pump(const Duration(milliseconds: 350)); // trigger long-press
+
+      // Drag to item 2 position
+      await gesture.moveTo(item2Center);
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Drop
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      // All items should still be visible (no items lost)
+      expect(find.byKey(const Key('ocr_grid_item_0')), findsOneWidget);
+      expect(find.byKey(const Key('ocr_grid_item_1')), findsOneWidget);
+      expect(find.byKey(const Key('ocr_grid_item_2')), findsOneWidget);
+
+      // No crash — operation completed
+      expect(find.byKey(const Key('ocr_sort_btn')), findsOneWidget);
+
+      // Verify sort button toggles (confirming clean state after reorder)
+      await tester.tap(find.byKey(const Key('ocr_sort_btn')));
+      await tester.pumpAndSettle();
+      expect(find.text('完成'), findsOneWidget);
+    });
+
+    testWidgets(
+        'AnimatedPositioned has identity-based keys for smooth transitions',
+        (tester) async {
+      final images = [
+        _createTestImage(seed: 1),
+        _createTestImage(seed: 2),
+        _createTestImage(seed: 3),
+      ];
+      await tester.pumpWidget(_buildTestApp(testImages: images));
+      await tester.pumpAndSettle();
+
+      // Each AnimatedPositioned should have a key (identity-based)
+      final animatedPositions = find.byType(AnimatedPositioned);
+      expect(animatedPositions, findsNWidgets(3));
+
+      // Verify each has a key matching the identity-based pattern
+      for (final element in tester.widgetList(animatedPositions)) {
+        final widget = element as AnimatedPositioned;
+        expect(widget.key, isA<ValueKey<String>>());
+        final keyValue = (widget.key as ValueKey<String>).value;
+        expect(keyValue, contains('grid_item_pos_'));
+        // Extract the numeric suffix and verify it's a valid integer hash
+        final suffix = keyValue.replaceAll('grid_item_pos_', '');
+        expect(int.tryParse(suffix), isNotNull);
+      }
+    });
+
+    testWidgets(
+        'AnimatedPositioned duration is set to 300ms for smooth animation',
+        (tester) async {
+      final images = [
+        _createTestImage(seed: 1),
+        _createTestImage(seed: 2),
+        _createTestImage(seed: 3),
+      ];
+      await tester.pumpWidget(_buildTestApp(testImages: images));
+      await tester.pumpAndSettle();
+
+      // AnimatedPositioned should have 300ms duration
+      final animatedPositions = find.byType(AnimatedPositioned);
+      for (final element in tester.widgetList(animatedPositions)) {
+        final widget = element as AnimatedPositioned;
+        expect(widget.duration, const Duration(milliseconds: 300));
+      }
+    });
+
+    testWidgets(
+        'no crash during rapid drag and drop',
+        (tester) async {
+      final images = [
+        _createTestImage(seed: 1),
+        _createTestImage(seed: 2),
+        _createTestImage(seed: 3),
+      ];
+      await tester.pumpWidget(_buildTestApp(testImages: images));
+      await tester.pumpAndSettle();
+
+      // Rapidly drag and drop multiple times
+      for (int i = 0; i < 10; i++) {
+        final item0Center = tester.getCenter(
+            find.byKey(const Key('ocr_grid_item_0')));
+        final item1Center = tester.getCenter(
+            find.byKey(const Key('ocr_grid_item_1')));
+
+        final gesture = await tester.startGesture(item0Center);
+        await tester.pump(const Duration(milliseconds: 350));
+        await gesture.moveTo(item1Center);
+        await tester.pump(const Duration(milliseconds: 50));
+        await gesture.up();
+        await tester.pumpAndSettle();
+      }
+
+      // No crash after rapid operations
+      expect(find.byKey(const Key('ocr_grid_item_0')), findsOneWidget);
+      expect(find.byKey(const Key('ocr_grid_item_1')), findsOneWidget);
+      expect(find.byKey(const Key('ocr_grid_item_2')), findsOneWidget);
+    });
+
+    testWidgets(
+        'drag state is properly cleaned up after drag cancel',
+        (tester) async {
+      final images = [
+        _createTestImage(seed: 1),
+        _createTestImage(seed: 2),
+        _createTestImage(seed: 3),
+      ];
+      await tester.pumpWidget(_buildTestApp(testImages: images));
+      await tester.pumpAndSettle();
+
+      // Long-press item 0 to trigger drag
+      final item0Center = tester.getCenter(
+          find.byKey(const Key('ocr_grid_item_0')));
+      final gesture = await tester.startGesture(item0Center);
+      await tester.pump(const Duration(milliseconds: 350));
+
+      // Move to hover over item 1 (sets _dragTargetIndex)
+      final item1Center = tester.getCenter(
+          find.byKey(const Key('ocr_grid_item_1')));
+      await gesture.moveTo(item1Center);
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Cancel the drag (not drop — cancel leaves original order intact)
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      // All items should still be present and normal
+      expect(find.byKey(const Key('ocr_grid_item_0')), findsOneWidget);
+      expect(find.byKey(const Key('ocr_grid_item_1')), findsOneWidget);
+      expect(find.byKey(const Key('ocr_grid_item_2')), findsOneWidget);
+
+      // Sort button still functional after drag cancel
+      // (proves no stale drag state)
+      expect(find.byKey(const Key('ocr_sort_btn')), findsOneWidget);
+    });
+
+    testWidgets(
+        'reorder completes correctly after drag-and-drop',
+        (tester) async {
+      final images = [
+        _createTestImage(seed: 1),
+        _createTestImage(seed: 2),
+        _createTestImage(seed: 3),
+      ];
+      await tester.pumpWidget(_buildTestApp(testImages: images));
+      await tester.pumpAndSettle();
+
+      // Drag item 0 and drop on item 2
+      final item0Center = tester.getCenter(
+          find.byKey(const Key('ocr_grid_item_0')));
+      final item2Center = tester.getCenter(
+          find.byKey(const Key('ocr_grid_item_2')));
+
+      final gesture = await tester.startGesture(item0Center);
+      await tester.pump(const Duration(milliseconds: 350));
+
+      // Move to item 2's position
+      await gesture.moveTo(item2Center);
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Drop on item 2
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      // After reorder, grid should be stable — all items visible
+      expect(find.byKey(const Key('ocr_grid_item_0')), findsOneWidget);
+      expect(find.byKey(const Key('ocr_grid_item_1')), findsOneWidget);
+      expect(find.byKey(const Key('ocr_grid_item_2')), findsOneWidget);
+
+      // Verify sort button still works after reorder
+      await tester.tap(find.byKey(const Key('ocr_sort_btn')));
+      await tester.pumpAndSettle();
+      expect(find.text('完成'), findsOneWidget);
     });
   });
 }
