@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
@@ -73,11 +73,13 @@ class BackupService {
     final imageRecords = await ManifestDatabase.getAllImageRecords();
     final audioRecords = await ManifestDatabase.getAllAudioRecords();
     final videoRecords = await ManifestDatabase.getAllVideoRecords();
+    final textRecords = await ManifestDatabase.getAllTextRecords();
     final folders = await ManifestDatabase.getAllFolders();
     final dbData = {
       'image_records': imageRecords,
       'audio_records': audioRecords,
       'video_records': videoRecords,
+      'text_records': textRecords,
       'folders': folders,
     };
     _addStringToArchive(
@@ -95,14 +97,20 @@ class BackupService {
     onProgress?.call(0.25);
 
     // 4. 任务文件（按存储格式：synthesis/tasks.json, catcatch/tasks.json）
-    final appDir = await AppStorage.directory;
-    await _addTaskFileToArchive(archive, 'synthesis/tasks.json',
-        p.join(appDir, 'synthesis', 'tasks.json'));
-    await _addTaskFileToArchive(archive, 'catcatch/tasks.json',
-        p.join(appDir, 'catcatch', 'tasks.json'));
+    // 在测试模式下跳过文件系统操作以避免平台通道挂起
+    if (!kIsWeb && !WebFileStore.isTestMode) {
+      final appDir = await AppStorage.directory;
+      await _addTaskFileToArchive(archive, 'synthesis/tasks.json',
+          p.join(appDir, 'synthesis', 'tasks.json'));
+      await _addTaskFileToArchive(archive, 'catcatch/tasks.json',
+          p.join(appDir, 'catcatch', 'tasks.json'));
+    } else {
+      _addStringToArchive(archive, 'synthesis/tasks.json', '[]');
+      _addStringToArchive(archive, 'catcatch/tasks.json', '[]');
+    }
     onProgress?.call(0.35);
 
-    // 5. 二进制文件（按存储格式：pictures/, tts_audio/, videos/, attachments/）
+    // 5. 二进制文件（按存储格式：pictures/, tts_audio/, videos/, texts/, attachments/）
     for (final record in imageRecords) {
       final hash = record['hash'] as String?;
       final format = record['format'] as String? ?? 'jpg';
@@ -133,6 +141,14 @@ class BackupService {
           '$hash.$format');
     }
     onProgress?.call(0.75);
+
+    for (final record in textRecords) {
+      final hash = record['hash'] as String?;
+      if (hash == null) continue;
+      await _addFileToArchive(
+          archive, 'texts/$hash.txt', 'texts', '$hash.txt');
+    }
+    onProgress?.call(0.8);
 
     final attachmentPaths = await _collectAttachmentPaths();
     for (final storagePath in attachmentPaths) {
@@ -206,9 +222,9 @@ class BackupService {
     onProgress?.call(0.55);
 
     // 恢复二进制文件和任务文件（兼容新旧两种路径格式）
-    // 新格式: pictures/, tts_audio/, videos/, attachments/, synthesis/, catcatch/
+    // 新格式: pictures/, tts_audio/, videos/, texts/, attachments/, synthesis/, catcatch/
     // 旧格式: files/pictures/, files/tts_audio/, ..., tasks/synthesis_tasks.json
-    const knownDirs = ['pictures', 'tts_audio', 'videos', 'attachments',
+    const knownDirs = ['pictures', 'tts_audio', 'videos', 'texts', 'attachments',
                        'synthesis', 'catcatch'];
     final skipFiles = {'manifest.json', 'stroom_manifest.json',
         'database/manifest_data.json', 'preferences.json'};
@@ -269,6 +285,11 @@ class BackupService {
 
   static Future<void> _addTaskFileToArchive(
       Archive archive, String archiveName, String sourcePath) async {
+    // In test mode, skip file I/O - just store empty placeholder.
+    if (WebFileStore.isTestMode) {
+      _addStringToArchive(archive, archiveName, '[]');
+      return;
+    }
     try {
       final file = File(sourcePath);
       if (await file.exists()) {
@@ -301,7 +322,7 @@ class BackupService {
 
   /// 读取一个 app 存储文件。
   static Future<Uint8List?> _readFile(String subDir, String fileName) async {
-    if (kIsWeb) {
+    if (kIsWeb || WebFileStore.isTestMode) {
       return WebFileStore.read('$subDir/$fileName');
     } else {
       final appDir = await AppStorage.directory;
@@ -316,7 +337,7 @@ class BackupService {
   /// 写入一个 app 存储文件。
   static Future<void> _writeFile(
       String subDir, String fileName, Uint8List data) async {
-    if (kIsWeb) {
+    if (kIsWeb || WebFileStore.isTestMode) {
       await WebFileStore.write('$subDir/$fileName', data);
     } else {
       final appDir = await AppStorage.directory;
@@ -341,6 +362,9 @@ class BackupService {
     final videoRecords = (data['video_records'] as List<dynamic>?)
             ?.cast<Map<String, dynamic>>() ??
         [];
+    final textRecords = (data['text_records'] as List<dynamic>?)
+            ?.cast<Map<String, dynamic>>() ??
+        [];
     final folders = (data['folders'] as List<dynamic>?)?.cast<String>() ?? [];
 
     await ManifestDatabase.clearAllData();
@@ -353,6 +377,9 @@ class BackupService {
     }
     for (final record in videoRecords) {
       await ManifestDatabase.insertVideoRecord(record);
+    }
+    for (final record in textRecords) {
+      await ManifestDatabase.insertTextRecord(record);
     }
     for (final folder in folders) {
       await ManifestDatabase.insertFolder(folder);
@@ -514,4 +541,28 @@ class BackupService {
       }
     }
   }
+
+  // ================================================================
+  // 测试辅助方法（@visibleForTesting）
+  // ================================================================
+
+  /// 公开 [_buildBackupBytes] 供测试使用。
+  @visibleForTesting
+  static Future<Uint8List> buildBackupBytesForTest({
+    void Function(double progress)? onProgress,
+  }) =>
+      _buildBackupBytes(onProgress: onProgress);
+
+  /// 公开 [_restoreFromBytes] 供测试使用。
+  @visibleForTesting
+  static Future<void> restoreFromBytesForTest(
+    Uint8List bytes, {
+    void Function(double progress)? onProgress,
+  }) =>
+      _restoreFromBytes(bytes, onProgress: onProgress);
+
+  /// 公开 [_restoreDatabaseFromJson] 供测试使用。
+  @visibleForTesting
+  static Future<void> restoreDatabaseFromJsonForTest(String json) =>
+      _restoreDatabaseFromJson(json);
 }
