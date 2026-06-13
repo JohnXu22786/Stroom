@@ -211,7 +211,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _configureAdapter();
     // Initialize MCP servers and discover tools
     final entriesState = ref.read(providerEntriesProvider);
-    await _adapter.initializeMcpServers(entriesState);
+    try {
+      await _adapter.initializeMcpServers(entriesState);
+    } finally {
+      // Always initialize enabled tool names with all available tools.
+      // Using finally ensures the provider is populated even if MCP
+      // discovery fails, so built-in tools (registered in initState)
+      // still work by default.
+      final allToolNames =
+          _adapter.getAllToolDefinitions().map((t) => t.name).toSet();
+      if (allToolNames.isNotEmpty) {
+        ref.read(enabledToolNamesProvider.notifier).state = allToolNames;
+      }
+    }
     // Restore saved model selection — clear stale index if out of range
     SharedPreferences.getInstance().then((prefs) {
       // Restore saved model selection — clear stale index if out of range
@@ -444,11 +456,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       // Merge built-in tools with MCP tools
       final allTools = _adapter.getAllToolDefinitions();
       final enabledTools = ref.read(enabledToolNamesProvider);
-      final filteredTools = allTools.where((t) {
-        // Built-in tools are always enabled; MCP tools follow the toggle
-        final isMcp = _adapter.mcpToolDefinitions.any((m) => m.name == t.name);
-        return !isMcp || enabledTools.contains(t.name);
-      }).toList();
+      // All tools uniformly respect the user's toggle state from the settings panel.
+      final filteredTools =
+          allTools.where((t) => enabledTools.contains(t.name)).toList();
 
       final stream = _adapter.sendStreamWithTools(
         text,
