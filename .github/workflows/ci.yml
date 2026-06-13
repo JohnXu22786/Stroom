@@ -89,6 +89,13 @@ jobs:
         with:
           channel: stable
       - run: flutter pub get
+      # Fix ffmpeg_kit_flutter_new Windows plugin include path (package bug: _full suffix mismatch)
+      - name: Patch ffmpeg_kit_flutter_new Windows plugin header path
+        shell: pwsh
+        run: |
+          $file = Resolve-Path "$env:PUB_CACHE\hosted\pub.dev\ffmpeg_kit_flutter_new-*\windows\ffmpeg_kit_flutter_plugin_c_api.cpp"
+          (Get-Content $file) -replace 'ffmpeg_kit_flutter_new_full', 'ffmpeg_kit_flutter_new' | Set-Content $file
+          Write-Output "Patched: $file"
       - run: flutter build windows --release
 
   build-macos:
@@ -115,4 +122,9 @@ jobs:
           channel: stable
       - run: flutter create --platforms=ios .
       - run: flutter pub get
+      # Set iOS deployment target to 14.0 for ffmpeg_kit_flutter_new compatibility
+      - name: Set iOS deployment target
+        shell: bash
+        run: |
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*/IPHONEOS_DEPLOYMENT_TARGET = 14.0;/' ios/Runner.xcodeproj/project.pbxproj
       - run: flutter build ios --release --no-codesign
