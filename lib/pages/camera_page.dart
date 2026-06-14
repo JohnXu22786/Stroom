@@ -270,7 +270,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
         setState(() => _isSaving = false);
         if (!mounted) return;
 
-        final editedBytes = await Navigator.push<Uint8List>(
+        final editorResult = await Navigator.push<ImageEditorResult>(
           context,
           MaterialPageRoute(
             builder: (_) => ImageEditorPage(imageBytes: bytes),
@@ -278,7 +278,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
         );
         if (!mounted || _discardRequested) return;
 
-        if (editedBytes == null) {
+        if (editorResult == null) {
           // User cancelled editing — discard the photo
           Navigator.pop(context, null);
           return;
@@ -286,7 +286,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
 
         // Save the edited image
         setState(() => _isSaving = true);
-        bytes = editedBytes;
+        bytes = editorResult.editedBytes;
       } else {
         // Step 2: Crop + target quality (in one compressWithList call)
         final aspectRatio = _aspectRatios[_aspectIndex];
