@@ -14,7 +14,10 @@ import '../providers/update_provider.dart';
 /// - 发现新版本: Shows version info + "跳过此版本"/"稍后提醒"/"立即更新" buttons.
 /// - 立即更新: Downloads the update and auto-installs immediately.
 ///   During download, a prominent progress bar is shown in the button area.
-///   After download, installation starts automatically and the dialog closes.
+///   The dialog cannot be dismissed (back button / barrier tap) while
+///   downloading or installing to prevent accidental interruption.
+///   After download, the installer opens automatically on desktop.
+///   The dialog stays open — the user closes it manually via 关闭 button.
 /// - If auto-install fails, a fallback "手动安装" button is shown.
 class UpdateDialog extends ConsumerStatefulWidget {
   const UpdateDialog({super.key});
@@ -32,43 +35,19 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
     return url.contains('/releases/tag/');
   }
 
-  /// Tracks whether we have already attempted to auto-close the dialog
-  /// after a successful install, to avoid repeated close attempts.
-  bool _autoClosed = false;
-
-  @override
-  void dispose() {
-    _autoClosed = false;
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(updateProvider);
 
-    // Auto-close dialog after successful auto-install (intent fired).
-    // Conditions: download complete, install finished (isInstalling false),
-    // no error, not currently downloading.
-    final shouldAutoClose = state.downloadComplete &&
-        !state.isInstalling &&
-        !state.isDownloading &&
-        state.downloadedFilePath != null &&
-        state.downloadError == null &&
-        !_autoClosed;
+    // Prevent dialog dismissal during download or install.
+    // The user must not accidentally dismiss the dialog while
+    // a critical operation is in progress.
+    final canPop = !state.isDownloading && !state.isInstalling;
 
-    if (shouldAutoClose) {
-      _autoClosed = true;
-      // Use post-frame callback to close the dialog after the current
-      // build frame is complete.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
-        }
-      });
-    }
-
-    return AlertDialog(
-      title: const Row(
+    return PopScope(
+      canPop: canPop,
+      child: AlertDialog(
+        title: const Row(
         children: [
           Icon(Icons.system_update, color: Colors.blue),
           SizedBox(width: 8),
@@ -160,6 +139,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
         ),
       ),
       actions: _buildActions(state),
+      ),
     );
   }
 
@@ -205,7 +185,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
           ),
         ];
       }
-      // No error — auto-close will handle it. Show a backup close button.
+      // No error — show a close button for manual dismissal.
       return [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
@@ -332,4 +312,5 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
+
 }
