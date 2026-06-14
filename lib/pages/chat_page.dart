@@ -58,6 +58,8 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
   late final ChatAdapter _adapter;
   final List<ChatMessage> _history = [];
   int _selectedModelIndex = 0;
+  /// Saved model display name order for drag-sort persistence.
+  List<String>? _savedModelOrder;
   bool _cancelledByUser = false;
   /// Tracks streaming state locally so dispose() can check it without
   /// calling ref.read() (which throws after the widget is marked disposed).
@@ -348,6 +350,14 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
           ['low', 'medium', 'high'].contains(savedEffort)) {
         ref.read(reasoningEffortProvider.notifier).state = savedEffort;
       }
+      // Restore saved model order (drag-sort persistence)
+      final savedOrder = prefs.getStringList('model_order');
+      if (savedOrder != null && savedOrder.isNotEmpty) {
+        setState(() {
+          _savedModelOrder = savedOrder;
+          _recalculateSelectedModelIndex();
+        });
+      }
     });
     _loadConversationMessages();
     // Restore streaming state if a stream was active when the page was
@@ -402,15 +412,29 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
   void _configureAdapter() {
     final entriesState = ref.read(providerEntriesProvider);
     _adapter.configure(entriesState);
+    _recalculateSelectedModelIndex();
+    if (mounted) setState(() {});
+  }
+
+  /// Recalculates [_selectedModelIndex] based on the adapter's currently
+  /// selected model, mapped through the display order (saved drag-sort).
+  void _recalculateSelectedModelIndex() {
+    final entriesState = ref.read(providerEntriesProvider);
     final models = _adapter.availableModels(entriesState);
     final idx = models.indexWhere(
       (m) =>
           m.configIndex == _adapter.currentConfigIndex &&
           m.modelIndex == _adapter.currentModelIndex,
     );
-    // Sync selected model index with adapter state
-    _selectedModelIndex = idx >= 0 ? idx : 0;
-    if (mounted) setState(() {});
+    if (idx >= 0) {
+      final selectedName = models[idx].displayName;
+      // Map to display order index so the panel highlights the right model
+      final displayNames = _getModelNames();
+      final displayIdx = displayNames.indexOf(selectedName);
+      _selectedModelIndex = displayIdx >= 0 ? displayIdx : 0;
+    } else {
+      _selectedModelIndex = 0;
+    }
   }
 
   Future<void> _loadConversationMessages() async {
@@ -1858,6 +1882,7 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
                   modelNames: _getModelNames(),
                   selectedModelIndex: _selectedModelIndex,
                   onModelSelected: _onModelSelected,
+                  onModelsReordered: _onModelsReordered,
                   reasoningParams: _adapter.reasoningParams,
                   hasReasoningParams: _adapter.hasReasoningParams,
                 ),
@@ -1878,26 +1903,60 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     );
   }
 
-  /// Returns the list of model display names for the attachment panel.
+  /// Returns the list of model display names for the attachment panel,
+  /// ordered according to the user's saved drag-sort order if available.
   List<String> _getModelNames() {
     final entriesState = ref.read(providerEntriesProvider);
-    return _adapter
+    final names = _adapter
         .availableModels(entriesState)
         .map((m) => m.displayName)
         .toList();
+
+    // Apply saved order: bring known names to the front in saved order,
+    // then append any new names not yet in the saved order.
+    if (_savedModelOrder != null && _savedModelOrder!.isNotEmpty) {
+      final ordered = <String>[];
+      final remaining = Set<String>.from(names);
+      for (final savedName in _savedModelOrder!) {
+        if (remaining.remove(savedName)) {
+          ordered.add(savedName);
+        }
+      }
+      // Append any models not yet in the saved order
+      ordered.addAll(remaining);
+      return ordered;
+    }
+    return names;
   }
 
   /// Called when model is selected from the attachment panel.
+  /// Uses the model name from the display list to find the correct
+  /// adapter model, so that drag-reordered indices still select the
+  /// right model.
   void _onModelSelected(int idx) {
     final entriesState = ref.read(providerEntriesProvider);
     final models = _adapter.availableModels(entriesState);
-    if (idx < 0 || idx >= models.length) return;
-    final model = models[idx];
+    final displayNames = _getModelNames();
+    if (idx < 0 || idx >= displayNames.length) return;
+
+    final selectedName = displayNames[idx];
+    final modelIdx = models.indexWhere((m) => m.displayName == selectedName);
+    if (modelIdx < 0) return;
+
+    final model = models[modelIdx];
     _adapter.selectModel(
         entriesState, model.configIndex, model.modelIndex);
     setState(() => _selectedModelIndex = idx);
     SharedPreferences.getInstance().then((prefs) {
       prefs.setInt('selected_model_index', idx);
+    });
+  }
+
+  /// Called when models are reordered by drag-and-drop in the model panel.
+  void _onModelsReordered(List<String> reordered) {
+    setState(() => _savedModelOrder = reordered);
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setStringList('model_order', reordered);
     });
   }
 }

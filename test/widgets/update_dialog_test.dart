@@ -7,6 +7,51 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/providers/update_provider.dart';
 import 'package:stroom/widgets/update_dialog.dart';
 
+/// Wraps the given [notifier] and shows [UpdateDialog] via [showDialog],
+/// then pumps until settled.
+Future<void> _showDialog({
+  required WidgetTester tester,
+  required UpdateNotifier notifier,
+}) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        updateProvider.overrideWith((ref) => notifier),
+      ],
+      child: MaterialApp(
+        home: Builder(
+          builder: (context) {
+            Future.microtask(() {
+              showDialog(
+                context: context,
+                builder: (_) => const UpdateDialog(),
+              );
+            });
+            return const SizedBox();
+          },
+        ),
+      ),
+    ),
+  );
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 100));
+}
+
+/// Sets up an [UpdateNotifier] with a mock Dio and given [state].
+({UpdateNotifier notifier, ProviderContainer container}) _setupNotifier({
+  required UpdateState state,
+}) {
+  final dio = _createMockDio(_githubRelease('v0.2.14'));
+  final container = ProviderContainer(
+    overrides: [
+      updateProvider.overrideWith((ref) => UpdateNotifier(dio: dio)),
+    ],
+  );
+  final notifier = container.read(updateProvider.notifier);
+  notifier.state = state;
+  return (notifier: notifier, container: container);
+}
+
 /// Creates a mock [Dio] that returns the given [jsonResponse].
 Dio _createMockDio(String jsonResponse) {
   final dio = Dio(BaseOptions());
@@ -358,6 +403,125 @@ void main() {
       expect(find.text('手动安装'), findsOneWidget);
       // Should also show the error
       expect(find.text('安装失败，请手动打开 APK 安装'), findsOneWidget);
+    });
+
+    testWidgets('dialog cannot be dismissed by popping while downloading', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = _setupNotifier(
+        state: UpdateState(
+          updateAvailable: true,
+          latestVersion: '0.2.14',
+          downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+          isDownloading: true,
+          downloadProgress: 0.5,
+        ),
+      ).notifier;
+
+      await _showDialog(tester: tester, notifier: notifier);
+
+      // Verify the dialog is visible
+      expect(find.text('正在下载更新...'), findsOneWidget);
+
+      // Try to pop the dialog (simulate back button or barrier dismiss)
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      navigator.pop();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Dialog should still be visible — not dismissed
+      expect(find.text('正在下载更新...'), findsOneWidget);
+    });
+
+    testWidgets('dialog cannot be dismissed by popping while installing', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = _setupNotifier(
+        state: UpdateState(
+          updateAvailable: true,
+          latestVersion: '0.2.14',
+          downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+          downloadComplete: true,
+          isInstalling: true,
+          downloadedFilePath: '/tmp/test.exe',
+        ),
+      ).notifier;
+
+      await _showDialog(tester: tester, notifier: notifier);
+
+      // Verify the dialog is visible
+      expect(find.text('正在安装...'), findsOneWidget);
+
+      // Try to pop the dialog
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      navigator.pop();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Dialog should still be visible
+      expect(find.text('正在安装...'), findsOneWidget);
+    });
+
+    testWidgets('dialog does NOT auto-close after download complete with no error', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = _setupNotifier(
+        state: UpdateState(
+          updateAvailable: true,
+          latestVersion: '0.2.14',
+          downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+          downloadComplete: true,
+          isDownloading: false,
+          isInstalling: false,
+          downloadError: null,
+          downloadedFilePath: '/tmp/test.exe',
+        ),
+      ).notifier;
+
+      await _showDialog(tester: tester, notifier: notifier);
+
+      // Pump multiple frames to ensure any auto-close logic would have fired
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+      await tester.pump();
+
+      // Dialog should still be open with the "下载完成" message
+      expect(find.text('下载完成'), findsOneWidget);
+      expect(find.text('关闭'), findsOneWidget);
+
+      // User can close it manually
+      await tester.tap(find.text('关闭'));
+      await tester.pumpAndSettle();
+      expect(find.text('发现新版本'), findsNothing);
+    });
+
+    testWidgets('dialog shows download-complete state and does not auto-close', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = _setupNotifier(
+        state: UpdateState(
+          updateAvailable: true,
+          latestVersion: '0.2.14',
+          downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+          downloadComplete: true,
+          isDownloading: false,
+          isInstalling: false,
+          downloadError: null,
+          downloadedFilePath: '/tmp/test.exe',
+        ),
+      ).notifier;
+
+      await _showDialog(tester: tester, notifier: notifier);
+
+      // Verify the download success state is shown
+      expect(find.text('下载完成'), findsOneWidget);
+      expect(find.byIcon(Icons.check_circle), findsOneWidget);
+
+      // "关闭" button should be shown for manual dismissal
+      expect(find.text('关闭'), findsOneWidget);
+
+      // No auto-closing — dialog survives after multiple frames
+      for (int i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.text('下载完成'), findsOneWidget);
     });
   });
 }
