@@ -34,8 +34,10 @@ dependencies:
   audio_session: ^0.1.12
   just_audio: ^0.9.36
   uuid: ^4.3.0
-  video_player: ^2.9.1
-  video_thumbnail: ^0.5.3
+  media_kit: ^1.2.6
+  media_kit_video: ^2.0.1
+  media_kit_native_event_loop: ^1.0.9
+  media_kit_libs_video: ^1.0.7
   crypto: ^3.0.3
   mime: ^1.0.4
   file: ^6.1.4
@@ -52,7 +54,6 @@ dependencies:
   flutter_inappwebview: ^6.0.0
 
   # UI and Utilities
-  chewie: ^1.8.1
   cupertino_icons: ^1.0.6
   material_color_utilities: ^0.13.0
   idb_shim: ^2.9.0
@@ -61,8 +62,6 @@ dependencies:
   flutter_background_service: ^5.0.0
   flutter_background_service_android: ^6.0.0
   flutter_math_fork: ^0.7.4
-
-  # FFmpeg is not currently bundled. Audio separation is unavailable.
 
 dev_dependencies:
   flutter_test:

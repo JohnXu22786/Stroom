@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:media_kit/media_kit.dart';
 
 import 'application.dart';
 import 'providers/tts_config.dart';
@@ -23,6 +24,7 @@ final catcatchStartupProvider = FutureProvider<void>((ref) async {
 Future<void> main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
+    MediaKit.ensureInitialized();
     if (defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS) {
       await initializeBackgroundService();
