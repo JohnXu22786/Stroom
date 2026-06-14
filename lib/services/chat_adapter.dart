@@ -46,6 +46,17 @@ class ChatAdapter {
 
   bool get isConfigured => _chatService != null;
 
+  /// Whether the current model has reasoning parameters configured.
+  bool get hasReasoningParams {
+    final config = _chatService?.modelConfig;
+    return config != null && config.reasoningParams.isNotEmpty;
+  }
+
+  /// Gets the reasoning parameters from the current model config.
+  List<ReasoningParam> get reasoningParams {
+    return _chatService?.modelConfig?.reasoningParams ?? [];
+  }
+
   /// 获取当前 MCP 工具定义列表
   List<ToolDefinition> get mcpToolDefinitions =>
       List.unmodifiable(_mcpToolDefinitions);
@@ -233,11 +244,11 @@ class ChatAdapter {
     _chatService?.setAssistantCustomParams(params);
   }
 
-  Stream<String> sendStream(String text, {required List<ChatMessage> history, bool reasoning = false, String reasoningEffort = 'medium'}) {
+  Stream<String> sendStream(String text, {required List<ChatMessage> history, bool reasoning = false, String reasoningEffort = 'medium', Map<String, String> reasoningParamValues = const {}}) {
     if (_chatService == null) {
       return Stream.error('请先配置聊天供应商');
     }
-    return _chatService!.sendStream(text, history: history, reasoning: reasoning, reasoningEffort: reasoningEffort);
+    return _chatService!.sendStream(text, history: history, reasoning: reasoning, reasoningEffort: reasoningEffort, reasoningParamValues: reasoningParamValues);
   }
 
   /// Send a message with tool call support.
@@ -247,6 +258,7 @@ class ChatAdapter {
     required List<ChatMessage> history,
     bool reasoning = false,
     String reasoningEffort = 'medium',
+    Map<String, String> reasoningParamValues = const {},
     List<ToolDefinition> tools = const [],
   }) {
     if (_chatService == null) {
@@ -257,6 +269,7 @@ class ChatAdapter {
       history: history,
       reasoning: reasoning,
       reasoningEffort: reasoningEffort,
+      reasoningParamValues: reasoningParamValues,
       tools: tools,
     );
   }
