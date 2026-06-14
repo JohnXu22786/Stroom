@@ -2,20 +2,22 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
-import 'package:video_player/video_player.dart';
-import 'package:video_thumbnail/video_thumbnail.dart';
-import 'package:chewie/chewie.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 
 import '../providers/video_provider.dart';
 import '../utils/video_manifest.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
 import '../utils/manifest_bridge.dart';
+import '../utils/thumbnail_utils.dart';
 import '../widgets/file_manager_view.dart';
 import '../widgets/folder_picker_dialog.dart';
 import 'video_capture_page.dart';
@@ -163,29 +165,32 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         );
 
         final videoPath = await VideoManifest.writeFile(storageFileName, bytes);
-        // Try to obtain video duration from the file
+        // Try to obtain video duration and thumbnail from the file using media_kit
         int videoDurationMs = 0;
         if (videoPath.isNotEmpty && !kIsWeb) {
-          VideoPlayerController? vController;
+          final probePlayer = Player();
           try {
-            vController = VideoPlayerController.file(File(videoPath));
-            await vController.initialize();
-            videoDurationMs = vController.value.duration.inMilliseconds;
+            await probePlayer.open(Media(Uri.file(videoPath).toString()), play: false);
+            // Wait for media to load
+            await Future.delayed(const Duration(milliseconds: 500));
+            videoDurationMs = probePlayer.state.duration.inMilliseconds;
+            // Generate thumbnail using screenshot
+            await probePlayer.seek(const Duration(seconds: 1));
+            await Future.delayed(const Duration(milliseconds: 200));
+            final thumbBytes = await probePlayer.screenshot();
+            if (thumbBytes != null && thumbBytes.isNotEmpty) {
+              await VideoManifest.writeThumbnail(hash, thumbBytes);
+            }
           } catch (_) {
-            // Duration detection failed, default to 0
+            // Duration/thumbnail detection failed
           } finally {
-            await vController?.dispose();
+            await probePlayer.dispose();
           }
         }
-        if (videoPath.isNotEmpty) {
+        // For web, generate thumbnail from bytes after saving
+        if (kIsWeb && videoPath.isNotEmpty) {
           try {
-            final thumbBytes = await VideoThumbnail.thumbnailData(
-              video: videoPath,
-              imageFormat: ImageFormat.JPEG,
-              maxWidth: 256,
-              quality: 75,
-              timeMs: 1000,
-            );
+            final thumbBytes = await _generateThumbnailFromBytes(bytes);
             if (thumbBytes != null) {
               await VideoManifest.writeThumbnail(hash, thumbBytes);
             }
@@ -585,7 +590,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       );
     }
 
-    /// Try to read the cached thumbnail; if missing, generate it on demand.
+    /// Try to read the cached thumbnail; if missing, generate it on demand using media_kit.
     Future<Uint8List?> loadOrGenerateThumbnail(VideoRecord file) async {
       // First try to read the cached thumbnail
       final existing = await VideoManifest.readThumbnail(file.hash);
@@ -603,13 +608,28 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
             await VideoManifest.readFilePath(file.storagePath);
         if (videoPath == null) return null;
 
-        final thumbBytes = await VideoThumbnail.thumbnailData(
-          video: videoPath,
-          imageFormat: ImageFormat.JPEG,
-          maxWidth: 256,
-          quality: 75,
-          timeMs: 1000,
-        );
+        Uint8List? thumbBytes;
+
+        if (kIsWeb) {
+          // Web: use JS-based thumbnail generation
+          final videoBytes = await VideoManifest.readFile(file.storagePath);
+          if (videoBytes != null) {
+            thumbBytes = await _generateThumbnailFromBytes(videoBytes);
+          }
+        } else {
+          // Native: use media_kit Player.screenshot()
+          final thumbPlayer = Player();
+          try {
+            await thumbPlayer.open(Media(Uri.file(videoPath).toString()), play: false);
+            await Future.delayed(const Duration(milliseconds: 500));
+            await thumbPlayer.seek(const Duration(seconds: 1));
+            await Future.delayed(const Duration(milliseconds: 200));
+            thumbBytes = await thumbPlayer.screenshot();
+          } finally {
+            await thumbPlayer.dispose();
+          }
+        }
+
         if (thumbBytes != null && thumbBytes.isNotEmpty) {
           await VideoManifest.writeThumbnail(file.hash, thumbBytes);
           return thumbBytes;
@@ -829,6 +849,30 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     );
   }
 
+  /// Generate thumbnail from video bytes (used on web).
+  /// Creates a blob URL and uses media_kit Player to take a screenshot.
+  Future<Uint8List?> _generateThumbnailFromBytes(Uint8List videoBytes) async {
+    if (!kIsWeb) return null;
+    try {
+      final blobUrl = await createBlobUrl(videoBytes);
+      if (blobUrl == null || blobUrl.isEmpty) return null;
+
+      final thumbPlayer = Player();
+      try {
+        await thumbPlayer.open(Media(blobUrl), play: false);
+        await Future.delayed(const Duration(milliseconds: 1000));
+        await thumbPlayer.seek(const Duration(seconds: 1));
+        await Future.delayed(const Duration(milliseconds: 500));
+        return await thumbPlayer.screenshot();
+      } finally {
+        await thumbPlayer.dispose();
+        revokeBlobUrl(blobUrl);
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Format duration in milliseconds to mm:ss string.
   String _formatDuration(int ms) {
     final totalSeconds = ms ~/ 1000;
@@ -839,7 +883,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
 }
 
 // ====================================================================
-// Video Player Page
+// Video Player Page (media_kit)
 // ====================================================================
 
 class _VideoPlayerPage extends StatefulWidget {
@@ -856,39 +900,32 @@ class _VideoPlayerPage extends StatefulWidget {
 }
 
 class _VideoPlayerPageState extends State<_VideoPlayerPage> {
-  VideoPlayerController? _videoPlayerController;
-  ChewieController? _chewieController;
+  late final Player _player;
+  late final VideoController _controller;
+  bool _initialized = false;
 
   @override
   void initState() {
     super.initState();
+    _player = Player();
+    _controller = VideoController(_player);
     _initializePlayer();
   }
 
   Future<void> _initializePlayer() async {
-    final controller = VideoPlayerController.file(File(widget.filePath));
-    await controller.initialize();
-    final chewie = ChewieController(
-      videoPlayerController: controller,
-      autoPlay: true,
-      looping: false,
-      aspectRatio: controller.value.aspectRatio,
-      allowFullScreen: true,
-      allowMuting: true,
-      showControls: true,
-    );
-    if (mounted) {
-      setState(() {
-        _videoPlayerController = controller;
-        _chewieController = chewie;
-      });
+    try {
+      await _player.open(Media(Uri.file(widget.filePath).toString()));
+      if (mounted) {
+        setState(() => _initialized = true);
+      }
+    } catch (e) {
+      debugPrint('_VideoPlayerPage init error: $e');
     }
   }
 
   @override
   void dispose() {
-    _chewieController?.dispose();
-    _videoPlayerController?.dispose();
+    _player.dispose();
     super.dispose();
   }
 
@@ -903,11 +940,14 @@ class _VideoPlayerPageState extends State<_VideoPlayerPage> {
             style: const TextStyle(color: Colors.white)),
       ),
       body: Center(
-        child: _chewieController != null &&
-                _chewieController!.videoPlayerController.value.isInitialized
-            ? Chewie(controller: _chewieController!)
+        child: _initialized
+            ? Video(
+                controller: _controller,
+                controls: MaterialVideoControls,
+              )
             : const CircularProgressIndicator(color: Colors.white),
       ),
     );
   }
 }
+
