@@ -228,7 +228,9 @@ void main() {
         );
 
         expect(result.text, equals('这是图片中的文字内容'));
-        expect(result.processingTimeMs, greaterThan(0));
+        // Use greaterThanOrEqualTo(0) because on fast CI runners the mock
+        // response may complete in <1ms, making processingTimeMs 0.
+        expect(result.processingTimeMs, greaterThanOrEqualTo(0));
         expect(result.imageCount, equals(1));
       });
 
