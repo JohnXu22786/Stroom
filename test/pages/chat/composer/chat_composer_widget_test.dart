@@ -342,10 +342,6 @@ void main() {
       expect(find.text('可用工具'), findsOneWidget);
     });
 
-      // Tools panel should be visible
-      expect(find.text('可用工具'), findsOneWidget);
-    });
-
     testWidgets('clicking 推理 button opens reasoning panel', (tester) async {
       await tester.pumpWidget(createChatTestApp());
       await tester.pump();
