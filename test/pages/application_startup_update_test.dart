@@ -54,15 +54,21 @@ List<Map<String, String>> _allPlatformAssets(String tagName) {
   ];
 }
 
+/// Builds the test app matching the real app structure:
+/// ProviderScope > Application (no outer MaterialApp wrapper).
+///
+/// In the real app, [Application] IS the root widget that returns
+/// a [MaterialApp] from its build() method. The startup update check
+/// runs in [Application.initState]. showDialog must use the
+/// MaterialApp's navigatorKey.currentContext (not the outer context)
+/// because the Application widget lives ABOVE the Navigator.
 Widget _buildTestApp({Dio? dio}) {
   return ProviderScope(
     overrides: [
       themeProvider.overrideWith((ref) => ThemeNotifier()),
       updateProvider.overrideWith((ref) => UpdateNotifier(dio: dio)),
     ],
-    child: const MaterialApp(
-      home: Application(),
-    ),
+    child: const Application(),
   );
 }
 
@@ -134,6 +140,28 @@ void main() {
 
       // No dialog should appear (silent error)
       expect(find.text('发现新版本'), findsNothing);
+    });
+
+    testWidgets('dialog has same UI elements as manual check dialog', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final dio = _createMockDio(
+        _githubRelease('v0.2.14', body: 'Bug fixes and improvements', assets: _allPlatformAssets('v0.2.14')),
+      );
+
+      await tester.pumpWidget(_buildTestApp(dio: dio));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump();
+
+      // Same elements as the manual check dialog in settings_page
+      expect(find.text('发现新版本'), findsOneWidget);
+      expect(find.text('最新版本: 0.2.14'), findsOneWidget);
+      expect(find.text('更新内容:'), findsOneWidget);
+      expect(find.text('Bug fixes and improvements'), findsOneWidget);
+      expect(find.text('跳过此版本'), findsOneWidget);
+      expect(find.text('稍后提醒'), findsOneWidget);
+      expect(find.text('立即更新'), findsOneWidget);
+      expect(find.byIcon(Icons.system_update), findsOneWidget);
     });
   });
 }

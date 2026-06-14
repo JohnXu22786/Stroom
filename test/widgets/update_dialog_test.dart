@@ -302,8 +302,9 @@ void main() {
 
       // Should show installing text
       expect(find.text('正在安装...'), findsOneWidget);
-      // Should NOT show the install button (auto-installing)
-      expect(find.text('打开/安装'), findsNothing);
+      // Should NOT show any action buttons (auto-installing)
+      expect(find.text('关闭'), findsNothing);
+      expect(find.text('手动安装'), findsNothing);
     });
 
     testWidgets('shows fallback install button when auto-install fails', (tester) async {
