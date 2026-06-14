@@ -54,6 +54,9 @@ class ChatService {
   /// Whether there's an active streaming session (instance or static).
   bool get isStreamActive => _controller != null && !_controller!.isClosed;
 
+  /// The model config used by this service instance.
+  ModelConfig? get modelConfig => _modelConfig;
+
   Map<String, dynamic>? get lastRequestBody =>
       _lastRequestBody ?? _provider?.lastRequestBody;
   Map<String, dynamic>? get lastResponseData =>
@@ -76,8 +79,14 @@ class ChatService {
   /// [history] must already include the latest user message (added by the
   /// caller before calling this method). Attachments are converted to the
   /// OpenAI multimodal content‑array format (base64 inline images).
+  ///
+  /// [reasoningParamValues] is a map of paramName -> selectedOptionValue
+  /// used when [reasoning] is true. If a param has no selection, it is skipped.
   Stream<String> sendStream(String userMessage,
-      {required List<ChatMessage> history, bool reasoning = false, String reasoningEffort = 'medium'}) {
+      {required List<ChatMessage> history,
+      bool reasoning = false,
+      String reasoningEffort = 'medium',
+      Map<String, String> reasoningParamValues = const {}}) {
     cancel();
     _isCancelledByUser = false;
     _reasoningBuffer = '';
@@ -93,7 +102,10 @@ class ChatService {
       },
     );
 
-    final extraParams = _buildExtraParams(reasoning: reasoning, reasoningEffort: reasoningEffort);
+    final extraParams = _buildExtraParams(
+        reasoning: reasoning,
+        reasoningEffort: reasoningEffort,
+        reasoningParamValues: reasoningParamValues);
 
     Future.microtask(() async {
       try {
@@ -165,11 +177,15 @@ class ChatService {
   /// Stream a message WITH tool call support.
   /// Returns both text chunks and tool call events.
   /// Handles the function-calling loop internally.
+  ///
+  /// [reasoningParamValues] is a map of paramName -> selectedOptionValue
+  /// used when [reasoning] is true. If a param has no selection, it is skipped.
   Stream<ChatEvent> sendStreamWithTools(
     String userMessage, {
     required List<ChatMessage> history,
     bool reasoning = false,
     String reasoningEffort = 'medium',
+    Map<String, String> reasoningParamValues = const {},
     List<ToolDefinition> tools = const [],
   }) {
     _isCancelledByUser = false;
@@ -184,7 +200,10 @@ class ChatService {
       },
       );
 
-      final extraParams = _buildExtraParams(reasoning: reasoning, reasoningEffort: reasoningEffort);
+    final extraParams = _buildExtraParams(
+        reasoning: reasoning,
+        reasoningEffort: reasoningEffort,
+        reasoningParamValues: reasoningParamValues);
       final toolDefs = tools.map((t) => t.toJson()).toList();
 
     Future.microtask(() async {
@@ -531,6 +550,7 @@ class ChatService {
   Map<String, dynamic> _buildExtraParams({
     bool reasoning = false,
     String reasoningEffort = 'medium',
+    Map<String, String> reasoningParamValues = const {},
   }) {
     final result = <String, dynamic>{};
 
@@ -581,16 +601,15 @@ class ChatService {
 
     // Reasoning params — only injected when reasoning is enabled.
     // Users configure these per-model in the LLM config page.
-    // Each param can be a top-level string, nested object (dot notation),
-    // or numeric/boolean literal.
+    // Each param can be a top-level string, nested object (dot notation).
+    // The selected value comes from reasoningParamValues (set by user in the
+    // reasoning panel). If no selection for a param, it is skipped.
     if (reasoning) {
       for (final rp in _modelConfig!.reasoningParams) {
-        final value = switch (rp.type) {
-          'number' => double.tryParse(rp.defaultValue) ?? 0.0,
-          'boolean' => rp.defaultValue.toLowerCase() == 'true',
-          'string' || _ => rp.defaultValue,
-        };
-        _setNestedParam(result, rp.paramName, value);
+        final selectedValue = reasoningParamValues[rp.paramName];
+        if (selectedValue != null && selectedValue.isNotEmpty) {
+          _setNestedParam(result, rp.paramName, selectedValue);
+        }
       }
     }
 
