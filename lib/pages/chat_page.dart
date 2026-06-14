@@ -1564,7 +1564,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                 _searchQuery.isNotEmpty &&
                                 _searchMatches.any((m) => m.messageId == message.id);
                             messageBubble = Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              crossAxisAlignment: hasAttachments && isSentByMe
+                                  ? CrossAxisAlignment.end
+                                  : CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 if (hasSearchMatch)
@@ -1591,7 +1593,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           }
 
                           return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            crossAxisAlignment: isSentByMe
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Container(
@@ -1676,6 +1680,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 ChatComposerWidget(
                   onSend: _onMessageSend,
                   onStop: _stopStreaming,
+                  onPreviewAttachment: _showAttachmentPreview,
                   mcpTools: _adapter.getAllToolDefinitions(),
                   enabledTools: ref.watch(enabledToolNamesProvider),
                   onEnabledToolsChanged: (tools) {
