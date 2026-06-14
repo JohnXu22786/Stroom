@@ -15,6 +15,10 @@ const String kHttpReferer = 'https://github.com/JohnXu22786/Stroom';
 
 /// X-Title header value identifying this application, following the
 /// OpenRouter convention for app attribution on leaderboards.
+///
+/// Note: OpenRouter also supports `X-OpenRouter-Title` as the current
+/// standard header name, but we keep `X-Title` for compatibility with
+/// both OpenRouter and other providers.
 const String kXTitle = 'Stroom';
 
 /// Map of application identification headers following OpenRouter format.
@@ -418,7 +422,10 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
               final toolCallsDelta = delta['tool_calls'] as List?;
               if (toolCallsDelta != null) {
                 for (final tc in toolCallsDelta) {
-                  final index = tc['index'] as int;
+                  // Use null-safe index with fallback to 0.
+                  // Per OpenAI streaming spec, index is always present,
+                  // but be defensive against providers that may omit it.
+                  final index = tc['index'] as int? ?? 0;
                   toolCallAccumulators.putIfAbsent(index, () => {});
                   final acc = toolCallAccumulators[index]!;
 
