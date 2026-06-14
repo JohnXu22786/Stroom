@@ -350,14 +350,18 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       tester.takeException();
 
-      // Tap the reasoning button
+      // The reasoning button exists
+      expect(find.text('推理'), findsOneWidget);
+
+      // When no reasoning params are configured, the button is disabled.
+      // Tap it to verify no crash, then check the panel is not shown.
       await tester.tap(find.text('推理'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Reasoning panel should be visible
-      expect(find.text('推理设置'), findsOneWidget);
+      // Reasoning panel should NOT open (button is disabled without params)
+      expect(find.text('推理设置'), findsNothing);
     });
   });
 
