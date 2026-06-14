@@ -453,33 +453,64 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     }
   }
 
-  /// 桌面端更新：
-  /// - .exe/.msi/.dmg：直接启动安装程序
-  /// - .zip：解压后替换当前安装文件并重启
+  /// 桌面端更新（所有非 Web 平台都会自动触发安装）：
+  ///
+  /// ### Windows
+  /// - .exe / .msi → [Process.start] 直接启动安装程序
+  ///
+  /// ### macOS
+  /// - .dmg → [launchUrl] 挂载磁盘映像
+  /// - .pkg → [launchUrl] 启动安装器
+  ///
+  /// ### Linux
+  /// - .AppImage → `chmod +x` 后直接运行
+  /// - .deb / .rpm → [launchUrl] 通过系统包管理器打开
+  ///
+  /// ### 全部桌面端
+  /// - .zip → 解压后走自更新流程（替换文件并重启）
+  /// - 其他类型 → [launchUrl] 以系统默认方式打开
   Future<void> _installOnDesktop(String filePath) async {
     final fileName = filePath.split(Platform.pathSeparator).last.toLowerCase();
-    final isInstaller = fileName.endsWith('.exe') ||
-        fileName.endsWith('.msi') ||
-        fileName.endsWith('.dmg');
 
-    if (isInstaller) {
-      // 安装包：直接启动
-      final uri = Uri.file(filePath);
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-      return;
-    }
-
-    if (!fileName.endsWith('.zip')) {
-      // 其他类型，用系统默认打开
-      final uri = Uri.file(filePath);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (Platform.isWindows) {
+      if (fileName.endsWith('.exe') || fileName.endsWith('.msi')) {
+        // Windows: 直接启动安装程序
+        await Process.start(filePath, [], runInShell: true);
+        return;
       }
+    } else if (Platform.isMacOS) {
+      if (fileName.endsWith('.dmg') || fileName.endsWith('.pkg')) {
+        // macOS: 挂载 dmg 或启动 pkg 安装器
+        final uri = Uri.file(filePath);
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return;
+      }
+    } else if (Platform.isLinux) {
+      if (fileName.endsWith('.AppImage')) {
+        // Linux AppImage: 加执行权限后直接运行
+        await Process.run('chmod', ['+x', filePath]);
+        await Process.run(filePath, []);
+        return;
+      }
+      if (fileName.endsWith('.deb') || fileName.endsWith('.rpm')) {
+        // Linux 包: 通过系统默认打开（会调起包管理器）
+        final uri = Uri.file(filePath);
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return;
+      }
+    }
+
+    // .zip：自更新流程（解压 → 替换 → 重启）
+    if (fileName.endsWith('.zip')) {
+      await _selfUpdateFromZip(filePath);
       return;
     }
 
-    // .zip：自更新流程
-    await _selfUpdateFromZip(filePath);
+    // 其他类型，用系统默认打开
+    final uri = Uri.file(filePath);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   /// 从 zip 自更新：解压 → 创建替换脚本 → 启动脚本 → 退出应用
