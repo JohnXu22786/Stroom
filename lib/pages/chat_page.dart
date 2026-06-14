@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,6 +18,7 @@ import '../models/tool_call.dart';
 import '../services/chat_adapter.dart';
 import '../services/chat_service.dart';
 import '../providers/conversation_provider.dart';
+import '../providers/chat_stream_provider.dart';
 import '../providers/provider_config.dart';
 import '../widgets/llm/jumping_dots.dart';
 import '../widgets/llm/tool_call_card.dart';
@@ -49,7 +51,7 @@ class ChatPage extends ConsumerStatefulWidget {
   ConsumerState<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends ConsumerState<ChatPage> {
+class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver {
   InMemoryChatController? _controller;
   late final User _currentUser;
   late final User _aiUser;
@@ -57,6 +59,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   final List<ChatMessage> _history = [];
   int _selectedModelIndex = 0;
   bool _cancelledByUser = false;
+  /// Tracks streaming state locally so dispose() can check it without
+  /// calling ref.read() (which throws after the widget is marked disposed).
+  bool _isStreamingActive = false;
   final Map<String, String> _reasoningContents = {};
   final Map<String, List<MessageSegment>> _chatSegments = {};
   /// Tracks how many characters of [_history] text have been rendered as
@@ -77,6 +82,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   bool _developerMode = false;
   final Map<String, bool> _expandedErrors = {};
+
+  /// Tracks whether the soft keyboard is currently visible, used by
+  /// [didChangeMetrics] to trigger an immediate scroll-to-bottom.
+  bool _keyboardVisible = false;
 
   // ── Infinite Scroll / Lazy Load pagination state ──
   /// Number of messages to load per page.
@@ -133,6 +142,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _currentUser = User(id: 'user1', name: 'You');
     _aiUser = User(id: 'ai1', name: 'Stroom');
     _adapter = ChatAdapter();
@@ -200,11 +210,98 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   @override
   void dispose() {
-    _adapter.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    if (!_isStreamingActive) {
+      // Only cancel the adapter when NOT streaming. If streaming is active,
+      // the adapter must stay alive so the stream can continue in the
+      // background and save results when it completes.
+      _adapter.cancel();
+      _adapter.dispose();
+    }
     _controller?.dispose();
-    _adapter.dispose();
     _searchTextController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    if (!mounted) return;
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final isNowVisible = bottomInset > 100;
+    if (isNowVisible && !_keyboardVisible) {
+      // Keyboard just opened — immediately scroll to the last message so
+      // the input area is visible without waiting for the next build cycle.
+      _scrollToBottom();
+    }
+    _keyboardVisible = isNowVisible;
+  }
+
+  /// Scrolls the chat list to the bottom-most message, used when the soft
+  /// keyboard opens so the latest message and input field are visible
+  /// immediately rather than after a ~1s layout delay.
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final msgs = _controller?.messages;
+      if (msgs != null && msgs.isNotEmpty) {
+        final lastMsg = msgs.last;
+        final key = _messageKeys[lastMsg.id];
+        if (key?.currentContext != null) {
+          Scrollable.ensureVisible(
+            key!.currentContext!,
+            alignment: 1.0, // bottom of the item aligned with viewport bottom
+            duration: Duration.zero, // instant, no animation delay
+          );
+        }
+      }
+    });
+  }
+
+  /// Restores the streaming message UI when the page is re-initialized after
+  /// having been disposed during active streaming (user navigated away during
+  /// generation and came back). Re-inserts the streaming message placeholder
+  /// into the controller and restores accumulated content providers so the UI
+  /// shows the loading indicator and any partial text already received.
+  void _restoreStreamingState() {
+    if (!ref.read(isStreamingProvider)) return;
+    final msgId = ref.read(streamingMsgIdProvider);
+    if (msgId == null) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final fullReply = ref.read(streamingFullReplyProvider);
+      _streamingMsgId = msgId;
+      _chatSegments[msgId] = [];
+      _streamingRenderedLengths[msgId] = 0;
+
+      final placeholder = Message.textStream(
+        id: msgId,
+        authorId: _aiUser.id,
+        createdAt: DateTime.now(),
+        streamId: msgId,
+      );
+      _controller?.insertMessage(placeholder).then((_) {
+        if (!mounted) return;
+        // If we already have content, update the message to show it
+        if (fullReply.isNotEmpty) {
+          _controller?.updateMessage(
+            placeholder,
+            Message.text(
+              id: msgId,
+              authorId: _aiUser.id,
+              text: fullReply,
+              createdAt: DateTime.now(),
+            ),
+          );
+          // If first token already received, the streaming message
+          // content will be displayed via textMessageBuilder reading
+          // message.text. The JumpingDots indicator is hidden because
+          // isWaitingForFirstToken checks streamingHasFirstTokenProvider.
+        }
+        setState(() {});
+      });
+    });
   }
 
   Future<void> _initialize() async {
@@ -253,6 +350,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       }
     });
     _loadConversationMessages();
+    // Restore streaming state if a stream was active when the page was
+    // previously disposed (user navigated away during generation and then
+    // came back). This re-inserts the streaming message placeholder with
+    // accumulated content so the UI shows the loading indicator and any
+    // partial text that has already been received.
+    _restoreStreamingState();
   }
 
   /// Loads the previous page of older messages and prepends them to the
@@ -365,14 +468,31 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _saveMessages() async {
     try {
-    // Ensure a conversation exists
-    final convId = ref.read(activeConversationIdProvider);
+      final convId = ref.read(activeConversationIdProvider);
       if (convId == null) return;
       await ref
           .read(conversationsProvider.notifier)
           .updateMessages(convId, [..._history]);
     } catch (e) {
-      debugPrint('_saveMessages failed: $e');
+      // Fallback: save directly to SharedPreferences if the notifier is
+      // unavailable (e.g. during background streaming after page disposal).
+      debugPrint('_saveMessages via notifier failed: $e');
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final allJson = prefs.getString('conversations');
+        if (allJson == null) return;
+        final convId = ref.read(activeConversationIdProvider);
+        if (convId == null) return;
+        final list = (jsonDecode(allJson) as List).cast<Map<String, dynamic>>();
+        final conv =
+            list.where((c) => c['id'] == convId).firstOrNull;
+        if (conv == null) return;
+        conv['messages'] = _history.map((m) => m.toMap()).toList();
+        conv['updatedAt'] = DateTime.now().toIso8601String();
+        await prefs.setString('conversations', jsonEncode(list));
+      } catch (e2) {
+        debugPrint('_saveMessages fallback also failed: $e2');
+      }
     }
   }
 
@@ -416,6 +536,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Future<void> _startStreaming(String text) async {
     if (ref.read(isStreamingProvider)) return;
     ref.read(isStreamingProvider.notifier).state = true;
+    _isStreamingActive = true;
     if (mounted) setState(() {});
     _cancelledByUser = false;
 
@@ -423,6 +544,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _streamingMsgId = aiMsgId;
     _chatSegments[aiMsgId] = [];
     _streamingRenderedLengths[aiMsgId] = 0;
+    // Persist streaming message ID in provider so it survives page disposal
+    ref.read(streamingMsgIdProvider.notifier).state = aiMsgId;
 
     final placeholder = Message.textStream(
       id: aiMsgId,
@@ -430,7 +553,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       createdAt: DateTime.now(),
       streamId: aiMsgId,
     );
-    await _controller?.insertMessage(placeholder);
+    if (mounted) {
+      await _controller?.insertMessage(placeholder);
+    }
 
     String fullReply = '';
     String reasoningBuffer = '';
@@ -465,6 +590,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         history: _history,
         reasoning: ref.read(reasoningEnabledProvider),
         reasoningEffort: ref.read(reasoningEffortProvider),
+        reasoningParamValues: ref.read(reasoningParamValuesProvider),
         tools: filteredTools,
       );
 
@@ -475,17 +601,22 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           case TextEvent e:
             if (!hasReceivedFirstToken) {
               hasReceivedFirstToken = true;
+              ref.read(streamingHasFirstTokenProvider.notifier).state = true;
               if (mounted) setState(() {});
             }
             fullReply += e.text;
             final now = DateTime.now();
             if (now.difference(lastUpdate) >= minInterval) {
               lastUpdate = now;
+              // Update provider so streaming state survives page disposal
+              ref.read(streamingFullReplyProvider.notifier).state = fullReply;
               // Keep the controller updated so the Chat widget re-renders
               // the streaming message. The textMessageBuilder will read
               // from _chatSegments (incremental segments) for the actual
               // markdown rendering, not from message.text directly.
-              updateMessage(fullReply);
+              if (mounted) {
+                updateMessage(fullReply);
+              }
               // Incremental rendering: add only the new text chunk as a
               // TextSegment, so MarkdownWidget only parses new content
               // instead of re-rendering the entire accumulated text.
@@ -629,6 +760,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       // The SSE parser now yields reasoning_content unconditionally;
       // the reasoning toggle only controls whether the params are SENT.
       reasoningBuffer = _adapter.reasoningContent;
+      ref.read(streamingReasoningProvider.notifier).state = reasoningBuffer;
     }
 
     // Wrap post-stream processing in try-catch so that isStreamingProvider
@@ -656,12 +788,30 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       debugPrint('[ChatPage] post-stream error: $e\n$s');
     } finally {
       _streamingMsgId = null;
+      _isStreamingActive = false;
       ref.read(isStreamingProvider.notifier).state = false;
+      ref.read(streamingMsgIdProvider.notifier).state = null;
+      ref.read(streamingFullReplyProvider.notifier).state = '';
+      ref.read(streamingHasFirstTokenProvider.notifier).state = false;
+      ref.read(streamingReasoningProvider.notifier).state = '';
       _cancelledByUser = false;
       if (mounted) setState(() {});
     }
 
+    // Save messages even if page was disposed — this persists the completed
+    // streaming result to SharedPreferences so it shows up when the user
+    // navigates back to the chat page. Uses ref.read which works at the
+    // ProviderScope level and does not require mounted to be true.
     await _saveMessages();
+
+    // Clean up the adapter after background streaming completes. If the page
+    // was disposed while streaming, dispose() skipped adapter cleanup, so we
+    // must do it here to prevent resource leaks.
+    if (!mounted) {
+      try {
+        _adapter.dispose();
+      } catch (_) {}
+    }
   }
 
   void _confirmRetryOrEdit(String messageId) {
@@ -867,6 +1017,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   void _stopStreaming() {
     _cancelledByUser = true;
+    _isStreamingActive = false;
     try {
       _adapter.cancel();
     } catch (e) {
@@ -1172,6 +1323,42 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       if (!_isSearching) _searchMode = SearchMode.current;
                     }),
                   ),
+                  // ── Reasoning toggle ──
+                  if (adapterConfigured)
+                    Consumer(
+                      builder: (context, ref, child) {
+                        final reasoningEnabled =
+                            ref.watch(reasoningEnabledProvider);
+                        final hasParams = _adapter.hasReasoningParams;
+                        return IconButton(
+                          icon: Icon(
+                            Icons.psychology,
+                            color: reasoningEnabled
+                                ? Theme.of(context).colorScheme.primary
+                                : (hasParams
+                                    ? null
+                                    : Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant
+                                        .withOpacity(0.38)),
+                          ),
+                          tooltip: hasParams
+                              ? (reasoningEnabled ? '推理已开启' : '推理')
+                              : '该模型无推理参数',
+                          onPressed: hasParams
+                              ? () {
+                                  final newValue = !reasoningEnabled;
+                                  ref
+                                      .read(reasoningEnabledProvider.notifier)
+                                      .state = newValue;
+                                  SharedPreferences.getInstance().then(
+                                      (prefs) => prefs.setBool(
+                                          'reasoning_enabled', newValue));
+                                }
+                              : null,
+                        );
+                      },
+                    ),
                 ],
               ),
             ),
@@ -1453,7 +1640,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                               final isWaitingForFirstToken =
                                   message.id == _streamingMsgId &&
                                   message.text.isEmpty &&
-                                  isStreaming;
+                                  isStreaming &&
+                                  !ref.read(streamingHasFirstTokenProvider);
                               final hasSearchMatch = _isSearching &&
                                   _searchQuery.isNotEmpty &&
                                   _searchMatches.any((m) => m.messageId == message.id);
@@ -1623,6 +1811,24 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         textStreamMessageBuilder: (context, message, index,
                             {required bool isSentByMe,
                             MessageGroupStatus? groupStatus}) {
+                          // If the message has accumulated content (e.g.,
+                          // after page restoration from background streaming),
+                          // render it as regular text instead of a spinner.
+                          final accumulated = ref.read(streamingFullReplyProvider);
+                          if (accumulated.isNotEmpty &&
+                              message.id == ref.read(streamingMsgIdProvider)) {
+                            return Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: MarkdownWidget(
+                                data: accumulated,
+                                selectable: true,
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                config: markdownConfig,
+                                markdownGenerator: markdownGenerator,
+                              ),
+                            );
+                          }
                           return const Padding(
                             padding: EdgeInsets.all(12),
                             child: SizedBox(
@@ -1652,6 +1858,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   modelNames: _getModelNames(),
                   selectedModelIndex: _selectedModelIndex,
                   onModelSelected: _onModelSelected,
+                  reasoningParams: _adapter.reasoningParams,
+                  hasReasoningParams: _adapter.hasReasoningParams,
                 ),
               ],
             ),
