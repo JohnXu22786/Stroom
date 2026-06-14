@@ -175,11 +175,9 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
           ),
           FilledButton(
             onPressed: () {
-              // 跳转至 GitHub Releases 页面，让用户手动下载安装
-              final releaseUrl =
-                  'https://github.com/JohnXu22786/Stroom/releases/tag/v${state.latestVersion ?? ''}';
-              _openInBrowser(releaseUrl);
-              Navigator.of(context).pop();
+              // Retry installing the already-downloaded APK file
+              // with visual feedback (isInstalling state).
+              notifier.retryInstall();
             },
             child: const Text('手动安装'),
           ),
