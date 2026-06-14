@@ -173,6 +173,75 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     return '${key.substring(0, 8)}...${key.substring(key.length - 4)}';
   }
 
+  /// Parse a single SSE data event and return a list of [AIStreamEvent]s.
+  ///
+  /// Handles all known reasoning formats:
+  /// - `delta.reasoning_content` (string) — OpenAI standard format
+  /// - `delta.reasoning` (string) — Open Router standard format
+  /// - `delta.reasoning_details` (array) — Open Router structured format
+  ///   - `reasoning.text` → extract `text` field
+  ///   - `reasoning.summary` → extract `summary` field
+  ///   - `reasoning.encrypted` → skipped (encrypted data is not human-readable)
+  ///
+  /// Also handles text content.
+  ///
+  /// Extracted as a static method for testability — allows direct unit testing
+  /// of the SSE parsing logic without mocking HTTP/SSE infrastructure.
+  @visibleForTesting
+  static List<AIStreamEvent> parseStreamEvent(Map<String, dynamic> data) {
+    final events = <AIStreamEvent>[];
+    final choices = data['choices'] as List?;
+    if (choices == null || choices.isEmpty) return events;
+
+    final delta = choices[0]['delta'] as Map<String, dynamic>?;
+    if (delta == null) return events;
+
+    // Text content
+    final content = delta['content'] as String?;
+    if (content != null && content.isNotEmpty) {
+      events.add(AIStreamEvent(content));
+    }
+
+    // Reasoning via reasoning_content (OpenAI standard format)
+    final reasoningContent = delta['reasoning_content'] as String?;
+    if (reasoningContent != null && reasoningContent.isNotEmpty) {
+      events.add(AIStreamEvent(reasoningContent, isReasoning: true));
+    }
+
+    // Reasoning via reasoning (Open Router string format)
+    final reasoning = delta['reasoning'] as String?;
+    if (reasoning != null && reasoning.isNotEmpty) {
+      events.add(AIStreamEvent(reasoning, isReasoning: true));
+    }
+
+    // Reasoning via reasoning_details (Open Router structured array format)
+    final reasoningDetails = delta['reasoning_details'];
+    if (reasoningDetails is List) {
+      for (final detail in reasoningDetails) {
+        final detailType = detail is Map ? detail['type'] as String? : null;
+        if (detailType == 'reasoning.text') {
+          final text = detail['text'] as String?;
+          if (text != null && text.isNotEmpty) {
+            events.add(AIStreamEvent(text, isReasoning: true));
+          }
+        } else if (detailType == 'reasoning.summary') {
+          final summary = detail['summary'] as String?;
+          if (summary != null && summary.isNotEmpty) {
+            events.add(AIStreamEvent(summary, isReasoning: true));
+          }
+        }
+        // reasoning.encrypted is skipped — encrypted data is not human-readable
+      }
+    }
+
+    // Tool call deltas (streamed in chunks by index)
+    // Note: tool call accumulation across events requires external state
+    // (toolCallAccumulators map in chatStream), so we don't handle it here.
+    // The caller (chatStream) handles tool call accumulation separately.
+
+    return events;
+  }
+
   @override
   Map<String, dynamic> get defaultParams => {
         'model': 'gpt-4o',
@@ -331,45 +400,39 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         try {
           final data = jsonDecode(dataStr) as Map<String, dynamic>;
           _lastResponseData = data;
+
+          // Parse the stream event using the static helper method
+          final parsedEvents = parseStreamEvent(data);
+
+          // Yield all parsed events (content, reasoning, etc.)
+          for (final pe in parsedEvents) {
+            yield pe;
+          }
+
+          // Tool call deltas (streamed in chunks by index) — handled here
+          // because accumulation requires state across multiple SSE events.
           final choices = data['choices'] as List?;
           if (choices != null && choices.isNotEmpty) {
             final delta = choices[0]['delta'] as Map<String, dynamic>?;
-            if (delta == null) continue;
+            if (delta != null) {
+              final toolCallsDelta = delta['tool_calls'] as List?;
+              if (toolCallsDelta != null) {
+                for (final tc in toolCallsDelta) {
+                  final index = tc['index'] as int;
+                  toolCallAccumulators.putIfAbsent(index, () => {});
+                  final acc = toolCallAccumulators[index]!;
 
-            // Text content
-            final content = delta['content'] as String?;
-            if (content != null && content.isNotEmpty) {
-              yield AIStreamEvent(content);
-            }
-
-            // Reasoning content — always parse from response if present,
-            // regardless of the reasoning flag. The reasoning flag only
-            // controls whether thinking/reasoning_effort is SENT in the
-            // request. Some models (e.g. DeepSeek, OpenAI o-series) may
-            // still return reasoning_content even when the flag is off.
-            final reasoningContent = delta['reasoning_content'] as String?;
-            if (reasoningContent != null && reasoningContent.isNotEmpty) {
-              yield AIStreamEvent(reasoningContent, isReasoning: true);
-            }
-
-            // Tool call deltas (streamed in chunks by index)
-            final toolCallsDelta = delta['tool_calls'] as List?;
-            if (toolCallsDelta != null) {
-              for (final tc in toolCallsDelta) {
-                final index = tc['index'] as int;
-                toolCallAccumulators.putIfAbsent(index, () => {});
-                final acc = toolCallAccumulators[index]!;
-
-                if (tc['id'] != null) acc['id'] = tc['id'];
-                if (tc['type'] != null) acc['type'] = tc['type'];
-                if (tc['function'] != null) {
-                  acc.putIfAbsent('function', () => <String, dynamic>{});
-                  final fn = tc['function'] as Map<String, dynamic>;
-                  final accFn = acc['function'] as Map<String, dynamic>;
-                  if (fn['name'] != null) accFn['name'] = fn['name'];
-                  if (fn['arguments'] != null) {
-                    accFn['arguments'] = (accFn['arguments'] as String? ?? '') +
-                        (fn['arguments'] as String);
+                  if (tc['id'] != null) acc['id'] = tc['id'];
+                  if (tc['type'] != null) acc['type'] = tc['type'];
+                  if (tc['function'] != null) {
+                    acc.putIfAbsent('function', () => <String, dynamic>{});
+                    final fn = tc['function'] as Map<String, dynamic>;
+                    final accFn = acc['function'] as Map<String, dynamic>;
+                    if (fn['name'] != null) accFn['name'] = fn['name'];
+                    if (fn['arguments'] != null) {
+                      accFn['arguments'] = (accFn['arguments'] as String? ?? '') +
+                          (fn['arguments'] as String);
+                    }
                   }
                 }
               }
