@@ -22,6 +22,7 @@ import 'app_album_picker_dialog.dart';
 class ChatComposerWidget extends ConsumerStatefulWidget {
   final void Function(String text, List<Attachment> attachments) onSend;
   final VoidCallback onStop;
+  final ValueChanged<Attachment>? onPreviewAttachment;
   final List<ToolDefinition> mcpTools;
   final Set<String> enabledTools;
   final ValueChanged<Set<String>> onEnabledToolsChanged;
@@ -33,6 +34,7 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     super.key,
     required this.onSend,
     required this.onStop,
+    this.onPreviewAttachment,
     this.mcpTools = const [],
     this.enabledTools = const {},
     required this.onEnabledToolsChanged,
@@ -443,6 +445,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
                       attachment: att,
                       imageBytes: _pendingImageBytes[att.id],
                       onRemove: () => _removePendingAttachment(i),
+                      onTap: widget.onPreviewAttachment != null
+                          ? () => widget.onPreviewAttachment!(att)
+                          : null,
                     );
                   },
                 ),

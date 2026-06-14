@@ -1172,28 +1172,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       if (!_isSearching) _searchMode = SearchMode.current;
                     }),
                   ),
-                  // ── Reasoning toggle ──
-                  if (adapterConfigured)
-                    Consumer(
-                      builder: (context, ref, child) {
-                        final reasoningEnabled = ref.watch(reasoningEnabledProvider);
-                        return IconButton(
-                          icon: Icon(
-                            Icons.psychology,
-                            color: reasoningEnabled
-                                ? Theme.of(context).colorScheme.primary
-                                : null,
-                          ),
-                          tooltip: reasoningEnabled ? '推理已开启' : '推理',
-                          onPressed: () {
-                            final newValue = !reasoningEnabled;
-                            ref.read(reasoningEnabledProvider.notifier).state = newValue;
-                            SharedPreferences.getInstance().then((prefs) =>
-                                prefs.setBool('reasoning_enabled', newValue));
-                          },
-                        );
-                      },
-                    ),
                 ],
               ),
             ),
@@ -1549,7 +1527,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                 _searchQuery.isNotEmpty &&
                                 _searchMatches.any((m) => m.messageId == message.id);
                             messageBubble = Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              crossAxisAlignment: hasAttachments && isSentByMe
+                                  ? CrossAxisAlignment.end
+                                  : CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 if (hasSearchMatch)
@@ -1576,7 +1556,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           }
 
                           return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            crossAxisAlignment: isSentByMe
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Container(
@@ -1661,6 +1643,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 ChatComposerWidget(
                   onSend: _onMessageSend,
                   onStop: _stopStreaming,
+                  onPreviewAttachment: _showAttachmentPreview,
                   mcpTools: _adapter.getAllToolDefinitions(),
                   enabledTools: ref.watch(enabledToolNamesProvider),
                   onEnabledToolsChanged: (tools) {
