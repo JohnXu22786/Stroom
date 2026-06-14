@@ -34,6 +34,19 @@ void main() {
       expect(engine.canHandleVideoFormat('3gp'), isTrue);
     });
 
+    test('extractAudio throws when engine is not available', () async {
+      final available = await engine.isAvailable();
+      if (!available) {
+        await expectLater(
+          engine.extractAudio(
+            videoBytes: Uint8List.fromList([0, 1, 2, 3]),
+            videoFormat: 'mp4',
+          ),
+          throwsA(isA<Exception>()),
+        );
+      }
+    });
+
     test('extractAudio throws on empty video bytes', () async {
       await expectLater(
         engine.extractAudio(
