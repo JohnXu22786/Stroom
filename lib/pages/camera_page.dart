@@ -245,7 +245,10 @@ class _CameraPageState extends ConsumerState<CameraPage> {
         final result = await Navigator.push<ImageEditorResult>(
           context,
           MaterialPageRoute(
-            builder: (_) => ImageEditorPage(imageBytes: bytes),
+            builder: (_) => ImageEditorPage(
+              imageBytes: bytes,
+              fromCamera: true,
+            ),
           ),
         );
         if (!mounted || _discardRequested) return;
