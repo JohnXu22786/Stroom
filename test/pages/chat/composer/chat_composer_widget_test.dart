@@ -284,6 +284,84 @@ void main() {
   });
 
   // ═══════════════════════════════════════════════════════════
+  // ChatComposer Settings Row Tests
+  // ═══════════════════════════════════════════════════════════
+  group('Settings row above composer input', () {
+    testWidgets('settings row shows model, tools, reasoning buttons above input',
+        (tester) async {
+      await tester.pumpWidget(createChatTestApp());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      // The settings row buttons should be visible above the input
+      expect(find.text('模型'), findsOneWidget);
+      expect(find.text('工具'), findsOneWidget);
+      expect(find.text('推理'), findsOneWidget);
+    });
+
+    testWidgets('each settings button has an icon', (tester) async {
+      await tester.pumpWidget(createChatTestApp());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      // Each button should have its icon
+      expect(find.byIcon(Icons.smart_toy_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.build_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.psychology_outlined), findsOneWidget);
+    });
+
+    testWidgets('clicking model button opens model panel', (tester) async {
+      await tester.pumpWidget(createChatTestApp());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      // Tap the model button
+      await tester.tap(find.text('模型'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Model panel should be visible
+      expect(find.text('选择模型'), findsOneWidget);
+    });
+
+    testWidgets('clicking 工具 button opens tools panel', (tester) async {
+      await tester.pumpWidget(createChatTestApp());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      // Tap the tools button
+      await tester.tap(find.text('工具'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Tools panel should be visible
+      expect(find.text('可用工具'), findsOneWidget);
+    });
+
+    testWidgets('clicking 推理 button opens reasoning panel', (tester) async {
+      await tester.pumpWidget(createChatTestApp());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      // Tap the reasoning button
+      await tester.tap(find.text('推理'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Reasoning panel should be visible
+      expect(find.text('推理设置'), findsOneWidget);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════
   // ChatPage Integration Smoke Tests
   // ═══════════════════════════════════════════════════════════
   group('ChatPage basic rendering', () {
@@ -308,11 +386,16 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       tester.takeException();
 
-      // The composer should render - we can verify by the attach file button
+      // The composer should render - verify by the attach file button
       expect(find.byIcon(Icons.attach_file_outlined), findsOneWidget);
 
       // The send button should exist
       expect(find.byIcon(Icons.send_rounded), findsOneWidget);
+
+      // The settings row should be visible above input
+      expect(find.text('模型'), findsOneWidget);
+      expect(find.text('工具'), findsOneWidget);
+      expect(find.text('推理'), findsOneWidget);
     });
 
     testWidgets('composer does not use its own Positioned widget',
@@ -350,28 +433,58 @@ void main() {
   });
 
   // ═══════════════════════════════════════════════════════════
-  // Req: Gallery picker uses new GalleryChoiceDialog
+  // Req: Gallery picker uses updated attachment panel
   // ═══════════════════════════════════════════════════════════
-  group('Gallery picker shows gallery choice dialog', () {
-    testWidgets('gallery picker opens gallery choice dialog instead of simple sheet',
+  group('Gallery picker shows camera/gallery/file/app-file options (file-only panel)', () {
+    testWidgets('gallery picker opens file-only panel with 4 action buttons',
         (tester) async {
       await tester.pumpWidget(createChatTestApp());
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
       tester.takeException();
 
-      // Tap the attach file button to open attachment panel
+      // Tap the attach file button to open file-only panel
       await tester.tap(find.byIcon(Icons.attach_file_outlined));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      // The attachment panel should be visible with action buttons
-      expect(find.text('相册'), findsOneWidget);
+      // The file-only panel should show all 4 file action buttons
       expect(find.text('拍照'), findsOneWidget);
-      // "文件" text appears twice (section header + action button), check by icon instead
-      expect(find.byIcon(Icons.insert_drive_file_outlined), findsOneWidget);
-      expect(find.byIcon(Icons.camera_alt_outlined), findsOneWidget);
-      expect(find.byIcon(Icons.photo_library_outlined), findsOneWidget);
+      expect(find.text('相册'), findsOneWidget);
+      expect(find.text('文件'), findsOneWidget);
+      expect(find.text('应用内文件'), findsOneWidget);
+
+      // Old settings section "推理设置" should not appear (it's not the button label)
+      expect(find.text('推理设置'), findsNothing);
+
+      // "模型" and "工具" are now visible in the settings row (always above input),
+      // so they are expected to exist even when the file panel is open.
+      expect(find.text('模型'), findsOneWidget);
+      expect(find.text('工具'), findsOneWidget);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // Req: File-only panel on attach file button
+  // ═══════════════════════════════════════════════════════════
+  group('Attachment button opens file-only panel (no settings)', () {
+    testWidgets('attach file button opens file-only panel, not old settings panel',
+        (tester) async {
+      await tester.pumpWidget(createChatTestApp());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      // Tap the attach file button
+      await tester.tap(find.byIcon(Icons.attach_file_outlined));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // The panel title should be about file transfer, not settings
+      expect(find.text('传文件'), findsOneWidget);
+
+      // Old settings section headers should not exist
+      expect(find.text('Chat 设置'), findsNothing);
     });
   });
 }
