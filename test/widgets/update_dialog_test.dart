@@ -399,7 +399,7 @@ void main() {
 
       // Should show download complete message
       expect(find.text('下载完成'), findsOneWidget);
-      // Should show manual install button that opens browser (because auto-install failed)
+      // Should show manual install button that retries local APK installation
       expect(find.text('手动安装'), findsOneWidget);
       // Should also show the error
       expect(find.text('安装失败，请手动打开 APK 安装'), findsOneWidget);
