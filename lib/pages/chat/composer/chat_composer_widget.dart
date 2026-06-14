@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -18,6 +19,7 @@ import 'package:stroom/widgets/file_preview.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/widgets/chat_attachment_panel.dart';
 import 'package:stroom/models/tool_call.dart';
+import 'package:stroom/providers/conversation_provider.dart';
 import 'chat_setting_panels.dart';
 import 'app_album_picker_dialog.dart';
 import 'app_file_picker_dialog.dart';
@@ -32,6 +34,8 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   final List<String> modelNames;
   final int selectedModelIndex;
   final ValueChanged<int> onModelSelected;
+  final String? conversationId;
+  final String initialDraftText;
   final ValueChanged<List<String>>? onModelsReordered;
   final List<ReasoningParam> reasoningParams;
   final bool hasReasoningParams;
@@ -47,6 +51,8 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     this.modelNames = const [],
     this.selectedModelIndex = 0,
     required this.onModelSelected,
+    this.conversationId,
+    this.initialDraftText = '',
     this.onModelsReordered,
     this.reasoningParams = const [],
     this.hasReasoningParams = false,
@@ -56,12 +62,19 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   ConsumerState<ChatComposerWidget> createState() => ChatComposerWidgetState();
 }
 
-class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
+class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
+    with WidgetsBindingObserver {
   final _textController = TextEditingController();
   final _focusNode = FocusNode();
   final List<Attachment> _pendingAttachments = [];
   final Map<String, Uint8List> _pendingImageBytes = {};
   final GlobalKey _composerKey = GlobalKey();
+
+  Timer? _draftTimer;
+
+  /// Tracks the last draft text that was saved, so we can avoid redundant
+  /// saves when the text hasn't actually changed.
+  String _lastSavedDraft = '';
 
   /// Whether the current platform is mobile (Android/iOS) where the soft
   /// keyboard should show a "newline" button. On desktop/web, the keyboard
@@ -82,6 +95,17 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
   @override
   void initState() {
     super.initState();
+
+    // Listen to app lifecycle events so drafts are saved even when the
+    // app goes to background or is terminated unexpectedly.
+    WidgetsBinding.instance.addObserver(this);
+
+    // Restore draft text for the current conversation, if any
+    if (widget.initialDraftText.isNotEmpty) {
+      _textController.text = widget.initialDraftText;
+      _lastSavedDraft = widget.initialDraftText;
+    }
+
     _focusNode.onKeyEvent = (node, event) {
       // Only intercept Enter key for desktop platforms.
       // On mobile, soft keyboard events don't trigger
@@ -104,11 +128,81 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
   }
 
   @override
+  void didUpdateWidget(ChatComposerWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Detect conversation change: save draft for old conversation,
+    // then restore draft for the new one
+    if (oldWidget.conversationId != widget.conversationId) {
+      // Cancel any pending debounced save to avoid it firing with a stale
+      // text value for the wrong conversation after the switch.
+      _draftTimer?.cancel();
+      // Save draft for the old conversation (if any)
+      _saveDraftImmediately(oldWidget);
+
+      // Restore draft for the new conversation
+      if (widget.initialDraftText.isNotEmpty) {
+        _textController.text = widget.initialDraftText;
+        _lastSavedDraft = widget.initialDraftText;
+      } else {
+        _textController.clear();
+        _lastSavedDraft = '';
+      }
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _draftTimer?.cancel();
+    _saveDraftImmediately(widget);
     _focusNode.onKeyEvent = null;
     _textController.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Save draft immediately when the app goes to background, is hidden,
+    // or is about to be terminated. This ensures unsent text is preserved
+    // even if dispose() never runs (e.g. app was killed by OS).
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached ||
+        state == AppLifecycleState.hidden) {
+      _draftTimer?.cancel();
+      _saveDraftImmediately(widget);
+    }
+  }
+
+  /// Saves the current text as draft for the given widget's conversation,
+  /// bypassing the debounce timer.
+  void _saveDraftImmediately(ChatComposerWidget w) {
+    final convId = w.conversationId;
+    if (convId == null) return;
+    // If the text hasn't changed since last save, skip
+    if (w == widget && _lastSavedDraft == _textController.text) return;
+    final textToSave = _textController.text;
+    ref
+        .read(conversationsProvider.notifier)
+        .saveDraft(convId, textToSave);
+    _lastSavedDraft = textToSave;
+  }
+
+  /// Debounced draft save triggered by text changes.
+  void _onTextChanged(String text) {
+    setState(() {});
+    _draftTimer?.cancel();
+    // Skip saving if the text hasn't actually changed since last save
+    if (text == _lastSavedDraft) return;
+    _draftTimer = Timer(const Duration(milliseconds: 800), () {
+      if (!mounted) return;
+      final convId = widget.conversationId;
+      if (convId == null) return;
+      ref
+          .read(conversationsProvider.notifier)
+          .saveDraft(convId, text);
+      _lastSavedDraft = text;
+    });
   }
 
   void _handleSubmitted(String text) {
@@ -117,6 +211,14 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
     _pendingAttachments.clear();
     _pendingImageBytes.clear();
     _textController.clear();
+
+    // Clear the draft for this conversation after sending
+    final convId = widget.conversationId;
+    if (convId != null) {
+      _draftTimer?.cancel();
+      ref.read(conversationsProvider.notifier).saveDraft(convId, '');
+      _lastSavedDraft = '';
+    }
   }
 
   void _showComposerFullscreenEditor() {
@@ -144,6 +246,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
                       // Preserve content back to the main input field
                       // instead of discarding it.
                       _textController.text = editingController.text;
+                      // Trigger draft save since setting text programmatically
+                      // does not fire onChanged.
+                      _onTextChanged(_textController.text);
                       editingController.dispose();
                       Navigator.pop(ctx);
                     },
@@ -560,7 +665,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
                           ? TextInputAction.newline
                           : TextInputAction.send,
                       onSubmitted: null,
-                      onChanged: (_) => setState(() {}),
+                      onChanged: _onTextChanged,
                       minLines: 1,
                       maxLines: 4,
                       decoration: InputDecoration(
