@@ -17,9 +17,9 @@ void main() {
 
     test('isAvailable returns a boolean', () async {
       final available = await engine.isAvailable();
-      // In test environment, no actual FFmpeg binary is available,
-      // but the method should always return a boolean
+      // With media_kit, isAvailable should return true (engine is always available)
       expect(available, isA<bool>());
+      expect(available, isTrue);
     });
 
     test('canHandleVideoFormat returns correct results', () {
@@ -32,19 +32,6 @@ void main() {
       expect(engine.canHandleVideoFormat('flv'), isTrue);
       expect(engine.canHandleVideoFormat('m4v'), isTrue);
       expect(engine.canHandleVideoFormat('3gp'), isTrue);
-    });
-
-    test('extractAudio throws when engine is not available', () async {
-      final available = await engine.isAvailable();
-      if (!available) {
-        await expectLater(
-          engine.extractAudio(
-            videoBytes: Uint8List.fromList([0, 1, 2, 3]),
-            videoFormat: 'mp4',
-          ),
-          throwsA(isA<Exception>()),
-        );
-      }
     });
 
     test('extractAudio throws on empty video bytes', () async {
@@ -72,11 +59,10 @@ void main() {
       expect(engine.canHandleVideoFormat('  '), isFalse);
     });
 
-    test('isAvailable returns false when ffmpeg not found', () async {
-      // In test environment, FFmpeg should not be available
-      // This applies to both mobile (ffmpeg_kit_flutter) and desktop (Process.run) paths
+    test('isAvailable returns true with media_kit', () async {
+      // media_kit is integrated as a dependency, engine should be available
       final available = await engine.isAvailable();
-      expect(available, isFalse);
+      expect(available, isTrue);
     });
   });
 }
