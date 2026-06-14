@@ -64,9 +64,9 @@ class AudioSeparationEngine {
         // --oac=libmp3lame: 音频编码器为 MP3
         // --ovc=no: 不编码视频
         if (player.platform != null) {
-          await (player.platform as dynamic).setProperty('o', outputPath, waitForInitialization: false);
-          await (player.platform as dynamic).setProperty('oac', 'libmp3lame', waitForInitialization: false);
-          await (player.platform as dynamic).setProperty('ovc', 'no', waitForInitialization: false);
+          await (player.platform as dynamic).setProperty('o', outputPath);
+          await (player.platform as dynamic).setProperty('oac', 'libmp3lame');
+          await (player.platform as dynamic).setProperty('ovc', 'no');
         }
 
         // 注册取消回调
