@@ -144,45 +144,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               ),
               onTap: () => notifier.setSaveToGallery(!settings.saveToGallery),
             ),
-            const Divider(height: 1),
-            _buildListTile(
-              leading: const Icon(Icons.high_quality, color: Colors.purple),
-              title: '高质量照片',
-              subtitle: '使用更高的分辨率拍摄照片',
-              trailing: Switch(
-                value: settings.highQuality,
-                onChanged: (v) => notifier.setHighQuality(v),
-              ),
-              onTap: () => notifier.setHighQuality(!settings.highQuality),
-            ),
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('压缩质量', style: TextStyle(fontSize: 16)),
-                      Text(
-                        '${(settings.compressionQuality * 100).toInt()}%',
-                        style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                  Slider(
-                    value: settings.compressionQuality,
-                    min: 0.1,
-                    max: 1.0,
-                    divisions: 9,
-                    label: '${(settings.compressionQuality * 100).toInt()}%',
-                    onChanged: (v) => notifier.setCompressionQuality(v),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),

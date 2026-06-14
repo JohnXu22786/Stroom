@@ -413,6 +413,9 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     if (filePath == null || filePath.isEmpty) return;
     if (kIsWeb) return;
 
+    // Clear previous error before attempting installation
+    state = state.copyWith(downloadError: null);
+
     if (defaultTargetPlatform == TargetPlatform.android) {
       try {
         await _installOnAndroid(filePath);
