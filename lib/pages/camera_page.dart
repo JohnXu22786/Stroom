@@ -6,7 +6,6 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/camera_settings_provider.dart';
 import '../utils/image_manifest.dart';
 import 'image_editor_page.dart';
 
@@ -83,13 +82,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
               orElse: () => _cameras!.first,
             );
 
-      final settings = ref.read(cameraSettingsProvider);
-      final preset = settings.highQuality
-          ? ResolutionPreset.veryHigh
-          : ResolutionPreset.medium;
-
       _controller =
-          CameraController(camera, preset, enableAudio: false);
+          CameraController(camera, ResolutionPreset.veryHigh, enableAudio: false);
       await _controller!.initialize();
       if (mounted) setState(() => _isInitialized = true);
     } catch (e) {
@@ -296,8 +290,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
       } else {
         // Step 2: Crop + target quality (in one compressWithList call)
         final aspectRatio = _aspectRatios[_aspectIndex];
-        final settings = ref.read(cameraSettingsProvider);
-        final quality = (settings.compressionQuality * 100).round();
+        const quality = 100;
 
         if (aspectRatio != _aspectRatios[0]) {
           final codec = await ui.instantiateImageCodec(bytes);
