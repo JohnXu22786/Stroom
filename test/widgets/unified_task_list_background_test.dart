@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:stroom/catcatch/models/catcatch_task.dart' as catcatch;
 import 'package:stroom/catcatch/providers/catcatch_provider.dart';
 import 'package:stroom/pages/unified_task_list_page.dart';
 import 'package:stroom/providers/task_provider.dart';
@@ -56,18 +55,6 @@ BackgroundTask _createRunningOcrTask({required String id, String title = 'OCR任
     title: title,
     status: TaskStatus.running,
     createdAt: DateTime(2025, 6, 1),
-  );
-}
-
-BackgroundTask _createCompletedOcrTask({required String id, String title = 'OCR已完成'}) {
-  return BackgroundTask(
-    id: id,
-    type: BackgroundTaskType.ocr,
-    title: title,
-    status: TaskStatus.completed,
-    createdAt: DateTime(2025, 6, 1),
-    completedAt: DateTime(2025, 6, 1, 0, 5),
-    statusChangedAt: DateTime(2025, 6, 1, 0, 5),
   );
 }
 

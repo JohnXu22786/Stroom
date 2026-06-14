@@ -398,13 +398,43 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                 Expanded(
                   child: sorted.isEmpty
                       ? _buildEmptyState(cs)
-                      : ListView.builder(
+                      : ReorderableListView.builder(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 8),
                           itemCount: sorted.length,
+                          buildDefaultDragHandles: false,
+                          onReorder: (oldIndex, newIndex) {
+                            final convs = ref.read(conversationsProvider);
+                            final item = sorted[oldIndex];
+                            final realOld =
+                                convs.indexWhere((c) => c.id == item.id);
+                            // Flutter's onReorder provides newIndex as the
+                            // position in the list before removal. When
+                            // dragging downward, decrement by 1 because
+                            // the item was removed from above, shifting
+                            // remaining items down.
+                            if (oldIndex < newIndex) {
+                              newIndex--;
+                            }
+                            final target = sorted[newIndex];
+                            final realNew =
+                                convs.indexWhere((c) => c.id == target.id);
+                            if (realOld >= 0 && realNew >= 0) {
+                              ref
+                                  .read(conversationsProvider.notifier)
+                                  .reorderConversation(realOld, realNew);
+                            }
+                          },
+                          proxyDecorator: (child, index, animation) => Material(
+                            elevation: 2,
+                            color: cs.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(12),
+                            child: child,
+                          ),
                           itemBuilder: (context, index) {
                             final topic = sorted[index];
-                            return _TopicItem(
+                            final itemWidget = _TopicItem(
+                              key: ValueKey('topic_${topic.id}'),
                               topic: topic,
                               selectionMode: _selectionMode,
                               isSelected: _selectedIds.contains(topic.id),
@@ -414,12 +444,6 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                                   _toggleSelection(topic.id);
                                 } else {
                                   _onTopicSelected(topic);
-                                }
-                              },
-                              onLongPress: () {
-                                if (!_selectionMode) {
-                                  _toggleSelectionMode();
-                                  _selectedIds.add(topic.id);
                                 }
                               },
                               onDelete: () => _deleteTopic(topic),
@@ -434,6 +458,15 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                               },
                               onSelectionToggle: () => _toggleSelection(topic.id),
                             );
+                            // When NOT in selection mode, wrap in long-press drag listener
+                            if (!_selectionMode) {
+                              return ReorderableDelayedDragStartListener(
+                                index: index,
+                                key: ValueKey('drag_${topic.id}'),
+                                child: itemWidget,
+                              );
+                            }
+                            return itemWidget;
                           },
                         ),
                 ),
@@ -803,7 +836,6 @@ class _TopicItem extends StatelessWidget {
   final bool isSelected;
   final bool isActive;
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
   final VoidCallback onDelete;
   final VoidCallback onPinToggle;
   final VoidCallback onRename;
@@ -811,12 +843,12 @@ class _TopicItem extends StatelessWidget {
   final VoidCallback onSelectionToggle;
 
   const _TopicItem({
+    super.key,
     required this.topic,
     required this.selectionMode,
     required this.isSelected,
     required this.isActive,
     required this.onTap,
-    required this.onLongPress,
     required this.onDelete,
     required this.onPinToggle,
     required this.onRename,
@@ -849,7 +881,6 @@ class _TopicItem extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
-        onLongPress: onLongPress,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(

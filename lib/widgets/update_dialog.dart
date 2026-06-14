@@ -13,9 +13,9 @@ import '../providers/update_provider.dart';
 /// # Behavior
 /// - 发现新版本: Shows version info + "跳过此版本"/"稍后提醒"/"立即更新" buttons.
 /// - 立即更新: Downloads the update and auto-installs immediately.
-///   During download, a prominent progress bar is shown.
+///   During download, a prominent progress bar is shown in the button area.
 ///   After download, installation starts automatically and the dialog closes.
-/// - If auto-install fails, a fallback "打开/安装" button is shown.
+/// - If auto-install fails, a fallback "手动安装" button is shown.
 class UpdateDialog extends ConsumerStatefulWidget {
   const UpdateDialog({super.key});
 
@@ -45,7 +45,6 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(updateProvider);
-    final theme = Theme.of(context);
 
     // Auto-close dialog after successful auto-install (intent fired).
     // Conditions: download complete, install finished (isInstalling false),
@@ -89,55 +88,6 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                   style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
               Text(state.releaseNotes!),
-            ],
-            // Download progress section — prominent card-style UI
-            if (state.isDownloading) ...[
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.blue.shade200),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.download, size: 18, color: Colors.blue),
-                        SizedBox(width: 6),
-                        Text('正在下载更新...',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: state.downloadProgress,
-                        minHeight: 10,
-                        backgroundColor: Colors.blue.shade100,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        '${(state.downloadProgress * 100).toInt()}%',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
-                          color: Colors.blue.shade700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ],
             // Installing state — shown briefly while the app auto-installs
             if (state.isInstalling) ...[
@@ -191,7 +141,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                 ],
               ),
             ],
-            // Download complete section (fallback when auto-install didn't happen)
+            // Download complete section (shown briefly before auto-close triggers)
             if (state.downloadComplete && !state.isInstalling) ...[
               const SizedBox(height: 12),
               Row(
@@ -216,13 +166,15 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
   List<Widget> _buildActions(UpdateState state) {
     final notifier = ref.read(updateProvider.notifier);
 
-    // During download, show only a cancel/disabled state
+    // During download, show progress bar in the button area
     if (state.isDownloading) {
       return [
-        const SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(strokeWidth: 2),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: SizedBox(
+            width: double.infinity,
+            child: _buildDownloadProgress(state),
+          ),
         ),
       ];
     }
@@ -232,13 +184,15 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
       return [];
     }
 
-    // After download complete: if there was no auto-install error,
-    // the dialog will auto-close. If there IS a download error,
-    // show the fallback install button.
+    // After download complete: if auto-install failed (downloadError set),
+    // show the fallback manual install button.
     if (state.downloadComplete) {
-      // If auto-install failed (downloadError set), show fallback
       if (state.downloadError != null) {
         return [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('关闭'),
+          ),
           FilledButton(
             onPressed: () {
               // 跳转至 GitHub Releases 页面，让用户手动下载安装
@@ -251,8 +205,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
           ),
         ];
       }
-      // If no error and auto-install finished, dialog will auto-close.
-      // But show a brief "已完成" status until auto-close triggers.
+      // No error — auto-close will handle it. Show a backup close button.
       return [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
@@ -320,6 +273,56 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
         child: const Text('立即更新'),
       ),
     ];
+  }
+
+  /// Builds the download progress card shown in the actions area.
+  Widget _buildDownloadProgress(UpdateState state) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.download, size: 18, color: Colors.blue),
+              SizedBox(width: 6),
+              Text('正在下载更新...',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: state.downloadProgress,
+              minHeight: 10,
+              backgroundColor: Colors.blue.shade100,
+              valueColor:
+                  AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              '${(state.downloadProgress * 100).toInt()}%',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+                color: Colors.blue.shade700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _openInBrowser(String url) async {
