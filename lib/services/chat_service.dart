@@ -346,19 +346,35 @@ class ChatService {
         }
         for (final att in msg.attachments) {
           if (att.fileType == 'image') {
-            final bytes = await AttachmentStorage.readFile(att.storagePath);
-            if (bytes != null && bytes.isNotEmpty) {
-              if (bytes.length > 10 * 1024 * 1024) {
+            // Use cached base64 if available, otherwise read from disk
+            String b64;
+            if (att.base64Data != null && att.base64Data!.isNotEmpty) {
+              // Size check: skip oversized images even when cached
+              if (att.fileSize > 10 * 1024 * 1024) {
                 parts.add({'type': 'text', 'text': '[图片过大已跳过: ${att.fileName}]'});
                 continue;
               }
-              final b64 = base64Encode(bytes);
-              final ext = _imageExtension(att.mimeType);
-              parts.add({
-                'type': 'image_url',
-                'image_url': {'url': 'data:image/$ext;base64,$b64'},
-              });
+              b64 = att.base64Data!;
+            } else {
+              final bytes = await AttachmentStorage.readFile(att.storagePath);
+              if (bytes != null && bytes.isNotEmpty) {
+                if (bytes.length > 10 * 1024 * 1024) {
+                  parts.add({'type': 'text', 'text': '[图片过大已跳过: ${att.fileName}]'});
+                  continue;
+                }
+                b64 = base64Encode(bytes);
+                // Also cache it back for future use
+                att.base64Data = b64;
+              } else {
+                parts.add({'type': 'text', 'text': '[图片加载失败: ${att.fileName}]'});
+                continue;
+              }
             }
+            final ext = _imageExtension(att.mimeType);
+            parts.add({
+              'type': 'image_url',
+              'image_url': {'url': 'data:image/$ext;base64,$b64'},
+            });
           } else {
             // Try to read text content for text-based files
             final textExts = ['txt', 'md', 'json', 'csv', 'log', 'yaml', 'xml', 'ini', 'cfg', 'py', 'js', 'ts', 'dart', 'java', 'cpp', 'h', 'rs', 'go', 'rb', 'php'];
