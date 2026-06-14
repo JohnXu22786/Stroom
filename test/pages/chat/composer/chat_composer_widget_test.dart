@@ -287,8 +287,14 @@ void main() {
   // ChatComposer Settings Row Tests
   // ═══════════════════════════════════════════════════════════
   group('Settings row above composer input', () {
+    // Use a wider surface to accommodate the full chat page layout
+    Future<void> setupSurface(WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+    }
+
     testWidgets('settings row shows model, tools, reasoning buttons above input',
         (tester) async {
+      await setupSurface(tester);
       await tester.pumpWidget(createChatTestApp());
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
@@ -301,6 +307,7 @@ void main() {
     });
 
     testWidgets('each settings button has an icon', (tester) async {
+      await setupSurface(tester);
       await tester.pumpWidget(createChatTestApp());
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
@@ -313,38 +320,39 @@ void main() {
     });
 
     testWidgets('clicking model button opens model panel', (tester) async {
+      await setupSurface(tester);
       await tester.pumpWidget(createChatTestApp());
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
       tester.takeException();
 
       // Tap the model button
+      await tester.ensureVisible(find.text('模型'));
       await tester.tap(find.text('模型'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
 
       // Model panel should be visible
       expect(find.text('选择模型'), findsOneWidget);
     });
 
     testWidgets('clicking 工具 button opens tools panel', (tester) async {
+      await setupSurface(tester);
       await tester.pumpWidget(createChatTestApp());
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
       tester.takeException();
 
       // Tap the tools button
+      await tester.ensureVisible(find.text('工具'));
       await tester.tap(find.text('工具'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
 
       // Tools panel should be visible
       expect(find.text('可用工具'), findsOneWidget);
     });
 
     testWidgets('clicking 推理 button opens reasoning panel', (tester) async {
+      await setupSurface(tester);
       await tester.pumpWidget(createChatTestApp());
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
@@ -370,6 +378,7 @@ void main() {
   // ═══════════════════════════════════════════════════════════
   group('ChatPage basic rendering', () {
     testWidgets('renders with default title', (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createChatTestApp());
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
@@ -411,6 +420,71 @@ void main() {
 
       // The composer itself no longer wraps in Positioned
       // (flutter_chat_ui may use Positioned internally for its layout)
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // Req: File button works during streaming
+  // ═══════════════════════════════════════════════════════════
+  group('File button works during streaming', () {
+    testWidgets('file button is tappable during streaming state',
+        (tester) async {
+      // Set streaming to true
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          isStreamingProvider.overrideWith((ref) => true),
+          conversationsProvider
+              .overrideWith((ref) => ConversationsNotifier(ref)),
+          activeConversationIdProvider
+              .overrideWith((ref) => 'test-conv-id'),
+          providerEntriesProvider
+              .overrideWith((ref) => ProviderEntriesNotifier()),
+        ],
+        child: const MaterialApp(home: ChatPage()),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      // The file button should be visible and enabled during streaming
+      final fileButton = find.byIcon(Icons.attach_file_outlined);
+      expect(fileButton, findsOneWidget);
+
+      // Tap the file button - should open the attachment panel
+      await tester.tap(fileButton);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // The attachment panel should be open (showing file options)
+      // even though streaming is in progress
+      expect(find.text('传文件'), findsOneWidget);
+    });
+
+    testWidgets('stop button shows during streaming, not send button',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          isStreamingProvider.overrideWith((ref) => true),
+          conversationsProvider
+              .overrideWith((ref) => ConversationsNotifier(ref)),
+          activeConversationIdProvider
+              .overrideWith((ref) => 'test-conv-id'),
+          providerEntriesProvider
+              .overrideWith((ref) => ProviderEntriesNotifier()),
+        ],
+        child: const MaterialApp(home: ChatPage()),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      // During streaming, stop button should be visible
+      expect(find.byIcon(Icons.stop_circle_outlined), findsOneWidget);
+
+      // Send button should NOT be visible during streaming
+      expect(find.byIcon(Icons.send_rounded), findsNothing);
     });
   });
 

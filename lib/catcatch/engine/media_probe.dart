@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart' show debugPrint;
-import 'package:video_player/video_player.dart';
+import 'package:media_kit/media_kit.dart';
 
 class MediaProbeResult {
   final Duration? duration;
@@ -11,19 +11,23 @@ class MediaProbeResult {
 
 class MediaProbe {
   static Future<MediaProbeResult> probe(String url) async {
+    final player = Player();
     try {
-      final controller = VideoPlayerController.networkUrl(Uri.parse(url));
-      await controller.initialize();
+      await player.open(Media(url), play: false);
+      // 等待媒体信息加载
+      await Future.delayed(const Duration(seconds: 2));
+
       final result = MediaProbeResult(
-        duration: controller.value.duration,
-        width: controller.value.size.width.toInt(),
-        height: controller.value.size.height.toInt(),
+        duration: player.state.duration,
+        width: player.state.width,
+        height: player.state.height,
       );
-      await controller.dispose();
       return result;
     } catch (e) {
       debugPrint('MediaProbe: failed to probe $url: $e');
       return const MediaProbeResult();
+    } finally {
+      await player.dispose();
     }
   }
 }

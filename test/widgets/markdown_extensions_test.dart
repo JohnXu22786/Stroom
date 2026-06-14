@@ -231,5 +231,47 @@ void main() {
       final config = buildMarkdownConfig(isDark: true);
       expect(config, isA<MarkdownConfig>());
     });
+
+    test('buildMarkdownConfig overrides h1 config with no divider', () {
+      final config = buildMarkdownConfig(isDark: false);
+      final h1 = config.h1;
+      expect(h1, isA<HeadingConfig>());
+      expect(h1.divider, isNull,
+          reason: 'h1 should have no divider line');
+    });
+
+    test('buildMarkdownConfig overrides h2 config with no divider', () {
+      final config = buildMarkdownConfig(isDark: false);
+      final h2 = config.h2;
+      expect(h2, isA<HeadingConfig>());
+      expect(h2.divider, isNull,
+          reason: 'h2 should have no divider line');
+    });
+
+    test('buildMarkdownConfig overrides h3 config with no divider', () {
+      final config = buildMarkdownConfig(isDark: false);
+      final h3 = config.h3;
+      expect(h3, isA<HeadingConfig>());
+      expect(h3.divider, isNull,
+          reason: 'h3 should have no divider line');
+    });
+
+    test('buildMarkdownConfig keeps h4,h5,h6 without divider (same as before)',
+        () {
+      final config = buildMarkdownConfig(isDark: false);
+      expect(config.h4.divider, isNull);
+      expect(config.h5.divider, isNull);
+      expect(config.h6.divider, isNull);
+    });
+
+    test('buildMarkdownConfig dark mode also removes h1/h2/h3 dividers', () {
+      final config = buildMarkdownConfig(isDark: true);
+      expect(config.h1.divider, isNull);
+      expect(config.h2.divider, isNull);
+      expect(config.h3.divider, isNull);
+      expect(config.h4.divider, isNull);
+      expect(config.h5.divider, isNull);
+      expect(config.h6.divider, isNull);
+    });
   });
 }
