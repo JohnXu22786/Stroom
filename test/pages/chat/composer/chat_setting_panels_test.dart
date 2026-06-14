@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/pages/chat/composer/chat_setting_panels.dart';
 import 'package:stroom/models/tool_call.dart';
+import 'package:stroom/providers/provider_config.dart';
 
 /// Helper to open the model panel in a test environment.
 Future<void> openPanel(WidgetTester tester) async {
@@ -234,8 +235,8 @@ void main() {
     });
   });
 
-  group('ReasoningPanel tests', () {
-    testWidgets('reasoning panel shows toggle and effort chips',
+  group('ReasoningPanel tests (old API - with effort)', () {
+    testWidgets('reasoning panel shows toggle and params',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -247,9 +248,15 @@ void main() {
                     showReasoningPanel(
                       context: context,
                       reasoningEnabled: true,
-                      reasoningEffort: 'medium',
+                      reasoningParamSelections: {'reasoning_effort': 'medium'},
+                      reasoningParams: [
+                        ReasoningParam(
+                          paramName: 'reasoning_effort',
+                          options: ['low', 'medium', 'high'],
+                        ),
+                      ],
                       onReasoningToggle: (_) {},
-                      onReasoningEffortChange: (_) {},
+                      onReasoningParamChanged: (_, __) {},
                     );
                   },
                   child: const Text('Open'),
@@ -267,7 +274,8 @@ void main() {
       expect(find.byType(Switch), findsOneWidget);
     });
 
-    testWidgets('effort chips appear when reasoning is enabled', (tester) async {
+    testWidgets('option chips appear when reasoning is enabled',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -278,9 +286,15 @@ void main() {
                     showReasoningPanel(
                       context: context,
                       reasoningEnabled: true,
-                      reasoningEffort: 'medium',
+                      reasoningParamSelections: {'reasoning_effort': 'medium'},
+                      reasoningParams: [
+                        ReasoningParam(
+                          paramName: 'reasoning_effort',
+                          options: ['low', 'medium', 'high'],
+                        ),
+                      ],
                       onReasoningToggle: (_) {},
-                      onReasoningEffortChange: (_) {},
+                      onReasoningParamChanged: (_, __) {},
                     );
                   },
                   child: const Text('Open'),
@@ -293,12 +307,12 @@ void main() {
 
       await openPanel(tester);
 
-      expect(find.text('低'), findsOneWidget);
-      expect(find.text('中'), findsOneWidget);
-      expect(find.text('高'), findsOneWidget);
+      expect(find.text('low'), findsOneWidget);
+      expect(find.text('medium'), findsOneWidget);
+      expect(find.text('high'), findsOneWidget);
     });
 
-    testWidgets('effort chips hidden when reasoning is disabled',
+    testWidgets('option chips hidden when reasoning is disabled',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -310,9 +324,15 @@ void main() {
                     showReasoningPanel(
                       context: context,
                       reasoningEnabled: false,
-                      reasoningEffort: 'medium',
+                      reasoningParamSelections: {},
+                      reasoningParams: [
+                        ReasoningParam(
+                          paramName: 'reasoning_effort',
+                          options: ['low', 'medium', 'high'],
+                        ),
+                      ],
                       onReasoningToggle: (_) {},
-                      onReasoningEffortChange: (_) {},
+                      onReasoningParamChanged: (_, __) {},
                     );
                   },
                   child: const Text('Open'),
@@ -325,9 +345,9 @@ void main() {
 
       await openPanel(tester);
 
-      expect(find.text('低'), findsNothing);
-      expect(find.text('中'), findsNothing);
-      expect(find.text('高'), findsNothing);
+      expect(find.text('low'), findsNothing);
+      expect(find.text('medium'), findsNothing);
+      expect(find.text('high'), findsNothing);
     });
 
     testWidgets('reasoning toggle callback fires', (tester) async {
@@ -342,9 +362,15 @@ void main() {
                     showReasoningPanel(
                       context: context,
                       reasoningEnabled: true,
-                      reasoningEffort: 'medium',
+                      reasoningParamSelections: {},
+                      reasoningParams: [
+                        ReasoningParam(
+                          paramName: 'reasoning_effort',
+                          options: ['low', 'medium', 'high'],
+                        ),
+                      ],
                       onReasoningToggle: (v) => toggleValue = v,
-                      onReasoningEffortChange: (_) {},
+                      onReasoningParamChanged: (_, __) {},
                     );
                   },
                   child: const Text('Open'),

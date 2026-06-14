@@ -465,6 +465,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         history: _history,
         reasoning: ref.read(reasoningEnabledProvider),
         reasoningEffort: ref.read(reasoningEffortProvider),
+        reasoningParamValues: ref.read(reasoningParamValuesProvider),
         tools: filteredTools,
       );
 
@@ -1176,21 +1177,35 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   if (adapterConfigured)
                     Consumer(
                       builder: (context, ref, child) {
-                        final reasoningEnabled = ref.watch(reasoningEnabledProvider);
+                        final reasoningEnabled =
+                            ref.watch(reasoningEnabledProvider);
+                        final hasParams = _adapter.hasReasoningParams;
                         return IconButton(
                           icon: Icon(
                             Icons.psychology,
                             color: reasoningEnabled
                                 ? Theme.of(context).colorScheme.primary
-                                : null,
+                                : (hasParams
+                                    ? null
+                                    : Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant
+                                        .withOpacity(0.38)),
                           ),
-                          tooltip: reasoningEnabled ? '推理已开启' : '推理',
-                          onPressed: () {
-                            final newValue = !reasoningEnabled;
-                            ref.read(reasoningEnabledProvider.notifier).state = newValue;
-                            SharedPreferences.getInstance().then((prefs) =>
-                                prefs.setBool('reasoning_enabled', newValue));
-                          },
+                          tooltip: hasParams
+                              ? (reasoningEnabled ? '推理已开启' : '推理')
+                              : '该模型无推理参数',
+                          onPressed: hasParams
+                              ? () {
+                                  final newValue = !reasoningEnabled;
+                                  ref
+                                      .read(reasoningEnabledProvider.notifier)
+                                      .state = newValue;
+                                  SharedPreferences.getInstance().then(
+                                      (prefs) => prefs.setBool(
+                                          'reasoning_enabled', newValue));
+                                }
+                              : null,
                         );
                       },
                     ),
@@ -1669,6 +1684,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   modelNames: _getModelNames(),
                   selectedModelIndex: _selectedModelIndex,
                   onModelSelected: _onModelSelected,
+                  reasoningParams: _adapter.reasoningParams,
+                  hasReasoningParams: _adapter.hasReasoningParams,
                 ),
               ],
             ),
