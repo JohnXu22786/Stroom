@@ -34,6 +34,7 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   final ValueChanged<int> onModelSelected;
   final String? conversationId;
   final String initialDraftText;
+  final ValueChanged<List<String>>? onModelsReordered;
   final List<ReasoningParam> reasoningParams;
   final bool hasReasoningParams;
 
@@ -50,6 +51,7 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     required this.onModelSelected,
     this.conversationId,
     this.initialDraftText = '',
+    this.onModelsReordered,
     this.reasoningParams = const [],
     this.hasReasoningParams = false,
   });
@@ -298,6 +300,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
       models: widget.modelNames,
       selectedModelIndex: widget.selectedModelIndex,
       onModelSelected: widget.onModelSelected,
+      onModelsReordered: widget.onModelsReordered,
     );
   }
 
@@ -618,7 +621,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                     icon:
                         Icon(Icons.attach_file_outlined, color: cs.onSurfaceVariant),
                     tooltip: '附件',
-                    onPressed: isStreaming ? null : _showAttachmentPicker,
+                    onPressed: _showAttachmentPicker,
                   ),
                   const SizedBox(width: 4),
                   Expanded(
