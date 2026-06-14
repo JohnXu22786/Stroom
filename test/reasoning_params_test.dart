@@ -127,7 +127,8 @@ void main() {
       expect(body['thinking']['budget_tokens'], '10000');
     });
 
-    test('no reasoning params sent when reasoning is disabled', () async {
+    test('boolean reasoning params sent with disabled value when toggle is OFF',
+        () async {
       final provider = _MockProvider();
       final modelConfig = ModelConfig(
         name: 'Test',
@@ -142,12 +143,15 @@ void main() {
 
       final service = ChatService(provider: provider, modelConfig: modelConfig);
 
+      // Even when reasoning is disabled, boolean params (thinking.type with
+      // enabled/disabled) should be sent with their "off" value.
       await for (final _ in service.sendStream('Hi',
           history: [], reasoning: false)) {}
 
       final body = provider.lastRequestBody;
       expect(body, isNotNull);
-      expect(body!.containsKey('thinking'), false);
+      // thinking.type is boolean-toggle style → sent as 'disabled' when OFF
+      expect(body!['thinking']['type'], 'disabled');
     });
 
     test('empty reasoning params sends nothing extra', () async {
