@@ -29,6 +29,7 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   final List<String> modelNames;
   final int selectedModelIndex;
   final ValueChanged<int> onModelSelected;
+  final ValueChanged<List<String>>? onModelsReordered;
 
   const ChatComposerWidget({
     super.key,
@@ -41,6 +42,7 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     this.modelNames = const [],
     this.selectedModelIndex = 0,
     required this.onModelSelected,
+    this.onModelsReordered,
   });
 
   @override
@@ -188,6 +190,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
       models: widget.modelNames,
       selectedModelIndex: widget.selectedModelIndex,
       onModelSelected: widget.onModelSelected,
+      onModelsReordered: widget.onModelsReordered,
     );
   }
 
@@ -501,7 +504,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
                     icon:
                         Icon(Icons.attach_file_outlined, color: cs.onSurfaceVariant),
                     tooltip: '附件',
-                    onPressed: isStreaming ? null : _showAttachmentPicker,
+                    onPressed: _showAttachmentPicker,
                   ),
                   const SizedBox(width: 4),
                   Expanded(
