@@ -319,6 +319,7 @@ void main() {
       tester.takeException();
 
       // Tap the model button
+      await tester.ensureVisible(find.text('模型'));
       await tester.tap(find.text('模型'));
       await tester.pumpAndSettle();
 
@@ -333,6 +334,7 @@ void main() {
       tester.takeException();
 
       // Tap the tools button
+      await tester.ensureVisible(find.text('工具'));
       await tester.tap(find.text('工具'));
       await tester.pumpAndSettle();
 
