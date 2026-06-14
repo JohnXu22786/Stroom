@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:video_player/video_player.dart';
-import 'package:chewie/chewie.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -129,11 +129,12 @@ class _MediaPreviewSheet extends ConsumerStatefulWidget {
 }
 
 class _MediaPreviewSheetState extends ConsumerState<_MediaPreviewSheet> {
-  VideoPlayerController? _videoController;
-  ChewieController? _chewieController;
+  Player? _player;
+  VideoController? _controller;
   bool _loading = true;
   String? _error;
   File? _tempFile;
+  bool _isAudioFormat = false;
 
   @override
   void initState() {
@@ -157,6 +158,8 @@ class _MediaPreviewSheetState extends ConsumerState<_MediaPreviewSheet> {
         return;
       }
 
+      _isAudioFormat = isAudioFormat;
+
       final tempDir = await getTemporaryDirectory();
       final safeName =
           widget.resource.name.replaceAll(RegExp(r'[^\w\-.]'), '_');
@@ -167,25 +170,14 @@ class _MediaPreviewSheetState extends ConsumerState<_MediaPreviewSheet> {
       if (!mounted) return;
 
       if (isVideoFormat) {
-        _videoController = VideoPlayerController.file(_tempFile!);
-        await _videoController!.initialize();
+        _player = Player();
+        _controller = VideoController(_player!);
+        await _player!.open(Media(Uri.file(_tempFile!.path).toString()));
         if (!mounted) return;
-        final theme = Theme.of(context).colorScheme;
-        _chewieController = ChewieController(
-          videoPlayerController: _videoController!,
-          autoPlay: true,
-          looping: false,
-          placeholder: Container(color: Colors.black),
-          materialProgressColors: ChewieProgressColors(
-            playedColor: theme.primary,
-            handleColor: theme.primary,
-            backgroundColor: Colors.grey.shade300,
-            bufferedColor: Colors.grey.shade100,
-          ),
-        );
+        setState(() => _loading = false);
+      } else {
+        setState(() => _loading = false);
       }
-
-      setState(() => _loading = false);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -224,8 +216,7 @@ class _MediaPreviewSheetState extends ConsumerState<_MediaPreviewSheet> {
 
   @override
   void dispose() {
-    _chewieController?.dispose();
-    _videoController?.dispose();
+    _player?.dispose();
     try {
       if (_tempFile != null && _tempFile!.existsSync()) {
         _tempFile!.deleteSync();
@@ -300,9 +291,7 @@ class _MediaPreviewSheetState extends ConsumerState<_MediaPreviewSheet> {
       );
     }
 
-    final ext = widget.resource.ext.toLowerCase();
-    final isAudioFormat =
-        ['mp3', 'wav', 'm4a', 'aac', 'wma', 'opus'].contains(ext);
+    final isAudioFormat = _isAudioFormat;
 
     if (isAudioFormat) {
       return Padding(
@@ -340,12 +329,12 @@ class _MediaPreviewSheetState extends ConsumerState<_MediaPreviewSheet> {
       );
     }
 
-    if (_chewieController != null && _videoController != null) {
+    if (_controller != null && _player != null) {
       return Padding(
         padding: const EdgeInsets.all(8),
-        child: AspectRatio(
-          aspectRatio: _videoController!.value.aspectRatio,
-          child: Chewie(controller: _chewieController!),
+        child: Video(
+          controller: _controller!,
+          controls: MaterialVideoControls,
         ),
       );
     }
