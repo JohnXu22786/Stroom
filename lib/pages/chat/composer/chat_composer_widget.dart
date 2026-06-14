@@ -16,6 +16,8 @@ import 'package:stroom/widgets/file_preview.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/widgets/chat_attachment_panel.dart';
 import 'package:stroom/models/tool_call.dart';
+import 'chat_setting_panels.dart';
+import 'app_album_picker_dialog.dart';
 
 class ChatComposerWidget extends ConsumerStatefulWidget {
   final void Function(String text, List<Attachment> attachments) onSend;
@@ -174,20 +176,43 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
     );
   }
 
-  void _showAttachmentPicker() {
-    final reasoningEnabled = ref.read(reasoningEnabledProvider);
-    final reasoningEffort = ref.read(reasoningEffortProvider);
-    final enabledTools = widget.enabledTools;
+  // ═══════════════════════════════════════════════════════════════
+  // Settings panels
+  // ═══════════════════════════════════════════════════════════════
 
-    showChatAttachmentPanel(
+  void _showModelPanel() {
+    showModelPanel(
       context: context,
       models: widget.modelNames,
       selectedModelIndex: widget.selectedModelIndex,
       onModelSelected: widget.onModelSelected,
+    );
+  }
+
+  void _showToolsPanel() {
+    showToolsPanel(
+      context: context,
       tools: widget.mcpTools,
+      enabledTools: widget.enabledTools,
+      onToolToggle: (toolName, enabled) {
+        final current = Set<String>.from(widget.enabledTools);
+        if (enabled) {
+          current.add(toolName);
+        } else {
+          current.remove(toolName);
+        }
+        widget.onEnabledToolsChanged(current);
+      },
+    );
+  }
+
+  void _showReasoningPanel() {
+    final reasoningEnabled = ref.read(reasoningEnabledProvider);
+    final reasoningEffort = ref.read(reasoningEffortProvider);
+    showReasoningPanel(
+      context: context,
       reasoningEnabled: reasoningEnabled,
       reasoningEffort: reasoningEffort,
-      enabledTools: enabledTools,
       onReasoningToggle: (value) {
         ref.read(reasoningEnabledProvider.notifier).state = value;
         SharedPreferences.getInstance()
@@ -198,18 +223,20 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
         SharedPreferences.getInstance()
             .then((prefs) => prefs.setString('reasoning_effort', value));
       },
-      onToolToggle: (toolName, enabled) {
-        final current = Set<String>.from(widget.enabledTools);
-        if (enabled) {
-          current.add(toolName);
-        } else {
-          current.remove(toolName);
-        }
-        widget.onEnabledToolsChanged(current);
-      },
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // Attachment / File pickers
+  // ═══════════════════════════════════════════════════════════════
+
+  void _showAttachmentPicker() {
+    showChatAttachmentPanel(
+      context: context,
       onPickFromCamera: _pickFromCamera,
       onPickFromGallery: _showGalleryPicker,
       onPickFromFilePicker: _pickFromFilePicker,
+      onPickFromAppFiles: _pickFromAppFiles,
     );
   }
 
@@ -219,9 +246,34 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
       if (result.choice == GalleryChoice.system) {
         _pickFromGallery();
       } else {
-        _pickFromAppGallery();
+        _pickFromAppAlbum();
       }
     });
+  }
+
+  /// Pick from app's internal album (ImageManifest).
+  Future<void> _pickFromAppAlbum() async {
+    try {
+      final result = await showAppAlbumPickerDialog(context);
+      if (result == null || result.isEmpty) return;
+      for (final entry in result) {
+        await _addPendingAttachment(entry.key, entry.value);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('导入失败: $e'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Pick from app internal files (images, documents, etc.).
+  Future<void> _pickFromAppFiles() async {
+    await _pickFromAppAlbum();
   }
 
   Future<void> _pickFromCamera() async {
@@ -270,30 +322,6 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
         final bytes = await file.readAsBytes();
         await _addPendingAttachment(file.name, bytes);
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('导入失败: $e'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _pickFromAppGallery() async {
-    try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'],
-        withData: true,
-      );
-      if (result == null || result.files.isEmpty) return;
-      final file = result.files.first;
-      final bytes = file.bytes;
-      if (bytes == null || bytes.isEmpty) return;
-      await _addPendingAttachment(file.name, bytes);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -401,6 +429,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // ── Pending attachments row ──
             if (hasAttachments)
               Container(
                 height: 80,
@@ -418,11 +447,47 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
                   },
                 ),
               ),
+
+            // ── Settings row (model, tools, reasoning) ──
+            Padding(
+              padding: EdgeInsets.only(
+                left: 12,
+                right: 12,
+                top: hasAttachments ? 0 : 6,
+                bottom: 0,
+              ),
+              child: Row(
+                children: [
+                  _SettingsChip(
+                    icon: Icons.smart_toy_outlined,
+                    label: '模型',
+                    color: Colors.teal,
+                    onTap: _showModelPanel,
+                  ),
+                  const SizedBox(width: 8),
+                  _SettingsChip(
+                    icon: Icons.build_outlined,
+                    label: '工具',
+                    color: cs.tertiary,
+                    onTap: _showToolsPanel,
+                  ),
+                  const SizedBox(width: 8),
+                  _SettingsChip(
+                    icon: Icons.psychology_outlined,
+                    label: '推理',
+                    color: Colors.purple,
+                    onTap: _showReasoningPanel,
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Input row ──
             Padding(
               padding: EdgeInsets.only(
                 left: 4,
                 right: 4,
-                top: hasAttachments ? 4 : 8,
+                top: 4,
                 bottom: 8 + MediaQuery.of(context).padding.bottom,
               ),
               child: Row(
@@ -438,14 +503,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
                     child: TextField(
                       controller: _textController,
                       focusNode: _focusNode,
-                      // On mobile (Android/iOS): keyboard shows "newline" button,
-                      // Enter inserts newline. On desktop: Enter is handled via
-                      // FocusNode.onKeyEvent to send, Shift+Enter inserts newline.
                       textInputAction: _isMobile(context)
                           ? TextInputAction.newline
                           : TextInputAction.send,
-                      // onSubmitted is not used because FocusNode.onKeyEvent
-                      // handles keyboard actions on all platforms where it applies.
                       onSubmitted: null,
                       onChanged: (_) => setState(() {}),
                       minLines: 1,
@@ -491,6 +551,56 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget> {
                           : null,
                     ),
                 ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A small chip button for the settings row above the composer input.
+class _SettingsChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _SettingsChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: color.withOpacity(0.2),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: cs.onSurface,
               ),
             ),
           ],
