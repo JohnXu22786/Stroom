@@ -168,6 +168,53 @@ class VoiceEntry {
 }
 
 // ============================================================================
+// 推理参数（用户自定义参数名和选项值）
+// ============================================================================
+
+/// 推理参数，由用户在模型设置中自定义参数名和可选的选项值列表。
+/// 在对话页面的推理面板中，每个参数显示为带选项 chips 的标签行。
+class ReasoningParam {
+  /// 参数名，支持点号嵌套（如 thinking.type → {"thinking": {"type": "enabled"}}）
+  String paramName;
+
+  /// 选项值列表，按用户添加的顺序显示在推理面板中。
+  /// 例如 ['low', 'medium', 'high'] 或 ['true', 'false'] 或 ['max']
+  List<String> options;
+
+  ReasoningParam({
+    required this.paramName,
+    List<String>? options,
+  }) : options = options ?? [];
+
+  Map<String, dynamic> toMap() => {
+        'paramName': paramName,
+        'options': options,
+      };
+
+  factory ReasoningParam.fromMap(Map<String, dynamic> map) {
+    // Handle old format (CustomParam with defaultValue/type)
+    if (map.containsKey('defaultValue') && !map.containsKey('options')) {
+      return ReasoningParam(
+        paramName: map['paramName'] as String? ?? '',
+        options: [],
+      );
+    }
+    return ReasoningParam(
+      paramName: map['paramName'] as String? ?? '',
+      options: (map['options'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
+    );
+  }
+
+  ReasoningParam copy() => ReasoningParam(
+        paramName: paramName,
+        options: List<String>.from(options),
+      );
+}
+
+// ============================================================================
 // 模型配置
 // ============================================================================
 
@@ -182,7 +229,7 @@ class ModelConfig {
   bool hasVolume; // 是否设置了音量范围
   bool hasSpeed; // 是否设置了语速范围
   List<CustomParam> customParams; // 自定义参数列表
-  List<CustomParam> reasoningParams; // 推理参数（仅推理开启时发送）
+  List<ReasoningParam> reasoningParams; // 推理参数（仅推理开启时发送）
   int maxWordsPerRequest; // 单次最长音频字数
   bool supportStream; // 是否支持流式输出
   bool supportInstruction; // 是否支持 instruction 参数
@@ -200,7 +247,7 @@ class ModelConfig {
     this.hasVolume = false,
     this.hasSpeed = false,
     List<CustomParam>? customParams,
-    List<CustomParam>? reasoningParams,
+    List<ReasoningParam>? reasoningParams,
     this.maxWordsPerRequest = 0,
     this.supportStream = false,
     this.supportInstruction = false,
@@ -250,7 +297,7 @@ class ModelConfig {
             [],
         reasoningParams: (map['reasoningParams'] as List?)
                 ?.map((e) =>
-                    CustomParam.fromMap(Map<String, dynamic>.from(e as Map)))
+                    ReasoningParam.fromMap(Map<String, dynamic>.from(e as Map)))
                 .toList() ??
             [],
         maxWordsPerRequest: (map['maxWordsPerRequest'] as num?)?.toInt() ?? 0,
