@@ -42,7 +42,7 @@ void main() {
             videoBytes: Uint8List.fromList([0, 1, 2, 3]),
             videoFormat: 'mp4',
           ),
-          throwsA(isA<Exception>()),
+          throwsA(isA<Error>()),
         );
       }
     });
@@ -53,7 +53,7 @@ void main() {
           videoBytes: Uint8List.fromList([]),
           videoFormat: 'mp4',
         ),
-        throwsA(isA<Exception>()),
+        throwsA(isA<Error>()),
       );
     });
 
@@ -63,7 +63,7 @@ void main() {
           videoBytes: Uint8List.fromList([0, 1, 2, 3]),
           videoFormat: 'unknown',
         ),
-        throwsA(isA<Exception>()),
+        throwsA(isA<Error>()),
       );
     });
 
