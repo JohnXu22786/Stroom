@@ -270,12 +270,10 @@ void showToolsPanel({
                           localEnabledTools.contains(tool.name);
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 4),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: cs.surfaceContainerHighest
-                                .withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
+                        child: Material(
+                          color: cs.surfaceContainerHighest
+                              .withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(10),
                           child: SwitchListTile(
                             dense: true,
                             value: isEnabled,
