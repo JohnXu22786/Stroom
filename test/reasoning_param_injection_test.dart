@@ -61,8 +61,9 @@ class _MockProvider extends BaseChatProvider {
 }
 
 void main() {
-  group('reasoning params - user configurable ReasoningParam model', () {
-    test('reasoning params come from model config and selected values', () async {
+  group('reasoning params with ReasoningParam model', () {
+    test('reasoning params use selected values from reasoning selections map',
+        () async {
       final provider = _MockProvider();
       final modelConfig = ModelConfig(
         name: 'Test',
@@ -70,11 +71,13 @@ void main() {
         typeConfig: {'context': 4096},
         reasoningParams: [
           ReasoningParam(
-              paramName: 'thinking.type',
-              options: ['enabled', 'disabled']),
+            paramName: 'reasoning_effort',
+            options: ['low', 'medium', 'high'],
+          ),
           ReasoningParam(
-              paramName: 'reasoning_effort',
-              options: ['low', 'medium', 'high']),
+            paramName: 'thinking.type',
+            options: ['enabled', 'disabled'],
+          ),
         ],
       );
 
@@ -84,17 +87,18 @@ void main() {
           history: [],
           reasoning: true,
           reasoningParamValues: {
-            'thinking.type': 'enabled',
             'reasoning_effort': 'high',
+            'thinking.type': 'enabled',
           })) {}
 
       final body = provider.lastRequestBody;
       expect(body, isNotNull);
-      expect(body!['thinking'], {'type': 'enabled'});
-      expect(body['reasoning_effort'], 'high');
+      expect(body!['reasoning_effort'], 'high');
+      expect(body['thinking']['type'], 'enabled');
     });
 
-    test('dot-notation creates nested objects', () async {
+    test('reasoning params use defaults from model config when no selection map',
+        () async {
       final provider = _MockProvider();
       final modelConfig = ModelConfig(
         name: 'Test',
@@ -102,29 +106,28 @@ void main() {
         typeConfig: {'context': 4096},
         reasoningParams: [
           ReasoningParam(
-              paramName: 'thinking.type',
-              options: ['enabled', 'disabled']),
+            paramName: 'reasoning_effort',
+            options: ['low', 'medium', 'high'],
+          ),
           ReasoningParam(
-              paramName: 'thinking.budget_tokens',
-              options: ['5000', '10000', '20000']),
+            paramName: 'thinking.type',
+            options: ['enabled'],
+          ),
         ],
       );
 
       final service = ChatService(provider: provider, modelConfig: modelConfig);
 
+      // When no selection map is passed, use first option as default
       await for (final _ in service.sendStream('Hi',
-          history: [],
-          reasoning: true,
-          reasoningParamValues: {
-            'thinking.type': 'enabled',
-            'thinking.budget_tokens': '10000',
-          })) {}
+          history: [], reasoning: true)) {}
 
       final body = provider.lastRequestBody;
       expect(body, isNotNull);
-      expect(body!['thinking'], isA<Map>());
-      expect(body['thinking']['type'], 'enabled');
-      expect(body['thinking']['budget_tokens'], '10000');
+      // No defaults from model config - only from typeConfig
+      // reasoning params without default values should not be sent
+      expect(body!.containsKey('reasoning_effort'), false);
+      expect(body.containsKey('thinking'), false);
     });
 
     test('no reasoning params sent when reasoning is disabled', () async {
@@ -135,8 +138,9 @@ void main() {
         typeConfig: {'context': 4096},
         reasoningParams: [
           ReasoningParam(
-              paramName: 'thinking.type',
-              options: ['enabled']),
+            paramName: 'thinking.type',
+            options: ['enabled'],
+          ),
         ],
       );
 
@@ -167,42 +171,10 @@ void main() {
       final body = provider.lastRequestBody;
       expect(body, isNotNull);
       expect(body!.containsKey('thinking'), false);
-      expect(body.containsKey('reasoning_effort'), false);
     });
 
-    test('supports different param types via reasoning selections map', () async {
-      final provider = _MockProvider();
-      final modelConfig = ModelConfig(
-        name: 'Test',
-        modelId: 'test-model',
-        typeConfig: {'context': 4096},
-        reasoningParams: [
-          ReasoningParam(
-              paramName: 'temperature',
-              options: ['0.5', '0.8', '1.0']),
-          ReasoningParam(
-              paramName: 'stream',
-              options: ['true', 'false']),
-        ],
-      );
-
-      final service = ChatService(provider: provider, modelConfig: modelConfig);
-
-      await for (final _ in service.sendStream('Hi',
-          history: [],
-          reasoning: true,
-          reasoningParamValues: {
-            'temperature': '0.8',
-            'stream': 'true',
-          })) {}
-
-      final body = provider.lastRequestBody;
-      expect(body, isNotNull);
-      expect(body!['temperature'], '0.8');
-      expect(body['stream'], 'true');
-    });
-
-    test('supports Anthropic thinking format', () async {
+    test('supports Anthropic thinking format via reasoning selections',
+        () async {
       final provider = _MockProvider();
       final modelConfig = ModelConfig(
         name: 'Claude',
@@ -210,11 +182,13 @@ void main() {
         typeConfig: {'context': 128000},
         reasoningParams: [
           ReasoningParam(
-              paramName: 'thinking.type',
-              options: ['enabled']),
+            paramName: 'thinking.type',
+            options: ['enabled'],
+          ),
           ReasoningParam(
-              paramName: 'thinking.budget_tokens',
-              options: ['5000', '10000', '20000', '32000']),
+            paramName: 'thinking.budget_tokens',
+            options: ['10000', '20000', '32000'],
+          ),
         ],
       );
 
@@ -234,7 +208,8 @@ void main() {
       expect(body['thinking']['budget_tokens'], '10000');
     });
 
-    test('supports Google Gemini deep nesting format', () async {
+    test('supports Google Gemini deep nesting format via reasoning selections',
+        () async {
       final provider = _MockProvider();
       final modelConfig = ModelConfig(
         name: 'Gemini',
@@ -242,8 +217,9 @@ void main() {
         typeConfig: {'context': 128000},
         reasoningParams: [
           ReasoningParam(
-              paramName: 'config.thinkingConfig.thinkingLevel',
-              options: ['HIGH', 'LOW']),
+            paramName: 'config.thinkingConfig.thinkingLevel',
+            options: ['HIGH', 'LOW'],
+          ),
         ],
       );
 
@@ -258,7 +234,36 @@ void main() {
 
       final body = provider.lastRequestBody;
       expect(body, isNotNull);
-      expect(body!['config']['thinkingConfig']['thinkingLevel'], 'HIGH');
+      expect(
+          body!['config']['thinkingConfig']['thinkingLevel'], 'HIGH');
+    });
+
+    test('single-value options (e.g. only max) work correctly', () async {
+      final provider = _MockProvider();
+      final modelConfig = ModelConfig(
+        name: 'Test',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.budget_tokens',
+            options: ['max'],
+          ),
+        ],
+      );
+
+      final service = ChatService(provider: provider, modelConfig: modelConfig);
+
+      await for (final _ in service.sendStream('Hi',
+          history: [],
+          reasoning: true,
+          reasoningParamValues: {
+            'thinking.budget_tokens': 'max',
+          })) {}
+
+      final body = provider.lastRequestBody;
+      expect(body, isNotNull);
+      expect(body!['thinking']['budget_tokens'], 'max');
     });
   });
 }
