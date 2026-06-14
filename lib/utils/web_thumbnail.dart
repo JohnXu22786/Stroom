@@ -8,11 +8,12 @@ import 'dart:typed_data';
 Future<Uint8List?> generateThumbnailFromBytes(Uint8List videoBytes) async {
   try {
     final jsBytes = videoBytes.map((b) => b.toJS).toList().toJS;
-    final result = await _jsCreateBlobUrl(jsBytes);
+    final result = _jsCreateBlobUrl(jsBytes);
     if (result == null) return null;
     final blobUrl = result.dartify() as String?;
     if (blobUrl == null || blobUrl.isEmpty) return null;
-    return blobUrl as Uint8List?;
+    // Web thumbnail via Player.screenshot is handled separately
+    return null;
   } catch (_) {
     return null;
   }
@@ -21,7 +22,7 @@ Future<Uint8List?> generateThumbnailFromBytes(Uint8List videoBytes) async {
 /// Create a blob URL from JS bytes.
 Future<String?> createBlobUrl(Uint8List videoBytes) async {
   final jsBytes = videoBytes.map((b) => b.toJS).toList().toJS;
-  final result = await _jsCreateBlobUrl(jsBytes);
+  final result = _jsCreateBlobUrl(jsBytes);
   if (result == null) return null;
   return result.dartify() as String?;
 }
