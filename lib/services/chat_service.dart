@@ -37,6 +37,14 @@ class ChatService {
   StreamSubscription<AIStreamEvent>? _streamSubscription;
   StreamController<String>? _controller;
   String _reasoningBuffer = '';
+
+  /// Accumulated visible content from the current streaming round,
+  /// preserved for tool call chain reconstruction per DeepSeek spec.
+  String _contentBuffer = '';
+
+  /// Tracks how much of [_reasoningBuffer] was accumulated in previous rounds,
+  /// so we can extract only the current round's reasoning for the assistant message.
+  int _lastReasoningLength = 0;
   Map<String, dynamic>? _lastRequestBody;
   Map<String, dynamic>? _lastResponseData;
   Map<String, String>? _lastRequestHeaders;
@@ -174,6 +182,8 @@ class ChatService {
   }) {
     _isCancelledByUser = false;
     _reasoningBuffer = '';
+    _contentBuffer = '';
+    _lastReasoningLength = 0;
 
     final controller = StreamController<ChatEvent>(
       onCancel: () {
@@ -234,6 +244,9 @@ class ChatService {
               } else if (event.isToolCallEvent) {
                 toolCallRefs.addAll(event.toolCalls!);
               } else if (event.text.isNotEmpty) {
+                // Accumulate visible content for tool call chain
+                // preservation per DeepSeek spec.
+                _contentBuffer += event.text;
                 controller.add(TextEvent(event.text));
               }
             },
@@ -258,7 +271,20 @@ class ChatService {
           // No tool calls → done
           if (toolCallRefs.isEmpty) break;
 
-          // Process tool calls
+          // Capture the current round's reasoning content (what was added
+          // since the last round). Per the DeepSeek Tool Calls guide,
+          // messages.append(message) preserves the complete assistant message
+          // (including reasoning_content) when sending subsequent requests
+          // in the same tool call chain.
+          final roundReasoning =
+              _reasoningBuffer.substring(_lastReasoningLength);
+
+          // Collect all tool calls and results first, then add ONE assistant
+          // message with ALL tool_calls (OpenAI-compatible spec: tool_calls in
+          // a single assistant message, not separate messages per tool call).
+          final allToolCalls = <Map<String, dynamic>>[];
+          final allToolResults = <Map<String, dynamic>>[];
+
           for (final tc in toolCallRefs) {
             if (_isCancelledByUser) break;
             final fn = tc['function'] as Map<String, dynamic>? ?? {};
@@ -292,23 +318,46 @@ class ChatService {
             controller.add(
                 ToolCallCompleteEvent(toolCallId, result));
 
-            // Add tool call + result to messages for the next API turn
-            messages.add({
-              'role': 'assistant',
-              'content': null,
-              'tool_calls': [
-                {
-                  'id': toolCallId,
-                  'type': 'function',
-                  'function': {'name': name, 'arguments': rawArgs},
-                }
-              ],
+            allToolCalls.add({
+              'id': toolCallId,
+              'type': 'function',
+              'function': {'name': name, 'arguments': rawArgs},
             });
-            messages.add({
+            allToolResults.add({
               'role': 'tool',
               'tool_call_id': toolCallId,
               'content': result,
             });
+          }
+
+          if (!_isCancelledByUser) {
+            // Per DeepSeek Tool Calls guide: messages.append(message)
+            // preserves the COMPLETE assistant message (including
+            // reasoning_content) when sending subsequent requests
+            // in the same tool call chain.
+            // https://api-docs.deepseek.com/guides/tool_calls
+            final assistantMsg = <String, dynamic>{
+              'role': 'assistant',
+              'tool_calls': allToolCalls,
+            };
+            if (_contentBuffer.isNotEmpty) {
+              assistantMsg['content'] = _contentBuffer;
+            } else {
+              assistantMsg['content'] = null;
+            }
+            // Preserve reasoning content so the model retains full context
+            // across tool call chain rounds.
+            if (roundReasoning.isNotEmpty) {
+              assistantMsg['reasoning_content'] = roundReasoning;
+            }
+            messages.add(assistantMsg);
+
+            // Add all tool results after the single assistant message
+            messages.addAll(allToolResults);
+
+            // Reset per-round buffers for the next iteration
+            _contentBuffer = '';
+            _lastReasoningLength = _reasoningBuffer.length;
           }
         }
       } catch (e) {
