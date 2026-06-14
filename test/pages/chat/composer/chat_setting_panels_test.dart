@@ -7,9 +7,7 @@ import 'package:stroom/providers/provider_config.dart';
 /// Helper to open the model panel in a test environment.
 Future<void> openPanel(WidgetTester tester) async {
   await tester.tap(find.text('Open'));
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 300));
-  await tester.pump(const Duration(milliseconds: 100));
+  await tester.pumpAndSettle();
 }
 
 void main() {

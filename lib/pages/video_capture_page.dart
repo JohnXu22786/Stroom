@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
-import 'package:video_thumbnail/video_thumbnail.dart';
+import 'package:media_kit/media_kit.dart';
 import '../providers/video_provider.dart';
 import '../utils/video_manifest.dart';
 
@@ -173,18 +173,21 @@ class _VideoCapturePageState extends ConsumerState<VideoCapturePage> {
         videoPath = await VideoManifest.writeFile('$hash.$format', videoBytes);
       } catch (_) {}
 
-      // Generate video thumbnail
+      // 生成视频缩略图（使用 media_kit Player.screenshot）
       if (videoPath != null && videoPath.isNotEmpty) {
         try {
-          final thumbBytes = await VideoThumbnail.thumbnailData(
-            video: videoPath,
-            imageFormat: ImageFormat.JPEG,
-            maxWidth: 256,
-            quality: 75,
-            timeMs: 1000,
-          );
-          if (thumbBytes != null) {
-            await VideoManifest.writeThumbnail(hash, thumbBytes);
+          final thumbPlayer = Player();
+          try {
+            await thumbPlayer.open(Media(Uri.file(videoPath).toString()), play: false);
+            await Future.delayed(const Duration(milliseconds: 500));
+            await thumbPlayer.seek(const Duration(seconds: 1));
+            await Future.delayed(const Duration(milliseconds: 200));
+            final thumbBytes = await thumbPlayer.screenshot();
+            if (thumbBytes != null) {
+              await VideoManifest.writeThumbnail(hash, thumbBytes);
+            }
+          } finally {
+            await thumbPlayer.dispose();
           }
         } catch (e) {
           debugPrint('_saveVideo thumbnail error: $e');
