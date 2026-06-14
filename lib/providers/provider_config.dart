@@ -173,6 +173,7 @@ class VoiceEntry {
 
 /// 推理参数，由用户在模型设置中自定义参数名和可选的选项值列表。
 /// 在对话页面的推理面板中，每个参数显示为带选项 chips 的标签行。
+/// 每个参数可在模型设置中独立开关（enabled），控制是否发送到 API。
 class ReasoningParam {
   /// 参数名，支持点号嵌套（如 thinking.type → {"thinking": {"type": "enabled"}}）
   String paramName;
@@ -181,14 +182,19 @@ class ReasoningParam {
   /// 例如 ['low', 'medium', 'high'] 或 ['true', 'false'] 或 ['max']
   List<String> options;
 
+  /// 是否启用此参数。启用时才会发送到 API（受聊天页面的推理总开关控制）。
+  bool enabled;
+
   ReasoningParam({
     required this.paramName,
+    this.enabled = true,
     List<String>? options,
   }) : options = options ?? [];
 
   Map<String, dynamic> toMap() => {
         'paramName': paramName,
         'options': options,
+        'enabled': enabled,
       };
 
   factory ReasoningParam.fromMap(Map<String, dynamic> map) {
@@ -201,6 +207,7 @@ class ReasoningParam {
     }
     return ReasoningParam(
       paramName: map['paramName'] as String? ?? '',
+      enabled: map['enabled'] as bool? ?? true,
       options: (map['options'] as List?)
               ?.map((e) => e.toString())
               .toList() ??
@@ -210,62 +217,9 @@ class ReasoningParam {
 
   ReasoningParam copy() => ReasoningParam(
         paramName: paramName,
+        enabled: enabled,
         options: List<String>.from(options),
       );
-
-  /// Whether this param's options suggest it's a boolean toggle.
-  /// Returns true if any option is a known boolean value
-  /// (true/false, enabled/disabled, on/off, yes/no, 1/0).
-  bool get isBooleanToggle => options.any(
-        (o) => _booleanValues.contains(o.toLowerCase()),
-      );
-
-  static const _booleanValues = {
-    'true', 'false', 'enabled', 'disabled',
-    'on', 'off', 'yes', 'no', '1', '0',
-  };
-
-  /// Get the "off" value for this boolean toggle param.
-  /// Returns null if this is not a boolean toggle.
-  /// When options contain an explicit off value (false/disabled/off/no/0),
-  /// the original-cased value is returned. Otherwise derives the off
-  /// counterpart preserving the casing of the on value.
-  String? get offValue {
-    if (!isBooleanToggle) return null;
-
-    // First, look for an explicit off value in the options
-    for (final option in options) {
-      final lower = option.toLowerCase();
-      if (['false', 'disabled', 'off', 'no', '0'].contains(lower)) {
-        return option;
-      }
-    }
-
-    // No explicit off value found; derive from on value preserving casing
-    for (final option in options) {
-      final lower = option.toLowerCase();
-      if (lower == 'true') return 'false';
-      if (lower == 'enabled') {
-        // Preserve casing: Enabled → Disabled, enabled → disabled, ENABLED → DISABLED
-        if (option == 'Enabled') return 'Disabled';
-        if (option == 'ENABLED') return 'DISABLED';
-        return 'disabled';
-      }
-      if (lower == 'on') {
-        if (option == 'On') return 'Off';
-        if (option == 'ON') return 'OFF';
-        return 'off';
-      }
-      if (lower == 'yes') {
-        if (option == 'Yes') return 'No';
-        if (option == 'YES') return 'NO';
-        return 'no';
-      }
-      if (lower == '1') return '0';
-    }
-
-    return null;
-  }
 }
 
 // ============================================================================

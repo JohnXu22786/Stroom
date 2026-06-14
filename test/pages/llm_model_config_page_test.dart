@@ -16,11 +16,18 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Should find switches
+      // Should find switches (reasoning toggle + LLM toggles)
       final switches = find.byType(Switch);
       expect(switches, findsWidgets);
 
-      // Temperature label should be visible
+      // Scroll down to find LLM params section
+      await tester.scrollUntilVisible(
+        find.text('温度 (Temperature)'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+
+      // Temperature label should now be in the tree
       expect(find.text('温度 (Temperature)'), findsOneWidget);
     });
 
@@ -55,7 +62,7 @@ void main() {
       // Find all switches
       final switches = find.byType(Switch);
       
-      // Toggle the first switch (Temperature)
+      // Toggle the first switch (currently the reasoning param toggle)
       await tester.tap(switches.first);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
@@ -75,8 +82,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       // Fill in required fields
+      // Text field order: model name, model ID, context, max tokens, seed
+      // Reasoning params add an extra TextFormField for param name
       final textFields = find.byType(TextField);
+      // Index 1 = model ID (index 0 is model name)
       await tester.enterText(textFields.at(1), 'test-model');
+      // Index 2 = context length
       await tester.enterText(textFields.at(2), '4096');
       
       await tester.pump();
@@ -98,7 +109,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // The page should have switches (some rendered even without scrolling)
+      // The page should have switches (reasoning toggle visible without scrolling)
       final switches = find.byType(Switch);
       expect(switches, findsWidgets);
     });
@@ -115,6 +126,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       // Fill required fields
+      // Text field order: model name, model ID, context, reasoning param name, ...
       final textFields = find.byType(TextField);
       await tester.enterText(textFields.at(1), 'test-model');
       await tester.enterText(textFields.at(2), '4096');
