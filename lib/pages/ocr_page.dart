@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -116,7 +115,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             TextButton.icon(
               key: const Key('ocr_sort_btn'),
               onPressed: () {
-                setState(() => _reorderMode = !_reorderMode);
+                setState(() {
+                  _reorderMode = !_reorderMode;
+                  // Reset any stale drag state when toggling modes
+                  _dragIndex = null;
+                  _dragTargetIndex = null;
+                });
               },
               icon: Icon(
                 _reorderMode ? Icons.check : Icons.swap_vert,
@@ -343,116 +347,155 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
     return Padding(
       padding: const EdgeInsets.all(8),
-      child: GridView.builder(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          crossAxisSpacing: 8,
-          mainAxisSpacing: 8,
-        ),
-        itemCount: _selectedImages.length,
-        itemBuilder: (context, index) {
-          final image = _selectedImages[index];
-          final isThisDragging = _dragIndex == index;
-          final isDimmed = isDragging && !isThisDragging;
-          final isHoverTarget = _dragTargetIndex == index && !isThisDragging;
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          const double spacing = 8;
+          const int crossAxisCount = 3;
+          final double totalSpacing = spacing * (crossAxisCount - 1);
+          final double itemSize =
+              (constraints.maxWidth - totalSpacing) / crossAxisCount;
+          final int itemCount = _selectedImages.length;
+          final int rowCount = itemCount == 0
+              ? 0
+              : (itemCount + crossAxisCount - 1) ~/ crossAxisCount;
+          final double totalHeight = rowCount > 0
+              ? rowCount * itemSize + (rowCount - 1) * spacing
+              : 0;
 
-          // Wrap each item with DragTarget + LongPressDraggable
-          return DragTarget<int>(
-            key: ValueKey('drag_target_$index'),
-            onWillAcceptWithDetails: (details) {
-              if (details.data != index) {
-                setState(() => _dragTargetIndex = index);
-                return true;
-              }
-              return false;
-            },
-            onLeave: (_) {
-              setState(() {
-                if (_dragTargetIndex == index) _dragTargetIndex = null;
-              });
-            },
-            onAcceptWithDetails: (details) {
-              _onGridReorder(details.data, index);
-            },
-            builder: (context, candidateData, rejectedData) {
-              final isCandidate = candidateData.isNotEmpty;
-              return LongPressDraggable<int>(
-                data: index,
-                delay: const Duration(milliseconds: 500),
-                onDragStarted: () {
-                  setState(() => _dragIndex = index);
-                },
-                onDraggableCanceled: (_, __) {
-                  setState(() {
-                    _dragIndex = null;
-                    _dragTargetIndex = null;
-                  });
-                },
-                onDragEnd: (_) {
-                  setState(() {
-                    _dragIndex = null;
-                    _dragTargetIndex = null;
-                  });
-                },
-                ignoringFeedbackSemantics: false,
-                feedback: SizedBox(
-                  // Match grid item dimensions
-                  width: (MediaQuery.of(context).size.width - 32) / 3,
-                  height: (MediaQuery.of(context).size.width - 32) / 3,
-                  child: Material(
-                    elevation: 8,
-                    borderRadius: BorderRadius.circular(8),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Image(
-                            image: image.provider,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
-                              color: cs.surfaceContainerHigh,
-                              child: const Icon(Icons.broken_image,
-                                  color: Colors.grey),
-                            ),
-                          ),
-                          if (_selectedImages.length > 1)
-                            Positioned(
-                              bottom: 4,
-                              left: 4,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: cs.primary,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  '${index + 1}',
-                                  style: const TextStyle(
-                                      color: Colors.white, fontSize: 11),
+          return SingleChildScrollView(
+            child: SizedBox(
+              height: totalHeight,
+              child: Stack(
+                children: List.generate(itemCount, (index) {
+                  final image = _selectedImages[index];
+                  final col = index % crossAxisCount;
+                  final row = index ~/ crossAxisCount;
+                  final left = col * (itemSize + spacing);
+                  final top = row * (itemSize + spacing);
+
+                  final isThisDragging = _dragIndex == index;
+                  final isDimmed = isDragging && !isThisDragging;
+                  final isHoverTarget =
+                      _dragTargetIndex == index && !isThisDragging;
+
+                  // Use identity-based key (image.hashCode) so AnimatedPositioned
+                  // can track each item across reorders and animate position changes
+                  return AnimatedPositioned(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                    key: ValueKey('grid_item_pos_${identityHashCode(image)}'),
+                    left: left,
+                    top: top,
+                    width: itemSize,
+                    height: itemSize,
+                    child: DragTarget<int>(
+                      key: ValueKey('drag_target_$index'),
+                      onWillAcceptWithDetails: (details) {
+                        if (details.data != index) {
+                          setState(() => _dragTargetIndex = index);
+                          return true;
+                        }
+                        return false;
+                      },
+                      onLeave: (_) {
+                        setState(() {
+                          if (_dragTargetIndex == index) {
+                            _dragTargetIndex = null;
+                          }
+                        });
+                      },
+                      onAcceptWithDetails: (details) {
+                        _onGridReorder(details.data, index);
+                      },
+                      builder: (context, candidateData, rejectedData) {
+                        final isCandidate = candidateData.isNotEmpty;
+                        return LongPressDraggable<int>(
+                          data: index,
+                          delay: const Duration(milliseconds: 300),
+                          onDragStarted: () {
+                            setState(() => _dragIndex = index);
+                          },
+                          onDraggableCanceled: (_, __) {
+                            setState(() {
+                              _dragIndex = null;
+                              _dragTargetIndex = null;
+                            });
+                          },
+                          onDragEnd: (_) {
+                            setState(() {
+                              _dragIndex = null;
+                              _dragTargetIndex = null;
+                            });
+                          },
+                          ignoringFeedbackSemantics: false,
+                          feedback: SizedBox(
+                            // Match grid item dimensions
+                            width: itemSize,
+                            height: itemSize,
+                            child: Material(
+                              elevation: 8,
+                              borderRadius: BorderRadius.circular(8),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    Image(
+                                      image: image.provider,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => Container(
+                                        color: cs.surfaceContainerHigh,
+                                        child: const Icon(
+                                            Icons.broken_image,
+                                            color: Colors.grey),
+                                      ),
+                                    ),
+                                    if (_selectedImages.length > 1)
+                                      Positioned(
+                                        bottom: 4,
+                                        left: 4,
+                                        child: Container(
+                                          padding:
+                                              const EdgeInsets.symmetric(
+                                                  horizontal: 6,
+                                                  vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: cs.primary,
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                          child: Text(
+                                            '${index + 1}',
+                                            style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 11),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ),
                             ),
-                        ],
-                      ),
+                          ),
+                          childWhenDragging: _buildDimmedPlaceholder(
+                            image, index, cs, isCandidate || isHoverTarget),
+                          child: _ImageGridItem(
+                            key: ValueKey('ocr_grid_item_$index'),
+                            image: image,
+                            index: index,
+                            totalCount: _selectedImages.length,
+                            isDimmed: isDimmed,
+                            isHoverTarget: isCandidate || isHoverTarget,
+                            onTap: () => _previewImage(index),
+                            onRemove: () => _removeImage(index),
+                          ),
+                        );
+                      },
                     ),
-                  ),
-                ),
-                childWhenDragging: _buildDimmedPlaceholder(
-                  image, index, cs, isCandidate || isHoverTarget),
-                child: _ImageGridItem(
-                  key: ValueKey('ocr_grid_item_$index'),
-                  image: image,
-                  index: index,
-                  totalCount: _selectedImages.length,
-                  isDimmed: isDimmed,
-                  isHoverTarget: isCandidate || isHoverTarget,
-                  onTap: () => _previewImage(index),
-                  onRemove: () => _removeImage(index),
-                ),
-              );
-            },
+                  );
+                }),
+              ),
+            ),
           );
         },
       ),
@@ -488,9 +531,14 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   void _onGridReorder(int oldIndex, int newIndex) {
     setState(() {
-      if (oldIndex == newIndex) return;
-      if (newIndex > oldIndex) newIndex--;
+      if (oldIndex == newIndex) {
+        _dragIndex = null;
+        _dragTargetIndex = null;
+        return;
+      }
       final item = _selectedImages.removeAt(oldIndex);
+      // newIndex is the visual grid position from DragTarget;
+      // after removeAt, the list shrinks, so insert directly at newIndex.
       _selectedImages.insert(newIndex, item);
       _dragIndex = null;
       _dragTargetIndex = null;
