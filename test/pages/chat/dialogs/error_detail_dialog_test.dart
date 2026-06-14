@@ -4,7 +4,7 @@ import 'package:stroom/pages/chat/dialogs/error_detail_dialog.dart';
 
 void main() {
   group('ErrorDetailDialog', () {
-    testWidgets('shows message when no request data', (tester) async {
+    testWidgets('shows message when no request/response data', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Builder(
@@ -23,19 +23,30 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      expect(find.text('错误详情'), findsOneWidget);
-      expect(find.text('无详细数据'), findsOneWidget);
+      expect(find.text('Error Details'), findsOneWidget);
+      expect(find.text('No detail data available'), findsOneWidget);
     });
 
-    testWidgets('shows request and response data', (tester) async {
+    testWidgets('shows item list when data is provided', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showErrorDetailDialog(
                 context: context,
-                rawRequest: {'url': 'https://api.example.com'},
-                rawResponse: {'statusCode': 500},
+                rawRequest: {
+                  'url': 'https://api.example.com/chat',
+                  'headers': {'Authorization': 'Bearer sk-test'},
+                  'body': {'model': 'gpt-4', 'messages': []},
+                },
+                rawResponse: {
+                  'statusCode': 401,
+                  'headers': {
+                    'content-type': ['application/json'],
+                    'x-request-id': ['req-001'],
+                  },
+                  'data': {'error': {'message': 'Unauthorized'}},
+                },
               ),
               child: const Text('Show'),
             ),
@@ -47,10 +58,264 @@ void main() {
       await tester.pumpAndSettle();
 
       // Title should be visible
-      expect(find.text('错误详情'), findsOneWidget);
-      // JSON data labels should be visible
-      expect(find.textContaining('Request'), findsWidgets);
-      expect(find.textContaining('Response'), findsWidgets);
+      expect(find.text('Error Details'), findsOneWidget);
+      // All item labels should be visible
+      expect(find.text('Request URL'), findsOneWidget);
+      expect(find.text('Request Headers'), findsOneWidget);
+      expect(find.text('Request Body'), findsOneWidget);
+      expect(find.text('Status Code'), findsOneWidget);
+      expect(find.text('Response Headers'), findsOneWidget);
+      expect(find.text('Response Body'), findsOneWidget);
+    });
+
+    testWidgets('tapping Request URL shows detail and back button works',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showErrorDetailDialog(
+                context: context,
+                rawRequest: {
+                  'url': 'https://api.example.com/chat',
+                },
+                rawResponse: {
+                  'statusCode': 401,
+                  'data': {'error': 'Unauthorized'},
+                },
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      // Tap Request URL
+      await tester.tap(find.text('Request URL'));
+      await tester.pumpAndSettle();
+
+      // Should show the URL value and back button
+      expect(find.text('https://api.example.com/chat'), findsOneWidget);
+      // Section label appears in both header title and detail body label
+      expect(find.text('Request URL'), findsAtLeastNWidgets(1));
+
+      // Back button should be visible
+      expect(find.byIcon(Icons.arrow_back), findsOneWidget);
+
+      // Tap back
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      // Should be back to list
+      expect(find.text('Request URL'), findsOneWidget);
+      expect(find.text('Status Code'), findsOneWidget);
+    });
+
+    testWidgets('tapping Response Headers shows headers as JSON',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showErrorDetailDialog(
+                context: context,
+                rawRequest: {'url': 'https://api.example.com/chat'},
+                rawResponse: {
+                  'statusCode': 401,
+                  'headers': {
+                    'content-type': ['application/json'],
+                    'x-request-id': ['req-001'],
+                  },
+                  'data': {'error': 'Unauthorized'},
+                },
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      // Tap Response Headers
+      await tester.tap(find.text('Response Headers'));
+      await tester.pumpAndSettle();
+
+      // Should show the headers JSON
+      // Label appears in both header title and detail body label
+      expect(find.text('Response Headers'), findsAtLeastNWidgets(1));
+      expect(find.textContaining('content-type'), findsOneWidget);
+      expect(find.textContaining('x-request-id'), findsOneWidget);
+    });
+
+    testWidgets('tapping Response Body shows data as JSON', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showErrorDetailDialog(
+                context: context,
+                rawRequest: {'url': 'https://api.example.com/chat'},
+                rawResponse: {
+                  'statusCode': 200,
+                  'headers': {},
+                  'data': {
+                    'choices': [
+                      {'message': {'content': 'Hello'}}
+                    ]
+                  },
+                },
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      // Tap Response Body
+      await tester.tap(find.text('Response Body'));
+      await tester.pumpAndSettle();
+
+      // Should show the data JSON
+      expect(find.text('Response Body'), findsAtLeastNWidgets(1));
+      expect(find.textContaining('choices'), findsOneWidget);
+      expect(find.textContaining('Hello'), findsOneWidget);
+    });
+
+    testWidgets('tapping Request Headers shows headers as JSON',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showErrorDetailDialog(
+                context: context,
+                rawRequest: {
+                  'url': 'https://api.example.com',
+                  'headers': {
+                    'Authorization': 'Bearer sk-test-key',
+                    'Content-Type': 'application/json',
+                  },
+                },
+                rawResponse: {'statusCode': 200},
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      // Tap Request Headers
+      await tester.tap(find.text('Request Headers'));
+      await tester.pumpAndSettle();
+
+      // Should show the headers JSON
+      expect(find.textContaining('Authorization'), findsOneWidget);
+      expect(find.textContaining('Content-Type'), findsOneWidget);
+    });
+
+    testWidgets('network error shows Error item instead of response sections',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showErrorDetailDialog(
+                context: context,
+                rawRequest: {'url': 'https://api.example.com/chat'},
+                rawResponse: {
+                  'error': 'DioException [connectionError]: Failed to connect',
+                },
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      // Network error should show Error item
+      expect(find.text('Error'), findsOneWidget);
+      // Response sections should NOT be visible
+      expect(find.text('Status Code'), findsNothing);
+      expect(find.text('Response Headers'), findsNothing);
+      expect(find.text('Response Body'), findsNothing);
+    });
+
+    testWidgets('network error detail view shows error string',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showErrorDetailDialog(
+                context: context,
+                rawRequest: {'url': 'https://api.example.com/chat'},
+                rawResponse: {
+                  'error': 'DioException [connectionError]: Failed to connect',
+                },
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      // Tap the Error section
+      await tester.tap(find.text('Error'));
+      await tester.pumpAndSettle();
+
+      // Should show the error message in detail
+      expect(find.textContaining('DioException'), findsOneWidget);
+      expect(find.textContaining('Failed to connect'), findsOneWidget);
+    });
+
+    testWidgets('request/response items hidden when data not present in section',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showErrorDetailDialog(
+                context: context,
+                rawRequest: {'url': 'https://api.example.com'},
+                // no headers or body
+                rawResponse: {'statusCode': 200},
+                // no headers or data
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      // URL and Status Code should be visible
+      expect(find.text('Request URL'), findsOneWidget);
+      expect(find.text('Status Code'), findsOneWidget);
+
+      // Items without data should NOT be shown
+      expect(find.text('Request Headers'), findsNothing);
+      expect(find.text('Request Body'), findsNothing);
+      expect(find.text('Response Headers'), findsNothing);
+      expect(find.text('Response Body'), findsNothing);
     });
 
     testWidgets('has a close button', (tester) async {
@@ -72,8 +337,131 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      // Find the close button
-      expect(find.widgetWithText(OutlinedButton, '关闭'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Close'), findsOneWidget);
+    });
+
+    testWidgets('close button dismisses dialog', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showErrorDetailDialog(
+                context: context,
+                rawRequest: {'url': 'https://api.example.com'},
+                rawResponse: {'statusCode': 200},
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Error Details'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Close'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Error Details'), findsNothing);
+    });
+
+    testWidgets('Status Code detail shows the numeric code', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showErrorDetailDialog(
+                context: context,
+                rawRequest: {'url': 'https://api.example.com'},
+                rawResponse: {'statusCode': 429},
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Status Code'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('429'), findsOneWidget);
+    });
+
+    testWidgets('Request Body detail shows formatted JSON', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showErrorDetailDialog(
+                context: context,
+                rawRequest: {
+                  'url': 'https://api.example.com',
+                  'body': {
+                    'model': 'gpt-4',
+                    'temperature': 0.7,
+                  },
+                },
+                rawResponse: {'statusCode': 200},
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Request Body'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('gpt-4'), findsOneWidget);
+      expect(find.textContaining('0.7'), findsOneWidget);
+    });
+
+    testWidgets('multiple back/forth navigation works', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showErrorDetailDialog(
+                context: context,
+                rawRequest: {'url': 'https://api.example.com', 'headers': {'Authorization': 'Bearer x'}},
+                rawResponse: {'statusCode': 401, 'data': {'error': 'Unauthorized'}},
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      // Go to Request URL
+      await tester.tap(find.text('Request URL'));
+      await tester.pumpAndSettle();
+      expect(find.text('https://api.example.com'), findsOneWidget);
+
+      // Back
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+      expect(find.text('Request Headers'), findsOneWidget);
+
+      // Go to Status Code
+      await tester.tap(find.text('Status Code'));
+      await tester.pumpAndSettle();
+      expect(find.text('401'), findsOneWidget);
+
+      // Back
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+      expect(find.text('Request URL'), findsOneWidget);
     });
   });
 }
