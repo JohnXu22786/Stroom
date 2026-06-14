@@ -1089,9 +1089,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final activeId = ref.watch(activeConversationIdProvider);
     final conversations = ref.watch(conversationsProvider);
     String title = '新对话';
+    String currentDraftText = '';
     if (activeId != null) {
       final conv = conversations.where((c) => c.id == activeId).firstOrNull;
-      if (conv != null && conv.title.isNotEmpty) title = conv.title;
+      if (conv != null) {
+        if (conv.title.isNotEmpty) title = conv.title;
+        currentDraftText = conv.draftText;
+      }
     }
 
     return SafeArea(
@@ -1641,6 +1645,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 // Stack. This lets the scroll area auto-adjust as the
                 // composer height changes (e.g. multi-line input).
                 ChatComposerWidget(
+                  conversationId: activeId,
+                  initialDraftText: currentDraftText,
                   onSend: _onMessageSend,
                   onStop: _stopStreaming,
                   onPreviewAttachment: _showAttachmentPreview,
