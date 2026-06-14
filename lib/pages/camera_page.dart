@@ -1,9 +1,9 @@
-import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 
-import 'package:camera/camera.dart';
+import 'package:camerawesome/camerawesome_plugin.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/camera_settings_provider.dart';
@@ -19,14 +19,10 @@ class CameraPage extends ConsumerStatefulWidget {
   ConsumerState<CameraPage> createState() => _CameraPageState();
 }
 
-class _CameraPageState extends ConsumerState<CameraPage>
-    with WidgetsBindingObserver {
-  CameraController? _controller;
-  List<CameraDescription>? _cameras;
-  bool _isInitialized = false;
+class _CameraPageState extends ConsumerState<CameraPage> {
   bool _isFrontCamera = false;
-  double _zoomLevel = 1.0;
-  FlashMode _flashMode = FlashMode.off;
+  double _zoomLevel = 0.0; // 0.0–1.0 (camerawesome normalized zoom)
+  FlashMode _flashMode = FlashMode.none;
   int _aspectIndex = 0;
   bool _isSaving = false;
   bool _discardRequested = false;
@@ -34,179 +30,26 @@ class _CameraPageState extends ConsumerState<CameraPage>
   double _shutterScale = 1.0;
   bool _showFlash = false;
   bool _showGrid = false;
-  Offset _focusOffset = Offset.zero;
-  bool _showFocusIndicator = false;
-  Timer? _focusTimer;
 
-  static const _aspectRatios = [4 / 3, 3 / 4, 16 / 9, 9 / 16, 1 / 1];
-  static const _aspectLabels = ['4:3', '3:4', '16:9', '9:16', '1:1'];
+  static const _aspectRatios = [
+    CameraAspectRatios.ratio_4_3,
+    CameraAspectRatios.ratio_16_9,
+    CameraAspectRatios.ratio_1_1,
+  ];
+  static const _aspectLabels = ['4:3', '16:9', '1:1'];
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _initCamera());
-  }
+  /// Display zoom (1.0x–5.0x), derived from normalized _zoomLevel.
+  double get _displayZoom => 1.0 + _zoomLevel * 4.0;
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _discardRequested = true;
-    _focusTimer?.cancel();
-    _controller?.dispose();
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _initCamera();
-    } else if (state == AppLifecycleState.paused) {
-      _controller?.dispose();
-      _controller = null;
-    }
-  }
-
-  Future<void> _initCamera() async {
-    if (!mounted) return;
-    try {
-      _cameras = await availableCameras();
-      if (_cameras!.isEmpty) return;
-
-      final camera = _isFrontCamera
-          ? _cameras!.firstWhere(
-              (c) => c.lensDirection == CameraLensDirection.front,
-              orElse: () => _cameras!.first,
-            )
-          : _cameras!.firstWhere(
-              (c) => c.lensDirection == CameraLensDirection.back,
-              orElse: () => _cameras!.first,
-            );
-
-      final settings = ref.read(cameraSettingsProvider);
-      final preset = settings.highQuality
-          ? ResolutionPreset.veryHigh
-          : ResolutionPreset.medium;
-
-      _controller =
-          CameraController(camera, preset, enableAudio: false);
-      await _controller!.initialize();
-      if (mounted) setState(() => _isInitialized = true);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('相机启动失败: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  void _toggleCamera() {
-    if (_cameras!.length < 2) return;
-    setState(() => _isFrontCamera = !_isFrontCamera);
-    _controller?.dispose();
-    _controller = null;
-    _isInitialized = false;
-    _initCamera();
-  }
-
-  void _toggleFlash() {
-    if (_controller == null || !_isInitialized) return;
-    const modes = [
-      FlashMode.off,
-      FlashMode.auto,
-      FlashMode.always,
-      FlashMode.torch
-    ];
-    final idx = (modes.indexOf(_flashMode) + 1) % modes.length;
-    setState(() => _flashMode = modes[idx]);
-    _controller!.setFlashMode(_flashMode);
-  }
-
-  void _showAspectRatioPicker() {
-    showModalBottomSheet<int>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return SingleChildScrollView(
-          child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 32,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurfaceVariant
-                      .withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                '选择画面比例',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              const SizedBox(height: 16),
-              ...List.generate(_aspectLabels.length, (i) {
-                final label = _aspectLabels[i];
-                final isSelected = i == _aspectIndex;
-                return ListTile(
-                  leading: Icon(
-                    isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
-                    color: isSelected
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  title: Text(
-                    label,
-                    style: TextStyle(
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                      color: isSelected
-                          ? Theme.of(context).colorScheme.primary
-                          : null,
-                    ),
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  onTap: () => Navigator.pop(context, i),
-                );
-              }),
-            ],
-          ),
-        ),
-        );
-      },
-    ).then((index) {
-      if (index != null && mounted) {
-        setState(() => _aspectIndex = index);
-      }
-    });
-  }
-
-  void _zoomIn() {
-    if (_controller == null || !_isInitialized) return;
-    setState(() => _zoomLevel = (_zoomLevel + 0.5).clamp(1.0, 5.0));
-    _controller!.setZoomLevel(_zoomLevel);
-  }
-
-  void _zoomOut() {
-    if (_controller == null || !_isInitialized) return;
-    setState(() => _zoomLevel = (_zoomLevel - 0.5).clamp(1.0, 5.0));
-    _controller!.setZoomLevel(_zoomLevel);
-  }
+  // ====================================================================
+  // Animations
+  // ====================================================================
 
   void _animateShutter() {
     setState(() => _shutterScale = 0.85);
@@ -222,61 +65,184 @@ class _CameraPageState extends ConsumerState<CameraPage>
     });
   }
 
-  void _onTapDown(TapDownDetails details) {
-    if (_controller == null || !_isInitialized) return;
+  // ====================================================================
+  // Camera controls
+  // ====================================================================
 
-    final RenderBox box = context.findRenderObject() as RenderBox;
-    final localOffset = box.globalToLocal(details.globalPosition);
-    final size = box.size;
+  void _toggleCamera(CameraState state) {
+    setState(() => _isFrontCamera = !_isFrontCamera);
+    state.switchCameraSensor();
+  }
 
-    final normalizedOffset = Offset(
-      (localOffset.dx / size.width).clamp(0.0, 1.0),
-      (localOffset.dy / size.height).clamp(0.0, 1.0),
-    );
+  void _toggleFlash(SensorConfig sensorConfig) {
+    const modes = [
+      FlashMode.none,
+      FlashMode.auto,
+      FlashMode.always,
+      FlashMode.on,
+    ];
+    final idx = (modes.indexOf(_flashMode) + 1) % modes.length;
+    setState(() => _flashMode = modes[idx]);
+    sensorConfig.setFlashMode(_flashMode);
+  }
 
-    _controller!.setFocusPoint(normalizedOffset);
-    _controller!.setExposurePoint(normalizedOffset);
+  void _zoomIn(SensorConfig sensorConfig) {
+    final newZoom = (_zoomLevel + 0.1).clamp(0.0, 1.0);
+    setState(() => _zoomLevel = newZoom);
+    sensorConfig.setZoom(newZoom);
+  }
 
-    setState(() {
-      _focusOffset = localOffset;
-      _showFocusIndicator = true;
-    });
+  void _zoomOut(SensorConfig sensorConfig) {
+    final newZoom = (_zoomLevel - 0.1).clamp(0.0, 1.0);
+    setState(() => _zoomLevel = newZoom);
+    sensorConfig.setZoom(newZoom);
+  }
 
-    _focusTimer?.cancel();
-    _focusTimer = Timer(const Duration(milliseconds: 1500), () {
-      if (mounted) setState(() => _showFocusIndicator = false);
+  void _showAspectRatioPicker(SensorConfig sensorConfig) {
+    showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 32,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurfaceVariant
+                        .withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  '选择画面比例',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 16),
+                ...List.generate(_aspectLabels.length, (i) {
+                  final label = _aspectLabels[i];
+                  final isSelected = i == _aspectIndex;
+                  return ListTile(
+                    leading: Icon(
+                      isSelected
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_off,
+                      color: isSelected
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    title: Text(
+                      label,
+                      style: TextStyle(
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.normal,
+                        color: isSelected
+                            ? Theme.of(context).colorScheme.primary
+                            : null,
+                      ),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    onTap: () => Navigator.pop(context, i),
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
+    ).then((index) {
+      if (index != null && mounted) {
+        setState(() => _aspectIndex = index);
+        sensorConfig.setAspectRatio(_aspectRatios[index]);
+      }
     });
   }
 
-  Future<void> _takePicture() async {
-    if (!_isInitialized || _controller == null || _isSaving) return;
+  // ====================================================================
+  // Photo capture
+  // ====================================================================
+
+  Future<void> _takePicture(PhotoCameraState state) async {
+    if (_isSaving) return;
 
     _animateShutter();
     _triggerFlash();
-
     setState(() => _isSaving = true);
 
     try {
-      final xFile = await _controller!.takePicture();
+      final request = await state.takePhoto();
+      if (_discardRequested || !mounted) return;
+
+      final filePath = request.when(
+        single: (single) => single.file?.path,
+      );
+
+      if (filePath == null) {
+        if (mounted) {
+          setState(() => _isSaving = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('拍照失败: 无法获取文件'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      await _processAndSave(filePath);
+    } catch (e) {
+      if (mounted && !_discardRequested) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('拍照失败: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted && _isSaving) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  Future<void> _processAndSave(String filePath) async {
+    try {
+      // Read bytes from the camerawesome-temp file
+      var bytes = await File(filePath).readAsBytes();
       if (_discardRequested) return;
 
-      var bytes = await xFile.readAsBytes();
-      if (_discardRequested) return;
-
-      // Step 1: Re-encode to correct EXIF orientation (always needed)
+      // Step 1: Re-encode to correct EXIF orientation
       bytes = await FlutterImageCompress.compressWithList(
         bytes,
         quality: 100,
         format: CompressFormat.jpeg,
       );
-      if (_discardRequested) return;
+      if (_discardRequested) {
+        if (mounted) setState(() => _isSaving = false);
+        return;
+      }
 
       // If edit-after-capture is enabled, show the editor before saving
       if (widget.editAfterCapture) {
         setState(() => _isSaving = false);
         if (!mounted) return;
 
-        final editedBytes = await Navigator.push<Uint8List>(
+        final result = await Navigator.push<ImageEditorResult>(
           context,
           MaterialPageRoute(
             builder: (_) => ImageEditorPage(imageBytes: bytes),
@@ -284,7 +250,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
         );
         if (!mounted || _discardRequested) return;
 
-        if (editedBytes == null) {
+        if (result == null) {
           // User cancelled editing — discard the photo
           Navigator.pop(context, null);
           return;
@@ -292,14 +258,17 @@ class _CameraPageState extends ConsumerState<CameraPage>
 
         // Save the edited image
         setState(() => _isSaving = true);
-        bytes = editedBytes;
+        bytes = result.editedBytes;
       } else {
         // Step 2: Crop + target quality (in one compressWithList call)
-        final aspectRatio = _aspectRatios[_aspectIndex];
         final settings = ref.read(cameraSettingsProvider);
         final quality = (settings.compressionQuality * 100).round();
 
-        if (aspectRatio != _aspectRatios[0]) {
+        // Map camerawesome aspect ratio index to actual ratio value
+        final ratios = [4 / 3, 16 / 9, 1 / 1];
+        final aspectRatio = ratios[_aspectIndex];
+
+        if (aspectRatio != ratios[0]) {
           final codec = await ui.instantiateImageCodec(bytes);
           final frame = await codec.getNextFrame();
           final image = frame.image;
@@ -315,7 +284,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
           final dx = (srcWidth - targetW) / 2;
           final dy = (srcHeight - targetH) / 2;
           final recorder = ui.PictureRecorder();
-          final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, targetW, targetH));
+          final canvas =
+              Canvas(recorder, Rect.fromLTWH(0, 0, targetW, targetH));
           canvas.drawImageRect(
             image,
             Rect.fromLTWH(dx, dy, targetW, targetH),
@@ -382,7 +352,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
       );
       await ImageManifest.addRecord(record);
 
-      final filePath = await ImageManifest.readFilePath(fileName);
+      final savedFilePath = await ImageManifest.readFilePath(fileName);
       if (mounted && !_discardRequested) {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -392,19 +362,15 @@ class _CameraPageState extends ConsumerState<CameraPage>
             behavior: SnackBarBehavior.floating,
           ),
         );
-        Navigator.pop(context, filePath);
+        Navigator.pop(context, savedFilePath);
       }
     } catch (e) {
       if (mounted && !_discardRequested) {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('拍照失败: $e'), backgroundColor: Colors.red),
+              content: Text('保存照片失败: $e'), backgroundColor: Colors.red),
         );
-      }
-    } finally {
-      if (mounted && _isSaving) {
-        setState(() => _isSaving = false);
       }
     }
   }
@@ -431,83 +397,42 @@ class _CameraPageState extends ConsumerState<CameraPage>
 
   IconData _flashIcon() {
     switch (_flashMode) {
-      case FlashMode.off:
+      case FlashMode.none:
         return Icons.flash_off;
       case FlashMode.auto:
         return Icons.flash_auto;
       case FlashMode.always:
         return Icons.flash_on;
-      case FlashMode.torch:
+      case FlashMode.on:
         return Icons.highlight;
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return PopScope(
-      canPop: !_isSaving,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) {
-          _discardRequested = true;
-          Navigator.pop(context);
-        }
-      },
-      child: Stack(
-        children: [
-        if (_isInitialized && _controller != null)
-          Positioned.fill(
-            child: GestureDetector(
-              onTapDown: _onTapDown,
-              child: CameraPreview(_controller!),
-            ),
-          )
-        else
-          const Positioned.fill(
-            child: ColoredBox(
-              color: Colors.black,
-              child: Center(
-                child: CircularProgressIndicator(color: Colors.white),
-              ),
-            ),
-          ),
+  // ====================================================================
+  // UI builders
+  // ====================================================================
 
+  Widget _buildLoadingUI() {
+    return const Positioned.fill(
+      child: ColoredBox(
+        color: Colors.black,
+        child: Center(
+          child: CircularProgressIndicator(color: Colors.white),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPhotoUI(PhotoCameraState state) {
+    final sensorConfig = state.sensorConfig;
+
+    return Stack(
+      children: [
         // Grid overlay
-        if (_showGrid && _isInitialized)
+        if (_showGrid)
           Positioned.fill(
             child: CustomPaint(painter: _GridPainter()),
           ),
-
-        // Crop preview overlay — darken areas outside selected ratio
-        if (_isInitialized)
-          Positioned.fill(
-            child: IgnorePointer(
-              child: CustomPaint(
-                painter: _CropPreviewPainter(
-                  selectedAspectRatio: _aspectRatios[_aspectIndex],
-                ),
-              ),
-            ),
-          ),
-
-        // Focus indicator
-        Positioned(
-          left: _focusOffset.dx - 25,
-          top: _focusOffset.dy - 25,
-          child: AnimatedOpacity(
-            opacity: _showFocusIndicator ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 300),
-            child: IgnorePointer(
-              child: Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.yellow, width: 2),
-                ),
-              ),
-            ),
-          ),
-        ),
 
         // Flash overlay
         Positioned.fill(
@@ -571,7 +496,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
-                  '${_zoomLevel.toStringAsFixed(1)}x',
+                  '${_displayZoom.toStringAsFixed(1)}x',
                   style: const TextStyle(
                       color: Colors.white, fontWeight: FontWeight.bold),
                 ),
@@ -580,10 +505,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    onPressed: _toggleFlash,
+                    onPressed: () => _toggleFlash(sensorConfig),
                     icon: Icon(
                       _flashIcon(),
-                      color: _flashMode == FlashMode.off
+                      color: _flashMode == FlashMode.none
                           ? Colors.white
                           : Colors.amber,
                       size: 28,
@@ -614,7 +539,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
             children: [
               // Aspect ratio toggle
               GestureDetector(
-                onTap: _showAspectRatioPicker,
+                onTap: () => _showAspectRatioPicker(sensorConfig),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 16, vertical: 6),
@@ -637,9 +562,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _overlayButton(Icons.zoom_out, _zoomOut),
+                  _overlayButton(Icons.zoom_out, () => _zoomOut(sensorConfig)),
                   const SizedBox(width: 48),
-                  _overlayButton(Icons.zoom_in, _zoomIn),
+                  _overlayButton(Icons.zoom_in, () => _zoomIn(sensorConfig)),
                 ],
               ),
               const SizedBox(height: 24),
@@ -648,13 +573,13 @@ class _CameraPageState extends ConsumerState<CameraPage>
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   IconButton(
-                    onPressed: _toggleCamera,
+                    onPressed: () => _toggleCamera(state),
                     icon: const Icon(Icons.flip_camera_ios,
                         color: Colors.white, size: 28),
                   ),
                   const SizedBox(width: 32),
                   GestureDetector(
-                    onTap: _takePicture,
+                    onTap: () => _takePicture(state),
                     child: AnimatedScale(
                       scale: _shutterScale,
                       duration: const Duration(milliseconds: 80),
@@ -682,7 +607,6 @@ class _CameraPageState extends ConsumerState<CameraPage>
           ),
         ),
       ],
-      ),
     );
   }
 
@@ -696,7 +620,71 @@ class _CameraPageState extends ConsumerState<CameraPage>
       ),
     );
   }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !_isSaving,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          _discardRequested = true;
+          Navigator.pop(context);
+        }
+      },
+      child: CameraAwesomeBuilder.custom(
+        sensorConfig: SensorConfig.single(
+          sensor: Sensor.position(
+            _isFrontCamera ? SensorPosition.front : SensorPosition.back,
+          ),
+          flashMode: _flashMode,
+          aspectRatio: _aspectRatios[_aspectIndex],
+          zoom: _zoomLevel,
+        ),
+        saveConfig: SaveConfig.photo(),
+        builder: (state, _) {
+          return state.when(
+            onPreparingCamera: (_) => _buildLoadingUI(),
+            onPhotoMode: (pState) => _buildPhotoUI(pState),
+            onVideoMode: (_) => const SizedBox.shrink(),
+            onVideoRecordingMode: (_) => const SizedBox.shrink(),
+          );
+        },
+        onPreviewTapBuilder: (state) => OnPreviewTap(
+          onTap: (position, flutterSize, pixelSize) {
+            state.when(
+              onPhotoMode: (s) => s.focusOnPoint(
+                flutterPosition: position,
+                flutterPreviewSize: flutterSize,
+                pixelPreviewSize: pixelSize,
+              ),
+              onVideoMode: (s) => s.focusOnPoint(
+                flutterPosition: position,
+                flutterPreviewSize: flutterSize,
+                pixelPreviewSize: pixelSize,
+              ),
+              onVideoRecordingMode: (s) => s.focusOnPoint(
+                flutterPosition: position,
+                flutterPreviewSize: flutterSize,
+                pixelPreviewSize: pixelSize,
+              ),
+            );
+          },
+        ),
+        onPreviewScaleBuilder: (state) => OnPreviewScale(
+          onScale: (scale) {
+            _zoomLevel = scale.clamp(0.0, 1.0);
+            state.sensorConfig.setZoom(_zoomLevel);
+            if (mounted) setState(() {});
+          },
+        ),
+      ),
+    );
+  }
 }
+
+// ====================================================================
+// Grid painter — unchanged from the original
+// ====================================================================
 
 class _GridPainter extends CustomPainter {
   @override
@@ -716,63 +704,4 @@ class _GridPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _CropPreviewPainter extends CustomPainter {
-  final double selectedAspectRatio;
-
-  _CropPreviewPainter({required this.selectedAspectRatio});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final previewRatio = size.width / size.height;
-    if ((previewRatio - selectedAspectRatio).abs() < 0.001) return;
-
-    double left, top, cropW, cropH;
-    if (previewRatio > selectedAspectRatio) {
-      cropW = size.height * selectedAspectRatio;
-      left = (size.width - cropW) / 2;
-      top = 0;
-      cropH = size.height;
-    } else {
-      cropH = size.width / selectedAspectRatio;
-      top = (size.height - cropH) / 2;
-      left = 0;
-      cropW = size.width;
-    }
-
-    final fillPaint = Paint()..color = Colors.black54;
-    final borderPaint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
-
-    // Top bar
-    if (top > 0) {
-      canvas.drawRect(Rect.fromLTWH(0, 0, size.width, top), fillPaint);
-    }
-    // Bottom bar
-    final bottom = top + cropH;
-    if (bottom < size.height) {
-      canvas.drawRect(
-          Rect.fromLTWH(0, bottom, size.width, size.height - bottom), fillPaint);
-    }
-    // Left bar (when preview is wider)
-    if (left > 0) {
-      canvas.drawRect(Rect.fromLTWH(0, top, left, cropH), fillPaint);
-    }
-    // Right bar
-    final right = left + cropW;
-    if (right < size.width) {
-      canvas.drawRect(
-          Rect.fromLTWH(right, top, size.width - right, cropH), fillPaint);
-    }
-
-    // Border around crop area
-    canvas.drawRect(Rect.fromLTWH(left, top, cropW, cropH), borderPaint);
-  }
-
-  @override
-  bool shouldRepaint(_CropPreviewPainter oldDelegate) =>
-      oldDelegate.selectedAspectRatio != selectedAspectRatio;
 }
