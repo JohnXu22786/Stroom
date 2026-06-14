@@ -1,24 +1,23 @@
-import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path/path.dart' as p;
 import 'package:dio/dio.dart' show CancelToken;
-import '../../utils/ffmpeg_resolver.dart';
+import 'package:media_kit/media_kit.dart';
 
 /// 格式转换器
 ///
 /// 将下载的 TS 分段合并/转换为 MP4。
-/// 优先使用系统安装的 FFmpeg，不可用时退化为纯 Dart 合并。
+/// 使用 media_kit 的编码引擎（通过 mpv 后端）进行转换。
 class FFmpegConverter {
   FFmpegConverter._();
 
   /// 检查系统是否安装了 FFmpeg
   ///
-  /// 执行 `ffmpeg -version` 验证。
-  /// 保留此方法以保持向后兼容性。
-  static Future<bool> isFFmpegAvailable() {
-    return FFmpegResolver.isFFmpegAvailable();
-  }
+  /// 此方法保留以保持向后兼容性，但现在始终返回 false，
+  /// 因为我们使用 media_kit 内建的编码引擎。
+  static Future<bool> isFFmpegAvailable() async => false;
 
   /// 将输入媒体转换为 MP4
   ///
@@ -47,37 +46,12 @@ class FFmpegConverter {
       return outputPath;
     }
 
-    final ffmpegAvailable = await isFFmpegAvailable();
-
-    if (ffmpegAvailable) {
-      return _convertWithFfmpeg(
-        inputPath: inputPath,
-        outputPath: outputPath,
-        onProgress: onProgress,
-        cancelToken: cancelToken,
-      );
-    }
-
-    // FFmpeg 不可用时，使用纯 Dart 合并（仅适用于 TS 文件）
-    debugPrint('[FFmpegConverter] FFmpeg not available, using pure Dart merge');
-    if (inputExt == '.ts' || inputExt == '.ts.catcatch_tmp') {
-      // 直接复制文件（TS → MP4 容器兼容）
-      onProgress?.call(10);
-      final inputFile = File(inputPath);
-      if (!await inputFile.exists()) {
-throw FileSystemException('下载源文件不存在，请重新下载', inputPath);
-      }
-
-      onProgress?.call(50);
-      await inputFile.copy(outputPath);
-      onProgress?.call(100);
-
-      return outputPath;
-    }
-
-    throw UnsupportedError(
-      'FFmpeg is required to convert non-TS formats. '
-      'Please install FFmpeg or provide a TS file.',
+    // 使用 media_kit 进行转换
+    return _convertWithMediaKit(
+      inputPath: inputPath,
+      outputPath: outputPath,
+      onProgress: onProgress,
+      cancelToken: cancelToken,
     );
   }
 
@@ -126,11 +100,11 @@ throw FileSystemException('下载源文件不存在，请重新下载', inputPat
   }
 
   // ===========================================================================
-  // FFmpeg 转换
+  // media_kit 转换
   // ===========================================================================
 
-  /// 使用 FFmpeg 进行转换
-  static Future<String> _convertWithFfmpeg({
+  /// 使用 media_kit 引擎进行转换
+  static Future<String> _convertWithMediaKit({
     required String inputPath,
     required String outputPath,
     void Function(int progress)? onProgress,
@@ -148,98 +122,102 @@ throw FileSystemException('下载源文件不存在，请重新下载', inputPat
       throw FileSystemException('Input file not found', inputPath);
     }
 
-    // 如果输入是 TS 文件，直接复制流（不重新编码）
+    // 如果输入是 TS 文件，使用纯 Dart 合并（不做重新编码）
     final isTs = inputPath.toLowerCase().endsWith('.ts');
-
-    final args = <String>[
-      '-i', inputPath,
-      '-y', // 覆盖输出
-      '-progress', 'pipe:1', // 输出进度到 stdout
-    ];
-
     if (isTs) {
-      args.addAll(['-c', 'copy']);
-    } else {
-      args.addAll([
-        '-c:v',
-        'libx264',
-        '-preset',
-        'fast',
-        '-crf',
-        '23',
-        '-c:a',
-        'aac',
-        '-b:a',
-        '128k',
-      ]);
+      onProgress?.call(10);
+      await inputFile.copy(outputPath);
+      onProgress?.call(100);
+      return outputPath;
     }
 
-    args.add(outputPath);
+    debugPrint('[FFmpegConverter] Using media_kit for conversion: $inputPath -> $outputPath');
 
-    debugPrint('[FFmpegConverter] Running: ffmpeg ${args.join(' ')}');
-
-    final process = await Process.start('ffmpeg', args);
-    cancelToken?.whenCancel.then((_) {
-      process.kill();
-    });
-
-    int? totalDurationUs;
-
-    // 读取 stdout 获取 FFmpeg 进度
-    process.stdout
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen((line) {
+    final player = Player();
+    try {
       if (cancelToken?.isCancelled ?? false) {
-        process.kill();
-        return;
+        throw Exception('Task was cancelled');
       }
-      if (line.startsWith('out_time_us=')) {
-        final us = int.tryParse(line.substring('out_time_us='.length));
-        if (us != null && totalDurationUs != null && totalDurationUs! > 0) {
-          final p = (us * 100 ~/ totalDurationUs!).clamp(0, 100);
-          onProgress?.call(p);
-        }
+
+      cancelToken?.whenCancel.then((_) async {
+        try {
+          await player.dispose();
+        } catch (_) {}
+      });
+
+      // 配置 mpv 编码参数
+      // --o=output.mp4: 输出文件路径
+      // --oac=aac: 音频编码
+      // --ovc=libx264: 视频编码
+      // --ovcopts=preset=fast,crf=23: 编码选项
+      if (player.platform != null) {
+        await (player.platform as dynamic).setProperty('o', outputPath, waitForInitialization: false);
+        await (player.platform as dynamic).setProperty('ovc', 'libx264', waitForInitialization: false);
+        await (player.platform as dynamic).setProperty('oac', 'aac', waitForInitialization: false);
+        await (player.platform as dynamic).setProperty('ovcopts', 'preset=fast,crf=23', waitForInitialization: false);
       }
-    });
 
-    // 读取 stderr 获取总时长
-    final stderrLines = <String>[];
-    process.stderr
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen((line) {
-      stderrLines.add(line);
-      final durationMatch =
-          RegExp(r'Duration:\s*(\d+):(\d+):(\d+\.\d+)').firstMatch(line);
-      if (durationMatch != null) {
-        final h = int.parse(durationMatch.group(1)!);
-        final m = int.parse(durationMatch.group(2)!);
-        final s = double.parse(durationMatch.group(3)!);
-        totalDurationUs = ((h * 3600 + m * 60 + s) * 1000000).round();
-      }
-    });
-
-    final exitCode = await process.exitCode;
-
-    // 如果取消了，终止进程
-    if (cancelToken?.isCancelled ?? false) {
-      process.kill();
-      throw Exception('Task was cancelled during FFmpeg conversion');
-    }
-
-    if (exitCode != 0) {
-      final error = stderrLines.join('\n');
-      throw ProcessException(
-        'ffmpeg',
-        args,
-        'Exit code: $exitCode\n$error',
+      // 打开媒体进行编码
+      await player.open(
+        Media(Uri.file(inputPath).toString()),
+        play: true,
       );
-    }
 
-    onProgress?.call(100);
-    debugPrint('[FFmpegConverter] Conversion complete: $outputPath');
-    return outputPath;
+      // 等待编码完成
+      final completer = Completer<void>();
+      StreamSubscription? completionSub;
+      StreamSubscription? errorSub;
+
+      completionSub = player.stream.completed.listen((completed) {
+        if (completed && !completer.isCompleted) {
+          completer.complete();
+        }
+      });
+
+      errorSub = player.stream.error.listen((error) {
+        if (error.isNotEmpty && !completer.isCompleted) {
+          completer.completeError(Exception('转换失败: $error'));
+        }
+      });
+
+      // 进度更新
+      StreamSubscription<Duration>? positionSub;
+      if (onProgress != null) {
+        positionSub = player.stream.position.listen((position) {
+          final duration = player.state.duration;
+          if (duration.inMilliseconds > 0) {
+            final progress = ((position.inMilliseconds / duration.inMilliseconds) * 100).round().clamp(0, 100);
+            onProgress(progress);
+          }
+        });
+      }
+
+      // 设置超时（10分钟）
+      final timeout = Future.delayed(const Duration(minutes: 10), () {
+        if (!completer.isCompleted) {
+          completer.completeError(Exception('转换超时'));
+        }
+      });
+
+      try {
+        await completer.future;
+      } finally {
+        timeout.ignore();
+        completionSub?.cancel();
+        errorSub?.cancel();
+        positionSub?.cancel();
+      }
+
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      onProgress?.call(100);
+      debugPrint('[FFmpegConverter] Conversion complete: $outputPath');
+      return outputPath;
+    } finally {
+      try {
+        await player.dispose();
+      } catch (_) {}
+    }
   }
 
   /// 从视频文件中提取音频
@@ -268,79 +246,90 @@ throw FileSystemException('下载源文件不存在，请重新下载', inputPat
       throw FileSystemException('Input file not found', inputPath);
     }
 
-    final args = <String>[
-      '-i', inputPath,
-      '-vn', // 不包含视频流
-      '-acodec', 'libmp3lame',
-      '-q:a', '2', // 高质量
-      '-y', // 覆盖输出
-      '-progress', 'pipe:1',
-      outputPath,
-    ];
+    debugPrint('[FFmpegConverter] Using media_kit for audio extraction: $inputPath -> $outputPath');
 
-    debugPrint('[FFmpegConverter] Running ffmpeg audio extraction: '
-        'ffmpeg ${args.join(' ')}');
-
-    final process = await Process.start('ffmpeg', args);
-    cancelToken?.whenCancel.then((_) {
-      process.kill();
-    });
-
-    int? totalDurationUs;
-
-    // 读取 stdout 获取 FFmpeg 进度
-    process.stdout
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen((line) {
+    final player = Player();
+    try {
       if (cancelToken?.isCancelled ?? false) {
-        process.kill();
-        return;
+        throw Exception('Task was cancelled');
       }
-      if (line.startsWith('out_time_us=')) {
-        final us = int.tryParse(line.substring('out_time_us='.length));
-        if (us != null && totalDurationUs != null && totalDurationUs! > 0) {
-          final p = (us * 100 ~/ totalDurationUs!).clamp(0, 100);
-          onProgress?.call(p);
-        }
+
+      cancelToken?.whenCancel.then((_) async {
+        try {
+          await player.dispose();
+        } catch (_) {}
+      });
+
+      // 配置 mpv 编码参数
+      // --o=output.mp3: 输出文件路径
+      // --oac=libmp3lame: MP3 音频编码器
+      // --ovc=no: 不编码视频
+      if (player.platform != null) {
+        await (player.platform as dynamic).setProperty('o', outputPath, waitForInitialization: false);
+        await (player.platform as dynamic).setProperty('oac', 'libmp3lame', waitForInitialization: false);
+        await (player.platform as dynamic).setProperty('ovc', 'no', waitForInitialization: false);
       }
-    });
 
-    // 读取 stderr 获取总时长
-    final stderrLines = <String>[];
-    process.stderr
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen((line) {
-      stderrLines.add(line);
-      final durationMatch =
-          RegExp(r'Duration:\s*(\d+):(\d+):(\d+\.\d+)').firstMatch(line);
-      if (durationMatch != null) {
-        final h = int.parse(durationMatch.group(1)!);
-        final m = int.parse(durationMatch.group(2)!);
-        final s = double.parse(durationMatch.group(3)!);
-        totalDurationUs = ((h * 3600 + m * 60 + s) * 1000000).round();
-      }
-    });
-
-    final exitCode = await process.exitCode;
-
-    if (cancelToken?.isCancelled ?? false) {
-      process.kill();
-      throw Exception('Task was cancelled during audio extraction');
-    }
-
-    if (exitCode != 0) {
-      final error = stderrLines.join('\n');
-      throw ProcessException(
-        'ffmpeg',
-        args,
-        'Exit code: $exitCode\n$error',
+      // 打开媒体进行编码
+      await player.open(
+        Media(Uri.file(inputPath).toString()),
+        play: true,
       );
-    }
 
-    onProgress?.call(100);
-    debugPrint('[FFmpegConverter] Audio extraction complete: $outputPath');
-    return outputPath;
+      // 等待编码完成
+      final completer = Completer<void>();
+      StreamSubscription? completionSub;
+      StreamSubscription? errorSub;
+
+      completionSub = player.stream.completed.listen((completed) {
+        if (completed && !completer.isCompleted) {
+          completer.complete();
+        }
+      });
+
+      errorSub = player.stream.error.listen((error) {
+        if (error.isNotEmpty && !completer.isCompleted) {
+          completer.completeError(Exception('音频提取失败: $error'));
+        }
+      });
+
+      // 进度更新
+      StreamSubscription<Duration>? positionSub;
+      if (onProgress != null) {
+        positionSub = player.stream.position.listen((position) {
+          final duration = player.state.duration;
+          if (duration.inMilliseconds > 0) {
+            final progress = ((position.inMilliseconds / duration.inMilliseconds) * 100).round().clamp(0, 100);
+            onProgress(progress);
+          }
+        });
+      }
+
+      // 设置超时（5分钟）
+      final timeout = Future.delayed(const Duration(minutes: 5), () {
+        if (!completer.isCompleted) {
+          completer.completeError(Exception('音频提取超时'));
+        }
+      });
+
+      try {
+        await completer.future;
+      } finally {
+        timeout.ignore();
+        completionSub?.cancel();
+        errorSub?.cancel();
+        positionSub?.cancel();
+      }
+
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      onProgress?.call(100);
+      debugPrint('[FFmpegConverter] Audio extraction complete: $outputPath');
+      return outputPath;
+    } finally {
+      try {
+        await player.dispose();
+      } catch (_) {}
+    }
   }
 }

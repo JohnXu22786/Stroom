@@ -9,6 +9,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:mime/mime.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
+import 'package:stroom/providers/provider_config.dart' show ReasoningParam;
 import 'package:stroom/services/attachment_storage.dart';
 import 'package:stroom/pages/camera_page.dart';
 import 'package:stroom/widgets/camera_choice_dialog.dart';
@@ -33,6 +34,8 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   final ValueChanged<int> onModelSelected;
   final String? conversationId;
   final String initialDraftText;
+  final List<ReasoningParam> reasoningParams;
+  final bool hasReasoningParams;
 
   const ChatComposerWidget({
     super.key,
@@ -47,6 +50,8 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     required this.onModelSelected,
     this.conversationId,
     this.initialDraftText = '',
+    this.reasoningParams = const [],
+    this.hasReasoningParams = false,
   });
 
   @override
@@ -315,20 +320,24 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
 
   void _showReasoningPanel() {
     final reasoningEnabled = ref.read(reasoningEnabledProvider);
-    final reasoningEffort = ref.read(reasoningEffortProvider);
+    final reasoningParamValues = ref.read(reasoningParamValuesProvider);
     showReasoningPanel(
       context: context,
       reasoningEnabled: reasoningEnabled,
-      reasoningEffort: reasoningEffort,
+      reasoningParamSelections: reasoningParamValues,
+      reasoningParams: widget.reasoningParams,
       onReasoningToggle: (value) {
         ref.read(reasoningEnabledProvider.notifier).state = value;
         SharedPreferences.getInstance()
             .then((prefs) => prefs.setBool('reasoning_enabled', value));
       },
-      onReasoningEffortChange: (value) {
-        ref.read(reasoningEffortProvider.notifier).state = value;
-        SharedPreferences.getInstance()
-            .then((prefs) => prefs.setString('reasoning_effort', value));
+      onReasoningParamChanged: (paramName, value) {
+        final current = Map<String, String>.from(
+            ref.read(reasoningParamValuesProvider));
+        current[paramName] = value;
+        ref.read(reasoningParamValuesProvider.notifier).state = current;
+        SharedPreferences.getInstance().then((prefs) =>
+            prefs.setString('reasoning_params', current.toString()));
       },
     );
   }
@@ -586,7 +595,10 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                     icon: Icons.psychology_outlined,
                     label: '推理',
                     color: Colors.purple,
-                    onTap: _showReasoningPanel,
+                    onTap: widget.hasReasoningParams
+                        ? _showReasoningPanel
+                        : null,
+                    enabled: widget.hasReasoningParams,
                   ),
                 ],
               ),
@@ -675,42 +687,55 @@ class _SettingsChip extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool enabled;
 
   const _SettingsChip({
     required this.icon,
     required this.label,
     required this.color,
-    required this.onTap,
+    this.onTap,
+    this.enabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isDisabled = !enabled;
     return InkWell(
-      onTap: onTap,
+      onTap: isDisabled ? null : onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: isDisabled
+              ? Colors.grey.withOpacity(0.08)
+              : color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: color.withOpacity(0.2),
+            color: isDisabled
+                ? Colors.grey.withOpacity(0.1)
+                : color.withOpacity(0.2),
             width: 1,
           ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: color),
+            Icon(icon,
+                size: 16,
+                color: isDisabled
+                    ? Colors.grey.withOpacity(0.4)
+                    : color),
             const SizedBox(width: 4),
             Text(
               label,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                color: cs.onSurface,
+                color: isDisabled
+                    ? Colors.grey.withOpacity(0.4)
+                    : cs.onSurface,
               ),
             ),
           ],
