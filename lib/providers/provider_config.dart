@@ -212,6 +212,60 @@ class ReasoningParam {
         paramName: paramName,
         options: List<String>.from(options),
       );
+
+  /// Whether this param's options suggest it's a boolean toggle.
+  /// Returns true if any option is a known boolean value
+  /// (true/false, enabled/disabled, on/off, yes/no, 1/0).
+  bool get isBooleanToggle => options.any(
+        (o) => _booleanValues.contains(o.toLowerCase()),
+      );
+
+  static const _booleanValues = {
+    'true', 'false', 'enabled', 'disabled',
+    'on', 'off', 'yes', 'no', '1', '0',
+  };
+
+  /// Get the "off" value for this boolean toggle param.
+  /// Returns null if this is not a boolean toggle.
+  /// When options contain an explicit off value (false/disabled/off/no/0),
+  /// the original-cased value is returned. Otherwise derives the off
+  /// counterpart preserving the casing of the on value.
+  String? get offValue {
+    if (!isBooleanToggle) return null;
+
+    // First, look for an explicit off value in the options
+    for (final option in options) {
+      final lower = option.toLowerCase();
+      if (['false', 'disabled', 'off', 'no', '0'].contains(lower)) {
+        return option;
+      }
+    }
+
+    // No explicit off value found; derive from on value preserving casing
+    for (final option in options) {
+      final lower = option.toLowerCase();
+      if (lower == 'true') return 'false';
+      if (lower == 'enabled') {
+        // Preserve casing: Enabled → Disabled, enabled → disabled, ENABLED → DISABLED
+        if (option == 'Enabled') return 'Disabled';
+        if (option == 'ENABLED') return 'DISABLED';
+        return 'disabled';
+      }
+      if (lower == 'on') {
+        if (option == 'On') return 'Off';
+        if (option == 'ON') return 'OFF';
+        return 'off';
+      }
+      if (lower == 'yes') {
+        if (option == 'Yes') return 'No';
+        if (option == 'YES') return 'NO';
+        return 'no';
+      }
+      if (lower == '1') return '0';
+    }
+
+    return null;
+  }
 }
 
 // ============================================================================

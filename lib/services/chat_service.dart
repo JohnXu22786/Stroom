@@ -648,16 +648,26 @@ class ChatService {
       }
     }
 
-    // Reasoning params — only injected when reasoning is enabled.
-    // Users configure these per-model in the LLM config page.
-    // Each param can be a top-level string, nested object (dot notation).
-    // The selected value comes from reasoningParamValues (set by user in the
-    // reasoning panel). If no selection for a param, it is skipped.
+    // Reasoning params:
+    // - When reasoning is ON: all params with selected values are sent.
+    // - When reasoning is OFF: only boolean/toggle params (those whose options
+    //   include true/false, enabled/disabled, or similar on/off pairs) are sent
+    //   with their "off"/"disabled"/"false" value. Non-boolean params (like
+    //   reasoning_effort with low/medium/high) are NOT sent when toggle is OFF.
     if (reasoning) {
+      // Reasoning ON: send all params with selected values
       for (final rp in _modelConfig!.reasoningParams) {
         final selectedValue = reasoningParamValues[rp.paramName];
         if (selectedValue != null && selectedValue.isNotEmpty) {
           _setNestedParam(result, rp.paramName, selectedValue);
+        }
+      }
+    } else {
+      // Reasoning OFF: send only boolean/toggle params with "off" value
+      for (final rp in _modelConfig!.reasoningParams) {
+        final offValue = rp.offValue;
+        if (offValue != null) {
+          _setNestedParam(result, rp.paramName, offValue);
         }
       }
     }

@@ -709,7 +709,6 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
               final param = _reasoningParams[i];
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
-                color: cs.primaryContainer.withOpacity(0.3),
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Column(
