@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:camera/camera.dart' hide ImageFormat;
+import 'package:camerawesome/camerawesome_plugin.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -17,73 +17,17 @@ class VideoCapturePage extends ConsumerStatefulWidget {
   ConsumerState<VideoCapturePage> createState() => _VideoCapturePageState();
 }
 
-class _VideoCapturePageState extends ConsumerState<VideoCapturePage>
-    with WidgetsBindingObserver {
-  CameraController? _controller;
-  List<CameraDescription>? _cameras;
-  bool _isInitialized = false;
+class _VideoCapturePageState extends ConsumerState<VideoCapturePage> {
   bool _isFrontCamera = false;
   bool _isRecording = false;
   int _recordingDurationMs = 0;
   Timer? _recordingTimer;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _initCamera());
-  }
-
-  @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _recordingTimer?.cancel();
-    _controller?.dispose();
+    _recordingTimer = null;
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _initCamera();
-    } else if (state == AppLifecycleState.paused) {
-      _recordingTimer?.cancel();
-      _recordingTimer = null;
-      _controller?.dispose();
-      _controller = null;
-    }
-  }
-
-  Future<void> _initCamera() async {
-    if (!mounted) return;
-    try {
-      _cameras = await availableCameras();
-      if (_cameras == null || _cameras!.isEmpty) return;
-
-      final camera = _isFrontCamera
-          ? _cameras!.firstWhere(
-              (c) => c.lensDirection == CameraLensDirection.front,
-              orElse: () => _cameras!.first,
-            )
-          : _cameras!.firstWhere(
-              (c) => c.lensDirection == CameraLensDirection.back,
-              orElse: () => _cameras!.first,
-            );
-
-      _controller =
-          CameraController(camera, ResolutionPreset.high, enableAudio: true);
-      await _controller!.initialize();
-      if (mounted) setState(() => _isInitialized = true);
-    } catch (_) {}
-  }
-
-  void _toggleCamera() {
-    if (_cameras == null || _cameras!.length < 2) return;
-    setState(() => _isFrontCamera = !_isFrontCamera);
-    _controller?.dispose();
-    _controller = null;
-    _isInitialized = false;
-    _initCamera();
   }
 
   void _startTimer() {
@@ -112,51 +56,79 @@ class _VideoCapturePageState extends ConsumerState<VideoCapturePage>
 
   String _pad(int n) => n.toString().padLeft(2, '0');
 
-  Future<void> _toggleRecording() async {
-    if (!_isInitialized || _controller == null) return;
+  // ====================================================================
+  // Camera controls
+  // ====================================================================
 
+  void _toggleCamera(CameraState state) {
+    setState(() => _isFrontCamera = !_isFrontCamera);
+    state.switchCameraSensor();
+  }
+
+  Future<void> _toggleRecording(CameraState state) async {
     if (_isRecording) {
-      await _stopRecording();
+      // Stop recording
+      state.when(
+        onVideoRecordingMode: (recordingState) async {
+          try {
+            await recordingState.stopRecording(
+              onVideo: (request) {
+                request.when(
+                  single: (single) {
+                    final filePath = single.file?.path;
+                    if (filePath != null) {
+                      _saveVideoFromPath(filePath);
+                    }
+                  },
+                );
+              },
+              onVideoFailed: (exception) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('录像保存失败: $exception'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              },
+            );
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                    content: Text('停止录像失败: $e'),
+                    backgroundColor: Colors.red),
+              );
+            }
+          }
+          _stopTimer();
+          if (mounted) {
+            setState(() => _isRecording = false);
+          }
+        },
+      );
     } else {
-      await _startRecording();
-    }
-  }
-
-  Future<void> _startRecording() async {
-    try {
-      if (_controller!.value.isRecordingVideo) return;
-      await _controller!.startVideoRecording();
-      if (mounted) {
-        setState(() => _isRecording = true);
-        _startTimer();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('开始录像失败: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
-  }
-
-  Future<void> _stopRecording() async {
-    try {
-      if (!_controller!.value.isRecordingVideo) return;
-      final xFile = await _controller!.stopVideoRecording();
-      _stopTimer();
-      if (!mounted) return;
-      setState(() {
-        _isRecording = false;
-      });
-      await _saveVideo(xFile);
-    } catch (e) {
-      _stopTimer();
-      if (mounted) {
-        setState(() => _isRecording = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('停止录像失败: $e'), backgroundColor: Colors.red),
-        );
-      }
+      // Start recording
+      state.when(
+        onVideoMode: (videoState) async {
+          try {
+            await videoState.startRecording();
+            if (mounted) {
+              setState(() => _isRecording = true);
+              _startTimer();
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                    content: Text('开始录像失败: $e'),
+                    backgroundColor: Colors.red),
+              );
+            }
+          }
+        },
+      );
     }
   }
 
@@ -178,6 +150,13 @@ class _VideoCapturePageState extends ConsumerState<VideoCapturePage>
     }
   }
 
+  /// Called when camerawesome finishes saving a recorded video.
+  /// The [filePath] points to a temporary file written by camerawesome.
+  void _saveVideoFromPath(String filePath) {
+    // Reuse _saveVideo by wrapping the path in an XFile.
+    _saveVideo(XFile(filePath));
+  }
+
   Future<void> _saveVideo(XFile videoFile) async {
     try {
       final now = DateTime.now();
@@ -188,13 +167,13 @@ class _VideoCapturePageState extends ConsumerState<VideoCapturePage>
       if (format.isEmpty) format = 'mp4';
       final hash = computeVideoHash(videoBytes);
 
-      // 写入视频文件并获取本地路径（用于生成缩略图）
+      // Write video file and get local path (for thumbnail generation)
       String? videoPath;
       try {
         videoPath = await VideoManifest.writeFile('$hash.$format', videoBytes);
       } catch (_) {}
 
-      // 生成视频缩略图
+      // Generate video thumbnail
       if (videoPath != null && videoPath.isNotEmpty) {
         try {
           final thumbBytes = await VideoThumbnail.thumbnailData(
@@ -235,30 +214,32 @@ class _VideoCapturePageState extends ConsumerState<VideoCapturePage>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存视频失败: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('保存视频失败: $e'), backgroundColor: Colors.red),
         );
       }
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
+  // ====================================================================
+  // UI builders
+  // ====================================================================
+
+  Widget _buildLoadingUI() {
+    return const Positioned.fill(
+      child: ColoredBox(
+        color: Colors.black,
+        child: Center(
+          child: CircularProgressIndicator(color: Colors.white),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVideoUI(CameraState state) {
     return Stack(
       children: [
-        // Camera preview or loading indicator
-        if (_isInitialized && _controller != null)
-          Positioned.fill(child: CameraPreview(_controller!))
-        else
-          const Positioned.fill(
-            child: ColoredBox(
-              color: Colors.black,
-              child: Center(
-                child: CircularProgressIndicator(color: Colors.white),
-              ),
-            ),
-          ),
-
-        // Top overlay: close button, recording timer
+        // Recording timer (top)
         Positioned(
           top: MediaQuery.of(context).padding.top + 8,
           left: 16,
@@ -268,12 +249,13 @@ class _VideoCapturePageState extends ConsumerState<VideoCapturePage>
             children: [
               IconButton(
                 onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                icon:
+                    const Icon(Icons.close, color: Colors.white, size: 28),
               ),
               if (_isRecording)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.black54,
                     borderRadius: BorderRadius.circular(16),
@@ -305,7 +287,7 @@ class _VideoCapturePageState extends ConsumerState<VideoCapturePage>
           ),
         ),
 
-        // Bottom overlay: toggle camera, record button, pick from gallery
+        // Bottom overlay
         Positioned(
           bottom: 48,
           left: 0,
@@ -325,7 +307,7 @@ class _VideoCapturePageState extends ConsumerState<VideoCapturePage>
                   const SizedBox(width: 32),
                   // Record button
                   GestureDetector(
-                    onTap: _toggleRecording,
+                    onTap: () => _toggleRecording(state),
                     child: Container(
                       width: 72,
                       height: 72,
@@ -355,7 +337,7 @@ class _VideoCapturePageState extends ConsumerState<VideoCapturePage>
                   const SizedBox(width: 32),
                   // Toggle camera
                   IconButton(
-                    onPressed: _isRecording ? null : _toggleCamera,
+                    onPressed: _isRecording ? null : () => _toggleCamera(state),
                     icon: const Icon(Icons.flip_camera_ios,
                         color: Colors.white, size: 28),
                   ),
@@ -365,6 +347,29 @@ class _VideoCapturePageState extends ConsumerState<VideoCapturePage>
           ),
         ),
       ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: CameraAwesomeBuilder.custom(
+        sensorConfig: SensorConfig.single(
+          sensor: Sensor.position(
+            _isFrontCamera ? SensorPosition.front : SensorPosition.back,
+          ),
+          aspectRatio: CameraAspectRatios.ratio_16_9,
+        ),
+        saveConfig: SaveConfig.video(),
+        builder: (state, _) {
+          return state.when(
+            onPreparingCamera: (_) => _buildLoadingUI(),
+            onVideoMode: (_) => _buildVideoUI(state),
+            onVideoRecordingMode: (_) => _buildVideoUI(state),
+            onPhotoMode: (_) => const SizedBox.shrink(),
+          );
+        },
+      ),
     );
   }
 }
