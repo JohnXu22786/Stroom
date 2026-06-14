@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:stroom/models/tool_call.dart';
+import 'package:stroom/providers/provider_config.dart' show ReasoningParam;
 
 // ═══════════════════════════════════════════════════════════════
 // Model Panel
@@ -276,15 +277,21 @@ void showToolsPanel({
 // ═══════════════════════════════════════════════════════════════
 
 /// Shows a modal bottom sheet for reasoning settings.
+/// [reasoningParams] is the list of configurable reasoning parameters from the
+/// current model. Each param has a [paramName] and [options] (user-defined list
+/// of selectable values). When [reasoningParams] is empty, the panel shows a
+/// disabled state.
 void showReasoningPanel({
   required BuildContext context,
   required bool reasoningEnabled,
-  required String reasoningEffort,
+  required Map<String, String> reasoningParamSelections,
+  required List<ReasoningParam> reasoningParams,
   required ValueChanged<bool> onReasoningToggle,
-  required ValueChanged<String> onReasoningEffortChange,
+  required void Function(String paramName, String value) onReasoningParamChanged,
 }) {
   var localEnabled = reasoningEnabled;
-  var localEffort = reasoningEffort;
+  var localSelections = Map<String, String>.from(reasoningParamSelections);
+  final hasParams = reasoningParams.isNotEmpty;
   showModalBottomSheet(
     context: context,
     shape: const RoundedRectangleBorder(
@@ -360,62 +367,81 @@ void showReasoningPanel({
                           ),
                         ),
                         Switch(
-                          value: localEnabled,
+                          value: localEnabled && hasParams,
                           activeColor: cs.primary,
-                          onChanged: (value) {
-                            setState(() => localEnabled = value);
-                            onReasoningToggle(value);
-                          },
+                          onChanged: hasParams
+                              ? (value) {
+                                  setState(() => localEnabled = value);
+                                  onReasoningToggle(value);
+                                }
+                              : null,
                         ),
                       ],
                     ),
                   ),
-                  // Reasoning effort chips
-                  if (localEnabled) ...[
+                  // Reasoning param option chips (only when enabled and params exist)
+                  if (localEnabled && hasParams) ...[
                     const SizedBox(height: 12),
-                    Text(
-                      '推理强度',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: cs.onSurfaceVariant,
+                    ...reasoningParams.map((param) {
+                      final currentValue =
+                          localSelections[param.paramName] ??
+                              (param.options.isNotEmpty
+                                  ? param.options.first
+                                  : '');
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              param.paramName,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: param.options.map((option) {
+                                final isSelected =
+                                    currentValue == option;
+                                return _OptionChip(
+                                  label: option,
+                                  selected: isSelected,
+                                  onTap: () {
+                                    setState(() {
+                                      localSelections[param.paramName] =
+                                          option;
+                                    });
+                                    onReasoningParamChanged(
+                                        param.paramName, option);
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                  // No params state
+                  if (!hasParams)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 16),
+                      child: Center(
+                        child: Text(
+                          '当前模型未配置推理参数\n请在模型设置中添加推理参数',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: cs.onSurfaceVariant.withOpacity(0.6),
+                          ),
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        _EffortChip(
-                          label: '低',
-                          value: 'low',
-                          selected: localEffort == 'low',
-                          onSelected: () {
-                            setState(() => localEffort = 'low');
-                            onReasoningEffortChange('low');
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        _EffortChip(
-                          label: '中',
-                          value: 'medium',
-                          selected: localEffort == 'medium',
-                          onSelected: () {
-                            setState(() => localEffort = 'medium');
-                            onReasoningEffortChange('medium');
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        _EffortChip(
-                          label: '高',
-                          value: 'high',
-                          selected: localEffort == 'high',
-                          onSelected: () {
-                            setState(() => localEffort = 'high');
-                            onReasoningEffortChange('high');
-                          },
-                        ),
-                      ],
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -426,77 +452,46 @@ void showReasoningPanel({
   );
 }
 
-/// A chip/button for selecting reasoning effort level.
-class _EffortChip extends StatelessWidget {
+/// A chip/button for selecting a reasoning parameter option.
+class _OptionChip extends StatelessWidget {
   final String label;
-  final String value;
   final bool selected;
-  final VoidCallback onSelected;
+  final VoidCallback onTap;
 
-  const _EffortChip({
+  const _OptionChip({
     required this.label,
-    required this.value,
     required this.selected,
-    required this.onSelected,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Expanded(
-      child: InkWell(
-        onTap: onSelected,
-        borderRadius: BorderRadius.circular(10),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: selected ? cs.primaryContainer : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: selected ? cs.primary : cs.outlineVariant,
-              width: selected ? 1.5 : 1,
-            ),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+        decoration: BoxDecoration(
+          color: selected ? cs.primaryContainer : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected ? cs.primary : cs.outlineVariant,
+            width: selected ? 1.5 : 1,
           ),
-          child: Column(
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                  color: selected
-                      ? cs.onPrimaryContainer
-                      : cs.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                _effortDescription(value),
-                style: TextStyle(
-                  fontSize: 10,
-                  color: selected
-                      ? cs.onPrimaryContainer.withOpacity(0.7)
-                      : cs.onSurfaceVariant.withOpacity(0.6),
-                ),
-              ),
-            ],
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+            color: selected
+                ? cs.onPrimaryContainer
+                : cs.onSurfaceVariant,
           ),
         ),
       ),
     );
-  }
-
-  String _effortDescription(String level) {
-    switch (level) {
-      case 'low':
-        return '快速响应';
-      case 'medium':
-        return '平衡';
-      case 'high':
-        return '深度思考';
-      default:
-        return '';
-    }
   }
 }
