@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -21,6 +22,7 @@ import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'chat_setting_panels.dart';
 import 'app_album_picker_dialog.dart';
+import 'app_file_picker_dialog.dart';
 
 class ChatComposerWidget extends ConsumerStatefulWidget {
   final void Function(String text, List<Attachment> attachments) onSend;
@@ -370,7 +372,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     });
   }
 
-  /// Pick from app's internal album (ImageManifest).
+  /// Pick from app's internal album (ImageManifest) — legacy single-type picker.
   Future<void> _pickFromAppAlbum() async {
     try {
       final result = await showAppAlbumPickerDialog(context);
@@ -391,8 +393,25 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   }
 
   /// Pick from app internal files (images, documents, etc.).
+  /// Uses the new unified file picker with folder hierarchy, multi-select,
+  /// cross-folder selection, and preview bar.
   Future<void> _pickFromAppFiles() async {
-    await _pickFromAppAlbum();
+    try {
+      final result = await showAppFilePickerDialog(context);
+      if (result == null || result.isEmpty) return;
+      for (final entry in result) {
+        await _addPendingAttachment(entry.key, entry.value);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('导入失败: $e'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _pickFromCamera() async {
@@ -488,6 +507,19 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                 : 'document';
     final storagePath = await AttachmentStorage.saveFile(fileName, bytes);
     final hash = AttachmentStorage.computeHash(bytes);
+
+    // Immediately compute base64 for the attachment so it's cached
+    // and ready to send without waiting for conversion.
+    // Only cache for images (which need base64 for API calls) and
+    // text files (which may be sent inline).
+    final String? base64Data;
+    if (fileType == 'image') {
+      base64Data = base64Encode(bytes);
+    } else {
+      // For non-image files, base64 is not needed for API calls
+      base64Data = null;
+    }
+
     final att = Attachment(
       fileName: fileName,
       mimeType: mimeType,
@@ -495,6 +527,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
       hash: hash,
       storagePath: storagePath,
       fileSize: bytes.length,
+      base64Data: base64Data,
     );
     if (fileType == 'image') {
       _pendingImageBytes[att.id] = bytes;

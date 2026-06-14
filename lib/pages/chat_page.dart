@@ -6,9 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:markdown_widget/markdown_widget.dart';
-import '../widgets/markdown_extensions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../widgets/markdown_extensions.dart';
 import '../widgets/message_attachment_preview.dart';
 import '../services/attachment_storage.dart';
 
@@ -1569,6 +1570,7 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
                       onMessageSend: (text) => _onMessageSend(text, []),
 
                       theme: isDark ? ChatTheme.dark() : ChatTheme.light(),
+                      timeFormat: DateFormat('yyyy-MM-dd HH:mm'),
                       builders: Builders(
                         chatAnimatedListBuilder: (context, itemBuilder) =>
                             ChatAnimatedList(
