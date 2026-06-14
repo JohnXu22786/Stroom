@@ -623,15 +623,43 @@ rm -- "\$0"
     return scriptFile.path;
   }
 
+  /// Retries installation of the already-downloaded file.
+  ///
+  /// Sets [UpdateState.isInstalling] to provide visual feedback in the UI,
+  /// then calls [installDownloadedFile]. Resets [UpdateState.isInstalling] to
+  /// `false` after the install attempt completes (success or failure).
+  ///
+  /// This is used by the update dialog's "手动安装" button when auto-install
+  /// fails — the APK is already on disk and only needs to be re-triggered.
+  Future<void> retryInstall() async {
+    state = state.copyWith(isInstalling: true, downloadError: null);
+    try {
+      await installDownloadedFile();
+    } finally {
+      state = state.copyWith(isInstalling: false);
+    }
+  }
+
   /// Android 专用：通过 FileProvider 生成 content:// URI 并触发安装
+  ///
+  /// Native side ([MainActivity.kt]) returns `"ok"` on success or throws a
+  /// [PlatformException] on failure with a Chinese error message in the
+  /// exception details. The error message is displayed directly in the dialog.
   Future<void> _installOnAndroid(String filePath) async {
-    const channel = MethodChannel('com.johntsui.stroom/install');
-    final result = await channel.invokeMethod<bool>('installApk', {
-      'filePath': filePath,
-    });
-    if (result != true) {
+    try {
+      const channel = MethodChannel('com.johntsui.stroom/install');
+      await channel.invokeMethod<String>('installApk', {
+        'filePath': filePath,
+      });
+      // Success — native side successfully launched the package installer.
+      // No error to report.
+    } on PlatformException catch (e) {
       state = state.copyWith(
-        downloadError: '安装失败，请手动打开 APK 安装',
+        downloadError: e.message ?? '安装失败，请手动打开 APK 安装',
+      );
+    } catch (e) {
+      state = state.copyWith(
+        downloadError: '安装失败: $e',
       );
     }
   }}
