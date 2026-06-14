@@ -81,12 +81,24 @@ void main() {
       expect(find.text('新对话'), findsOneWidget);
     });
 
-    testWidgets('model selector not shown when unconfigured', (tester) async {
+    testWidgets('NO reasoning toggle (Icons.psychology) in top bar', (tester) async {
       await pumpChatPage(tester);
 
-      // Psychology icon (reasoning toggle) should not be present
-      // when not configured
+      // The reasoning toggle button has been removed entirely from the top bar
       expect(find.byIcon(Icons.psychology), findsNothing);
+    });
+
+    testWidgets('only search button in top bar action area, no other icons', (tester) async {
+      await pumpChatPage(tester);
+
+      // Search is the only icon button in the top bar actions
+      expect(find.byIcon(Icons.search), findsOneWidget);
+      // No other action icons should be in the top bar
+      expect(find.byIcon(Icons.psychology), findsNothing);
+      expect(find.byIcon(Icons.history), findsNothing);
+      expect(find.byIcon(Icons.add), findsNothing);
+      expect(find.byIcon(Icons.arrow_back), findsNothing);
+      expect(find.byIcon(Icons.stop_circle_outlined), findsNothing);
     });
   });
 }
