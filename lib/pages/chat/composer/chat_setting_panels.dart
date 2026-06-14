@@ -6,13 +6,34 @@ import 'package:stroom/models/tool_call.dart';
 // ═══════════════════════════════════════════════════════════════
 
 /// Shows a modal bottom sheet for selecting the AI model.
+/// Supports drag-and-drop reordering via [onModelsReordered].
 void showModelPanel({
   required BuildContext context,
   required List<String> models,
   required int selectedModelIndex,
   required ValueChanged<int> onModelSelected,
+  ValueChanged<List<String>>? onModelsReordered,
 }) {
   var localSelectedIndex = selectedModelIndex;
+  var localModels = List<String>.from(models);
+
+  void handleReorder(int oldIndex, int newIndex) {
+    if (newIndex > oldIndex) newIndex--;
+    final item = localModels.removeAt(oldIndex);
+    localModels.insert(newIndex, item);
+
+    // Update selected index to follow the dragged model
+    if (localSelectedIndex == oldIndex) {
+      localSelectedIndex = newIndex;
+    } else if (oldIndex < localSelectedIndex && newIndex >= localSelectedIndex) {
+      localSelectedIndex--;
+    } else if (oldIndex > localSelectedIndex && newIndex <= localSelectedIndex) {
+      localSelectedIndex++;
+    }
+
+    onModelsReordered?.call(List<String>.from(localModels));
+  }
+
   showModalBottomSheet(
     context: context,
     shape: const RoundedRectangleBorder(
@@ -26,7 +47,7 @@ void showModelPanel({
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisSize: MainAxisSize.max,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Drag handle
@@ -66,7 +87,7 @@ void showModelPanel({
                     ],
                   ),
                   const SizedBox(height: 16),
-                  if (models.isEmpty)
+                  if (localModels.isEmpty)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       child: Center(
@@ -80,50 +101,80 @@ void showModelPanel({
                       ),
                     )
                   else
-                    ...List.generate(models.length, (i) {
-                      final isSelected = localSelectedIndex == i;
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Card(
-                          elevation: 0,
-                          color: isSelected
-                              ? cs.primaryContainer
-                              : cs.surfaceContainerHighest.withOpacity(0.3),
-                          child: ListTile(
-                            dense: true,
-                            leading: Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? cs.primary
-                                    : cs.outlineVariant,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            title: Text(
-                              models[i],
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: isSelected
-                                    ? FontWeight.w600
-                                    : FontWeight.normal,
-                                color: cs.onSurface,
-                              ),
-                            ),
-                            trailing: isSelected
-                                ? Icon(Icons.check,
-                                    size: 18, color: cs.primary)
-                                : null,
-                            onTap: () {
-                              setState(() => localSelectedIndex = i);
-                              onModelSelected(i);
-                              Navigator.pop(context);
+                    Expanded(
+                      child: ReorderableListView.builder(
+                        shrinkWrap: true,
+                        buildDefaultDragHandles: false,
+                        itemCount: localModels.length,
+                        onReorder: (oldIndex, newIndex) {
+                          handleReorder(oldIndex, newIndex);
+                        },
+                        proxyDecorator: (child, index, animation) {
+                          return AnimatedBuilder(
+                            animation: animation,
+                            builder: (context, child) {
+                              final elevation =
+                                  Tween<double>(begin: 0, end: 4)
+                                      .animate(animation)
+                                      .value;
+                              return Material(
+                                elevation: elevation,
+                                color: Colors.transparent,
+                                shadowColor: Colors.black26,
+                                borderRadius: BorderRadius.circular(10),
+                                child: child,
+                              );
                             },
-                          ),
-                        ),
-                      );
-                    }),
+                            child: child,
+                          );
+                        },
+                        itemBuilder: (context, i) {
+                          final isSelected = localSelectedIndex == i;
+                          return Padding(
+                            key: ValueKey('model_${localModels[i]}_$i'),
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Card(
+                              elevation: 0,
+                              color: isSelected
+                                  ? cs.primaryContainer
+                                  : cs.surfaceContainerHighest
+                                      .withOpacity(0.3),
+                              child: ListTile(
+                                dense: true,
+                                leading: ReorderableDragStartListener(
+                                  index: i,
+                                  child: Icon(
+                                    Icons.drag_indicator,
+                                    size: 20,
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                                title: Text(
+                                  localModels[i],
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                    color: cs.onSurface,
+                                  ),
+                                ),
+                                trailing: isSelected
+                                    ? Icon(Icons.check,
+                                        size: 18, color: cs.primary)
+                                    : null,
+                                onTap: () {
+                                  setState(
+                                      () => localSelectedIndex = i);
+                                  onModelSelected(i);
+                                  Navigator.pop(context);
+                                },
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                 ],
               ),
             ),

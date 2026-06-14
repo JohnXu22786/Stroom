@@ -144,14 +144,55 @@ final MarkdownGenerator markdownGenerator = MarkdownGenerator(
   generators: [latexGenerator],
 );
 
+/// A custom [H1Config] that removes the bottom divider line.
+/// Accepts an optional [style] to preserve dark-mode text color.
+class NoDividerH1Config extends H1Config {
+  const NoDividerH1Config({super.style});
+
+  @override
+  HeadingDivider? get divider => null;
+}
+
+/// A custom [H2Config] that removes the bottom divider line.
+/// Accepts an optional [style] to preserve dark-mode text color.
+class NoDividerH2Config extends H2Config {
+  const NoDividerH2Config({super.style});
+
+  @override
+  HeadingDivider? get divider => null;
+}
+
+/// A custom [H3Config] that removes the bottom divider line.
+/// Accepts an optional [style] to preserve dark-mode text color.
+class NoDividerH3Config extends H3Config {
+  const NoDividerH3Config({super.style});
+
+  @override
+  HeadingDivider? get divider => null;
+}
+
 /// Builds a [MarkdownConfig] suitable for the current brightness.
 ///
 /// [isDark] controls whether dark or default markdown styling is used.
 /// The [PreConfig] for code blocks is overridden to use [draculaTheme]
 /// with a background colour that matches the brightness.
+///
+/// Headers h1/h2/h3 use custom configs that remove the bottom divider
+/// line (light gray `---` under each heading), while the thematic break
+/// (`---` in markdown) remains unaffected. Dark-mode text colour is
+/// preserved by passing the dark config's style when applicable.
 MarkdownConfig buildMarkdownConfig({required bool isDark}) {
-  return (isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig)
-      .copy(configs: [
+  final base = isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig;
+  return base.copy(configs: [
     codeBlockPreConfig(isDark: isDark),
+    if (isDark) ...[
+      NoDividerH1Config(style: H1Config.darkConfig.style),
+      NoDividerH2Config(style: H2Config.darkConfig.style),
+      NoDividerH3Config(style: H3Config.darkConfig.style),
+    ] else ...[
+      const NoDividerH1Config(),
+      const NoDividerH2Config(),
+      const NoDividerH3Config(),
+    ],
   ]);
 }

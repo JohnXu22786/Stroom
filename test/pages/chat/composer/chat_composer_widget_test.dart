@@ -411,6 +411,71 @@ void main() {
   });
 
   // ═══════════════════════════════════════════════════════════
+  // Req: File button works during streaming
+  // ═══════════════════════════════════════════════════════════
+  group('File button works during streaming', () {
+    testWidgets('file button is tappable during streaming state',
+        (tester) async {
+      // Set streaming to true
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          isStreamingProvider.overrideWith((ref) => true),
+          conversationsProvider
+              .overrideWith((ref) => ConversationsNotifier(ref)),
+          activeConversationIdProvider
+              .overrideWith((ref) => 'test-conv-id'),
+          providerEntriesProvider
+              .overrideWith((ref) => ProviderEntriesNotifier()),
+        ],
+        child: const MaterialApp(home: ChatPage()),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      // The file button should be visible and enabled during streaming
+      final fileButton = find.byIcon(Icons.attach_file_outlined);
+      expect(fileButton, findsOneWidget);
+
+      // Tap the file button - should open the attachment panel
+      await tester.tap(fileButton);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // The attachment panel should be open (showing file options)
+      // even though streaming is in progress
+      expect(find.text('传文件'), findsOneWidget);
+    });
+
+    testWidgets('stop button shows during streaming, not send button',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          isStreamingProvider.overrideWith((ref) => true),
+          conversationsProvider
+              .overrideWith((ref) => ConversationsNotifier(ref)),
+          activeConversationIdProvider
+              .overrideWith((ref) => 'test-conv-id'),
+          providerEntriesProvider
+              .overrideWith((ref) => ProviderEntriesNotifier()),
+        ],
+        child: const MaterialApp(home: ChatPage()),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      // During streaming, stop button should be visible
+      expect(find.byIcon(Icons.stop_circle_outlined), findsOneWidget);
+
+      // Send button should NOT be visible during streaming
+      expect(find.byIcon(Icons.send_rounded), findsNothing);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════
   // Req: Camera picker with showFolderSection:false
   // ═══════════════════════════════════════════════════════════
   group('Camera picker from chat (showFolderSection:false)', () {
