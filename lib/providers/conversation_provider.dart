@@ -100,6 +100,7 @@ class Conversation {
   bool isPinned;
   int sortOrder;
   String? assistantId;
+  String draftText;
 
   Conversation({
     String? id,
@@ -110,6 +111,7 @@ class Conversation {
     this.isPinned = false,
     this.sortOrder = 0,
     this.assistantId,
+    this.draftText = '',
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now(),
@@ -124,6 +126,7 @@ class Conversation {
         'isPinned': isPinned,
         'sortOrder': sortOrder,
         if (assistantId != null) 'assistantId': assistantId,
+        'draftText': draftText,
       };
 
   factory Conversation.fromMap(Map<String, dynamic> map) => Conversation(
@@ -143,6 +146,7 @@ class Conversation {
         isPinned: map['isPinned'] as bool? ?? false,
         sortOrder: map['sortOrder'] as int? ?? 0,
         assistantId: map['assistantId'] as String?,
+        draftText: map['draftText'] as String? ?? '',
       );
 
   @override
@@ -390,6 +394,19 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       return c;
     }).toList();
     await _persist();
+  }
+
+  /// Saves the draft text for a specific conversation.
+  ///
+  /// Drafts are per-conversation and persisted along with the conversation
+  /// data. When [draftText] is empty, the draft is cleared.
+  void saveDraft(String conversationId, String draftText) {
+    state = state.map((c) {
+      if (c.id != conversationId) return c;
+      c.draftText = draftText;
+      return c;
+    }).toList();
+    _persist();
   }
 }
 
