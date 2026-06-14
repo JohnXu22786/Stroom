@@ -13,6 +13,11 @@ class Attachment {
   final DateTime createdAt;
   final String? thumbnailPath;
 
+  /// 缓存的文件 base64 数据（非持久化）。
+  /// 文件上传时立即转换并缓存，发送时无需等待重复转换。
+  /// 该字段不会被序列化到 toMap/fromMap，生命周期跟随内存中的 Conversation。
+  String? base64Data;
+
   Attachment({
     String? id,
     required this.fileName,
@@ -23,6 +28,7 @@ class Attachment {
     required this.fileSize,
     DateTime? createdAt,
     this.thumbnailPath,
+    this.base64Data,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
@@ -36,6 +42,8 @@ class Attachment {
         'fileSize': fileSize,
         'createdAt': createdAt.toIso8601String(),
         if (thumbnailPath != null) 'thumbnailPath': thumbnailPath,
+        // NOTE: base64Data is intentionally NOT serialized.
+        // It is a transient in-memory cache tied to conversation lifecycle.
       };
 
   factory Attachment.fromMap(Map<String, dynamic> map) => Attachment(
@@ -62,6 +70,7 @@ class Attachment {
     int? fileSize,
     DateTime? createdAt,
     String? thumbnailPath,
+    String? base64Data,
   }) =>
       Attachment(
         id: id ?? this.id,
@@ -73,6 +82,7 @@ class Attachment {
         fileSize: fileSize ?? this.fileSize,
         createdAt: createdAt ?? this.createdAt,
         thumbnailPath: thumbnailPath ?? this.thumbnailPath,
+        base64Data: base64Data ?? this.base64Data,
       );
 
   @override
