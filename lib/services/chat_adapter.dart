@@ -46,15 +46,12 @@ class ChatAdapter {
 
   bool get isConfigured => _chatService != null;
 
-  /// Whether the current model has boolean-style reasoning parameters
-  /// (params with options like true/false, enabled/disabled, on/off).
-  /// The reasoning toggle should only be enabled when at least one such
-  /// param exists that can actually enable/disable reasoning.
-  /// Non-boolean params alone (e.g. reasoning_effort with low/medium/high)
-  /// do NOT enable the toggle — they are sent automatically when toggled on.
+  /// Whether the current model has reasoning parameters configured.
+  /// Each reasoning param can be independently enabled/disabled in the model
+  /// config. The global reasoning toggle in the chat page is the master switch.
   bool get hasReasoningParams {
     final config = _chatService?.modelConfig;
-    return config != null && config.reasoningParams.any((p) => p.isBooleanToggle);
+    return config != null && config.reasoningParams.isNotEmpty;
   }
 
   /// Gets the reasoning parameters from the current model config.

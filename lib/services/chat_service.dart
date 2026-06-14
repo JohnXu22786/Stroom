@@ -649,25 +649,19 @@ class ChatService {
     }
 
     // Reasoning params:
-    // - When reasoning is ON: all params with selected values are sent.
-    // - When reasoning is OFF: only boolean/toggle params (those whose options
-    //   include true/false, enabled/disabled, or similar on/off pairs) are sent
-    //   with their "off"/"disabled"/"false" value. Non-boolean params (like
-    //   reasoning_effort with low/medium/high) are NOT sent when toggle is OFF.
+    // Only sent when the global reasoning toggle is ON.
+    // Within that, each param has its own `enabled` toggle (set in model config).
+    // Enabled params with a selected value send that value.
+    // Enabled params WITHOUT options (no selected value) send `true`.
     if (reasoning) {
-      // Reasoning ON: send all params with selected values
       for (final rp in _modelConfig!.reasoningParams) {
+        if (!rp.enabled) continue;
         final selectedValue = reasoningParamValues[rp.paramName];
         if (selectedValue != null && selectedValue.isNotEmpty) {
           _setNestedParam(result, rp.paramName, selectedValue);
-        }
-      }
-    } else {
-      // Reasoning OFF: send only boolean/toggle params with "off" value
-      for (final rp in _modelConfig!.reasoningParams) {
-        final offValue = rp.offValue;
-        if (offValue != null) {
-          _setNestedParam(result, rp.paramName, offValue);
+        } else if (rp.options.isEmpty) {
+          // No options → boolean flag, send true when enabled
+          _setNestedParam(result, rp.paramName, true);
         }
       }
     }
