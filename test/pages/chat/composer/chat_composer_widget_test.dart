@@ -320,9 +320,7 @@ void main() {
 
       // Tap the model button
       await tester.tap(find.text('模型'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
 
       // Model panel should be visible
       expect(find.text('选择模型'), findsOneWidget);
@@ -336,9 +334,7 @@ void main() {
 
       // Tap the tools button
       await tester.tap(find.text('工具'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
 
       // Tools panel should be visible
       expect(find.text('可用工具'), findsOneWidget);
