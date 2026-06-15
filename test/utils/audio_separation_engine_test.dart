@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -76,6 +77,64 @@ void main() {
       // media_kit is integrated as a dependency, engine should be available
       final available = await engine.isAvailable();
       expect(available, isTrue);
+    });
+
+    // ==================================================================
+    // Crash regression: verify setProperty calls do NOT pass waitForInitialization.
+    // media_kit's NativePlayer.setProperty(String, String, {bool waitForInitialization = true})
+    // skips player initialization when waitForInitialization=false, causing a native segfault
+    // when mpv_set_property_string() is called on an uninitialized mpv context.
+    // ==================================================================
+    test('source code has no setProperty calls with waitForInitialization', () {
+      // Read the source files and verify no setProperty calls use waitForInitialization.
+      // This prevents regression if someone reintroduces the crash pattern.
+      final sourcePaths = [
+        'lib/utils/audio_separation_native.dart',
+        'lib/catcatch/engine/ffmpeg_converter.dart',
+      ];
+
+      for (final path in sourcePaths) {
+        final file = File(path);
+        expect(file.existsSync(), isTrue, reason: 'Source file $path must exist');
+
+        final content = file.readAsStringSync();
+        final lines = content.split('\n');
+        for (var i = 0; i < lines.length; i++) {
+          final line = lines[i];
+          if (line.contains('setProperty') && line.contains('waitForInitialization')) {
+            fail('Line ${i + 1} in $path contains setProperty with waitForInitialization: '
+                '${line.trim()}');
+          }
+        }
+      }
+    });
+
+    test('setProperty calls only pass two positional arguments', () {
+      // Verify that setProperty calls use the correct signature:
+      // setProperty(String property, String value) — no extra named params.
+      final sourcePaths = [
+        'lib/utils/audio_separation_native.dart',
+        'lib/catcatch/engine/ffmpeg_converter.dart',
+      ];
+
+      for (final path in sourcePaths) {
+        final file = File(path);
+        expect(file.existsSync(), isTrue, reason: 'Source file $path must exist');
+
+        final content = file.readAsStringSync();
+        final lines = content.split('\n');
+        for (var i = 0; i < lines.length; i++) {
+          final line = lines[i];
+          // Match setProperty(...) calls: should be `setProperty('key', 'value')`
+          if (line.trimLeft().startsWith('await') && line.contains('setProperty')) {
+            // Should not contain more than 2 string arguments + closing paren
+            expect(line.contains(', waitForInitialization'), isFalse,
+                reason: 'Line ${i + 1} in $path must not use waitForInitialization parameter');
+            expect(line.contains(', true)'), isFalse,
+                reason: 'Line ${i + 1} in $path must not pass explicit positional after value');
+          }
+        }
+      }
     });
   });
 }

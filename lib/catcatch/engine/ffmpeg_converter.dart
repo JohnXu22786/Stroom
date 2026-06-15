@@ -151,10 +151,10 @@ class FFmpegConverter {
       // --ovc=libx264: 视频编码
       // --ovcopts=preset=fast,crf=23: 编码选项
       if (player.platform != null) {
-        await (player.platform as dynamic).setProperty('o', outputPath, waitForInitialization: false);
-        await (player.platform as dynamic).setProperty('ovc', 'libx264', waitForInitialization: false);
-        await (player.platform as dynamic).setProperty('oac', 'aac', waitForInitialization: false);
-        await (player.platform as dynamic).setProperty('ovcopts', 'preset=fast,crf=23', waitForInitialization: false);
+        await (player.platform as dynamic).setProperty('o', outputPath);
+        await (player.platform as dynamic).setProperty('ovc', 'libx264');
+        await (player.platform as dynamic).setProperty('oac', 'aac');
+        await (player.platform as dynamic).setProperty('ovcopts', 'preset=fast,crf=23');
       }
 
       // 打开媒体进行编码
@@ -265,9 +265,9 @@ class FFmpegConverter {
       // --oac=libmp3lame: MP3 音频编码器
       // --ovc=no: 不编码视频
       if (player.platform != null) {
-        await (player.platform as dynamic).setProperty('o', outputPath, waitForInitialization: false);
-        await (player.platform as dynamic).setProperty('oac', 'libmp3lame', waitForInitialization: false);
-        await (player.platform as dynamic).setProperty('ovc', 'no', waitForInitialization: false);
+        await (player.platform as dynamic).setProperty('o', outputPath);
+        await (player.platform as dynamic).setProperty('oac', 'libmp3lame');
+        await (player.platform as dynamic).setProperty('ovc', 'no');
       }
 
       // 打开媒体进行编码
