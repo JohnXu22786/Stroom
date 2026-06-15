@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +10,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
+import 'package:just_audio/just_audio.dart';
 import '../widgets/markdown_extensions.dart';
 import '../widgets/message_attachment_preview.dart';
 import '../services/attachment_storage.dart';
@@ -85,10 +92,6 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
 
   bool _developerMode = false;
   final Map<String, bool> _expandedErrors = {};
-
-  /// Tracks whether the soft keyboard is currently visible, used by
-  /// [didChangeMetrics] to trigger an immediate scroll-to-bottom.
-  bool _keyboardVisible = false;
 
   // ── Infinite Scroll / Lazy Load pagination state ──
   /// Number of messages to load per page.
@@ -232,12 +235,14 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     if (!mounted) return;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final isNowVisible = bottomInset > 100;
-    if (isNowVisible && !_keyboardVisible) {
-      // Keyboard just opened — immediately scroll to the last message so
-      // the input area is visible without waiting for the next build cycle.
+    if (isNowVisible) {
+      // Scroll to bottom on every metrics change while the keyboard is
+      // visible, not just on the hidden→visible transition. This ensures
+      // the latest message stays visible during the keyboard animation
+      // (~300ms on Android/iOS), eliminating the ~1s lag that occurred
+      // when scrolling was gated by the transition-only check.
       _scrollToBottom();
     }
-    _keyboardVisible = isNowVisible;
   }
 
   /// Scrolls the chat list to the bottom-most message, used when the soft
@@ -1003,6 +1008,31 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     );
   }
 
+  /// Returns true if the attachment is a text-based file that can be
+  /// previewed by reading its content as UTF-8 text.
+  bool _isTextAttachment(Attachment att) {
+    // Check mime type for text
+    if (att.mimeType.startsWith('text/')) return true;
+    // Check common text file extensions
+    final ext = p.extension(att.fileName).toLowerCase();
+    const textExtensions = {
+      '.txt', '.md', '.json', '.xml', '.csv', '.html', '.htm',
+      '.css', '.js', '.ts', '.dart', '.py', '.yaml', '.yml',
+      '.toml', '.ini', '.cfg', '.conf', '.log', '.sh', '.bat',
+      '.ps1', '.sql', '.rb', '.php', '.java', '.cpp', '.c', '.h',
+      '.hpp', '.rs', '.go', '.swift', '.kt', '.gradle', '.properties',
+      '.env', '.gitignore', '.dockerfile', '.makefile',
+    };
+    if (textExtensions.contains(ext)) return true;
+    return false;
+  }
+
+  /// Returns true if the attachment is a PDF file.
+  bool _isPdfAttachment(Attachment att) {
+    if (att.mimeType == 'application/pdf') return true;
+    return p.extension(att.fileName).toLowerCase() == '.pdf';
+  }
+
   void _showAttachmentPreview(Attachment att) async {
     final data = await AttachmentStorage.readFile(att.storagePath);
     if (data == null || data.isEmpty) {
@@ -1015,8 +1045,21 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     }
     if (!mounted) return;
     final isImage = att.fileType == 'image';
+    final isText = _isTextAttachment(att);
+    final isPdf = _isPdfAttachment(att);
+    final isAudio = att.fileType == 'audio';
+    final isVideo = att.fileType == 'video';
+
     if (isImage) {
       _showImagePreview(att, data);
+    } else if (isText) {
+      _showTextPreview(att, data);
+    } else if (isPdf) {
+      _showPdfPreview(att, data);
+    } else if (isAudio) {
+      _showAudioPreview(att, data);
+    } else if (isVideo) {
+      _showVideoPreview(att, data);
     } else {
       _showFileInfoPreview(att);
     }
@@ -1037,6 +1080,151 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     showFileInfoPreviewDialog(
       context: context,
       attachment: att,
+    );
+  }
+
+  /// Text content preview — shows the full file content in a scrollable
+  /// dialog with selectable text. Supports all common text-based formats
+  /// (txt, md, json, code files, etc.).
+  void _showTextPreview(Attachment att, Uint8List data) {
+    String content;
+    try {
+      content = utf8.decode(data);
+    } catch (e) {
+      debugPrint('[ChatPage] Text preview decode failed: $e');
+      _showFileInfoPreview(att);
+      return;
+    }
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header with file name
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.description_outlined, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      att.fileName,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+            ),
+            // Scrollable text content
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: SelectableText(
+                  content,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontFamily: 'monospace',
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// PDF preview — attempts to open the PDF using the system's default
+  /// PDF viewer via [url_launcher]. Falls back to file info dialog if
+  /// the launcher is unavailable.
+  Future<void> _showPdfPreview(Attachment att, Uint8List data) async {
+    try {
+      // Try to save to a temp file and open with system handler
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File(p.join(tempDir.path, att.fileName));
+      await tempFile.writeAsBytes(data);
+      final uri = Uri.file(tempFile.path);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return;
+      }
+    } catch (e) {
+      debugPrint('[ChatPage] PDF preview failed: $e');
+    }
+    // Fallback: show file info
+    if (mounted) _showFileInfoPreview(att);
+  }
+
+  /// Audio preview — opens a dialog with an audio player powered by
+  /// [just_audio]. The user can play/pause the audio file.
+  Future<void> _showAudioPreview(Attachment att, Uint8List data) async {
+    // Save bytes to a temp file for the audio player
+    String? filePath;
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File(p.join(tempDir.path, att.fileName));
+      await tempFile.writeAsBytes(data);
+      filePath = tempFile.path;
+    } catch (e) {
+      debugPrint('[ChatPage] Audio preview temp file failed: $e');
+      if (mounted) _showFileInfoPreview(att);
+      return;
+    }
+
+    if (!mounted) return;
+    // Show audio player dialog
+    showDialog(
+      context: context,
+      builder: (ctx) => _AudioPreviewDialog(
+        filePath: filePath!,
+        fileName: att.fileName,
+      ),
+    );
+  }
+
+  /// Video preview — opens a dialog with a video player powered by
+  /// [media_kit]. The user can play/pause the video file.
+  Future<void> _showVideoPreview(Attachment att, Uint8List data) async {
+    // Save bytes to a temp file for the video player
+    String? filePath;
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File(p.join(tempDir.path, att.fileName));
+      await tempFile.writeAsBytes(data);
+      filePath = tempFile.path;
+    } catch (e) {
+      debugPrint('[ChatPage] Video preview temp file failed: $e');
+      if (mounted) _showFileInfoPreview(att);
+      return;
+    }
+
+    if (!mounted) return;
+    // Show video player dialog
+    showDialog(
+      context: context,
+      builder: (ctx) => _VideoPreviewDialog(
+        filePath: filePath!,
+        fileName: att.fileName,
+      ),
     );
   }
 
@@ -1274,7 +1462,41 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
       }
     }
 
-    return SafeArea(
+    return PopScope(
+      canPop: !isStreaming,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        // Streaming is active — confirm before navigating away
+        final shouldStop = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('停止生成？'),
+            content: const Text('AI正在生成回复，返回上一级将中断生成。'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('取消'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.error,
+                ),
+                child: const Text('停止并返回'),
+              ),
+            ],
+          ),
+        );
+        if (shouldStop == true && mounted) {
+          _stopStreaming();
+          // Use post-frame callback to pop after the widget has rebuilt
+          // with canPop: true (isStreaming is now false).
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) Navigator.of(context).pop();
+          });
+        }
+      },
+      child: SafeArea(
       child: Container(
         color: Theme.of(context).colorScheme.surfaceContainerLow,
         child: Column(
@@ -1761,6 +1983,7 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
                                       height: 120,
                                       child: ListView.builder(
                                         scrollDirection: Axis.horizontal,
+                                        reverse: isSentByMe,
                                         itemCount: chatMsg!.attachments.length,
                                         itemBuilder: (ctx, i) {
                                           final att = chatMsg.attachments[i];
@@ -1897,8 +2120,9 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
               ],
             ),
           ),
-        );
-      }
+        ),
+      );
+    }
 
   void _showErrorDetailDialog(BuildContext context, String messageId) {
     final chatMsg = _history.where((m) => m.id == messageId).firstOrNull;
@@ -1966,5 +2190,305 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     SharedPreferences.getInstance().then((prefs) {
       prefs.setStringList('model_order', reordered);
     });
+  }
+}
+
+/// Audio preview dialog — plays an audio file using [just_audio].
+/// Shows the file name with play/pause controls.
+class _AudioPreviewDialog extends StatefulWidget {
+  final String filePath;
+  final String fileName;
+
+  const _AudioPreviewDialog({
+    required this.filePath,
+    required this.fileName,
+  });
+
+  @override
+  State<_AudioPreviewDialog> createState() => _AudioPreviewDialogState();
+}
+
+class _AudioPreviewDialogState extends State<_AudioPreviewDialog> {
+  AudioPlayer? _player;
+  bool _isPlaying = false;
+  bool _isInitialized = false;
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+  final List<StreamSubscription> _subscriptions = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _initPlayer();
+  }
+
+  Future<void> _initPlayer() async {
+    try {
+      final player = AudioPlayer();
+      _player = player;
+      await player.setFilePath(widget.filePath);
+      _duration = player.duration ?? Duration.zero;
+      _isInitialized = true;
+
+      _subscriptions.add(player.positionStream.listen((pos) {
+        if (mounted) setState(() => _position = pos);
+      }));
+
+      _subscriptions.add(player.playerStateStream.listen((state) {
+        if (mounted) {
+          setState(() {
+            _isPlaying = state.playing;
+          });
+        }
+      }));
+
+      _subscriptions.add(player.processingStateStream.listen((state) {
+        if (state == ProcessingState.completed && mounted) {
+          setState(() => _isPlaying = false);
+          player.seek(Duration.zero);
+        }
+      }));
+
+      if (mounted) setState(() {});
+    } catch (e) {
+      debugPrint('[AudioPreview] init failed: $e');
+      _player?.dispose();
+      _player = null;
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _togglePlay() {
+    if (_player == null || !_isInitialized) return;
+    if (_isPlaying) {
+      _player!.pause();
+    } else {
+      _player!.play();
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final sub in _subscriptions) {
+      sub.cancel();
+    }
+    _player?.dispose();
+    super.dispose();
+  }
+
+  String _formatDuration(Duration d) {
+    final min = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final sec = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$min:$sec';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Dialog(
+      backgroundColor: cs.surface,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Audio icon
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: cs.primaryContainer.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(36),
+              ),
+              child: Icon(
+                Icons.audiotrack_outlined,
+                size: 36,
+                color: cs.primary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            // File name
+            Text(
+              widget.fileName,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: cs.onSurface,
+              ),
+            ),
+            const SizedBox(height: 24),
+            // Progress bar
+            if (_isInitialized) ...[
+              Slider(
+                value: _duration.inMilliseconds > 0
+                    ? _position.inMilliseconds /
+                        _duration.inMilliseconds
+                    : 0.0,
+                onChanged: (v) {
+                  final pos =
+                      Duration(milliseconds: (v * _duration.inMilliseconds).round());
+                  _player?.seek(pos);
+                },
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      _formatDuration(_position),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                    Text(
+                      _formatDuration(_duration),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            const SizedBox(height: 16),
+            // Play/Pause button
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  icon: Icon(
+                    _isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
+                    size: 48,
+                    color: cs.primary,
+                  ),
+                  onPressed: _isInitialized ? _togglePlay : null,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // Close button
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Video preview dialog — plays a video file using [media_kit].
+/// Shows the video with play/pause controls.
+class _VideoPreviewDialog extends StatefulWidget {
+  final String filePath;
+  final String fileName;
+
+  const _VideoPreviewDialog({
+    required this.filePath,
+    required this.fileName,
+  });
+
+  @override
+  State<_VideoPreviewDialog> createState() => _VideoPreviewDialogState();
+}
+
+class _VideoPreviewDialogState extends State<_VideoPreviewDialog> {
+  Player? _player;
+  VideoController? _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _initPlayer();
+  }
+
+  Future<void> _initPlayer() async {
+    try {
+      final player = Player();
+      _player = player;
+      _controller = VideoController(player);
+      await player.open(Media(widget.filePath));
+    } catch (e) {
+      debugPrint('[VideoPreview] init failed: $e');
+      _player?.dispose();
+      _player = null;
+      _controller = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _player?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.black,
+      insetPadding: EdgeInsets.zero,
+      child: Stack(
+        children: [
+          // Video player with size constraints to prevent excessive
+          // memory usage from very large video files.
+          if (_controller != null)
+            Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width,
+                  maxHeight: MediaQuery.of(context).size.height * 0.8,
+                ),
+                child: Video(
+                  controller: _controller!,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            )
+          else
+            const Center(
+              child: CircularProgressIndicator(color: Colors.white),
+            ),
+          // Close button
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            right: 8,
+            child: IconButton(
+              icon: const Icon(Icons.close, color: Colors.white, size: 28),
+              onPressed: () {
+                _player?.stop();
+                Navigator.pop(context);
+              },
+            ),
+          ),
+          // File name at bottom
+          Positioned(
+            bottom: 16,
+            left: 16,
+            right: 16,
+            child: Text(
+              widget.fileName,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
