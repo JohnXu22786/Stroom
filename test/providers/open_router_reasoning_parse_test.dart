@@ -113,11 +113,100 @@ void main() {
 
       final events = OpenAICompatibleChatProvider.parseStreamEvent(data);
 
-      // Should include both without duplicates (they are different fields)
+      // Should include both without duplicates (they are different fields
+      // with different content)
       expect(events.length, 2);
       expect(events.any((e) => e.text == 'OR reasoning...'), isTrue);
       expect(events.any((e) => e.text == 'OpenAI also sending...'), isTrue);
       expect(events.every((e) => e.isReasoning), isTrue);
+    });
+
+    test('deduplicates reasoning when reasoning_content and reasoning have identical text',
+        () {
+      final data = {
+        'choices': [
+          {
+            'delta': {
+              'reasoning': 'The user said...',
+              'reasoning_content': 'The user said...',
+            },
+          },
+        ],
+      };
+
+      final events = OpenAICompatibleChatProvider.parseStreamEvent(data);
+
+      // When both fields contain the same text (as OpenRouter does when
+      // proxying DeepSeek), only one event should be emitted.
+      expect(events.length, 1);
+      expect(events[0].text, 'The user said...');
+      expect(events[0].isReasoning, isTrue);
+    });
+
+    test('deduplicates reasoning across reasoning_details, reasoning, and reasoning_content',
+        () {
+      final data = {
+        'choices': [
+          {
+            'delta': {
+              'reasoning_content': 'Let me think...',
+              'reasoning': 'Let me think...',
+              'reasoning_details': [
+                {
+                  'type': 'reasoning.text',
+                  'text': 'Let me think...',
+                  'id': 'reasoning-text-1',
+                  'index': 0,
+                },
+              ],
+            },
+          },
+        ],
+      };
+
+      final events = OpenAICompatibleChatProvider.parseStreamEvent(data);
+
+      // All three fields contain the same text; only one event should be emitted.
+      expect(events.length, 1);
+      expect(events[0].text, 'Let me think...');
+      expect(events[0].isReasoning, isTrue);
+    });
+
+    test('deduplicates reasoning_details items when they duplicate string reasoning fields',
+        () {
+      final data = {
+        'choices': [
+          {
+            'delta': {
+              'reasoning_content': 'Step by step...',
+              'reasoning_details': [
+                {
+                  'type': 'reasoning.text',
+                  'text': 'Step by step...',
+                  'id': 'reasoning-text-1',
+                  'index': 0,
+                },
+                {
+                  'type': 'reasoning.summary',
+                  'summary': 'Summary...',
+                  'id': 'reasoning-summary-1',
+                  'index': 1,
+                },
+              ],
+            },
+          },
+        ],
+      };
+
+      final events = OpenAICompatibleChatProvider.parseStreamEvent(data);
+
+      // reasoning_content duplicates with the first reasoning_details item,
+      // but summary is different so should still be included.
+      expect(events.length, 2);
+      expect(events[0].text, 'Step by step...');
+      expect(events[0].isReasoning, isTrue);
+      expect(events[1].text, 'Summary...');
+      expect(events[1].isReasoning, isTrue);
     });
 
     // ====================================================================
