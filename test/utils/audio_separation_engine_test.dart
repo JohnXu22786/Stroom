@@ -136,5 +136,47 @@ void main() {
         }
       }
     });
+
+    group('audio_separation_native.dart - audio playback prevention', () {
+      test('engine sets ao=null to prevent audio playback', () {
+        final file = File('lib/utils/audio_separation_native.dart');
+        expect(file.existsSync(), isTrue);
+
+        final content = file.readAsStringSync();
+        // The engine must set ao=null to prevent audio from playing through speakers
+        // during the extraction/encoding process
+        expect(content.contains("setProperty('ao', 'null')"), isTrue,
+            reason: 'Engine must set ao=null to prevent audio playback during extraction');
+      });
+
+      test('engine sets keep-open=no for proper encoding completion', () {
+        final file = File('lib/utils/audio_separation_native.dart');
+        expect(file.existsSync(), isTrue);
+
+        final content = file.readAsStringSync();
+        // The engine must set keep-open=no to allow encoding to complete naturally
+        expect(content.contains("setProperty('keep-open', 'no')"), isTrue,
+            reason: 'Engine must set keep-open=no for proper encoding completion');
+      });
+
+      test('engine sets encoding properties (o, oac, ovc) before opening media', () {
+        final file = File('lib/utils/audio_separation_native.dart');
+        expect(file.existsSync(), isTrue);
+
+        final content = file.readAsStringSync();
+        final oIndex = content.indexOf("setProperty('o',");
+        final ovcIndex = content.indexOf("setProperty('ovc',");
+        final oacIndex = content.indexOf("setProperty('oac',");
+        final openIndex = content.indexOf('player.open(');
+
+        // All encoding properties must be set BEFORE player.open()
+        expect(oIndex, lessThan(openIndex),
+            reason: 'setProperty(\'o\', ...) must come before player.open()');
+        expect(ovcIndex, lessThan(openIndex),
+            reason: 'setProperty(\'ovc\', ...) must come before player.open()');
+        expect(oacIndex, lessThan(openIndex),
+            reason: 'setProperty(\'oac\', ...) must come before player.open()');
+      });
+    });
   });
 }
