@@ -147,7 +147,7 @@ void main() {
     });
   });
 
-  group('ReasoningParam validation (toggle optional)', () {
+  group('ReasoningParam validation (toggle required)', () {
     // ========== Toggle: fully empty = valid (optional) ==========
     test('toggle with all fields empty has no validation error (optional)',
         () {

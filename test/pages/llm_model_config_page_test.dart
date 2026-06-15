@@ -164,8 +164,8 @@ void main() {
     });
   });
 
-  group('Inference switch validation: optional vs required', () {
-    testWidgets('click "添加推理参数" with empty toggle shows error snackbar',
+  group('Inference switch validation: all fields required', () {
+    testWidgets('click "添加推理参数" adds param regardless of toggle state',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -190,65 +190,15 @@ void main() {
       );
       await tester.pump();
 
-      // Click "添加推理参数" - should show error because toggle is empty
-      await tester.tap(find.text('添加推理参数'));
-      await tester.pump();
-
-      // Should show error snackbar
-      expect(find.text('请先填写推理开关'), findsOneWidget);
-    });
-
-    testWidgets('click "添加推理参数" with filled toggle adds param successfully',
-        (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: LlmModelConfigPage(),
-        ),
-      );
-
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // Fill required fields: model ID and context
-      var textFields = find.byType(TextField);
-      await tester.enterText(textFields.at(1), 'test-model');
-      await tester.enterText(textFields.at(2), '4096');
-      await tester.pump();
-
-      // Fill toggle fields
-      textFields = find.byType(TextField);
-      // The TextFormField for toggle paramName is at index 3
-      // First TextFormField in page (index 0 beyond TextFields)
-      // Let's find the TextFormField widgets instead
-      final toggleNameField = find.byType(TextFormField).first;
-      await tester.enterText(toggleNameField, 'thinking.type');
-
-      // Fill onValue and offValue (second and third TextFormField)
-      final toggleFields = find.byType(TextFormField);
-      await tester.enterText(toggleFields.at(1), 'enabled');
-      await tester.enterText(toggleFields.at(2), 'disabled');
-      await tester.pump();
-
-      // Scroll to find "添加推理参数" button
-      await tester.scrollUntilVisible(
-        find.text('添加推理参数'),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.pump();
-
-      // Click "添加推理参数" - should work because toggle is filled
+      // Click "添加推理参数" - should add even with empty toggle
       await tester.tap(find.text('添加推理参数'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
-      // Should NOT show error - the add should succeed
-      expect(find.text('请先填写推理开关'), findsNothing);
-      // Verify the form can still be saved (no validation errors from adding)
+      // Verify save fails because new param has empty name (not toggle error)
       await tester.tap(find.text('保存'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
-      // The save should fail because the new param has empty name, not toggle error
       expect(find.text('推理参数错误：参数名不能为空'), findsWidgets);
     });
 
