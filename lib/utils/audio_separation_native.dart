@@ -63,7 +63,11 @@ class AudioSeparationEngine {
         // --o=output.mp3: 输出文件路径
         // --oac=libmp3lame: 音频编码器为 MP3
         // --ovc=no: 不编码视频
+        // --ao=null: 禁止音频输出（防止编码过程中播放音频到扬声器）
+        // --keep-open=no: 编码完成后不保持文件打开状态（默认 keep-open=yes 会干扰编码完成事件）
         if (player.platform != null) {
+          await (player.platform as dynamic).setProperty('ao', 'null');
+          await (player.platform as dynamic).setProperty('keep-open', 'no');
           await (player.platform as dynamic).setProperty('o', outputPath);
           await (player.platform as dynamic).setProperty('oac', 'libmp3lame');
           await (player.platform as dynamic).setProperty('ovc', 'no');
