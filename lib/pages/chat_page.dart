@@ -28,6 +28,7 @@ import '../services/chat_service.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/chat_stream_provider.dart';
 import '../providers/provider_config.dart';
+import '../providers/assistant_provider.dart' show selectedAssistantProvider;
 import '../widgets/llm/jumping_dots.dart';
 import '../widgets/llm/tool_call_card.dart';
 import 'message_search_page.dart';
@@ -614,6 +615,16 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
       // All tools uniformly respect the user's toggle state from the settings panel.
       final filteredTools =
           allTools.where((t) => enabledTools.contains(t.name)).toList();
+
+      // Pass assistant settings to adapter — enabled settings override model params
+      final selectedAssistant = ref.read(selectedAssistantProvider);
+      if (selectedAssistant != null) {
+        _adapter.setAssistantSettings(selectedAssistant.settings);
+        _adapter.setAssistantCustomParams(selectedAssistant.settings.customParameters);
+      } else {
+        _adapter.setAssistantSettings(null);
+        _adapter.setAssistantCustomParams(null);
+      }
 
       final stream = _adapter.sendStreamWithTools(
         text,

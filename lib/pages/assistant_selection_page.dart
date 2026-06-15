@@ -265,7 +265,6 @@ void showAssistantFullEditDialog(
   int maxTokens = assistant.settings.maxTokens;
   bool enableMaxTokens = assistant.settings.enableMaxTokens;
   bool streamOutput = assistant.settings.streamOutput;
-  String reasoningEffort = assistant.settings.reasoningEffort;
   bool enableWebSearch = assistant.settings.enableWebSearch;
   double frequencyPenalty = assistant.settings.frequencyPenalty;
   bool enableFrequencyPenalty = assistant.settings.enableFrequencyPenalty;
@@ -285,7 +284,7 @@ void showAssistantFullEditDialog(
       builder: (ctx, setDlgState) => AlertDialog(
         title: const Text('编辑助手'),
         content: SizedBox(
-          width: double.maxFinite,
+          width: 520,
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -409,30 +408,6 @@ void showAssistantFullEditDialog(
                   value: streamOutput,
                   onChanged: (v) =>
                       setDlgState(() => streamOutput = v),
-                ),
-                const Divider(),
-
-                // Reasoning Effort
-                ListTile(
-                  title: const Text('推理努力度'),
-                  subtitle: Text(reasoningEffort),
-                  trailing: DropdownButton<String>(
-                    value: reasoningEffort,
-                    underline: const SizedBox.shrink(),
-                    items: const [
-                      DropdownMenuItem(
-                          value: 'default', child: Text('默认')),
-                      DropdownMenuItem(
-                          value: 'low', child: Text('低')),
-                      DropdownMenuItem(
-                          value: 'high', child: Text('高')),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) {
-                        setDlgState(() => reasoningEffort = v);
-                      }
-                    },
-                  ),
                 ),
                 const Divider(),
 
@@ -603,6 +578,45 @@ void showAssistantFullEditDialog(
                       },
                     );
                   }),
+                // Override rule explanation
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .tertiaryContainer
+                          .withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          size: 16,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .tertiary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '助手的参数开关打开时覆盖模型参数；关闭时使用模型参数。',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onTertiaryContainer,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -636,7 +650,6 @@ void showAssistantFullEditDialog(
                     maxTokens: maxTokens,
                     enableMaxTokens: enableMaxTokens,
                     streamOutput: streamOutput,
-                    reasoningEffort: reasoningEffort,
                     enableWebSearch: enableWebSearch,
                     frequencyPenalty: frequencyPenalty,
                     enableFrequencyPenalty: enableFrequencyPenalty,
