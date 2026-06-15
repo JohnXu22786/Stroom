@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/provider_config_page.dart';
 import 'package:stroom/pages/settings_page.dart';
 import 'package:stroom/providers/provider_config.dart';
-import 'package:stroom/providers/camera_settings_provider.dart';
 import 'package:stroom/providers/theme_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
 
@@ -17,7 +16,6 @@ Widget _buildTestApp() {
   return ProviderScope(
     overrides: [
       themeProvider.overrideWith((ref) => ThemeNotifier()),
-      cameraSettingsProvider.overrideWith((ref) => CameraSettingsNotifier()),
       providerEntriesProvider.overrideWith(
         (ref) {
           final notifier = ProviderEntriesNotifier();

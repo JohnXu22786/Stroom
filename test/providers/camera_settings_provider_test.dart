@@ -4,45 +4,58 @@ import 'package:stroom/providers/camera_settings_provider.dart';
 
 void main() {
   group('CameraSettings', () {
-    test('default values are correct - saveToGallery defaults to true', () {
+    test('default values are correct - compressionQuality defaults to 0.8', () {
       const settings = CameraSettings();
-      expect(settings.saveToGallery, true);
+      expect(settings.compressionQuality, 0.8);
     });
 
-    test('copyWith updates saveToGallery', () {
-      const settings = CameraSettings(saveToGallery: true);
-      final updated = settings.copyWith(saveToGallery: false);
-      expect(updated.saveToGallery, false);
+    test('saveToGallery field does not exist', () {
+      const settings = CameraSettings();
+      // Verify that there is no saveToGallery field on the type
+      expect(settings, isA<CameraSettings>());
+      // The only remaining field should be compressionQuality
+      expect(settings.compressionQuality, 0.8);
+    });
+
+    test('copyWith updates compressionQuality', () {
+      const settings = CameraSettings(compressionQuality: 0.8);
+      final updated = settings.copyWith(compressionQuality: 0.5);
+      expect(updated.compressionQuality, 0.5);
       // original unchanged
-      expect(settings.saveToGallery, true);
+      expect(settings.compressionQuality, 0.8);
     });
 
-    test('toJson/fromJson round-trip preserves saveToGallery', () {
-      const settings = CameraSettings(saveToGallery: false);
+    test('toJson does not include saveToGallery key', () {
+      const settings = CameraSettings(compressionQuality: 0.5);
+      final json = settings.toJson();
+      expect(json.containsKey('saveToGallery'), false);
+      expect(json['compressionQuality'], 0.5);
+    });
+
+    test('toJson/fromJson round-trip preserves compressionQuality', () {
+      const settings = CameraSettings(compressionQuality: 0.5);
       final json = settings.toJson();
       final restored = CameraSettings.fromJson(json);
-      expect(restored.saveToGallery, false);
+      expect(restored.compressionQuality, 0.5);
     });
 
     test('fromJson handles missing keys gracefully', () {
       final restored = CameraSettings.fromJson({});
-      expect(restored.saveToGallery, true);
+      expect(restored.compressionQuality, 0.8);
     });
 
-    test('fromJson ignores unknown keys (backward compat)', () {
+    test('fromJson ignores old saveToGallery key (backward compat)', () {
       final restored = CameraSettings.fromJson({
         'saveToGallery': false,
-        'highQuality': true,
         'compressionQuality': 0.5,
       });
-      expect(restored.saveToGallery, false);
-      // highQuality and compressionQuality should simply be ignored
+      expect(restored.compressionQuality, 0.5);
     });
 
     test('equality works', () {
-      const a = CameraSettings(saveToGallery: true);
-      const b = CameraSettings(saveToGallery: true);
-      const c = CameraSettings(saveToGallery: false);
+      const a = CameraSettings(compressionQuality: 0.8);
+      const b = CameraSettings(compressionQuality: 0.8);
+      const c = CameraSettings(compressionQuality: 0.5);
       expect(a, b);
       expect(a, isNot(c));
     });
@@ -54,38 +67,18 @@ void main() {
       SharedPreferences.setMockInitialValues({});
     });
 
-    testWidgets('initial state has saveToGallery true', (tester) async {
+    testWidgets('initial state has compressionQuality 0.8', (tester) async {
       final notifier = CameraSettingsNotifier();
       // Wait for the async _load to complete
       await tester.pump();
-      expect(notifier.state.saveToGallery, true);
+      expect(notifier.state.compressionQuality, 0.8);
     });
 
-    testWidgets('setSaveToGallery updates state', (tester) async {
+    testWidgets('setCompressionQuality updates state', (tester) async {
       final notifier = CameraSettingsNotifier();
       await tester.pump();
-      await notifier.setSaveToGallery(false);
-      expect(notifier.state.saveToGallery, false);
-    });
-
-    testWidgets('setSaveToGallery can toggle back to true', (tester) async {
-      final notifier = CameraSettingsNotifier();
-      await tester.pump();
-      await notifier.setSaveToGallery(false);
-      expect(notifier.state.saveToGallery, false);
-      await notifier.setSaveToGallery(true);
-      expect(notifier.state.saveToGallery, true);
-    });
-
-    testWidgets('multiple setSaveToGallery calls work', (tester) async {
-      final notifier = CameraSettingsNotifier();
-      await tester.pump();
-      await notifier.setSaveToGallery(false);
-      expect(notifier.state.saveToGallery, false);
-      await notifier.setSaveToGallery(true);
-      expect(notifier.state.saveToGallery, true);
-      await notifier.setSaveToGallery(false);
-      expect(notifier.state.saveToGallery, false);
+      await notifier.setCompressionQuality(0.5);
+      expect(notifier.state.compressionQuality, 0.5);
     });
   });
 }
