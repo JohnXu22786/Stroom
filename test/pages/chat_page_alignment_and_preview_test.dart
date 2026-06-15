@@ -10,7 +10,6 @@ import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
-import 'dart:io';
 
 /// Helper that creates a MaterialApp wrapped in ProviderScope with
 /// all providers needed to render ChatPage.
