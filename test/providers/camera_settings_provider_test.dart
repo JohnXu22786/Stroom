@@ -9,11 +9,9 @@ void main() {
       expect(settings.compressionQuality, 0.8);
     });
 
-    test('saveToGallery field does not exist', () {
+    test('saveToGallery defaults to true', () {
       const settings = CameraSettings();
-      // Verify that there is no saveToGallery field on the type
-      expect(settings, isA<CameraSettings>());
-      // The only remaining field should be compressionQuality
+      expect(settings.saveToGallery, true);
       expect(settings.compressionQuality, 0.8);
     });
 
@@ -25,37 +23,40 @@ void main() {
       expect(settings.compressionQuality, 0.8);
     });
 
-    test('toJson does not include saveToGallery key', () {
-      const settings = CameraSettings(compressionQuality: 0.5);
+    test('toJson includes saveToGallery and compressionQuality keys', () {
+      const settings = CameraSettings(saveToGallery: true, compressionQuality: 0.5);
       final json = settings.toJson();
-      expect(json.containsKey('saveToGallery'), false);
+      expect(json['saveToGallery'], true);
       expect(json['compressionQuality'], 0.5);
     });
 
-    test('toJson/fromJson round-trip preserves compressionQuality', () {
-      const settings = CameraSettings(compressionQuality: 0.5);
+    test('toJson/fromJson round-trip preserves all fields', () {
+      const settings = CameraSettings(saveToGallery: false, compressionQuality: 0.5);
       final json = settings.toJson();
       final restored = CameraSettings.fromJson(json);
+      expect(restored.saveToGallery, false);
       expect(restored.compressionQuality, 0.5);
     });
 
     test('fromJson handles missing keys gracefully', () {
       final restored = CameraSettings.fromJson({});
+      expect(restored.saveToGallery, true);
       expect(restored.compressionQuality, 0.8);
     });
 
-    test('fromJson ignores old saveToGallery key (backward compat)', () {
+    test('fromJson reads saveToGallery key', () {
       final restored = CameraSettings.fromJson({
         'saveToGallery': false,
         'compressionQuality': 0.5,
       });
+      expect(restored.saveToGallery, false);
       expect(restored.compressionQuality, 0.5);
     });
 
     test('equality works', () {
-      const a = CameraSettings(compressionQuality: 0.8);
-      const b = CameraSettings(compressionQuality: 0.8);
-      const c = CameraSettings(compressionQuality: 0.5);
+      const a = CameraSettings(saveToGallery: true, compressionQuality: 0.8);
+      const b = CameraSettings(saveToGallery: true, compressionQuality: 0.8);
+      const c = CameraSettings(saveToGallery: false, compressionQuality: 0.5);
       expect(a, b);
       expect(a, isNot(c));
     });
@@ -67,11 +68,19 @@ void main() {
       SharedPreferences.setMockInitialValues({});
     });
 
-    testWidgets('initial state has compressionQuality 0.8', (tester) async {
+    testWidgets('initial state has saveToGallery true and compressionQuality 0.8', (tester) async {
       final notifier = CameraSettingsNotifier();
       // Wait for the async _load to complete
       await tester.pump();
+      expect(notifier.state.saveToGallery, true);
       expect(notifier.state.compressionQuality, 0.8);
+    });
+
+    testWidgets('setSaveToGallery updates state', (tester) async {
+      final notifier = CameraSettingsNotifier();
+      await tester.pump();
+      await notifier.setSaveToGallery(false);
+      expect(notifier.state.saveToGallery, false);
     });
 
     testWidgets('setCompressionQuality updates state', (tester) async {
