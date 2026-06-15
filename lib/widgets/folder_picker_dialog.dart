@@ -67,13 +67,10 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
   }
 
   List<String> get _sortedFolders {
-    final folders = widget.availableFolders.toList();
-    folders.sort((a, b) {
-      // 根目录（空字符串）排在最前
-      if (a.isEmpty) return -1;
-      if (b.isEmpty) return 1;
-      return a.toLowerCase().compareTo(b.toLowerCase());
-    });
+    final folders = widget.availableFolders
+        .where((f) => f.isNotEmpty) // 过滤掉空字符串（根目录）
+        .toList();
+    folders.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     return folders;
   }
 
@@ -150,9 +147,8 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                 constraints: const BoxConstraints(maxHeight: 200),
                 child: ListView(
                   shrinkWrap: true,
-                  children: [
-                    for (final folder in _sortedFolders)
-                      if (folder.isNotEmpty)
+                    children: [
+                      for (final folder in _sortedFolders)
                         _buildFolderTile(
                             context, cs, folder, folder, Icons.folder_outlined),
                   ],

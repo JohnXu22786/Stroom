@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -76,6 +77,106 @@ void main() {
       // media_kit is integrated as a dependency, engine should be available
       final available = await engine.isAvailable();
       expect(available, isTrue);
+    });
+
+    // ==================================================================
+    // Crash regression: verify setProperty calls do NOT pass waitForInitialization.
+    // media_kit's NativePlayer.setProperty(String, String, {bool waitForInitialization = true})
+    // skips player initialization when waitForInitialization=false, causing a native segfault
+    // when mpv_set_property_string() is called on an uninitialized mpv context.
+    // ==================================================================
+    test('source code has no setProperty calls with waitForInitialization', () {
+      // Read the source files and verify no setProperty calls use waitForInitialization.
+      // This prevents regression if someone reintroduces the crash pattern.
+      final sourcePaths = [
+        'lib/utils/audio_separation_native.dart',
+        'lib/catcatch/engine/ffmpeg_converter.dart',
+      ];
+
+      for (final path in sourcePaths) {
+        final file = File(path);
+        expect(file.existsSync(), isTrue, reason: 'Source file $path must exist');
+
+        final content = file.readAsStringSync();
+        final lines = content.split('\n');
+        for (var i = 0; i < lines.length; i++) {
+          final line = lines[i];
+          if (line.contains('setProperty') && line.contains('waitForInitialization')) {
+            fail('Line ${i + 1} in $path contains setProperty with waitForInitialization: '
+                '${line.trim()}');
+          }
+        }
+      }
+    });
+
+    test('setProperty calls only pass two positional arguments', () {
+      // Verify that setProperty calls use the correct signature:
+      // setProperty(String property, String value) — no extra named params.
+      final sourcePaths = [
+        'lib/utils/audio_separation_native.dart',
+        'lib/catcatch/engine/ffmpeg_converter.dart',
+      ];
+
+      for (final path in sourcePaths) {
+        final file = File(path);
+        expect(file.existsSync(), isTrue, reason: 'Source file $path must exist');
+
+        final content = file.readAsStringSync();
+        final lines = content.split('\n');
+        for (var i = 0; i < lines.length; i++) {
+          final line = lines[i];
+          // Match setProperty(...) calls: should be `setProperty('key', 'value')`
+          if (line.trimLeft().startsWith('await') && line.contains('setProperty')) {
+            // Should not contain more than 2 string arguments + closing paren
+            expect(line.contains(', waitForInitialization'), isFalse,
+                reason: 'Line ${i + 1} in $path must not use waitForInitialization parameter');
+            expect(line.contains(', true)'), isFalse,
+                reason: 'Line ${i + 1} in $path must not pass explicit positional after value');
+          }
+        }
+      }
+    });
+
+    group('audio_separation_native.dart - audio playback prevention', () {
+      test('engine sets ao=null to prevent audio playback', () {
+        final file = File('lib/utils/audio_separation_native.dart');
+        expect(file.existsSync(), isTrue);
+
+        final content = file.readAsStringSync();
+        // The engine must set ao=null to prevent audio from playing through speakers
+        // during the extraction/encoding process
+        expect(content.contains("setProperty('ao', 'null')"), isTrue,
+            reason: 'Engine must set ao=null to prevent audio playback during extraction');
+      });
+
+      test('engine sets keep-open=no for proper encoding completion', () {
+        final file = File('lib/utils/audio_separation_native.dart');
+        expect(file.existsSync(), isTrue);
+
+        final content = file.readAsStringSync();
+        // The engine must set keep-open=no to allow encoding to complete naturally
+        expect(content.contains("setProperty('keep-open', 'no')"), isTrue,
+            reason: 'Engine must set keep-open=no for proper encoding completion');
+      });
+
+      test('engine sets encoding properties (o, oac, ovc) before opening media', () {
+        final file = File('lib/utils/audio_separation_native.dart');
+        expect(file.existsSync(), isTrue);
+
+        final content = file.readAsStringSync();
+        final oIndex = content.indexOf("setProperty('o',");
+        final ovcIndex = content.indexOf("setProperty('ovc',");
+        final oacIndex = content.indexOf("setProperty('oac',");
+        final openIndex = content.indexOf('player.open(');
+
+        // All encoding properties must be set BEFORE player.open()
+        expect(oIndex, lessThan(openIndex),
+            reason: 'setProperty(\'o\', ...) must come before player.open()');
+        expect(ovcIndex, lessThan(openIndex),
+            reason: 'setProperty(\'ovc\', ...) must come before player.open()');
+        expect(oacIndex, lessThan(openIndex),
+            reason: 'setProperty(\'oac\', ...) must come before player.open()');
+      });
     });
   });
 }

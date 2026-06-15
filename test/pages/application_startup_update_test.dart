@@ -72,19 +72,36 @@ Widget _buildTestApp({Dio? dio}) {
   );
 }
 
+/// Pumps the test app through the full startup flow.
+///
+/// Sets initial preferences with [dataFormatVersion] (default 1 = current)
+/// so migration is skipped, allowing the test to focus on update check behavior.
+///
+/// [extraPrefs] allows setting additional SharedPreferences keys.
+Future<void> _pumpThroughStartup(WidgetTester tester, {required Dio dio, int dataFormatVersion = 1, Map<String, Object>? extraPrefs}) async {
+  final prefs = <String, Object>{'data_format_version': dataFormatVersion};
+  if (extraPrefs != null) {
+    prefs.addAll(extraPrefs);
+  }
+  SharedPreferences.setMockInitialValues(prefs);
+
+  await tester.pumpWidget(_buildTestApp(dio: dio));
+  // Process post-frame callback → _performStartupChecks starts
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 100));
+  await tester.pump();
+
+  // Update dialog should appear if new version available
+}
+
 void main() {
   group('Application - Startup Update Check', () {
     testWidgets('shows update dialog on startup when new version available', (tester) async {
-      SharedPreferences.setMockInitialValues({});
       final dio = _createMockDio(
         _githubRelease('v0.2.14', body: 'New features', assets: _allPlatformAssets('v0.2.14')),
       );
 
-      await tester.pumpWidget(_buildTestApp(dio: dio));
-      // Wait for post-frame callback and update check
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.pump();
+      await _pumpThroughStartup(tester, dio: dio);
 
       // The update dialog should appear
       expect(find.text('发现新版本'), findsOneWidget);
@@ -95,63 +112,47 @@ void main() {
     });
 
     testWidgets('shows no dialog on startup when current version matches latest', (tester) async {
-      SharedPreferences.setMockInitialValues({});
       final dio = _createMockDio(
         _githubRelease('v0.2.13'), // Same as appVersion
       );
 
-      await tester.pumpWidget(_buildTestApp(dio: dio));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.pump();
+      await _pumpThroughStartup(tester, dio: dio);
 
       // No dialog should appear
       expect(find.text('发现新版本'), findsNothing);
     });
 
     testWidgets('shows no dialog on startup when version was skipped', (tester) async {
-      SharedPreferences.setMockInitialValues({
-        'update_skipped_version': '0.2.14',
-      });
       final dio = _createMockDio(
         _githubRelease('v0.2.14'),
       );
 
-      await tester.pumpWidget(_buildTestApp(dio: dio));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.pump();
+      await _pumpThroughStartup(tester, dio: dio, extraPrefs: {
+        'update_skipped_version': '0.2.14',
+      });
 
       // No dialog should appear (version was skipped)
       expect(find.text('发现新版本'), findsNothing);
     });
 
     testWidgets('shows no dialog on startup when API call fails', (tester) async {
-      SharedPreferences.setMockInitialValues({});
       final dio = _createMockDio(
         _githubRelease('v0.2.14'),
         statusCode: 500,
       );
 
-      await tester.pumpWidget(_buildTestApp(dio: dio));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.pump();
+      await _pumpThroughStartup(tester, dio: dio);
 
       // No dialog should appear (silent error)
       expect(find.text('发现新版本'), findsNothing);
     });
 
     testWidgets('dialog has same UI elements as manual check dialog', (tester) async {
-      SharedPreferences.setMockInitialValues({});
       final dio = _createMockDio(
         _githubRelease('v0.2.14', body: 'Bug fixes and improvements', assets: _allPlatformAssets('v0.2.14')),
       );
 
-      await tester.pumpWidget(_buildTestApp(dio: dio));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.pump();
+      await _pumpThroughStartup(tester, dio: dio);
 
       // Same elements as the manual check dialog in settings_page
       expect(find.text('发现新版本'), findsOneWidget);

@@ -5,7 +5,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../providers/theme_provider.dart';
 import '../providers/provider_config.dart';
-import '../providers/camera_settings_provider.dart';
 import '../providers/update_provider.dart';
 import '../utils/app_version.dart';
 import '../widgets/update_dialog.dart';
@@ -35,9 +34,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         children: [
           _buildSectionHeader('主题'),
           _buildThemeSettings(themeMode, themeNotifier),
-          const SizedBox(height: 24),
-          _buildSectionHeader('相机设置'),
-          _buildCameraSettings(),
           const SizedBox(height: 24),
           _buildSectionHeader('供应商设置'),
           _buildProviderSettings(),
@@ -114,35 +110,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 onChanged: (_) => themeNotifier.setSystem(),
               ),
               onTap: () => themeNotifier.setSystem(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ================================================================
-  // 相机设置
-  // ================================================================
-
-  Widget _buildCameraSettings() {
-    final settings = ref.watch(cameraSettingsProvider);
-    final notifier = ref.read(cameraSettingsProvider.notifier);
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Column(
-          children: [
-            _buildListTile(
-              leading: const Icon(Icons.photo_library, color: Colors.green),
-              title: '保存到相册',
-              subtitle: '自动将拍摄的照片保存到设备相册',
-              trailing: Switch(
-                value: settings.saveToGallery,
-                onChanged: (v) => notifier.setSaveToGallery(v),
-              ),
-              onTap: () => notifier.setSaveToGallery(!settings.saveToGallery),
             ),
           ],
         ),

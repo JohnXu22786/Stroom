@@ -62,8 +62,7 @@ class _MockProvider extends BaseChatProvider {
 
 void main() {
   group('reasoning params with ReasoningParam model', () {
-    test('reasoning params use selected values from reasoning selections map',
-        () async {
+    test('reasoning toggle sends onValue when global toggle is ON', () async {
       final provider = _MockProvider();
       final modelConfig = ModelConfig(
         name: 'Test',
@@ -71,66 +70,25 @@ void main() {
         typeConfig: {'context': 4096},
         reasoningParams: [
           ReasoningParam(
-            paramName: 'reasoning_effort',
-            options: ['low', 'medium', 'high'],
-          ),
-          ReasoningParam(
             paramName: 'thinking.type',
-            options: ['enabled', 'disabled'],
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
           ),
         ],
       );
 
       final service = ChatService(provider: provider, modelConfig: modelConfig);
 
-      await for (final _ in service.sendStream('Hi',
-          history: [],
-          reasoning: true,
-          reasoningParamValues: {
-            'reasoning_effort': 'high',
-            'thinking.type': 'enabled',
-          })) {}
-
-      final body = provider.lastRequestBody;
-      expect(body, isNotNull);
-      expect(body!['reasoning_effort'], 'high');
-      expect(body['thinking']['type'], 'enabled');
-    });
-
-    test('reasoning params use defaults from model config when no selection map',
-        () async {
-      final provider = _MockProvider();
-      final modelConfig = ModelConfig(
-        name: 'Test',
-        modelId: 'test-model',
-        typeConfig: {'context': 4096},
-        reasoningParams: [
-          ReasoningParam(
-            paramName: 'reasoning_effort',
-            options: ['low', 'medium', 'high'],
-          ),
-          ReasoningParam(
-            paramName: 'thinking.type',
-            options: ['enabled'],
-          ),
-        ],
-      );
-
-      final service = ChatService(provider: provider, modelConfig: modelConfig);
-
-      // When no selection map is passed, use first option as default
       await for (final _ in service.sendStream('Hi',
           history: [], reasoning: true)) {}
 
       final body = provider.lastRequestBody;
       expect(body, isNotNull);
-      // No defaults from model config - only from typeConfig
-      // reasoning params without default values should not be sent
-      expect(body!.containsKey('reasoning_effort'), false);
-      expect(body.containsKey('thinking'), false);
+      expect(body!['thinking']['type'], 'enabled');
     });
 
-    test('no reasoning params sent when reasoning is disabled', () async {
+    test('reasoning toggle sends offValue when global toggle is OFF', () async {
       final provider = _MockProvider();
       final modelConfig = ModelConfig(
         name: 'Test',
@@ -139,7 +97,9 @@ void main() {
         reasoningParams: [
           ReasoningParam(
             paramName: 'thinking.type',
-            options: ['enabled'],
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
           ),
         ],
       );
@@ -151,7 +111,122 @@ void main() {
 
       final body = provider.lastRequestBody;
       expect(body, isNotNull);
-      expect(body!.containsKey('thinking'), false);
+      expect(body!['thinking']['type'], 'disabled');
+    });
+
+    test('additional enabled params sent with selected values when reasoning ON',
+        () async {
+      final provider = _MockProvider();
+      final modelConfig = ModelConfig(
+        name: 'Test',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            options: ['low', 'medium', 'high'],
+            enabled: true,
+          ),
+        ],
+      );
+
+      final service = ChatService(provider: provider, modelConfig: modelConfig);
+
+      await for (final _ in service.sendStream('Hi',
+          history: [],
+          reasoning: true,
+          reasoningParamValues: {
+            'reasoning_effort': 'high',
+          })) {}
+
+      final body = provider.lastRequestBody;
+      expect(body, isNotNull);
+      // Toggle always sent
+      expect(body!['thinking']['type'], 'enabled');
+      // Enabled additional param sent
+      expect(body['reasoning_effort'], 'high');
+    });
+
+    test('additional disabled params not sent when reasoning is ON', () async {
+      final provider = _MockProvider();
+      final modelConfig = ModelConfig(
+        name: 'Test',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            options: ['low', 'medium', 'high'],
+            enabled: false,
+          ),
+        ],
+      );
+
+      final service = ChatService(provider: provider, modelConfig: modelConfig);
+
+      await for (final _ in service.sendStream('Hi',
+          history: [],
+          reasoning: true,
+          reasoningParamValues: {
+            'reasoning_effort': 'high',
+          })) {}
+
+      final body = provider.lastRequestBody;
+      expect(body, isNotNull);
+      // Toggle always sent
+      expect(body!['thinking']['type'], 'enabled');
+      // Disabled additional param NOT sent
+      expect(body.containsKey('reasoning_effort'), false);
+    });
+
+    test('additional params not sent when global toggle is OFF', () async {
+      final provider = _MockProvider();
+      final modelConfig = ModelConfig(
+        name: 'Test',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            options: ['low', 'medium', 'high'],
+            enabled: true,
+          ),
+        ],
+      );
+
+      final service = ChatService(provider: provider, modelConfig: modelConfig);
+
+      await for (final _ in service.sendStream('Hi',
+          history: [],
+          reasoning: false,
+          reasoningParamValues: {
+            'reasoning_effort': 'high',
+          })) {}
+
+      final body = provider.lastRequestBody;
+      expect(body, isNotNull);
+      // Toggle always sent → offValue
+      expect(body!['thinking']['type'], 'disabled');
+      // Additional params NOT sent when global toggle is OFF
+      expect(body.containsKey('reasoning_effort'), false);
     });
 
     test('empty reasoning params sends nothing extra', () async {
@@ -183,7 +258,9 @@ void main() {
         reasoningParams: [
           ReasoningParam(
             paramName: 'thinking.type',
-            options: ['enabled'],
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
           ),
           ReasoningParam(
             paramName: 'thinking.budget_tokens',
@@ -198,7 +275,6 @@ void main() {
           history: [],
           reasoning: true,
           reasoningParamValues: {
-            'thinking.type': 'enabled',
             'thinking.budget_tokens': '10000',
           })) {}
 
@@ -218,7 +294,9 @@ void main() {
         reasoningParams: [
           ReasoningParam(
             paramName: 'config.thinkingConfig.thinkingLevel',
-            options: ['HIGH', 'LOW'],
+            isReasoningToggle: true,
+            onValue: 'HIGH',
+            offValue: 'LOW',
           ),
         ],
       );
@@ -228,9 +306,7 @@ void main() {
       await for (final _ in service.sendStream('Hi',
           history: [],
           reasoning: true,
-          reasoningParamValues: {
-            'config.thinkingConfig.thinkingLevel': 'HIGH',
-          })) {}
+          reasoningParamValues: {})) {}
 
       final body = provider.lastRequestBody;
       expect(body, isNotNull);
@@ -246,8 +322,15 @@ void main() {
         typeConfig: {'context': 4096},
         reasoningParams: [
           ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
             paramName: 'thinking.budget_tokens',
             options: ['max'],
+            enabled: true,
           ),
         ],
       );
@@ -263,7 +346,8 @@ void main() {
 
       final body = provider.lastRequestBody;
       expect(body, isNotNull);
-      expect(body!['thinking']['budget_tokens'], 'max');
+      expect(body!['thinking']['type'], 'enabled');
+      expect(body['thinking']['budget_tokens'], 'max');
     });
   });
 }

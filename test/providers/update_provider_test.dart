@@ -597,4 +597,68 @@ void main() {
       expect(notifier.state.downloadError, isNotNull);
     });
   });
+
+  group('UpdateNotifier - Install Flow', () {
+    late TargetPlatform originalPlatform;
+    late String tempDir;
+
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      tempDir = Directory.systemTemp.createTempSync('stroom_test_install_').path;
+      originalPlatform = debugDefaultTargetPlatformOverride ?? defaultTargetPlatform;
+      // Use iOS to avoid Android MethodChannel dependency in unit tests
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    });
+
+    tearDown(() {
+      debugDefaultTargetPlatformOverride = originalPlatform;
+      try {
+        Directory(tempDir).deleteSync(recursive: true);
+      } catch (_) {}
+    });
+
+    test('installDownloadedFile does nothing when downloadedFilePath is null', () async {
+      final notifier = UpdateNotifier(dio: Dio(BaseOptions()));
+      notifier.state = UpdateState(
+        updateAvailable: true,
+        latestVersion: '0.2.14',
+        downloadUrl: 'https://example.com/test.apk',
+      );
+
+      // downloadedFilePath is null → early return, no install attempt
+      await notifier.installDownloadedFile();
+      expect(notifier.state.downloadError, isNull);
+    });
+
+    test('installDownloadedFile does nothing when downloadedFilePath is empty', () async {
+      final notifier = UpdateNotifier(dio: Dio(BaseOptions()));
+      notifier.state = UpdateState(
+        updateAvailable: true,
+        latestVersion: '0.2.14',
+        downloadUrl: 'https://example.com/test.apk',
+        downloadComplete: true,
+        downloadedFilePath: '',
+      );
+
+      await notifier.installDownloadedFile();
+      expect(notifier.state.downloadError, isNull);
+    });
+
+    test('installDownloadedFile clears previous downloadError before attempting install', () async {
+      final notifier = UpdateNotifier(dio: Dio(BaseOptions()));
+      notifier.state = UpdateState(
+        updateAvailable: true,
+        latestVersion: '0.2.14',
+        downloadUrl: 'https://example.com/test.apk',
+        downloadComplete: true,
+        downloadedFilePath: '/tmp/nonexistent.zip',
+        downloadError: '之前的错误',
+      );
+
+      await notifier.installDownloadedFile();
+
+      // The error should be cleared first (even if install later fails with a new error)
+      expect(notifier.state.downloadError, isNot(contains('之前的错误')));
+    });
+  });
 }
