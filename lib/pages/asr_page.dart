@@ -13,6 +13,7 @@ import '../utils/data_sanitizer.dart';
 import '../utils/file_manifest.dart';
 import '../utils/text_manifest.dart';
 import '../widgets/folder_picker_dialog.dart';
+import 'ocr/ocr_shared.dart';
 
 // ============================================================================
 // Provider: Get the first configured ASR config from provider entries
@@ -629,7 +630,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               const SizedBox(height: 24),
               Column(
                 children: [
-                  _ChoiceCard(
+                  ChoiceCard(
                     icon: Icons.library_music_outlined,
                     title: '应用内录音',
                     subtitle: '从已生成的录音中选择',
@@ -640,7 +641,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     },
                   ),
                   const SizedBox(height: 8),
-                  _ChoiceCard(
+                  ChoiceCard(
                     icon: Icons.audio_file_outlined,
                     title: '系统音频文件',
                     subtitle: '从设备文件中选择',
@@ -1059,84 +1060,4 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   }
 
   String _pad(int n) => n.toString().padLeft(2, '0');
-}
-
-// ============================================================================
-// ChoiceCard Widget — reusable card with icon, title, subtitle
-// ============================================================================
-
-class _ChoiceCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _ChoiceCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return Material(
-      color: cs.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: color, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: cs.onSurfaceVariant),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.chevron_right,
-                size: 20,
-                color: cs.onSurfaceVariant,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
