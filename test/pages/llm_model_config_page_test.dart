@@ -16,16 +16,16 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Should find switches (reasoning toggle + LLM toggles)
-      final switches = find.byType(Switch);
-      expect(switches, findsWidgets);
-
-      // Scroll down to find LLM params section
+      // Scroll down to LLM params section to find Switch widgets
       await tester.scrollUntilVisible(
         find.text('温度 (Temperature)'),
         200,
         scrollable: find.byType(Scrollable).first,
       );
+
+      // Switches should now be visible in LLM params section
+      final switches = find.byType(Switch);
+      expect(switches, findsWidgets);
 
       // Temperature label should now be in the tree
       expect(find.text('温度 (Temperature)'), findsOneWidget);
@@ -43,7 +43,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Find all Switch widgets in the page
+      // Scroll down to LLM params section to find Switch widgets
+      await tester.scrollUntilVisible(
+        find.text('温度 (Temperature)'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+
+      // Find all Switch widgets in the LLM params section
       final switches = find.byType(Switch);
       expect(switches, findsWidgets);
     });
@@ -59,10 +66,17 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Find all switches
+      // Scroll down to LLM params section to find Switch widgets
+      await tester.scrollUntilVisible(
+        find.text('温度 (Temperature)'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+
+      // Find all switches in LLM section
       final switches = find.byType(Switch);
       
-      // Toggle the first switch (currently the reasoning param toggle)
+      // Toggle the first switch (temperature toggle)
       await tester.tap(switches.first);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
@@ -109,9 +123,21 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // The page should have switches (reasoning toggle visible without scrolling)
-      final switches = find.byType(Switch);
-      expect(switches, findsWidgets);
+      // The page should show the 推理开关 card (reasoning toggle) visible without scrolling
+      expect(find.text('推理开关'), findsOneWidget);
+      expect(find.text('参数名'), findsOneWidget);
+      expect(find.text('开启时值'), findsOneWidget);
+      expect(find.text('关闭时值'), findsOneWidget);
+
+      // Scroll down to find the "添加推理参数" button
+      await tester.scrollUntilVisible(
+        find.text('添加推理参数'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+
+      // "添加推理参数" button should now exist
+      expect(find.text('添加推理参数'), findsOneWidget);
     });
 
     testWidgets('can add reasoning param with options',
