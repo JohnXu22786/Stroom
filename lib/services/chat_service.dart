@@ -649,19 +649,37 @@ class ChatService {
     }
 
     // Reasoning params:
-    // Only sent when the global reasoning toggle is ON.
-    // Within that, each param has its own `enabled` toggle (set in model config).
-    // Enabled params with a selected value send that value.
-    // Enabled params WITHOUT options (no selected value) send `true`.
+    // - The reasoning toggle param (isReasoningToggle=true) controls the
+    //   overall reasoning on/off: when reasoning=true send onValue,
+    //   when reasoning=false send offValue.
+    // - Additional reasoning params (isReasoningToggle=false) are only sent
+    //   when reasoning is ON and the param's own enabled flag is set.
+    //   They send the selected value from reasoningParamValues.
+    // Find the reasoning toggle (first one marked as toggle)
+    ReasoningParam? toggleParam;
+    final extraParams = <ReasoningParam>[];
+    for (final rp in _modelConfig!.reasoningParams) {
+      if (rp.isReasoningToggle) {
+        toggleParam = rp;
+      } else {
+        extraParams.add(rp);
+      }
+    }
+
+    // Always send reasoning toggle if it exists
+    if (toggleParam != null) {
+      final toggleValue =
+          reasoning ? (toggleParam.onValue ?? 'true') : (toggleParam.offValue ?? 'false');
+      _setNestedParam(result, toggleParam.paramName, toggleValue);
+    }
+
+    // Additional reasoning params: only sent when global toggle is ON
     if (reasoning) {
-      for (final rp in _modelConfig!.reasoningParams) {
+      for (final rp in extraParams) {
         if (!rp.enabled) continue;
         final selectedValue = reasoningParamValues[rp.paramName];
         if (selectedValue != null && selectedValue.isNotEmpty) {
           _setNestedParam(result, rp.paramName, selectedValue);
-        } else if (rp.options.isEmpty) {
-          // No options → boolean flag, send true when enabled
-          _setNestedParam(result, rp.paramName, true);
         }
       }
     }
