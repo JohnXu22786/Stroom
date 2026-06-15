@@ -124,6 +124,19 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   // ===================================================================
 
   void _addReasoningParam() {
+    // 检查推理开关是否已填写完整
+    final toggle = _reasoningParams
+        .where((p) => p.isReasoningToggle)
+        .firstOrNull;
+    if (toggle == null || !toggle.isFilledToggle) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('请先填写推理开关'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     setState(() {
       _reasoningParams.insert(
           0, ReasoningParam(paramName: '', enabled: false, options: []));

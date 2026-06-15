@@ -47,11 +47,18 @@ class ChatAdapter {
   bool get isConfigured => _chatService != null;
 
   /// Whether the current model has reasoning parameters configured.
-  /// Each reasoning param can be independently enabled/disabled in the model
-  /// config. The global reasoning toggle in the chat page is the master switch.
+  /// A model with only an empty toggle (all fields empty) has no reasoning
+  /// params configured, so the chat page should not show the reasoning toggle.
   bool get hasReasoningParams {
     final config = _chatService?.modelConfig;
-    return config != null && config.reasoningParams.isNotEmpty;
+    if (config == null || config.reasoningParams.isEmpty) return false;
+    // At least one param must be actually configured (not all-empty toggle)
+    return config.reasoningParams.any((rp) {
+      if (rp.isReasoningToggle) {
+        return rp.isFilledToggle;
+      }
+      return rp.paramName.trim().isNotEmpty;
+    });
   }
 
   /// Gets the reasoning parameters from the current model config.
