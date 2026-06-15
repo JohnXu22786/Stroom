@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -304,6 +306,39 @@ void main() {
       }
       // If no button matched by child text, at least verify the button exists
       expect(filledButtons, isNotEmpty);
+    });
+  });
+
+  group('AudioSeparationPage - save-to-library integration', () {
+    testWidgets('_saveAudioToLibrary generates correct AudioRecord',
+        (tester) async {
+      final file = File('lib/pages/audio_separation_page.dart');
+      expect(file.existsSync(), isTrue);
+
+      final content = file.readAsStringSync();
+
+      // Locate the _saveAudioToLibrary method start
+      final methodStart = content.indexOf('Future<void> _saveAudioToLibrary');
+      expect(methodStart, greaterThanOrEqualTo(0),
+          reason: '_saveAudioToLibrary method not found');
+
+      // Extract a reasonable chunk after the method signature (the method is
+      // ~30 lines). We search for the first '};' pattern (end of class) or
+      // the next method declaration to bound the search.
+      final methodCode = content.substring(
+        methodStart,
+        content.indexOf('\n  void ', methodStart).clamp(methodStart + 1, content.length),
+      );
+
+      expect(methodCode.contains('FileManifest.writeFile'), isTrue,
+          reason: '_saveAudioToLibrary must write audio data via FileManifest');
+      expect(methodCode.contains('AudioRecord('), isTrue,
+          reason: '_saveAudioToLibrary must create an AudioRecord instance');
+      expect(methodCode.contains('FileManifest.addRecord'), isTrue,
+          reason: '_saveAudioToLibrary must add the record via FileManifest');
+      expect(methodCode.contains('audioRecordsProvider.notifier'), isTrue,
+          reason:
+              '_saveAudioToLibrary must refresh the audio records provider');
     });
   });
 }
