@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -92,9 +93,24 @@ void main() {
       expect(find.text('新对话'), findsOneWidget);
     });
 
-    testWidgets(
+    test(
         'AttachmentStorage.readFile handles non-existent files gracefully',
-        (tester) async {
+        () async {
+      // Mock path_provider to avoid MissingPluginException
+      const channel = MethodChannel('plugins.flutter.io/path_provider');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall methodCall) async {
+        if (methodCall.method == 'getApplicationDocumentsDirectory') {
+          return '.';
+        }
+        return null;
+      });
+
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+      });
+
       // When previewing a file that doesn't exist, the app should show
       // a snackbar error instead of crashing.
       final result = await AttachmentStorage.readFile('nonexistent/path');
