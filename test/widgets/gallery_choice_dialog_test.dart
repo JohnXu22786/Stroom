@@ -53,7 +53,7 @@ void main() {
 
       // Should have the same UI pattern as camera choice dialog:
       // - Choice cards with icons
-      expect(find.byIcon(Icons.photo_album_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.photo_library), findsOneWidget);
       expect(find.byIcon(Icons.folder_outlined), findsOneWidget);
 
       // Should NOT have camera-specific elements
@@ -81,9 +81,9 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      // Both cards should be visible in a Row layout (side by side),
-      // matching the camera dialog's design pattern
-      expect(find.byIcon(Icons.photo_album_outlined), findsOneWidget);
+      // Both cards should be visible in a column layout (vertical list),
+      // matching the file page style design pattern
+      expect(find.byIcon(Icons.photo_library), findsOneWidget);
       expect(find.byIcon(Icons.folder_outlined), findsOneWidget);
     });
 

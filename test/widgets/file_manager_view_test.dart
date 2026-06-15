@@ -259,4 +259,73 @@ void main() {
       expect(find.byKey(const Key('thumbnail_file_2')), findsOneWidget);
     });
   });
+
+  group('FileManagerView back navigation', () {
+    testWidgets('shows back button in app bar when in subfolder', (tester) async {
+      final records = [
+        _TestFileRecord(
+          id: 'file1',
+          name: 'test',
+          folder: 'subfolder',
+        ),
+      ];
+      final config = FileManagerConfig<_TestFileRecord>(
+        title: 'Test',
+        fileIconBuilder: (_) =>
+            const Icon(Icons.videocam, key: Key('fallback_icon')),
+        onFileTap: (_) {},
+      );
+
+      // We need to trigger the "back" navigation by having the initial folder
+      // be a subfolder. We use the manifestBridge to provide parent folder info.
+      final bridge = ManifestBridge(
+        getFolderBaseName: (path) => path.split('/').last,
+        getParentFolderPath: (path) {
+          if (path.isEmpty) return '';
+          final parts = path.split('/');
+          return parts.length > 1 ? parts.sublist(0, -1).join('/') : '';
+        },
+        getChildFolderPaths: (parent, allPaths) => [],
+        validateFolderName: (_) => null,
+        getAllDescendantFolderPaths: (parentPath, allPaths) => [],
+      );
+
+      await tester.pumpWidget(_buildTestApp(
+        FileManagerView<_TestFileRecord>(
+          sortedRecords: records,
+          folders: {'subfolder'},
+          sortConfig: sortConfig,
+          config: config,
+          onRefresh: () async {},
+          onRenameFile: (_, __) async {},
+          onMoveFile: (_, __) async {},
+          onCopyFile: (_, __) async {},
+          onDeleteFile: (_) async {},
+          onDeleteFiles: (_) async {},
+          onDeleteFolders: (_) async {},
+          onMoveFiles: (_, __) async {},
+          onMoveFolders: (_, __) async {},
+          onExportFile: (_) async {},
+          onRenameFolder: (_, __) async {},
+          onMoveFolder: (_, __) async {},
+          onCopyFolder: (_, __) async {},
+          onDeleteFolder: (_) async {},
+          onCreateFolder: (_) async {},
+          onToggleSort: (_) {},
+          manifestBridge: bridge,
+        ),
+      ));
+
+      // The FileManagerView starts at root by default
+      // Tap the subfolder to navigate into it
+      await tester.tap(find.text('subfolder'));
+      await tester.pumpAndSettle();
+
+      // Now the app bar back button should be visible
+      expect(find.byKey(const Key('fm_back_btn')), findsOneWidget);
+
+      // The in-list back item should also be visible
+      expect(find.byKey(const Key('fm_back_item')), findsOneWidget);
+    });
+  });
 }

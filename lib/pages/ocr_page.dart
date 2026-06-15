@@ -12,6 +12,7 @@ import '../utils/data_sanitizer.dart';
 import '../utils/image_manifest.dart';
 import '../utils/text_manifest.dart';
 import '../widgets/folder_picker_dialog.dart';
+import 'chat/composer/app_album_picker_dialog.dart';
 
 // ============================================================================
 // Provider: Get the first configured OCR config from provider entries
@@ -845,30 +846,28 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     ),
               ),
               const SizedBox(height: 24),
-              Row(
+              Column(
                 children: [
-                  Expanded(
-                    child: _ChoiceCard(
-                      icon: Icons.camera_alt,
-                      title: '应用相机',
-                      subtitle: '使用应用内置相机，支持调整比例和压缩设置',
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _takePhotoWithAppCamera();
-                      },
-                    ),
+                  _ChoiceCard(
+                    icon: Icons.camera_alt,
+                    title: '应用相机',
+                    subtitle: '使用应用内置相机，支持调整比例和压缩设置',
+                    color: Colors.orange,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _takePhotoWithAppCamera();
+                    },
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _ChoiceCard(
-                      icon: Icons.phone_android,
-                      title: '系统相机',
-                      subtitle: '使用系统默认相机应用',
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _takePhotoWithSystemCamera();
-                      },
-                    ),
+                  const SizedBox(height: 8),
+                  _ChoiceCard(
+                    icon: Icons.phone_android,
+                    title: '系统相机',
+                    subtitle: '使用系统默认相机应用',
+                    color: Colors.blue,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _takePhotoWithSystemCamera();
+                    },
                   ),
                 ],
               ),
@@ -909,30 +908,28 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     ),
               ),
               const SizedBox(height: 24),
-              Row(
+              Column(
                 children: [
-                  Expanded(
-                    child: _ChoiceCard(
-                      icon: Icons.photo_library,
-                      title: '从系统相册选择',
-                      subtitle: '从设备系统相册中选择图片',
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _pickFromSystemGallery();
-                      },
-                    ),
+                  _ChoiceCard(
+                    icon: Icons.photo_library,
+                    title: '从系统相册选择',
+                    subtitle: '从设备系统相册中选择图片',
+                    color: Colors.blue,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _pickFromSystemGallery();
+                    },
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _ChoiceCard(
-                      icon: Icons.collections_bookmark,
-                      title: '从应用相册选择',
-                      subtitle: '从应用内已保存的图片中选择',
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _pickFromAppAlbum();
-                      },
-                    ),
+                  const SizedBox(height: 8),
+                  _ChoiceCard(
+                    icon: Icons.collections_bookmark,
+                    title: '从应用相册选择',
+                    subtitle: '从应用内已保存的图片中选择',
+                    color: Colors.purple,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _pickFromAppAlbum();
+                    },
                   ),
                 ],
               ),
@@ -1015,96 +1012,45 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   /// Pick images from the app's album.
   Future<void> _pickFromAppAlbum() async {
     try {
-      final records = await ImageManifest.loadRecords();
-
-      if (!mounted) return;
-
-      if (records.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('暂无可用的应用内图片')),
-        );
-        return;
+      final result = await showAppAlbumPickerDialog(context);
+      if (result == null || result.isEmpty) return;
+      for (final entry in result) {
+        await _handleSelectedImage(entry.key, entry.value);
       }
-
-      final cs = Theme.of(context).colorScheme;
-      showDialog(
-        context: context,
-        builder: (ctx) => Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          child: Container(
-            constraints: BoxConstraints(
-              maxWidth: 500,
-              maxHeight: MediaQuery.of(ctx).size.height * 0.6,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Header
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Row(
-                    children: [
-                      Icon(Icons.collections_bookmark,
-                          size: 18, color: cs.primary),
-                      const SizedBox(width: 8),
-                      Text(
-                        '选择应用内图片',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: cs.onSurface,
-                        ),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        onPressed: () => Navigator.pop(ctx),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-                // List
-                Flexible(
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: records.length,
-                    itemBuilder: (_, index) {
-                      final record = records[index];
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: cs.primaryContainer,
-                          child: Icon(Icons.image,
-                              color: cs.onPrimaryContainer, size: 20),
-                        ),
-                        title: Text(
-                          record.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                        subtitle: Text(
-                          '${record.format.toUpperCase()}  ${_formatFileSize(record.size)}',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        onTap: () async {
-                          Navigator.pop(ctx);
-                          await _selectFromAppAlbum(record);
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('已加载 ${result.length} 张图片'),
+            duration: const Duration(seconds: 2),
           ),
-        ),
-      );
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('加载图片列表失败: $e')),
+          SnackBar(content: Text('选择图片失败: $e')),
+        );
+      }
+    }
+  }
+
+  /// Handle a selected image from the album picker.
+  Future<void> _handleSelectedImage(String fileName, Uint8List data) async {
+    try {
+      final format = fileName.contains('.')
+          ? fileName.split('.').last.toLowerCase()
+          : 'png';
+      setState(() {
+        _selectedImages.add(SelectedImage(
+          bytes: data,
+          provider: MemoryImage(data),
+          format: format,
+        ));
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('处理图片失败: $e')),
         );
       }
     }
@@ -1490,12 +1436,14 @@ class _ChoiceCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
+  final Color color;
   final VoidCallback onTap;
 
   const _ChoiceCard({
     required this.icon,
     required this.title,
     required this.subtitle,
+    required this.color,
     required this.onTap,
   });
 
@@ -1506,40 +1454,52 @@ class _ChoiceCard extends StatelessWidget {
     return Material(
       color: cs.surfaceContainerLow,
       borderRadius: BorderRadius.circular(12),
-      elevation: 1,
-      shadowColor: cs.shadow,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
             children: [
+              // 文件页面风格图标容器
               Container(
-                width: 48,
-                height: 48,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
-                  color: cs.primaryContainer,
-                  shape: BoxShape.circle,
+                  color: color.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(icon, color: cs.onPrimaryContainer),
+                child: Icon(icon, color: color, size: 22),
               ),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(fontWeight: FontWeight.w500),
                     ),
-                textAlign: TextAlign.center,
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: cs.onSurfaceVariant),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: cs.onSurfaceVariant,
-                    ),
-                textAlign: TextAlign.center,
+              Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: cs.onSurfaceVariant,
               ),
             ],
           ),
