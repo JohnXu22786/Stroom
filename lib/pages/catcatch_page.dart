@@ -11,6 +11,8 @@ import 'package:path_provider/path_provider.dart';
 import '../catcatch/models/media_resource.dart';
 import '../catcatch/providers/catcatch_provider.dart';
 import '../utils/duration_parser.dart';
+import '../utils/file_manifest.dart';
+import '../utils/video_manifest.dart';
 import '../widgets/folder_picker_dialog.dart';
 import 'browser_page.dart';
 import 'unified_task_list_page.dart';
@@ -637,9 +639,12 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
   // ====================================================================
 
   Future<void> _pickVideoFolder() async {
+    final folders = await VideoManifest.getAllFolders();
+    if (!mounted) return;
     final result = await FolderPickerDialog.show(
       context,
       currentFolder: _videoFolder,
+      availableFolders: folders,
       title: '视频保存至文件夹',
     );
     if (result != null && mounted) {
@@ -648,9 +653,12 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
   }
 
   Future<void> _pickAudioFolder() async {
+    final folders = await FileManifest.getAllFolders();
+    if (!mounted) return;
     final result = await FolderPickerDialog.show(
       context,
       currentFolder: _audioFolder,
+      availableFolders: folders,
       title: '音频保存至文件夹',
     );
     if (result != null && mounted) {

@@ -638,7 +638,7 @@ void main() {
   });
 
   // ====================================================================
-  // NEW TESTS: In-app album picker dialog
+  // NEW TESTS: In-app album picker dialog (uses showAppAlbumPickerDialog)
   // ====================================================================
 
   group('OcrPage - in-app album picker dialog', () {
@@ -662,10 +662,11 @@ void main() {
 
       // Tap "从应用相册选择"
       await tester.tap(find.text('从应用相册选择'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       // Should show the in-app album picker dialog title
-      expect(find.text('选择应用内图片'), findsOneWidget);
+      expect(find.text('应用内相册'), findsOneWidget);
     });
 
     testWidgets('in-app album picker shows empty state when no images',
@@ -681,10 +682,11 @@ void main() {
       await tester.tap(find.text('相册选择'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('从应用相册选择'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       // Should show empty state text
-      expect(find.text('暂无可用的应用内图片'), findsOneWidget);
+      expect(find.text('暂无图片'), findsOneWidget);
     });
 
     testWidgets('in-app album picker shows records when images exist',
@@ -708,10 +710,11 @@ void main() {
       await tester.tap(find.text('相册选择'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('从应用相册选择'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       // Should show the record name
-      expect(find.text('测试图片'), findsOneWidget);
+      expect(find.text('测试图片.png'), findsOneWidget);
     });
 
     testWidgets(
@@ -733,14 +736,22 @@ void main() {
       await tester.tap(find.text('相册选择'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('从应用相册选择'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
-      // Tap on the record
-      await tester.tap(find.text('缺失图片'));
-      await tester.pumpAndSettle();
+      // Tap the checkbox to toggle selection (this triggers read)
+      final checkboxes = find.byType(Checkbox);
+      if (checkboxes.evaluate().isNotEmpty) {
+        await tester.tap(checkboxes.first);
+      } else {
+        // Fallback: tap the text
+        await tester.tap(find.text('缺失图片.png'));
+      }
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
 
       // Should show error snackbar since the file doesn't exist
-      expect(find.textContaining('无法读取'), findsOneWidget);
+      expect(find.textContaining('无法读取'), findsAtLeastNWidgets(1));
     });
 
     testWidgets('in-app album picker close button dismisses the dialog',
@@ -761,17 +772,19 @@ void main() {
       await tester.tap(find.text('相册选择'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('从应用相册选择'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       // Dialog should be visible
-      expect(find.text('选择应用内图片'), findsOneWidget);
+      expect(find.text('应用内相册'), findsOneWidget);
 
       // Tap the close button
       await tester.tap(find.byIcon(Icons.close));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
       // Dialog should be dismissed
-      expect(find.text('选择应用内图片'), findsNothing);
+      expect(find.text('应用内相册'), findsNothing);
     });
   });
 

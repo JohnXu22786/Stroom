@@ -256,20 +256,29 @@ class _FileManagerViewState<T extends FileRecord>
     final showGrid =
         widget.config.fileThumbnailBuilder != null && _showGridView;
 
-    return Scaffold(
-      key: const Key('fm_scaffold'),
-      appBar: _buildAppBar(grouped),
-      body: Column(
-        children: [
-          if (widget.config.topActionBar != null) widget.config.topActionBar!,
-          Expanded(
-            child: showGrid
-                ? _buildGridView(grouped)
-                : _buildFileListView(grouped),
-          ),
-        ],
-      ),
-      bottomNavigationBar: _selectionMode
+    return PopScope(
+      canPop: _currentFolder.isEmpty, // 在根目录时允许系统返回，在子文件夹中拦截
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _currentFolder.isNotEmpty) {
+          // 系统返回：导航到父文件夹
+          _setCurrentFolder(
+              widget.manifestBridge.getParentFolderPath(_currentFolder));
+        }
+      },
+      child: Scaffold(
+        key: const Key('fm_scaffold'),
+        appBar: _buildAppBar(grouped),
+        body: Column(
+          children: [
+            if (widget.config.topActionBar != null) widget.config.topActionBar!,
+            Expanded(
+              child: showGrid
+                  ? _buildGridView(grouped)
+                  : _buildFileListView(grouped),
+            ),
+          ],
+        ),
+        bottomNavigationBar: _selectionMode
           ? SafeArea(
               child: Container(
                 padding:
@@ -324,6 +333,7 @@ class _FileManagerViewState<T extends FileRecord>
               ),
             )
           : null,
+      ),
     );
   }
 
