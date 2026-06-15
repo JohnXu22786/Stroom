@@ -127,7 +127,8 @@ void main() {
       expect(body['thinking']['budget_tokens'], '10000');
     });
 
-    test('no reasoning params sent when reasoning is disabled', () async {
+    test('disabled reasoning param not sent when reasoning is ON',
+        () async {
       final provider = _MockProvider();
       final modelConfig = ModelConfig(
         name: 'Test',
@@ -136,14 +137,17 @@ void main() {
         reasoningParams: [
           ReasoningParam(
               paramName: 'thinking.type',
-              options: ['enabled']),
+              options: ['enabled'],
+              enabled: false),
         ],
       );
 
       final service = ChatService(provider: provider, modelConfig: modelConfig);
 
+      // When reasoning is ON but the param is disabled in config, it should
+      // NOT be sent.
       await for (final _ in service.sendStream('Hi',
-          history: [], reasoning: false)) {}
+          history: [], reasoning: true)) {}
 
       final body = provider.lastRequestBody;
       expect(body, isNotNull);

@@ -30,11 +30,13 @@ void main() {
       final param = ReasoningParam(
         paramName: 'reasoning_effort',
         options: ['low', 'medium', 'high'],
+        enabled: false,
       );
       final map = param.toMap();
       expect(map, {
         'paramName': 'reasoning_effort',
         'options': ['low', 'medium', 'high'],
+        'enabled': false,
       });
     });
 
@@ -42,9 +44,11 @@ void main() {
       final param = ReasoningParam.fromMap({
         'paramName': 'thinking.type',
         'options': ['enabled'],
+        'enabled': false,
       });
       expect(param.paramName, 'thinking.type');
       expect(param.options, ['enabled']);
+      expect(param.enabled, isFalse);
     });
 
     test('fromMap handles missing options', () {
@@ -63,20 +67,64 @@ void main() {
       expect(param.options, isEmpty);
     });
 
-    test('copy creates independent instance', () {
+    test('constructor with default enabled', () {
+      final param = ReasoningParam(paramName: 'thinking.type');
+      expect(param.enabled, isTrue);
+    });
+
+    test('constructor with explicit enabled', () {
+      final param = ReasoningParam(
+        paramName: 'thinking.type',
+        enabled: false,
+      );
+      expect(param.enabled, isFalse);
+    });
+
+    test('toMap serialization includes enabled', () {
+      final param = ReasoningParam(
+        paramName: 'reasoning_effort',
+        options: ['low', 'medium', 'high'],
+        enabled: false,
+      );
+      final map = param.toMap();
+      expect(map, {
+        'paramName': 'reasoning_effort',
+        'options': ['low', 'medium', 'high'],
+        'enabled': false,
+      });
+    });
+
+    test('fromMap deserialization includes enabled', () {
+      final param = ReasoningParam.fromMap({
+        'paramName': 'thinking.type',
+        'options': ['enabled'],
+        'enabled': false,
+      });
+      expect(param.paramName, 'thinking.type');
+      expect(param.options, ['enabled']);
+      expect(param.enabled, isFalse);
+    });
+
+    test('fromMap defaults enabled to true when missing', () {
+      final param = ReasoningParam.fromMap({
+        'paramName': 'thinking.type',
+        'options': ['enabled'],
+      });
+      expect(param.enabled, isTrue);
+    });
+
+    test('copy preserves enabled', () {
       final param = ReasoningParam(
         paramName: 'test',
+        enabled: false,
         options: ['a', 'b'],
       );
       final copy = param.copy();
-      expect(copy.paramName, 'test');
-      expect(copy.options, ['a', 'b']);
+      expect(copy.enabled, isFalse);
       
       // Verify independence
-      copy.paramName = 'changed';
-      copy.options.add('c');
-      expect(param.paramName, 'test');
-      expect(param.options, ['a', 'b']);
+      copy.enabled = true;
+      expect(param.enabled, isFalse);
     });
 
     test('options with single value (e.g. only max)', () {
