@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -12,6 +13,8 @@ import '../utils/data_sanitizer.dart';
 import '../utils/image_manifest.dart';
 import '../utils/text_manifest.dart';
 import '../widgets/folder_picker_dialog.dart';
+import '../widgets/camera_choice_dialog.dart';
+import 'camera_page.dart';
 
 // ============================================================================
 // Provider: Get the first configured OCR config from provider entries
@@ -817,66 +820,17 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   /// Show camera choice panel (app camera / system camera, no save-to, no edit toggle)
   void _showCameraChoicePanel() {
-    final cs = Theme.of(context).colorScheme;
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 32,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: cs.onSurfaceVariant.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                '选择拍照方式',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: _ChoiceCard(
-                      icon: Icons.camera_alt,
-                      title: '应用相机',
-                      subtitle: '使用应用内置相机，支持调整比例和压缩设置',
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _takePhotoWithAppCamera();
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _ChoiceCard(
-                      icon: Icons.phone_android,
-                      title: '系统相机',
-                      subtitle: '使用系统默认相机应用',
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _takePhotoWithSystemCamera();
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    showCameraChoiceDialog(
+      context,
+      showFolderSection: false,
+    ).then((result) {
+      if (result == null || !mounted) return;
+      if (result.choice == CameraChoice.app) {
+        _takePhotoWithAppCamera();
+      } else {
+        _takePhotoWithSystemCamera();
+      }
+    });
   }
 
   /// Show album choice panel (system album / app album)
@@ -943,10 +897,34 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     );
   }
 
-  /// Take a photo using the app's built-in camera.
+  /// Take a photo using the app's camera (camerawesome).
   Future<void> _takePhotoWithAppCamera() async {
-    // For now, use system camera as fallback
-    await _takePhotoWithSystemCamera();
+    try {
+      final savedFilePath = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(builder: (_) => const CameraPage()),
+      );
+      if (savedFilePath == null || savedFilePath.isEmpty) return;
+      if (!mounted) return;
+
+      final file = File(savedFilePath);
+      final bytes = await file.readAsBytes();
+      if (!mounted) return;
+
+      setState(() {
+        _selectedImages.add(SelectedImage(
+          bytes: bytes,
+          provider: _createProvider(bytes),
+          format: _detectFormat(savedFilePath),
+        ));
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('拍照失败: $e')),
+        );
+      }
+    }
   }
 
   /// Take a photo using the system camera.

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:gal/gal.dart';
 
 import 'package:camerawesome/camerawesome_plugin.dart';
 import 'package:flutter/material.dart';
@@ -351,6 +352,18 @@ class _CameraPageState extends ConsumerState<CameraPage> {
         folder: widget.folder,
       );
       await ImageManifest.addRecord(record);
+
+      // Save to device gallery if the setting is enabled
+      if (!_discardRequested) {
+        final settings = ref.read(cameraSettingsProvider);
+        if (settings.saveToGallery) {
+          try {
+            await Gal.putImageBytes(finalBytes, name: hash);
+          } catch (e) {
+            debugPrint('Save to gallery failed: $e');
+          }
+        }
+      }
 
       final savedFilePath = await ImageManifest.readFilePath(fileName);
       if (mounted && !_discardRequested) {
