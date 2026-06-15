@@ -19,10 +19,10 @@ Future<Uint8List> createTestImageBytes({int width = 100, int height = 100}) asyn
   return byteData!.buffer.asUint8List();
 }
 
-Widget createTestApp(Uint8List imageBytes) {
+Widget createTestApp(Uint8List imageBytes, {bool fromCamera = false}) {
   return MaterialApp(
     home: Scaffold(
-      body: ImageEditorPage(imageBytes: imageBytes),
+      body: ImageEditorPage(imageBytes: imageBytes, fromCamera: fromCamera),
     ),
   );
 }
@@ -219,6 +219,110 @@ void main() {
       // The ProImageEditor is rendered and the page exists — this verifies
       // the widget tree doesn't crash. The actual null-return on close
       // is handled by pro_image_editor's internal close mechanism.
+    });
+
+    testWidgets('page renders with fromCamera=true without crash',
+        (tester) async {
+      await tester.pumpWidget(createTestApp(testImage, fromCamera: true));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byType(ImageEditorPage), findsOneWidget);
+    });
+  });
+
+  // ====================================================================
+  // Tests for the discard-or-save dialog (camera source)
+  // ====================================================================
+  group('showDiscardOrSaveDialog', () {
+    testWidgets('shows correct title and options', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(builder: (context) {
+          return ElevatedButton(
+            onPressed: () => showDiscardOrSaveDialog(context),
+            child: const Text('保存'),
+          );
+        }),
+      ));
+
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('保存照片'), findsOneWidget);
+      // "保存" appears inside the dialog's FilledButton and on the trigger button
+      expect(find.widgetWithText(FilledButton, '保存'), findsOneWidget);
+      expect(find.text('不保存'), findsOneWidget);
+      expect(find.text('取消'), findsOneWidget);
+    });
+
+    testWidgets('save returns SaveAction.save', (tester) async {
+      SaveAction? result;
+
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(builder: (context) {
+          return ElevatedButton(
+            onPressed: () async {
+              result = await showDiscardOrSaveDialog(context);
+            },
+            child: const Text('保存'),
+          );
+        }),
+      ));
+
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      // Tap the "保存" FilledButton inside the dialog
+      await tester.tap(find.widgetWithText(FilledButton, '保存'));
+      await tester.pumpAndSettle();
+
+      expect(result, SaveAction.save);
+    });
+
+    testWidgets('discard returns SaveAction.discard', (tester) async {
+      SaveAction? result;
+
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(builder: (context) {
+          return ElevatedButton(
+            onPressed: () async {
+              result = await showDiscardOrSaveDialog(context);
+            },
+            child: const Text('保存'),
+          );
+        }),
+      ));
+
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('不保存'));
+      await tester.pumpAndSettle();
+
+      expect(result, SaveAction.discard);
+    });
+
+    testWidgets('cancel returns SaveAction.cancel', (tester) async {
+      SaveAction? result;
+
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(builder: (context) {
+          return ElevatedButton(
+            onPressed: () async {
+              result = await showDiscardOrSaveDialog(context);
+            },
+            child: const Text('保存'),
+          );
+        }),
+      ));
+
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+
+      expect(result, SaveAction.cancel);
     });
   });
 }
