@@ -37,6 +37,7 @@ void main() {
         'paramName': 'reasoning_effort',
         'options': ['low', 'medium', 'high'],
         'enabled': false,
+        'isReasoningToggle': false,
       });
     });
 
@@ -91,6 +92,7 @@ void main() {
         'paramName': 'reasoning_effort',
         'options': ['low', 'medium', 'high'],
         'enabled': false,
+        'isReasoningToggle': false,
       });
     });
 

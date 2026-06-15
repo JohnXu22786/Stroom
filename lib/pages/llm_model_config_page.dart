@@ -80,11 +80,13 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         .map((p) => p.copy())
         .toList();
     if (m == null && _reasoningParams.isEmpty) {
-      // 新模型提供一个默认推理参数（由用户输入参数名，通过开关控制）
+      // 新模型提供一个默认推理开关（用户填写参数名和开/关值）
       _reasoningParams = [
         ReasoningParam(
-          paramName: 'thinking.type',
-          enabled: true,
+          paramName: '',
+          isReasoningToggle: true,
+          onValue: '',
+          offValue: '',
           options: [],
         ),
       ];
@@ -124,7 +126,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   void _addReasoningParam() {
     setState(() {
       _reasoningParams.insert(
-          0, ReasoningParam(paramName: '', options: []));
+          0, ReasoningParam(paramName: '', enabled: false, options: []));
     });
   }
 
@@ -211,26 +213,15 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     // 验证推理参数
     for (int i = 0; i < _reasoningParams.length; i++) {
       final param = _reasoningParams[i];
-      if (param.paramName.trim().isEmpty) {
+      final error = param.validationError;
+      if (error != null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('推理参数的参数名不能为空'),
+          SnackBar(
+            content: Text('推理参数错误：$error'),
             behavior: SnackBarBehavior.floating,
           ),
         );
         return;
-      }
-      // 检查选项值
-      for (int j = 0; j < param.options.length; j++) {
-        if (param.options[j].trim().isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('推理参数的选项值不能为空'),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-          return;
-        }
       }
     }
 
@@ -577,7 +568,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                   color: cs.primary)),
           const SizedBox(height: 4),
           Text(
-            '每个推理参数可独立开关，仅在启用且聊天页面的推理总开关开启时发送到 API。'
+            '推理开关控制聊天页面中推理功能的开启和关闭，由您定义参数名和对应的开/关值。'
+            '附加推理参数可添加多个，每个含参数名和可选项，显示在推理面板中供选择。'
             '参数名支持点号嵌套（如 thinking.type 会展开为 {"thinking": {"type": "..."}}）。',
             style: TextStyle(
               fontSize: 12,
@@ -597,6 +589,93 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           else
             ...List.generate(_reasoningParams.length, (i) {
               final param = _reasoningParams[i];
+              if (param.isReasoningToggle) {
+                // 推理开关 — 特殊卡片：参数名 + 开启值 + 关闭值
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.toggle_on_outlined,
+                                size: 18, color: cs.primary),
+                            const SizedBox(width: 4),
+                            Text('推理开关',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: cs.primary,
+                                )),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          initialValue: param.paramName,
+                          decoration: InputDecoration(
+                            labelText: '参数名',
+                            hintText: '如 thinking.type、reasoning',
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          onChanged: (v) {
+                            param.paramName = v;
+                            setState(() {});
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                initialValue: param.onValue ?? '',
+                                decoration: InputDecoration(
+                                  labelText: '开启时值',
+                                  hintText: '如 enabled、true',
+                                  border: const OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                                onChanged: (v) {
+                                  param.onValue = v;
+                                  setState(() {});
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextFormField(
+                                initialValue: param.offValue ?? '',
+                                decoration: InputDecoration(
+                                  labelText: '关闭时值',
+                                  hintText: '如 disabled、false',
+                                  border: const OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                                onChanged: (v) {
+                                  param.offValue = v;
+                                  setState(() {});
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '推理开关打开时发送「${param.onValue ?? ''}」，'
+                          '关闭时发送「${param.offValue ?? ''}」',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: cs.onSurfaceVariant.withOpacity(0.7),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              // 附加推理参数 — 参数名 + 开关 + 选项值列表
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: Padding(
@@ -604,7 +683,6 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 参数名 + 开关 + 删除按钮
                       Row(
                         children: [
                           Expanded(
@@ -639,7 +717,6 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      // 选项值列表
                       Text('选项值',
                           style: TextStyle(
                             fontSize: 13,
@@ -648,7 +725,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                           )),
                       const SizedBox(height: 4),
                       Text(
-                        '当参数无选项值时，启用时将发送 true；有选项时发送选中的值',
+                        '这些选项将按顺序显示在推理面板中供选择',
                         style: TextStyle(
                           fontSize: 11,
                           color: cs.onSurfaceVariant.withOpacity(0.7),
