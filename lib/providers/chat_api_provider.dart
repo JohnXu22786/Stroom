@@ -189,6 +189,12 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   ///
   /// Also handles text content.
   ///
+  /// **Deduplication note:** Open Router often echoes the same reasoning
+  /// content in multiple fields (e.g. both `reasoning_content` and `reasoning`)
+  /// within the same SSE delta chunk. To avoid word-level duplication in the
+  /// final output, events with identical text are deduplicated within a single
+  /// chunk.
+  ///
   /// Extracted as a static method for testability — allows direct unit testing
   /// of the SSE parsing logic without mocking HTTP/SSE infrastructure.
   @visibleForTesting
@@ -206,15 +212,25 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       events.add(AIStreamEvent(content));
     }
 
+    // Track reasoning text already added within this delta chunk.
+    // Open Router often echoes the same text in multiple fields
+    // (reasoning_content, reasoning, reasoning_details), so we
+    // deduplicate to avoid word-level duplication.
+    final reasoningTexts = <String>{};
+
     // Reasoning via reasoning_content (OpenAI standard format)
     final reasoningContent = delta['reasoning_content'] as String?;
     if (reasoningContent != null && reasoningContent.isNotEmpty) {
+      reasoningTexts.add(reasoningContent);
       events.add(AIStreamEvent(reasoningContent, isReasoning: true));
     }
 
     // Reasoning via reasoning (Open Router string format)
     final reasoning = delta['reasoning'] as String?;
-    if (reasoning != null && reasoning.isNotEmpty) {
+    if (reasoning != null &&
+        reasoning.isNotEmpty &&
+        !reasoningTexts.contains(reasoning)) {
+      reasoningTexts.add(reasoning);
       events.add(AIStreamEvent(reasoning, isReasoning: true));
     }
 
@@ -225,12 +241,18 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         final detailType = detail is Map ? detail['type'] as String? : null;
         if (detailType == 'reasoning.text') {
           final text = detail['text'] as String?;
-          if (text != null && text.isNotEmpty) {
+          if (text != null &&
+              text.isNotEmpty &&
+              !reasoningTexts.contains(text)) {
+            reasoningTexts.add(text);
             events.add(AIStreamEvent(text, isReasoning: true));
           }
         } else if (detailType == 'reasoning.summary') {
           final summary = detail['summary'] as String?;
-          if (summary != null && summary.isNotEmpty) {
+          if (summary != null &&
+              summary.isNotEmpty &&
+              !reasoningTexts.contains(summary)) {
+            reasoningTexts.add(summary);
             events.add(AIStreamEvent(summary, isReasoning: true));
           }
         }

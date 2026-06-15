@@ -9,34 +9,28 @@ final cameraSettingsProvider =
 );
 
 class CameraSettings {
-  final bool saveToGallery;
   final double compressionQuality;
 
   const CameraSettings({
-    this.saveToGallery = true,
     this.compressionQuality = 0.8,
   });
 
   Map<String, dynamic> toJson() {
     return {
-      'saveToGallery': saveToGallery,
       'compressionQuality': compressionQuality,
     };
   }
 
   factory CameraSettings.fromJson(Map<String, dynamic> json) {
     return CameraSettings(
-      saveToGallery: json['saveToGallery'] as bool? ?? true,
       compressionQuality: (json['compressionQuality'] as num?)?.toDouble() ?? 0.8,
     );
   }
 
   CameraSettings copyWith({
-    bool? saveToGallery,
     double? compressionQuality,
   }) {
     return CameraSettings(
-      saveToGallery: saveToGallery ?? this.saveToGallery,
       compressionQuality: compressionQuality ?? this.compressionQuality,
     );
   }
@@ -46,11 +40,10 @@ class CameraSettings {
       identical(this, other) ||
       other is CameraSettings &&
           runtimeType == other.runtimeType &&
-          saveToGallery == other.saveToGallery &&
           compressionQuality == other.compressionQuality;
 
   @override
-  int get hashCode => Object.hash(saveToGallery, compressionQuality);
+  int get hashCode => compressionQuality.hashCode;
 }
 
 class CameraSettingsNotifier extends StateNotifier<CameraSettings> {
@@ -72,11 +65,6 @@ class CameraSettingsNotifier extends StateNotifier<CameraSettings> {
   Future<void> _persist() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('camera_settings', jsonEncode(state.toJson()));
-  }
-
-  Future<void> setSaveToGallery(bool value) async {
-    state = state.copyWith(saveToGallery: value);
-    await _persist();
   }
 
   Future<void> setCompressionQuality(double value) async {
