@@ -27,7 +27,7 @@ class CameraChoiceResult {
   int get hashCode => Object.hash(choice, folder, editAfterCapture);
 }
 
-/// 显示拍照方式选择弹窗（含可选的文件夹选择）
+/// 显示拍照方式选择弹窗（统一使用文件页面样式）
 ///
 /// [initialFolder] 初始选中的文件夹（默认根目录）
 /// [availableFolders] 可选文件夹列表
@@ -42,6 +42,7 @@ Future<CameraChoiceResult?> showCameraChoiceDialog(
 }) {
   return showModalBottomSheet<CameraChoiceResult>(
     context: context,
+    isScrollControlled: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
@@ -103,158 +104,188 @@ class _CameraChoiceSheetState extends State<_CameraChoiceSheet> {
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-          Container(
-            width: 32,
-            height: 4,
-            decoration: BoxDecoration(
-              color: cs.onSurfaceVariant.withValues(alpha: 0.4),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            '选择拍照方式',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: _ChoiceCard(
-                  icon: Icons.camera_alt,
-                  title: '应用相机',
-                  subtitle: '使用应用内置相机，支持调整比例和压缩设置',
-                  choice: CameraChoice.app,
-                  onTap: () => _onChoice(CameraChoice.app),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _ChoiceCard(
-                  icon: Icons.phone_android,
-                  title: '系统相机',
-                  subtitle: '使用系统默认相机应用',
-                  choice: CameraChoice.system,
-                  onTap: () => _onChoice(CameraChoice.system),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          // Folder selection section (hidden when showFolderSection is false)
-          if (widget.showFolderSection) ...[
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: cs.outlineVariant.withValues(alpha: 0.5),
-                ),
-              ),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: _pickFolder,
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.folder_outlined,
-                      size: 20,
-                      color: cs.primary,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '添加至文件夹',
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelMedium
-                                ?.copyWith(color: cs.onSurfaceVariant),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _selectedFolder.isEmpty ? '根目录' : _selectedFolder,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                  color: cs.primary,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Icon(
-                      Icons.chevron_right,
-                      size: 20,
-                      color: cs.onSurfaceVariant,
-                    ),
-                  ],
+            // ── Drag handle ──
+            Center(
+              child: Container(
+                width: 32,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            // Edit after capture toggle
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: cs.outlineVariant.withValues(alpha: 0.5),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.edit_outlined,
-                    size: 20,
-                    color: cs.primary,
+            const SizedBox(height: 24),
+
+            // ── Title ──
+            Text(
+              '选择拍照方式',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+            ),
+            const SizedBox(height: 20),
+
+            // ── Camera choices (file-page style cards) ──
+            // 应用相机
+            _FileStyleChoiceCard(
+              icon: Icons.camera_alt,
+              title: '应用相机',
+              subtitle: '使用应用内置相机，支持调整比例和压缩设置',
+              color: Colors.orange,
+              onTap: () => _onChoice(CameraChoice.app),
+            ),
+            const SizedBox(height: 8),
+
+            // 系统相机
+            _FileStyleChoiceCard(
+              icon: Icons.phone_android,
+              title: '系统相机',
+              subtitle: '使用系统默认相机应用',
+              color: Colors.blue,
+              onTap: () => _onChoice(CameraChoice.system),
+            ),
+            const SizedBox(height: 20),
+
+            // ── Folder selection section ──
+            if (widget.showFolderSection) ...[
+              // 添加至文件夹
+              Container(
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: cs.outlineVariant.withValues(alpha: 0.5),
+                  ),
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: _pickFolder,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    child: Row(
                       children: [
-                        Text(
-                          '拍完编辑',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w500),
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Center(
+                            child: Icon(Icons.folder_outlined,
+                                size: 20, color: Colors.amber),
+                          ),
                         ),
-                        Text(
-                          '拍照后立即进入编辑模式',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: cs.onSurfaceVariant),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '添加至文件夹',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelMedium
+                                    ?.copyWith(
+                                        color: cs.onSurfaceVariant),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _selectedFolder.isEmpty
+                                    ? '根目录'
+                                    : _selectedFolder,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: cs.primary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right,
+                          size: 20,
+                          color: cs.onSurfaceVariant,
                         ),
                       ],
                     ),
                   ),
-                  Switch(
-                    value: _editAfterCapture,
-                    onChanged: (v) => setState(() => _editAfterCapture = v),
-                  ),
-                ],
+                ),
               ),
-            ),
+              const SizedBox(height: 12),
+
+              // 拍完编辑
+              Container(
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: cs.outlineVariant.withValues(alpha: 0.5),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.purple.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Center(
+                          child: Icon(Icons.edit_outlined,
+                              size: 20, color: Colors.purple),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '拍完编辑',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                      fontWeight: FontWeight.w500),
+                            ),
+                            Text(
+                              '拍照后立即进入编辑模式',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                      color: cs.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: _editAfterCapture,
+                        onChanged: (v) =>
+                            setState(() => _editAfterCapture = v),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   void _onChoice(CameraChoice choice) {
     Navigator.of(context).pop(CameraChoiceResult(
@@ -265,18 +296,19 @@ class _CameraChoiceSheetState extends State<_CameraChoiceSheet> {
   }
 }
 
-class _ChoiceCard extends StatelessWidget {
+/// 文件页面风格的选项卡片（使用列表样式代替原来的圆形图标卡片）
+class _FileStyleChoiceCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  final CameraChoice choice;
+  final Color color;
   final VoidCallback onTap;
 
-  const _ChoiceCard({
+  const _FileStyleChoiceCard({
     required this.icon,
     required this.title,
     required this.subtitle,
-    required this.choice,
+    required this.color,
     required this.onTap,
   });
 
@@ -287,40 +319,52 @@ class _ChoiceCard extends StatelessWidget {
     return Material(
       color: cs.surfaceContainerLow,
       borderRadius: BorderRadius.circular(12),
-      elevation: 1,
-      shadowColor: cs.shadow,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
             children: [
+              // 文件页面风格图标容器
               Container(
-                width: 48,
-                height: 48,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
-                  color: cs.primaryContainer,
-                  shape: BoxShape.circle,
+                  color: color.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(icon, color: cs.onPrimaryContainer),
+                child: Icon(icon, color: color, size: 22),
               ),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(fontWeight: FontWeight.w500),
                     ),
-                textAlign: TextAlign.center,
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: cs.onSurfaceVariant),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: cs.onSurfaceVariant,
-                    ),
-                textAlign: TextAlign.center,
+              Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: cs.onSurfaceVariant,
               ),
             ],
           ),

@@ -627,30 +627,28 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     ),
               ),
               const SizedBox(height: 24),
-              Row(
+              Column(
                 children: [
-                  Expanded(
-                    child: _ChoiceCard(
-                      icon: Icons.library_music_outlined,
-                      title: '应用内录音',
-                      subtitle: '从已生成的录音中选择',
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _showInAppAudioPicker();
-                      },
-                    ),
+                  _ChoiceCard(
+                    icon: Icons.library_music_outlined,
+                    title: '应用内录音',
+                    subtitle: '从已生成的录音中选择',
+                    color: Colors.green,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showInAppAudioPicker();
+                    },
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _ChoiceCard(
-                      icon: Icons.audio_file_outlined,
-                      title: '系统音频文件',
-                      subtitle: '从设备文件中选择',
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _pickAudioFile();
-                      },
-                    ),
+                  const SizedBox(height: 8),
+                  _ChoiceCard(
+                    icon: Icons.audio_file_outlined,
+                    title: '系统音频文件',
+                    subtitle: '从设备文件中选择',
+                    color: Colors.blue,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _pickAudioFile();
+                    },
                   ),
                 ],
               ),
@@ -1071,12 +1069,14 @@ class _ChoiceCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
+  final Color color;
   final VoidCallback onTap;
 
   const _ChoiceCard({
     required this.icon,
     required this.title,
     required this.subtitle,
+    required this.color,
     required this.onTap,
   });
 
@@ -1087,40 +1087,51 @@ class _ChoiceCard extends StatelessWidget {
     return Material(
       color: cs.surfaceContainerLow,
       borderRadius: BorderRadius.circular(12),
-      elevation: 1,
-      shadowColor: cs.shadow,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
             children: [
               Container(
-                width: 48,
-                height: 48,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
-                  color: cs.primaryContainer,
-                  shape: BoxShape.circle,
+                  color: color.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(icon, color: cs.onPrimaryContainer),
+                child: Icon(icon, color: color, size: 22),
               ),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(fontWeight: FontWeight.w500),
                     ),
-                textAlign: TextAlign.center,
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: cs.onSurfaceVariant),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: cs.onSurfaceVariant,
-                    ),
-                textAlign: TextAlign.center,
+              Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: cs.onSurfaceVariant,
               ),
             ],
           ),
