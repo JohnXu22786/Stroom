@@ -5,44 +5,10 @@ import 'package:flutter/material.dart';
 import '../utils/file_record.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/sort_config.dart';
+import 'file_manager_config.dart';
+import 'file_manager_utils.dart';
 
-// ====================================================================
-// FileManagerConfig — per-page customization
-// ====================================================================
-
-class FileManagerConfig<T extends FileRecord> {
-  final String title;
-  final Widget? topActionBar;
-  final bool showThumbnailToggle;
-  final bool initialGridView;
-  final void Function(bool)? onGridViewChanged;
-  final Widget Function(T) fileIconBuilder;
-  final Widget Function(T)? fileThumbnailBuilder;
-  final void Function(T) onFileTap;
-  final List<PopupMenuEntry<String>> Function(T) extraPopupMenuItems;
-  final void Function(T, String)? onExtraMenuAction;
-  final void Function(T)? onLongPress;
-  final void Function(String)? onCurrentFolderChanged;
-  final List<Widget> Function()? extraAppBarActions;
-
-  const FileManagerConfig({
-    required this.title,
-    this.topActionBar,
-    this.showThumbnailToggle = false,
-    this.initialGridView = false,
-    this.onGridViewChanged,
-    required this.fileIconBuilder,
-    this.fileThumbnailBuilder,
-    required this.onFileTap,
-    this.extraPopupMenuItems = _defaultExtraMenu,
-    this.onExtraMenuAction,
-    this.onLongPress,
-    this.onCurrentFolderChanged,
-    this.extraAppBarActions,
-  });
-
-  static List<PopupMenuEntry<String>> _defaultExtraMenu(_) => [];
-}
+export 'file_manager_config.dart';
 
 // ====================================================================
 // FileManagerView — reusable file-manager stateful widget
@@ -974,8 +940,8 @@ class _FileManagerViewState<T extends FileRecord>
 
   Widget _buildFileItem(T file) {
     final isSelected = _selectedIds.contains(file.id);
-    final fileSizeStr = _formatFileSize(file.size);
-    final dateStr = _formatDate(file.createdAt);
+    final fileSizeStr = formatFileSize(file.size);
+    final dateStr = formatDate(file.createdAt);
     final hasThumbnailBuilder = widget.config.fileThumbnailBuilder != null;
 
     return Card(
@@ -1964,34 +1930,4 @@ class _FileManagerViewState<T extends FileRecord>
     );
   }
 
-  // ====================================================================
-  // Helpers
-  // ====================================================================
-
-  String _formatFileSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    // 使用日历日比较而非墙钟时间差，避免跨午夜时日期偏差
-    final today = DateTime(now.year, now.month, now.day);
-    final fileDay = DateTime(date.year, date.month, date.day);
-    final diffDays = today.difference(fileDay).inDays;
-    final time =
-        '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-    if (diffDays == 0) {
-      return '今天 $time';
-    }
-    if (diffDays == 1) {
-      return '昨天 $time';
-    }
-    if (diffDays < 7) return '$diffDays天前 $time';
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} $time';
-  }
 }
