@@ -251,24 +251,40 @@ class ReasoningParam {
         options: List<String>.from(options),
       );
 
+  /// 推理开关是否已填写完整（至少必须有参数名、开启值和关闭值）。
+  /// 仅对 isReasoningToggle=true 有意义。
+  bool get isFilledToggle {
+    if (!isReasoningToggle) return false;
+    return paramName.trim().isNotEmpty &&
+        (onValue != null && onValue!.trim().isNotEmpty) &&
+        (offValue != null && offValue!.trim().isNotEmpty);
+  }
+
   /// 验证此参数是否有效。
-  /// 所有参数必须：paramName 不能为空。
-  /// 推理开关必须：onValue 和 offValue 不能为空。
-  /// 非推理开关的附加参数：options 中的每个值不能为空。
+  /// - 推理开关（isReasoningToggle=true）：允许全部留空（可选），
+  ///   但如果任一部分有填写，则所有字段都必须填写完整。
+  /// - 非推理开关的附加参数：参数名不能为空，且所有选项值不能为空。
   String? get validationError {
-    if (paramName.trim().isEmpty) return '参数名不能为空';
     if (isReasoningToggle) {
-      if (onValue == null || onValue!.trim().isEmpty) {
-        return '推理开关开启值不能为空';
-      }
-      if (offValue == null || offValue!.trim().isEmpty) {
-        return '推理开关关闭值不能为空';
-      }
-    } else {
-      for (int j = 0; j < options.length; j++) {
-        if (options[j].trim().isEmpty) {
-          return '选项值不能为空';
-        }
+      final nameTrimmed = paramName.trim();
+      final hasOnValue = onValue != null && onValue!.trim().isNotEmpty;
+      final hasOffValue = offValue != null && offValue!.trim().isNotEmpty;
+
+      // 全部留空 → 有效（可选，不传递推理参数）
+      if (nameTrimmed.isEmpty && !hasOnValue && !hasOffValue) return null;
+
+      // 部分填写 → 错误
+      if (nameTrimmed.isEmpty) return '推理开关参数名不能为空';
+      if (!hasOnValue) return '推理开关开启值不能为空';
+      if (!hasOffValue) return '推理开关关闭值不能为空';
+
+      return null;
+    }
+    // 非开关参数
+    if (paramName.trim().isEmpty) return '参数名不能为空';
+    for (int j = 0; j < options.length; j++) {
+      if (options[j].trim().isEmpty) {
+        return '选项值不能为空';
       }
     }
     return null;

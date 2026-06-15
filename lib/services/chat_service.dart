@@ -652,6 +652,7 @@ class ChatService {
     // - The reasoning toggle param (isReasoningToggle=true) controls the
     //   overall reasoning on/off: when reasoning=true send onValue,
     //   when reasoning=false send offValue.
+    //   If the toggle fields are all empty, skip it entirely (no toggle configured).
     // - Additional reasoning params (isReasoningToggle=false) are only sent
     //   when reasoning is ON and the param's own enabled flag is set.
     //   They send the selected value from reasoningParamValues.
@@ -666,8 +667,8 @@ class ChatService {
       }
     }
 
-    // Always send reasoning toggle if it exists
-    if (toggleParam != null) {
+    // Only send reasoning toggle if it exists AND is filled (has a paramName)
+    if (toggleParam != null && toggleParam.isFilledToggle) {
       final toggleValue =
           reasoning ? (toggleParam.onValue ?? 'true') : (toggleParam.offValue ?? 'false');
       _setNestedParam(result, toggleParam.paramName, toggleValue);
