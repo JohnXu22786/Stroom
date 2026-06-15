@@ -648,16 +648,20 @@ class ChatService {
       }
     }
 
-    // Reasoning params — only injected when reasoning is enabled.
-    // Users configure these per-model in the LLM config page.
-    // Each param can be a top-level string, nested object (dot notation).
-    // The selected value comes from reasoningParamValues (set by user in the
-    // reasoning panel). If no selection for a param, it is skipped.
+    // Reasoning params:
+    // Only sent when the global reasoning toggle is ON.
+    // Within that, each param has its own `enabled` toggle (set in model config).
+    // Enabled params with a selected value send that value.
+    // Enabled params WITHOUT options (no selected value) send `true`.
     if (reasoning) {
       for (final rp in _modelConfig!.reasoningParams) {
+        if (!rp.enabled) continue;
         final selectedValue = reasoningParamValues[rp.paramName];
         if (selectedValue != null && selectedValue.isNotEmpty) {
           _setNestedParam(result, rp.paramName, selectedValue);
+        } else if (rp.options.isEmpty) {
+          // No options → boolean flag, send true when enabled
+          _setNestedParam(result, rp.paramName, true);
         }
       }
     }

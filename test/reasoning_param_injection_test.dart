@@ -130,7 +130,7 @@ void main() {
       expect(body.containsKey('thinking'), false);
     });
 
-    test('no reasoning params sent when reasoning is disabled', () async {
+    test('disabled reasoning params not sent when reasoning is ON', () async {
       final provider = _MockProvider();
       final modelConfig = ModelConfig(
         name: 'Test',
@@ -140,12 +140,106 @@ void main() {
           ReasoningParam(
             paramName: 'thinking.type',
             options: ['enabled'],
+            enabled: false,  // explicitly disabled
           ),
         ],
       );
 
       final service = ChatService(provider: provider, modelConfig: modelConfig);
 
+      // Even with reasoning=true, a disabled param should NOT be sent
+      await for (final _ in service.sendStream('Hi',
+          history: [], reasoning: true)) {}
+
+      final body = provider.lastRequestBody;
+      expect(body, isNotNull);
+      expect(body!.containsKey('thinking'), false);
+    });
+
+    test('enabled reasoning params without options send true when reasoning is ON',
+        () async {
+      final provider = _MockProvider();
+      final modelConfig = ModelConfig(
+        name: 'Test',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            enabled: true,
+            options: [],  // no options
+          ),
+        ],
+      );
+
+      final service = ChatService(provider: provider, modelConfig: modelConfig);
+
+      // When enabled and no options, send true
+      await for (final _ in service.sendStream('Hi',
+          history: [], reasoning: true)) {}
+
+      final body = provider.lastRequestBody;
+      expect(body, isNotNull);
+      expect(body!['thinking']['type'], isTrue);
+    });
+
+    test('mixed enabled/disabled params handled correctly when reasoning is ON',
+        () async {
+      final provider = _MockProvider();
+      final modelConfig = ModelConfig(
+        name: 'Test',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            options: ['enabled'],
+            enabled: true,
+          ),
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            options: ['low', 'medium', 'high'],
+            enabled: false,  // disabled
+          ),
+        ],
+      );
+
+      final service = ChatService(provider: provider, modelConfig: modelConfig);
+
+      await for (final _ in service.sendStream('Hi',
+          history: [],
+          reasoning: true,
+          reasoningParamValues: {
+            'thinking.type': 'enabled',
+            'reasoning_effort': 'high',
+          })) {}
+
+      final body = provider.lastRequestBody;
+      expect(body, isNotNull);
+      // thinking.type is enabled → should be sent
+      expect(body!['thinking']['type'], 'enabled');
+      // reasoning_effort is disabled → should NOT be sent
+      expect(body.containsKey('reasoning_effort'), false);
+    });
+
+    test('no reasoning params sent when global reasoning toggle is OFF', () async {
+      final provider = _MockProvider();
+      final modelConfig = ModelConfig(
+        name: 'Test',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            options: ['enabled'],
+            enabled: true,
+          ),
+        ],
+      );
+
+      final service = ChatService(provider: provider, modelConfig: modelConfig);
+
+      // Global reasoning toggle is OFF → no params sent regardless of enabled
       await for (final _ in service.sendStream('Hi',
           history: [], reasoning: false)) {}
 
@@ -154,7 +248,8 @@ void main() {
       expect(body!.containsKey('thinking'), false);
     });
 
-    test('empty reasoning params sends nothing extra', () async {
+    test('empty reasoning params sends nothing extra when reasoning is ON',
+        () async {
       final provider = _MockProvider();
       final modelConfig = ModelConfig(
         name: 'Test',
