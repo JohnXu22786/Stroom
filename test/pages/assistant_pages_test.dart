@@ -487,6 +487,63 @@ void main() {
       expect(find.text('保留的助手'), findsOneWidget);
     });
 
+    testWidgets('combined dialog has no separate section headers',
+        (tester) async {
+      await tester.pumpWidget(createTestApp(
+        assistants: [
+          Assistant(
+            name: '助手测试',
+            prompt: 'P1',
+            emoji: '🤖',
+          ),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      // Long-press to open menu
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+
+      // Tap 编辑
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      // Should NOT have separate '基本信息' or '参数设置' headers
+      expect(find.text('基本信息'), findsNothing);
+      expect(find.text('参数设置'), findsNothing);
+    });
+
+    testWidgets('combined dialog shows info box at top near system prompt',
+        (tester) async {
+      await tester.pumpWidget(createTestApp(
+        assistants: [
+          Assistant(
+            name: '助手测试',
+            prompt: 'P1',
+            emoji: '🤖',
+          ),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      // Long-press to open menu
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+
+      // Tap 编辑
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      // The info box text should be visible
+      expect(
+        find.text('助手的参数开关打开时覆盖模型参数；关闭时使用模型参数。'),
+        findsOneWidget,
+      );
+
+      // The info icon should be visible
+      expect(find.byIcon(Icons.info_outline), findsOneWidget);
+    });
+
     testWidgets('combined dialog save button updates assistant', (tester) async {
       await tester.pumpWidget(createTestApp(
         assistants: [

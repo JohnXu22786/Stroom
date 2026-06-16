@@ -290,15 +290,6 @@ void showAssistantFullEditDialog(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ==================== Basic Info Section ====================
-                Text('基本信息',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                      color: Theme.of(context).colorScheme.primary,
-                    )),
-                const SizedBox(height: 12),
-
                 // Emoji picker (only emoji avatar supported)
                 CategorizedEmojiPicker(
                   selectedEmoji: selectedEmoji,
@@ -331,18 +322,46 @@ void showAssistantFullEditDialog(
                   ),
                   maxLines: 4,
                 ),
+                // Override rule explanation
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .tertiaryContainer
+                          .withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          size: 16,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .tertiary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '助手的参数开关打开时覆盖模型参数；关闭时使用模型参数。',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onTertiaryContainer,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 16),
-                const Divider(),
-                const SizedBox(height: 8),
-
-                // ==================== Settings Section ====================
-                Text('参数设置',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                      color: Theme.of(context).colorScheme.primary,
-                    )),
-                const SizedBox(height: 8),
 
                 // Temperature
                 SwitchListTile(
@@ -578,45 +597,6 @@ void showAssistantFullEditDialog(
                       },
                     );
                   }),
-                // Override rule explanation
-                const SizedBox(height: 8),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .tertiaryContainer
-                          .withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          size: 16,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .tertiary,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '助手的参数开关打开时覆盖模型参数；关闭时使用模型参数。',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onTertiaryContainer,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
