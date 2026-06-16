@@ -40,7 +40,6 @@ class AssistantSettings {
   final int maxTokens;
   final bool enableMaxTokens;
   final bool streamOutput;
-  final String reasoningEffort;
   final bool enableWebSearch;
   final int maxToolCalls;
   final bool enableMaxToolCalls;
@@ -60,7 +59,6 @@ class AssistantSettings {
     this.maxTokens = 4096,
     this.enableMaxTokens = false,
     this.streamOutput = true,
-    this.reasoningEffort = 'default',
     this.enableWebSearch = false,
     this.maxToolCalls = 20,
     this.enableMaxToolCalls = true,
@@ -83,7 +81,6 @@ class AssistantSettings {
         'maxTokens': maxTokens,
         'enableMaxTokens': enableMaxTokens,
         'streamOutput': streamOutput,
-        'reasoningEffort': reasoningEffort,
         'enableWebSearch': enableWebSearch,
         'maxToolCalls': maxToolCalls,
         'enableMaxToolCalls': enableMaxToolCalls,
@@ -106,7 +103,6 @@ class AssistantSettings {
         maxTokens: (map['maxTokens'] as int?) ?? 4096,
         enableMaxTokens: (map['enableMaxTokens'] as bool?) ?? false,
         streamOutput: (map['streamOutput'] as bool?) ?? true,
-        reasoningEffort: (map['reasoningEffort'] as String?) ?? 'default',
         enableWebSearch: (map['enableWebSearch'] as bool?) ?? false,
         maxToolCalls: (map['maxToolCalls'] as int?) ?? 20,
         enableMaxToolCalls: (map['enableMaxToolCalls'] as bool?) ?? true,
@@ -135,7 +131,6 @@ class AssistantSettings {
     int? maxTokens,
     bool? enableMaxTokens,
     bool? streamOutput,
-    String? reasoningEffort,
     bool? enableWebSearch,
     int? maxToolCalls,
     bool? enableMaxToolCalls,
@@ -155,7 +150,6 @@ class AssistantSettings {
         maxTokens: maxTokens ?? this.maxTokens,
         enableMaxTokens: enableMaxTokens ?? this.enableMaxTokens,
         streamOutput: streamOutput ?? this.streamOutput,
-        reasoningEffort: reasoningEffort ?? this.reasoningEffort,
         enableWebSearch: enableWebSearch ?? this.enableWebSearch,
         maxToolCalls: maxToolCalls ?? this.maxToolCalls,
         enableMaxToolCalls: enableMaxToolCalls ?? this.enableMaxToolCalls,

@@ -55,7 +55,8 @@ void main() {
     test('migration needed when no version stored', () async {
       final result = await DataMigrationService.checkAndMigrate();
       expect(result.needsMigration, isTrue);
-      expect(result.restartRequired, isFalse);
+      // 迁移后总是需要重启，确保所有 provider 重新初始化
+      expect(result.restartRequired, isTrue);
 
       // After migration, version should be updated
       final storedVersion = await DataMigrationService.getStoredFormatVersion();
