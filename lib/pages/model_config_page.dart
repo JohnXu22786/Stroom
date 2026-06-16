@@ -11,6 +11,7 @@ import '../providers/tts_config.dart';
 import '../utils/audio_playback.dart';
 import '../utils/audio_trim.dart';
 import '../utils/audio_utils.dart';
+import 'model_config_shared.dart';
 import 'voice_editor_page.dart';
 
 class ModelConfigPage extends ConsumerStatefulWidget {
@@ -414,28 +415,6 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         ),
       ),
     );
-  }
-
-  /// 获取当前选中的裁切预设名称（用于显示）
-  String _getTrimPresetLabel(String? presetId, List<TrimPreset> customPresets) {
-    if (presetId == null) {
-      // 默认显示内置的 "不裁切"
-      final nonePreset = getBuiltinTrimPresets().firstWhere(
-        (p) => p['id'] == BuiltinTrimPresetIds.none,
-      );
-      return nonePreset['name'] as String;
-    }
-    final all = getAllTrimPresets(customPresets);
-    for (final p in all) {
-      if (p['id'] == presetId) {
-        final direction = p['direction'] as String;
-        final dirLabel = direction == 'head' ? '开头' : '结尾';
-        final name = p['name'] as String;
-        final duration = p['durationSeconds'] as double;
-        return '$name（$dirLabel，${duration.toStringAsFixed(3)}s）';
-      }
-    }
-    return '不裁切';
   }
 
   // ----------------------------------------------------------------
@@ -1186,10 +1165,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    _buildToggleButton('是', true, _supportInstruction,
+                    ToggleButton('是', true, _supportInstruction,
                         (v) => setState(() => _supportInstruction = v)),
                     const SizedBox(width: 8),
-                    _buildToggleButton('否', false, _supportInstruction,
+                    ToggleButton('否', false, _supportInstruction,
                         (v) => setState(() => _supportInstruction = v)),
                   ],
                 ),
@@ -1226,10 +1205,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    _buildToggleButton('是', true, _supportStream,
+                    ToggleButton('是', true, _supportStream,
                         (v) => setState(() => _supportStream = v)),
                     const SizedBox(width: 8),
-                    _buildToggleButton('否', false, _supportStream,
+                    ToggleButton('否', false, _supportStream,
                         (v) => setState(() => _supportStream = v)),
                   ],
                 ),
@@ -1240,7 +1219,24 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             // ==========================================================
             // 裁切设置
             // ==========================================================
-            _buildTrimSection(),
+            TrimSection(
+              selectedPresetId: _selectedTrimPresetId,
+              onPresetChanged: (v) => setState(() => _selectedTrimPresetId = v),
+              isTestingAudio: _isTestingAudio,
+              testAudioError: _testAudioError,
+              onPlayTestAudio: _playTestAudio,
+              onAddPreset: _showAddTrimPresetDialog,
+              onEditPreset: _showEditTrimPresetDialog,
+              onDeletePreset: (preset) async {
+                await ref
+                    .read(customTrimPresetsProvider.notifier)
+                    .remove(preset.id);
+                if (_selectedTrimPresetId == preset.id) {
+                  setState(() => _selectedTrimPresetId = null);
+                }
+                return true;
+              },
+            ),
             const SizedBox(height: 8),
 
             const SizedBox(height: 16),
@@ -1250,215 +1246,3 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     );
   }
 
-  Widget _buildTrimSection() {
-    final customPresets = ref.watch(customTrimPresetsProvider);
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.content_cut, size: 20),
-                const SizedBox(width: 8),
-                const Text('裁切设置',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                const Spacer(),
-                if (_selectedTrimPresetId != null &&
-                    _selectedTrimPresetId != BuiltinTrimPresetIds.none)
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.orange[100],
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      _getTrimPresetLabel(_selectedTrimPresetId, customPresets),
-                      style: TextStyle(fontSize: 11, color: Colors.orange[800]),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const Text('选择对音频进行裁切的方式',
-                style: TextStyle(fontSize: 12, color: Colors.grey)),
-            const SizedBox(height: 12),
-
-            // 内置预设
-            ...getBuiltinTrimPresets().map((preset) {
-              final presetId = preset['id'] as String;
-              return RadioListTile<String?>(
-                title: Text(preset['name'] as String),
-                subtitle: Text(
-                  presetId == BuiltinTrimPresetIds.none
-                      ? '不对音频做任何裁切'
-                      : '裁切开头 ${preset['durationSeconds']}s',
-                  style: const TextStyle(fontSize: 12),
-                ),
-                value: preset['id'] as String,
-                // ignore: deprecated_member_use
-                groupValue: _selectedTrimPresetId ?? BuiltinTrimPresetIds.none,
-                // ignore: deprecated_member_use
-                onChanged: (v) => setState(() => _selectedTrimPresetId = v),
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-              );
-            }),
-
-            // 分割线
-            if (customPresets.isNotEmpty) const Divider(),
-
-            // 自定义预设
-            if (customPresets.isNotEmpty)
-              ...customPresets.asMap().entries.map((entry) {
-                final preset = entry.value;
-                final dirLabel = preset.direction == 'head' ? '开头' : '结尾';
-                return ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: Radio<String?>(
-                    value: preset.id,
-                    // ignore: deprecated_member_use
-                    groupValue:
-                        _selectedTrimPresetId ?? BuiltinTrimPresetIds.none,
-                    // ignore: deprecated_member_use
-                    onChanged: (v) => setState(() => _selectedTrimPresetId = v),
-                  ),
-                  title:
-                      Text(preset.name, style: const TextStyle(fontSize: 14)),
-                  subtitle: Text(
-                    '裁切$dirLabel ${preset.durationSeconds.toStringAsFixed(3)}s',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit, size: 18),
-                        onPressed: () => _showEditTrimPresetDialog(preset),
-                        tooltip: '编辑',
-                        padding: EdgeInsets.zero,
-                        constraints:
-                            const BoxConstraints(minWidth: 32, minHeight: 32),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete,
-                            size: 18, color: Colors.red),
-                        onPressed: () async {
-                          final confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('删除裁切预设'),
-                              content: Text('确定要删除裁切预设"${preset.name}"吗？'),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(ctx, false),
-                                  child: const Text('取消'),
-                                ),
-                                TextButton(
-                                  onPressed: () => Navigator.pop(ctx, true),
-                                  style: TextButton.styleFrom(
-                                      foregroundColor: Colors.red),
-                                  child: const Text('删除'),
-                                ),
-                              ],
-                            ),
-                          );
-                          if (confirm == true) {
-                            await ref
-                                .read(customTrimPresetsProvider.notifier)
-                                .remove(preset.id);
-                            // 如果当前选中的是这个预设，重置为不裁切
-                            if (_selectedTrimPresetId == preset.id) {
-                              setState(() => _selectedTrimPresetId = null);
-                            }
-                          }
-                        },
-                        tooltip: '删除',
-                        padding: EdgeInsets.zero,
-                        constraints:
-                            const BoxConstraints(minWidth: 32, minHeight: 32),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-
-            // 添加按钮
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('添加自定义裁切'),
-                onPressed: _showAddTrimPresetDialog,
-              ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                icon: _isTestingAudio
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Icon(Icons.play_arrow, size: 18),
-                label: Text(_isTestingAudio ? '播放中...' : '播放测试音频'),
-                onPressed: _isTestingAudio ? null : _playTestAudio,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-              ),
-            ),
-            if (_testAudioError != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  _testAudioError!,
-                  style: const TextStyle(color: Colors.red, fontSize: 12),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildToggleButton(String label, bool value, bool currentValue,
-      ValueChanged<bool> onChanged) {
-    final isSelected = currentValue == value;
-    return GestureDetector(
-      onTap: () => onChanged(value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? Theme.of(context).colorScheme.primary
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: isSelected
-                ? Theme.of(context).colorScheme.primary
-                : Theme.of(context).colorScheme.outline,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected
-                ? Theme.of(context).colorScheme.onPrimary
-                : Theme.of(context).colorScheme.onSurface,
-            fontSize: 14,
-          ),
-        ),
-      ),
-    );
-  }
-}
