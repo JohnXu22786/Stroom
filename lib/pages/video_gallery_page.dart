@@ -2,17 +2,15 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
-
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart';
 
 import '../providers/video_provider.dart';
+import 'video_gallery_shared.dart';
 import '../utils/video_manifest.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
@@ -254,7 +252,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => _VideoPlayerPage(
+        builder: (_) => VideoPlayerPage(
           filePath: filePath,
           displayName: '${file.name}.${file.format}',
         ),
@@ -577,7 +575,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    _formatDuration(file.duration),
+                    formatDuration(file.duration),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 11,
@@ -674,7 +672,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
-                          _formatDuration(file.duration),
+                          formatDuration(file.duration),
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 11,
@@ -871,83 +869,6 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     } catch (_) {
       return null;
     }
-  }
-
-  /// Format duration in milliseconds to mm:ss string.
-  String _formatDuration(int ms) {
-    final totalSeconds = ms ~/ 1000;
-    final minutes = totalSeconds ~/ 60;
-    final seconds = totalSeconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-  }
-}
-
-// ====================================================================
-// Video Player Page (media_kit)
-// ====================================================================
-
-class _VideoPlayerPage extends StatefulWidget {
-  final String filePath;
-  final String displayName;
-
-  const _VideoPlayerPage({
-    required this.filePath,
-    required this.displayName,
-  });
-
-  @override
-  State<_VideoPlayerPage> createState() => _VideoPlayerPageState();
-}
-
-class _VideoPlayerPageState extends State<_VideoPlayerPage> {
-  late final Player _player;
-  late final VideoController _controller;
-  bool _initialized = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _player = Player();
-    _controller = VideoController(_player);
-    _initializePlayer();
-  }
-
-  Future<void> _initializePlayer() async {
-    try {
-      await _player.open(Media(Uri.file(widget.filePath).toString()));
-      if (mounted) {
-        setState(() => _initialized = true);
-      }
-    } catch (e) {
-      debugPrint('_VideoPlayerPage init error: $e');
-    }
-  }
-
-  @override
-  void dispose() {
-    _player.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: Text(widget.displayName,
-            style: const TextStyle(color: Colors.white)),
-      ),
-      body: Center(
-        child: _initialized
-            ? Video(
-                controller: _controller,
-                controls: MaterialVideoControls,
-              )
-            : const CircularProgressIndicator(color: Colors.white),
-      ),
-    );
   }
 }
 
