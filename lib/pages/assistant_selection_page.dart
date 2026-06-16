@@ -284,7 +284,7 @@ void showAssistantFullEditDialog(
       builder: (ctx, setDlgState) => AlertDialog(
         title: const Text('编辑助手'),
         content: SizedBox(
-          width: 520,
+          width: double.maxFinite,
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
