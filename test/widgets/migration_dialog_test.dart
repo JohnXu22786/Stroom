@@ -71,7 +71,7 @@ void main() {
       expect(find.text('正在数据迁移到新版本'), findsOneWidget);
     });
 
-    testWidgets('shows completion and restart prompt when restart required',
+    testWidgets('shows completion and restart message when migration completes',
         (tester) async {
       final result = await _pumpDialog(tester);
 
@@ -82,12 +82,17 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
+      // 迁移完成后显示重启提示
       expect(find.textContaining('重启应用'), findsOneWidget);
-      expect(find.text('确定'), findsOneWidget);
+
+      // 消耗 1.5s 自动关闭定时器，避免 Timer pending 错误
+      await tester.pump(const Duration(milliseconds: 1500));
+      await tester.pump();
     });
 
     testWidgets(
-        'confirm button returns true (signal to exit app)', (tester) async {
+        'auto-closes with true (exit signal) after migration completes',
+        (tester) async {
       final result = await _pumpDialog(tester, capturePopResult: true);
 
       result.completer.complete(const MigrationResult(
@@ -95,27 +100,12 @@ void main() {
         restartRequired: true,
       ));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
+      // Wait for the 1.5s auto-close delay (1600ms = 1500ms delay + 100ms buffer)
+      await tester.pump(const Duration(milliseconds: 1600));
+      await tester.pump();
 
-      await tester.tap(find.text('确定'));
-      await tester.pumpAndSettle();
-
+      // 迁移完成后自动关闭并返回 true（退出应用）
       expect(result.popResult!.value, isTrue);
-    });
-
-    testWidgets('auto-closes when migration completes without restart',
-        (tester) async {
-      final result = await _pumpDialog(tester, capturePopResult: true);
-
-      result.completer.complete(const MigrationResult(
-        needsMigration: true,
-        restartRequired: false,
-      ));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 600));
-      await tester.pump();
-
-      expect(result.popResult!.value, isFalse);
     });
 
     testWidgets('shows error state when migration fails', (tester) async {

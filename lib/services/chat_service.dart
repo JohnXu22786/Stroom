@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 
-import '../models/assistant.dart' show CustomParameter;
+import '../models/assistant.dart' show AssistantSettings, CustomParameter;
 import '../models/ai_stream_event.dart';
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
@@ -79,6 +79,23 @@ class ChatService {
   Map<String, List<String>>? get lastResponseHeaders =>
       _lastResponseHeaders ?? _provider?.lastResponseHeaders;
 
+  /// Returns the effective temperature considering assistant overrides.
+  double get _effectiveTemperature {
+    if (_assistantSettings != null && _assistantSettings!.enableTemperature) {
+      return _assistantSettings!.temperature;
+    }
+    return (_modelConfig!.typeConfig['temperature'] as num?)?.toDouble() ?? 0.7;
+  }
+
+  /// Returns the effective maxTokens considering assistant overrides.
+  int get _effectiveMaxTokens {
+    if (_assistantSettings != null && _assistantSettings!.enableMaxTokens) {
+      return _assistantSettings!.maxTokens;
+    }
+    return (_modelConfig!.typeConfig['context'] as num?)?.toInt() ??
+        (_modelConfig!.typeConfig['maxTokens'] as num?)?.toInt() ?? 4096;
+  }
+
   // ── Instance methods ────────────────────────────────────────────
 
   /// Stream a message — converts [history] (which already contains the latest
@@ -123,12 +140,8 @@ class ChatService {
         _lastRequestBody = {
           'messages': apiMessages,
           'model': _modelConfig?.modelId,
-          'max_tokens': (_modelConfig!.typeConfig['context'] as num?)?.toInt() ??
-              (_modelConfig!.typeConfig['maxTokens'] as num?)?.toInt() ?? 4096,
-          if (_modelConfig!.typeConfig['temperature'] != null)
-            'temperature':
-                (_modelConfig!.typeConfig['temperature'] as num).toDouble(),
-          if (extraParams != null) ...extraParams,
+          'max_tokens': _effectiveMaxTokens,
+          'temperature': _effectiveTemperature,
         };
         _cancelToken = CancelToken();
         _streamSubscription = _provider!
@@ -137,12 +150,8 @@ class ChatService {
           model: _modelConfig!.modelId,
           reasoning: reasoning,
           reasoningEffort: reasoningEffort,
-          maxTokens: (_modelConfig!.typeConfig['context'] as num?)
-                  ?.toInt()
-              ?? (_modelConfig!.typeConfig['maxTokens'] as num?)?.toInt()
-              ?? 4096,
-          temperature: (_modelConfig!.typeConfig['temperature'] as num?)
-              ?.toDouble(),
+          maxTokens: _effectiveMaxTokens,
+          temperature: _effectiveTemperature,
           extraParams: extraParams,
           cancelToken: _cancelToken,
         )
@@ -226,13 +235,9 @@ class ChatService {
         _lastRequestBody = {
           'messages': messages,
           'model': _modelConfig?.modelId,
-          'max_tokens': (_modelConfig!.typeConfig['context'] as num?)?.toInt() ??
-              (_modelConfig!.typeConfig['maxTokens'] as num?)?.toInt() ?? 4096,
-          if (_modelConfig!.typeConfig['temperature'] != null)
-            'temperature':
-                (_modelConfig!.typeConfig['temperature'] as num).toDouble(),
-          if (toolDefs.isNotEmpty) 'tools': toolDefs,
-          if (extraParams != null) ...extraParams,
+          'max_tokens': _effectiveMaxTokens,
+          'temperature': _effectiveTemperature,
+          'tools': toolDefs.isNotEmpty ? toolDefs : null,
         };
         int loopProtection = 0;
 
@@ -251,12 +256,8 @@ class ChatService {
             model: _modelConfig!.modelId,
             reasoning: reasoning,
             reasoningEffort: reasoningEffort,
-            maxTokens:
-                (_modelConfig!.typeConfig['context'] as num?)?.toInt() ??
-                    (_modelConfig!.typeConfig['maxTokens'] as num?)?.toInt() ??
-                    4096,
-            temperature:
-                (_modelConfig!.typeConfig['temperature'] as num?)?.toDouble(),
+            maxTokens: _effectiveMaxTokens,
+            temperature: _effectiveTemperature,
             tools: toolDefs.isNotEmpty ? toolDefs : null,
             extraParams: extraParams,
             cancelToken: _cancelToken,
@@ -579,6 +580,17 @@ class ChatService {
     _assistantCustomParams = params;
   }
 
+  /// Optional assistant-level settings to override model params.
+  /// When an assistant setting's enableXxx flag is true, its value overrides
+  /// the corresponding model parameter. When false, the model parameter is used.
+  AssistantSettings? _assistantSettings;
+
+  /// Set assistant-level settings that will override model parameters when
+  /// their corresponding enable flags are set to true.
+  void setAssistantSettings(AssistantSettings? settings) {
+    _assistantSettings = settings;
+  }
+
   /// Build extraParams map from typeConfig and customParams for the API call.
   /// Merges model-level standard LLM params + [ProviderParam]s with
   /// assistant-level [CustomParameter]s.
@@ -637,6 +649,23 @@ class ChatService {
       }
     }
 
+    // Assistant-level settings override model params when enableXxx is true
+    if (_assistantSettings != null) {
+      final as = _assistantSettings!;
+      if (as.enableTopP) {
+        result['top_p'] = as.topP;
+      }
+      if (as.enableFrequencyPenalty) {
+        result['frequency_penalty'] = as.frequencyPenalty;
+      }
+      if (as.enablePresencePenalty) {
+        result['presence_penalty'] = as.presencePenalty;
+      }
+      if (as.enableSeed && as.seed != null) {
+        result['seed'] = as.seed;
+      }
+    }
+
     // Reasoning params:
     // - The reasoning toggle param (isReasoningToggle=true) controls the
     //   overall reasoning on/off: when reasoning=true send onValue,
@@ -671,6 +700,24 @@ class ChatService {
         if (selectedValue != null && selectedValue.isNotEmpty) {
           setNestedParam(result, rp.paramName, selectedValue);
         }
+      }
+    }
+
+    // Assistant-level settings override model/reasoning params when enableXxx is true.
+    // These are applied last so they take final precedence.
+    if (_assistantSettings != null) {
+      final as = _assistantSettings!;
+      if (as.enableTopP) {
+        result['top_p'] = as.topP;
+      }
+      if (as.enableFrequencyPenalty) {
+        result['frequency_penalty'] = as.frequencyPenalty;
+      }
+      if (as.enablePresencePenalty) {
+        result['presence_penalty'] = as.presencePenalty;
+      }
+      if (as.enableSeed && as.seed != null) {
+        result['seed'] = as.seed;
       }
     }
 

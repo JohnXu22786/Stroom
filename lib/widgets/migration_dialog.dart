@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../services/data_migration_service.dart';
 
@@ -8,12 +7,10 @@ import '../services/data_migration_service.dart';
 /// # Behavior
 /// - While the migration [future] is running, shows a spinner with the message
 ///   "正在数据迁移到新版本".
-/// - When the future completes:
-///   - If [MigrationResult.restartRequired] is `true`: replaces the spinner with
-///     a "迁移完成，请重启应用" message and a "确定" button. Tapping it closes
-///     the dialog and returns `true` to signal the caller to exit the app.
-///   - If [MigrationResult.restartRequired] is `false` (seamless migration):
-///     auto-closes the dialog and returns `false`.
+/// - When the future completes successfully: replaces the spinner with a
+///   "数据迁移完成，即将重启应用..." message, then auto-closes the dialog
+///   after a brief delay and returns `true` to signal the caller to exit
+///   the app (ensuring all providers re-initialize with the new format).
 /// - If the future fails: shows the error message; the user must manually close.
 ///
 /// The dialog cannot be dismissed by tapping the barrier or pressing back.
@@ -28,7 +25,6 @@ class MigrationDialog extends StatefulWidget {
 }
 
 class _MigrationDialogState extends State<MigrationDialog> {
-  MigrationResult? _result;
   String? _error;
   bool _completed = false;
 
@@ -40,21 +36,18 @@ class _MigrationDialogState extends State<MigrationDialog> {
 
   Future<void> _startMigration() async {
     try {
-      final result = await widget.future;
+      await widget.future;
       if (!mounted) return;
 
       setState(() {
-        _result = result;
         _completed = true;
       });
 
-      // 无重启需求的迁移完成后自动关闭对话框
-      if (!result.restartRequired) {
-        // 短暂延迟让用户看到完成状态
-        await Future.delayed(const Duration(milliseconds: 500));
-        if (mounted) {
-          Navigator.of(context).pop(false);
-        }
+      // 迁移完成后自动关闭对话框并返回 true（退出信号），
+      // 确保应用重启后所有 provider 以新数据格式重新初始化
+      await Future.delayed(const Duration(milliseconds: 1500));
+      if (mounted) {
+        Navigator.of(context).pop(true);
       }
     } catch (e) {
       if (!mounted) return;
@@ -140,29 +133,7 @@ class _MigrationDialogState extends State<MigrationDialog> {
       );
     }
 
-    // 迁移完成
-    if (_result!.restartRequired) {
-      // 需要重启
-      return const Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(height: 12),
-          Icon(Icons.info_outline, color: Colors.orange, size: 48),
-          SizedBox(height: 12),
-          Text(
-            '迁移完成，请重启应用',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          SizedBox(height: 8),
-          Text(
-            '数据格式已更新为最新版本。\n点击"确定"关闭应用，然后重新打开即可。',
-            textAlign: TextAlign.center,
-          ),
-        ],
-      );
-    }
-
-    // 自动迁移完成（无缝）
+    // 迁移完成 - 总是提示重启
     return const Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -175,7 +146,7 @@ class _MigrationDialogState extends State<MigrationDialog> {
         ),
         SizedBox(height: 8),
         Text(
-          '应用将继续启动...',
+          '即将重启应用...',
           style: TextStyle(fontSize: 13, color: Colors.grey),
         ),
       ],
@@ -198,26 +169,7 @@ class _MigrationDialogState extends State<MigrationDialog> {
       ];
     }
 
-    // 需要重启 → 确定按钮（关闭应用）
-    if (_result!.restartRequired) {
-      return [
-        FilledButton.icon(
-          onPressed: () {
-            // 返回 true 表示调用者应关闭应用
-            Navigator.of(context).pop(true);
-          },
-          icon: const Icon(Icons.power_settings_new, size: 18),
-          label: const Text('确定'),
-        ),
-      ];
-    }
-
-    // 无缝迁移 → 自动关闭已由 _startMigration 处理，此处提供兜底按钮
-    return [
-      TextButton(
-        onPressed: () => Navigator.of(context).pop(false),
-        child: const Text('继续'),
-      ),
-    ];
+    // 迁移成功 → 无按钮（自动关闭后返回 true 触发退出）
+    return [];
   }
 }
