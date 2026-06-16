@@ -28,6 +28,33 @@ Map<String, String> get openRouterAppHeaders => {
       'X-Title': kXTitle,
     };
 
+/// Attempts to parse the error response body from a streaming [DioException].
+///
+/// When [ResponseType.stream] is used (SSE streaming), a non-2xx response
+/// from the server results in a [DioException] whose `response.data` is a
+/// [ResponseBody] (an unread stream) rather than a [Map] or [String].
+/// This function reads that stream and returns the body as a `{'raw': string}`
+/// map, or `null` if the data is not a [ResponseBody].
+///
+/// Extracted as a top-level function for testability.
+@visibleForTesting
+Future<Map<String, dynamic>?> parseStreamErrorBody(DioException e) async {
+  if (e.response?.data is ResponseBody) {
+    try {
+      final responseBody = e.response!.data as ResponseBody;
+      final bytes = await responseBody.stream.toList();
+      final allBytes = <int>[];
+      for (final chunk in bytes) {
+        allBytes.addAll(chunk);
+      }
+      return <String, dynamic>{'raw': utf8.decode(allBytes)};
+    } catch (_) {
+      return null;
+    }
+  }
+  return null;
+}
+
 // ============================================================================
 // 抽象基类 — BaseChatProvider
 // ============================================================================
@@ -198,7 +225,6 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     if (key.length <= 16) return '${key.substring(0, 4)}****';
     return '${key.substring(0, 8)}...${key.substring(key.length - 4)}';
   }
-
   /// Parse a single SSE data event and return a list of [AIStreamEvent]s.
   ///
   /// Handles all known reasoning formats:
@@ -326,7 +352,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       _lastRequestUrl = _baseUrl;
       _lastRequestHeaders = {
         'Content-Type': 'application/json',
-        if (_apiKey.isNotEmpty) 'Authorization': 'Bearer ${_maskApiKey(_apiKey)}',
+        if (_apiKey.isNotEmpty) 'Authorization': 'Bearer $_apiKey',
         ...openRouterAppHeaders,
       };
       _lastResponseStatusCode = null;
@@ -409,7 +435,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     _lastRequestUrl = _baseUrl;
     _lastRequestHeaders = {
       'Content-Type': 'application/json',
-      if (_apiKey.isNotEmpty) 'Authorization': 'Bearer ${_maskApiKey(_apiKey)}',
+      if (_apiKey.isNotEmpty) 'Authorization': 'Bearer $_apiKey',
       'Accept': 'text/event-stream',
       ...openRouterAppHeaders,
     };
@@ -495,6 +521,9 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       }
     } catch (e) {
       if (e is DioException) {
+        // Clear stale streaming data from successful SSE events first.
+        _lastResponseData = null;
+
         if (e.response?.data is Map) {
           _lastResponseData =
               Map<String, dynamic>.from(e.response!.data as Map);
@@ -502,10 +531,13 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
           _lastResponseData =
               <String, dynamic>{'raw': e.response!.data as String};
         } else {
-          // Clear stale streaming data when response body is a Stream,
-          // null, or otherwise unparseable (e.g., non-2xx HTTP with
-          // ResponseType.stream).
-          _lastResponseData = null;
+          // When ResponseType.stream is used, non-2xx error response data
+          // is a ResponseBody (unread stream). Try to read it to capture
+          // the error response body for diagnostic display.
+          final streamBody = await parseStreamErrorBody(e);
+          if (streamBody != null) {
+            _lastResponseData = streamBody;
+          }
         }
         // Preserve status code even when response body is unavailable.
         _lastResponseStatusCode = e.response?.statusCode;
