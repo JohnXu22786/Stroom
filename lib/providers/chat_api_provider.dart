@@ -145,10 +145,12 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   @override
   Map<String, dynamic> get defaultHeaders => _dio.options.headers;
 
-  /// 构建请求体
+  /// Build the request body map.
   ///
   /// [messages] 已由 ChatService 预处理为 API 格式
   ///（OpenAI multimodal content array 或 plain string）。
+  ///
+  /// Exposed as [buildBody] for testing.
   Map<String, dynamic> _buildBody(
     List<Map<String, dynamic>> messages, {
     String? model,
@@ -162,11 +164,31 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       'model': model ?? defaultParams['model'],
       'messages': messages,
       'max_tokens': maxTokens ?? defaultParams['max_tokens'],
-      'temperature': temperature ?? defaultParams['temperature'],
+      if (temperature != null) 'temperature': temperature,
       'stream': stream,
       if (tools != null && tools.isNotEmpty) 'tools': tools,
       if (extraParams != null) ...extraParams,
     };
+  }
+
+  /// Public wrapper around [_buildBody] for direct testing.
+  @visibleForTesting
+  Map<String, dynamic> buildBody(
+    List<Map<String, dynamic>> messages, {
+    String? model,
+    int? maxTokens,
+    double? temperature,
+    bool stream = false,
+    List<Map<String, dynamic>>? tools,
+    Map<String, dynamic>? extraParams,
+  }) {
+    return _buildBody(messages,
+        model: model,
+        maxTokens: maxTokens,
+        temperature: temperature,
+        stream: stream,
+        tools: tools,
+        extraParams: extraParams);
   }
 
   /// Mask API key for display, showing only first 8 chars and last 4 chars.
