@@ -189,7 +189,9 @@ class _ApplicationState extends ConsumerState<Application> {
                     ? lightColorScheme
                     : darkColorScheme;
 
-        return Stack(
+        return Directionality(
+          textDirection: TextDirection.ltr,
+          child: Stack(
           children: [
             MaterialApp(
               title: 'Stroom',
@@ -238,7 +240,8 @@ class _ApplicationState extends ConsumerState<Application> {
             // In-app notification banner overlay
             _InAppBannerOverlay(),
           ],
-        );
+        ),
+      );
       },
     );
   }
