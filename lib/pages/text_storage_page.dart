@@ -15,6 +15,7 @@ import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
 import '../widgets/file_manager_view.dart';
 import 'text_preview_edit_page.dart';
+import 'text_storage_shared.dart';
 
 /// 文本储存区页面 - 管理文本文件，支持导入、创建、预览和导出
 class TextStoragePage extends ConsumerStatefulWidget {
@@ -195,7 +196,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     final result = await Navigator.push<String>(
       context,
       MaterialPageRoute(
-        builder: (_) => _TextCreatePage(initialFolder: _currentFolder),
+        builder: (_) => TextCreatePage(initialFolder: _currentFolder),
       ),
     );
 
@@ -731,134 +732,3 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
   }
 }
 
-// ====================================================================
-// Text Create Page
-// ====================================================================
-
-/// 文本创建页面 - 允许用户输入文本内容并保存
-class _TextCreatePage extends StatefulWidget {
-  final String initialFolder;
-
-  const _TextCreatePage({this.initialFolder = ''});
-
-  @override
-  State<_TextCreatePage> createState() => _TextCreatePageState();
-}
-
-class _TextCreatePageState extends State<_TextCreatePage> {
-  final _titleController = TextEditingController();
-  final _contentController = TextEditingController();
-  bool _isSaving = false;
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _contentController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    final title = _titleController.text.trim();
-    final content = _contentController.text;
-
-    if (title.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请输入标题')),
-      );
-      return;
-    }
-
-    if (content.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请输入文本内容')),
-      );
-      return;
-    }
-
-    setState(() => _isSaving = true);
-
-    try {
-      final bytes = Uint8List.fromList(utf8.encode(content));
-      final hash = computeTextHash(bytes);
-      final storageFileName = '$hash.txt';
-
-      await TextManifest.writeText(storageFileName, content);
-      await TextManifest.addRecord(TextRecord(
-        name: title,
-        hash: hash,
-        format: 'txt',
-        createdAt: DateTime.now(),
-        size: bytes.length,
-        folder: widget.initialFolder,
-        textLength: content.length,
-      ));
-
-      if (mounted) {
-        Navigator.pop(context, 'saved');
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isSaving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('保存失败: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('新建文本'),
-        actions: [
-          TextButton(
-            onPressed: _isSaving ? null : _save,
-            child: _isSaving
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('保存'),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: TextField(
-              controller: _titleController,
-              decoration: const InputDecoration(
-                labelText: '标题',
-                hintText: '输入文本标题',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: TextField(
-                controller: _contentController,
-                decoration: const InputDecoration(
-                  labelText: '文本内容',
-                  hintText: '输入文本内容...',
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                ),
-                maxLines: null,
-                expands: true,
-                textAlignVertical: TextAlignVertical.top,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}

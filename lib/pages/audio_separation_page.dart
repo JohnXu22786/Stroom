@@ -14,6 +14,7 @@ import '../utils/file_manifest.dart';
 import '../utils/video_manifest.dart';
 import '../widgets/folder_picker_dialog.dart';
 import 'tts_page.dart';
+import 'audio_separation_shared.dart';
 
 /// 视频音频分离页面
 ///
@@ -172,7 +173,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
               const SizedBox(height: 24),
               Column(
                 children: [
-                  _ChoiceCard(
+                  ChoiceCard(
                     icon: Icons.file_present,
                     title: '从系统相册选择',
                     subtitle: '从设备存储中选择视频文件',
@@ -183,7 +184,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
                     },
                   ),
                   const SizedBox(height: 8),
-                  _ChoiceCard(
+                  ChoiceCard(
                     icon: Icons.video_library,
                     title: '从应用相册选择',
                     subtitle: '从应用内已保存的视频中选择',
@@ -275,7 +276,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
                           style: const TextStyle(fontSize: 14),
                         ),
                         subtitle: Text(
-                          '${record.format.toUpperCase()}  ${_formatFileSize(record.size)}  ${record.duration > 0 ? '${(record.duration / 1000).toStringAsFixed(1)}秒' : ''}',
+                          '${record.format.toUpperCase()}  ${formatFileSize(record.size)}  ${record.duration > 0 ? '${(record.duration / 1000).toStringAsFixed(1)}秒' : ''}',
                           style: const TextStyle(fontSize: 12),
                         ),
                         onTap: () async {
@@ -436,7 +437,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                '格式: ${_videoFormat?.toUpperCase() ?? 'N/A'}  |  大小: ${_formatFileSize(_videoBytes!.length)}',
+                '格式: ${_videoFormat?.toUpperCase() ?? 'N/A'}  |  大小: ${formatFileSize(_videoBytes!.length)}',
                 style: TextStyle(
                   fontSize: 13,
                   color: cs.onSurfaceVariant,
@@ -660,7 +661,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       setState(() {
         _videoBytes = bytes;
         _videoName = file.name;
-        _videoFormat = _detectFormat(file.name);
+        _videoFormat = detectFormat(file.name);
         _hasError = false;
         _errorMessage = '';
         _success = false;
@@ -775,106 +776,5 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     );
   }
 
-  // ==================================================================
-  // Helpers
-  // ==================================================================
-
-  String _detectFormat(String? name) {
-    if (name == null) return 'mp4';
-    final lower = name.toLowerCase();
-    if (lower.endsWith('.mov')) return 'mov';
-    if (lower.endsWith('.avi')) return 'avi';
-    if (lower.endsWith('.mkv')) return 'mkv';
-    if (lower.endsWith('.webm')) return 'webm';
-    if (lower.endsWith('.flv')) return 'flv';
-    if (lower.endsWith('.m4v')) return 'm4v';
-    if (lower.endsWith('.3gp')) return '3gp';
-    return 'mp4';
   }
 
-  String _formatFileSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
-}
-
-// ============================================================================
-// ChoiceCard Widget
-// ============================================================================
-
-class _ChoiceCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _ChoiceCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return Material(
-      color: cs.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: color, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: cs.onSurfaceVariant),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.chevron_right,
-                size: 20,
-                color: cs.onSurfaceVariant,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
