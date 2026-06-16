@@ -115,7 +115,7 @@ void main() {
 
     // ==================== Edit Mode: Icon-Only Buttons ====================
 
-    testWidgets('edit mode shows icon-only save, discard, undo, redo buttons',
+    testWidgets('edit mode shows icon-only save, discard, undo, redo, font size buttons',
         (tester) async {
       await enterEditMode(tester);
 
@@ -123,6 +123,7 @@ void main() {
       expect(find.byIcon(Icons.edit), findsNothing);
 
       // Edit mode should have icon-only buttons (no text labels)
+      expect(find.byIcon(Icons.format_size), findsOneWidget);
       expect(find.byIcon(Icons.save), findsOneWidget);
       expect(find.byIcon(Icons.close), findsOneWidget);
       expect(find.byIcon(Icons.undo), findsOneWidget);
@@ -141,6 +142,41 @@ void main() {
       final textField = tester.widget<TextField>(find.byType(TextField));
       final controller = textField.controller;
       expect(controller?.text, equals(testContent));
+    });
+
+    testWidgets('font size button shows slider popup and changes text size',
+        (tester) async {
+      await enterEditMode(tester);
+
+      // Font size button should be present
+      expect(find.byIcon(Icons.format_size), findsOneWidget);
+
+      // Tap font size button
+      await tester.tap(find.byIcon(Icons.format_size));
+      await tester.pumpAndSettle();
+
+      // Popup should show
+      expect(find.text('字号调整'), findsOneWidget);
+      expect(find.byType(Slider), findsOneWidget);
+
+      // Default font size 14 should be shown
+      expect(find.text('14'), findsOneWidget);
+
+      // Drag slider to change font size
+      final slider = find.byType(Slider);
+      // Slide right to increase to a larger value
+      await tester.drag(slider, const Offset(100, 0));
+      await tester.pumpAndSettle();
+
+      // The displayed value should have changed (greater than 14)
+      // Close the popup
+      await tester.tap(find.text('关闭'));
+      await tester.pumpAndSettle();
+
+      // Verify TextStyle font size has been updated in TextField
+      final textField = tester.widget<TextField>(find.byType(TextField));
+      final textStyle = textField.style;
+      expect(textStyle?.fontSize, greaterThan(14));
     });
 
     // ==================== Undo / Redo ====================
