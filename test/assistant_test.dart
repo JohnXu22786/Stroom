@@ -16,7 +16,6 @@ void main() {
       expect(settings.enableTemperature, false);
       expect(settings.enableTopP, false);
       expect(settings.enableMaxTokens, false);
-      expect(settings.reasoningEffort, 'default');
       expect(settings.enableWebSearch, false);
       expect(settings.maxToolCalls, 20);
       expect(settings.enableMaxToolCalls, true);
@@ -32,7 +31,6 @@ void main() {
         maxTokens: 2048,
         enableMaxTokens: true,
         streamOutput: false,
-        reasoningEffort: 'high',
         enableWebSearch: true,
         customParameters: [
           CustomParameter(name: 'top_k', type: 'number', value: 40),
@@ -50,7 +48,6 @@ void main() {
       expect(restored.maxTokens, 2048);
       expect(restored.enableMaxTokens, true);
       expect(restored.streamOutput, false);
-      expect(restored.reasoningEffort, 'high');
       expect(restored.enableWebSearch, true);
       expect(restored.customParameters.length, 2);
       expect(restored.customParameters[0].name, 'top_k');
@@ -69,6 +66,44 @@ void main() {
       expect(restored.enableWebSearch, original.enableWebSearch);
     });
 
+    test('settings fromMap ignores legacy reasoningEffort field', () {
+      // Legacy data that still has reasoningEffort in the map
+      final map = <String, dynamic>{
+        'temperature': 0.7,
+        'topP': 0.9,
+        'reasoningEffort': 'high',
+      };
+      final restored = AssistantSettings.fromMap(map);
+      // Should load without error and reasoningEffort should not exist
+      expect(restored.temperature, 0.7);
+      expect(restored.topP, 0.9);
+    });
+
+    test('settings toMap does not include reasoningEffort', () {
+      // Use a fully non-default settings to verify the field is truly absent
+      final settings = AssistantSettings(
+        temperature: 0.7,
+        enableTemperature: true,
+        topP: 0.9,
+        enableTopP: true,
+        maxTokens: 2048,
+        enableMaxTokens: true,
+        streamOutput: false,
+        enableWebSearch: true,
+        maxToolCalls: 30,
+        enableMaxToolCalls: true,
+        frequencyPenalty: 0.5,
+        enableFrequencyPenalty: true,
+        presencePenalty: 0.3,
+        enablePresencePenalty: true,
+        seed: 777,
+        enableSeed: true,
+      );
+      final map = settings.toMap();
+      expect(map.containsKey('reasoningEffort'), isFalse,
+          reason: 'reasoningEffort should be removed from AssistantSettings toMap');
+    });
+
     test('assistant toMap/fromMap round-trip', () {
       final settings = AssistantSettings(
         temperature: 0.5,
@@ -78,7 +113,6 @@ void main() {
         maxTokens: 1024,
         enableMaxTokens: true,
         streamOutput: true,
-        reasoningEffort: 'low',
         enableWebSearch: false,
         customParameters: [],
       );
@@ -337,7 +371,6 @@ void main() {
         maxTokens: 2048,
         enableMaxTokens: true,
         streamOutput: false,
-        reasoningEffort: 'high',
         enableWebSearch: true,
         maxToolCalls: 30,
         enableMaxToolCalls: true,
