@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/mcp.dart';
 import '../providers/provider_config.dart';
+import 'mcp_server_config_shared.dart';
 
 /// MCP 服务器配置页面
 /// 用于添加或编辑 MCP 服务器的连接信息
@@ -288,7 +289,7 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
           padding: const EdgeInsets.all(16),
           children: [
             // Transport type
-            _buildSectionHeader('传输方式'),
+            const SectionHeader(title: '传输方式'),
             const SizedBox(height: 8),
             if (_isEditMode)
               _buildTransportSelector()
@@ -298,7 +299,7 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
             const SizedBox(height: 16),
 
             // Server name
-            _buildSectionHeader('服务器名称'),
+            const SectionHeader(title: '服务器名称'),
             const SizedBox(height: 8),
             if (_isEditMode)
               TextField(
@@ -311,7 +312,7 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
                 onChanged: (_) => _checkUnsavedChanges(),
               )
             else
-              _buildReadOnlyField(
+              ReadOnlyField(
                 icon: Icons.label,
                 iconColor: Colors.teal,
                 label: '名称',
@@ -322,7 +323,7 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
 
             // Transport-specific fields
             if (_transportType == McpTransportType.stdio) ...[
-              _buildSectionHeader('命令'),
+              const SectionHeader(title: '命令'),
               const SizedBox(height: 8),
               if (_isEditMode)
                 TextField(
@@ -335,14 +336,14 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
                   onChanged: (_) => _checkUnsavedChanges(),
                 )
               else
-                _buildReadOnlyField(
+                ReadOnlyField(
                   icon: Icons.terminal,
                   iconColor: Colors.orange,
                   label: '命令',
                   value: _commandController.text,
                 ),
               const SizedBox(height: 12),
-              _buildSectionHeader('参数'),
+              const SectionHeader(title: '参数'),
               const SizedBox(height: 8),
               if (_isEditMode)
                 TextField(
@@ -355,14 +356,14 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
                   onChanged: (_) => _checkUnsavedChanges(),
                 )
               else
-                _buildReadOnlyField(
+                ReadOnlyField(
                   icon: Icons.list,
                   iconColor: Colors.purple,
                   label: '参数',
                   value: _argsController.text,
                 ),
             ] else ...[
-              _buildSectionHeader('SSE URL'),
+              const SectionHeader(title: 'SSE URL'),
               const SizedBox(height: 8),
               if (_isEditMode)
                 TextField(
@@ -375,7 +376,7 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
                   onChanged: (_) => _checkUnsavedChanges(),
                 )
               else
-                _buildReadOnlyField(
+                ReadOnlyField(
                   icon: Icons.link,
                   iconColor: Colors.blue,
                   label: 'URL',
@@ -481,25 +482,11 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
         ? Icons.desktop_windows
         : Icons.cloud;
     final label = _transportType == McpTransportType.stdio ? '本地 (stdio)' : '远程 (SSE)';
-    return _buildReadOnlyField(
+    return ReadOnlyField(
       icon: icon,
       iconColor: cs.primary,
       label: '传输方式',
       value: label,
-    );
-  }
-
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.w600,
-          color: Theme.of(context).colorScheme.primary,
-        ),
-      ),
     );
   }
 
@@ -534,44 +521,4 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
     ];
   }
 
-  Widget _buildReadOnlyField({
-    required IconData icon,
-    required Color iconColor,
-    required String label,
-    required String value,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: iconColor, size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                const SizedBox(height: 4),
-                Text(
-                  value.isNotEmpty ? value : '（未设置）',
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: value.isNotEmpty
-                        ? Theme.of(context).colorScheme.onSurface
-                        : Colors.grey,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

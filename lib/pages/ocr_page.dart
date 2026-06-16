@@ -15,7 +15,7 @@ import '../utils/text_manifest.dart';
 import '../widgets/folder_picker_dialog.dart';
 import '../widgets/camera_choice_dialog.dart';
 import 'camera_page.dart';
-import 'chat/composer/app_album_picker_dialog.dart';
+import 'chat/composer/chat_album_picker_dialog.dart';
 import 'ocr/ocr_shared.dart';
 export 'ocr/ocr_shared.dart';
 

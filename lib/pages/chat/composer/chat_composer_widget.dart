@@ -21,8 +21,8 @@ import 'package:stroom/widgets/chat_attachment_panel.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'chat_setting_panels.dart';
-import 'app_album_picker_dialog.dart';
-import 'app_file_picker_dialog.dart';
+import 'chat_album_picker_dialog.dart';
+import 'chat_file_picker_dialog.dart';
 import 'composer_shared.dart';
 
 class ChatComposerWidget extends ConsumerStatefulWidget {

@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:stroom/pages/chat/composer/app_file_picker_dialog.dart';
+import 'package:stroom/pages/chat/composer/chat_file_picker_dialog.dart';
 
 void main() {
   // ═══════════════════════════════════════════════════════════════
