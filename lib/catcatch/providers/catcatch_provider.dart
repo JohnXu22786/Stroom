@@ -8,6 +8,7 @@ import '../../services/background_service.dart';
 import 'package:uuid/uuid.dart';
 import 'package:dio/dio.dart' show CancelToken;
 import '../models/catcatch_task.dart';
+import 'catcatch_provider_shared.dart';
 import '../models/media_resource.dart';
 import '../engine/task_executor.dart';
 
@@ -65,7 +66,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       id: id,
       url: url,
       expectedDurationSec: expectedDurationSec,
-      title: _inferTitle(url),
+      title: inferTitleFromUrl(url),
       createdAt: DateTime.now(),
       metadata: metadata,
     );
@@ -627,22 +628,4 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     return File(p.join(catcatchDir.path, 'tasks.json'));
   }
 
-  // ===========================================================================
-  // 辅助方法
-  // ===========================================================================
-
-  /// 从 URL 推断标题
-  static String _inferTitle(String url) {
-    try {
-      final uri = Uri.parse(url);
-      // 取路径最后一段
-      final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
-      if (segments.isNotEmpty) {
-        return segments.last;
-      }
-      return uri.host;
-    } catch (_) {
-      return url.length > 50 ? '${url.substring(0, 50)}...' : url;
-    }
-  }
 }

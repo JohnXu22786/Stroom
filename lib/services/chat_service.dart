@@ -12,6 +12,7 @@ import '../models/tool_call.dart';
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
 import 'attachment_storage.dart';
+import 'chat_service_shared.dart';
 import 'mcp_client.dart';
 
 // ====================================================================
@@ -443,7 +444,7 @@ class ChatService {
                 continue;
               }
             }
-            final ext = _imageExtension(att.mimeType);
+            final ext = imageExtension(att.mimeType);
             parts.add({
               'type': 'image_url',
               'image_url': {'url': 'data:image/$ext;base64,$b64'},
@@ -474,22 +475,6 @@ class ChatService {
       }
     }
     return result;
-  }
-
-  /// Map MIME type to file extension for data URI.
-  static String _imageExtension(String mimeType) {
-    switch (mimeType) {
-      case 'image/png':
-        return 'png';
-      case 'image/gif':
-        return 'gif';
-      case 'image/webp':
-        return 'webp';
-      case 'image/bmp':
-        return 'bmp';
-      default:
-        return 'jpeg';
-    }
   }
 
   /// Non-streaming version - collects stream into a single string.
@@ -704,7 +689,7 @@ class ChatService {
     if (toggleParam != null && toggleParam.isFilledToggle) {
       final toggleValue =
           reasoning ? (toggleParam.onValue ?? 'true') : (toggleParam.offValue ?? 'false');
-      _setNestedParam(result, toggleParam.paramName, toggleValue);
+      setNestedParam(result, toggleParam.paramName, toggleValue);
     }
 
     // Additional reasoning params: only sent when global toggle is ON
@@ -713,7 +698,7 @@ class ChatService {
         if (!rp.enabled) continue;
         final selectedValue = reasoningParamValues[rp.paramName];
         if (selectedValue != null && selectedValue.isNotEmpty) {
-          _setNestedParam(result, rp.paramName, selectedValue);
+          setNestedParam(result, rp.paramName, selectedValue);
         }
       }
     }
@@ -737,23 +722,6 @@ class ChatService {
     }
 
     return result;
-  }
-
-  /// Set a value at a dot-notation path in the given map.
-  /// E.g. _setNestedParam(map, 'thinking.type', 'enabled')
-  ///   → map['thinking']['type'] = 'enabled'
-  void _setNestedParam(Map<String, dynamic> map, String path, dynamic value) {
-    final parts = path.split('.');
-    if (parts.length == 1) {
-      map[parts[0]] = value;
-      return;
-    }
-    var current = map;
-    for (int i = 0; i < parts.length - 1; i++) {
-      current.putIfAbsent(parts[i], () => <String, dynamic>{});
-      current = current[parts[i]] as Map<String, dynamic>;
-    }
-    current[parts.last] = value;
   }
 
   /// Dispose permanently (no more streams possible after this)

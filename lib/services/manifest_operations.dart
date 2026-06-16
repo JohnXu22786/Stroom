@@ -3,21 +3,11 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'file_record.dart';
-import 'web_file_store.dart';
-import 'folder_path_utils.dart';
-import '../services/manifest_database.dart';
-
-// ---- Access helpers (records always use these mixins) -------------------
-
-String _hashOf(dynamic r) => (r as Hashable).hash;
-String _storageNameOf(dynamic r) => (r as Storable).storagePath;
-String _folderOf(dynamic r) => (r as FileRecord).folder;
-
-T _copyName<T extends FileRecord>(T r, String name) =>
-    (r as dynamic).copyWithName(name) as T;
-T _copyFolder<T extends FileRecord>(T r, String folder) =>
-    (r as dynamic).copyWithFolder(folder) as T;
+import '../utils/file_record.dart';
+import '../utils/web_file_store.dart';
+import '../utils/folder_path_utils.dart';
+import '../utils/manifest_operations_shared.dart';
+import 'manifest_database.dart';
 
 // ====================================================================
 // ManifestOperations — generic CRUD + folder management
@@ -172,11 +162,11 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   Future<void> _deleteEntityFiles(T record) async {
-    final storageName = _storageNameOf(record);
+    final storageName = storageNameOf(record);
     final refCount =
-        _cache!.where((r) => _storageNameOf(r) == storageName).length;
+        _cache!.where((r) => storageNameOf(r) == storageName).length;
     if (refCount <= 1) {
-      final name = _storageNameOf(record);
+      final name = storageNameOf(record);
       // Guard against names without extension
       final dotIndex = name.lastIndexOf('.');
       if (dotIndex == -1) return;
@@ -191,9 +181,9 @@ class ManifestOperations<T extends FileRecord> {
     }
     // Thumbnail deletion: keyed by hash, not storageName
     final hashRefCount =
-        _cache!.where((x) => _hashOf(x) == _hashOf(record)).length;
+        _cache!.where((x) => hashOf(x) == hashOf(record)).length;
     if (hashRefCount <= 1) {
-      final thumbName = '${_hashOf(record)}_thumb$thumbnailExtension';
+      final thumbName = '${hashOf(record)}_thumb$thumbnailExtension';
       if (kIsWeb) {
         await WebFileStore.delete(_webKey(thumbName));
       } else {
@@ -233,17 +223,17 @@ class ManifestOperations<T extends FileRecord> {
     final storageCount = <String, int>{};
     final hashCount = <String, int>{};
     for (final r in _cache!) {
-      final sn = _storageNameOf(r);
+      final sn = storageNameOf(r);
       storageCount[sn] = (storageCount[sn] ?? 0) + 1;
-      final h = _hashOf(r);
+      final h = hashOf(r);
       hashCount[h] = (hashCount[h] ?? 0) + 1;
     }
 
     for (final r in toDelete) {
-      final sn = _storageNameOf(r);
+      final sn = storageNameOf(r);
       storageCount[sn] = (storageCount[sn] ?? 1) - 1;
       if (storageCount[sn]! <= 0) {
-        final name = _storageNameOf(r);
+        final name = storageNameOf(r);
         // Guard against names without extension
         final dotIndex = name.lastIndexOf('.');
         if (dotIndex == -1) continue;
@@ -257,10 +247,10 @@ class ManifestOperations<T extends FileRecord> {
         await onExtraDelete?.call(r);
       }
       // Thumbnail deletion: keyed by hash, not storageName
-      final h = _hashOf(r);
+      final h = hashOf(r);
       hashCount[h] = (hashCount[h] ?? 1) - 1;
       if (hashCount[h]! <= 0) {
-        final thumbName = '${_hashOf(r)}_thumb$thumbnailExtension';
+        final thumbName = '${hashOf(r)}_thumb$thumbnailExtension';
         if (kIsWeb) {
           await WebFileStore.delete(_webKey(thumbName));
         } else {
@@ -287,7 +277,7 @@ class ManifestOperations<T extends FileRecord> {
     await loadRecords();
     final index = _cache!.indexWhere((r) => r.id == id);
     if (index != -1) {
-      _cache![index] = _copyName(_cache![index], newName);
+      _cache![index] = copyName(_cache![index], newName);
       await _dbUpdateRecord(id, toMap(_cache![index]));
     }
   }
@@ -296,7 +286,7 @@ class ManifestOperations<T extends FileRecord> {
     await loadRecords();
     final index = _cache!.indexWhere((r) => r.id == id);
     if (index != -1) {
-      _cache![index] = _copyFolder(_cache![index], targetFolder);
+      _cache![index] = copyFolder(_cache![index], targetFolder);
       await _dbUpdateRecord(id, toMap(_cache![index]));
     }
   }
@@ -408,7 +398,7 @@ class ManifestOperations<T extends FileRecord> {
 
     final allPaths = <String>{..._folderCache};
     for (final r in _cache ?? []) {
-      final f = _folderOf(r);
+      final f = folderOf(r);
       if (f.isNotEmpty) allPaths.add(f);
     }
     final descendants =
@@ -420,7 +410,7 @@ class ManifestOperations<T extends FileRecord> {
 
     for (final child in descendants) {
       _folderCache.remove(child);
-      final childRecords = _cache!.where((r) => _folderOf(r) == child).toList();
+      final childRecords = _cache!.where((r) => folderOf(r) == child).toList();
       toRemoveRecords.addAll(childRecords);
       for (final record in childRecords) {
         idsToDelete.add(record.id);
@@ -431,7 +421,7 @@ class ManifestOperations<T extends FileRecord> {
     _folderCache.remove(folderName);
 
     final folderRecords =
-        _cache!.where((r) => _folderOf(r) == folderName).toList();
+        _cache!.where((r) => folderOf(r) == folderName).toList();
     toRemoveRecords.addAll(folderRecords);
     for (final record in folderRecords) {
       idsToDelete.add(record.id);
@@ -442,18 +432,18 @@ class ManifestOperations<T extends FileRecord> {
     final storageNameCount = <String, int>{};
     final hashCount = <String, int>{};
     for (final r in _cache!) {
-      final sn = _storageNameOf(r);
+      final sn = storageNameOf(r);
       storageNameCount[sn] = (storageNameCount[sn] ?? 0) + 1;
-      final h = _hashOf(r);
+      final h = hashOf(r);
       hashCount[h] = (hashCount[h] ?? 0) + 1;
     }
 
     // Decrement per record being deleted; only delete file when count reaches 0
     for (final r in toRemoveRecords) {
-      final sn = _storageNameOf(r);
+      final sn = storageNameOf(r);
       storageNameCount[sn] = (storageNameCount[sn] ?? 1) - 1;
       if (storageNameCount[sn]! <= 0) {
-        final name = _storageNameOf(r);
+        final name = storageNameOf(r);
         // Guard against names without extension
         final dotIndex = name.lastIndexOf('.');
         if (dotIndex == -1) continue;
@@ -467,10 +457,10 @@ class ManifestOperations<T extends FileRecord> {
         await onExtraDelete?.call(r);
       }
       // Thumbnail deletion: keyed by hash, not storageName
-      final h = _hashOf(r);
+      final h = hashOf(r);
       hashCount[h] = (hashCount[h] ?? 1) - 1;
       if (hashCount[h]! <= 0) {
-        final thumbName = '${_hashOf(r)}_thumb$thumbnailExtension';
+        final thumbName = '${hashOf(r)}_thumb$thumbnailExtension';
         if (kIsWeb) {
           await WebFileStore.delete(_webKey(thumbName));
         } else {
@@ -494,7 +484,7 @@ class ManifestOperations<T extends FileRecord> {
     final folders = <String>{};
     folders.addAll(_folderCache);
     for (final r in _cache ?? []) {
-      final f = _folderOf(r);
+      final f = folderOf(r);
       if (f.isNotEmpty) folders.add(f);
     }
     return folders;
@@ -518,10 +508,10 @@ class ManifestOperations<T extends FileRecord> {
     final folderPrefix = folderPath.isEmpty ? '' : '$folderPath/';
     for (var i = 0; i < (_cache?.length ?? 0); i++) {
       final r = _cache![i];
-      final f = _folderOf(r);
+      final f = folderOf(r);
       if (f == folderPath ||
           (folderPrefix.isNotEmpty && f.startsWith(folderPrefix))) {
-        _cache![i] = _copyFolder(r, '');
+        _cache![i] = copyFolder(r, '');
         await _dbUpdateRecord(r.id, {...toMap(r), 'folder': ''});
       }
     }
@@ -530,7 +520,7 @@ class ManifestOperations<T extends FileRecord> {
   Future<void> _cleanEmptyFoldersFromCache() async {
     final validFolders = <String>{};
     for (final r in _cache ?? []) {
-      final f = _folderOf(r);
+      final f = folderOf(r);
       if (f.isNotEmpty) validFolders.add(f);
       var parent = FolderPathUtils.getParentFolderPath(f);
       while (parent.isNotEmpty) {

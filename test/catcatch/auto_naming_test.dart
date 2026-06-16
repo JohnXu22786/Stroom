@@ -1,12 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/catcatch/engine/task_executor.dart';
+import 'package:stroom/catcatch/engine/executor_save.dart';
 import 'package:stroom/catcatch/models/media_resource.dart';
 
 void main() {
   group('sanitizeForFileName', () {
     test('normal title passes through unchanged', () {
       expect(
-        TaskExecutor.sanitizeForFileName('My Awesome Video'),
+        sanitizeForFileName('My Awesome Video'),
         equals('My Awesome Video'),
       );
     });
@@ -14,7 +14,7 @@ void main() {
     test('removes Windows-invalid characters', () {
       // Each invalid char is replaced with a space, then consecutive spaces collapse
       expect(
-        TaskExecutor.sanitizeForFileName('Video: "Great" Movie <1>'),
+        sanitizeForFileName('Video: "Great" Movie <1>'),
         equals('Video Great Movie 1'),
       );
     });
@@ -22,7 +22,7 @@ void main() {
     test('removes backslash and forward slash', () {
       // /, \, : all become spaces then collapse
       expect(
-        TaskExecutor.sanitizeForFileName('a/b\\c:d'),
+        sanitizeForFileName('a/b\\c:d'),
         equals('a b c d'),
       );
     });
@@ -30,53 +30,53 @@ void main() {
     test('removes pipe, question mark, asterisk', () {
       // ?, |, * all become spaces then collapse
       expect(
-        TaskExecutor.sanitizeForFileName('What? | Test*'),
+        sanitizeForFileName('What? | Test*'),
         equals('What Test'),
       );
     });
 
     test('trims leading and trailing whitespace', () {
       expect(
-        TaskExecutor.sanitizeForFileName('  Hello World  '),
+        sanitizeForFileName('  Hello World  '),
         equals('Hello World'),
       );
     });
 
     test('collapses multiple spaces into one', () {
       expect(
-        TaskExecutor.sanitizeForFileName('Hello    World'),
+        sanitizeForFileName('Hello    World'),
         equals('Hello World'),
       );
     });
 
     test('truncates very long title to 200 chars', () {
       final longTitle = 'A' * 300;
-      final result = TaskExecutor.sanitizeForFileName(longTitle);
+      final result = sanitizeForFileName(longTitle);
       expect(result.length, equals(200));
       expect(result, equals('A' * 200));
     });
 
     test('handles empty string', () {
-      expect(TaskExecutor.sanitizeForFileName(''), isEmpty);
+      expect(sanitizeForFileName(''), isEmpty);
     });
 
     test('handles title with only special chars', () {
       expect(
-        TaskExecutor.sanitizeForFileName('<>:"/\|?*'),
+        sanitizeForFileName('<>:"/\|?*'),
         isEmpty,
       );
     });
 
     test('handles Chinese title', () {
       expect(
-        TaskExecutor.sanitizeForFileName('哔哩哔哩 (゜-゜)つロ 干杯~!'),
+        sanitizeForFileName('哔哩哔哩 (゜-゜)つロ 干杯~!'),
         equals('哔哩哔哩 (゜-゜)つロ 干杯~!'),
       );
     });
 
     test('handles title with dots', () {
       expect(
-        TaskExecutor.sanitizeForFileName('video.name.test'),
+        sanitizeForFileName('video.name.test'),
         equals('video.name.test'),
       );
     });
@@ -91,7 +91,7 @@ void main() {
       );
       final metadata = {'pageTitle': 'My Awesome Video'};
       expect(
-        TaskExecutor.buildDownloadFileName(media, metadata),
+        buildDownloadFileName(media, metadata),
         equals('My Awesome Video.mp4'),
       );
     });
@@ -106,7 +106,7 @@ void main() {
       // Page title is sanitized: Video: "Best" Title → Video  Best  Title
       // After collapsing spaces: Video Best Title
       expect(
-        TaskExecutor.buildDownloadFileName(media, metadata),
+        buildDownloadFileName(media, metadata),
         equals('Video Best Title.mp4'),
       );
     });
@@ -119,7 +119,7 @@ void main() {
       );
       final metadata = <String, String>{};
       expect(
-        TaskExecutor.buildDownloadFileName(media, metadata),
+        buildDownloadFileName(media, metadata),
         equals('video.mp4'),
       );
     });
@@ -132,7 +132,7 @@ void main() {
       );
       final metadata = {'pageTitle': ''};
       expect(
-        TaskExecutor.buildDownloadFileName(media, metadata),
+        buildDownloadFileName(media, metadata),
         equals('my_video.mp4'),
       );
     });
@@ -145,7 +145,7 @@ void main() {
       );
       final metadata = {'pageTitle': '   '};
       expect(
-        TaskExecutor.buildDownloadFileName(media, metadata),
+        buildDownloadFileName(media, metadata),
         equals('fallback.mp4'),
       );
     });
@@ -158,7 +158,7 @@ void main() {
       );
       final metadata = {'pageTitle': 'WebM Video Clip'};
       expect(
-        TaskExecutor.buildDownloadFileName(media, metadata),
+        buildDownloadFileName(media, metadata),
         equals('WebM Video Clip.webm'),
       );
     });
@@ -171,7 +171,7 @@ void main() {
       );
       final metadata = {'pageTitle': 'Live Stream'};
       expect(
-        TaskExecutor.buildDownloadFileName(media, metadata),
+        buildDownloadFileName(media, metadata),
         equals('Live Stream.m3u8'),
       );
     });

@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,10 +8,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../utils/web_file_store.dart';
-
-// WebFileStore 没有 readString / writeString，在此扩展
-String _utf8Decode(Uint8List data) => utf8.decode(data);
-Uint8List _utf8Encode(String text) => Uint8List.fromList(utf8.encode(text));
+import 'manifest_database_shared.dart';
+export 'manifest_database_shared.dart';
 
 // ====================================================================
 // ManifestDatabase — SQLite 存储服务
@@ -22,15 +19,6 @@ Uint8List _utf8Encode(String text) => Uint8List.fromList(utf8.encode(text));
 // - Native（Android / iOS / macOS / Linux / Windows）：使用 sqflite
 // - Web：使用 WebFileStore（IndexedDB）存储 JSON 数据，规避 SharedPreferences 的 2MB 上限
 // ====================================================================
-
-/// 数据库表名常量
-class ManifestTables {
-  static const String imageRecords = 'image_records';
-  static const String audioRecords = 'audio_records';
-  static const String videoRecords = 'video_records';
-  static const String textRecords = 'text_records';
-  static const String folders = 'folders';
-}
 
 class ManifestDatabase {
   ManifestDatabase._(); // 私有构造，禁止实例化
@@ -262,14 +250,14 @@ class ManifestDatabase {
     try {
       final raw = await WebFileStore.read(_webStoreKey);
       if (raw != null && raw.isNotEmpty) {
-        final text = _utf8Decode(raw);
+        final text = utf8Decode(raw);
         _webData = jsonDecode(text) as Map<String, dynamic>;
       } else {
-        _webData = _emptyWebData();
+        _webData = emptyWebData();
       }
     } catch (e) {
       debugPrint('ManifestDatabase._loadWebData error: $e');
-      _webData = _emptyWebData();
+      _webData = emptyWebData();
     }
     await _migrateOldVideoRecordsJson();
     return _webData!;
@@ -279,66 +267,10 @@ class ManifestDatabase {
     if (_webData == null) return;
     try {
       final json = jsonEncode(_webData);
-      await WebFileStore.write(_webStoreKey, _utf8Encode(json));
+      await WebFileStore.write(_webStoreKey, utf8Encode(json));
     } catch (e) {
       debugPrint('ManifestDatabase._saveWebData error: $e');
     }
-  }
-
-  static Map<String, dynamic> _emptyWebData() => {
-        ManifestTables.imageRecords: <Map<String, dynamic>>[],
-        ManifestTables.audioRecords: <Map<String, dynamic>>[],
-        ManifestTables.videoRecords: <Map<String, dynamic>>[],
-        ManifestTables.textRecords: <Map<String, dynamic>>[],
-        ManifestTables.folders: <String>[],
-      };
-
-  // ==================================================================
-  // 辅助方法：Map 转换
-  // ==================================================================
-
-  /// Dart camelCase → DB snake_case（列名映射表）
-  static const Map<String, String> _camelToSnake = {
-    'createdAt': 'created_at',
-    'sourceText': 'source_text',
-    'textLength': 'text_length',
-  };
-
-  /// DB snake_case → Dart camelCase（列名映射表）
-  static const Map<String, String> _snakeToCamel = {
-    'created_at': 'createdAt',
-    'source_text': 'sourceText',
-    'text_length': 'textLength',
-  };
-
-  /// 将 record 的 Map（fromMap 格式，camelCase 键名）转为 DB 行格式（snake_case）
-  static Map<String, dynamic> _recordToDbRow(Map<String, dynamic> record) {
-    final row = <String, dynamic>{};
-    for (final entry in record.entries) {
-      final dbKey = _camelToSnake[entry.key] ?? entry.key;
-      var value = entry.value;
-      // 转换 createdAt: ISO 字符串 → 毫秒时间戳
-      if (dbKey == 'created_at' && value is String) {
-        value = DateTime.parse(value).millisecondsSinceEpoch;
-      }
-      row[dbKey] = value;
-    }
-    return row;
-  }
-
-  /// 将 DB 行格式（snake_case）转为 record 的 Map（camelCase）
-  static Map<String, dynamic> _dbRowToRecord(Map<String, dynamic> row) {
-    final record = <String, dynamic>{};
-    for (final entry in row.entries) {
-      final recordKey = _snakeToCamel[entry.key] ?? entry.key;
-      var value = entry.value;
-      // 转换 created_at: 毫秒时间戳 → ISO 字符串
-      if (entry.key == 'created_at' && value is int) {
-        value = DateTime.fromMillisecondsSinceEpoch(value).toIso8601String();
-      }
-      record[recordKey] = value;
-    }
-    return record;
   }
 
   // ==================================================================
@@ -354,7 +286,7 @@ class ManifestDatabase {
     }
     final db = await database;
     final rows = await db.query(ManifestTables.imageRecords);
-    return rows.map(_dbRowToRecord).toList();
+    return rows.map(dbRowToRecord).toList();
   }
 
   /// 插入一条图片记录
@@ -369,7 +301,7 @@ class ManifestDatabase {
     final db = await database;
     await db.insert(
       ManifestTables.imageRecords,
-      _recordToDbRow(record),
+      recordToDbRow(record),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
@@ -390,7 +322,7 @@ class ManifestDatabase {
     final db = await database;
     await db.update(
       ManifestTables.imageRecords,
-      _recordToDbRow(updates),
+      recordToDbRow(updates),
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -445,7 +377,7 @@ class ManifestDatabase {
     }
     final db = await database;
     final rows = await db.query(ManifestTables.audioRecords);
-    return rows.map(_dbRowToRecord).toList();
+    return rows.map(dbRowToRecord).toList();
   }
 
   /// 插入一条音频记录
@@ -460,7 +392,7 @@ class ManifestDatabase {
     final db = await database;
     await db.insert(
       ManifestTables.audioRecords,
-      _recordToDbRow(record),
+      recordToDbRow(record),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
@@ -481,7 +413,7 @@ class ManifestDatabase {
     final db = await database;
     await db.update(
       ManifestTables.audioRecords,
-      _recordToDbRow(updates),
+      recordToDbRow(updates),
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -536,7 +468,7 @@ class ManifestDatabase {
     }
     final db = await database;
     final rows = await db.query(ManifestTables.videoRecords);
-    return rows.map(_dbRowToRecord).toList();
+    return rows.map(dbRowToRecord).toList();
   }
 
   /// 插入一条视频记录
@@ -551,7 +483,7 @@ class ManifestDatabase {
     final db = await database;
     await db.insert(
       ManifestTables.videoRecords,
-      _recordToDbRow(record),
+      recordToDbRow(record),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
@@ -572,7 +504,7 @@ class ManifestDatabase {
     final db = await database;
     await db.update(
       ManifestTables.videoRecords,
-      _recordToDbRow(updates),
+      recordToDbRow(updates),
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -633,7 +565,7 @@ class ManifestDatabase {
       limit: 1,
     );
     if (rows.isEmpty) return null;
-    return _dbRowToRecord(rows.first);
+    return dbRowToRecord(rows.first);
   }
 
   // ==================================================================
@@ -649,7 +581,7 @@ class ManifestDatabase {
     }
     final db = await database;
     final rows = await db.query(ManifestTables.textRecords);
-    return rows.map(_dbRowToRecord).toList();
+    return rows.map(dbRowToRecord).toList();
   }
 
   /// 插入一条文本记录
@@ -664,7 +596,7 @@ class ManifestDatabase {
     final db = await database;
     await db.insert(
       ManifestTables.textRecords,
-      _recordToDbRow(record),
+      recordToDbRow(record),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
@@ -685,7 +617,7 @@ class ManifestDatabase {
     final db = await database;
     await db.update(
       ManifestTables.textRecords,
-      _recordToDbRow(updates),
+      recordToDbRow(updates),
       where: 'id = ?',
       whereArgs: [id],
     );

@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/assistant.dart';
 import '../providers/assistant_provider.dart';
-import '../utils/emojis.dart';
-import '../widgets/llm/assistant_avatar.dart';
+import 'assistant/assistant_shared.dart';
+export 'assistant/assistant_shared.dart';
 
 /// First page in the chat flow: select an assistant.
 /// Displays assistants in a grid of cards, similar to Cherry Studio's design.
@@ -65,7 +65,7 @@ class AssistantSelectionPage extends ConsumerWidget {
                   itemCount: assistants.length,
                   itemBuilder: (context, index) {
                     final assistant = assistants[index];
-                    return _AssistantCard(
+                    return AssistantCard(
                       assistant: assistant,
                       onTap: () => _onAssistantSelected(
                           context, ref, assistant),
@@ -110,7 +110,7 @@ class AssistantSelectionPage extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Emoji picker (only emoji avatar supported)
-                _CategorizedEmojiPicker(
+                CategorizedEmojiPicker(
                   selectedEmoji: selectedEmoji,
                   onEmojiSelected: (e) =>
                       setDlgState(() => selectedEmoji = e),
@@ -300,7 +300,7 @@ void showAssistantFullEditDialog(
                 const SizedBox(height: 12),
 
                 // Emoji picker (only emoji avatar supported)
-                _CategorizedEmojiPicker(
+                CategorizedEmojiPicker(
                   selectedEmoji: selectedEmoji,
                   onEmojiSelected: (e) =>
                       setDlgState(() => selectedEmoji = e),
@@ -841,194 +841,3 @@ void showEditCustomParameterDialog(
   );
 }
 
-class _AssistantCard extends StatelessWidget {
-  final Assistant assistant;
-  final VoidCallback onTap;
-  final VoidCallback onLongPress;
-
-  const _AssistantCard({
-    required this.assistant,
-    required this.onTap,
-    required this.onLongPress,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Card(
-      elevation: 0,
-      color: isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: cs.outlineVariant.withOpacity(0.5),
-          width: 0.5,
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPress,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Avatar (emoji or image)
-                AssistantAvatar(assistant: assistant, size: 56),
-                const SizedBox(height: 12),
-              // Name
-              Text(
-                assistant.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: cs.onSurface,
-                ),
-              ),
-              const SizedBox(height: 4),
-              // Description
-              if (assistant.description.isNotEmpty)
-                Text(
-                  assistant.description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: cs.onSurfaceVariant,
-                  ),
-                ),
-              const Spacer(),
-              // Prompt preview
-              Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerHighest.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  assistant.prompt,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: cs.onSurfaceVariant.withOpacity(0.7),
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ),
-              ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// Categorized emoji picker widget
-// ============================================================================
-
-/// A tabbed emoji picker that displays emojis organized by category.
-/// Used in create/edit assistant dialogs when avatar type is emoji.
-class _CategorizedEmojiPicker extends StatelessWidget {
-  final String selectedEmoji;
-  final ValueChanged<String> onEmojiSelected;
-
-  const _CategorizedEmojiPicker({
-    required this.selectedEmoji,
-    required this.onEmojiSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final categories = EmojiCategories.categories;
-
-    return Center(
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: SizedBox(
-          width: 320,
-          child: DefaultTabController(
-            length: categories.length,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-              // Category tabs
-              SizedBox(
-                height: 36,
-                child: TabBar(
-                  isScrollable: true,
-                  tabAlignment: TabAlignment.start,
-                  labelPadding: const EdgeInsets.symmetric(horizontal: 8),
-                  indicatorSize: TabBarIndicatorSize.label,
-                  tabs: categories.map((cat) {
-                    return Tab(
-                      child: Text(
-                        cat.label,
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-              // Emoji grid
-              SizedBox(
-                height: 180,
-                child: TabBarView(
-                  children: categories.map((cat) {
-                    return GridView.builder(
-                      padding: const EdgeInsets.only(top: 4),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 8,
-                        mainAxisSpacing: 2,
-                        crossAxisSpacing: 2,
-                        childAspectRatio: 1,
-                      ),
-                      itemCount: cat.emojis.length,
-                      itemBuilder: (ctx, index) {
-                        final e = cat.emojis[index];
-                        final isSelected = e == selectedEmoji;
-                        return GestureDetector(
-                          onTap: () => onEmojiSelected(e),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? cs.primaryContainer
-                                  : null,
-                              borderRadius: BorderRadius.circular(6),
-                              border: isSelected
-                                  ? Border.all(color: cs.primary)
-                                  : null,
-                            ),
-                            child: Center(
-                              child: Text(
-                                e,
-                                style: const TextStyle(fontSize: 22),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  }).toList(),
-                ),
-              ),
-            ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

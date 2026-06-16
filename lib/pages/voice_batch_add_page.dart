@@ -1,27 +1,6 @@
 import 'package:flutter/material.dart';
 import '../providers/provider_config.dart';
-
-// ============================================================================
-// 内部辅助类型
-// ============================================================================
-
-enum _LineStatus { newVoice, duplicate, formatError }
-
-class _ParsedLine {
-  final int index;
-  final String name;
-  final String id;
-  final _LineStatus status;
-  final String? errorMsg;
-
-  _ParsedLine({
-    required this.index,
-    required this.name,
-    required this.id,
-    required this.status,
-    this.errorMsg,
-  });
-}
+import 'voice_batch_add_shared.dart';
 
 // ============================================================================
 // 批量添加音色页面
@@ -49,7 +28,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
   String _customSeparator = '';
   bool _nameFirst = true; // true → 第1个=名称, 第2个=ID
   final TextEditingController _inputController = TextEditingController();
-  List<_ParsedLine> _parsedLines = [];
+  List<ParsedLine> _parsedLines = [];
 
   /// 检测到的最大列数（多行取最大值）
   int _detectedColumns = 0;
@@ -121,7 +100,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
 
     final lines = text.split('\n');
     final separator = _separatorChar;
-    final List<_ParsedLine> parsed = [];
+    final List<ParsedLine> parsed = [];
     final Set<String> seenIds = {};
     final existingIds = widget.existingVoices.map((v) => v.id).toSet();
 
@@ -143,10 +122,10 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
         // 单列 → 作为 ID 处理，名称也等于 ID
         final id = fields[0];
         final status = (existingIds.contains(id) || seenIds.contains(id))
-            ? _LineStatus.duplicate
-            : _LineStatus.newVoice;
+            ? LineStatus.duplicate
+            : LineStatus.newVoice;
         seenIds.add(id);
-        parsed.add(_ParsedLine(
+        parsed.add(ParsedLine(
           index: i, name: id, id: id, status: status,
         ));
       } else if (fields.length >= 2) {
@@ -156,9 +135,9 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
         final second = (start + 1 < fields.length) ? fields[start + 1] : '';
 
         if (second.isEmpty || first.isEmpty) {
-          parsed.add(_ParsedLine(
+          parsed.add(ParsedLine(
             index: i, name: '', id: '',
-            status: _LineStatus.formatError,
+            status: LineStatus.formatError,
             errorMsg: '所选列数据不足',
           ));
           continue;
@@ -168,10 +147,10 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
         final id = _nameFirst ? second : first;
 
         final status = (existingIds.contains(id) || seenIds.contains(id))
-            ? _LineStatus.duplicate
-            : _LineStatus.newVoice;
+            ? LineStatus.duplicate
+            : LineStatus.newVoice;
         seenIds.add(id);
-        parsed.add(_ParsedLine(
+        parsed.add(ParsedLine(
           index: i, name: name, id: id, status: status,
         ));
       }
@@ -196,7 +175,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
 
   bool get _canConfirm =>
       _parsedLines.isNotEmpty &&
-      _parsedLines.any((p) => p.status != _LineStatus.formatError);
+      _parsedLines.any((p) => p.status != LineStatus.formatError);
 
   void _onConfirm() {
     if (!_canConfirm) return;
@@ -204,7 +183,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
     final result = <VoiceEntry>[];
 
     for (final line in _parsedLines) {
-      if (line.status == _LineStatus.formatError) continue;
+      if (line.status == LineStatus.formatError) continue;
       result.add(VoiceEntry(name: line.name, id: line.id));
     }
 
@@ -216,10 +195,10 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
   // --------------------------------------------------------------------------
 
   bool get _hasDuplicates =>
-      _parsedLines.any((p) => p.status == _LineStatus.duplicate);
+      _parsedLines.any((p) => p.status == LineStatus.duplicate);
 
   Set<String> get _duplicateIds => _parsedLines
-      .where((p) => p.status == _LineStatus.duplicate)
+      .where((p) => p.status == LineStatus.duplicate)
       .map((p) => p.id)
       .toSet();
 
@@ -537,9 +516,9 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                       color: Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                     children: const [
-                      _TableCell('音色名称', isHeader: true),
-                      _TableCell('音色ID', isHeader: true),
-                      _TableCell('状态', isHeader: true),
+                      VbTableCell('音色名称', isHeader: true),
+                      VbTableCell('音色ID', isHeader: true),
+                      VbTableCell('状态', isHeader: true),
                     ],
                   ),
                   // 数据行
@@ -550,21 +529,21 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
     );
   }
 
-  TableRow _buildPreviewRow(_ParsedLine line) {
+  TableRow _buildPreviewRow(ParsedLine line) {
     return TableRow(
       children: [
-        _TableCell(line.name),
-        _TableCell(line.id),
+        VbTableCell(line.name),
+        VbTableCell(line.id),
         _buildStatusCell(line),
       ],
     );
   }
 
-  Widget _buildStatusCell(_ParsedLine line) {
+  Widget _buildStatusCell(ParsedLine line) {
     final (String text, Color color) = switch (line.status) {
-      _LineStatus.newVoice => ('✅ 新增', Colors.green.shade700),
-      _LineStatus.duplicate => ('⚠️ ID已存在', Colors.orange.shade700),
-      _LineStatus.formatError => (
+      LineStatus.newVoice => ('✅ 新增', Colors.green.shade700),
+      LineStatus.duplicate => ('⚠️ ID已存在', Colors.orange.shade700),
+      LineStatus.formatError => (
           '❌ 格式错误${line.errorMsg != null ? ': ${line.errorMsg}' : ''}',
           Colors.red.shade700,
         ),
@@ -610,27 +589,4 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
   }
 }
 
-// ============================================================================
-// 预览表格单元格组件
-// ============================================================================
-
-class _TableCell extends StatelessWidget {
-  final String text;
-  final bool isHeader;
-
-  const _TableCell(this.text, {this.isHeader = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontWeight: isHeader ? FontWeight.bold : null,
-          fontSize: isHeader ? 14 : 13,
-        ),
-      ),
-    );
-  }
-}
+// (VbTableCell moved to voice_batch_add_shared.dart)
