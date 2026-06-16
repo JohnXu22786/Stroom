@@ -124,7 +124,10 @@ class ChatService {
           'model': _modelConfig?.modelId,
           'max_tokens': (_modelConfig!.typeConfig['context'] as num?)?.toInt() ??
               (_modelConfig!.typeConfig['maxTokens'] as num?)?.toInt() ?? 4096,
-          'temperature': (_modelConfig!.typeConfig['temperature'] as num?)?.toDouble() ?? 0.7,
+          if (_modelConfig!.typeConfig['temperature'] != null)
+            'temperature':
+                (_modelConfig!.typeConfig['temperature'] as num).toDouble(),
+          if (extraParams != null) ...extraParams,
         };
         _cancelToken = CancelToken();
         _streamSubscription = _provider!
@@ -138,8 +141,7 @@ class ChatService {
               ?? (_modelConfig!.typeConfig['maxTokens'] as num?)?.toInt()
               ?? 4096,
           temperature: (_modelConfig!.typeConfig['temperature'] as num?)
-                  ?.toDouble() ??
-              0.7,
+              ?.toDouble(),
           extraParams: extraParams,
           cancelToken: _cancelToken,
         )
@@ -225,8 +227,11 @@ class ChatService {
           'model': _modelConfig?.modelId,
           'max_tokens': (_modelConfig!.typeConfig['context'] as num?)?.toInt() ??
               (_modelConfig!.typeConfig['maxTokens'] as num?)?.toInt() ?? 4096,
-          'temperature': (_modelConfig!.typeConfig['temperature'] as num?)?.toDouble() ?? 0.7,
-          'tools': toolDefs.isNotEmpty ? toolDefs : null,
+          if (_modelConfig!.typeConfig['temperature'] != null)
+            'temperature':
+                (_modelConfig!.typeConfig['temperature'] as num).toDouble(),
+          if (toolDefs.isNotEmpty) 'tools': toolDefs,
+          if (extraParams != null) ...extraParams,
         };
         int loopProtection = 0;
 
@@ -250,8 +255,7 @@ class ChatService {
                     (_modelConfig!.typeConfig['maxTokens'] as num?)?.toInt() ??
                     4096,
             temperature:
-                (_modelConfig!.typeConfig['temperature'] as num?)?.toDouble() ??
-                    0.7,
+                (_modelConfig!.typeConfig['temperature'] as num?)?.toDouble(),
             tools: toolDefs.isNotEmpty ? toolDefs : null,
             extraParams: extraParams,
             cancelToken: _cancelToken,
