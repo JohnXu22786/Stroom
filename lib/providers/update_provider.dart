@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../utils/app_version.dart';
 import 'update_provider_shared.dart';
+export 'update_provider_shared.dart';
 
 final updateProvider = StateNotifierProvider<UpdateNotifier, UpdateState>(
   (ref) => UpdateNotifier(),
