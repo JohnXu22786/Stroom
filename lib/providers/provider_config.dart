@@ -477,7 +477,7 @@ class ProviderEntry {
     // 新格式
     if (map.containsKey('configs')) {
       return ProviderEntry(
-        id: map['id'] as String,
+        id: map['id'] as String?,
         type: map['type'] as String? ?? 'tts',
         name: map['name'] as String? ?? '',
         configs: (map['configs'] as List?)
@@ -499,7 +499,7 @@ class ProviderEntry {
           [],
     );
     return ProviderEntry(
-      id: map['id'] as String,
+      id: map['id'] as String?,
       type: map['type'] as String? ?? 'tts',
       name: map['name'] as String? ?? '',
       configs: config.providerName.isEmpty &&
