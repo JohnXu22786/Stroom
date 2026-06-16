@@ -1,11 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path/path.dart' as p;
-import '../../services/storage_service.dart';
 import 'package:dio/dio.dart';
 import '../config/default_rules.dart';
+import 'download_manager_shared.dart';
 
 /// 下载管理器
 ///
@@ -16,9 +15,6 @@ import '../config/default_rules.dart';
 /// - 下载进度持久化（应用重启后可恢复）
 class DownloadManager {
   DownloadManager._();
-
-  /// 任务暂停令牌映射表，key 为任务 ID，value 为暂停 Completer
-  static final Map<String, Completer<void>> _pauseTokens = {};
 
   /// 检测服务器是否支持断点续传（Range 请求）
   ///
@@ -56,7 +52,7 @@ class DownloadManager {
   /// [taskId] 任务 ID
   static Future<void> pauseDownload(String taskId) async {
     final completer = Completer<void>();
-    _pauseTokens[taskId] = completer;
+    pauseTokens[taskId] = completer;
     debugPrint('[DownloadManager] Paused task: $taskId');
   }
 
@@ -65,7 +61,7 @@ class DownloadManager {
   /// 完成对应的 Completer，使下载循环继续执行。
   /// [taskId] 任务 ID
   static void resumeDownload(String taskId) {
-    final completer = _pauseTokens.remove(taskId);
+    final completer = pauseTokens.remove(taskId);
     if (completer != null && !completer.isCompleted) {
       completer.complete();
       debugPrint('[DownloadManager] Resumed task: $taskId');
@@ -77,7 +73,7 @@ class DownloadManager {
   /// [taskId] 任务 ID
   /// 返回 `true` 表示该任务已暂停。
   static bool isPaused(String taskId) {
-    return _pauseTokens.containsKey(taskId);
+    return pauseTokens.containsKey(taskId);
   }
 
   /// 下载单个文件，支持断点续传
@@ -169,7 +165,7 @@ class DownloadManager {
           await for (final chunk in stream) {
             // 检查暂停状态，如果已暂停则等待恢复
             if (taskId.isNotEmpty) {
-              final pauseCompleter = _pauseTokens[taskId];
+              final pauseCompleter = pauseTokens[taskId];
               if (pauseCompleter != null) {
                 await pauseCompleter.future;
               }
@@ -240,7 +236,7 @@ class DownloadManager {
     // 恢复进度
     int completedCount = 0;
     if (taskId.isNotEmpty) {
-      final saved = await _loadSegmentProgress(taskId);
+      final saved = await loadSegmentProgress(taskId);
       if (saved != null) {
         completedCount = saved['completed'] as int? ?? 0;
         debugPrint(
@@ -269,7 +265,7 @@ class DownloadManager {
     final futures = <Future<void>>[];
 
     for (int i = completedCount; i < total; i++) {
-      futures.add(_downloadSingleSegment(
+      futures.add(downloadSingleSegment(
         index: i,
         url: segmentUrls[i],
         tempDir: tempDirPath,
@@ -285,7 +281,7 @@ class DownloadManager {
           onProgress?.call(completedCount, total, progress);
           // 保存进度
           if (taskId.isNotEmpty) {
-            _saveSegmentProgress(taskId, {'completed': completedCount});
+            saveSegmentProgress(taskId, {'completed': completedCount});
           }
         },
       ));
@@ -311,7 +307,7 @@ class DownloadManager {
 
     // 清理进度
     if (taskId.isNotEmpty) {
-      await _deleteSegmentProgress(taskId);
+      await deleteSegmentProgress(taskId);
     }
 
     debugPrint('[DownloadManager] Segments merged to: $outputPath');
@@ -355,198 +351,14 @@ class DownloadManager {
     }
   }
 
-  // ===========================================================================
-  // 进度持久化
-  // ===========================================================================
-
-  /// 保存下载进度
   static Future<void> saveProgress(
     String taskId,
     Map<String, dynamic> progress,
   ) async {
-    await _saveSegmentProgress(taskId, progress);
+    await saveSegmentProgress(taskId, progress);
   }
 
-  /// 加载下载进度
   static Future<Map<String, dynamic>?> loadProgress(String taskId) async {
-    return _loadSegmentProgress(taskId);
-  }
-
-  static Future<String> _progressPath(String taskId) async {
-    final dirPath = await AppStorage.directory;
-    final progDir = Directory(p.join(dirPath, 'catcatch', '.progress'));
-    if (!await progDir.exists()) {
-      await progDir.create(recursive: true);
-    }
-    return p.join(progDir.path, '${taskId}_dl_progress.json');
-  }
-
-  static Future<void> _saveSegmentProgress(
-    String taskId,
-    Map<String, dynamic> data,
-  ) async {
-    try {
-      final path = await _progressPath(taskId);
-      final file = File(path);
-      await file.writeAsString(jsonEncode(data));
-    } catch (e) {
-      debugPrint('[DownloadManager] Failed to save progress: $e');
-    }
-  }
-
-  static Future<Map<String, dynamic>?> _loadSegmentProgress(
-    String taskId,
-  ) async {
-    try {
-      final path = await _progressPath(taskId);
-      final file = File(path);
-      if (!await file.exists()) return null;
-      final content = await file.readAsString();
-      return jsonDecode(content) as Map<String, dynamic>;
-    } catch (e) {
-      debugPrint('[DownloadManager] Failed to load progress: $e');
-      return null;
-    }
-  }
-
-  static Future<void> _deleteSegmentProgress(String taskId) async {
-    try {
-      final path = await _progressPath(taskId);
-      final file = File(path);
-      if (await file.exists()) {
-        await file.delete();
-      }
-    } catch (e) {
-      debugPrint('[DownloadManager] Failed to delete progress: $e');
-    }
-  }
-
-  // ===========================================================================
-  // 内部方法
-  // ===========================================================================
-
-  /// 下载单个分段
-  ///
-  /// [taskId] 任务 ID（用于暂停/恢复控制）
-  static Future<void> _downloadSingleSegment({
-    required int index,
-    required String url,
-    required String tempDir,
-    required List<String?> partFiles,
-    Map<String, String>? headers,
-    required Semaphore semaphore,
-    CancelToken? cancelToken,
-    required Map<int, String> errors,
-    required void Function(int index) onSegmentComplete,
-    String taskId = '',
-  }) async {
-    await semaphore.acquire();
-    try {
-      final partPath = p.join(tempDir, 'part_$index');
-      partFiles[index] = partPath;
-
-      int retries = 0;
-      while (retries <= DefaultRules.maxRetriesPerSegment) {
-        try {
-          final dio = Dio();
-          cancelToken?.whenCancel.then((_) => dio.close());
-          try {
-            final mergedHeaders =
-                Map<String, String>.from(DefaultRules.defaultHeaders);
-            if (headers != null) mergedHeaders.addAll(headers);
-
-            final response = await dio.get(
-              url,
-              options: Options(
-                headers: mergedHeaders,
-                responseType: ResponseType.stream,
-                receiveTimeout: const Duration(seconds: 30),
-              ),
-              cancelToken: cancelToken,
-            );
-
-            if (response.statusCode != 200 && response.statusCode != 206) {
-              throw DioException(
-                requestOptions: response.requestOptions,
-                response: response,
-                message: 'HTTP ${response.statusCode}',
-              );
-            }
-
-            // File operations wrapped for web compatibility
-            try {
-              final file = File(partPath);
-              final raf = await file.open(mode: FileMode.write);
-              try {
-                final stream = response.data.stream as Stream<List<int>>;
-                await for (final chunk in stream) {
-                  // 检查暂停状态，如果已暂停则等待恢复
-                  if (taskId.isNotEmpty) {
-                    final pauseCompleter = _pauseTokens[taskId];
-                    if (pauseCompleter != null) {
-                      await pauseCompleter.future;
-                    }
-                  }
-                  await raf.writeFrom(chunk);
-                }
-              } finally {
-                await raf.close();
-              }
-            } catch (e) {
-              if (retries < DefaultRules.maxRetriesPerSegment) {
-                retries++;
-                continue;
-              }
-              errors[index] = e.toString();
-              return;
-            }
-
-            // 成功
-            onSegmentComplete(index);
-            return;
-          } finally {
-            dio.close();
-          }
-        } catch (e) {
-          retries++;
-          if (retries > DefaultRules.maxRetriesPerSegment) {
-            errors[index] = e.toString();
-            return;
-          }
-          debugPrint('[DownloadManager] Retry $retries for segment $index: $e');
-          await Future.delayed(Duration(seconds: retries));
-        }
-      }
-    } finally {
-      semaphore.release();
-    }
-  }
-}
-
-// =============================================================================
-// 信号量（限制并发数）
-// =============================================================================
-
-class Semaphore {
-  final int _max;
-  int _current = 0;
-  final _queue = <Completer<void>>[];
-
-  Semaphore(this._max);
-
-  Future<void> acquire() async {
-    while (_current >= _max) {
-      final completer = Completer<void>();
-      _queue.add(completer);
-      await completer.future;
-    }
-    _current++;
-  }
-
-  void release() {
-    _current--;
-    if (_queue.isNotEmpty) {
-      _queue.removeAt(0).complete();
-    }
+    return loadSegmentProgress(taskId);
   }
 }
