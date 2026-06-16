@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/tts_models.dart';
 import '../providers/tts_config.dart';
 
 // ============================================================================
@@ -84,10 +85,8 @@ class TrimSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final customPresets = ref.watch(customTrimPresetsProvider);
-    final cs = Theme.of(context).colorScheme;
-    final theme = Theme.of(context);
 
-    Widget _buildTrimPresetLabel(String? presetId) {
+    Widget buildTrimPresetLabel(String? presetId) {
       if (presetId == null) {
         final nonePreset = getBuiltinTrimPresets().firstWhere(
           (p) => p['id'] == BuiltinTrimPresetIds.none,
@@ -131,7 +130,7 @@ class TrimSection extends ConsumerWidget {
                     ),
                     child: DefaultTextStyle(
                       style: TextStyle(fontSize: 11, color: Colors.orange[800]),
-                      child: _buildTrimPresetLabel(selectedPresetId),
+                      child: buildTrimPresetLabel(selectedPresetId),
                     ),
                   ),
               ],

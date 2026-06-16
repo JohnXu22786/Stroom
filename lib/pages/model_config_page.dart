@@ -1165,11 +1165,21 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    ToggleButton('是', true, _supportInstruction,
-                        (v) => setState(() => _supportInstruction = v)),
+                    ToggleButton(
+                      label: '是',
+                      value: true,
+                      currentValue: _supportInstruction,
+                      onChanged: (v) =>
+                          setState(() => _supportInstruction = v),
+                    ),
                     const SizedBox(width: 8),
-                    ToggleButton('否', false, _supportInstruction,
-                        (v) => setState(() => _supportInstruction = v)),
+                    ToggleButton(
+                      label: '否',
+                      value: false,
+                      currentValue: _supportInstruction,
+                      onChanged: (v) =>
+                          setState(() => _supportInstruction = v),
+                    ),
                   ],
                 ),
               ),
@@ -1205,11 +1215,19 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    ToggleButton('是', true, _supportStream,
-                        (v) => setState(() => _supportStream = v)),
+                    ToggleButton(
+                      label: '是',
+                      value: true,
+                      currentValue: _supportStream,
+                      onChanged: (v) => setState(() => _supportStream = v),
+                    ),
                     const SizedBox(width: 8),
-                    ToggleButton('否', false, _supportStream,
-                        (v) => setState(() => _supportStream = v)),
+                    ToggleButton(
+                      label: '否',
+                      value: false,
+                      currentValue: _supportStream,
+                      onChanged: (v) => setState(() => _supportStream = v),
+                    ),
                   ],
                 ),
               ),
@@ -1245,4 +1263,4 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       ),
     );
   }
-
+}
