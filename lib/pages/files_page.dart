@@ -36,7 +36,7 @@ class _FilesPageState extends ConsumerState<FilesPage>
     super.dispose();
   }
 
-  static const _tabLabels = ['文本', '图片', '视频', '音频'];
+  static const _tabLabels = ['文本', '音频', '图片', '视频'];
 
   @override
   Widget build(BuildContext context) {
@@ -69,11 +69,11 @@ class _FilesPageState extends ConsumerState<FilesPage>
                   case 0:
                     return TextStoragePage(key: ValueKey('text_storage_$refreshSignal'));
                   case 1:
-                    return GalleryPage(key: ValueKey('gallery_$refreshSignal'));
-                  case 2:
-                    return VideoGalleryPage(key: ValueKey('video_gallery_$refreshSignal'));
-                  case 3:
                     return TtsPage(key: ValueKey('tts_$refreshSignal'));
+                  case 2:
+                    return GalleryPage(key: ValueKey('gallery_$refreshSignal'));
+                  case 3:
+                    return VideoGalleryPage(key: ValueKey('video_gallery_$refreshSignal'));
                   default:
                     return const SizedBox.shrink();
                 }

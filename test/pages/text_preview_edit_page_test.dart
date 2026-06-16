@@ -374,7 +374,7 @@ void main() {
       final customFile = TextRecord(
         name: 'my_document',
         hash: testFile.hash,
-        format: 'md',
+        format: 'txt',
         createdAt: DateTime.now(),
         size: 100,
         textLength: 50,
@@ -383,7 +383,7 @@ void main() {
       await tester.pumpWidget(_buildTestApp(customFile, testContent));
       await navigateToEditor(tester);
 
-      expect(find.text('my_document.md'), findsOneWidget);
+      expect(find.text('my_document.txt'), findsOneWidget);
     });
 
     // ==================== Back Navigation: No Changes ====================
@@ -497,5 +497,28 @@ void main() {
       final redoButton = tester.widget<IconButton>(redoButtonFinder);
       expect(redoButton.onPressed, isNotNull);
     });
+
+    // ==================== Empty Content ====================
+
+    testWidgets('renders empty content without error', (tester) async {
+      final emptyFile = TextRecord(
+        name: 'empty_file',
+        hash: testFile.hash,
+        format: 'txt',
+        createdAt: DateTime.now(),
+        size: 0,
+        textLength: 0,
+      );
+
+      await tester.pumpWidget(_buildTestApp(emptyFile, ''));
+      await navigateToEditor(tester);
+
+      // Should show the title
+      expect(find.text('empty_file.txt'), findsOneWidget);
+
+      // Should show empty content area (no crash)
+      expect(find.byType(SelectableText), findsOneWidget);
+    });
+
   });
 }
