@@ -11,10 +11,10 @@ import '../utils/audio_separation.dart';
 import '../providers/tts_state_provider.dart';
 import '../providers/background_task_provider.dart';
 import '../utils/file_manifest.dart';
-import '../utils/video_manifest.dart';
 import '../widgets/folder_picker_dialog.dart';
 import 'tts_page.dart';
 import 'audio_separation_shared.dart';
+import 'chat/composer/video_album_picker_dialog.dart';
 
 /// 视频音频分离页面
 ///
@@ -203,121 +203,15 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     );
   }
 
-  /// Pick from video library - shows in-app video picker dialog.
+  /// Pick from video library - shows folder-navigable video album picker.
   Future<void> _pickFromVideoLibrary() async {
     try {
-      final records = await VideoManifest.loadRecords();
-
-      if (!mounted) return;
-
-      if (records.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('暂无可用的应用内视频')),
-        );
-        return;
-      }
-
-      final cs = Theme.of(context).colorScheme;
-      showDialog(
-        context: context,
-        builder: (ctx) => Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          child: Container(
-            constraints: BoxConstraints(
-              maxWidth: 500,
-              maxHeight: MediaQuery.of(ctx).size.height * 0.6,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Header
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Row(
-                    children: [
-                      Icon(Icons.video_library,
-                          size: 18, color: cs.primary),
-                      const SizedBox(width: 8),
-                      Text(
-                        '选择应用内视频',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: cs.onSurface,
-                        ),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        onPressed: () => Navigator.pop(ctx),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-                // List
-                Flexible(
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: records.length,
-                    itemBuilder: (_, index) {
-                      final record = records[index];
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: cs.primaryContainer,
-                          child: Icon(Icons.videocam,
-                              color: cs.onPrimaryContainer, size: 20),
-                        ),
-                        title: Text(
-                          record.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                        subtitle: Text(
-                          '${record.format.toUpperCase()}  ${formatFileSize(record.size)}  ${record.duration > 0 ? '${(record.duration / 1000).toStringAsFixed(1)}秒' : ''}',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        onTap: () async {
-                          Navigator.pop(ctx);
-                          await _selectFromVideoLibrary(record);
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('加载视频列表失败: $e')),
-        );
-      }
-    }
-  }
-
-  /// Select an in-app video record and read its bytes.
-  Future<void> _selectFromVideoLibrary(VideoRecord record) async {
-    try {
-      final bytes = await VideoManifest.readFile(record.storagePath);
-      if (bytes == null || bytes.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('无法读取视频文件')),
-          );
-        }
-        return;
-      }
-
+      final result = await showAppVideoPickerDialog(context);
+      if (result == null || !mounted) return;
       setState(() {
-        _videoBytes = bytes;
-        _videoName = record.name;
-        _videoFormat = record.format;
+        _videoBytes = result.bytes;
+        _videoName = result.record.name;
+        _videoFormat = result.record.format;
         _hasError = false;
         _errorMessage = '';
         _success = false;
@@ -325,7 +219,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('读取视频失败: $e')),
+          SnackBar(content: Text('选择视频失败: $e')),
         );
       }
     }
@@ -720,6 +614,12 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       final audioBytes = await _engine.extractAudio(
         videoBytes: _videoBytes!,
         videoFormat: _videoFormat ?? 'mp4',
+        onProgress: (progress) {
+          ref.read(backgroundTasksProvider.notifier).updateProgress(
+                taskId,
+                progress,
+              );
+        },
       );
 
       // 保存到音频库

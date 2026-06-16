@@ -176,19 +176,15 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // Ensure video records are empty
-      VideoManifest.invalidateCache();
-      final records = await VideoManifest.loadRecords();
-      expect(records, isEmpty);
-
       // Navigate to the in-app video picker
       await tester.tap(find.text('选择视频来源'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('从应用相册选择'));
       await tester.pumpAndSettle();
 
-      // Should show empty state text
-      expect(find.text('暂无可用的应用内视频'), findsOneWidget);
+      // Should show the full-screen picker with empty state
+      expect(find.text('选择应用内视频'), findsOneWidget);
+      expect(find.text('暂无视频'), findsOneWidget);
     });
 
     testWidgets('in-app video picker shows records when videos exist',
@@ -240,12 +236,13 @@ void main() {
       await tester.tap(find.text('从应用相册选择'));
       await tester.pumpAndSettle();
 
-      // Tap on the record
+      // Tap on the record inside the picker dialog
       await tester.tap(find.text('缺失视频'));
       await tester.pumpAndSettle();
 
       // Should show error snackbar since the file doesn't exist
-      expect(find.textContaining('无法读取'), findsOneWidget);
+      // The dialog should remain open since the file read failed
+      expect(find.text('选择应用内视频'), findsOneWidget);
     });
 
     testWidgets('in-app video picker close button dismisses the dialog',

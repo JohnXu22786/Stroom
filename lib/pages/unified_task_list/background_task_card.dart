@@ -7,17 +7,44 @@ import 'task_utils.dart';
 
 // =============================================================================
 // 后台任务卡片（OCR / ASR / 音频分离）
+// 设计参考 CatCatchTaskCard：可展开/折叠，圆形进度条，步骤信息
 // =============================================================================
 
-class BackgroundTaskCard extends ConsumerWidget {
+class BackgroundTaskCard extends ConsumerStatefulWidget {
   final BackgroundTask task;
   final bool isUnread;
 
   const BackgroundTaskCard({super.key, required this.task, this.isUnread = false});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<BackgroundTaskCard> createState() => _BackgroundTaskCardState();
+}
+
+class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
+  bool _expanded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = widget.task.status == TaskStatus.running;
+  }
+
+  @override
+  void didUpdateWidget(covariant BackgroundTaskCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.task.status == TaskStatus.running &&
+        oldWidget.task.status != TaskStatus.running) {
+      setState(() => _expanded = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final task = widget.task;
     final colorScheme = Theme.of(context).colorScheme;
+
+    final statusColor = _statusColor(task.status);
+    final statusIcon = _statusIcon(task.status);
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -26,144 +53,315 @@ class BackgroundTaskCard extends ConsumerWidget {
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: colorScheme.outlineVariant, width: 0.5),
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            if (isUnread)
-              Container(
-                width: 6,
-                height: 6,
-                margin: const EdgeInsets.only(right: 4),
-                decoration: BoxDecoration(
-                  color: colorScheme.primary,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            _buildStatusIcon(task.status),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
                 children: [
-                  Row(
-                    children: [
-                      Icon(
-                        _taskTypeIcon(task.type),
-                        size: 14,
-                        color: _taskTypeColor(task.type),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _taskTypeLabel(task.type),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: _taskTypeColor(task.type),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    task.title,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      _buildStatusChip(task.status),
-                      const SizedBox(width: 8),
-                      Text(
-                        formatRelativeTime(task.createdAt),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[500],
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (task.status == TaskStatus.failed &&
-                      task.error != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: Colors.red.withValues(alpha: 0.25),
-                          ),
-                        ),
-                        child: Text(
-                          task.error!,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.red,
-                            height: 1.4,
-                          ),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                  if (widget.isUnread)
+                    Container(
+                      width: 6,
+                      height: 6,
+                      margin: const EdgeInsets.only(right: 4),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary,
+                        shape: BoxShape.circle,
                       ),
                     ),
+                  Icon(statusIcon, color: statusColor, size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            _taskTypeBadge(task.type, colorScheme),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                task.title,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            _buildStatusChip(task.status),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${formatRelativeTime(task.createdAt)}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Circular progress or completion icon
+                  if (task.status == TaskStatus.running)
+                    SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          CircularProgressIndicator(
+                            value: task.progress / 100.0,
+                            strokeWidth: 3,
+                            color: Colors.blue,
+                            backgroundColor: colorScheme.outlineVariant,
+                          ),
+                          Text(
+                            '${task.progress}%',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    Icon(statusIcon, color: statusColor, size: 28),
+                  const SizedBox(width: 4),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(
+                      Icons.expand_more,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, size: 20),
-              onSelected: (value) {
-                if (value == 'remove') {
-                  ref.read(backgroundTasksProvider.notifier).removeTask(task.id);
-                }
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem(
-                  value: 'remove',
-                  child: ListTile(
-                    leading: Icon(Icons.delete_outline,
-                        size: 20, color: Colors.grey),
-                    title: Text('从列表移除'),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-              ],
+          ),
+          if (_expanded) ...[
+            const Divider(height: 1, indent: 12, endIndent: 12),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: _buildExpandedContent(task, colorScheme),
             ),
           ],
-        ),
+        ],
       ),
     );
   }
 
-  static Widget _buildStatusIcon(TaskStatus status) {
+  Widget _buildExpandedContent(BackgroundTask task, ColorScheme cs) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Type and time info
+        _buildInfoRow(cs, Icons.category_outlined, '任务类型', task.type.label),
+        const SizedBox(height: 6),
+        _buildInfoRow(cs, Icons.access_time, '创建时间',
+            formatRelativeTime(task.createdAt)),
+        if (task.completedAt != null) ...[
+          const SizedBox(height: 6),
+          _buildInfoRow(cs, Icons.check_circle_outline, '完成时间',
+              formatRelativeTime(task.completedAt!)),
+        ],
+
+        // Progress bar for running tasks
+        if (task.status == TaskStatus.running) ...[
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: task.progress / 100.0,
+              minHeight: 6,
+              backgroundColor: cs.outlineVariant,
+              color: Colors.blue,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              '进度 ${task.progress}%',
+              style: TextStyle(
+                fontSize: 11,
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+
+        // Error message for failed tasks
+        if (task.status == TaskStatus.failed && task.error != null) ...[
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.red.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: Colors.red.withValues(alpha: 0.25),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.error_outline, size: 14, color: Colors.red),
+                    const SizedBox(width: 4),
+                    Text(
+                      '错误详情',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.red[700],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  task.error!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.red,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+
+        // Action buttons
+        const SizedBox(height: 12),
+        _buildActionButtons(task, cs),
+      ],
+    );
+  }
+
+  Widget _buildInfoRow(ColorScheme cs, IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: cs.onSurfaceVariant),
+        const SizedBox(width: 6),
+        Text(
+          '$label: ',
+          style: TextStyle(
+            fontSize: 12,
+            color: cs.onSurfaceVariant,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              color: cs.onSurface,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButtons(BackgroundTask task, ColorScheme cs) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        TextButton.icon(
+          onPressed: () {
+            ref.read(backgroundTasksProvider.notifier).removeTask(task.id);
+          },
+          icon: Icon(Icons.delete_outline, size: 18, color: cs.error),
+          label: Text(
+            '删除',
+            style: TextStyle(fontSize: 13, color: cs.error),
+          ),
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ===========================================================================
+  // Helper widgets
+  // ===========================================================================
+
+  Widget _taskTypeBadge(BackgroundTaskType type, ColorScheme cs) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: _taskTypeColor(type).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            _taskTypeIcon(type),
+            size: 12,
+            color: _taskTypeColor(type),
+          ),
+          const SizedBox(width: 3),
+          Text(
+            type.label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: _taskTypeColor(type),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Color _statusColor(TaskStatus status) {
     switch (status) {
       case TaskStatus.running:
-        return const SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(
-            strokeWidth: 2.5,
-            color: Colors.blue,
-          ),
-        );
+        return Colors.blue;
       case TaskStatus.completed:
-        return const Icon(Icons.check_circle, color: Colors.green, size: 24);
+        return Colors.green;
       case TaskStatus.failed:
-        return const Icon(Icons.error, color: Colors.red, size: 24);
+        return Colors.red;
       case TaskStatus.paused:
-        return const Icon(Icons.pause_circle, color: Colors.orange, size: 24);
+        return Colors.orange;
+    }
+  }
+
+  static IconData _statusIcon(TaskStatus status) {
+    switch (status) {
+      case TaskStatus.running:
+        return Icons.sync;
+      case TaskStatus.completed:
+        return Icons.check_circle;
+      case TaskStatus.failed:
+        return Icons.error;
+      case TaskStatus.paused:
+        return Icons.pause_circle;
     }
   }
 
@@ -240,9 +438,5 @@ class BackgroundTaskCard extends ConsumerWidget {
       case BackgroundTaskType.audioSeparation:
         return Colors.indigo;
     }
-  }
-
-  static String _taskTypeLabel(BackgroundTaskType type) {
-    return type.label;
   }
 }
