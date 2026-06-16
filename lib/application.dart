@@ -15,7 +15,9 @@ import 'pages/files_page.dart';
 import 'pages/settings_page.dart';
 import 'providers/theme_provider.dart';
 import 'providers/update_provider.dart';
+import 'providers/notification_provider.dart';
 import 'services/data_migration_service.dart';
+import 'services/notification_service.dart';
 import 'widgets/migration_dialog.dart';
 import 'widgets/update_dialog.dart';
 
@@ -46,6 +48,12 @@ class _ApplicationState extends ConsumerState<Application> {
         _performStartupChecks();
       });
     }
+    // Set up in-app notification handler
+    NotificationService().onInAppNotification = (payload) {
+      if (mounted) {
+        ref.read(inAppNotificationProvider.notifier).state = payload;
+      }
+    };
   }
 
   /// 执行启动时的检查流程（按顺序）：
@@ -181,51 +189,87 @@ class _ApplicationState extends ConsumerState<Application> {
                     ? lightColorScheme
                     : darkColorScheme;
 
-        return MaterialApp(
-          title: 'Stroom',
-          navigatorKey: _navigatorKey,
-          theme: ThemeData(
-            useMaterial3: true,
-            colorScheme: colorScheme,
-            pageTransitionsTheme: PageTransitionsTheme(
-              builders: {
-                TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-                TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        return Directionality(
+          textDirection: TextDirection.ltr,
+          child: Stack(
+          children: [
+            MaterialApp(
+              title: 'Stroom',
+              navigatorKey: _navigatorKey,
+              theme: ThemeData(
+                useMaterial3: true,
+                colorScheme: colorScheme,
+                pageTransitionsTheme: PageTransitionsTheme(
+                  builders: {
+                    TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+                    TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+                  },
+                ),
+              ),
+              darkTheme: ThemeData(
+                useMaterial3: true,
+                colorScheme: darkColorScheme,
+                pageTransitionsTheme: PageTransitionsTheme(
+                  builders: {
+                    TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+                    TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+                  },
+                ),
+              ),
+              themeMode: themeMode,
+              localizationsDelegates: const [
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              supportedLocales: const [
+                Locale('zh', 'CN'),
+                Locale('en', 'US'),
+              ],
+              locale: const Locale('zh', 'CN'),
+              home: const HomePage(),
+              routes: {
+                '/home': (context) => const HomePage(),
+                '/camera': (context) => const CameraPage(),
+                '/chat': (context) => const ChatPage(),
+                '/files': (context) => const FilesPage(),
+                '/settings': (context) => const SettingsPage(),
               },
+              debugShowCheckedModeBanner: false,
             ),
-          ),
-          darkTheme: ThemeData(
-            useMaterial3: true,
-            colorScheme: darkColorScheme,
-            pageTransitionsTheme: PageTransitionsTheme(
-              builders: {
-                TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-                TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-              },
-            ),
-          ),
-          themeMode: themeMode,
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
+            // In-app notification banner overlay
+            _InAppBannerOverlay(),
           ],
-          supportedLocales: const [
-            Locale('zh', 'CN'),
-            Locale('en', 'US'),
-          ],
-          locale: const Locale('zh', 'CN'),
-          home: const HomePage(),
-          routes: {
-            '/home': (context) => const HomePage(),
-            '/camera': (context) => const CameraPage(),
-            '/chat': (context) => const ChatPage(),
-            '/files': (context) => const FilesPage(),
-            '/settings': (context) => const SettingsPage(),
-          },
-          debugShowCheckedModeBanner: false,
-        );
+        ),
+      );
       },
+    );
+  }
+}
+
+// ============================================================================
+// In-App Notification Banner Overlay
+// ============================================================================
+
+/// Overlay widget that displays on top of the MaterialApp when a
+/// notification payload is set. Listens to [inAppNotificationProvider].
+class _InAppBannerOverlay extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final payload = ref.watch(inAppNotificationProvider);
+    if (payload == null) return const SizedBox.shrink();
+
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: InAppNotificationBanner(
+        key: ValueKey(payload.taskId),
+        payload: payload,
+        onDismiss: () {
+          ref.read(inAppNotificationProvider.notifier).state = null;
+        },
+      ),
     );
   }
 }

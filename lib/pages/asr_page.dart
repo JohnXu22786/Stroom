@@ -871,6 +871,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     // Continue processing in the background
     late final AsrService service;
     try {
+      ref.read(backgroundTasksProvider.notifier).updateProgress(taskId, 10);
       service = AsrService(config: effectiveConfig);
       final result = await service.transcribe(
         audioBytes: _selectedAudio!.bytes,
@@ -878,6 +879,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       );
 
       // Save the transcription result as a text file
+      ref.read(backgroundTasksProvider.notifier).updateProgress(taskId, 70);
       await _saveTranscriptionResult(result.text, title: title);
 
       // Mark task as completed

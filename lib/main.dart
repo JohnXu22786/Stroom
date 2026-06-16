@@ -9,8 +9,10 @@ import 'providers/provider_config.dart';
 import 'catcatch/providers/catcatch_provider.dart';
 import 'providers/task_provider.dart';
 import 'providers/background_task_provider.dart';
+import 'providers/notification_provider.dart';
 import 'pages/unified_task_list_page.dart';
 import 'services/background_service.dart';
+import 'services/notification_service.dart';
 
 /// 初始化 ProviderScope 的 overrides
 final catcatchStartupProvider = FutureProvider<void>((ref) async {
@@ -19,6 +21,8 @@ final catcatchStartupProvider = FutureProvider<void>((ref) async {
   await ref.read(backgroundTasksProvider.notifier).restoreFromPersistence();
   final lastRead = await loadTaskListLastRead();
   ref.read(taskListLastReadProvider.notifier).state = lastRead;
+  // 加载通知设置
+  await ref.read(notificationSettingsProvider.notifier).load();
 });
 
 Future<void> main() async {
@@ -28,6 +32,8 @@ Future<void> main() async {
     if (defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS) {
       await initializeBackgroundService();
+      // 初始化通知服务
+      await NotificationService().initialize();
     }
     registerBuiltinProviders();
     registerBuiltinProviderTypes();
