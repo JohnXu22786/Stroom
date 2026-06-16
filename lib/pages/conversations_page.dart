@@ -1,27 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../models/chat_message.dart';
 import '../providers/conversation_provider.dart';
 import '../services/attachment_storage.dart';
+import 'conversations_shared.dart';
 
-/// Helper: count message content matches in a conversation for a query.
-int _countMessageMatches(Conversation conv, String query) {
-  if (query.isEmpty) return 0;
-  final lowerQuery = query.toLowerCase();
-  int count = 0;
-  for (final msg in conv.messages) {
-    final lowerContent = msg.content.toLowerCase();
-    int start = 0;
-    while (true) {
-      final idx = lowerContent.indexOf(lowerQuery, start);
-      if (idx == -1) break;
-      count++;
-      start = idx + lowerQuery.length;
-    }
-  }
-  return count;
-}
 
 class ConversationsPage extends ConsumerStatefulWidget {
   const ConversationsPage({super.key});
@@ -79,7 +62,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
         final displayTitle = c.title.isEmpty ? '新对话' : c.title;
         if (displayTitle.toLowerCase().contains(query)) return true;
         // Check message content match
-        if (_countMessageMatches(c, query) > 0) return true;
+        if (countMessageMatches(c, query) > 0) return true;
         return false;
       }).toList();
     }
@@ -522,7 +505,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
   }
 
   Widget _buildMatchBadge(Conversation conv, ColorScheme cs) {
-    final matchCount = _countMessageMatches(conv, _searchQuery);
+    final matchCount = countMessageMatches(conv, _searchQuery);
     if (matchCount == 0) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(left: 4),

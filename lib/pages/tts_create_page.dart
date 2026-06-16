@@ -7,14 +7,8 @@ import '../providers/provider_config.dart';
 import '../providers/tts_config.dart';
 import '../providers/task_provider.dart';
 import 'provider_config_page.dart';
+import 'tts_create_shared.dart';
 
-/// 模型选项：模型配置 + 所属供应商配置（含 host/key）
-class _ModelOption {
-  final ModelConfig config;
-  final ProviderConfigItem providerConfig;
-
-  const _ModelOption(this.config, this.providerConfig);
-}
 
 /// TTS创建页面 - 用于文本转语音转换
 class TTSCreatePage extends ConsumerStatefulWidget {
@@ -45,7 +39,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   String? _ttsEntryId;
 
   // 当前 TTS 供应商下所有可用的模型列表（含所属供应商名称）
-  List<_ModelOption> _availableModels = [];
+  List<ModelOption> _availableModels = [];
 
   // instruction 参数控制器
   final _instructionController = TextEditingController();
@@ -119,11 +113,11 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     }
 
     // 聚合所有配置项中的模型
-    final allModels = <_ModelOption>[];
+    final allModels = <ModelOption>[];
     for (final configItem in ttsEntry.configs) {
       if (configItem.models.isEmpty) continue;
       for (final model in configItem.models) {
-        allModels.add(_ModelOption(model, configItem));
+        allModels.add(ModelOption(model, configItem));
       }
     }
 

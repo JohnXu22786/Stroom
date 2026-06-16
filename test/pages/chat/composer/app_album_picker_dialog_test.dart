@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/pages/chat/composer/app_album_picker_dialog.dart';
+import 'package:stroom/pages/chat/composer/chat_album_picker_dialog.dart';
 
 void main() {
   group('AppAlbumPickerDialog tests', () {

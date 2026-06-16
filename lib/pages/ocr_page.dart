@@ -15,7 +15,9 @@ import '../utils/text_manifest.dart';
 import '../widgets/folder_picker_dialog.dart';
 import '../widgets/camera_choice_dialog.dart';
 import 'camera_page.dart';
-import 'chat/composer/app_album_picker_dialog.dart';
+import 'chat/composer/chat_album_picker_dialog.dart';
+import 'ocr/ocr_shared.dart';
+export 'ocr/ocr_shared.dart';
 
 // ============================================================================
 // Provider: Get the first configured OCR config from provider entries
@@ -405,7 +407,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                         setState(() {
                           if (_dragTargetIndex == index) {
                             _dragTargetIndex = null;
-                          }
+}
                         });
                       },
                       onAcceptWithDetails: (details) {
@@ -483,7 +485,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                           ),
                           childWhenDragging: _buildDimmedPlaceholder(
                             image, index, cs, isCandidate || isHoverTarget),
-                          child: _ImageGridItem(
+                          child: ImageGridItem(
                             key: ValueKey('ocr_grid_item_$index'),
                             image: image,
                             index: index,
@@ -868,7 +870,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               const SizedBox(height: 24),
               Column(
                 children: [
-                  _ChoiceCard(
+                  ChoiceCard(
                     icon: Icons.photo_library,
                     title: '从系统相册选择',
                     subtitle: '从设备系统相册中选择图片',
@@ -879,7 +881,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     },
                   ),
                   const SizedBox(height: 8),
-                  _ChoiceCard(
+                  ChoiceCard(
                     icon: Icons.collections_bookmark,
                     title: '从应用相册选择',
                     subtitle: '从应用内已保存的图片中选择',
@@ -1408,201 +1410,4 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   String _pad(int n) => n.toString().padLeft(2, '0');
-}
-
-// ============================================================================
-// ChoiceCard Widget — reusable card with icon, title, subtitle
-// ============================================================================
-
-class _ChoiceCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _ChoiceCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return Material(
-      color: cs.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              // 文件页面风格图标容器
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: color, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: cs.onSurfaceVariant),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.chevron_right,
-                size: 20,
-                color: cs.onSurfaceVariant,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// ImageGridItem Widget — individual image in grid with tap/remove
-// ============================================================================
-
-class _ImageGridItem extends StatelessWidget {
-  final SelectedImage image;
-  final int index;
-  final int totalCount;
-  final VoidCallback onTap;
-  final VoidCallback onRemove;
-  final bool isDimmed;
-  final bool isHoverTarget;
-
-  const _ImageGridItem({
-    super.key,
-    required this.image,
-    required this.index,
-    required this.totalCount,
-    required this.onTap,
-    required this.onRemove,
-    this.isDimmed = false,
-    this.isHoverTarget = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Opacity(
-        opacity: isDimmed ? 0.5 : 1.0,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: isHoverTarget
-                ? Border.all(color: cs.primary, width: 2.5)
-                : null,
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Image(
-                  image: image.provider,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: cs.surfaceContainerHigh,
-                    child: const Icon(Icons.broken_image, color: Colors.grey),
-                  ),
-                ),
-                // Remove button
-                Positioned(
-                  top: 2,
-                  right: 2,
-                  child: GestureDetector(
-                    onTap: onRemove,
-                    child: Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.close,
-                          color: Colors.white, size: 16),
-                    ),
-                  ),
-                ),
-                // Image index badge
-                if (totalCount > 1)
-                  Positioned(
-                    bottom: 4,
-                    left: 4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '${index + 1}',
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 11),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// SelectedImage Model
-// ============================================================================
-
-/// Represents a single selected image for OCR processing.
-class SelectedImage {
-  final Uint8List bytes;
-  final ImageProvider provider;
-  final String format;
-
-  SelectedImage({
-    required this.bytes,
-    required this.provider,
-    this.format = 'jpeg',
-  });
 }

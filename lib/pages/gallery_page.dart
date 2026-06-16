@@ -18,6 +18,7 @@ import '../widgets/camera_choice_dialog.dart';
 import '../widgets/file_manager_view.dart';
 import '../widgets/image_preview_dialog.dart';
 import 'camera_page.dart';
+import 'gallery_shared.dart';
 import 'image_editor_page.dart';
 
 class GalleryPage extends ConsumerStatefulWidget {
@@ -93,8 +94,6 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     return clean;
   }
 
-  String _pad(int n) => n.toString().padLeft(2, '0');
-
   // ====================================================================
   // Helpers
   // ====================================================================
@@ -114,30 +113,6 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       i++;
     }
     return '$baseName ($i)';
-  }
-
-  /// Fallback widget shown in the grid for unsupported image formats.
-  Widget _buildFormatIcon(String format) {
-    return Container(
-      color: Colors.grey[200],
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.insert_drive_file, size: 24, color: Colors.grey),
-            const SizedBox(height: 4),
-            Text(
-              format.toUpperCase(),
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[500],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   // ====================================================================
@@ -331,7 +306,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           await ImageManifest.writeFile(thumbFileName, thumbnailBytes);
           final now = DateTime.now();
           final timestamp =
-              '${now.year}${_pad(now.month)}${_pad(now.day)}_${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}';
+              '${now.year}${padInt(now.month)}${padInt(now.day)}_${padInt(now.hour)}${padInt(now.minute)}${padInt(now.second)}';
           await ImageManifest.addRecord(ImageRecord(
             name: '照片_$timestamp',
             hash: hash,
@@ -771,19 +746,19 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           builder: (context, snapshot) {
             final data = snapshot.data;
             if (data == null || data.isEmpty) {
-              return _buildFormatIcon(file.format);
+              return buildFormatIcon(file.format);
             }
             return Image.memory(
               data,
               fit: BoxFit.cover,
               width: double.infinity,
               height: double.infinity,
-              errorBuilder: (_, __, ___) => _buildFormatIcon(file.format),
+              errorBuilder: (_, __, ___) => buildFormatIcon(file.format),
             );
           },
         );
       }
-      return _buildFormatIcon(file.format);
+      return buildFormatIcon(file.format);
     }
 
     // FileManagerConfig
