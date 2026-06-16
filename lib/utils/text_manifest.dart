@@ -163,7 +163,8 @@ class TextManifest {
   /// 读取文本内容从文件
   static Future<String?> readText(String fileName) async {
     final bytes = await readFile(fileName);
-    if (bytes == null || bytes.isEmpty) return null;
+    if (bytes == null) return null;
+    if (bytes.isEmpty) return '';
     return utf8.decode(bytes);
   }
 

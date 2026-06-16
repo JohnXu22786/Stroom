@@ -42,11 +42,11 @@ void main() {
       expect(find.text('文本'), findsWidgets);
     });
 
-    testWidgets('text tab is placed before images tab', (tester) async {
+    testWidgets('text tab is placed before audio tab (new order)', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // The tabs should be ordered: 文本, 图片, 视频, 音频
+      // The tabs should be ordered: 文本, 音频, 图片, 视频
       // Check by finding the TabBar and inspecting its children
       final tabBar = find.byType(TabBar);
       final tabBarWidget = tester.widget<TabBar>(tabBar);
@@ -57,9 +57,17 @@ void main() {
       final firstTab = tabBarWidget.tabs[0] as Tab;
       expect(firstTab.text, equals('文本'));
 
-      // The second tab should be '图片'
+      // The second tab should be '音频'
       final secondTab = tabBarWidget.tabs[1] as Tab;
-      expect(secondTab.text, equals('图片'));
+      expect(secondTab.text, equals('音频'));
+
+      // The third tab should be '图片'
+      final thirdTab = tabBarWidget.tabs[2] as Tab;
+      expect(thirdTab.text, equals('图片'));
+
+      // The fourth tab should be '视频'
+      final fourthTab = tabBarWidget.tabs[3] as Tab;
+      expect(fourthTab.text, equals('视频'));
     });
 
     testWidgets('files page has fileTabOrderProvider with 4 items',

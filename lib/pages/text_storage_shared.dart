@@ -18,6 +18,7 @@ class TextCreatePageState extends State<TextCreatePage> {
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
   bool _isSaving = false;
+  String _selectedFormat = 'txt';
 
   @override
   void dispose() {
@@ -37,13 +38,6 @@ class TextCreatePageState extends State<TextCreatePage> {
       return;
     }
 
-    if (content.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请输入文本内容')),
-      );
-      return;
-    }
-
     setState(() => _isSaving = true);
 
     try {
@@ -55,7 +49,7 @@ class TextCreatePageState extends State<TextCreatePage> {
       await TextManifest.addRecord(TextRecord(
         name: title,
         hash: hash,
-        format: 'txt',
+        format: _selectedFormat,
         createdAt: DateTime.now(),
         size: bytes.length,
         folder: widget.initialFolder,
@@ -63,6 +57,7 @@ class TextCreatePageState extends State<TextCreatePage> {
       ));
 
       if (mounted) {
+        setState(() => _isSaving = false);
         Navigator.pop(context, 'saved');
       }
     } catch (e) {
@@ -100,13 +95,41 @@ class TextCreatePageState extends State<TextCreatePage> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: TextField(
-              controller: _titleController,
-              decoration: const InputDecoration(
-                labelText: '标题',
-                hintText: '输入文本标题',
-                border: OutlineInputBorder(),
-              ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _titleController,
+                    decoration: const InputDecoration(
+                      labelText: '标题',
+                      hintText: '输入文本标题',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 120,
+                  child: DropdownButtonFormField<String>(
+                    value: _selectedFormat,
+                    decoration: const InputDecoration(
+                      labelText: '格式',
+                      border: OutlineInputBorder(),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'txt', child: Text('txt')),
+                      DropdownMenuItem(value: 'md', child: Text('md')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => _selectedFormat = value);
+                      }
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
           Expanded(
