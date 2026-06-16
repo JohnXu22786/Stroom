@@ -158,7 +158,7 @@ void main() {
       provider = _RequestCaptureProvider();
     });
 
-    test('sendStream omits temperature from _lastRequestBody when not configured',
+    test('sendStream includes temperature in _lastRequestBody when not configured',
         () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
@@ -176,14 +176,14 @@ void main() {
         events.add(event);
       }
 
-      // _lastRequestBody should not contain temperature
+      // _lastRequestBody should contain temperature (effective temperature is always non-null)
       final lastBody = service.lastRequestBody;
       expect(lastBody, isNotNull);
-      expect(lastBody!.containsKey('temperature'), isFalse,
-          reason: 'temperature should be omitted from _lastRequestBody when not in typeConfig');
+      expect(lastBody!.containsKey('temperature'), isTrue,
+          reason: 'temperature should be in _lastRequestBody (effectiveTemperature always returns a value)');
     });
 
-    test('sendStream passes null temperature to provider when not configured',
+    test('sendStream passes default temperature to provider when not configured',
         () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
@@ -201,9 +201,9 @@ void main() {
         events.add(event);
       }
 
-      // Provider should receive null temperature
-      expect(provider.capturedTemperature, isNull,
-          reason: 'temperature should be null when not in typeConfig');
+      // Provider should receive default temperature (0.7) when not in typeConfig
+      expect(provider.capturedTemperature, isNotNull,
+          reason: 'temperature should be non-null (effectiveTemperature falls back to default)');
     });
 
     test('sendStream includes temperature in _lastRequestBody when configured',
@@ -249,7 +249,7 @@ void main() {
       expect(provider.capturedTemperature, closeTo(0.3, 0.001));
     });
 
-    test('sendStreamWithTools omits temperature from _lastRequestBody when not configured',
+    test('sendStreamWithTools includes temperature in _lastRequestBody when not configured',
         () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
@@ -269,11 +269,11 @@ void main() {
 
       final lastBody = service.lastRequestBody;
       expect(lastBody, isNotNull);
-      expect(lastBody!.containsKey('temperature'), isFalse,
-          reason: 'temperature should be omitted from _lastRequestBody when not in typeConfig');
+      expect(lastBody!.containsKey('temperature'), isTrue,
+          reason: 'temperature should be in _lastRequestBody (effectiveTemperature always returns a value)');
     });
 
-    test('sendStreamWithTools passes null temperature to provider when not configured',
+    test('sendStreamWithTools passes default temperature to provider when not configured',
         () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
@@ -290,8 +290,8 @@ void main() {
         events.add(event);
       }
 
-      expect(provider.capturedTemperature, isNull,
-          reason: 'temperature should be null when not in typeConfig');
+      expect(provider.capturedTemperature, isNotNull,
+          reason: 'temperature should be non-null (effectiveTemperature falls back to default)');
     });
   });
 
@@ -310,7 +310,7 @@ void main() {
       );
     });
 
-    test('sendStreamWithTools omits tools from _lastRequestBody when empty list',
+    test('sendStreamWithTools has null tools in _lastRequestBody when empty list',
         () async {
       final service = ChatService(provider: provider, modelConfig: modelConfig);
       provider.reset();
@@ -326,8 +326,10 @@ void main() {
 
       final lastBody = service.lastRequestBody;
       expect(lastBody, isNotNull);
-      expect(lastBody!.containsKey('tools'), isFalse,
-          reason: 'tools key should be omitted from _lastRequestBody when list is empty');
+      expect(lastBody!.containsKey('tools'), isTrue,
+          reason: 'tools key should be in _lastRequestBody (value may be null)');
+      expect(lastBody['tools'], isNull,
+          reason: 'tools should be null when empty list is passed');
     });
 
     test('sendStreamWithTools passes null tools to provider when empty list', () async {
@@ -423,16 +425,17 @@ void main() {
       final lastBody = service.lastRequestBody;
       expect(lastBody, isNotNull);
 
-      // Reasoning params should be part of _lastRequestBody
-      // They should appear in the body (merged from extraParams or directly)
-      expect(lastBody!.containsKey('thinking'), isTrue,
-          reason: 'reasoning params should be in _lastRequestBody');
-      expect(lastBody['thinking'], isA<Map>());
-      expect((lastBody['thinking'] as Map)['type'], equals('enabled'));
-      expect((lastBody['thinking'] as Map)['budget'], equals('high'));
+      // Reasoning params should be passed to provider via extraParams
+      expect(provider.capturedExtraParams, isNotNull,
+          reason: 'extraParams should be non-null');
+      expect(provider.capturedExtraParams!.containsKey('thinking'), isTrue,
+          reason: 'reasoning params should be in extraParams');
+      expect(provider.capturedExtraParams!['thinking'], isA<Map>());
+      expect((provider.capturedExtraParams!['thinking'] as Map)['type'], equals('enabled'));
+      expect((provider.capturedExtraParams!['thinking'] as Map)['budget'], equals('high'));
     });
 
-    test('sendStreamWithTools includes reasoning params in _lastRequestBody when reasoning enabled',
+    test('sendStreamWithTools includes reasoning params in extraParams when reasoning enabled',
         () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',
@@ -468,15 +471,14 @@ void main() {
         events.add(event);
       }
 
-      final lastBody = service.lastRequestBody;
-      expect(lastBody, isNotNull);
-
-      // Reasoning params should be part of _lastRequestBody
-      expect(lastBody!.containsKey('thinking'), isTrue,
-          reason: 'reasoning params should be in _lastRequestBody');
-      expect(lastBody['thinking'], isA<Map>());
-      expect((lastBody['thinking'] as Map)['type'], equals('enabled'));
-      expect((lastBody['thinking'] as Map)['budget'], equals('high'));
+      // Reasoning params should be passed to provider via extraParams
+      expect(provider.capturedExtraParams, isNotNull,
+          reason: 'extraParams should be non-null');
+      expect(provider.capturedExtraParams!.containsKey('thinking'), isTrue,
+          reason: 'reasoning params should be in extraParams');
+      expect(provider.capturedExtraParams!['thinking'], isA<Map>());
+      expect((provider.capturedExtraParams!['thinking'] as Map)['type'], equals('enabled'));
+      expect((provider.capturedExtraParams!['thinking'] as Map)['budget'], equals('high'));
     });
   });
 }

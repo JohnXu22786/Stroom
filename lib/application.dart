@@ -63,9 +63,8 @@ class _ApplicationState extends ConsumerState<Application> {
   /// 执行数据格式迁移。
   ///
   /// 如果存储的数据格式版本低于当前版本，弹出不可关闭的迁移对话框，
-  /// 执行备份和迁移。迁移完成后：
-  /// - 无重启需求：自动关闭对话框，返回 `true` 继续启动流程。
-  /// - 需要重启：显示确认按钮，用户点击后关闭应用。
+  /// 执行备份和迁移。迁移完成后自动关闭对话框并退出应用，
+  /// 确保所有 provider 和服务以新的数据格式重新初始化。
   ///
   /// 返回 `true` 表示迁移已处理完毕（或无迁移需求），可继续下一步；
   /// 返回 `false` 表示应用需要退出，不应继续。
@@ -81,9 +80,10 @@ class _ApplicationState extends ConsumerState<Application> {
       // 需要迁移：弹出对话框并执行迁移
       final navigatorContext = _navigatorKey.currentContext;
       if (navigatorContext == null || !navigatorContext.mounted) {
-        // 没有有效的 context，直接执行静默迁移
+        // 没有有效的 context，直接执行静默迁移后退出应用
         await DataMigrationService.checkAndMigrate();
-        return true;
+        _exitApp();
+        return false;
       }
 
       // 在对话框内执行迁移
@@ -101,7 +101,7 @@ class _ApplicationState extends ConsumerState<Application> {
         return false;
       }
 
-      // 迁移成功完成（无重启需求）或用户确认后继续
+      // 迁移出错或无退出信号时，继续启动流程
       return true;
     } catch (e) {
       debugPrint('[Application] Data migration failed: $e');
