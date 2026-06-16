@@ -15,6 +15,7 @@ import '../providers/tts_state_provider.dart';
 import '../utils/file_manifest.dart';
 import '../utils/audio_playback.dart';
 import '../utils/audio_utils.dart';
+import 'audio_player_shared.dart';
 import 'tts_create_page.dart';
 
 /// 音频播放器页面
@@ -371,11 +372,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     }
 
     // 收集所有支持流式的模型
-    final streamingModels = <_StreamModelOption>[];
+    final streamingModels = <StreamModelOption>[];
     for (final configItem in ttsEntry.configs) {
       for (final model in configItem.models) {
         if (model.supportStream) {
-          streamingModels.add(_StreamModelOption(model, configItem));
+          streamingModels.add(StreamModelOption(model, configItem));
         }
       }
     }
@@ -401,7 +402,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     );
   }
 
-  void _showStreamModelDialog(String text, List<_StreamModelOption> models) {
+  void _showStreamModelDialog(String text, List<StreamModelOption> models) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -436,7 +437,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     );
   }
 
-  void _startStreamingPlayback(String text, _StreamModelOption opt) {
+  void _startStreamingPlayback(String text, StreamModelOption opt) {
     // 使用 TTSStateNotifier 的 startStreaming 方法
     ref.read(ttsStateProvider.notifier).startStreaming(
           text,
@@ -471,11 +472,29 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
   Widget _buildBody() {
     if (_hasError) {
-      return _buildErrorView();
+      return AudioPlayerErrorView(
+        errorMessage: _errorMessage,
+        diagnosticInfo: _diagnosticInfo,
+        onRetry: () {
+          if (_tempFilePath != null) {
+            try {
+              File(_tempFilePath!).delete();
+            } catch (_) {}
+            _tempFilePath = null;
+          }
+          _disposePlayer();
+          setState(() {
+            _hasError = false;
+            _errorMessage = '';
+            _diagnosticInfo = '';
+          });
+          _initPlayer();
+        },
+      );
     }
 
     if (!_isInitialized || _textLoading) {
-      return _buildLoadingView();
+      return buildAudioLoadingView();
     }
 
     final hasSelection = _selectedText.isNotEmpty;
@@ -679,16 +698,16 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _toolbarButton(
+                    AudioPlayerToolbarButton(
                       icon: Icons.play_arrow,
                       label: '播放选中',
-                      onTap: _onPlaySelectedText,
+                      onPressed: _onPlaySelectedText,
                     ),
                     const SizedBox(width: 4),
-                    _toolbarButton(
+                    AudioPlayerToolbarButton(
                       icon: Icons.auto_awesome,
                       label: '生成选中',
-                      onTap: _onGenerateSelectedText,
+                      onPressed: _onGenerateSelectedText,
                     ),
                   ],
                 ),
@@ -704,35 +723,6 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
           child: _buildPlayerPanel(),
         ),
       ],
-    );
-  }
-
-  Widget _toolbarButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon,
-                  size: 16, color: Theme.of(context).colorScheme.primary),
-              const SizedBox(width: 4),
-              Text(label,
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.primary)),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -921,18 +911,6 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     );
   }
 
-  /// 重新生成按钮：跳转到生成录音页面，预填源文本
-  // ignore: unused_element
-  void _onRegenerate() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => TTSCreatePage(
-            initialText: _sourceText.isNotEmpty ? _sourceText : null),
-      ),
-    );
-  }
-
   /// 倍速调节弹窗（数字在上，滑块在下）
   void _showSpeedPopup() {
     double temp = _playbackSpeed;
@@ -980,86 +958,6 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     );
   }
 
-  Widget _buildLoadingView() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('正在加载音频...'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorView() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(
-            Icons.error_outline,
-            size: 64,
-            color: Colors.red,
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            '播放失败',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.red,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Text(
-              _errorMessage,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.grey),
-            ),
-          ),
-          if (_diagnosticInfo.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: SelectableText(
-                _diagnosticInfo,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.grey[500],
-                  fontFamily: 'monospace',
-                ),
-              ),
-            ),
-          ],
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: () {
-              if (_tempFilePath != null) {
-                try {
-                  File(_tempFilePath!).delete();
-                } catch (_) {}
-                _tempFilePath = null;
-              }
-              _disposePlayer();
-              setState(() {
-                _hasError = false;
-                _errorMessage = '';
-                _diagnosticInfo = '';
-              });
-              _initPlayer();
-            },
-            child: const Text('重试'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   void dispose() {
     if (_tempFilePath != null) {
@@ -1071,12 +969,4 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     _textController.dispose();
     super.dispose();
   }
-}
-
-/// 流式模型选项（内部辅助类）
-class _StreamModelOption {
-  final ModelConfig model;
-  final ProviderConfigItem configItem;
-
-  const _StreamModelOption(this.model, this.configItem);
 }
