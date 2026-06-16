@@ -6,6 +6,7 @@ import 'package:stroom/pages/settings_page.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/theme_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
+import 'package:stroom/providers/notification_provider.dart';
 
 /// Builds the test app with all required provider overrides.
 /// Uses a large screen size to avoid needing to scroll.
@@ -21,6 +22,7 @@ Widget _buildTestApp() {
         },
       ),
       updateProvider.overrideWith((ref) => UpdateNotifier()),
+      notificationSettingsProvider.overrideWith((ref) => NotificationSettingsNotifier()),
     ],
     child: const MaterialApp(
       home: SettingsPage(),
@@ -64,7 +66,7 @@ void main() {
       expect(find.text('相机设置'), findsNothing);
     });
 
-    testWidgets('does NOT show any Switch (from removed save-to-album)', (tester) async {
+    testWidgets('does NOT show camera-related Switch, but shows notification Switch', (tester) async {
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -77,8 +79,10 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // There should be no Switch widget (the only one was save to gallery)
-      expect(find.byType(Switch), findsNothing);
+      // Notification Switch should now be present (not camera-related)
+      expect(find.byType(Switch), findsOneWidget);
+      // Camera section should still not be present
+      expect(find.text('相机设置'), findsNothing);
     });
 
     testWidgets('settings page renders without error and shows all remaining sections', (tester) async {
