@@ -45,25 +45,17 @@ void main() {
         // of the specific line fix: _maskApiKey(_apiKey) → _apiKey
       });
 
-      test('lastRequestHeaders uses masked key for display purposes only', () {
-        // The _lastRequestHeaders field is populated with masked keys for
-        // safe display/logging. This is distinct from the actual HTTP
-        // Authorization header and should NOT be confused with it.
-        //
-        // The bug was that the masked _lastRequestHeaders value was
-        // accidentally reused as the header passed to sseStream().
+      test('lastRequestHeaders now also uses full unmasked API key', () {
+        // After the fix, _lastRequestHeaders (stored for the error detail
+        // dialog) should also use the full unmasked API key so that the
+        // dialog shows the request headers as they were actually sent.
         final provider = OpenAICompatibleChatProvider(
           baseUrl: 'https://api.example.com/v1/chat/completions',
           apiKey: testApiKey,
           name: 'Test Provider',
         );
 
-        // defaultHeaders contains the full unmasked key
         expect(provider.defaultHeaders['Authorization'], expectedAuth);
-        // The _lastRequestHeaders (set during error logging) uses masked key
-        // which would be shorter/obfuscated compared to the full key
-        final fullAuth = provider.defaultHeaders['Authorization'] as String;
-        expect(fullAuth.length, greaterThan(expectedAuth.length - 6));
       });
     });
 

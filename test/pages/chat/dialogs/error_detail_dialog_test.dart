@@ -224,6 +224,140 @@ void main() {
       expect(find.textContaining('Content-Type'), findsOneWidget);
     });
 
+    testWidgets('Response Body shows when data is a Map', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showErrorDetailDialog(
+                context: context,
+                rawRequest: {'url': 'https://api.example.com/chat'},
+                rawResponse: {
+                  'statusCode': 400,
+                  'headers': {'content-type': ['application/json']},
+                  'data': {'error': {'message': 'Bad Request'}},
+                },
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Response Body'), findsOneWidget);
+
+      // Tap Response Body to see detail
+      await tester.tap(find.text('Response Body'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Bad Request'), findsOneWidget);
+    });
+
+    testWidgets('Response Body shows when data has raw key (string body)',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showErrorDetailDialog(
+                context: context,
+                rawRequest: {'url': 'https://api.example.com/chat'},
+                rawResponse: {
+                  'statusCode': 400,
+                  'headers': {'content-type': ['application/json']},
+                  'data': {'raw': '{"error":"bad request"}'},
+                },
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Response Body'), findsOneWidget);
+
+      // Tap Response Body to see detail
+      await tester.tap(find.text('Response Body'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('bad request'), findsOneWidget);
+    });
+
+    testWidgets('Response Body hidden when data key is absent',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showErrorDetailDialog(
+                context: context,
+                rawRequest: {'url': 'https://api.example.com/chat'},
+                rawResponse: {
+                  'statusCode': 400,
+                  'headers': {'content-type': ['application/json']},
+                  // no 'data' key
+                },
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Response Body'), findsNothing);
+      expect(find.text('Response Headers'), findsOneWidget);
+      expect(find.text('Status Code'), findsOneWidget);
+    });
+
+    testWidgets('Response Headers shows all header keys as-is',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showErrorDetailDialog(
+                context: context,
+                rawRequest: {'url': 'https://api.example.com/chat'},
+                rawResponse: {
+                  'statusCode': 200,
+                  'headers': {
+                    'content-type': ['application/json'],
+                    'x-request-id': ['req-001'],
+                    'x-ratelimit-remaining': ['99'],
+                  },
+                  'data': {'ok': true},
+                },
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Response Headers'));
+      await tester.pumpAndSettle();
+
+      // All header keys should be visible
+      expect(find.textContaining('content-type'), findsOneWidget);
+      expect(find.textContaining('x-request-id'), findsOneWidget);
+      expect(find.textContaining('x-ratelimit-remaining'), findsOneWidget);
+      // Header values should be visible
+      expect(find.textContaining('application/json'), findsOneWidget);
+      expect(find.textContaining('req-001'), findsOneWidget);
+    });
+
     testWidgets('network error shows Error item instead of response sections',
         (tester) async {
       await tester.pumpWidget(
