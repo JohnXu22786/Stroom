@@ -801,7 +801,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('继续编辑'),
+                child: const Text('取消'),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),

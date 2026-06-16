@@ -38,6 +38,7 @@ void main() {
         'options': ['low', 'medium', 'high'],
         'enabled': false,
         'isReasoningToggle': false,
+        'type': 'string',
       });
     });
 
@@ -93,6 +94,7 @@ void main() {
         'options': ['low', 'medium', 'high'],
         'enabled': false,
         'isReasoningToggle': false,
+        'type': 'string',
       });
     });
 

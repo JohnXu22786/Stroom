@@ -112,7 +112,7 @@ void main() {
   });
 
   group('Reasoning params editing with options', () {
-    testWidgets('reasoning params section shows option editing UI',
+    testWidgets('reasoning params section shows no toggle by default (must add manually)',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -123,21 +123,20 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // The page should show the 推理开关 card (reasoning toggle) visible without scrolling
+      // No default toggle - should show "暂无推理开关" instead
+      expect(find.text('暂无推理开关'), findsOneWidget);
+      expect(find.text('添加推理开关'), findsOneWidget);
+
+      // Add a reasoning toggle
+      await tester.tap(find.text('添加推理开关'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Now the toggle card should be visible
       expect(find.text('推理开关'), findsOneWidget);
       expect(find.text('参数名'), findsOneWidget);
       expect(find.text('开启时值'), findsOneWidget);
       expect(find.text('关闭时值'), findsOneWidget);
-
-      // Scroll down to find the "添加推理参数" button
-      await tester.scrollUntilVisible(
-        find.text('添加推理参数'),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-
-      // "添加推理参数" button should now exist
-      expect(find.text('添加推理参数'), findsOneWidget);
     });
 
     testWidgets('can add reasoning param with options',
@@ -213,6 +212,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
+      // Add a toggle first
+      await tester.tap(find.text('添加推理开关'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
       // Fill required fields
       final textFields = find.byType(TextField);
       await tester.enterText(textFields.at(1), 'test-model');
@@ -268,6 +272,11 @@ void main() {
 
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
+
+      // Add a toggle first
+      await tester.tap(find.text('添加推理开关'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
 
       // Fill required fields
       var textFields = find.byType(TextField);
