@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
 import 'file_record.dart';
-import 'manifest_operations.dart';
+import '../services/manifest_operations.dart';
 import 'folder_path_utils.dart';
 
 // ====================================================================

@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'manifest_database.dart';
 import '../utils/app_version.dart';
 import '../utils/web_file_store.dart';
+import 'backup_service_shared.dart';
 import 'storage_service.dart';
 
 // ====================================================================
@@ -66,7 +67,7 @@ class BackupService {
       'createdAt': DateTime.now().toIso8601String(),
       'appVersion': appVersion,
     };
-    _addStringToArchive(archive, 'manifest.json', jsonEncode(manifest));
+    addStringToArchive(archive, 'manifest.json', jsonEncode(manifest));
     onProgress?.call(0.05);
 
     // 2. 数据库（按存储格式：根目录 stroom_manifest.json）
@@ -82,7 +83,7 @@ class BackupService {
       'text_records': textRecords,
       'folders': folders,
     };
-    _addStringToArchive(
+    addStringToArchive(
         archive, 'stroom_manifest.json', jsonEncode(dbData));
     onProgress?.call(0.15);
 
@@ -93,20 +94,20 @@ class BackupService {
       if (key.startsWith('flutter.')) continue;
       prefData[key] = prefs.get(key);
     }
-    _addStringToArchive(archive, 'preferences.json', jsonEncode(prefData));
+    addStringToArchive(archive, 'preferences.json', jsonEncode(prefData));
     onProgress?.call(0.25);
 
     // 4. 任务文件（按存储格式：synthesis/tasks.json, catcatch/tasks.json）
     // 在测试模式下跳过文件系统操作以避免平台通道挂起
     if (!kIsWeb && !WebFileStore.isTestMode) {
       final appDir = await AppStorage.directory;
-      await _addTaskFileToArchive(archive, 'synthesis/tasks.json',
+      await addTaskFileToArchive(archive, 'synthesis/tasks.json',
           p.join(appDir, 'synthesis', 'tasks.json'));
-      await _addTaskFileToArchive(archive, 'catcatch/tasks.json',
+      await addTaskFileToArchive(archive, 'catcatch/tasks.json',
           p.join(appDir, 'catcatch', 'tasks.json'));
     } else {
-      _addStringToArchive(archive, 'synthesis/tasks.json', '[]');
-      _addStringToArchive(archive, 'catcatch/tasks.json', '[]');
+      addStringToArchive(archive, 'synthesis/tasks.json', '[]');
+      addStringToArchive(archive, 'catcatch/tasks.json', '[]');
     }
     onProgress?.call(0.35);
 
@@ -115,9 +116,9 @@ class BackupService {
       final hash = record['hash'] as String?;
       final format = record['format'] as String? ?? 'jpg';
       if (hash == null) continue;
-      await _addFileToArchive(
+      await addFileToArchive(
           archive, 'pictures/$hash.$format', 'pictures', '$hash.$format');
-      await _addFileToArchive(archive, 'pictures/${hash}_thumb.png',
+      await addFileToArchive(archive, 'pictures/${hash}_thumb.png',
           'pictures', '${hash}_thumb.png');
     }
     onProgress?.call(0.5);
@@ -126,9 +127,9 @@ class BackupService {
       final hash = record['hash'] as String?;
       final format = record['format'] as String? ?? 'wav';
       if (hash == null) continue;
-      await _addFileToArchive(archive, 'tts_audio/$hash.$format',
+      await addFileToArchive(archive, 'tts_audio/$hash.$format',
           'tts_audio', '$hash.$format');
-      await _addFileToArchive(
+      await addFileToArchive(
           archive, 'tts_audio/$hash.txt', 'tts_audio', '$hash.txt');
     }
     onProgress?.call(0.65);
@@ -137,7 +138,7 @@ class BackupService {
       final hash = record['hash'] as String?;
       final format = record['format'] as String? ?? 'mp4';
       if (hash == null) continue;
-      await _addFileToArchive(archive, 'videos/$hash.$format', 'videos',
+      await addFileToArchive(archive, 'videos/$hash.$format', 'videos',
           '$hash.$format');
     }
     onProgress?.call(0.75);
@@ -145,18 +146,18 @@ class BackupService {
     for (final record in textRecords) {
       final hash = record['hash'] as String?;
       if (hash == null) continue;
-      await _addFileToArchive(
+      await addFileToArchive(
           archive, 'texts/$hash.txt', 'texts', '$hash.txt');
     }
     onProgress?.call(0.8);
 
-    final attachmentPaths = await _collectAttachmentPaths();
+    final attachmentPaths = await collectAttachmentPaths();
     for (final storagePath in attachmentPaths) {
       final parts = storagePath.split('/');
       if (parts.length < 2) continue;
       final subDir = parts[0];
       final fileName = parts.sublist(1).join('/');
-      await _addFileToArchive(
+      await addFileToArchive(
           archive, storagePath, subDir, fileName);
     }
     onProgress?.call(0.85);
@@ -262,89 +263,15 @@ class BackupService {
 
       if (matchedDir == 'synthesis' || matchedDir == 'catcatch') {
         if (relativePath == 'tasks.json') {
-          await _writeFile(matchedDir, 'tasks.json', entry.value);
+          await writeBackupFile(matchedDir, 'tasks.json', entry.value);
         }
         continue;
       }
 
       // 普通二进制文件
-      await _writeFile(matchedDir, relativePath, entry.value);
+      await writeBackupFile(matchedDir, relativePath, entry.value);
     }
     onProgress?.call(1.0);
-  }
-
-  // ================================================================
-  // 归档构建辅助
-  // ================================================================
-
-  static void _addStringToArchive(
-      Archive archive, String name, String content) {
-    final bytes = utf8.encode(content);
-    archive.addFile(ArchiveFile(name, bytes.length, bytes));
-  }
-
-  static Future<void> _addTaskFileToArchive(
-      Archive archive, String archiveName, String sourcePath) async {
-    // In test mode, skip file I/O - just store empty placeholder.
-    if (WebFileStore.isTestMode) {
-      _addStringToArchive(archive, archiveName, '[]');
-      return;
-    }
-    try {
-      final file = File(sourcePath);
-      if (await file.exists()) {
-        final data = await file.readAsBytes();
-        archive.addFile(ArchiveFile(archiveName, data.length, data));
-      } else {
-        _addStringToArchive(archive, archiveName, '[]');
-      }
-    } catch (e) {
-      debugPrint('添加任务文件 $archiveName 失败: $e');
-      _addStringToArchive(archive, archiveName, '[]');
-    }
-  }
-
-  static Future<void> _addFileToArchive(
-      Archive archive, String archiveName, String subDir, String fileName) async {
-    try {
-      final data = await _readFile(subDir, fileName);
-      if (data != null) {
-        archive.addFile(ArchiveFile(archiveName, data.length, data));
-      }
-    } catch (e) {
-      debugPrint('添加文件 $archiveName 失败: $e');
-    }
-  }
-
-  // ================================================================
-  // 存储 I/O（双平台）
-  // ================================================================
-
-  /// 读取一个 app 存储文件。
-  static Future<Uint8List?> _readFile(String subDir, String fileName) async {
-    if (kIsWeb || WebFileStore.isTestMode) {
-      return WebFileStore.read('$subDir/$fileName');
-    } else {
-      final appDir = await AppStorage.directory;
-      final file = File(p.join(appDir, subDir, fileName));
-      if (await file.exists()) {
-        return await file.readAsBytes();
-      }
-      return null;
-    }
-  }
-
-  /// 写入一个 app 存储文件。
-  static Future<void> _writeFile(
-      String subDir, String fileName, Uint8List data) async {
-    if (kIsWeb || WebFileStore.isTestMode) {
-      await WebFileStore.write('$subDir/$fileName', data);
-    } else {
-      final appDir = await AppStorage.directory;
-      final dir = Directory(p.join(appDir, subDir));
-      await dir.create(recursive: true);
-      await File(p.join(dir.path, fileName)).writeAsBytes(data);
-    }
   }
 
   // ================================================================
@@ -416,46 +343,6 @@ class BackupService {
         debugPrint('恢复偏好设置 ${entry.key} 失败: $e');
       }
     }
-  }
-
-  // ================================================================
-  // 附件路径收集
-  // ================================================================
-
-  /// 从 SharedPreferences 收集所有附件的 storagePath + thumbnailPath。
-  static Future<Set<String>> _collectAttachmentPaths() async {
-    final paths = <String>{};
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final json = prefs.getString('conversations');
-      if (json == null) return paths;
-
-      final conversations = jsonDecode(json) as List<dynamic>;
-      for (final conv in conversations) {
-        final messages = (conv as Map<String, dynamic>)['messages']
-                as List<dynamic>? ??
-            [];
-        for (final msg in messages) {
-          final attachments = (msg as Map<String, dynamic>)['attachments']
-                  as List<dynamic>? ??
-              [];
-          for (final att in attachments) {
-            final attMap = att as Map<String, dynamic>;
-            final storagePath = attMap['storagePath'] as String?;
-            if (storagePath != null && storagePath.isNotEmpty) {
-              paths.add(storagePath);
-            }
-            final thumbnailPath = attMap['thumbnailPath'] as String?;
-            if (thumbnailPath != null && thumbnailPath.isNotEmpty) {
-              paths.add(thumbnailPath);
-            }
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('收集附件路径失败: $e');
-    }
-    return paths;
   }
 
   // ================================================================

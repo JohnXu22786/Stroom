@@ -7,6 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/file_manifest.dart';
 import 'provider_config.dart';
 import 'tts_provider.dart' as tts_provider_base;
+import 'tts_state_shared.dart';
+export 'tts_state_shared.dart';
 import '../utils/audio_trim.dart';
 import '../utils/audio_utils.dart';
 
@@ -21,53 +23,6 @@ final ttsProviderProvider = Provider<tts_provider_base.BaseTTSProvider?>((ref) {
   if (config.host.isEmpty || config.key.isEmpty) return null;
   return tts_provider_base.createProviderFromConfig(config);
 });
-
-/// 合成配置状态
-class SynthesisConfig {
-  final String voice;
-  final double speed;
-  final double volume;
-  final String format;
-
-  const SynthesisConfig({
-    this.voice = 'female',
-    this.speed = 1.0,
-    this.volume = 1.0,
-    this.format = 'wav',
-  });
-
-  SynthesisConfig copyWith({
-    String? voice,
-    double? speed,
-    double? volume,
-    String? format,
-  }) {
-    return SynthesisConfig(
-      voice: voice ?? this.voice,
-      speed: speed ?? this.speed,
-      volume: volume ?? this.volume,
-      format: format ?? this.format,
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'voice': voice,
-      'speed': speed,
-      'volume': volume,
-      'format': format,
-    };
-  }
-
-  factory SynthesisConfig.fromMap(Map<String, dynamic> map) {
-    return SynthesisConfig(
-      voice: map['voice'] ?? 'female',
-      speed: (map['speed'] ?? 1.0).toDouble(),
-      volume: (map['volume'] ?? 1.0).toDouble(),
-      format: map['format'] ?? 'wav',
-    );
-  }
-}
 
 /// 合成配置提供器（支持持久化）
 final synthesisConfigProvider =
@@ -351,43 +306,6 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
       await FileManifest.addFolder(targetFolder);
     }
     await loadRecords();
-  }
-}
-
-/// TTS 合成状态
-class TTSState {
-  final bool isSynthesizing;
-  final bool isStreaming;
-  final double progress;
-  final String? currentText;
-  final String? error;
-  final AudioRecord? lastGeneratedAudio;
-
-  const TTSState({
-    this.isSynthesizing = false,
-    this.isStreaming = false,
-    this.progress = 0,
-    this.currentText,
-    this.error,
-    this.lastGeneratedAudio,
-  });
-
-  TTSState copyWith({
-    bool? isSynthesizing,
-    bool? isStreaming,
-    double? progress,
-    String? currentText,
-    String? error,
-    AudioRecord? lastGeneratedAudio,
-  }) {
-    return TTSState(
-      isSynthesizing: isSynthesizing ?? this.isSynthesizing,
-      isStreaming: isStreaming ?? this.isStreaming,
-      progress: progress ?? this.progress,
-      currentText: currentText ?? this.currentText,
-      error: error ?? this.error,
-      lastGeneratedAudio: lastGeneratedAudio ?? this.lastGeneratedAudio,
-    );
   }
 }
 

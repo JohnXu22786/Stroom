@@ -7,7 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
 import 'web_file_store.dart';
 import 'file_record.dart';
-import 'manifest_operations.dart';
+import '../services/manifest_operations.dart';
 import 'folder_path_utils.dart';
 
 // ====================================================================
