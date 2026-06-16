@@ -92,10 +92,11 @@ class DataMigrationService {
       '[DataMigrationService] Migrated data format from v$storedVersion to v$currentFormatVersion',
     );
 
-    // 当前版本 (1) 的迁移不需要重启
+    // 迁移完成后总是需要重启应用，确保所有 provider 和服务
+    // 以新的数据格式重新初始化，避免因旧状态导致闪退。
     return const MigrationResult(
       needsMigration: true,
-      restartRequired: false,
+      restartRequired: true,
     );
   }
 
@@ -212,14 +213,11 @@ class DataMigrationService {
   /// 执行从指定版本的迁移。
   ///
   /// 每个 case 对应一个版本的迁移逻辑。
-  /// v0 → v1: 首次引入数据格式版本跟踪，无需实际数据变更。
+  /// v0 → v1: 首次引入数据格式版本，执行实际的 SharedPreferences 数据迁移。
   static Future<void> _migrateFrom(int version) async {
     switch (version) {
       case 0:
-        // v0 → v1: 首次引入数据格式版本，无需数据变更。
-        // 这是一个标记性迁移，所有现有数据在旧版本中已兼容。
-        debugPrint('[DataMigrationService] Migrating from v0 to v1: '
-            'initial format versioning (no data changes needed)');
+        await _migrateV0ToV1();
         break;
       // 未来版本：
       // case 1:
@@ -232,9 +230,175 @@ class DataMigrationService {
     }
   }
 
-  // 未来版本迁移示例：
-  // static Future<void> _migrateV1ToV2() async {
-  //   debugPrint('[DataMigrationService] Executing v1 → v2 migration...');
-  //   // ... 实际的迁移逻辑
-  // }
+  /// v0 → v1: 实际的 SharedPreferences 数据格式迁移。
+  ///
+  /// 将旧版数据格式统一迁移到新版格式，确保所有 provider 在迁移完成
+  /// 后的首次初始化时读取到的数据已是正确格式，避免因格式不兼容
+  /// 导致的重复闪退（keeps stopping）问题。
+  static Future<void> _migrateV0ToV1() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      debugPrint('[DataMigrationService] v0→v1: Starting data format migration');
+
+      // --- 第1步：迁移旧版 chat_configs → provider_entries ---
+      await _migrateOldChatConfigs(prefs);
+
+      // --- 第2步：修复 provider_entries 中的空 ID 字段 ---
+      await _fixNullIdsInProviderEntries(prefs);
+
+      // --- 第3步：移除旧 key，防止重复迁移 ---
+      // chat_configs 已由 _migrateOldChatConfigs 清理
+      // 清理其他可能残留的旧迁移标记
+      await prefs.remove('migrated_old_conversations');
+      await prefs.remove('data_format_version_migrated');
+
+      debugPrint('[DataMigrationService] v0→v1: Migration completed successfully');
+    } catch (e) {
+      // 迁移失败不阻塞启动，记录日志后继续
+      debugPrint('[DataMigrationService] v0→v1 migration failed: $e');
+    }
+  }
+
+  /// 迁移旧版 chat_configs（被重构删除的格式）到 provider_entries。
+  static Future<void> _migrateOldChatConfigs(SharedPreferences prefs) async {
+    final oldJson = prefs.getString('chat_configs');
+    if (oldJson == null || oldJson.isEmpty) return;
+
+    try {
+      final oldList = (jsonDecode(oldJson) as List?)?.cast<Map<String, dynamic>>();
+      if (oldList == null || oldList.isEmpty) return;
+
+      final migratedConfigs = <Map<String, dynamic>>[];
+      for (final oldItem in oldList) {
+        final oldModels = (oldItem['models'] as List?)
+                ?.cast<Map<String, dynamic>>() ??
+            [];
+
+        final models = oldModels.map((m) {
+          final typeConfig = <String, dynamic>{};
+          final maxTokens = m['maxTokens'] ?? m['context'];
+          if (maxTokens != null) typeConfig['context'] = maxTokens;
+          final temperature = m['temperature'];
+          if (temperature != null) typeConfig['temperature'] = temperature;
+
+          return <String, dynamic>{
+            'name': m['modelId'] as String? ?? '',
+            'modelId': m['modelId'] as String? ?? '',
+            'supportStream': m['supportStream'] as bool? ?? true,
+            'typeConfig': typeConfig,
+          };
+        }).toList();
+
+        migratedConfigs.add(<String, dynamic>{
+          'providerName': oldItem['providerName'] as String? ?? '',
+          'host': oldItem['host'] as String? ?? '',
+          'key': oldItem['key'] as String? ?? '',
+          'models': models,
+        });
+      }
+
+      if (migratedConfigs.isEmpty) return;
+
+      // 读取或初始化当前 provider_entries
+      String? existingJson;
+      try {
+        existingJson = prefs.getString('provider_entries');
+      } catch (_) {}
+
+      List<Map<String, dynamic>> existingEntries = [];
+      if (existingJson != null && existingJson.isNotEmpty) {
+        try {
+          existingEntries =
+              (jsonDecode(existingJson) as List).cast<Map<String, dynamic>>();
+        } catch (_) {
+          // 现有数据损坏，忽略并用空列表重新开始
+        }
+      }
+
+      // 如果已有 llm 类型条目则不覆盖
+      final hasLlmEntry =
+          existingEntries.any((e) => e['type'] == 'llm' && e['id'] != 'builtin_llm');
+      if (!hasLlmEntry) {
+        existingEntries.add({
+          'id': 'migrated_llm',
+          'type': 'llm',
+          'name': 'LLM供应商',
+          'configs': migratedConfigs,
+        });
+
+        await prefs.setString('provider_entries', jsonEncode(existingEntries));
+        debugPrint(
+            '[DataMigrationService] Migrated ${oldList.length} old chat config(s) to provider_entries');
+      }
+
+      // 删除旧数据，防止 provider 级别重复迁移
+      await prefs.remove('chat_configs');
+      await prefs.remove('chat_selected_config_id');
+    } catch (e) {
+      debugPrint('[DataMigrationService] Failed to migrate old chat configs: $e');
+    }
+  }
+
+  /// 修复 provider_entries 中所有条目的 id 字段不为空。
+  ///
+  /// 旧版数据中某些条目的 id 可能为 null，导致 ProviderEntry.fromMap()
+  /// 在 `map['id'] as String` 处抛出 TypeError，进而引发闪退。
+  static Future<void> _fixNullIdsInProviderEntries(SharedPreferences prefs) async {
+    final json = prefs.getString('provider_entries');
+    if (json == null || json.isEmpty) return;
+
+    try {
+      final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
+      bool changed = false;
+
+      for (int i = 0; i < list.length; i++) {
+        final entry = list[i];
+        if (entry['id'] == null || (entry['id'] as String?)?.isEmpty == true) {
+          // 为 null id 的条目生成一个唯一 ID
+          final type = entry['type'] as String? ?? 'unknown';
+          entry['id'] = 'migrated_${type}_$i';
+          changed = true;
+          debugPrint(
+              '[DataMigrationService] Fixed null id for provider entry at index $i (type: $type)');
+        }
+
+        // 修复自定义参数中缺少 type 字段的旧格式
+        final configs = entry['configs'] as List?;
+        if (configs != null) {
+          for (final config in configs) {
+            final configMap = config as Map<String, dynamic>;
+            final models = configMap['models'] as List?;
+            if (models == null) continue;
+            for (final model in models) {
+              final modelMap = model as Map<String, dynamic>;
+              final customParams = modelMap['customParams'] as List?;
+              if (customParams == null) continue;
+              for (final param in customParams) {
+                final paramMap = param as Map<String, dynamic>;
+                if (paramMap['type'] == null) {
+                  paramMap['type'] = 'string';
+                  changed = true;
+                }
+              }
+            }
+          }
+        }
+
+        // 确保每条记录都有 type 字段（旧版可能缺失）
+        if (entry['type'] == null || (entry['type'] as String?)?.isEmpty == true) {
+          entry['type'] = 'tts';
+          changed = true;
+          debugPrint(
+              '[DataMigrationService] Fixed null type for provider entry at index $i');
+        }
+      }
+
+      if (changed) {
+        await prefs.setString('provider_entries', jsonEncode(list));
+        debugPrint('[DataMigrationService] Fixed null IDs/types in provider_entries');
+      }
+    } catch (e) {
+      debugPrint('[DataMigrationService] Failed to fix provider entries: $e');
+    }
+  }
 }
