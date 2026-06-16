@@ -370,4 +370,36 @@ void main() {
       expect(codeUnitsDecoded, equals(ascii));
     });
   });
+
+  // ====== Empty file handling ======
+
+  group('TextManifest empty file handling', () {
+    test('readText returns empty string for empty bytes instead of null', () async {
+      // Create a test file with empty content
+      const emptyContent = '';
+      final bytes = Uint8List.fromList(utf8.encode(emptyContent));
+      final hash = computeTextHash(bytes);
+      final storageFileName = '$hash.txt';
+
+      // Write empty content
+      await TextManifest.writeText(storageFileName, emptyContent);
+
+      // Read back - should return '' not null
+      final result = await TextManifest.readText(storageFileName);
+      expect(result, isNotNull,
+          reason: 'Empty content should return "" not null');
+      expect(result, equals(''),
+          reason: 'readText should return empty string for empty file');
+    });
+
+    test('computeTextHash for empty content is deterministic', () {
+      final emptyBytes = Uint8List.fromList(utf8.encode(''));
+      final hash1 = computeTextHash(emptyBytes);
+      final hash2 = computeTextHash(Uint8List.fromList(utf8.encode('')));
+      expect(hash1, equals(hash2),
+          reason: 'Hash for empty content must be deterministic');
+      expect(hash1, isNotEmpty,
+          reason: 'Hash for empty content must still produce a valid hash');
+    });
+  });
 }
