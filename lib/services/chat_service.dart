@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 
 import '../models/assistant.dart' show AssistantSettings, CustomParameter;
 import '../models/ai_stream_event.dart';
@@ -138,6 +138,7 @@ class ChatService {
         if (_isCancelledByUser) return;
         final apiMessages = await _prepareApiMessages(history);
         _lastRequestBody = {
+          ...extraParams,
           'messages': apiMessages,
           'model': _modelConfig?.modelId,
           'max_tokens': _effectiveMaxTokens,
@@ -233,6 +234,7 @@ class ChatService {
         if (_isCancelledByUser) return;
         var messages = await _prepareApiMessages(history);
         _lastRequestBody = {
+          ...extraParams,
           'messages': messages,
           'model': _modelConfig?.modelId,
           'max_tokens': _effectiveMaxTokens,
@@ -631,6 +633,7 @@ class ChatService {
       result[cp.paramName] = switch (cp.type) {
         'number' => double.tryParse(cp.defaultValue) ?? 0.0,
         'boolean' => cp.defaultValue.toLowerCase() == 'true',
+        'json' => parseJsonValue(cp.defaultValue),
         'string' || _ => cp.defaultValue,
       };
     }
@@ -689,7 +692,7 @@ class ChatService {
     if (toggleParam != null && toggleParam.isFilledToggle) {
       final toggleValue =
           reasoning ? (toggleParam.onValue ?? 'true') : (toggleParam.offValue ?? 'false');
-      setNestedParam(result, toggleParam.paramName, toggleValue);
+      setNestedParam(result, toggleParam.paramName, parseReasoningValue(toggleValue, toggleParam.type));
     }
 
     // Additional reasoning params: only sent when global toggle is ON
@@ -698,7 +701,7 @@ class ChatService {
         if (!rp.enabled) continue;
         final selectedValue = reasoningParamValues[rp.paramName];
         if (selectedValue != null && selectedValue.isNotEmpty) {
-          setNestedParam(result, rp.paramName, selectedValue);
+          setNestedParam(result, rp.paramName, parseReasoningValue(selectedValue, rp.type));
         }
       }
     }
@@ -722,6 +725,28 @@ class ChatService {
     }
 
     return result;
+  }
+
+  /// Parse a JSON string into a dynamic value.
+  /// Returns the parsed JSON on success, or the raw string on failure.
+  @visibleForTesting
+  static dynamic parseJsonValue(String value) {
+    try {
+      return jsonDecode(value);
+    } catch (_) {
+      return value;
+    }
+  }
+
+  /// Parse a reasoning parameter value according to its [type].
+  /// Supports: 'string', 'number', 'boolean', 'json'.
+  static dynamic parseReasoningValue(String value, String type) {
+    return switch (type) {
+      'number' => double.tryParse(value) ?? 0.0,
+      'boolean' => value.toLowerCase() == 'true',
+      'json' => parseJsonValue(value),
+      'string' || _ => value,
+    };
   }
 
   /// Dispose permanently (no more streams possible after this)

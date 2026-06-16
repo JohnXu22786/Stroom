@@ -13,8 +13,9 @@ class ParamType {
   static const string = ParamType._('string', '字符串');
   static const number = ParamType._('number', '数字');
   static const boolean = ParamType._('boolean', '布尔');
+  static const json = ParamType._('json', 'JSON');
 
-  static const List<ParamType> values = [string, number, boolean];
+  static const List<ParamType> values = [string, number, boolean, json];
 
   static ParamType fromValue(String? value) {
     return values.firstWhere(
@@ -33,6 +34,8 @@ class ParamType {
         return '例如: 0.8';
       case ParamType.boolean:
         return '例如: true';
+      case ParamType.json:
+        return '例如: {"key": "value"}';
       default:
         return '';
     }
@@ -179,6 +182,8 @@ class ReasoningParam {
 
   String? offValue;
 
+  String type; // 'string', 'number', 'boolean', 'json'
+
   ReasoningParam({
     required this.paramName,
     this.enabled = true,
@@ -186,6 +191,7 @@ class ReasoningParam {
     this.onValue,
     this.offValue,
     List<String>? options,
+    this.type = 'string',
   }) : options = options ?? [];
 
   Map<String, dynamic> toMap() => {
@@ -195,6 +201,7 @@ class ReasoningParam {
         'isReasoningToggle': isReasoningToggle,
         if (onValue != null) 'onValue': onValue,
         if (offValue != null) 'offValue': offValue,
+        'type': type,
       };
 
   factory ReasoningParam.fromMap(Map<String, dynamic> map) {
@@ -214,6 +221,7 @@ class ReasoningParam {
               ?.map((e) => e.toString())
               .toList() ??
           [],
+      type: map['type'] as String? ?? 'string',
     );
   }
 
@@ -224,6 +232,7 @@ class ReasoningParam {
         onValue: onValue,
         offValue: offValue,
         options: List<String>.from(options),
+        type: type,
       );
 
   bool get isFilledToggle {
