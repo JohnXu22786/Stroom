@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:markdown_widget/markdown_widget.dart';
 import 'package:stroom/utils/text_manifest.dart';
+import '../widgets/markdown_extensions.dart';
 
 /// 文本预览/编辑页面 - 查看和编辑文本内容
 ///
@@ -286,13 +288,26 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
                   style: const TextStyle(fontSize: 14, height: 1.5),
                 ),
               )
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: SelectableText(
-                  _contentController.text,
-                  style: const TextStyle(fontSize: 14, height: 1.5),
-                ),
-              ),
+            : widget.file.format == 'md'
+                ? SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: MarkdownWidget(
+                      data: _contentController.text,
+                      markdownGenerator: markdownGenerator,
+                      config: buildMarkdownConfig(
+                        isDark: Theme.of(context).brightness == Brightness.dark,
+                      ),
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                    ),
+                  )
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: SelectableText(
+                      _contentController.text,
+                      style: const TextStyle(fontSize: 14, height: 1.5),
+                    ),
+                  ),
       ),
     );
   }
