@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/ai_stream_event.dart';
 
@@ -26,6 +28,33 @@ Map<String, String> get openRouterAppHeaders => {
       'HTTP-Referer': kHttpReferer,
       'X-Title': kXTitle,
     };
+
+/// Attempts to parse the error response body from a streaming [DioException].
+///
+/// When [ResponseType.stream] is used (SSE streaming), a non-2xx response
+/// from the server results in a [DioException] whose `response.data` is a
+/// [ResponseBody] (an unread stream) rather than a [Map] or [String].
+/// This function reads that stream and returns the body as a `{'raw': string}`
+/// map, or `null` if the data is not a [ResponseBody].
+///
+/// Extracted as a top-level function for testability.
+@visibleForTesting
+Future<Map<String, dynamic>?> parseStreamErrorBody(DioException e) async {
+  if (e.response?.data is ResponseBody) {
+    try {
+      final responseBody = e.response!.data as ResponseBody;
+      final bytes = await responseBody.stream.toList();
+      final allBytes = <int>[];
+      for (final chunk in bytes) {
+        allBytes.addAll(chunk);
+      }
+      return <String, dynamic>{'raw': utf8.decode(allBytes)};
+    } catch (_) {
+      return null;
+    }
+  }
+  return null;
+}
 
 // ============================================================================
 // 抽象基类 — BaseChatProvider

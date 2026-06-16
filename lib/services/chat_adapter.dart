@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint;
-import '../models/assistant.dart' show CustomParameter;
+import '../models/assistant.dart' show AssistantSettings, CustomParameter;
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
 import '../models/mcp.dart';
@@ -251,6 +251,13 @@ class ChatAdapter {
   /// These will be merged into the API request body alongside model-level params.
   void setAssistantCustomParams(List<CustomParameter>? params) {
     _chatService?.setAssistantCustomParams(params);
+  }
+
+  /// Pass assistant-level settings to the underlying ChatService.
+  /// When an assistant setting's enable flag is true, it overrides the
+  /// corresponding model parameter. When false, the model parameter is used.
+  void setAssistantSettings(AssistantSettings? settings) {
+    _chatService?.setAssistantSettings(settings);
   }
 
   Stream<String> sendStream(String text, {required List<ChatMessage> history, bool reasoning = false, String reasoningEffort = 'medium', Map<String, String> reasoningParamValues = const {}}) {

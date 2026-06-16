@@ -127,7 +127,6 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     if (key.length <= 16) return '${key.substring(0, 4)}****';
     return '${key.substring(0, 8)}...${key.substring(key.length - 4)}';
   }
-
   /// Parse a single SSE data event and return a list of [AIStreamEvent]s.
   ///
   /// Handles all known reasoning formats:
@@ -255,7 +254,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       _lastRequestUrl = _baseUrl;
       _lastRequestHeaders = {
         'Content-Type': 'application/json',
-        if (_apiKey.isNotEmpty) 'Authorization': 'Bearer ${_maskApiKey(_apiKey)}',
+        if (_apiKey.isNotEmpty) 'Authorization': 'Bearer $_apiKey',
         ...openRouterAppHeaders,
       };
       _lastResponseStatusCode = null;
@@ -338,7 +337,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     _lastRequestUrl = _baseUrl;
     _lastRequestHeaders = {
       'Content-Type': 'application/json',
-      if (_apiKey.isNotEmpty) 'Authorization': 'Bearer ${_maskApiKey(_apiKey)}',
+      if (_apiKey.isNotEmpty) 'Authorization': 'Bearer $_apiKey',
       'Accept': 'text/event-stream',
       ...openRouterAppHeaders,
     };
@@ -424,6 +423,9 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       }
     } catch (e) {
       if (e is DioException) {
+        // Clear stale streaming data from successful SSE events first.
+        _lastResponseData = null;
+
         if (e.response?.data is Map) {
           _lastResponseData =
               Map<String, dynamic>.from(e.response!.data as Map);
@@ -431,10 +433,13 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
           _lastResponseData =
               <String, dynamic>{'raw': e.response!.data as String};
         } else {
-          // Clear stale streaming data when response body is a Stream,
-          // null, or otherwise unparseable (e.g., non-2xx HTTP with
-          // ResponseType.stream).
-          _lastResponseData = null;
+          // When ResponseType.stream is used, non-2xx error response data
+          // is a ResponseBody (unread stream). Try to read it to capture
+          // the error response body for diagnostic display.
+          final streamBody = await parseStreamErrorBody(e);
+          if (streamBody != null) {
+            _lastResponseData = streamBody;
+          }
         }
         // Preserve status code even when response body is unavailable.
         _lastResponseStatusCode = e.response?.statusCode;
