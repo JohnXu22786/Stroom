@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../providers/provider_config.dart';
+import 'llm_model_config_shared.dart';
 
 /// LLM 模型配置编辑页面
 /// 包含基本设置和 LLM 专有参数（温度、Top P 等）
@@ -324,179 +325,6 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   }
 
   // ===================================================================
-  // UI Helpers
-  // ===================================================================
-
-  Widget _buildToggleSlider({
-    required String label,
-    required double value,
-    required double min,
-    required double max,
-    required int divisions,
-    required bool enabled,
-    required ValueChanged<double> onChanged,
-    required ValueChanged<bool> onToggle,
-    String? description,
-  }) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(label,
-                      style:
-                          const TextStyle(fontWeight: FontWeight.w600)),
-                ),
-                Switch(
-                  value: enabled,
-                  onChanged: onToggle,
-                ),
-              ],
-            ),
-            if (description != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  description,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            if (enabled)
-              Row(
-                children: [
-                  Expanded(
-                    child: Slider(
-                      value: value,
-                      min: min,
-                      max: max,
-                      divisions: divisions,
-                      onChanged: onChanged,
-                    ),
-                  ),
-                  SizedBox(
-                    width: 48,
-                    child: Text(
-                      value.toStringAsFixed(2),
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Theme.of(context).colorScheme.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildToggleTextField({
-    required String label,
-    required TextEditingController controller,
-    required bool enabled,
-    required ValueChanged<bool> onToggle,
-    String? hintText,
-    bool required = false,
-    TextInputType keyboardType = TextInputType.text,
-    String? description,
-  }) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text('$label${required ? ' *' : ''}',
-                      style:
-                          const TextStyle(fontWeight: FontWeight.w600)),
-                ),
-                Switch(
-                  value: enabled,
-                  onChanged: onToggle,
-                ),
-              ],
-            ),
-            if (description != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  description,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            if (enabled)
-              TextField(
-                controller: controller,
-                decoration: InputDecoration(
-                  hintText: hintText,
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                ),
-                keyboardType: keyboardType,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTextField({
-    required String label,
-    required TextEditingController controller,
-    String? hintText,
-    bool required = false,
-    TextInputType keyboardType = TextInputType.text,
-    String? description,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '$label${required ? ' *' : ''}',
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        if (description != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 2, bottom: 4),
-            child: Text(
-              description,
-              style: TextStyle(
-                fontSize: 11,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-        const SizedBox(height: 4),
-        TextField(
-          controller: controller,
-          decoration: InputDecoration(
-            hintText: hintText,
-            border: const OutlineInputBorder(),
-          ),
-          keyboardType: keyboardType,
-        ),
-      ],
-    );
-  }
-
-  // ===================================================================
   // Build
   // ===================================================================
 
@@ -531,7 +359,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           const SizedBox(height: 12),
 
           // 模型名称
-          _buildTextField(
+          LabeledTextField(
             label: '模型名称',
             controller: _nameController,
             hintText: '输入显示名称（可选）',
@@ -539,7 +367,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           const SizedBox(height: 16),
 
           // 模型 ID
-          _buildTextField(
+          LabeledTextField(
             label: '模型 ID',
             controller: _modelIdController,
             hintText: '如 gpt-4o',
@@ -548,7 +376,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           const SizedBox(height: 16),
 
           // 上下文长度
-          _buildTextField(
+          LabeledTextField(
             label: '上下文长度',
             controller: _contextController,
             hintText: '输入上下文长度',
@@ -806,7 +634,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           const SizedBox(height: 12),
 
           // Temperature
-          _buildToggleSlider(
+          LlmToggleSlider(
             label: '温度 (Temperature)',
             value: _temperature,
             min: 0.0,
@@ -819,7 +647,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           ),
 
           // Top P
-          _buildToggleSlider(
+          LlmToggleSlider(
             label: 'Top P',
             value: _topP,
             min: 0.0,
@@ -832,7 +660,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           ),
 
           // Frequency Penalty
-          _buildToggleSlider(
+          LlmToggleSlider(
             label: '频率惩罚 (Frequency Penalty)',
             value: _frequencyPenalty,
             min: -2.0,
@@ -845,7 +673,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           ),
 
           // Presence Penalty
-          _buildToggleSlider(
+          LlmToggleSlider(
             label: '存在惩罚 (Presence Penalty)',
             value: _presencePenalty,
             min: -2.0,
@@ -858,7 +686,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           ),
 
           // Max Tokens
-          _buildToggleTextField(
+          LlmToggleTextField(
             label: '最大输出 Token 数',
             controller: _maxTokensController,
             enabled: _enableMaxTokens,
@@ -869,7 +697,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           ),
 
           // Seed
-          _buildToggleTextField(
+          LlmToggleTextField(
             label: '随机种子 (Seed)',
             controller: _seedController,
             enabled: _enableSeed,
