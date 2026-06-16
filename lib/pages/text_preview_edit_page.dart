@@ -37,6 +37,11 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
   final List<String> _redoStack = [];
   bool _isUndoingOrRedoing = false;
 
+  // 字号设置
+  double _fontSize = 14;
+  static const double _minFontSize = 10;
+  static const double _maxFontSize = 28;
+
   @override
   void initState() {
     super.initState();
@@ -136,6 +141,54 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
     });
   }
 
+  /// 字号调节弹窗（数字在上，滑块在下）
+  void _showFontSizePopup() {
+    double temp = _fontSize;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('字号调整'),
+          content: SizedBox(
+            width: 260,
+            height: 80,
+            child: Column(
+              children: [
+                Text(
+                  '${temp.toInt()}',
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Expanded(
+                  child: Slider(
+                    value: temp,
+                    min: _minFontSize,
+                    max: _maxFontSize,
+                    divisions: ((_maxFontSize - _minFontSize) / 2).toInt(),
+                    label: '${temp.toInt()}',
+                    onChanged: (v) {
+                      temp = v.roundToDouble();
+                      setDialogState(() {});
+                      setState(() => _fontSize = temp);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// 保存内容到文本文件
   Future<void> _save() async {
     setState(() => _isSaving = true);
@@ -187,6 +240,12 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
   List<Widget> _buildAppBarActions() {
     if (_isEditMode) {
       return [
+        // 字号调整按钮
+        IconButton(
+          icon: const Icon(Icons.format_size, size: 20),
+          tooltip: '字号调整',
+          onPressed: _showFontSizePopup,
+        ),
         // 撤销按钮
         IconButton(
           icon: const Icon(Icons.undo, size: 20),
@@ -285,7 +344,7 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
                   maxLines: null,
                   expands: true,
                   textAlignVertical: TextAlignVertical.top,
-                  style: const TextStyle(fontSize: 14, height: 1.5),
+                  style: TextStyle(fontSize: _fontSize, height: 1.5),
                 ),
               )
             : widget.file.format == 'md'
@@ -305,10 +364,10 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
                     padding: const EdgeInsets.all(16),
                     child: SelectableText(
                       _contentController.text,
-                      style: const TextStyle(fontSize: 14, height: 1.5),
+                      style: TextStyle(fontSize: _fontSize, height: 1.5),
                     ),
                   ),
-      ),
+          ),
     );
   }
 }
