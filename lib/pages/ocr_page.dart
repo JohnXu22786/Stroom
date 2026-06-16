@@ -1208,6 +1208,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       service = OcrService(config: ocrConfig);
       OcrResult result;
 
+      // Update progress to show processing
+      ref.read(backgroundTasksProvider.notifier).updateProgress(taskId, 10);
+
       if (_selectedImages.length == 1) {
         final img = _selectedImages.first;
         result = await service.recognize(
@@ -1224,6 +1227,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       }
 
       // Save the OCR result as a text file using TextManifest
+      ref.read(backgroundTasksProvider.notifier).updateProgress(taskId, 70);
       await _saveOcrResult(result.text, title: title);
 
       // Mark task as completed (widget may be gone, but notifier is independent)

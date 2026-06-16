@@ -227,5 +227,79 @@ void main() {
       expect(notifier.state.where((t) => t.id == id2).single.status, TaskStatus.failed);
       expect(notifier.state.where((t) => t.id == id3).single.status, TaskStatus.running);
     });
+
+    // ==================================================================
+    // Progress tests
+    // ==================================================================
+
+    test('addTask initializes task with progress=0', () {
+      final notifier = BackgroundTaskNotifier();
+      
+      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR');
+      
+      expect(notifier.state[0].progress, 0);
+    });
+
+    test('updateProgress updates task progress correctly', () {
+      final notifier = BackgroundTaskNotifier();
+      
+      final id = notifier.addTask(type: BackgroundTaskType.audioSeparation, title: '音频分离');
+      
+      notifier.updateProgress(id, 50);
+      expect(notifier.state[0].progress, 50);
+
+      notifier.updateProgress(id, 100);
+      expect(notifier.state[0].progress, 100);
+    });
+
+    test('updateProgress does not affect other tasks', () {
+      final notifier = BackgroundTaskNotifier();
+      
+      final id1 = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR');
+      final id2 = notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR');
+      
+      notifier.updateProgress(id1, 75);
+      
+      expect(notifier.state.where((t) => t.id == id1).single.progress, 75);
+      expect(notifier.state.where((t) => t.id == id2).single.progress, 0);
+    });
+
+    test('updateProgress with non-existent id does nothing', () {
+      final notifier = BackgroundTaskNotifier();
+      
+      notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
+      
+      expect(() => notifier.updateProgress('non-existent', 50), returnsNormally);
+      expect(notifier.state[0].progress, 0);
+    });
+
+    test('toMap/fromMap preserves progress field', () {
+      final notifier = BackgroundTaskNotifier();
+      
+      final id = notifier.addTask(type: BackgroundTaskType.audioSeparation, title: '音频分离');
+      notifier.updateProgress(id, 65);
+      
+      final task = notifier.state[0];
+      final map = task.toMap();
+      final restored = BackgroundTask.fromMap(map);
+
+      expect(restored.progress, 65);
+    });
+
+    test('fromMap handles missing progress key (backward compatibility)', () {
+      final map = {
+        'id': 'test-id',
+        'type': 'ocr',
+        'title': '旧数据任务',
+        'status': 'running',
+        'createdAt': DateTime.now().toIso8601String(),
+      };
+      
+      final restored = BackgroundTask.fromMap(map);
+      
+      expect(restored.progress, 0);
+      expect(restored.title, '旧数据任务');
+      expect(restored.status, TaskStatus.running);
+    });
   });
 }
