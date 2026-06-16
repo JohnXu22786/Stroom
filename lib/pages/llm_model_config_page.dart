@@ -40,6 +40,54 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
 
   bool get _isEditing => widget.model != null;
 
+  /// Whether the user has made unsaved changes.
+  bool get _hasUnsavedChanges {
+    final m = widget.model;
+    if (m == null) {
+      // New model: check if any field is non-empty or any param added
+      if (_nameController.text.isNotEmpty) return true;
+      if (_modelIdController.text.isNotEmpty) return true;
+      if (_contextController.text.isNotEmpty) return true;
+      if (_customParams.any((p) => p.paramName.isNotEmpty)) return true;
+      if (_reasoningParams.any((p) => p.paramName.isNotEmpty)) return true;
+      if (_enableTemperature || _enableTopP || _enableFrequencyPenalty ||
+          _enablePresencePenalty || _enableMaxTokens || _enableSeed) return true;
+      if (_maxTokensController.text.isNotEmpty) return true;
+      if (_seedController.text.isNotEmpty) return true;
+      if (_temperature != 0.7) return true;
+      if (_topP != 1.0) return true;
+      if (_frequencyPenalty != 0.0) return true;
+      if (_presencePenalty != 0.0) return true;
+      return false;
+    }
+    // Editing: compare against original model
+    if (_nameController.text != m.name) return true;
+    if (_modelIdController.text != m.modelId) return true;
+    if (_contextController.text != 
+        ((m.typeConfig['context'] as num?)?.toInt()?.toString() ?? '')) return true;
+    // LLM params
+    if (((m.typeConfig['temperature'] as num?)?.toDouble() ?? 0.7) != _temperature) return true;
+    if (((m.typeConfig['topP'] as num?)?.toDouble() ?? 1.0) != _topP) return true;
+    if (((m.typeConfig['frequencyPenalty'] as num?)?.toDouble() ?? 0.0) != _frequencyPenalty) return true;
+    if (((m.typeConfig['presencePenalty'] as num?)?.toDouble() ?? 0.0) != _presencePenalty) return true;
+    if ((m.typeConfig['enableTemperature'] as bool? ?? false) != _enableTemperature) return true;
+    if ((m.typeConfig['enableTopP'] as bool? ?? false) != _enableTopP) return true;
+    if ((m.typeConfig['enableFrequencyPenalty'] as bool? ?? false) != _enableFrequencyPenalty) return true;
+    if ((m.typeConfig['enablePresencePenalty'] as bool? ?? false) != _enablePresencePenalty) return true;
+    if ((m.typeConfig['enableMaxTokens'] as bool? ?? false) != _enableMaxTokens) return true;
+    if ((m.typeConfig['enableSeed'] as bool? ?? false) != _enableSeed) return true;
+    if ((m.typeConfig['maxTokens']?.toString() ?? '') != _maxTokensController.text) return true;
+    if ((m.typeConfig['seed']?.toString() ?? '') != _seedController.text) return true;
+    // Custom params and reasoning params (simple check via serialization)
+    final originalCustom = m.customParams.map((p) => p.toMap()).toList();
+    final currentCustom = _customParams.map((p) => p.toMap()).toList();
+    if (originalCustom.toString() != currentCustom.toString()) return true;
+    final originalReasoning = m.reasoningParams.map((p) => p.toMap()).toList();
+    final currentReasoning = _reasoningParams.map((p) => p.toMap()).toList();
+    if (originalReasoning.toString() != currentReasoning.toString()) return true;
+    return false;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -80,18 +128,6 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     _reasoningParams = (m?.reasoningParams ?? [])
         .map((p) => p.copy())
         .toList();
-    if (m == null && _reasoningParams.isEmpty) {
-      // 新模型提供一个默认推理开关（用户填写参数名和开/关值）
-      _reasoningParams = [
-        ReasoningParam(
-          paramName: '',
-          isReasoningToggle: true,
-          onValue: '',
-          offValue: '',
-          options: [],
-        ),
-      ];
-    }
   }
 
   @override
@@ -126,8 +162,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
 
   void _addReasoningParam() {
     setState(() {
-      _reasoningParams.insert(
-          0, ReasoningParam(paramName: '', enabled: false, options: []));
+      _reasoningParams.add(ReasoningParam(paramName: '', enabled: false, options: []));
     });
   }
 
@@ -147,6 +182,294 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     setState(() {
       _reasoningParams[paramIndex].options.removeAt(optionIndex);
     });
+  }
+
+  // ===================================================================
+  // 推理参数帮助方法
+  // ===================================================================
+
+  /// Returns reasoning params that are NOT the toggle (additional params).
+  List<ReasoningParam> get _additionalReasoningParams =>
+      _reasoningParams.where((p) => !p.isReasoningToggle).toList();
+
+  /// Returns the reasoning toggle param, or null if none exists.
+  ReasoningParam? get _toggleReasoningParam =>
+      _reasoningParams.cast<ReasoningParam?>().firstWhere(
+        (p) => p?.isReasoningToggle ?? false,
+        orElse: () => null,
+      );
+
+  /// Builds the reasoning toggle card section.
+  Widget _buildReasoningToggleSection(ColorScheme cs) {
+    final toggle = _toggleReasoningParam;
+    if (toggle == null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          children: [
+            Center(
+              child: Text('暂无推理开关',
+                  style: TextStyle(color: Colors.grey, fontSize: 13)),
+            ),
+            const SizedBox(height: 4),
+            Center(
+              child: TextButton.icon(
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('添加推理开关',
+                    style: TextStyle(fontSize: 13)),
+                onPressed: () {
+                  setState(() {
+                    _reasoningParams.insert(0, ReasoningParam(
+                      paramName: '',
+                      isReasoningToggle: true,
+                      onValue: '',
+                      offValue: '',
+                      options: [],
+                    ));
+                  });
+                },
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.toggle_on_outlined,
+                    size: 18, color: cs.primary),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text('推理开关',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: cs.primary,
+                      )),
+                ),
+                // 参数值类型选择
+                _buildTypeDropdown(toggle, cs),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.delete,
+                      color: Colors.red, size: 20),
+                  onPressed: () => _removeReasoningParam(
+                      _reasoningParams.indexOf(toggle)),
+                  tooltip: '删除推理开关',
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              initialValue: toggle.paramName,
+              decoration: InputDecoration(
+                labelText: '参数名',
+                hintText: '如 thinking.type、reasoning',
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+              onChanged: (v) {
+                toggle.paramName = v;
+                setState(() {});
+              },
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    initialValue: toggle.onValue ?? '',
+                    decoration: InputDecoration(
+                      labelText: '开启时值',
+                      hintText: '如 enabled、true',
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    onChanged: (v) {
+                      toggle.onValue = v;
+                      setState(() {});
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    initialValue: toggle.offValue ?? '',
+                    decoration: InputDecoration(
+                      labelText: '关闭时值',
+                      hintText: '如 disabled、false',
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    onChanged: (v) {
+                      toggle.offValue = v;
+                      setState(() {});
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '推理开关打开时发送「${toggle.onValue ?? ''}」，'
+              '关闭时发送「${toggle.offValue ?? ''}」',
+              style: TextStyle(
+                fontSize: 11,
+                color: cs.onSurfaceVariant.withOpacity(0.7),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Builds a type dropdown for a reasoning param.
+  Widget _buildTypeDropdown(ReasoningParam param, ColorScheme cs) {
+    return Container(
+      width: 100,
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade400),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: ParamType.values.any((t) => t.value == param.type)
+              ? param.type
+              : 'string',
+          isDense: true,
+          items: ParamType.values
+              .map((t) => DropdownMenuItem(
+                    value: t.value,
+                    child: Text(t.label,
+                        style: const TextStyle(fontSize: 12)),
+                  ))
+              .toList(),
+          onChanged: (v) {
+            if (v != null) {
+              setState(() => param.type = v);
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  /// Builds a card for an additional (non-toggle) reasoning parameter.
+  Widget _buildAdditionalReasoningParamCard(
+      ReasoningParam param, int actualIndex, int displayIndex, ColorScheme cs) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    initialValue: param.paramName,
+                    decoration: InputDecoration(
+                      labelText: '参数名（支持点号嵌套）',
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      hintText:
+                          '如 thinking.type 或 reasoning_effort',
+                    ),
+                    onChanged: (v) {
+                      param.paramName = v;
+                      setState(() {});
+                    },
+                  ),
+                ),
+                const SizedBox(width: 4),
+                // 参数值类型选择
+                _buildTypeDropdown(param, cs),
+                const SizedBox(width: 4),
+                Switch(
+                  value: param.enabled,
+                  onChanged: (v) {
+                    setState(() => param.enabled = v);
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete,
+                      color: Colors.red, size: 20),
+                  onPressed: () => _removeReasoningParam(actualIndex),
+                  tooltip: '删除参数',
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text('选项值',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: cs.onSurfaceVariant,
+                )),
+            const SizedBox(height: 4),
+            Text(
+              '这些选项将按顺序显示在推理面板中供选择',
+              style: TextStyle(
+                fontSize: 11,
+                color: cs.onSurfaceVariant.withOpacity(0.7),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...List.generate(param.options.length, (j) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        initialValue: param.options[j],
+                        decoration: InputDecoration(
+                          labelText: '选项 ${j + 1}',
+                          hintText: '如 low, enabled, true, max',
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: (v) {
+                          param.options[j] = v;
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    if (param.options.length > 1)
+                      IconButton(
+                        icon: const Icon(Icons.remove_circle,
+                            color: Colors.red, size: 18),
+                        onPressed: () =>
+                            _removeOptionFromParam(actualIndex, j),
+                        tooltip: '删除选项',
+                      ),
+                  ],
+                ),
+              );
+            }),
+            const SizedBox(height: 4),
+            TextButton.icon(
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('添加选项',
+                  style: TextStyle(fontSize: 13)),
+              onPressed: () => _addOptionToParam(actualIndex),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ===================================================================
@@ -335,7 +658,33 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         : '添加模型';
     final cs = Theme.of(context).colorScheme;
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_hasUnsavedChanges,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final discard = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('放弃修改？'),
+            content: const Text('当前有未保存的修改，确定要放弃吗？'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('取消'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: const Text('放弃'),
+              ),
+            ],
+          ),
+        );
+        if (discard == true && context.mounted) {
+          Navigator.pop(context);
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Text(title),
         actions: [
@@ -406,204 +755,15 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           ),
           const SizedBox(height: 12),
 
-          if (_reasoningParams.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(
-                child: Text('暂无推理参数',
-                    style: TextStyle(color: Colors.grey)),
-              ),
-            )
-          else
-            ...List.generate(_reasoningParams.length, (i) {
-              final param = _reasoningParams[i];
-              if (param.isReasoningToggle) {
-                // 推理开关 — 特殊卡片：参数名 + 开启值 + 关闭值
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.toggle_on_outlined,
-                                size: 18, color: cs.primary),
-                            const SizedBox(width: 4),
-                            Text('推理开关',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: cs.primary,
-                                )),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        TextFormField(
-                          initialValue: param.paramName,
-                          decoration: InputDecoration(
-                            labelText: '参数名',
-                            hintText: '如 thinking.type、reasoning',
-                            border: const OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          onChanged: (v) {
-                            param.paramName = v;
-                            setState(() {});
-                          },
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                initialValue: param.onValue ?? '',
-                                decoration: InputDecoration(
-                                  labelText: '开启时值',
-                                  hintText: '如 enabled、true',
-                                  border: const OutlineInputBorder(),
-                                  isDense: true,
-                                ),
-                                onChanged: (v) {
-                                  param.onValue = v;
-                                  setState(() {});
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: TextFormField(
-                                initialValue: param.offValue ?? '',
-                                decoration: InputDecoration(
-                                  labelText: '关闭时值',
-                                  hintText: '如 disabled、false',
-                                  border: const OutlineInputBorder(),
-                                  isDense: true,
-                                ),
-                                onChanged: (v) {
-                                  param.offValue = v;
-                                  setState(() {});
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '推理开关打开时发送「${param.onValue ?? ''}」，'
-                          '关闭时发送「${param.offValue ?? ''}」',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: cs.onSurfaceVariant.withOpacity(0.7),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }
-              // 附加推理参数 — 参数名 + 开关 + 选项值列表
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextFormField(
-                              initialValue: param.paramName,
-                              decoration: InputDecoration(
-                                labelText: '参数名（支持点号嵌套）',
-                                border: const OutlineInputBorder(),
-                                isDense: true,
-                                hintText:
-                                    '如 thinking.type 或 reasoning_effort',
-                              ),
-                              onChanged: (v) {
-                                param.paramName = v;
-                                setState(() {});
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Switch(
-                            value: param.enabled,
-                            onChanged: (v) {
-                              setState(() => param.enabled = v);
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete,
-                                color: Colors.red, size: 20),
-                            onPressed: () => _removeReasoningParam(i),
-                            tooltip: '删除参数',
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text('选项值',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: cs.onSurfaceVariant,
-                          )),
-                      const SizedBox(height: 4),
-                      Text(
-                        '这些选项将按顺序显示在推理面板中供选择',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: cs.onSurfaceVariant.withOpacity(0.7),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      ...List.generate(param.options.length, (j) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: TextFormField(
-                                  initialValue: param.options[j],
-                                  decoration: InputDecoration(
-                                    labelText: '选项 ${j + 1}',
-                                    hintText: '如 low, enabled, true, max',
-                                    border: const OutlineInputBorder(),
-                                    isDense: true,
-                                  ),
-                                  onChanged: (v) {
-                                    param.options[j] = v;
-                                    setState(() {});
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              if (param.options.length > 1)
-                                IconButton(
-                                  icon: const Icon(Icons.remove_circle,
-                                      color: Colors.red, size: 18),
-                                  onPressed: () =>
-                                      _removeOptionFromParam(i, j),
-                                  tooltip: '删除选项',
-                                ),
-                            ],
-                          ),
-                        );
-                      }),
-                      const SizedBox(height: 4),
-                      TextButton.icon(
-                        icon: const Icon(Icons.add, size: 16),
-                        label: const Text('添加选项',
-                            style: TextStyle(fontSize: 13)),
-                        onPressed: () => _addOptionToParam(i),
-                      ),
-                    ],
-                  ),
-                ),
-              );
+          // 推理开关 — 单独渲染，始终在第一个位置
+          _buildReasoningToggleSection(cs),
+
+          // 附加推理参数
+          if (_additionalReasoningParams.isNotEmpty)
+            ...List.generate(_additionalReasoningParams.length, (i) {
+              final param = _additionalReasoningParams[i];
+              final actualIndex = _reasoningParams.indexOf(param);
+              return _buildAdditionalReasoningParamCard(param, actualIndex, i, cs);
             }),
           const SizedBox(height: 12),
           Center(
@@ -825,6 +985,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           const SizedBox(height: 32),
         ],
       ),
+    ),
     );
   }
 }

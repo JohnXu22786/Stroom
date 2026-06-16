@@ -248,7 +248,7 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('继续编辑'),
+                child: const Text('取消'),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
