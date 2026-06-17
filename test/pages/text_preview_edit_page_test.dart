@@ -436,11 +436,11 @@ void main() {
       expect(find.text('放弃编辑？'), findsOneWidget);
       expect(find.text('你有未保存的更改，确定要放弃吗？'), findsOneWidget);
 
-      // '继续编辑' button should exist
-      expect(find.text('继续编辑'), findsOneWidget);
+      // '取消' button should exist
+      expect(find.text('取消'), findsOneWidget);
 
-      // Tap '继续编辑' to dismiss the dialog
-      await tester.tap(find.text('继续编辑'));
+      // Tap '取消' to dismiss the dialog
+      await tester.tap(find.text('取消'));
       await tester.pumpAndSettle();
 
       // Should still be in edit mode
