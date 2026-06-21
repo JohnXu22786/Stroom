@@ -57,21 +57,25 @@ class ChatPage extends ConsumerStatefulWidget {
   ConsumerState<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver {
+class _ChatPageState extends ConsumerState<ChatPage>
+    with WidgetsBindingObserver {
   InMemoryChatController? _controller;
   late final User _currentUser;
   late final User _aiUser;
   late final ChatAdapter _adapter;
   final List<ChatMessage> _history = [];
   int _selectedModelIndex = 0;
+
   /// Saved model display name order for drag-sort persistence.
   List<String>? _savedModelOrder;
   bool _cancelledByUser = false;
+
   /// Tracks streaming state locally so dispose() can check it without
   /// calling ref.read() (which throws after the widget is marked disposed).
   bool _isStreamingActive = false;
   final Map<String, String> _reasoningContents = {};
   final Map<String, List<MessageSegment>> _chatSegments = {};
+
   /// Tracks how many characters of [_history] text have been rendered as
   /// [TextSegment] entries in [_chatSegments] for each streaming message.
   /// Used for incremental markdown rendering: only new text chunks are
@@ -327,41 +331,33 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
         ref.read(enabledToolNamesProvider.notifier).state = allToolNames;
       }
     }
-    // Restore saved model selection — clear stale index if out of range
+    // Restore saved model selection and restore per-model settings
     SharedPreferences.getInstance().then((prefs) {
-      // Restore saved model selection — clear stale index if out of range
-      final saved = prefs.getInt('selected_model_index');
-      if (saved != null) {
-        final entriesState = ref.read(providerEntriesProvider);
-        final models = _adapter.availableModels(entriesState);
-        if (saved >= 0 && saved < models.length) {
-          final model = models[saved];
-          _adapter.selectModel(
-              entriesState, model.configIndex, model.modelIndex);
-          setState(() => _selectedModelIndex = saved);
-        } else {
-          prefs.remove('selected_model_index');
-        }
-      }
-      // Restore saved reasoning toggle
-      final savedReasoning = prefs.getBool('reasoning_enabled');
-      if (savedReasoning != null) {
-        ref.read(reasoningEnabledProvider.notifier).state = savedReasoning;
-      }
-      // Restore saved reasoning effort
-      final savedEffort = prefs.getString('reasoning_effort');
-      if (savedEffort != null &&
-          ['low', 'medium', 'high'].contains(savedEffort)) {
-        ref.read(reasoningEffortProvider.notifier).state = savedEffort;
-      }
-      // Restore saved model order (drag-sort persistence)
+      // Restore saved model order (drag-sort persistence) first,
+      // so model names resolve correctly.
       final savedOrder = prefs.getStringList('model_order');
       if (savedOrder != null && savedOrder.isNotEmpty) {
         setState(() {
           _savedModelOrder = savedOrder;
-          _recalculateSelectedModelIndex();
         });
       }
+
+      // Restore saved model selection — clear stale index if out of range
+      final entriesState = ref.read(providerEntriesProvider);
+      final models = _adapter.availableModels(entriesState);
+      final saved = prefs.getInt('selected_model_index');
+      int selectedIdx = 0;
+      if (saved != null && saved >= 0 && saved < models.length) {
+        selectedIdx = saved;
+        final model = models[saved];
+        _adapter.selectModel(entriesState, model.configIndex, model.modelIndex);
+      } else {
+        prefs.remove('selected_model_index');
+      }
+      setState(() => _selectedModelIndex = selectedIdx);
+
+      // Restore per-model settings for the currently selected model
+      _restorePerModelSettings(prefs, selectedIdx);
     });
     _loadConversationMessages();
     // Restore streaming state if a stream was active when the page was
@@ -382,18 +378,21 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     if (mounted) setState(() {});
 
     try {
-      final newStart = _loadedUpToIndex >= _pageSize 
-          ? _loadedUpToIndex - _pageSize 
-          : 0;
+      final newStart =
+          _loadedUpToIndex >= _pageSize ? _loadedUpToIndex - _pageSize : 0;
       final batchMessages = _history.sublist(newStart, _loadedUpToIndex);
 
       // Convert ChatMessage list to flutter_chat_ui Message list
-      final msgs = batchMessages.map((m) => Message.text(
-        id: m.id,
-        authorId: m.role == 'user' ? _currentUser.id : _aiUser.id,
-        text: m.content,
-        createdAt: m.createdAt,
-      )).toList();
+      final msgs = batchMessages
+          .map(
+            (m) => Message.text(
+              id: m.id,
+              authorId: m.role == 'user' ? _currentUser.id : _aiUser.id,
+              text: m.content,
+              createdAt: m.createdAt,
+            ),
+          )
+          .toList();
 
       // Guard: controller might have been disposed during the async gap
       // (e.g., conversation switched). Only update state if still valid
@@ -480,17 +479,18 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
       for (final msg in conv.messages) {
         _history.add(msg);
       }
-      _loadedUpToIndex = _history.length >= _pageSize 
-          ? _history.length - _pageSize 
-          : 0;
+      _loadedUpToIndex =
+          _history.length >= _pageSize ? _history.length - _pageSize : 0;
       for (var i = _loadedUpToIndex; i < _history.length; i++) {
         final msg = _history[i];
-        await _controller?.insertMessage(Message.text(
-          id: msg.id,
-          authorId: msg.role == 'user' ? _currentUser.id : _aiUser.id,
-          text: msg.content,
-          createdAt: msg.createdAt,
-        ));
+        await _controller?.insertMessage(
+          Message.text(
+            id: msg.id,
+            authorId: msg.role == 'user' ? _currentUser.id : _aiUser.id,
+            text: msg.content,
+            createdAt: msg.createdAt,
+          ),
+        );
       }
       if (mounted) setState(() {});
     } catch (e, s) {
@@ -502,9 +502,9 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     try {
       final convId = ref.read(activeConversationIdProvider);
       if (convId == null) return;
-      await ref
-          .read(conversationsProvider.notifier)
-          .updateMessages(convId, [..._history]);
+      await ref.read(conversationsProvider.notifier).updateMessages(convId, [
+        ..._history,
+      ]);
     } catch (e) {
       // Fallback: save directly to SharedPreferences if the notifier is
       // unavailable (e.g. during background streaming after page disposal).
@@ -516,8 +516,7 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
         final convId = ref.read(activeConversationIdProvider);
         if (convId == null) return;
         final list = (jsonDecode(allJson) as List).cast<Map<String, dynamic>>();
-        final conv =
-            list.where((c) => c['id'] == convId).firstOrNull;
+        final conv = list.where((c) => c['id'] == convId).firstOrNull;
         if (conv == null) return;
         conv['messages'] = _history.map((m) => m.toMap()).toList();
         conv['updatedAt'] = DateTime.now().toIso8601String();
@@ -533,11 +532,13 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     final llmEntry =
         entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
     if (llmEntry != null) {
-      Navigator.of(context, rootNavigator: true).push(
+      Navigator.of(context, rootNavigator: true)
+          .push(
         MaterialPageRoute(
           builder: (_) => ProviderConfigPage(entryId: llmEntry.id),
         ),
-      ).then((_) {
+      )
+          .then((_) {
         if (mounted) _configureAdapter();
       });
     }
@@ -553,14 +554,22 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
 
     final userMsgId = 'u${DateTime.now().millisecondsSinceEpoch}';
 
-    _history.add(ChatMessage(
-        role: 'user', content: text, id: userMsgId, attachments: attachments));
-    await _controller?.insertMessage(Message.text(
-      id: userMsgId,
-      authorId: _currentUser.id,
-      text: text,
-      createdAt: DateTime.now(),
-    ));
+    _history.add(
+      ChatMessage(
+        role: 'user',
+        content: text,
+        id: userMsgId,
+        attachments: attachments,
+      ),
+    );
+    await _controller?.insertMessage(
+      Message.text(
+        id: userMsgId,
+        authorId: _currentUser.id,
+        text: text,
+        createdAt: DateTime.now(),
+      ),
+    );
 
     await _startStreaming(text);
   }
@@ -609,6 +618,7 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
       );
     }
 
+    Object? streamError;
     try {
       // Merge built-in tools with MCP tools
       final allTools = _adapter.getAllToolDefinitions();
@@ -617,12 +627,16 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
       final filteredTools =
           allTools.where((t) => enabledTools.contains(t.name)).toList();
 
-      // Pass assistant settings to adapter — enabled settings override model params
+      // Pass assistant prompt and settings to adapter
       final selectedAssistant = ref.read(selectedAssistantProvider);
       if (selectedAssistant != null) {
+        _adapter.setAssistantPrompt(selectedAssistant.prompt);
         _adapter.setAssistantSettings(selectedAssistant.settings);
-        _adapter.setAssistantCustomParams(selectedAssistant.settings.customParameters);
+        _adapter.setAssistantCustomParams(
+          selectedAssistant.settings.customParameters,
+        );
       } else {
+        _adapter.setAssistantPrompt(null);
         _adapter.setAssistantSettings(null);
         _adapter.setAssistantCustomParams(null);
       }
@@ -666,16 +680,15 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
               if (fullReply.length > renderedLen) {
                 final newChunk = fullReply.substring(renderedLen);
                 final segments = _chatSegments[aiMsgId]!;
-                final lastSeg =
-                    segments.isNotEmpty ? segments.last : null;
-                if (lastSeg is TextSegment &&
-                    _hasUnclosedMath(lastSeg.text)) {
+                final lastSeg = segments.isNotEmpty ? segments.last : null;
+                if (lastSeg is TextSegment && _hasUnclosedMath(lastSeg.text)) {
                   // Merge into the last segment to avoid splitting math
                   // formulas ($...$ or $$...$$) across segment boundaries.
                   // The merged segment's MarkdownWidget will re-parse the
                   // combined text and can render the now-complete formula.
-                  segments[segments.length - 1] =
-                      TextSegment(lastSeg.text + newChunk);
+                  segments[segments.length - 1] = TextSegment(
+                    lastSeg.text + newChunk,
+                  );
                 } else {
                   segments.add(TextSegment(newChunk));
                 }
@@ -717,6 +730,7 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
         }
       }
     } catch (e, s) {
+      streamError = e;
       if (!_cancelledByUser) {
         debugPrint('[ChatPage] streaming error: $e\n$s');
         final errorMsg = _formatErrorMessage(e);
@@ -736,7 +750,12 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
         // not _chatSegments, so segments are not used for error display.
         _chatSegments[aiMsgId]?.clear();
         _streamingRenderedLengths[aiMsgId] = 0;
-        // Capture full request/response raw data for error detail display
+      }
+    } finally {
+      // Always capture request/response raw data for ALL messages
+      // (not just errors), so the "view raw data" button works.
+      // This runs regardless of _cancelledByUser or error vs. success.
+      try {
         final reqBody = _adapter.lastRequestBody;
         final headers = _adapter.lastRequestHeaders;
         final url = _adapter.lastRequestUrl;
@@ -751,18 +770,15 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
         final respHeaders = _adapter.lastResponseHeaders;
         if (respData != null || statusCode != null || respHeaders != null) {
           rawResponseCapture = {};
-          if (statusCode != null) rawResponseCapture!['statusCode'] = statusCode;
+          if (statusCode != null)
+            rawResponseCapture!['statusCode'] = statusCode;
           if (respHeaders != null) rawResponseCapture!['headers'] = respHeaders;
           if (respData != null) rawResponseCapture!['data'] = respData;
-        } else {
-          // For network errors (DNS failure, timeout, server not found, etc.)
-          // there is no HTTP response, so capture the error message string.
-          rawResponseCapture = {
-            'error': e.toString(),
-          };
+        } else if (streamError is Exception) {
+          // For network errors with no HTTP response, capture error string
+          rawResponseCapture = {'error': streamError.toString()};
         }
-      }
-    } finally {
+      } catch (_) {}
       // Flush any remaining text not yet rendered as segments
       final renderedLen = _streamingRenderedLengths[aiMsgId]!;
       if (fullReply.length > renderedLen) {
@@ -774,7 +790,8 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
       // Mark any still-running tool calls as cancelled
       for (var i = 0; i < (_chatSegments[aiMsgId]?.length ?? 0); i++) {
         final seg = _chatSegments[aiMsgId]![i];
-        if (seg is ToolCallSegment && seg.data.status == ToolCallStatus.running) {
+        if (seg is ToolCallSegment &&
+            seg.data.status == ToolCallStatus.running) {
           _chatSegments[aiMsgId]![i] = ToolCallSegment(
             seg.data.copyWith(
               status: ToolCallStatus.error,
@@ -816,10 +833,9 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
           content: fullReply,
           id: aiMsgId,
           isError: isError,
-          reasoningContent:
-              reasoningBuffer.isNotEmpty ? reasoningBuffer : null,
-          rawRequest: isError ? rawRequestCapture : null,
-          rawResponse: isError ? rawResponseCapture : null,
+          reasoningContent: reasoningBuffer.isNotEmpty ? reasoningBuffer : null,
+          rawRequest: rawRequestCapture,
+          rawResponse: rawResponseCapture,
         );
         _history.add(msg);
         if (reasoningBuffer.isNotEmpty) {
@@ -907,17 +923,19 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     if (index == -1) return;
     final msg = _history[index];
 
-    showEditMessageDialog(
-      context: context,
-      currentText: msg.content,
-    ).then((newText) {
+    showEditMessageDialog(context: context, currentText: msg.content).then((
+      newText,
+    ) {
       if (newText != null && newText.isNotEmpty && mounted) {
         _editUserMessageWithText(messageId, newText);
       }
     });
   }
 
-  Future<void> _editUserMessageWithText(String messageId, String newText) async {
+  Future<void> _editUserMessageWithText(
+    String messageId,
+    String newText,
+  ) async {
     final index = _history.indexWhere((m) => m.id == messageId);
     if (index == -1 || index >= _history.length) return;
     final msg = _history[index];
@@ -980,10 +998,12 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
 
     for (final att in msg.attachments) {
       final isReferencedElsewhere = _history.asMap().entries.any(
-        (entry) => entry.key != index && entry.value.attachments.any(
-          (a) => a.storagePath == att.storagePath,
-        ),
-      );
+            (entry) =>
+                entry.key != index &&
+                entry.value.attachments.any(
+                  (a) => a.storagePath == att.storagePath,
+                ),
+          );
       if (!isReferencedElsewhere) {
         await AttachmentStorage.deleteFile(att.storagePath);
       }
@@ -998,7 +1018,8 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
       }
     });
 
-    final msgToRemove = _controller?.messages.where((m) => m.id == messageId).firstOrNull;
+    final msgToRemove =
+        _controller?.messages.where((m) => m.id == messageId).firstOrNull;
     if (msgToRemove != null) {
       await _controller?.removeMessage(msgToRemove);
     }
@@ -1028,12 +1049,46 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     // Check common text file extensions
     final ext = p.extension(att.fileName).toLowerCase();
     const textExtensions = {
-      '.txt', '.md', '.json', '.xml', '.csv', '.html', '.htm',
-      '.css', '.js', '.ts', '.dart', '.py', '.yaml', '.yml',
-      '.toml', '.ini', '.cfg', '.conf', '.log', '.sh', '.bat',
-      '.ps1', '.sql', '.rb', '.php', '.java', '.cpp', '.c', '.h',
-      '.hpp', '.rs', '.go', '.swift', '.kt', '.gradle', '.properties',
-      '.env', '.gitignore', '.dockerfile', '.makefile',
+      '.txt',
+      '.md',
+      '.json',
+      '.xml',
+      '.csv',
+      '.html',
+      '.htm',
+      '.css',
+      '.js',
+      '.ts',
+      '.dart',
+      '.py',
+      '.yaml',
+      '.yml',
+      '.toml',
+      '.ini',
+      '.cfg',
+      '.conf',
+      '.log',
+      '.sh',
+      '.bat',
+      '.ps1',
+      '.sql',
+      '.rb',
+      '.php',
+      '.java',
+      '.cpp',
+      '.c',
+      '.h',
+      '.hpp',
+      '.rs',
+      '.go',
+      '.swift',
+      '.kt',
+      '.gradle',
+      '.properties',
+      '.env',
+      '.gitignore',
+      '.dockerfile',
+      '.makefile',
     };
     if (textExtensions.contains(ext)) return true;
     return false;
@@ -1049,9 +1104,9 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     final data = await AttachmentStorage.readFile(att.storagePath);
     if (data == null || data.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('无法加载文件')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('无法加载文件')));
       }
       return;
     }
@@ -1089,10 +1144,7 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
   /// Full-screen dark preview for non-image files (documents, audio, video).
   /// Shows file icon, name, type, size, and action buttons.
   void _showFileInfoPreview(Attachment att) {
-    showFileInfoPreviewDialog(
-      context: context,
-      attachment: att,
-    );
+    showFileInfoPreviewDialog(context: context, attachment: att);
   }
 
   /// Text content preview — shows the full file content in a scrollable
@@ -1206,10 +1258,8 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     // Show audio player dialog
     showDialog(
       context: context,
-      builder: (ctx) => AudioPreviewDialog(
-        filePath: filePath!,
-        fileName: att.fileName,
-      ),
+      builder: (ctx) =>
+          AudioPreviewDialog(filePath: filePath!, fileName: att.fileName),
     );
   }
 
@@ -1233,10 +1283,8 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     // Show video player dialog
     showDialog(
       context: context,
-      builder: (ctx) => VideoPreviewDialog(
-        filePath: filePath!,
-        fileName: att.fileName,
-      ),
+      builder: (ctx) =>
+          VideoPreviewDialog(filePath: filePath!, fileName: att.fileName),
     );
   }
 
@@ -1281,7 +1329,8 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
   }
 
   void _scrollToCurrentMatch() {
-    if (_currentMatchIndex < 0 || _currentMatchIndex >= _searchMatches.length) return;
+    if (_currentMatchIndex < 0 || _currentMatchIndex >= _searchMatches.length)
+      return;
     final match = _searchMatches[_currentMatchIndex];
     final key = _messageKeys[match.messageId];
     if (key?.currentContext != null) {
@@ -1292,7 +1341,8 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
   void _previousMatch() {
     if (_searchMatches.isEmpty) return;
     setState(() {
-      _currentMatchIndex = (_currentMatchIndex - 1 + _searchMatches.length) % _searchMatches.length;
+      _currentMatchIndex = (_currentMatchIndex - 1 + _searchMatches.length) %
+          _searchMatches.length;
     });
     _scrollToCurrentMatch();
   }
@@ -1347,9 +1397,11 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
   }
 
   void _openGlobalSearch() {
-    Navigator.of(context, rootNavigator: true).push<Map<String, dynamic>>(
+    Navigator.of(context, rootNavigator: true)
+        .push<Map<String, dynamic>>(
       MaterialPageRoute(builder: (_) => const MessageSearchPage()),
-    ).then((result) async {
+    )
+        .then((result) async {
       if (!mounted || result == null) return;
       final conversationId = result['conversationId'] as String?;
       final query = result['query'] as String?;
@@ -1366,7 +1418,9 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
       // post-frame callback so it runs AFTER that load completes.
       final activeId = ref.read(activeConversationIdProvider);
       if (conversationId != activeId) {
-        ref.read(conversationsProvider.notifier).selectConversation(conversationId);
+        ref
+            .read(conversationsProvider.notifier)
+            .selectConversation(conversationId);
       }
 
       // Step 3: Schedule search activation for the next frame, after
@@ -1386,13 +1440,24 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     });
   }
 
-  Widget _buildHighlightedText(String text, String messageId, {Color? textColor}) {
+  Widget _buildHighlightedText(
+    String text,
+    String messageId, {
+    Color? textColor,
+  }) {
     if (_searchQuery.isEmpty) {
-      return SelectableText(text, style: textColor != null ? TextStyle(color: textColor) : null);
+      return SelectableText(
+        text,
+        style: textColor != null ? TextStyle(color: textColor) : null,
+      );
     }
-    final matches = _searchMatches.where((m) => m.messageId == messageId).toList();
+    final matches =
+        _searchMatches.where((m) => m.messageId == messageId).toList();
     if (matches.isEmpty) {
-      return SelectableText(text, style: textColor != null ? TextStyle(color: textColor) : null);
+      return SelectableText(
+        text,
+        style: textColor != null ? TextStyle(color: textColor) : null,
+      );
     }
     final spans = <TextSpan>[];
     int lastEnd = 0;
@@ -1403,24 +1468,23 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
       }
       final matchText = text.substring(match.matchStart, match.matchEnd);
       final isCurrent = _searchMatches.indexOf(match) == _currentMatchIndex;
-      spans.add(TextSpan(
-        text: matchText,
-        style: TextStyle(
-          backgroundColor: isCurrent ? Colors.orangeAccent : Colors.yellow,
-          color: Colors.black87,
-          fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+      spans.add(
+        TextSpan(
+          text: matchText,
+          style: TextStyle(
+            backgroundColor: isCurrent ? Colors.orangeAccent : Colors.yellow,
+            color: Colors.black87,
+            fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+          ),
         ),
-      ));
+      );
       lastEnd = match.matchEnd;
     }
     if (lastEnd < text.length) {
       spans.add(TextSpan(text: text.substring(lastEnd)));
     }
     return SelectableText.rich(
-      TextSpan(
-        style: DefaultTextStyle.of(context).style,
-        children: spans,
-      ),
+      TextSpan(style: DefaultTextStyle.of(context).style, children: spans),
     );
   }
 
@@ -1460,6 +1524,20 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
         });
       }
     });
+
+    // Auto-save reasoning settings when they change (per-model persistence)
+    ref.listen(
+      reasoningEnabledProvider,
+      (_, __) => _persistCurrentReasoningSettings(),
+    );
+    ref.listen(
+      reasoningEffortProvider,
+      (_, __) => _persistCurrentReasoningSettings(),
+    );
+    ref.listen(
+      reasoningParamValuesProvider,
+      (_, __) => _persistCurrentReasoningSettings(),
+    );
 
     // Get conversation title
     final activeId = ref.watch(activeConversationIdProvider);
@@ -1509,91 +1587,14 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
         }
       },
       child: SafeArea(
-      child: Container(
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
-        child: Column(
-          children: [
-            // ── Top bar ──
-            Container(
-              height: 48,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                border: Border(
-                  bottom: BorderSide(
-                    color: Theme.of(context).colorScheme.outlineVariant,
-                    width: 0.5,
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  // Back button when inside nested navigator and not first route
-                  if (Navigator.of(context).canPop())
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back),
-                      tooltip: 'Back',
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  Expanded(
-                    child: GestureDetector(
-                      onLongPress: () => setState(() => _developerMode = !_developerMode),
-                      child: Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              title,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                            ),
-                          ),
-                          if (_developerMode)
-                            Container(
-                              margin: const EdgeInsets.only(left: 6),
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: Colors.amber,
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                              child: const Text(
-                                'DEV',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // ── Search toggle ──
-                  IconButton(
-                    icon: Icon(
-                      _isSearching ? Icons.search_off : Icons.search,
-                      color: _isSearching
-                          ? Theme.of(context).colorScheme.primary
-                          : null,
-                    ),
-                    tooltip: '搜索消息',
-                    onPressed: () => setState(() {
-                      _isSearching = !_isSearching;
-                      if (!_isSearching) _searchMode = SearchMode.current;
-                    }),
-                  ),
-                ],
-              ),
-            ),
-
-            // ── Search bar ──
-            if (_isSearching)
+        child: Container(
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
+          child: Column(
+            children: [
+              // ── Top bar ──
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                height: 48,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surface,
                   border: Border(
@@ -1603,502 +1604,737 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
                     ),
                   ),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Row 1: Search field + nav controls
-                    Row(
-                      children: [
-                        Icon(Icons.search, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: SizedBox(
-                            height: 32,
-                            child: TextField(
-                              controller: _searchTextController,
-                              autofocus: true,
-                              onChanged: (query) {
-                                if (_searchMode == SearchMode.current) {
-                                  _performSearch(query);
-                                } else if (query.isNotEmpty) {
-                                  // Global mode: defer to full search page
-                                  _openGlobalSearch();
-                                }
-                              },
-                              decoration: InputDecoration(
-                                hintText: _searchMode == SearchMode.current
-                                    ? '搜索当前对话...'
-                                    : '搜索所有对话...',
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                border: OutlineInputBorder(),
-                              ),
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          ),
-                        ),
-                        if (_searchMode == SearchMode.current && _searchMatches.isNotEmpty) ...[
-                          const SizedBox(width: 8),
-                          Text(
-                            '${_currentMatchIndex + 1}/${_searchMatches.length}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                        if (_searchMode == SearchMode.current) ...[
-                          IconButton(
-                            icon: const Icon(Icons.keyboard_arrow_up, size: 20),
-                            tooltip: '上一个',
-                            onPressed: _previousMatch,
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.keyboard_arrow_down, size: 20),
-                            tooltip: '下一个',
-                            onPressed: _nextMatch,
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                          ),
-                        ],
-                        IconButton(
-                          icon: const Icon(Icons.close, size: 18),
-                          tooltip: '关闭搜索',
-                          onPressed: _closeSearch,
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                        ),
-                      ],
-                    ),
-                    // Row 2: Mode toggle chips
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        _buildModeChip(
-                          label: '当前对话',
-                          selected: _searchMode == SearchMode.current,
-                          onTap: () {
-                            if (_searchMode != SearchMode.current) {
-                              setState(() {
-                                _searchMode = SearchMode.current;
-                                _searchTextController.clear();
-                                _performSearch('');
-                              });
-                            }
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        _buildModeChip(
-                          label: '所有对话',
-                          selected: _searchMode == SearchMode.global,
-                          onTap: () {
-                            if (_searchMode != SearchMode.global) {
-                              setState(() => _searchMode = SearchMode.global);
-                              _openGlobalSearch();
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-            // ── Unconfigured banner ──
-            if (!adapterConfigured)
-              Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                color: Theme.of(context)
-                    .colorScheme
-                    .errorContainer
-                    .withOpacity(0.3),
                 child: Row(
                   children: [
-                    Icon(Icons.warning_amber_rounded,
-                        size: 16, color: Theme.of(context).colorScheme.error),
-                    const SizedBox(width: 8),
+                    // Back button when inside nested navigator and not first route
+                    if (Navigator.of(context).canPop())
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back),
+                        tooltip: 'Back',
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
                     Expanded(
-                      child: Text(
-                        '⚠️ 未配置聊天API — 前往设置',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).colorScheme.onErrorContainer,
+                      child: GestureDetector(
+                        onLongPress: () =>
+                            setState(() => _developerMode = !_developerMode),
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                title,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface,
+                                ),
+                              ),
+                            ),
+                            if (_developerMode)
+                              Container(
+                                margin: const EdgeInsets.only(left: 6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 1,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber,
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                                child: const Text(
+                                  'DEV',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ),
-                    TextButton(
-                      onPressed: _navigateToProviderConfig,
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    // ── Search toggle ──
+                    IconButton(
+                      icon: Icon(
+                        _isSearching ? Icons.search_off : Icons.search,
+                        color: _isSearching
+                            ? Theme.of(context).colorScheme.primary
+                            : null,
                       ),
-                      child: Text(
-                        '设置',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
+                      tooltip: '搜索消息',
+                      onPressed: () => setState(() {
+                        _isSearching = !_isSearching;
+                        if (!_isSearching) _searchMode = SearchMode.current;
+                      }),
                     ),
                   ],
                 ),
               ),
 
-            // ── Chat widget ──
-            Expanded(
-              child: controller == null
-                  ? const SizedBox.shrink()
-                  : Chat(
-                      key: ValueKey(controller.hashCode),
-                      currentUserId: _currentUser.id,
-                      resolveUser: (id) async {
-                        if (id == _currentUser.id) return _currentUser;
-                        if (id == _aiUser.id) return _aiUser;
-                        return null;
-                      },
-                      chatController: controller,
-                      onMessageSend: (text) => _onMessageSend(text, []),
-
-                      theme: isDark ? ChatTheme.dark() : ChatTheme.light(),
-                      timeFormat: DateFormat('yyyy-MM-dd HH:mm'),
-                      builders: Builders(
-                        chatAnimatedListBuilder: (context, itemBuilder) =>
-                            ChatAnimatedList(
-                          itemBuilder: itemBuilder,
-                          onEndReached: _loadMoreMessages,
-                        ),
-                        // Empty composer builder — the actual composer is
-                        // rendered below the Chat widget so it participates
-                        // in the Column layout flow instead of overlaying
-                        // the message list via the internal Stack. This
-                        // ensures the scroll area auto-adjusts as the
-                        // composer height changes (e.g. multi-line input).
-                        composerBuilder: (_) => const SizedBox.shrink(),
-                        textMessageBuilder: (context, message, index,
-                            {required bool isSentByMe,
-                            MessageGroupStatus? groupStatus}) {
-                          final isAi = message.authorId == _aiUser.id;
-
-                          Widget messageBubble;
-                          if (isAi) {
-                            final chatMsg = _history.where((m) => m.id == message.id).firstOrNull;
-                            if ((chatMsg?.isError == true) || message.text.startsWith('错误:')) {
-                              messageBubble = Container(
-                                margin: const EdgeInsets.symmetric(vertical: 2),
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: (isDark
-                                          ? Colors.grey[850]
-                                          : Colors.grey[100])!
-                                      .withOpacity(0.7),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: Colors.red.withOpacity(0.3),
-                                    width: 1,
+              // ── Search bar ──
+              if (_isSearching)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    border: Border(
+                      bottom: BorderSide(
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Row 1: Search field + nav controls
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.search,
+                            size: 18,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: SizedBox(
+                              height: 32,
+                              child: TextField(
+                                controller: _searchTextController,
+                                autofocus: true,
+                                onChanged: (query) {
+                                  if (_searchMode == SearchMode.current) {
+                                    _performSearch(query);
+                                  } else if (query.isNotEmpty) {
+                                    // Global mode: defer to full search page
+                                    _openGlobalSearch();
+                                  }
+                                },
+                                decoration: InputDecoration(
+                                  hintText: _searchMode == SearchMode.current
+                                      ? '搜索当前对话...'
+                                      : '搜索所有对话...',
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 6,
                                   ),
+                                  border: OutlineInputBorder(),
                                 ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.error_outline,
-                                            size: 14, color: Colors.red[700]),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          '发送失败',
-                                          style: TextStyle(
-                                            color: Colors.red[700],
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                          ),
+                          if (_searchMode == SearchMode.current &&
+                              _searchMatches.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              '${_currentMatchIndex + 1}/${_searchMatches.length}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                          if (_searchMode == SearchMode.current) ...[
+                            IconButton(
+                              icon: const Icon(
+                                Icons.keyboard_arrow_up,
+                                size: 20,
+                              ),
+                              tooltip: '上一个',
+                              onPressed: _previousMatch,
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 32,
+                                minHeight: 32,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.keyboard_arrow_down,
+                                size: 20,
+                              ),
+                              tooltip: '下一个',
+                              onPressed: _nextMatch,
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 32,
+                                minHeight: 32,
+                              ),
+                            ),
+                          ],
+                          IconButton(
+                            icon: const Icon(Icons.close, size: 18),
+                            tooltip: '关闭搜索',
+                            onPressed: _closeSearch,
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 32,
+                              minHeight: 32,
+                            ),
+                          ),
+                        ],
+                      ),
+                      // Row 2: Mode toggle chips
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          _buildModeChip(
+                            label: '当前对话',
+                            selected: _searchMode == SearchMode.current,
+                            onTap: () {
+                              if (_searchMode != SearchMode.current) {
+                                setState(() {
+                                  _searchMode = SearchMode.current;
+                                  _searchTextController.clear();
+                                  _performSearch('');
+                                });
+                              }
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          _buildModeChip(
+                            label: '所有对话',
+                            selected: _searchMode == SearchMode.global,
+                            onTap: () {
+                              if (_searchMode != SearchMode.global) {
+                                setState(() => _searchMode = SearchMode.global);
+                                _openGlobalSearch();
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+              // ── Unconfigured banner ──
+              if (!adapterConfigured)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 6,
+                  ),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.errorContainer.withOpacity(0.3),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '⚠️ 未配置聊天API — 前往设置',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onErrorContainer,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _navigateToProviderConfig,
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: Text(
+                          '设置',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // ── Chat widget ──
+              Expanded(
+                child: controller == null
+                    ? const SizedBox.shrink()
+                    : Chat(
+                        key: ValueKey(controller.hashCode),
+                        currentUserId: _currentUser.id,
+                        resolveUser: (id) async {
+                          if (id == _currentUser.id) return _currentUser;
+                          if (id == _aiUser.id) return _aiUser;
+                          return null;
+                        },
+                        chatController: controller,
+                        onMessageSend: (text) => _onMessageSend(text, []),
+                        theme: isDark ? ChatTheme.dark() : ChatTheme.light(),
+                        timeFormat: DateFormat('yyyy-MM-dd HH:mm'),
+                        builders: Builders(
+                          chatAnimatedListBuilder: (context, itemBuilder) =>
+                              ChatAnimatedList(
+                            itemBuilder: itemBuilder,
+                            onEndReached: _loadMoreMessages,
+                          ),
+                          // Empty composer builder — the actual composer is
+                          // rendered below the Chat widget so it participates
+                          // in the Column layout flow instead of overlaying
+                          // the message list via the internal Stack. This
+                          // ensures the scroll area auto-adjusts as the
+                          // composer height changes (e.g. multi-line input).
+                          composerBuilder: (_) => const SizedBox.shrink(),
+                          textMessageBuilder: (
+                            context,
+                            message,
+                            index, {
+                            required bool isSentByMe,
+                            MessageGroupStatus? groupStatus,
+                          }) {
+                            final isAi = message.authorId == _aiUser.id;
+
+                            Widget messageBubble;
+                            if (isAi) {
+                              final chatMsg = _history
+                                  .where((m) => m.id == message.id)
+                                  .firstOrNull;
+                              if ((chatMsg?.isError == true) ||
+                                  message.text.startsWith('错误:')) {
+                                messageBubble = Container(
+                                  margin: const EdgeInsets.symmetric(
+                                    vertical: 2,
+                                  ),
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: (isDark
+                                            ? Colors.grey[850]
+                                            : Colors.grey[100])!
+                                        .withOpacity(0.7),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: Colors.red.withOpacity(0.3),
+                                      width: 1,
                                     ),
-                                    const SizedBox(height: 6),
-                                    SelectableText(
-                                      message.text.replaceAll('错误: ', ''),
-                                      style: TextStyle(
-                                        color: Colors.red[700],
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                    if (chatMsg != null &&
-                                        (chatMsg.rawRequest != null ||
-                                            chatMsg.rawResponse != null))
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 8),
-                                        child: TextButton.icon(
-                                          icon: const Icon(
-                                            Icons.preview,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.error_outline,
                                             size: 14,
+                                            color: Colors.red[700],
                                           ),
-                                          label: const Text(
-                                            '查看详细错误',
-                                            style: TextStyle(fontSize: 12),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '发送失败',
+                                            style: TextStyle(
+                                              color: Colors.red[700],
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                            ),
                                           ),
-                                          onPressed: () =>
-                                              _showErrorDetailDialog(
-                                            context,
-                                            message.id,
-                                          ),
-                                          style: TextButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                                            minimumSize: Size.zero,
-                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      SelectableText(
+                                        message.text.replaceAll('错误: ', ''),
+                                        style: TextStyle(
+                                          color: Colors.red[700],
+                                          fontSize: 13,
                                         ),
                                       ),
-                                  ],
-                                ),
-                              );
+                                      if (chatMsg != null &&
+                                          (chatMsg.rawRequest != null ||
+                                              chatMsg.rawResponse != null))
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 8,
+                                          ),
+                                          child: TextButton.icon(
+                                            icon: const Icon(
+                                              Icons.preview,
+                                              size: 14,
+                                            ),
+                                            label: const Text(
+                                              '查看详细错误',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                            onPressed: () =>
+                                                _showErrorDetailDialog(
+                                              context,
+                                              message.id,
+                                            ),
+                                            style: TextButton.styleFrom(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                              ),
+                                              minimumSize: Size.zero,
+                                              tapTargetSize:
+                                                  MaterialTapTargetSize
+                                                      .shrinkWrap,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              } else {
+                                final reasoningText =
+                                    _reasoningContents[message.id];
+                                final segments = _chatSegments[message.id];
+                                final isWaitingForFirstToken =
+                                    message.id == _streamingMsgId &&
+                                        message.text.isEmpty &&
+                                        isStreaming &&
+                                        !ref.read(
+                                          streamingHasFirstTokenProvider,
+                                        );
+                                final hasSearchMatch = _isSearching &&
+                                    _searchQuery.isNotEmpty &&
+                                    _searchMatches.any(
+                                      (m) => m.messageId == message.id,
+                                    );
+
+                                messageBubble = Container(
+                                  margin: const EdgeInsets.symmetric(
+                                    vertical: 2,
+                                  ),
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? Colors.grey[850]
+                                        : Colors.grey[100],
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (reasoningText != null)
+                                        ReasoningSection(
+                                          reasoningText: reasoningText,
+                                        ),
+                                      // Show JumpingDots while waiting for first token
+                                      if (isWaitingForFirstToken)
+                                        const Padding(
+                                          padding: EdgeInsets.symmetric(
+                                            vertical: 8,
+                                          ),
+                                          child: JumpingDotsProgressIndicator(
+                                            color: Colors.grey,
+                                            fontSize: 14,
+                                          ),
+                                        )
+                                      else if (segments != null &&
+                                          segments.isNotEmpty)
+                                        // Merge consecutive TextSegments to avoid visual breaks
+                                        // between arbitrary streaming chunk boundaries (e.g.
+                                        // throttle intervals). Each text block renders in a
+                                        // single MarkdownWidget for continuity.
+                                        ...mergeConsecutiveTextSegments(
+                                          segments,
+                                        ).map(
+                                          (seg) => switch (seg) {
+                                            TextSegment s => Padding(
+                                                padding: const EdgeInsets.only(
+                                                  bottom: 4,
+                                                ),
+                                                child: hasSearchMatch
+                                                    ? _buildHighlightedText(
+                                                        s.text,
+                                                        message.id,
+                                                      )
+                                                    : MarkdownWidget(
+                                                        data: s.text,
+                                                        selectable: true,
+                                                        shrinkWrap: true,
+                                                        physics:
+                                                            const NeverScrollableScrollPhysics(),
+                                                        config: markdownConfig,
+                                                        markdownGenerator:
+                                                            markdownGenerator,
+                                                      ),
+                                              ),
+                                            ToolCallSegment s =>
+                                              ToolCallCard(data: s.data),
+                                          },
+                                        )
+                                      else if (hasSearchMatch)
+                                        _buildHighlightedText(
+                                          message.text,
+                                          message.id,
+                                        )
+                                      else
+                                        MarkdownWidget(
+                                          data: message.text,
+                                          selectable: true,
+                                          shrinkWrap: true,
+                                          physics:
+                                              const NeverScrollableScrollPhysics(),
+                                          config: markdownConfig,
+                                          markdownGenerator: markdownGenerator,
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              }
                             } else {
-                              final reasoningText = _reasoningContents[message.id];
-                              final segments = _chatSegments[message.id];
-                              final isWaitingForFirstToken =
-                                  message.id == _streamingMsgId &&
-                                  message.text.isEmpty &&
-                                  isStreaming &&
-                                  !ref.read(streamingHasFirstTokenProvider);
+                              final chatMsg = _history
+                                  .where((m) => m.id == message.id)
+                                  .firstOrNull;
+                              final hasAttachments =
+                                  chatMsg?.attachments.isNotEmpty == true;
                               final hasSearchMatch = _isSearching &&
                                   _searchQuery.isNotEmpty &&
-                                  _searchMatches.any((m) => m.messageId == message.id);
-
-                              messageBubble = Container(
-                                margin:
-                                    const EdgeInsets.symmetric(vertical: 2),
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? Colors.grey[850]
-                                      : Colors.grey[100],
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                  child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (reasoningText != null)
-                                      ReasoningSection(reasoningText: reasoningText),
-                                    // Show JumpingDots while waiting for first token
-                                    if (isWaitingForFirstToken)
-                                      const Padding(
-                                        padding: EdgeInsets.symmetric(vertical: 8),
-                                        child: JumpingDotsProgressIndicator(
-                                          color: Colors.grey,
-                                          fontSize: 14,
-                                        ),
-                                      )
-                                    else if (segments != null && segments.isNotEmpty)
-                                      // Merge consecutive TextSegments to avoid visual breaks
-                                      // between arbitrary streaming chunk boundaries (e.g.
-                                      // throttle intervals). Each text block renders in a
-                                      // single MarkdownWidget for continuity.
-                                      ...mergeConsecutiveTextSegments(segments).map((seg) => switch (seg) {
-                                            TextSegment s => Padding(
-                                              padding: const EdgeInsets.only(bottom: 4),
-                                              child: hasSearchMatch
-                                                ? _buildHighlightedText(s.text, message.id)
-                                                : MarkdownWidget(
-                                                    data: s.text,
-                                                    selectable: true,
-                                                    shrinkWrap: true,
-                                                    physics: const NeverScrollableScrollPhysics(),
-                                                    config: markdownConfig,
-                                                    markdownGenerator: markdownGenerator,
-                                                  ),
-                                            ),
-                                            ToolCallSegment s => ToolCallCard(data: s.data),
-                                          })
-                                    else if (hasSearchMatch)
-                                      _buildHighlightedText(message.text, message.id)
-                                    else
-                                      MarkdownWidget(
-                                        data: message.text,
-                                        selectable: true,
-                                        shrinkWrap: true,
-                                        physics:
-                                            const NeverScrollableScrollPhysics(),
-                                        config: markdownConfig,
-                                        markdownGenerator: markdownGenerator,
+                                  _searchMatches.any(
+                                    (m) => m.messageId == message.id,
+                                  );
+                              messageBubble = Column(
+                                crossAxisAlignment: hasAttachments && isSentByMe
+                                    ? CrossAxisAlignment.end
+                                    : CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (hasSearchMatch)
+                                    _buildHighlightedText(
+                                      message.text,
+                                      message.id,
+                                    )
+                                  else
+                                    SimpleTextMessage(
+                                      message: message,
+                                      index: index,
+                                    ),
+                                  if (hasAttachments)
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                        left: 4,
+                                        right: 4,
+                                        bottom: 4,
                                       ),
-                                  ],
-                                ),
+                                      child: SizedBox(
+                                        height: 120,
+                                        child: ListView.builder(
+                                          scrollDirection: Axis.horizontal,
+                                          reverse: isSentByMe,
+                                          itemCount:
+                                              chatMsg!.attachments.length,
+                                          itemBuilder: (ctx, i) {
+                                            final att = chatMsg.attachments[i];
+                                            return _buildMessageAttachmentPreview(
+                                              att,
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               );
                             }
-                          } else {
-                            final chatMsg = _history.where((m) => m.id == message.id).firstOrNull;
-                            final hasAttachments = chatMsg?.attachments.isNotEmpty == true;
-                            final hasSearchMatch = _isSearching &&
-                                _searchQuery.isNotEmpty &&
-                                _searchMatches.any((m) => m.messageId == message.id);
-                            messageBubble = Column(
-                              crossAxisAlignment: hasAttachments && isSentByMe
+
+                            return Column(
+                              crossAxisAlignment: isSentByMe
                                   ? CrossAxisAlignment.end
                                   : CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (hasSearchMatch)
-                                  _buildHighlightedText(message.text, message.id)
-                                else
-                                  SimpleTextMessage(message: message, index: index),
-                                if (hasAttachments)
-                                  Padding(
-                                    padding: const EdgeInsets.only(left: 4, right: 4, bottom: 4),
-                                    child: SizedBox(
-                                      height: 120,
-                                      child: ListView.builder(
-                                        scrollDirection: Axis.horizontal,
-                                        reverse: isSentByMe,
-                                        itemCount: chatMsg!.attachments.length,
-                                        itemBuilder: (ctx, i) {
-                                          final att = chatMsg.attachments[i];
-                                          return _buildMessageAttachmentPreview(att);
+                                Container(
+                                  key: _messageKeys.putIfAbsent(
+                                    message.id,
+                                    () => GlobalKey(),
+                                  ),
+                                  child: messageBubble,
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                    left: 4,
+                                    top: 2,
+                                    bottom: 4,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      ActionButton(
+                                        icon: Icons.copy,
+                                        tooltip: '复制',
+                                        onPressed: () {
+                                          Clipboard.setData(
+                                            ClipboardData(
+                                              text: message.text,
+                                            ),
+                                          );
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('已复制'),
+                                              duration: Duration(
+                                                seconds: 1,
+                                              ),
+                                            ),
+                                          );
                                         },
                                       ),
-                                    ),
+                                      const SizedBox(width: 2),
+                                      if (isAi)
+                                        ActionButton(
+                                          icon: Icons.refresh,
+                                          tooltip: '重试',
+                                          onPressed: () => _confirmRetryOrEdit(
+                                            message.id,
+                                          ),
+                                        )
+                                      else
+                                        ActionButton(
+                                          icon: Icons.edit_outlined,
+                                          tooltip: '编辑',
+                                          onPressed: () =>
+                                              _showEditMessageDialog(
+                                            message.id,
+                                          ),
+                                        ),
+                                      const SizedBox(width: 2),
+                                      // Raw data view button: shows response data for AI messages,
+                                      // request data for user messages. Always visible when data exists.
+                                      if (_history.any((m) =>
+                                          m.id == message.id &&
+                                          ((isAi && m.rawResponse != null) ||
+                                              (!isAi && m.rawRequest != null))))
+                                        ActionButton(
+                                          icon: Icons.data_exploration,
+                                          tooltip: isAi ? '查看响应数据' : '查看请求数据',
+                                          onPressed: () => _showRawDataDialog(
+                                            message.id,
+                                            isAi: isAi,
+                                          ),
+                                        ),
+                                      const SizedBox(width: 2),
+                                      if (_developerMode &&
+                                          isAi &&
+                                          _history.any(
+                                            (m) =>
+                                                m.id == message.id &&
+                                                (m.rawRequest != null ||
+                                                    m.rawResponse != null),
+                                          ))
+                                        ActionButton(
+                                          icon: Icons.code,
+                                          tooltip: 'JSON 审查',
+                                          onPressed: () => _showJsonInspection(
+                                            message.id,
+                                          ),
+                                        ),
+                                      const SizedBox(width: 2),
+                                      ActionButton(
+                                        icon: Icons.delete_outline,
+                                        tooltip: '删除',
+                                        onPressed: () => _confirmDeleteMessage(
+                                          message.id,
+                                        ),
+                                      ),
+                                    ],
                                   ),
+                                ),
                               ],
                             );
-                          }
-
-                          return Column(
-                            crossAxisAlignment: isSentByMe
-                                ? CrossAxisAlignment.end
-                                : CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                key: _messageKeys.putIfAbsent(message.id, () => GlobalKey()),
-                                child: messageBubble,
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.only(left: 4, top: 2, bottom: 4),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    ActionButton(
-                                      icon: Icons.copy,
-                                      tooltip: '复制',
-                                      onPressed: () {
-                                        Clipboard.setData(
-                                            ClipboardData(text: message.text));
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                            content: Text('已复制'),
-                                            duration: Duration(seconds: 1),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                    const SizedBox(width: 2),
-                                    if (isAi)
-                                      ActionButton(
-                                        icon: Icons.refresh,
-                                        tooltip: '重试',
-                                        onPressed: () =>
-                                            _confirmRetryOrEdit(message.id),
-                                      )
-                                    else
-                                      ActionButton(
-                                        icon: Icons.edit_outlined,
-                                        tooltip: '编辑',
-                                        onPressed: () =>
-                                            _showEditMessageDialog(message.id),
-                                      ),
-                                    const SizedBox(width: 2),
-                                    if (_developerMode && isAi && _history.any((m) => m.id == message.id && (m.rawRequest != null || m.rawResponse != null)))
-                                      ActionButton(
-                                        icon: Icons.code,
-                                        tooltip: 'JSON 审查',
-                                        onPressed: () => _showJsonInspection(message.id),
-                                      ),
-                                    const SizedBox(width: 2),
-                                    ActionButton(
-                                      icon: Icons.delete_outline,
-                                      tooltip: '删除',
-                                      onPressed: () =>
-                                          _confirmDeleteMessage(message.id),
-                                    ),
-                                  ],
+                          },
+                          textStreamMessageBuilder: (
+                            context,
+                            message,
+                            index, {
+                            required bool isSentByMe,
+                            MessageGroupStatus? groupStatus,
+                          }) {
+                            // If the message has accumulated content (e.g.,
+                            // after page restoration from background streaming),
+                            // render it as regular text instead of a spinner.
+                            final accumulated = ref.read(
+                              streamingFullReplyProvider,
+                            );
+                            if (accumulated.isNotEmpty &&
+                                message.id ==
+                                    ref.read(streamingMsgIdProvider)) {
+                              return Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: MarkdownWidget(
+                                  data: accumulated,
+                                  selectable: true,
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  config: markdownConfig,
+                                  markdownGenerator: markdownGenerator,
+                                ),
+                              );
+                            }
+                            return const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
                                 ),
                               ),
-                            ],
-                          );
-                        },
-                        textStreamMessageBuilder: (context, message, index,
-                            {required bool isSentByMe,
-                            MessageGroupStatus? groupStatus}) {
-                          // If the message has accumulated content (e.g.,
-                          // after page restoration from background streaming),
-                          // render it as regular text instead of a spinner.
-                          final accumulated = ref.read(streamingFullReplyProvider);
-                          if (accumulated.isNotEmpty &&
-                              message.id == ref.read(streamingMsgIdProvider)) {
-                            return Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: MarkdownWidget(
-                                data: accumulated,
-                                selectable: true,
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                config: markdownConfig,
-                                markdownGenerator: markdownGenerator,
-                              ),
                             );
-                          }
-                          return const Padding(
-                            padding: EdgeInsets.all(12),
-                            child: SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          );
-                        },
+                          },
+                        ),
                       ),
-                    ),
-                  ),
-                // ── Chat composer (below chat, in Column flow) ──
-                // Rendered as a direct Column child so it participates in the
-                // layout flow instead of overlaying the message list via a
-                // Stack. This lets the scroll area auto-adjust as the
-                // composer height changes (e.g. multi-line input).
-                ChatComposerWidget(
-                  conversationId: activeId,
-                  initialDraftText: currentDraftText,
-                  onSend: _onMessageSend,
-                  onStop: _stopStreaming,
-                  onPreviewAttachment: _showAttachmentPreview,
-                  mcpTools: _adapter.getAllToolDefinitions(),
-                  enabledTools: ref.watch(enabledToolNamesProvider),
-                  onEnabledToolsChanged: (tools) {
-                    ref.read(enabledToolNamesProvider.notifier).state = tools;
-                  },
-                  modelNames: _getModelNames(),
-                  selectedModelIndex: _selectedModelIndex,
-                  onModelSelected: _onModelSelected,
-                  onModelsReordered: _onModelsReordered,
-                  reasoningParams: _adapter.reasoningParams,
-                  hasReasoningParams: _adapter.hasReasoningParams,
-                ),
-              ],
-            ),
+              ),
+              // ── Chat composer (below chat, in Column flow) ──
+              // Rendered as a direct Column child so it participates in the
+              // layout flow instead of overlaying the message list via a
+              // Stack. This lets the scroll area auto-adjust as the
+              // composer height changes (e.g. multi-line input).
+              ChatComposerWidget(
+                conversationId: activeId,
+                initialDraftText: currentDraftText,
+                onSend: _onMessageSend,
+                onStop: _stopStreaming,
+                onPreviewAttachment: _showAttachmentPreview,
+                mcpTools: _adapter.getAllToolDefinitions(),
+                enabledTools: ref.watch(enabledToolNamesProvider),
+                onEnabledToolsChanged: (tools) {
+                  ref.read(enabledToolNamesProvider.notifier).state = tools;
+                },
+                modelNames: _getModelNames(),
+                selectedModelIndex: _selectedModelIndex,
+                onModelSelected: _onModelSelected,
+                onModelsReordered: _onModelsReordered,
+                reasoningParams: _adapter.reasoningParams,
+                hasReasoningParams: _adapter.hasReasoningParams,
+              ),
+            ],
           ),
         ),
-      );
-    }
+      ),
+    );
+  }
 
   void _showErrorDetailDialog(BuildContext context, String messageId) {
     final chatMsg = _history.where((m) => m.id == messageId).firstOrNull;
@@ -2109,6 +2345,34 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
       rawRequest: chatMsg.rawRequest,
       rawResponse: chatMsg.rawResponse,
     );
+  }
+
+  /// Shows a dialog with raw HTTP request/response data for the given message.
+  /// For AI messages, shows response headers + body.
+  /// For user messages, shows request headers + body.
+  void _showRawDataDialog(String messageId, {required bool isAi}) {
+    final chatMsg = _history.where((m) => m.id == messageId).firstOrNull;
+    if (chatMsg == null) return;
+
+    if (isAi) {
+      // Show response data
+      if (chatMsg.rawResponse != null) {
+        showErrorDetailDialog(
+          context: context,
+          rawRequest: null,
+          rawResponse: chatMsg.rawResponse,
+        );
+      }
+    } else {
+      // Show request data
+      if (chatMsg.rawRequest != null) {
+        showErrorDetailDialog(
+          context: context,
+          rawRequest: chatMsg.rawRequest,
+          rawResponse: null,
+        );
+      }
+    }
   }
 
   /// Returns the list of model display names for the attachment panel,
@@ -2140,7 +2404,8 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
   /// Called when model is selected from the attachment panel.
   /// Uses the model name from the display list to find the correct
   /// adapter model, so that drag-reordered indices still select the
-  /// right model.
+  /// right model. Saves current model's settings and restores the
+  /// new model's per-model settings.
   void _onModelSelected(int idx) {
     final entriesState = ref.read(providerEntriesProvider);
     final models = _adapter.availableModels(entriesState);
@@ -2151,12 +2416,29 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     final modelIdx = models.indexWhere((m) => m.displayName == selectedName);
     if (modelIdx < 0) return;
 
+    // Capture old model name BEFORE setState changes _selectedModelIndex
+    final oldModelName = _getCurrentModelName();
+
+    // Save current model's settings before switching, using captured name
+    SharedPreferences.getInstance().then((prefs) {
+      if (oldModelName.isNotEmpty) {
+        final allSettings = _loadPerModelSettingsMap(prefs);
+        allSettings[oldModelName] = {
+          'reasoningEnabled': ref.read(reasoningEnabledProvider),
+          'reasoningEffort': ref.read(reasoningEffortProvider),
+          'reasoningParamValues': ref.read(reasoningParamValuesProvider),
+        };
+        prefs.setString('per_model_chat_settings', jsonEncode(allSettings));
+      }
+    });
+
     final model = models[modelIdx];
-    _adapter.selectModel(
-        entriesState, model.configIndex, model.modelIndex);
+    _adapter.selectModel(entriesState, model.configIndex, model.modelIndex);
     setState(() => _selectedModelIndex = idx);
     SharedPreferences.getInstance().then((prefs) {
       prefs.setInt('selected_model_index', idx);
+      // Restore the new model's per-model settings
+      _restorePerModelSettings(prefs, idx);
     });
   }
 
@@ -2165,6 +2447,83 @@ class _ChatPageState extends ConsumerState<ChatPage> with WidgetsBindingObserver
     setState(() => _savedModelOrder = reordered);
     SharedPreferences.getInstance().then((prefs) {
       prefs.setStringList('model_order', reordered);
+    });
+  }
+
+  // ── Per-model settings persistence ──────────────────────────────────
+
+  /// Returns the display name of the currently selected model.
+  String _getCurrentModelName() {
+    final names = _getModelNames();
+    if (_selectedModelIndex >= 0 && _selectedModelIndex < names.length) {
+      return names[_selectedModelIndex];
+    }
+    return '';
+  }
+
+  /// Saves the current reasoning/reasoning-effort/reasoning-param settings
+  /// to SharedPreferences, keyed by the current model's display name.
+  void _saveCurrentModelSettings(SharedPreferences prefs) {
+    final modelName = _getCurrentModelName();
+    if (modelName.isEmpty) return;
+
+    // Load existing per-model settings map
+    final allSettings = _loadPerModelSettingsMap(prefs);
+    allSettings[modelName] = {
+      'reasoningEnabled': ref.read(reasoningEnabledProvider),
+      'reasoningEffort': ref.read(reasoningEffortProvider),
+      'reasoningParamValues': ref.read(reasoningParamValuesProvider),
+    };
+    prefs.setString('per_model_chat_settings', jsonEncode(allSettings));
+  }
+
+  /// Restores the reasoning/reasoning-effort/reasoning-param settings
+  /// for the model at the given display [index].
+  void _restorePerModelSettings(SharedPreferences prefs, int index) {
+    final names = _getModelNames();
+    if (index < 0 || index >= names.length) return;
+    final modelName = names[index];
+
+    final allSettings = _loadPerModelSettingsMap(prefs);
+    final modelSettings = allSettings[modelName];
+    if (modelSettings
+        case {
+          'reasoningEnabled': bool re,
+          'reasoningEffort': String refEff,
+          'reasoningParamValues': Map<String, dynamic> rpv,
+        }) {
+      ref.read(reasoningEnabledProvider.notifier).state = re;
+      // Validate reasoningEffort against known values
+      const validEfforts = {'low', 'medium', 'high'};
+      ref.read(reasoningEffortProvider.notifier).state =
+          validEfforts.contains(refEff) ? refEff : 'medium';
+      // Cast from Map<String, dynamic> (jsonDecode result) to Map<String, String>
+      ref.read(reasoningParamValuesProvider.notifier).state =
+          rpv.map((k, v) => MapEntry(k, v.toString()));
+    } else {
+      // No saved settings for this model — use defaults
+      ref.read(reasoningEnabledProvider.notifier).state = false;
+      ref.read(reasoningEffortProvider.notifier).state = 'medium';
+      ref.read(reasoningParamValuesProvider.notifier).state = {};
+    }
+  }
+
+  /// Loads the per-model settings map from SharedPreferences.
+  Map<String, dynamic> _loadPerModelSettingsMap(SharedPreferences prefs) {
+    final json = prefs.getString('per_model_chat_settings');
+    if (json != null && json.isNotEmpty) {
+      try {
+        return Map<String, dynamic>.from(jsonDecode(json) as Map);
+      } catch (_) {}
+    }
+    return {};
+  }
+
+  /// Persists the current reasoning settings to the current model's slot.
+  /// Called when reasoning toggle, effort, or param values change.
+  void _persistCurrentReasoningSettings() {
+    SharedPreferences.getInstance().then((prefs) {
+      _saveCurrentModelSettings(prefs);
     });
   }
 }
