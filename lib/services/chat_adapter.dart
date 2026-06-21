@@ -72,15 +72,17 @@ class ChatAdapter {
 
   /// 初始化 MCP 客户端并发现工具
   Future<void> initializeMcpServers(ProviderEntriesState entriesState) async {
-    final mcpEntry =
-        entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
+    final mcpEntry = entriesState.entries
+        .where((e) => e.type == 'mcp')
+        .firstOrNull;
     if (mcpEntry == null || mcpEntry.configs.isEmpty) return;
 
     // Build MCP server configs from provider configs
     final mcpConfigs = <McpServerConfig>[];
     for (final config in mcpEntry.configs) {
-      final typeConfig =
-          config.models.isNotEmpty ? config.models[0].typeConfig : null;
+      final typeConfig = config.models.isNotEmpty
+          ? config.models[0].typeConfig
+          : null;
       final serverConfig = McpServerConfig.fromProviderConfig(
         providerName: config.providerName,
         typeConfig: typeConfig,
@@ -106,7 +108,8 @@ class ChatAdapter {
         allTools.addAll(toolDefs);
 
         debugPrint(
-            'MCP[${mcpConfig.name}]: discovered ${toolDefs.length} tools');
+          'MCP[${mcpConfig.name}]: discovered ${toolDefs.length} tools',
+        );
       } catch (e) {
         debugPrint('MCP[${mcpConfig.name}]: init error: $e');
       }
@@ -122,8 +125,9 @@ class ChatAdapter {
 
   /// 从 ProviderEntriesState 解析出所有可选的模型列表
   List<AvailableModel> availableModels(ProviderEntriesState entriesState) {
-    final llmEntry =
-        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
+    final llmEntry = entriesState.entries
+        .where((e) => e.type == 'llm')
+        .firstOrNull;
     if (llmEntry == null || llmEntry.configs.isEmpty) return const [];
 
     final result = <AvailableModel>[];
@@ -133,11 +137,13 @@ class ChatAdapter {
         final model = config.models[mi];
         final displayName =
             '${model.name.isNotEmpty ? model.name : model.modelId} | ${config.providerName}';
-        result.add(AvailableModel(
-          displayName: displayName,
-          configIndex: ci,
-          modelIndex: mi,
-        ));
+        result.add(
+          AvailableModel(
+            displayName: displayName,
+            configIndex: ci,
+            modelIndex: mi,
+          ),
+        );
       }
     }
     return result;
@@ -145,8 +151,9 @@ class ChatAdapter {
 
   /// 从 ProviderEntriesState 读取 LLM 配置并初始化 ChatService
   void configure(ProviderEntriesState entriesState) {
-    final llmEntry =
-        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
+    final llmEntry = entriesState.entries
+        .where((e) => e.type == 'llm')
+        .firstOrNull;
     if (llmEntry == null || llmEntry.configs.isEmpty) {
       debugPrint('ChatAdapter.configure: no LLM entry or configs');
       _chatService = null;
@@ -170,7 +177,9 @@ class ChatAdapter {
       currentModelIndex = -1;
       return;
     }
-    debugPrint('ChatAdapter.configure: host=${config.host} model=${modelConfig.modelId}');
+    debugPrint(
+      'ChatAdapter.configure: host=${config.host} model=${modelConfig.modelId}',
+    );
     final provider = createChatProviderFromConfig(
       providerName: config.providerName,
       baseUrl: config.host,
@@ -183,9 +192,13 @@ class ChatAdapter {
 
   /// 根据 configIndex / modelIndex 重新创建 ChatService
   void selectModel(
-      ProviderEntriesState entriesState, int configIndex, int modelIndex) {
-    final llmEntry =
-        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
+    ProviderEntriesState entriesState,
+    int configIndex,
+    int modelIndex,
+  ) {
+    final llmEntry = entriesState.entries
+        .where((e) => e.type == 'llm')
+        .firstOrNull;
     if (llmEntry == null ||
         configIndex < 0 ||
         configIndex >= llmEntry.configs.length) {
@@ -197,7 +210,9 @@ class ChatAdapter {
     }
     final config = llmEntry.configs[configIndex];
     if (config.host.isEmpty || config.key.isEmpty) {
-      debugPrint('ChatAdapter.selectModel: config[$configIndex] host or key empty');
+      debugPrint(
+        'ChatAdapter.selectModel: config[$configIndex] host or key empty',
+      );
       _chatService = null;
       currentConfigIndex = -1;
       currentModelIndex = -1;
@@ -211,7 +226,9 @@ class ChatAdapter {
       return;
     }
     final modelConfig = config.models[modelIndex];
-    debugPrint('ChatAdapter.selectModel: using config[$configIndex] host=${config.host} model=${modelConfig.modelId}');
+    debugPrint(
+      'ChatAdapter.selectModel: using config[$configIndex] host=${config.host} model=${modelConfig.modelId}',
+    );
     final provider = createChatProviderFromConfig(
       providerName: config.providerName,
       baseUrl: config.host,
@@ -253,6 +270,12 @@ class ChatAdapter {
     _chatService?.setAssistantCustomParams(params);
   }
 
+  /// Pass the assistant's system prompt to the underlying ChatService.
+  /// This prompt will be prepended as a system-role message in API requests.
+  void setAssistantPrompt(String? prompt) {
+    _chatService?.setAssistantPrompt(prompt);
+  }
+
   /// Pass assistant-level settings to the underlying ChatService.
   /// When an assistant setting's enable flag is true, it overrides the
   /// corresponding model parameter. When false, the model parameter is used.
@@ -260,11 +283,23 @@ class ChatAdapter {
     _chatService?.setAssistantSettings(settings);
   }
 
-  Stream<String> sendStream(String text, {required List<ChatMessage> history, bool reasoning = false, String reasoningEffort = 'medium', Map<String, String> reasoningParamValues = const {}}) {
+  Stream<String> sendStream(
+    String text, {
+    required List<ChatMessage> history,
+    bool reasoning = false,
+    String reasoningEffort = 'medium',
+    Map<String, String> reasoningParamValues = const {},
+  }) {
     if (_chatService == null) {
       return Stream.error('请先配置聊天供应商');
     }
-    return _chatService!.sendStream(text, history: history, reasoning: reasoning, reasoningEffort: reasoningEffort, reasoningParamValues: reasoningParamValues);
+    return _chatService!.sendStream(
+      text,
+      history: history,
+      reasoning: reasoning,
+      reasoningEffort: reasoningEffort,
+      reasoningParamValues: reasoningParamValues,
+    );
   }
 
   /// Send a message with tool call support.
@@ -294,8 +329,10 @@ class ChatAdapter {
 
   Map<String, dynamic>? get lastRequestBody => _chatService?.lastRequestBody;
   Map<String, dynamic>? get lastResponseData => _chatService?.lastResponseData;
-  Map<String, String>? get lastRequestHeaders => _chatService?.lastRequestHeaders;
+  Map<String, String>? get lastRequestHeaders =>
+      _chatService?.lastRequestHeaders;
   String? get lastRequestUrl => _chatService?.lastRequestUrl;
   int? get lastResponseStatusCode => _chatService?.lastResponseStatusCode;
-  Map<String, List<String>>? get lastResponseHeaders => _chatService?.lastResponseHeaders;
+  Map<String, List<String>>? get lastResponseHeaders =>
+      _chatService?.lastResponseHeaders;
 }
