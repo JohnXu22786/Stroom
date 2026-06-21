@@ -69,8 +69,9 @@ class SelectedAudio {
 // ASR Page
 // ============================================================================
 
-/// Main ASR page — allows selecting audio files from device storage,
-/// then performing speech-to-text transcription and saving results to text storage.
+/// Main ASR page — allows selecting audio files from device storage or
+/// in-app recordings (multi-select), then performing speech-to-text
+/// transcription and saving results to text storage.
 class AsrPage extends ConsumerStatefulWidget {
   const AsrPage({super.key});
 
@@ -79,7 +80,7 @@ class AsrPage extends ConsumerStatefulWidget {
 }
 
 class _AsrPageState extends ConsumerState<AsrPage> {
-  SelectedAudio? _selectedAudio;
+  final List<SelectedAudio> _selectedAudios = [];
   bool _isProcessing = false;
   String? _errorMessage;
   String? _transcriptionResult;
@@ -100,10 +101,10 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('语音识别'),
+        title: const Text('音频转写'),
         centerTitle: true,
         actions: [
-          if (_selectedAudio != null && !_isProcessing)
+          if (_selectedAudios.isNotEmpty && !_isProcessing)
             TextButton.icon(
               onPressed: _clearAll,
               icon: const Icon(Icons.clear_all, size: 18),
@@ -121,7 +122,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
           // Audio info area
           Expanded(
-            child: _selectedAudio == null
+            child: _selectedAudios.isEmpty
                 ? _buildEmptyState(cs)
                 : _buildAudioInfo(cs),
           ),
@@ -322,49 +323,125 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   Widget _buildAudioInfo(ColorScheme cs) {
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Card(
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: cs.outlineVariant, width: 0.5),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.audiotrack, size: 48, color: cs.primary),
-              const SizedBox(height: 12),
-              Text(
-                _selectedAudio!.name,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: cs.onSurface,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+      child: ListView(
+        children: [
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: cs.outlineVariant, width: 0.5),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.audiotrack, size: 48, color: cs.primary),
+                  const SizedBox(height: 12),
+                  Text(
+                    '已选择 ${_selectedAudios.length} 个音频文件',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _isProcessing ? null : _showAudioSourceSheet,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text('重新选择'),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                '格式: ${_selectedAudio!.format.toUpperCase()}  |  大小: ${_formatFileSize(_selectedAudio!.bytes.length)}',
-                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _isProcessing ? null : _showAudioSourceSheet,
-                  icon: const Icon(Icons.refresh, size: 18),
-                  label: const Text('重新选择'),
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
+          const SizedBox(height: 8),
+          ...List.generate(_selectedAudios.length, (index) {
+            final audio = _selectedAudios[index];
+            return Card(
+              key: ValueKey('audio_item_${audio.hashCode}_$index'),
+              elevation: 0,
+              margin: const EdgeInsets.symmetric(vertical: 3),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: BorderSide(color: cs.outlineVariant, width: 0.5),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: cs.primary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.audiotrack,
+                        size: 18,
+                        color: cs.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${index + 1}. ${audio.name}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: cs.onSurface,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${audio.format.toUpperCase()}  |  ${_formatFileSize(audio.bytes.length)}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close, size: 16, color: cs.error),
+                      onPressed: _isProcessing
+                          ? null
+                          : () => _removeAudio(index),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
       ),
     );
+  }
+
+  void _removeAudio(int index) {
+    if (index < 0 || index >= _selectedAudios.length) return;
+    setState(() {
+      _selectedAudios.removeAt(index);
+      _errorMessage = null;
+      _transcriptionResult = null;
+    });
   }
 
   Widget _buildErrorBanner(ColorScheme cs) {
@@ -491,11 +568,19 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             // Save-to folder selector (above start button)
             _buildSaveToSelector(cs),
             const SizedBox(height: 4),
+            if (_selectedAudios.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '已选 ${_selectedAudios.length} 个音频',
+                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                ),
+              ),
             SizedBox(
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed: _selectedAudio == null || _isProcessing
+                onPressed: _selectedAudios.isEmpty || _isProcessing
                     ? null
                     : _startTranscription,
                 icon: _isProcessing
@@ -645,19 +730,30 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     );
   }
 
-  /// Pick an audio file from the device storage.
+  /// Pick audio files from the device storage (supports multi-select).
   Future<void> _pickAudioFile() async {
     try {
       final result = await FilePicker.pickFiles(
         type: FileType.audio,
-        allowMultiple: false,
+        allowMultiple: true,
         withData: true,
       );
       if (result == null || result.files.isEmpty) return;
 
-      final file = result.files.first;
-      final bytes = file.bytes;
-      if (bytes == null || bytes.isEmpty) {
+      final newAudios = <SelectedAudio>[];
+      for (final file in result.files) {
+        final bytes = file.bytes;
+        if (bytes == null || bytes.isEmpty) continue;
+        newAudios.add(
+          SelectedAudio(
+            bytes: bytes,
+            name: file.name,
+            format: _detectFormat(file.name),
+          ),
+        );
+      }
+
+      if (newAudios.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(
             context,
@@ -667,11 +763,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       }
 
       setState(() {
-        _selectedAudio = SelectedAudio(
-          bytes: bytes,
-          name: file.name,
-          format: _detectFormat(file.name),
-        );
+        _selectedAudios.addAll(newAudios);
         _errorMessage = null;
         _transcriptionResult = null;
       });
@@ -695,7 +787,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         emptyText: '暂无录音',
         fileIcon: Icons.audiotrack,
         fileIconColor: Colors.green,
-        multiSelect: false,
+        multiSelect: true,
         loadRecords: () async {
           await ref.read(audioRecordsProvider.notifier).loadRecords();
           return ref.read(audioRecordsProvider);
@@ -746,24 +838,24 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
     if (result == null || result.isEmpty || !mounted) return;
 
-    final entry = result.first;
-
-    // Look up the AudioRecord to get the correct format (displayName is bare name)
-    String format = 'wav';
+    // Look up records to get correct formats
     final records = ref.read(audioRecordsProvider);
-    for (final r in records) {
-      if (r.name == entry.key) {
-        format = r.format;
-        break;
+    final newAudios = <SelectedAudio>[];
+    for (final entry in result) {
+      String format = 'wav';
+      for (final r in records) {
+        if (r.name == entry.key) {
+          format = r.format;
+          break;
+        }
       }
+      newAudios.add(
+        SelectedAudio(bytes: entry.value, name: entry.key, format: format),
+      );
     }
 
     setState(() {
-      _selectedAudio = SelectedAudio(
-        bytes: entry.value,
-        name: entry.key,
-        format: format,
-      );
+      _selectedAudios.addAll(newAudios);
       _errorMessage = null;
       _transcriptionResult = null;
     });
@@ -771,7 +863,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
   void _clearAll() {
     setState(() {
-      _selectedAudio = null;
+      _selectedAudios.clear();
       _errorMessage = null;
       _transcriptionResult = null;
     });
@@ -782,26 +874,14 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   // ==================================================================
 
   Future<void> _startTranscription() async {
-    if (_selectedAudio == null) return;
+    if (_selectedAudios.isEmpty) return;
 
     final asrConfig = _resolveAsrConfig(ref);
     if (asrConfig == null) {
       setState(() {
-        _errorMessage = '请先在设置中配置语音识别供应商';
+        _errorMessage = '请先在设置中配置音频转写供应商';
       });
       return;
-    }
-
-    // Create a background task for tracking
-    final timestamp = _currentTimestamp();
-    final title = 'ASR_$timestamp';
-    final taskId = ref
-        .read(backgroundTasksProvider.notifier)
-        .addTask(type: BackgroundTaskType.asr, title: title);
-
-    // Pop back to home page immediately so user can see task progress
-    if (mounted) {
-      Navigator.pop(context);
     }
 
     // Use the selected model from dropdown
@@ -814,19 +894,45 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       effectiveConfig = asrConfig;
     }
 
-    // Continue processing in the background
-    late final AsrService service;
-    try {
-      ref.read(backgroundTasksProvider.notifier).updateProgress(taskId, 10);
-      service = AsrService(config: effectiveConfig);
-      final result = await service.transcribe(
-        audioBytes: _selectedAudio!.bytes,
-        audioFormat: _selectedAudio!.format,
-      );
+    // Create a single background task for all audios
+    final timestamp = _currentTimestamp();
+    final title = 'ASR_${_selectedAudios.length}files_$timestamp';
+    final taskId = ref
+        .read(backgroundTasksProvider.notifier)
+        .addTask(type: BackgroundTaskType.asr, title: title);
 
-      // Save the transcription result as a text file
-      ref.read(backgroundTasksProvider.notifier).updateProgress(taskId, 70);
-      await _saveTranscriptionResult(result.text, title: title);
+    // Pop back to home page immediately so user can see task progress
+    if (mounted) {
+      Navigator.pop(context);
+    }
+
+    // Continue processing sequentially in the background
+    try {
+      final service = AsrService(config: effectiveConfig);
+      final total = _selectedAudios.length;
+
+      for (int i = 0; i < total; i++) {
+        final audio = _selectedAudios[i];
+        final fileTitle = 'ASR_${audio.name}_$timestamp';
+
+        // Update progress for current file
+        final baseProgress = (i * 100) ~/ total;
+        ref
+            .read(backgroundTasksProvider.notifier)
+            .updateProgress(taskId, baseProgress + (10 ~/ total));
+
+        // Transcribe this audio file
+        final result = await service.transcribe(
+          audioBytes: audio.bytes,
+          audioFormat: audio.format,
+        );
+
+        // Save the transcription result
+        ref
+            .read(backgroundTasksProvider.notifier)
+            .updateProgress(taskId, baseProgress + (70 ~/ total));
+        await _saveTranscriptionResult(result.text, title: fileTitle);
+      }
 
       // Mark task as completed
       ref.read(backgroundTasksProvider.notifier).completeTask(taskId);
@@ -834,7 +940,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       // Mark task as failed (widget may be gone, but notifier is independent)
       ref
           .read(backgroundTasksProvider.notifier)
-          .failTask(taskId, error: 'ASR识别失败: $e');
+          .failTask(taskId, error: '音频转写失败: $e');
     }
   }
 
@@ -854,7 +960,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     await TextManifest.writeText(storageFileName, text);
     await TextManifest.addRecord(
       TextRecord(
-        name: title ??
+        name:
+            title ??
             'ASR_${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}',
         hash: hash,
         format: 'txt',

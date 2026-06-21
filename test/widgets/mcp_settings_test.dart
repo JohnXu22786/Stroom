@@ -13,19 +13,15 @@ Widget _buildTestApp() {
   return ProviderScope(
     overrides: [
       themeProvider.overrideWith((ref) => ThemeNotifier()),
-      providerEntriesProvider.overrideWith(
-        (ref) {
-          final notifier = ProviderEntriesNotifier();
-          // load() is normally called in the provider factory, so we call it here too.
-          notifier.load();
-          return notifier;
-        },
-      ),
+      providerEntriesProvider.overrideWith((ref) {
+        final notifier = ProviderEntriesNotifier();
+        // load() is normally called in the provider factory, so we call it here too.
+        notifier.load();
+        return notifier;
+      }),
       updateProvider.overrideWith((ref) => UpdateNotifier()),
     ],
-    child: const MaterialApp(
-      home: SettingsPage(),
-    ),
+    child: const MaterialApp(home: SettingsPage()),
   );
 }
 
@@ -35,31 +31,34 @@ void main() {
       registerBuiltinProviderTypes();
     });
 
-    testWidgets('settings page shows MCP供应商 entry when MCP type is registered',
-        (tester) async {
-      // Use a large viewport so all content is visible
-      tester.view.physicalSize = const Size(1080, 4000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
+    testWidgets(
+      'settings page shows MCP供应商 entry when MCP type is registered',
+      (tester) async {
+        // Use a large viewport so all content is visible
+        tester.view.physicalSize = const Size(1080, 4000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
 
-      // No saved data → defaults including MCP
-      SharedPreferences.setMockInitialValues({});
+        // No saved data → defaults including MCP
+        SharedPreferences.setMockInitialValues({});
 
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
 
-      expect(find.text('MCP供应商'), findsOneWidget);
-      expect(find.text('TTS供应商'), findsOneWidget);
-      expect(find.text('LLM供应商'), findsOneWidget);
-      expect(find.text('OCR供应商'), findsOneWidget);
-      expect(find.text('语音识别供应商'), findsOneWidget);
-    });
+        expect(find.text('MCP供应商'), findsOneWidget);
+        expect(find.text('TTS供应商'), findsOneWidget);
+        expect(find.text('LLM供应商'), findsOneWidget);
+        expect(find.text('OCR供应商'), findsOneWidget);
+        expect(find.text('音频转写供应商'), findsOneWidget);
+      },
+    );
 
-    testWidgets('tapping MCP entry navigates to MCP config page',
-        (tester) async {
+    testWidgets('tapping MCP entry navigates to MCP config page', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -81,8 +80,9 @@ void main() {
       expect(find.text('暂无供应商配置，请点击"添加"创建'), findsOneWidget);
     });
 
-    testWidgets('MCP config page allows adding a new MCP server',
-        (tester) async {
+    testWidgets('MCP config page allows adding a new MCP server', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {

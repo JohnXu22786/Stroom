@@ -211,7 +211,8 @@ void main() {
       expect(result!.choice, CameraChoice.system);
     });
 
-    testWidgets('selecting app camera with showFolderSection:false returns result',
+    testWidgets(
+        'selecting app camera with showFolderSection:false returns result',
         (tester) async {
       CameraChoiceResult? result;
       await tester.pumpWidget(
@@ -248,6 +249,63 @@ void main() {
       expect(result!.choice, CameraChoice.app);
       // When showFolderSection is false, folder/editaftercapture are irrelevant
       // but the result should still have default values
+    });
+  });
+
+  group('CameraChoiceDialog - unified colors (app=green, system=blue)', () {
+    testWidgets('app camera card uses green color', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () => showCameraChoiceDialog(context),
+                  child: Text('Open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // The app camera icon container should use green color
+      // Find the Icon widget with camera_alt and check its parent container's color
+      final iconFinder = find.byIcon(Icons.camera_alt);
+      expect(iconFinder, findsOneWidget);
+      final iconWidget = tester.widget<Icon>(iconFinder);
+      expect(iconWidget.color, Colors.green);
+    });
+
+    testWidgets('system camera card uses blue color', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () => showCameraChoiceDialog(context),
+                  child: Text('Open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // The system camera icon container should use blue color
+      final iconFinder = find.byIcon(Icons.phone_android);
+      expect(iconFinder, findsOneWidget);
+      final iconWidget = tester.widget<Icon>(iconFinder);
+      expect(iconWidget.color, Colors.blue);
     });
   });
 }
