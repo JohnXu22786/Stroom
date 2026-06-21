@@ -572,7 +572,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   _buildModuleCard(
                     icon: Icons.language,
                     label: '下载网页资源',
-                    subtitle: '下载网页中的资源',
+                    subtitle: '下载网页中的音视频',
                     color: Colors.purple,
                     onTap: () {
                       Navigator.push(

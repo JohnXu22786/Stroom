@@ -112,6 +112,20 @@ void main() {
       expect(find.text('下载网页资源'), findsOneWidget);
     });
 
+    testWidgets('下载网页资源 card subtitle shows 下载网页中的音视频', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Scroll to find the module card with subtitle
+      final cardFinder = find.text('下载网页资源');
+      await tester.ensureVisible(cardFinder);
+      await tester.pumpAndSettle();
+
+      // The subtitle should be the new text, not the old one
+      expect(find.text('下载网页中的音视频'), findsOneWidget);
+      expect(find.text('下载网页中的资源'), findsNothing);
+    });
+
     testWidgets('下载网页资源 card navigates to CatCatchPage', (tester) async {
       _setSmallScreen(tester);
 
