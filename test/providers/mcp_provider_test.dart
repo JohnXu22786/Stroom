@@ -29,7 +29,7 @@ String _savedDataWithoutMcp() {
     {
       'id': 'builtin_asr',
       'type': 'asr',
-      'name': '语音识别供应商',
+      'name': '音频转写供应商',
       'configs': <Map<String, dynamic>>[],
     },
   ];
@@ -60,7 +60,7 @@ String _savedDataWithMcp() {
     {
       'id': 'builtin_asr',
       'type': 'asr',
-      'name': '语音识别供应商',
+      'name': '音频转写供应商',
       'configs': <Map<String, dynamic>>[],
     },
     {
@@ -97,7 +97,7 @@ String _savedDataWithMcpConfig() {
     {
       'id': 'builtin_asr',
       'type': 'asr',
-      'name': '语音识别供应商',
+      'name': '音频转写供应商',
       'configs': <Map<String, dynamic>>[],
     },
     {
@@ -105,12 +105,7 @@ String _savedDataWithMcpConfig() {
       'type': 'mcp',
       'name': 'MCP供应商',
       'configs': [
-        {
-          'providerName': '自定义MCP',
-          'host': '',
-          'key': '',
-          'models': [],
-        },
+        {'providerName': '自定义MCP', 'host': '', 'key': '', 'models': []},
       ],
     },
   ];
@@ -129,18 +124,17 @@ void main() {
       final def = ProviderTypeRegistry.get('mcp');
       expect(def, isNotNull);
       expect(def!.type, equals('mcp'));
-      expect(def.useLlmModelConfig, isFalse,
-          reason: 'MCP servers use typeConfig, not LLM model config');
+      expect(
+        def.useLlmModelConfig,
+        isFalse,
+        reason: 'MCP servers use typeConfig, not LLM model config',
+      );
     });
   });
 
   group('MCP ProviderEntry', () {
     test('MCP ProviderEntry can be created', () {
-      final entry = ProviderEntry(
-        id: 'test_mcp',
-        type: 'mcp',
-        name: 'MCP供应商',
-      );
+      final entry = ProviderEntry(id: 'test_mcp', type: 'mcp', name: 'MCP供应商');
       expect(entry.id, equals('test_mcp'));
       expect(entry.type, equals('mcp'));
       expect(entry.name, equals('MCP供应商'));
@@ -214,7 +208,10 @@ void main() {
       final restored = ProviderEntry.fromMap(map);
       final restoredModel = restored.configs[0].models[0];
       expect(restoredModel.typeConfig['transport'], equals('sse'));
-      expect(restoredModel.typeConfig['url'], equals('https://mcp.example.com/sse'));
+      expect(
+        restoredModel.typeConfig['url'],
+        equals('https://mcp.example.com/sse'),
+      );
     });
   });
 
@@ -237,80 +234,105 @@ void main() {
       expect(state.entries.any((e) => e.id == 'builtin_mcp'), isTrue);
     });
 
-    test('MCP entry is auto-added to saved data that does not have MCP', () async {
-      SharedPreferences.setMockInitialValues({
-        'provider_entries': _savedDataWithoutMcp(),
-      });
-      final container = ProviderContainer(
-        overrides: [
-          providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
-          ),
-        ],
-      );
-      addTearDown(() => container.dispose());
+    test(
+      'MCP entry is auto-added to saved data that does not have MCP',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'provider_entries': _savedDataWithoutMcp(),
+        });
+        final container = ProviderContainer(
+          overrides: [
+            providerEntriesProvider.overrideWith(
+              (ref) => ProviderEntriesNotifier(),
+            ),
+          ],
+        );
+        addTearDown(() => container.dispose());
 
-      await container.read(providerEntriesProvider.notifier).load();
+        await container.read(providerEntriesProvider.notifier).load();
 
-      final state = container.read(providerEntriesProvider);
-      expect(state.entries.any((e) => e.type == 'mcp'), isTrue,
-          reason: 'MCP entry should be migrated in');
-      expect(state.entries.any((e) => e.id == 'builtin_tts'), isTrue,
-          reason: 'TTS entry should be preserved');
-      expect(state.entries.any((e) => e.id == 'builtin_llm'), isTrue,
-          reason: 'LLM entry should be preserved');
-      expect(state.entries.any((e) => e.id == 'builtin_ocr'), isTrue,
-          reason: 'OCR entry should be preserved');
-      expect(state.entries.any((e) => e.id == 'builtin_asr'), isTrue,
-          reason: 'ASR entry should be preserved');
-    });
+        final state = container.read(providerEntriesProvider);
+        expect(
+          state.entries.any((e) => e.type == 'mcp'),
+          isTrue,
+          reason: 'MCP entry should be migrated in',
+        );
+        expect(
+          state.entries.any((e) => e.id == 'builtin_tts'),
+          isTrue,
+          reason: 'TTS entry should be preserved',
+        );
+        expect(
+          state.entries.any((e) => e.id == 'builtin_llm'),
+          isTrue,
+          reason: 'LLM entry should be preserved',
+        );
+        expect(
+          state.entries.any((e) => e.id == 'builtin_ocr'),
+          isTrue,
+          reason: 'OCR entry should be preserved',
+        );
+        expect(
+          state.entries.any((e) => e.id == 'builtin_asr'),
+          isTrue,
+          reason: 'ASR entry should be preserved',
+        );
+      },
+    );
 
-    test('MCP entry is not duplicated when it already exists in saved data',
-        () async {
-      SharedPreferences.setMockInitialValues({
-        'provider_entries': _savedDataWithMcp(),
-      });
-      final container = ProviderContainer(
-        overrides: [
-          providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
-          ),
-        ],
-      );
-      addTearDown(() => container.dispose());
+    test(
+      'MCP entry is not duplicated when it already exists in saved data',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'provider_entries': _savedDataWithMcp(),
+        });
+        final container = ProviderContainer(
+          overrides: [
+            providerEntriesProvider.overrideWith(
+              (ref) => ProviderEntriesNotifier(),
+            ),
+          ],
+        );
+        addTearDown(() => container.dispose());
 
-      await container.read(providerEntriesProvider.notifier).load();
+        await container.read(providerEntriesProvider.notifier).load();
 
-      final state = container.read(providerEntriesProvider);
-      final mcpEntries = state.entries.where((e) => e.type == 'mcp').toList();
-      expect(mcpEntries.length, equals(1),
-          reason: 'Should have exactly one MCP entry, not duplicated');
-    });
+        final state = container.read(providerEntriesProvider);
+        final mcpEntries = state.entries.where((e) => e.type == 'mcp').toList();
+        expect(
+          mcpEntries.length,
+          equals(1),
+          reason: 'Should have exactly one MCP entry, not duplicated',
+        );
+      },
+    );
 
-    test('MCP entry preserves existing provider configs (TTS, LLM, OCR, ASR)',
-        () async {
-      SharedPreferences.setMockInitialValues({
-        'provider_entries': _savedDataWithoutMcp(),
-      });
-      final container = ProviderContainer(
-        overrides: [
-          providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
-          ),
-        ],
-      );
-      addTearDown(() => container.dispose());
+    test(
+      'MCP entry preserves existing provider configs (TTS, LLM, OCR, ASR)',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'provider_entries': _savedDataWithoutMcp(),
+        });
+        final container = ProviderContainer(
+          overrides: [
+            providerEntriesProvider.overrideWith(
+              (ref) => ProviderEntriesNotifier(),
+            ),
+          ],
+        );
+        addTearDown(() => container.dispose());
 
-      await container.read(providerEntriesProvider.notifier).load();
+        await container.read(providerEntriesProvider.notifier).load();
 
-      final state = container.read(providerEntriesProvider);
-      expect(state.entries.length, equals(5));
-      expect(state.entries[0].type, equals('tts'));
-      expect(state.entries[1].type, equals('llm'));
-      expect(state.entries[2].type, equals('ocr'));
-      expect(state.entries[3].type, equals('asr'));
-      expect(state.entries[4].type, equals('mcp'));
-    });
+        final state = container.read(providerEntriesProvider);
+        expect(state.entries.length, equals(5));
+        expect(state.entries[0].type, equals('tts'));
+        expect(state.entries[1].type, equals('llm'));
+        expect(state.entries[2].type, equals('ocr'));
+        expect(state.entries[3].type, equals('asr'));
+        expect(state.entries[4].type, equals('mcp'));
+      },
+    );
 
     test('saved MCP config is preserved through load', () async {
       SharedPreferences.setMockInitialValues({

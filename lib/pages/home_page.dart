@@ -559,7 +559,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                   _buildModuleCard(
                     icon: Icons.multitrack_audio,
-                    label: '语音识别',
+                    label: '音频转写',
                     subtitle: '语音转文字',
                     color: Colors.deepPurple,
                     onTap: () {

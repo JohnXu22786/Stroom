@@ -72,10 +72,16 @@ Widget createMergedTopicTestApp({
 
 void main() {
   group('Merged SelectConversationPage - AppBar', () {
-    testWidgets('shows title "选择对话" and no avatar icon in title', (tester) async {
+    testWidgets('shows title "选择对话" and no avatar icon in title',
+        (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-id', name: '测试助手', prompt: '你好', emoji: '🤖', description: '测试'),
+          Assistant(
+              id: 'test-id',
+              name: '测试助手',
+              prompt: '你好',
+              emoji: '🤖',
+              description: '测试'),
         ],
         selectedAssistantId: 'test-id',
       ));
@@ -92,10 +98,16 @@ void main() {
       expect(find.text('🤖'), findsOneWidget);
     });
 
-    testWidgets('NO add (新话题) button in AppBar (bottom button still exists)', (tester) async {
+    testWidgets('NO add (新话题) button in AppBar (bottom button still exists)',
+        (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-id', name: '助手A', prompt: 'P1', emoji: '🤖', description: 'AA'),
+          Assistant(
+              id: 'test-id',
+              name: '助手A',
+              prompt: 'P1',
+              emoji: '🤖',
+              description: 'AA'),
         ],
         selectedAssistantId: 'test-id',
       ));
@@ -114,7 +126,12 @@ void main() {
     testWidgets('NO swap_horiz (切换助手) button in AppBar', (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-id-2', name: '助手B', prompt: 'P2', emoji: '🤖', description: 'BB'),
+          Assistant(
+              id: 'test-id-2',
+              name: '助手B',
+              prompt: 'P2',
+              emoji: '🤖',
+              description: 'BB'),
         ],
         selectedAssistantId: 'test-id-2',
       ));
@@ -127,7 +144,12 @@ void main() {
     testWidgets('title has no icon (no avatar) to its left', (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-id-icon', name: '图标助手', prompt: 'P', emoji: '🌟', description: 'ICON'),
+          Assistant(
+              id: 'test-id-icon',
+              name: '图标助手',
+              prompt: 'P',
+              emoji: '🌟',
+              description: 'ICON'),
         ],
         selectedAssistantId: 'test-id-icon',
       ));
@@ -143,18 +165,26 @@ void main() {
       expect(titleText, findsOneWidget);
       // Verify there's no Row with AssistantAvatar icon before the title
       // (the title is a plain Text, not wrapped in a Row with avatar)
-      expect(find.descendant(
-        of: appBar,
-        matching: find.byIcon(Icons.chat_bubble_outline_rounded),
-      ), findsNothing);
+      expect(
+          find.descendant(
+            of: appBar,
+            matching: find.byIcon(Icons.chat_bubble_outline_rounded),
+          ),
+          findsNothing);
     });
   });
 
   group('Merged SelectConversationPage - Features', () {
-    testWidgets('shows search button in AppBar that opens a panel', (tester) async {
+    testWidgets('shows search button in AppBar that opens a panel',
+        (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-id-3', name: '助手C', prompt: 'P3', emoji: '🤖', description: 'CC'),
+          Assistant(
+              id: 'test-id-3',
+              name: '助手C',
+              prompt: 'P3',
+              emoji: '🤖',
+              description: 'CC'),
         ],
         selectedAssistantId: 'test-id-3',
       ));
@@ -165,10 +195,16 @@ void main() {
       expect(find.byIcon(Icons.search), findsOneWidget);
     });
 
-    testWidgets('tapping search button opens search panel (bottom sheet)', (tester) async {
+    testWidgets('tapping search button opens search panel (bottom sheet)',
+        (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-id-search', name: '助手搜索', prompt: 'P', emoji: '🔍', description: '搜索'),
+          Assistant(
+              id: 'test-id-search',
+              name: '助手搜索',
+              prompt: 'P',
+              emoji: '🔍',
+              description: '搜索'),
         ],
         selectedAssistantId: 'test-id-search',
       ));
@@ -184,10 +220,16 @@ void main() {
       expect(find.byType(TextField), findsOneWidget);
     });
 
-    testWidgets('search panel has two toggle options: 搜标题 and 搜内容', (tester) async {
+    testWidgets('search panel has two toggle options: 搜标题 and 搜内容',
+        (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-id-toggle', name: '助手切换', prompt: 'P', emoji: '🔀', description: '切换'),
+          Assistant(
+              id: 'test-id-toggle',
+              name: '助手切换',
+              prompt: 'P',
+              emoji: '🔀',
+              description: '切换'),
         ],
         selectedAssistantId: 'test-id-toggle',
       ));
@@ -204,10 +246,16 @@ void main() {
       expect(find.text('搜内容'), findsOneWidget);
     });
 
-    testWidgets('shows selection mode (checklist) button in AppBar', (tester) async {
+    testWidgets('shows selection mode (checklist) button in AppBar',
+        (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-id-4', name: '助手D', prompt: 'P4', emoji: '🤖', description: 'DD'),
+          Assistant(
+              id: 'test-id-4',
+              name: '助手D',
+              prompt: 'P4',
+              emoji: '🤖',
+              description: 'DD'),
         ],
         selectedAssistantId: 'test-id-4',
       ));
@@ -232,7 +280,12 @@ void main() {
 
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-id-5', name: '助手E', prompt: 'P5', emoji: '🤖', description: 'EE'),
+          Assistant(
+              id: 'test-id-5',
+              name: '助手E',
+              prompt: 'P5',
+              emoji: '🤖',
+              description: 'EE'),
         ],
         selectedAssistantId: 'test-id-5',
         conversations: [conv1],
@@ -256,7 +309,12 @@ void main() {
 
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-id-6', name: '助手F', prompt: 'P6', emoji: '🤖', description: 'FF'),
+          Assistant(
+              id: 'test-id-6',
+              name: '助手F',
+              prompt: 'P6',
+              emoji: '🤖',
+              description: 'FF'),
         ],
         selectedAssistantId: 'test-id-6',
         conversations: [conv1],
@@ -273,7 +331,8 @@ void main() {
       expect(find.text('Chat Page Mock'), findsOneWidget);
     });
 
-    testWidgets('shows popup menu (more_vert) on each conversation card', (tester) async {
+    testWidgets('shows popup menu (more_vert) on each conversation card',
+        (tester) async {
       final conv1 = Conversation(
         id: 'conv-1',
         title: '对话D',
@@ -283,7 +342,12 @@ void main() {
 
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-id-7', name: '助手G', prompt: 'P7', emoji: '🤖', description: 'GG'),
+          Assistant(
+              id: 'test-id-7',
+              name: '助手G',
+              prompt: 'P7',
+              emoji: '🤖',
+              description: 'GG'),
         ],
         selectedAssistantId: 'test-id-7',
         conversations: [conv1],
@@ -298,7 +362,12 @@ void main() {
     testWidgets('shows only ONE "新话题" button (bottom only)', (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-id-8', name: '助手H', prompt: 'P8', emoji: '🤖', description: 'HH'),
+          Assistant(
+              id: 'test-id-8',
+              name: '助手H',
+              prompt: 'P8',
+              emoji: '🤖',
+              description: 'HH'),
         ],
         selectedAssistantId: 'test-id-8',
       ));
@@ -309,10 +378,16 @@ void main() {
       expect(find.widgetWithText(FilledButton, '新话题'), findsOneWidget);
     });
 
-    testWidgets('tapping bottom new topic button navigates to chat', (tester) async {
+    testWidgets('tapping bottom new topic button navigates to chat',
+        (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-id-9', name: '助手I', prompt: 'P9', emoji: '🤖', description: 'II'),
+          Assistant(
+              id: 'test-id-9',
+              name: '助手I',
+              prompt: 'P9',
+              emoji: '🤖',
+              description: 'II'),
         ],
         selectedAssistantId: 'test-id-9',
       ));
@@ -332,7 +407,9 @@ void main() {
       expect(find.text('Chat Page Mock'), findsOneWidget);
     });
 
-    testWidgets('search panel filters conversations by title when "搜标题" is selected', (tester) async {
+    testWidgets(
+        'search panel filters conversations by title when "搜标题" is selected',
+        (tester) async {
       final conv1 = Conversation(
         id: 'conv-s1',
         title: '机器学习基础',
@@ -348,7 +425,12 @@ void main() {
 
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-search-filter', name: '助手筛选', prompt: 'P', emoji: '🔍', description: '筛选'),
+          Assistant(
+              id: 'test-search-filter',
+              name: '助手筛选',
+              prompt: 'P',
+              emoji: '🔍',
+              description: '筛选'),
         ],
         selectedAssistantId: 'test-search-filter',
         conversations: [conv1, conv2],
@@ -370,14 +452,18 @@ void main() {
       // Scope to the bottom sheet's DraggableScrollableSheet
       final sheet = find.byType(DraggableScrollableSheet);
       // Should show matching conversation "机器学习基础" in the search panel
-      expect(find.descendant(of: sheet, matching: find.text('机器学习基础')), findsOneWidget);
+      expect(find.descendant(of: sheet, matching: find.text('机器学习基础')),
+          findsOneWidget);
       // The matching card also appears on the main page behind the sheet
       // so total is 2, but within the sheet it's 1
       // Should NOT show non-matching "深度学习" in the search panel
-      expect(find.descendant(of: sheet, matching: find.text('深度学习')), findsNothing);
+      expect(find.descendant(of: sheet, matching: find.text('深度学习')),
+          findsNothing);
     });
 
-    testWidgets('search panel filters conversations by content when "搜内容" is selected', (tester) async {
+    testWidgets(
+        'search panel filters conversations by content when "搜内容" is selected',
+        (tester) async {
       final conv1 = Conversation(
         id: 'conv-c1',
         title: '天气讨论',
@@ -400,7 +486,12 @@ void main() {
 
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-content-search', name: '助手内容', prompt: 'P', emoji: '📝', description: '内容搜索'),
+          Assistant(
+              id: 'test-content-search',
+              name: '助手内容',
+              prompt: 'P',
+              emoji: '📝',
+              description: '内容搜索'),
         ],
         selectedAssistantId: 'test-content-search',
         conversations: [conv1, conv2],
@@ -426,12 +517,15 @@ void main() {
       // Scope to the bottom sheet's DraggableScrollableSheet
       final sheet = find.byType(DraggableScrollableSheet);
       // Should show conversation with matching content in the panel
-      expect(find.descendant(of: sheet, matching: find.text('天气讨论')), findsOneWidget);
+      expect(find.descendant(of: sheet, matching: find.text('天气讨论')),
+          findsOneWidget);
       // Should NOT show non-matching in the panel
-      expect(find.descendant(of: sheet, matching: find.text('编程问题')), findsNothing);
+      expect(find.descendant(of: sheet, matching: find.text('编程问题')),
+          findsNothing);
     });
 
-    testWidgets('tapping a card in the search panel navigates to chat', (tester) async {
+    testWidgets('tapping a card in the search panel navigates to chat',
+        (tester) async {
       final conv1 = Conversation(
         id: 'conv-nav',
         title: '搜索结果导航',
@@ -441,7 +535,12 @@ void main() {
 
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-nav-search', name: '助手导航', prompt: 'P', emoji: '🧭', description: '导航'),
+          Assistant(
+              id: 'test-nav-search',
+              name: '助手导航',
+              prompt: 'P',
+              emoji: '🧭',
+              description: '导航'),
         ],
         selectedAssistantId: 'test-nav-search',
         conversations: [conv1],
@@ -461,7 +560,8 @@ void main() {
 
       // Tap the conversation card in the panel (scope to DraggableScrollableSheet)
       final sheet = find.byType(DraggableScrollableSheet);
-      await tester.tap(find.descendant(of: sheet, matching: find.text('搜索结果导航')));
+      await tester
+          .tap(find.descendant(of: sheet, matching: find.text('搜索结果导航')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
@@ -469,7 +569,8 @@ void main() {
       expect(find.text('Chat Page Mock'), findsOneWidget);
     });
 
-    testWidgets('search panel shows "没有找到匹配的对话" when no results', (tester) async {
+    testWidgets('search panel shows "没有找到匹配的对话" when no results',
+        (tester) async {
       final conv1 = Conversation(
         id: 'conv-empty',
         title: '唯一对话',
@@ -479,7 +580,12 @@ void main() {
 
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-empty-search', name: '助手空', prompt: 'P', emoji: '🔍', description: '空结果'),
+          Assistant(
+              id: 'test-empty-search',
+              name: '助手空',
+              prompt: 'P',
+              emoji: '🔍',
+              description: '空结果'),
         ],
         selectedAssistantId: 'test-empty-search',
         conversations: [conv1],
@@ -504,7 +610,12 @@ void main() {
     testWidgets('search panel shows "搜标题" selected by default', (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-default-mode', name: '助手默认', prompt: 'P', emoji: '🔍', description: '默认'),
+          Assistant(
+              id: 'test-default-mode',
+              name: '助手默认',
+              prompt: 'P',
+              emoji: '🔍',
+              description: '默认'),
         ],
         selectedAssistantId: 'test-default-mode',
         conversations: [
@@ -536,7 +647,8 @@ void main() {
   });
 
   group('Merged SelectConversationPage - Assistant info bar', () {
-    testWidgets('shows assistant info bar with emoji, name, description', (tester) async {
+    testWidgets('shows assistant info bar with emoji, name, description',
+        (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
           Assistant(
@@ -559,10 +671,16 @@ void main() {
       expect(find.text('一个智能助手'), findsOneWidget);
     });
 
-    testWidgets('assistant info bar tune button opens combined edit dialog', (tester) async {
+    testWidgets('assistant info bar tune button opens combined edit dialog',
+        (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-id-10', name: '助手J', prompt: 'P10', emoji: '🤖', description: 'JJ'),
+          Assistant(
+              id: 'test-id-10',
+              name: '助手J',
+              prompt: 'P10',
+              emoji: '🤖',
+              description: 'JJ'),
         ],
         selectedAssistantId: 'test-id-10',
       ));
@@ -577,8 +695,17 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Should open combined edit dialog
+      // Should open combined edit dialog with tab bar
       expect(find.text('助手名称'), findsOneWidget);
+      expect(find.text('基本设置'), findsOneWidget);
+      expect(find.text('参数设置'), findsOneWidget);
+      // Temperature is in 参数设置 tab, not visible initially
+      expect(find.text('温度 (Temperature)'), findsNothing);
+
+      // Switch to 参数设置 tab to verify parameters are there
+      await tester.tap(find.text('参数设置'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
       expect(find.text('温度 (Temperature)'), findsOneWidget);
 
       expect(find.text('保存'), findsOneWidget);
@@ -589,7 +716,12 @@ void main() {
     testWidgets('shows empty state when no conversations', (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-id-11', name: '助手K', prompt: 'P11', emoji: '🤖', description: 'KK'),
+          Assistant(
+              id: 'test-id-11',
+              name: '助手K',
+              prompt: 'P11',
+              emoji: '🤖',
+              description: 'KK'),
         ],
         selectedAssistantId: 'test-id-11',
       ));
@@ -603,10 +735,16 @@ void main() {
   });
 
   group('No assistant selected state', () {
-    testWidgets('shows error state when no assistant is selected', (tester) async {
+    testWidgets('shows error state when no assistant is selected',
+        (tester) async {
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-id-12', name: '助手L', prompt: 'P12', emoji: '🤖', description: 'LL'),
+          Assistant(
+              id: 'test-id-12',
+              name: '助手L',
+              prompt: 'P12',
+              emoji: '🤖',
+              description: 'LL'),
         ],
         selectedAssistantId: null,
       ));
@@ -619,8 +757,10 @@ void main() {
     });
   });
 
-  group('Merged SelectConversationPage - Pinned topic preserves original time', () {
-    testWidgets('pinned topic shows original updatedAt date, not modified time', (tester) async {
+  group('Merged SelectConversationPage - Pinned topic preserves original time',
+      () {
+    testWidgets('pinned topic shows original updatedAt date, not modified time',
+        (tester) async {
       final originalTime = DateTime(2026, 5, 15, 10, 30, 0);
       final conv = Conversation(
         id: 'pinned-conv',
@@ -633,7 +773,12 @@ void main() {
 
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-pin-time', name: '时间助手', prompt: 'P', emoji: '⏰', description: '测试'),
+          Assistant(
+              id: 'test-pin-time',
+              name: '时间助手',
+              prompt: 'P',
+              emoji: '⏰',
+              description: '测试'),
         ],
         selectedAssistantId: 'test-pin-time',
         conversations: [conv],
@@ -648,7 +793,8 @@ void main() {
       expect(find.byIcon(Icons.push_pin), findsAtLeast(1));
     });
 
-    testWidgets('non-pinned topic shows its own updatedAt date', (tester) async {
+    testWidgets('non-pinned topic shows its own updatedAt date',
+        (tester) async {
       final conv = Conversation(
         id: 'normal-conv',
         title: '普通对话',
@@ -660,7 +806,12 @@ void main() {
 
       await tester.pumpWidget(createMergedTopicTestApp(
         assistants: [
-          Assistant(id: 'test-non-pin-time', name: '普通助手', prompt: 'P', emoji: '📋', description: '测试'),
+          Assistant(
+              id: 'test-non-pin-time',
+              name: '普通助手',
+              prompt: 'P',
+              emoji: '📋',
+              description: '测试'),
         ],
         selectedAssistantId: 'test-non-pin-time',
         conversations: [conv],
