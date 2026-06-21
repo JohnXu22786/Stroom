@@ -5,14 +5,11 @@ import 'package:stroom/pages/catcatch_page.dart';
 
 void main() {
   group('CatCatchPage - Duration Filter Three Inputs', () {
-    testWidgets('Three input fields render for hours, minutes, seconds',
-        (tester) async {
+    testWidgets('Three input fields render for hours, minutes, seconds', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: CatCatchPage(),
-          ),
-        ),
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
       );
 
       // Wait for frame
@@ -22,17 +19,17 @@ void main() {
       // The hour field's InputDecoration has labelText: '时'
       // The minute field's InputDecoration has labelText: '分'
       // The second field's InputDecoration has labelText: '秒'
-      expect(find.byType(TextFormField), findsNWidgets(4)); // URL + 3 duration fields
+      expect(
+        find.byType(TextFormField),
+        findsNWidgets(4),
+      ); // URL + 3 duration fields
     });
 
-    testWidgets('Entering values shows hh:mm:ss preview below inputs',
-        (tester) async {
+    testWidgets('Entering values shows hh:mm:ss preview below inputs', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: CatCatchPage(),
-          ),
-        ),
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
       );
 
       // Wait for frame
@@ -56,32 +53,22 @@ void main() {
       expect(find.text('01:30:15'), findsOneWidget);
     });
 
-    testWidgets('Hint text is visible below the duration inputs',
-        (tester) async {
+    testWidgets('Hint text is visible below the duration inputs', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: CatCatchPage(),
-          ),
-        ),
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
       );
 
       await tester.pump();
 
       // The hint text about duration filtering should be visible
-      expect(
-        find.text('按时长筛选视频资源，不匹配的将不会出现在结果列表中'),
-        findsOneWidget,
-      );
+      expect(find.text('按时长筛选视频资源，不匹配的将不会出现在结果列表中'), findsOneWidget);
     });
 
     testWidgets('Empty fields show 00:00:00 preview', (tester) async {
       await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: CatCatchPage(),
-          ),
-        ),
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
       );
 
       await tester.pump();
@@ -90,14 +77,58 @@ void main() {
       expect(find.text('00:00:00'), findsOneWidget);
     });
 
-    testWidgets('Non-numeric input in hour field handled gracefully',
-        (tester) async {
+    testWidgets('Login hint text is visible below duration filter hint', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: CatCatchPage(),
-          ),
-        ),
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+      );
+
+      await tester.pump();
+
+      // The login hint should be visible
+      expect(find.text('使用右上角按钮，在应用内浏览器登录，以获得需要登录才能获得的资源'), findsOneWidget);
+    });
+
+    testWidgets('Login hint is positioned below duration filter hint', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+      );
+
+      await tester.pump();
+
+      // Both hints should be on the page
+      final durationHint = find.text('按时长筛选视频资源，不匹配的将不会出现在结果列表中');
+      final loginHint = find.text('使用右上角按钮，在应用内浏览器登录，以获得需要登录才能获得的资源');
+
+      expect(durationHint, findsOneWidget);
+      expect(loginHint, findsOneWidget);
+
+      // Get render boxes to check positioning
+      final durationBox = tester.renderObject<RenderBox>(durationHint);
+      final loginBox = tester.renderObject<RenderBox>(loginHint);
+
+      final durationPos = durationBox.localToGlobal(Offset.zero);
+      final loginPos = loginBox.localToGlobal(Offset.zero);
+
+      // Login hint should be below the duration hint
+      expect(loginPos.dy, greaterThan(durationPos.dy));
+
+      // There should be some gap between them (not directly adjacent)
+      expect(
+        loginPos.dy - durationPos.dy - durationBox.size.height,
+        greaterThan(10.0),
+        reason: 'Login hint should be slightly separated from duration hint',
+      );
+    });
+
+    testWidgets('Non-numeric input in hour field handled gracefully', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
       );
 
       await tester.pump();
