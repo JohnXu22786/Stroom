@@ -75,11 +75,9 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
     final minutes = (total % 3600) ~/ 60;
     final seconds = total % 60;
     setState(() {
-      _previewText = formatHms(DurationResult(
-        hours: hours,
-        minutes: minutes,
-        seconds: seconds,
-      ));
+      _previewText = formatHms(
+        DurationResult(hours: hours, minutes: minutes, seconds: seconds),
+      );
     });
   }
 
@@ -103,8 +101,14 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
     }
 
     try {
-      ref.read(catcatchTasksProvider.notifier).addTask(url, totalSec,
-          videoFolder: _videoFolder, audioFolder: _audioFolder);
+      ref
+          .read(catcatchTasksProvider.notifier)
+          .addTask(
+            url,
+            totalSec,
+            videoFolder: _videoFolder,
+            audioFolder: _audioFolder,
+          );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -124,9 +128,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
           label: '查看任务列表',
           onPressed: () {
             Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const UnifiedTaskListPage(),
-              ),
+              MaterialPageRoute(builder: (_) => const UnifiedTaskListPage()),
             );
           },
         ),
@@ -152,7 +154,8 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => const BrowserPage(initialUrl: 'https://www.google.com'),
+                builder: (_) =>
+                    const BrowserPage(initialUrl: 'https://www.google.com'),
               ),
             ),
           ),
@@ -279,8 +282,11 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
               padding: const EdgeInsets.only(top: 8, left: 4),
               child: Row(
                 children: [
-                  Icon(Icons.timer_outlined,
-                      size: 16, color: colorScheme.primary),
+                  Icon(
+                    Icons.timer_outlined,
+                    size: 16,
+                    color: colorScheme.primary,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     '预览: ',
@@ -303,7 +309,9 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                     '时:分:秒',
                     style: TextStyle(
                       fontSize: 11,
-                      color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                      color: colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.5,
+                      ),
                     ),
                   ),
                 ],
@@ -314,6 +322,19 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
               padding: const EdgeInsets.only(top: 2, left: 4),
               child: Text(
                 '按时长筛选视频资源，不匹配的将不会出现在结果列表中',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: Text(
+                '使用右上角按钮，在应用内浏览器登录，以获得需要登录才能获得的资源',
                 style: TextStyle(
                   fontSize: 12,
                   color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
