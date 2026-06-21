@@ -618,6 +618,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       );
     }
 
+    Object? streamError;
     try {
       // Merge built-in tools with MCP tools
       final allTools = _adapter.getAllToolDefinitions();
@@ -729,6 +730,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
         }
       }
     } catch (e, s) {
+      streamError = e;
       if (!_cancelledByUser) {
         debugPrint('[ChatPage] streaming error: $e\n$s');
         final errorMsg = _formatErrorMessage(e);
@@ -749,6 +751,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
         _chatSegments[aiMsgId]?.clear();
         _streamingRenderedLengths[aiMsgId] = 0;
       }
+    } finally {
       // Always capture request/response raw data for ALL messages
       // (not just errors), so the "view raw data" button works.
       // This runs regardless of _cancelledByUser or error vs. success.
@@ -771,12 +774,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
             rawResponseCapture!['statusCode'] = statusCode;
           if (respHeaders != null) rawResponseCapture!['headers'] = respHeaders;
           if (respData != null) rawResponseCapture!['data'] = respData;
-        } else if (e is Exception) {
+        } else if (streamError is Exception) {
           // For network errors with no HTTP response, capture error string
-          rawResponseCapture = {'error': e.toString()};
+          rawResponseCapture = {'error': streamError.toString()};
         }
       } catch (_) {}
-    } finally {
       // Flush any remaining text not yet rendered as segments
       final renderedLen = _streamingRenderedLengths[aiMsgId]!;
       if (fullReply.length > renderedLen) {
@@ -2414,9 +2416,20 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final modelIdx = models.indexWhere((m) => m.displayName == selectedName);
     if (modelIdx < 0) return;
 
-    // Save current model's settings before switching
+    // Capture old model name BEFORE setState changes _selectedModelIndex
+    final oldModelName = _getCurrentModelName();
+
+    // Save current model's settings before switching, using captured name
     SharedPreferences.getInstance().then((prefs) {
-      _saveCurrentModelSettings(prefs);
+      if (oldModelName.isNotEmpty) {
+        final allSettings = _loadPerModelSettingsMap(prefs);
+        allSettings[oldModelName] = {
+          'reasoningEnabled': ref.read(reasoningEnabledProvider),
+          'reasoningEffort': ref.read(reasoningEffortProvider),
+          'reasoningParamValues': ref.read(reasoningParamValuesProvider),
+        };
+        prefs.setString('per_model_chat_settings', jsonEncode(allSettings));
+      }
     });
 
     final model = models[modelIdx];
@@ -2477,11 +2490,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
         case {
           'reasoningEnabled': bool re,
           'reasoningEffort': String refEff,
-          'reasoningParamValues': Map<String, String> rpv,
+          'reasoningParamValues': Map<String, dynamic> rpv,
         }) {
       ref.read(reasoningEnabledProvider.notifier).state = re;
-      ref.read(reasoningEffortProvider.notifier).state = refEff;
-      ref.read(reasoningParamValuesProvider.notifier).state = rpv;
+      // Validate reasoningEffort against known values
+      const validEfforts = {'low', 'medium', 'high'};
+      ref.read(reasoningEffortProvider.notifier).state =
+          validEfforts.contains(refEff) ? refEff : 'medium';
+      // Cast from Map<String, dynamic> (jsonDecode result) to Map<String, String>
+      ref.read(reasoningParamValuesProvider.notifier).state =
+          rpv.map((k, v) => MapEntry(k, v.toString()));
     } else {
       // No saved settings for this model — use defaults
       ref.read(reasoningEnabledProvider.notifier).state = false;
