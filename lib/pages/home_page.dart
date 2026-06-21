@@ -4,6 +4,7 @@ import 'home_shared.dart';
 
 import '../main.dart' as main_lib;
 import 'assistant_selection_page.dart';
+import 'files_page_shared.dart';
 import 'topic_selection_page.dart';
 import 'catcatch_page.dart' hide showMediaPreview;
 import 'unified_task_list_page.dart';
@@ -732,12 +733,20 @@ class _HomePageState extends ConsumerState<HomePage> {
           });
           return;
         }
-        // 2. 如果在非主页标签页（对话根路由、文件、设置），跳转到主页（上一级页面）
+        // 2. 如果在文件页面且文件管理器已处理返回（导航到父文件夹），不重复跳转
+        if (currentPage == AppPage.files) {
+          if (ref.read(filesPageBackHandledProvider)) {
+            // 文件管理器的内部 PopScope 已处理返回事件 → 重置标记并跳过
+            ref.read(filesPageBackHandledProvider.notifier).state = false;
+            return;
+          }
+        }
+        // 3. 如果在非主页标签页（对话根路由、文件、设置），跳转到主页（上一级页面）
         if (currentPage != AppPage.home) {
           ref.read(selectedPageProvider.notifier).state = AppPage.home;
           return;
         }
-        // 3. 如果在主页，不做任何操作，不退出应用
+        // 4. 如果在主页，不做任何操作，不退出应用
       },
       child: Scaffold(
         body: Row(
