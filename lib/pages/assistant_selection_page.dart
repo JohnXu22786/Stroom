@@ -36,11 +36,16 @@ class AssistantSelectionPage extends ConsumerWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.smart_toy_outlined,
-                      size: 64, color: cs.onSurfaceVariant.withOpacity(0.4)),
+                  Icon(
+                    Icons.smart_toy_outlined,
+                    size: 64,
+                    color: cs.onSurfaceVariant.withOpacity(0.4),
+                  ),
                   const SizedBox(height: 16),
-                  Text('暂无助手，请先创建',
-                      style: TextStyle(color: cs.onSurfaceVariant)),
+                  Text(
+                    '暂无助手，请先创建',
+                    style: TextStyle(color: cs.onSurfaceVariant),
+                  ),
                   const SizedBox(height: 16),
                   FilledButton.icon(
                     icon: const Icon(Icons.add),
@@ -67,10 +72,10 @@ class AssistantSelectionPage extends ConsumerWidget {
                     final assistant = assistants[index];
                     return AssistantCard(
                       assistant: assistant,
-                      onTap: () => _onAssistantSelected(
-                          context, ref, assistant),
-                      onLongPress: () => _showAssistantMenu(
-                          context, ref, assistant),
+                      onTap: () =>
+                          _onAssistantSelected(context, ref, assistant),
+                      onLongPress: () =>
+                          _showAssistantMenu(context, ref, assistant),
                     );
                   },
                 );
@@ -80,7 +85,10 @@ class AssistantSelectionPage extends ConsumerWidget {
   }
 
   void _onAssistantSelected(
-      BuildContext context, WidgetRef ref, Assistant assistant) {
+    BuildContext context,
+    WidgetRef ref,
+    Assistant assistant,
+  ) {
     // Set the selected assistant
     ref.read(selectedAssistantIdProvider.notifier).state = assistant.id;
     // Navigate to topic selection within the chat tab's nested navigator
@@ -90,7 +98,8 @@ class AssistantSelectionPage extends ConsumerWidget {
   void _showCreateAssistantDialog(BuildContext context, WidgetRef ref) {
     final nameController = TextEditingController();
     final promptController = TextEditingController(
-        text: '你是一个有帮助的AI助手。请用中文回答用户的问题。');
+      text: '你是一个有帮助的AI助手。请用中文回答用户的问题。',
+    );
     String selectedEmoji = '🤖';
     final descriptionController = TextEditingController();
 
@@ -112,8 +121,7 @@ class AssistantSelectionPage extends ConsumerWidget {
                 // Emoji picker (only emoji avatar supported)
                 CategorizedEmojiPicker(
                   selectedEmoji: selectedEmoji,
-                  onEmojiSelected: (e) =>
-                      setDlgState(() => selectedEmoji = e),
+                  onEmojiSelected: (e) => setDlgState(() => selectedEmoji = e),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -159,11 +167,11 @@ class AssistantSelectionPage extends ConsumerWidget {
               onPressed: () {
                 final name = nameController.text.trim();
                 if (name.isEmpty) return;
-                  ref.read(assistantProvider.notifier).createAssistant(
-                        name: name,
-                        prompt: promptController.text.trim(),
-                        emoji: selectedEmoji,
-                        description: descriptionController.text.trim(),
+                ref.read(assistantProvider.notifier).createAssistant(
+                      name: name,
+                      prompt: promptController.text.trim(),
+                      emoji: selectedEmoji,
+                      description: descriptionController.text.trim(),
                     );
                 disposeControllers();
                 Navigator.pop(ctx);
@@ -177,7 +185,10 @@ class AssistantSelectionPage extends ConsumerWidget {
   }
 
   void _showAssistantMenu(
-      BuildContext context, WidgetRef ref, Assistant assistant) {
+    BuildContext context,
+    WidgetRef ref,
+    Assistant assistant,
+  ) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -197,13 +208,13 @@ class AssistantSelectionPage extends ConsumerWidget {
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline),
-              title: Text('删除',
-                  style: TextStyle(
-                      color: Theme.of(context).colorScheme.error)),
+              title: Text(
+                '删除',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
-                _showDeleteAssistantConfirmation(
-                    context, ref, assistant);
+                _showDeleteAssistantConfirmation(context, ref, assistant);
               },
             ),
           ],
@@ -213,13 +224,15 @@ class AssistantSelectionPage extends ConsumerWidget {
   }
 
   void _showDeleteAssistantConfirmation(
-      BuildContext context, WidgetRef ref, Assistant assistant) {
+    BuildContext context,
+    WidgetRef ref,
+    Assistant assistant,
+  ) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('删除助手'),
-        content: Text(
-            '确定要删除助手「${assistant.name}」吗？此操作无法撤销。'),
+        content: Text('确定要删除助手「${assistant.name}」吗？此操作无法撤销。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -227,19 +240,20 @@ class AssistantSelectionPage extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () {
-              ref.read(assistantProvider.notifier)
+              ref
+                  .read(assistantProvider.notifier)
                   .deleteAssistant(assistant.id);
               Navigator.pop(ctx);
             },
             style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error),
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
             child: const Text('删除'),
           ),
         ],
       ),
     );
   }
-
 }
 
 // ============================================================================
@@ -250,12 +264,16 @@ class AssistantSelectionPage extends ConsumerWidget {
 /// of an assistant. Used from both [AssistantSelectionPage] and
 /// [TopicSelectionPage].
 void showAssistantFullEditDialog(
-    BuildContext context, WidgetRef ref, Assistant assistant) {
+  BuildContext context,
+  WidgetRef ref,
+  Assistant assistant,
+) {
   final nameController = TextEditingController(text: assistant.name);
   final promptController = TextEditingController(text: assistant.prompt);
   String selectedEmoji = assistant.emoji;
-  final descriptionController =
-      TextEditingController(text: assistant.description);
+  final descriptionController = TextEditingController(
+    text: assistant.description,
+  );
 
   // Settings state
   double temperature = assistant.settings.temperature;
@@ -272,11 +290,10 @@ void showAssistantFullEditDialog(
   bool enablePresencePenalty = assistant.settings.enablePresencePenalty;
   int? seed = assistant.settings.seed;
   bool enableSeed = assistant.settings.enableSeed;
-  final seedController = TextEditingController(
-    text: seed?.toString() ?? '',
+  final seedController = TextEditingController(text: seed?.toString() ?? '');
+  List<CustomParameter> customParameters = List.from(
+    assistant.settings.customParameters,
   );
-  List<CustomParameter> customParameters =
-      List.from(assistant.settings.customParameters);
 
   showDialog(
     context: context,
@@ -285,318 +302,414 @@ void showAssistantFullEditDialog(
         title: const Text('编辑助手'),
         content: SizedBox(
           width: double.maxFinite,
-          child: SingleChildScrollView(
+          child: DefaultTabController(
+            length: 2,
             child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Emoji picker (only emoji avatar supported)
-                CategorizedEmojiPicker(
-                  selectedEmoji: selectedEmoji,
-                  onEmojiSelected: (e) =>
-                      setDlgState(() => selectedEmoji = e),
+                // Tab bar
+                TabBar(
+                  tabAlignment: TabAlignment.center,
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 24),
+                  tabs: const [
+                    Tab(text: '基本设置'),
+                    Tab(text: '参数设置'),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(
-                    labelText: '助手名称',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: descriptionController,
-                  decoration: const InputDecoration(
-                    labelText: '描述（可选）',
-                    border: OutlineInputBorder(),
-                  ),
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: promptController,
-                  decoration: const InputDecoration(
-                    labelText: '系统提示词',
-                    border: OutlineInputBorder(),
-                  ),
-                  maxLines: 4,
-                ),
-                // Override rule explanation
-                const SizedBox(height: 12),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .tertiaryContainer
-                          .withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          size: 16,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .tertiary,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '助手的参数开关打开时覆盖模型参数；关闭时使用模型参数。',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onTertiaryContainer,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Temperature
-                SwitchListTile(
-                  title: const Text('温度 (Temperature)'),
-                  subtitle: Text('$temperature'),
-                  value: enableTemperature,
-                  onChanged: (v) =>
-                      setDlgState(() => enableTemperature = v),
-                ),
-                if (enableTemperature)
-                  Slider(
-                    value: temperature,
-                    min: 0,
-                    max: 2,
-                    divisions: 40,
-                    label: temperature.toStringAsFixed(2),
-                    onChanged: (v) =>
-                        setDlgState(() => temperature = v),
-                  ),
-                const Divider(),
-
-                // Top P
-                SwitchListTile(
-                  title: const Text('Top P'),
-                  subtitle: Text('$topP'),
-                  value: enableTopP,
-                  onChanged: (v) => setDlgState(() => enableTopP = v),
-                ),
-                if (enableTopP)
-                  Slider(
-                    value: topP,
-                    min: 0,
-                    max: 1,
-                    divisions: 20,
-                    label: topP.toStringAsFixed(2),
-                    onChanged: (v) => setDlgState(() => topP = v),
-                  ),
-                const Divider(),
-
-                // Max Tokens
-                SwitchListTile(
-                  title: const Text('最大Token数 (Max Tokens)'),
-                  subtitle: Text('$maxTokens'),
-                  value: enableMaxTokens,
-                  onChanged: (v) =>
-                      setDlgState(() => enableMaxTokens = v),
-                ),
-                if (enableMaxTokens)
-                  Slider(
-                    value: maxTokens.toDouble(),
-                    min: 256,
-                    max: 32768,
-                    divisions: 127,
-                    label: '$maxTokens',
-                    onChanged: (v) =>
-                        setDlgState(() => maxTokens = v.round()),
-                  ),
-                const Divider(),
-
-                // Stream Output
-                SwitchListTile(
-                  title: const Text('流式输出 (Stream Output)'),
-                  value: streamOutput,
-                  onChanged: (v) =>
-                      setDlgState(() => streamOutput = v),
-                ),
-                const Divider(),
-
-                // Frequency Penalty
-                SwitchListTile(
-                  title: const Text('频率惩罚 (Frequency Penalty)'),
-                  subtitle: Text('$frequencyPenalty'),
-                  value: enableFrequencyPenalty,
-                  onChanged: (v) => setDlgState(
-                      () => enableFrequencyPenalty = v),
-                ),
-                if (enableFrequencyPenalty)
-                  Slider(
-                    value: frequencyPenalty,
-                    min: -2,
-                    max: 2,
-                    divisions: 40,
-                    label: frequencyPenalty.toStringAsFixed(2),
-                    onChanged: (v) =>
-                        setDlgState(() => frequencyPenalty = v),
-                  ),
-                const Divider(),
-
-                // Presence Penalty
-                SwitchListTile(
-                  title: const Text('存在惩罚 (Presence Penalty)'),
-                  subtitle: Text('$presencePenalty'),
-                  value: enablePresencePenalty,
-                  onChanged: (v) => setDlgState(
-                      () => enablePresencePenalty = v),
-                ),
-                if (enablePresencePenalty)
-                  Slider(
-                    value: presencePenalty,
-                    min: -2,
-                    max: 2,
-                    divisions: 40,
-                    label: presencePenalty.toStringAsFixed(2),
-                    onChanged: (v) =>
-                        setDlgState(() => presencePenalty = v),
-                  ),
-                const Divider(),
-
-                // Seed
-                SwitchListTile(
-                  title: const Text('随机种子 (Seed)'),
-                  subtitle: Text(seed?.toString() ?? '未设置'),
-                  value: enableSeed,
-                  onChanged: (v) =>
-                      setDlgState(() => enableSeed = v),
-                ),
-                if (enableSeed)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: TextField(
-                      decoration: const InputDecoration(
-                        labelText: '种子值',
-                        hintText: '输入整数种子',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      keyboardType: TextInputType.number,
-                      controller: seedController,
-                      onChanged: (v) => setDlgState(() {
-                        seed = int.tryParse(v);
-                      }),
-                    ),
-                  ),
-                const Divider(),
-
-                // Web Search
-                SwitchListTile(
-                  title: const Text('联网搜索'),
-                  value: enableWebSearch,
-                  onChanged: (v) =>
-                      setDlgState(() => enableWebSearch = v),
-                ),
-                const Divider(),
-
-                // Custom Parameters section
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
+                // Tab content area - expands to fill remaining space
+                Expanded(
+                  child: TabBarView(
                     children: [
-                      const Text(
-                        '自定义参数',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
+                      // ============ Tab 1: 基本设置 ============
+                      SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 12),
+                            // Emoji picker (only emoji avatar supported)
+                            CategorizedEmojiPicker(
+                              selectedEmoji: selectedEmoji,
+                              onEmojiSelected: (e) =>
+                                  setDlgState(() => selectedEmoji = e),
+                            ),
+                            const SizedBox(height: 12),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              child: TextField(
+                                controller: nameController,
+                                decoration: const InputDecoration(
+                                  labelText: '助手名称',
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              child: TextField(
+                                controller: descriptionController,
+                                decoration: const InputDecoration(
+                                  labelText: '描述（可选）',
+                                  border: OutlineInputBorder(),
+                                ),
+                                maxLines: 2,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              child: TextField(
+                                controller: promptController,
+                                decoration: const InputDecoration(
+                                  labelText: '系统提示词',
+                                  border: OutlineInputBorder(),
+                                ),
+                                maxLines: 4,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
                         ),
                       ),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.add_circle_outline,
-                            size: 20),
-                        tooltip: '添加参数',
-                        onPressed: () {
-                          showAddCustomParameterDialog(
-                            context,
-                            (name, type, value) {
-                              setDlgState(() {
-                                customParameters.add(CustomParameter(
-                                  name: name,
-                                  type: type,
-                                  value: value,
-                                ));
-                              });
-                            },
-                          );
-                        },
+
+                      // ============ Tab 2: 参数设置 ============
+                      SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 12),
+                            // Override rule explanation
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .tertiaryContainer
+                                      .withOpacity(0.3),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Icon(
+                                      Icons.info_outline,
+                                      size: 16,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.tertiary,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        '助手的参数开关打开时覆盖模型参数；关闭时使用模型参数。',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onTertiaryContainer,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Temperature
+                            SwitchListTile(
+                              title: const Text('温度 (Temperature)'),
+                              subtitle: Text('$temperature'),
+                              value: enableTemperature,
+                              onChanged: (v) =>
+                                  setDlgState(() => enableTemperature = v),
+                            ),
+                            if (enableTemperature)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: Slider(
+                                  value: temperature,
+                                  min: 0,
+                                  max: 2,
+                                  divisions: 40,
+                                  label: temperature.toStringAsFixed(2),
+                                  onChanged: (v) =>
+                                      setDlgState(() => temperature = v),
+                                ),
+                              ),
+                            const Divider(),
+
+                            // Top P
+                            SwitchListTile(
+                              title: const Text('Top P'),
+                              subtitle: Text('$topP'),
+                              value: enableTopP,
+                              onChanged: (v) =>
+                                  setDlgState(() => enableTopP = v),
+                            ),
+                            if (enableTopP)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: Slider(
+                                  value: topP,
+                                  min: 0,
+                                  max: 1,
+                                  divisions: 20,
+                                  label: topP.toStringAsFixed(2),
+                                  onChanged: (v) => setDlgState(() => topP = v),
+                                ),
+                              ),
+                            const Divider(),
+
+                            // Max Tokens
+                            SwitchListTile(
+                              title: const Text('最大Token数 (Max Tokens)'),
+                              subtitle: Text('$maxTokens'),
+                              value: enableMaxTokens,
+                              onChanged: (v) =>
+                                  setDlgState(() => enableMaxTokens = v),
+                            ),
+                            if (enableMaxTokens)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: Slider(
+                                  value: maxTokens.toDouble(),
+                                  min: 256,
+                                  max: 32768,
+                                  divisions: 127,
+                                  label: '$maxTokens',
+                                  onChanged: (v) =>
+                                      setDlgState(() => maxTokens = v.round()),
+                                ),
+                              ),
+                            const Divider(),
+
+                            // Stream Output
+                            SwitchListTile(
+                              title: const Text('流式输出 (Stream Output)'),
+                              value: streamOutput,
+                              onChanged: (v) =>
+                                  setDlgState(() => streamOutput = v),
+                            ),
+                            const Divider(),
+
+                            // Frequency Penalty
+                            SwitchListTile(
+                              title: const Text('频率惩罚 (Frequency Penalty)'),
+                              subtitle: Text('$frequencyPenalty'),
+                              value: enableFrequencyPenalty,
+                              onChanged: (v) =>
+                                  setDlgState(() => enableFrequencyPenalty = v),
+                            ),
+                            if (enableFrequencyPenalty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: Slider(
+                                  value: frequencyPenalty,
+                                  min: -2,
+                                  max: 2,
+                                  divisions: 40,
+                                  label: frequencyPenalty.toStringAsFixed(2),
+                                  onChanged: (v) =>
+                                      setDlgState(() => frequencyPenalty = v),
+                                ),
+                              ),
+                            const Divider(),
+
+                            // Presence Penalty
+                            SwitchListTile(
+                              title: const Text('存在惩罚 (Presence Penalty)'),
+                              subtitle: Text('$presencePenalty'),
+                              value: enablePresencePenalty,
+                              onChanged: (v) =>
+                                  setDlgState(() => enablePresencePenalty = v),
+                            ),
+                            if (enablePresencePenalty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: Slider(
+                                  value: presencePenalty,
+                                  min: -2,
+                                  max: 2,
+                                  divisions: 40,
+                                  label: presencePenalty.toStringAsFixed(2),
+                                  onChanged: (v) =>
+                                      setDlgState(() => presencePenalty = v),
+                                ),
+                              ),
+                            const Divider(),
+
+                            // Seed
+                            SwitchListTile(
+                              title: const Text('随机种子 (Seed)'),
+                              subtitle: Text(seed?.toString() ?? '未设置'),
+                              value: enableSeed,
+                              onChanged: (v) =>
+                                  setDlgState(() => enableSeed = v),
+                            ),
+                            if (enableSeed)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: TextField(
+                                  decoration: const InputDecoration(
+                                    labelText: '种子值',
+                                    hintText: '输入整数种子',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  controller: seedController,
+                                  onChanged: (v) => setDlgState(() {
+                                    seed = int.tryParse(v);
+                                  }),
+                                ),
+                              ),
+                            const Divider(),
+
+                            // Web Search
+                            SwitchListTile(
+                              title: const Text('联网搜索'),
+                              value: enableWebSearch,
+                              onChanged: (v) =>
+                                  setDlgState(() => enableWebSearch = v),
+                            ),
+                            const Divider(),
+
+                            // Custom Parameters section
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              child: Row(
+                                children: [
+                                  const Text(
+                                    '自定义参数',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.add_circle_outline,
+                                      size: 20,
+                                    ),
+                                    tooltip: '添加参数',
+                                    onPressed: () {
+                                      showAddCustomParameterDialog(context, (
+                                        name,
+                                        type,
+                                        value,
+                                      ) {
+                                        setDlgState(() {
+                                          customParameters.add(
+                                            CustomParameter(
+                                              name: name,
+                                              type: type,
+                                              value: value,
+                                            ),
+                                          );
+                                        });
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (customParameters.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
+                                child: Text(
+                                  '暂无自定义参数',
+                                  style: TextStyle(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              )
+                            else
+                              ...customParameters.asMap().entries.map((entry) {
+                                final i = entry.key;
+                                final cp = entry.value;
+                                return ListTile(
+                                  dense: true,
+                                  title: Text(
+                                    cp.name,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    '${cp.type}: ${cp.value?.toString() ?? 'null'}',
+                                  ),
+                                  trailing: IconButton(
+                                    icon: Icon(
+                                      Icons.delete_outline,
+                                      size: 18,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.error,
+                                    ),
+                                    onPressed: () {
+                                      setDlgState(() {
+                                        customParameters.removeAt(i);
+                                      });
+                                    },
+                                  ),
+                                  onTap: () {
+                                    showEditCustomParameterDialog(context, cp, (
+                                      name,
+                                      type,
+                                      value,
+                                    ) {
+                                      setDlgState(() {
+                                        customParameters[i] = CustomParameter(
+                                          name: name,
+                                          type: type,
+                                          value: value,
+                                        );
+                                      });
+                                    });
+                                  },
+                                );
+                              }),
+                            const SizedBox(height: 16),
+                          ],
+                        ),
                       ),
                     ],
                   ),
                 ),
-                if (customParameters.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 8),
-                    child: Text(
-                      '暂无自定义参数',
-                      style: TextStyle(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurfaceVariant,
-                        fontSize: 13,
-                      ),
-                    ),
-                  )
-                else
-                  ...customParameters.asMap().entries.map((entry) {
-                    final i = entry.key;
-                    final cp = entry.value;
-                    return ListTile(
-                      dense: true,
-                      title: Text(
-                        cp.name,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w500),
-                      ),
-                      subtitle: Text(
-                          '${cp.type}: ${cp.value?.toString() ?? 'null'}'),
-                      trailing: IconButton(
-                        icon: Icon(Icons.delete_outline,
-                            size: 18,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .error),
-                        onPressed: () {
-                          setDlgState(() {
-                            customParameters.removeAt(i);
-                          });
-                        },
-                      ),
-                      onTap: () {
-                        showEditCustomParameterDialog(
-                          context,
-                          cp,
-                          (name, type, value) {
-                            setDlgState(() {
-                              customParameters[i] = CustomParameter(
-                                name: name,
-                                type: type,
-                                value: value,
-                              );
-                            });
-                          },
-                        );
-                      },
-                    );
-                  }),
               ],
             ),
           ),
@@ -746,8 +859,9 @@ void showEditCustomParameterDialog(
 ) {
   final nameController = TextEditingController(text: cp.name);
   String type = cp.type;
-  final valueController =
-      TextEditingController(text: cp.value?.toString() ?? '');
+  final valueController = TextEditingController(
+    text: cp.value?.toString() ?? '',
+  );
 
   showDialog(
     context: context,
@@ -820,4 +934,3 @@ void showEditCustomParameterDialog(
     ),
   );
 }
-
