@@ -331,20 +331,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
         ref.read(enabledToolNamesProvider.notifier).state = allToolNames;
       }
     }
-    // Auto-save reasoning settings when they change
-    ref.listen(
-      reasoningEnabledProvider,
-      (_, __) => _persistCurrentReasoningSettings(),
-    );
-    ref.listen(
-      reasoningEffortProvider,
-      (_, __) => _persistCurrentReasoningSettings(),
-    );
-    ref.listen(
-      reasoningParamValuesProvider,
-      (_, __) => _persistCurrentReasoningSettings(),
-    );
-
     // Restore saved model selection and restore per-model settings
     SharedPreferences.getInstance().then((prefs) {
       // Restore saved model order (drag-sort persistence) first,
@@ -1536,6 +1522,20 @@ class _ChatPageState extends ConsumerState<ChatPage>
         });
       }
     });
+
+    // Auto-save reasoning settings when they change (per-model persistence)
+    ref.listen(
+      reasoningEnabledProvider,
+      (_, __) => _persistCurrentReasoningSettings(),
+    );
+    ref.listen(
+      reasoningEffortProvider,
+      (_, __) => _persistCurrentReasoningSettings(),
+    );
+    ref.listen(
+      reasoningParamValuesProvider,
+      (_, __) => _persistCurrentReasoningSettings(),
+    );
 
     // Get conversation title
     final activeId = ref.watch(activeConversationIdProvider);
