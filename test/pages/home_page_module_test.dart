@@ -112,6 +112,20 @@ void main() {
       expect(find.text('下载网页资源'), findsOneWidget);
     });
 
+    testWidgets('下载网页资源 card subtitle shows 下载网页中的音视频', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Scroll to find the module card with subtitle
+      final cardFinder = find.text('下载网页资源');
+      await tester.ensureVisible(cardFinder);
+      await tester.pumpAndSettle();
+
+      // The subtitle should be the new text, not the old one
+      expect(find.text('下载网页中的音视频'), findsOneWidget);
+      expect(find.text('下载网页中的资源'), findsNothing);
+    });
+
     testWidgets('下载网页资源 card navigates to CatCatchPage', (tester) async {
       _setSmallScreen(tester);
 
@@ -181,7 +195,7 @@ void main() {
 
         // Module card labels should be visible
         expect(find.text('OCR'), findsOneWidget);
-        expect(find.text('音频转写'), findsOneWidget);
+        expect(find.text('语音识别'), findsOneWidget);
 
         // No overflow exceptions should have been thrown
         expect(tester.takeException(), isNull);
@@ -199,7 +213,7 @@ void main() {
       // Verify all key elements are still present
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
       expect(find.text('OCR'), findsOneWidget);
-      expect(find.text('音频转写'), findsOneWidget);
+      expect(find.text('语音识别'), findsOneWidget);
       expect(find.byIcon(Icons.pending_actions), findsOneWidget);
 
       // No overflow exceptions
@@ -323,7 +337,7 @@ void main() {
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
       expect(find.text('选择一个功能模块开始使用'), findsOneWidget);
       expect(find.text('OCR'), findsOneWidget);
-      expect(find.text('音频转写'), findsOneWidget);
+      expect(find.text('语音识别'), findsOneWidget);
       expect(find.byIcon(Icons.pending_actions), findsOneWidget);
 
       // No overflow exceptions
