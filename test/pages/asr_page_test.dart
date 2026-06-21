@@ -119,8 +119,7 @@ void main() {
       expect(find.text('Whisper-1'), findsWidgets);
     });
 
-    testWidgets('model selector shows all models when tapped',
-        (tester) async {
+    testWidgets('model selector shows all models when tapped', (tester) async {
       final entry = _createAsrEntry(withModels: true);
       await tester.pumpWidget(_buildTestApp(entries: [entry]));
       await tester.pumpAndSettle();
@@ -224,6 +223,69 @@ void main() {
       expect(find.byIcon(Icons.library_music_outlined), findsOneWidget);
       // audio_file_outlined appears in the bar button AND in the ChoiceCard
       expect(find.byIcon(Icons.audio_file_outlined), findsNWidgets(2));
+    });
+  });
+
+  group('AsrPage - unified in-app audio picker', () {
+    testWidgets('tapping "应用内录音" opens unified media picker with correct title',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Open the bottom sheet
+      await tester.tap(find.text('录音选择'));
+      await tester.pumpAndSettle();
+
+      // Tap "应用内录音" ChoiceCard
+      await tester.tap(find.text('应用内录音'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Should open the unified media picker with the correct title
+      expect(find.text('选择应用内录音'), findsOneWidget);
+    });
+
+    testWidgets('unified media picker shows empty state when no recordings',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Open the bottom sheet
+      await tester.tap(find.text('录音选择'));
+      await tester.pumpAndSettle();
+
+      // Tap "应用内录音" ChoiceCard
+      await tester.tap(find.text('应用内录音'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Should show empty state since no audio records are loaded
+      expect(find.text('暂无录音'), findsOneWidget);
+    });
+
+    testWidgets('unified media picker shows close button and can be dismissed',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Open the bottom sheet
+      await tester.tap(find.text('录音选择'));
+      await tester.pumpAndSettle();
+
+      // Tap "应用内录音" ChoiceCard
+      await tester.tap(find.text('应用内录音'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Dialog should be visible
+      expect(find.text('选择应用内录音'), findsOneWidget);
+
+      // Tap close button
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+
+      // Dialog should be dismissed
+      expect(find.text('选择应用内录音'), findsNothing);
     });
   });
 }

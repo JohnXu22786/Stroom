@@ -119,7 +119,8 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      final filledButtons = tester.widgetList<FilledButton>(find.byType(FilledButton));
+      final filledButtons =
+          tester.widgetList<FilledButton>(find.byType(FilledButton));
       for (final btn in filledButtons) {
         if (btn.onPressed == null) {
           // Found a disabled button - this is expected when no file
@@ -215,7 +216,8 @@ void main() {
       expect(find.text('测试视频'), findsOneWidget);
     });
 
-    testWidgets('in-app video picker tapping record with missing file shows error snackbar',
+    testWidgets(
+        'in-app video picker tapping record with missing file shows error snackbar',
         (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
@@ -243,6 +245,34 @@ void main() {
       // Should show error snackbar since the file doesn't exist
       // The dialog should remain open since the file read failed
       expect(find.text('选择应用内视频'), findsOneWidget);
+    });
+
+    testWidgets(
+        'in-app video picker shows folder navigation when videos exist in subfolders',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Add a record in a subfolder
+      await VideoManifest.addRecord(VideoRecord(
+        name: '视频子文件夹',
+        hash: 'test_nested_hash',
+        format: 'mp4',
+        createdAt: DateTime.now(),
+        size: 2048,
+        duration: 5000,
+        folder: '测试子文件夹',
+      ));
+
+      // Navigate to the in-app video picker
+      await tester.tap(find.text('选择视频来源'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('从应用相册选择'));
+      await tester.pumpAndSettle();
+
+      // Should show the folder, not the file inside it
+      expect(find.text('测试子文件夹'), findsOneWidget);
+      expect(find.text('视频子文件夹'), findsNothing);
     });
 
     testWidgets('in-app video picker close button dismisses the dialog',
@@ -293,11 +323,13 @@ void main() {
       expect(find.text('视频音频分离'), findsOneWidget);
 
       // Start button exists but should be disabled without video
-      final filledButtons = tester.widgetList<FilledButton>(find.byType(FilledButton));
+      final filledButtons =
+          tester.widgetList<FilledButton>(find.byType(FilledButton));
       for (final btn in filledButtons) {
         if (btn.child != null && btn.child.toString().contains('提取音频')) {
           expect(btn.onPressed, isNull,
-              reason: 'Extract button must be disabled when no video is loaded');
+              reason:
+                  'Extract button must be disabled when no video is loaded');
           return;
         }
       }
@@ -324,7 +356,9 @@ void main() {
       // the next method declaration to bound the search.
       final methodCode = content.substring(
         methodStart,
-        content.indexOf('\n  void ', methodStart).clamp(methodStart + 1, content.length),
+        content
+            .indexOf('\n  void ', methodStart)
+            .clamp(methodStart + 1, content.length),
       );
 
       expect(methodCode.contains('FileManifest.writeFile'), isTrue,
