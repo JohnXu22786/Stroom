@@ -36,9 +36,7 @@ ProviderEntry _createTestEntry({
 class ProviderEntriesNotifierFake extends ProviderEntriesNotifier {
   ProviderEntriesNotifierFake({String type = 'llm', String name = 'LLM供应商'}) {
     state = ProviderEntriesState(
-      entries: [
-        _createTestEntry(type: type, name: name),
-      ],
+      entries: [_createTestEntry(type: type, name: name)],
     );
   }
 
@@ -61,10 +59,8 @@ extension on WidgetTester {
       ProviderScope(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifierFake(
-              type: entryType,
-              name: entryName,
-            ),
+            (ref) =>
+                ProviderEntriesNotifierFake(type: entryType, name: entryName),
           ),
         ],
         child: MaterialApp(
@@ -84,8 +80,9 @@ void main() {
   });
 
   group('Display mode (existing config)', () {
-    testWidgets('shows read-only display with provider name and host',
-        (tester) async {
+    testWidgets('shows read-only display with provider name and host', (
+      tester,
+    ) async {
       await tester.pumpDetailPage();
 
       // Wait for post frame callback to finish
@@ -105,28 +102,31 @@ void main() {
       expect(find.text('模型列表'), findsOneWidget);
     });
 
-    testWidgets('click edit shows editable fields, save, discard, hides model list',
-        (tester) async {
-      await tester.pumpDetailPage();
-      await tester.pumpAndSettle();
+    testWidgets(
+      'click edit shows editable fields, save, discard, hides model list',
+      (tester) async {
+        await tester.pumpDetailPage();
+        await tester.pumpAndSettle();
 
-      // Enter edit mode
-      await tester.tap(find.text('编辑'));
-      await tester.pumpAndSettle();
+        // Enter edit mode
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
 
-      // Editable fields appear
-      expect(find.byType(TextField), findsNWidgets(3));
+        // Editable fields appear
+        expect(find.byType(TextField), findsNWidgets(3));
 
-      // Save and discard buttons
-      expect(find.text('保存'), findsOneWidget);
-      expect(find.text('放弃'), findsOneWidget);
+        // Save and discard buttons
+        expect(find.text('保存'), findsOneWidget);
+        expect(find.text('放弃'), findsOneWidget);
 
-      // Model list hidden
-      expect(find.text('模型列表'), findsNothing);
-    });
+        // Model list hidden
+        expect(find.text('模型列表'), findsNothing);
+      },
+    );
 
-    testWidgets('discard reverts values and returns to display mode',
-        (tester) async {
+    testWidgets('discard reverts values and returns to display mode', (
+      tester,
+    ) async {
       await tester.pumpDetailPage();
       await tester.pumpAndSettle();
 
@@ -152,8 +152,9 @@ void main() {
       expect(find.byType(TextField), findsNothing);
     });
 
-    testWidgets('save with empty fields shows validation snackbar',
-        (tester) async {
+    testWidgets('save with empty fields shows validation snackbar', (
+      tester,
+    ) async {
       await tester.pumpDetailPage();
       await tester.pumpAndSettle();
 
@@ -176,8 +177,7 @@ void main() {
   });
 
   group('New config creation', () {
-    testWidgets('starts in edit mode with editable fields',
-        (tester) async {
+    testWidgets('starts in edit mode with editable fields', (tester) async {
       await tester.pumpDetailPage(configIndex: -1);
       await tester.pumpAndSettle();
 
@@ -191,8 +191,7 @@ void main() {
       expect(find.text('模型列表'), findsNothing);
     });
 
-    testWidgets('discard navigates back for new config',
-        (tester) async {
+    testWidgets('discard navigates back for new config', (tester) async {
       await tester.pumpDetailPage(configIndex: -1);
       await tester.pumpAndSettle();
 
@@ -209,8 +208,9 @@ void main() {
   });
 
   group('Save existing config', () {
-    testWidgets('save exits edit mode and returns to display mode',
-        (tester) async {
+    testWidgets('save exits edit mode and returns to display mode', (
+      tester,
+    ) async {
       await tester.pumpDetailPage();
       await tester.pumpAndSettle();
 
@@ -239,7 +239,10 @@ void main() {
   });
 
   group('Unsaved changes dialog', () {
-    Future<void> pumpWithBackButton(WidgetTester tester, {int configIndex = 0}) {
+    Future<void> pumpWithBackButton(
+      WidgetTester tester, {
+      int configIndex = 0,
+    }) {
       return tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -273,8 +276,9 @@ void main() {
       );
     }
 
-    testWidgets('PopScope shows dialog on back with unsaved changes',
-        (tester) async {
+    testWidgets('PopScope shows dialog on back with unsaved changes', (
+      tester,
+    ) async {
       await pumpWithBackButton(tester);
       await tester.pumpAndSettle();
 
@@ -303,8 +307,9 @@ void main() {
       expect(find.text('放弃'), findsNWidgets(2));
     });
 
-    testWidgets('cancel in unsaved dialog returns to edit mode',
-        (tester) async {
+    testWidgets('cancel in unsaved dialog returns to edit mode', (
+      tester,
+    ) async {
       await pumpWithBackButton(tester);
       await tester.pumpAndSettle();
 
@@ -332,8 +337,7 @@ void main() {
       expect(find.text('放弃'), findsOneWidget);
     });
 
-    testWidgets('confirm discard in dialog navigates back',
-        (tester) async {
+    testWidgets('confirm discard in dialog navigates back', (tester) async {
       await pumpWithBackButton(tester);
       await tester.pumpAndSettle();
 
@@ -367,8 +371,9 @@ void main() {
       return tester.widget<TextField>(find.byKey(const ValueKey('host_field')));
     }
 
-    testWidgets('LLM type shows hintText and type-specific helperText',
-        (tester) async {
+    testWidgets('LLM type shows hintText and type-specific helperText', (
+      tester,
+    ) async {
       await tester.pumpDetailPage(entryType: 'llm', configIndex: -1);
       await tester.pumpAndSettle();
 
@@ -384,8 +389,9 @@ void main() {
       expect(decoration.helperMaxLines, equals(3));
     });
 
-    testWidgets('TTS type shows type-specific helperText with audio/speech',
-        (tester) async {
+    testWidgets('TTS type shows type-specific helperText with audio/speech', (
+      tester,
+    ) async {
       await tester.pumpDetailPage(entryType: 'tts', configIndex: -1);
       await tester.pumpAndSettle();
 
@@ -394,28 +400,33 @@ void main() {
       expect(decoration.helperText, contains('audio/speech'));
     });
 
-    testWidgets('ASR type shows type-specific helperText with audio/transcriptions',
-        (tester) async {
-      await tester.pumpDetailPage(entryType: 'asr', configIndex: -1);
-      await tester.pumpAndSettle();
+    testWidgets(
+      'ASR type shows type-specific helperText with audio/transcriptions',
+      (tester) async {
+        await tester.pumpDetailPage(entryType: 'asr', configIndex: -1);
+        await tester.pumpAndSettle();
 
-      final decoration = _hostField(tester).decoration;
-      expect(decoration!.helperText, contains('请填写完整的 API 端点地址'));
-      expect(decoration.helperText, contains('audio/transcriptions'));
-    });
+        final decoration = _hostField(tester).decoration;
+        expect(decoration!.helperText, contains('请填写完整的 API 端点地址'));
+        expect(decoration.helperText, contains('audio/transcriptions'));
+      },
+    );
 
-    testWidgets('OCR type shows type-specific helperText with chat/completions',
-        (tester) async {
-      await tester.pumpDetailPage(entryType: 'ocr', configIndex: -1);
-      await tester.pumpAndSettle();
+    testWidgets(
+      'OCR type shows type-specific helperText with chat/completions',
+      (tester) async {
+        await tester.pumpDetailPage(entryType: 'ocr', configIndex: -1);
+        await tester.pumpAndSettle();
 
-      final decoration = _hostField(tester).decoration;
-      expect(decoration!.helperText, contains('请填写完整的 API 端点地址'));
-      expect(decoration.helperText, contains('chat/completions'));
-    });
+        final decoration = _hostField(tester).decoration;
+        expect(decoration!.helperText, contains('请填写完整的 API 端点地址'));
+        expect(decoration.helperText, contains('chat/completions'));
+      },
+    );
 
-    testWidgets('MCP type shows type-specific helperText with URL example',
-        (tester) async {
+    testWidgets('MCP type shows type-specific helperText with URL example', (
+      tester,
+    ) async {
       await tester.pumpDetailPage(entryType: 'mcp', configIndex: -1);
       await tester.pumpAndSettle();
 
@@ -424,8 +435,9 @@ void main() {
       expect(decoration.helperText, contains('localhost'));
     });
 
-    testWidgets('host input field does NOT auto-fill with any value',
-        (tester) async {
+    testWidgets('host input field does NOT auto-fill with any value', (
+      tester,
+    ) async {
       await tester.pumpDetailPage(entryType: 'llm', configIndex: -1);
       await tester.pumpAndSettle();
 
@@ -434,8 +446,9 @@ void main() {
       expect(hostTextField.controller?.text, isEmpty);
     });
 
-    testWidgets('helperText is null when no type definition available',
-        (tester) async {
+    testWidgets('helperText is null when no type definition available', (
+      tester,
+    ) async {
       // Use an unregistered type to test null helperText
       await tester.pumpWidget(
         ProviderScope(
@@ -464,8 +477,9 @@ void main() {
   });
 
   group('Model config page routing by type', () {
-    testWidgets('LLM type renders LlmModelConfigPage when adding model',
-        (tester) async {
+    testWidgets('LLM type renders LlmModelConfigPage when adding model', (
+      tester,
+    ) async {
       await tester.pumpDetailPage(entryType: 'llm', entryName: 'LLM供应商');
       await tester.pumpAndSettle();
 
@@ -487,8 +501,9 @@ void main() {
       expect(find.byType(SimpleModelConfigPage), findsNothing);
     });
 
-    testWidgets('OCR type renders SimpleModelConfigPage when adding model',
-        (tester) async {
+    testWidgets('OCR type renders SimpleModelConfigPage when adding model', (
+      tester,
+    ) async {
       await tester.pumpDetailPage(entryType: 'ocr', entryName: 'OCR供应商');
       await tester.pumpAndSettle();
 
@@ -508,9 +523,10 @@ void main() {
       expect(find.byType(LlmModelConfigPage), findsNothing);
     });
 
-    testWidgets('ASR type renders SimpleModelConfigPage when adding model',
-        (tester) async {
-      await tester.pumpDetailPage(entryType: 'asr', entryName: '语音识别供应商');
+    testWidgets('ASR type renders SimpleModelConfigPage when adding model', (
+      tester,
+    ) async {
+      await tester.pumpDetailPage(entryType: 'asr', entryName: '音频转写供应商');
       await tester.pumpAndSettle();
 
       // Enter edit mode and save to transition to display mode
@@ -528,8 +544,9 @@ void main() {
       expect(find.byType(LlmModelConfigPage), findsNothing);
     });
 
-    testWidgets('TTS type renders ModelConfigPage when adding model',
-        (tester) async {
+    testWidgets('TTS type renders ModelConfigPage when adding model', (
+      tester,
+    ) async {
       await tester.pumpDetailPage(entryType: 'tts', entryName: 'TTS供应商');
       await tester.pumpAndSettle();
 

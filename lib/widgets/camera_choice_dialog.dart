@@ -134,7 +134,7 @@ class _CameraChoiceSheetState extends State<_CameraChoiceSheet> {
               icon: Icons.camera_alt,
               title: '应用相机',
               subtitle: '使用应用内置相机，支持调整比例和压缩设置',
-              color: Colors.orange,
+              color: Colors.green,
               onTap: () => _onChoice(CameraChoice.app),
             ),
             const SizedBox(height: 8),
@@ -190,8 +190,7 @@ class _CameraChoiceSheetState extends State<_CameraChoiceSheet> {
                                 style: Theme.of(context)
                                     .textTheme
                                     .labelMedium
-                                    ?.copyWith(
-                                        color: cs.onSurfaceVariant),
+                                    ?.copyWith(color: cs.onSurfaceVariant),
                               ),
                               const SizedBox(height: 2),
                               Text(
@@ -231,8 +230,8 @@ class _CameraChoiceSheetState extends State<_CameraChoiceSheet> {
                   ),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   child: Row(
                     children: [
                       Container(
@@ -257,24 +256,21 @@ class _CameraChoiceSheetState extends State<_CameraChoiceSheet> {
                               style: Theme.of(context)
                                   .textTheme
                                   .bodyMedium
-                                  ?.copyWith(
-                                      fontWeight: FontWeight.w500),
+                                  ?.copyWith(fontWeight: FontWeight.w500),
                             ),
                             Text(
                               '拍照后立即进入编辑模式',
                               style: Theme.of(context)
                                   .textTheme
                                   .bodySmall
-                                  ?.copyWith(
-                                      color: cs.onSurfaceVariant),
+                                  ?.copyWith(color: cs.onSurfaceVariant),
                             ),
                           ],
                         ),
                       ),
                       Switch(
                         value: _editAfterCapture,
-                        onChanged: (v) =>
-                            setState(() => _editAfterCapture = v),
+                        onChanged: (v) => setState(() => _editAfterCapture = v),
                       ),
                     ],
                   ),

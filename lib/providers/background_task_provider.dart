@@ -26,7 +26,7 @@ enum BackgroundTaskType {
       case BackgroundTaskType.ocr:
         return '文字识别';
       case BackgroundTaskType.asr:
-        return '语音识别';
+        return '音频转写';
       case BackgroundTaskType.audioSeparation:
         return '音频分离';
     }
@@ -70,7 +70,8 @@ class BackgroundTask {
     DateTime? statusChangedAt,
   }) {
     final newStatus = status ?? this.status;
-    final newStatusChangedAt = statusChangedAt ??
+    final newStatusChangedAt =
+        statusChangedAt ??
         (status != null && status != this.status
             ? DateTime.now()
             : this.statusChangedAt);
@@ -88,32 +89,32 @@ class BackgroundTask {
   }
 
   Map<String, dynamic> toMap() => {
-        'id': id,
-        'type': type.name,
-        'title': title,
-        'status': status.name,
-        'progress': progress,
-        'error': error,
-        'createdAt': createdAt.toIso8601String(),
-        'completedAt': completedAt?.toIso8601String(),
-        'statusChangedAt': statusChangedAt?.toIso8601String(),
-      };
+    'id': id,
+    'type': type.name,
+    'title': title,
+    'status': status.name,
+    'progress': progress,
+    'error': error,
+    'createdAt': createdAt.toIso8601String(),
+    'completedAt': completedAt?.toIso8601String(),
+    'statusChangedAt': statusChangedAt?.toIso8601String(),
+  };
 
   factory BackgroundTask.fromMap(Map<String, dynamic> map) => BackgroundTask(
-        id: map['id'] as String,
-        type: BackgroundTaskType.values.byName(map['type'] as String),
-        title: map['title'] as String,
-        status: TaskStatus.values.byName(map['status'] as String),
-        progress: map['progress'] as int? ?? 0,
-        error: map['error'] as String?,
-        createdAt: DateTime.parse(map['createdAt'] as String),
-        completedAt: map['completedAt'] != null
-            ? DateTime.parse(map['completedAt'] as String)
-            : null,
-        statusChangedAt: map['statusChangedAt'] != null
-            ? DateTime.parse(map['statusChangedAt'] as String)
-            : null,
-      );
+    id: map['id'] as String,
+    type: BackgroundTaskType.values.byName(map['type'] as String),
+    title: map['title'] as String,
+    status: TaskStatus.values.byName(map['status'] as String),
+    progress: map['progress'] as int? ?? 0,
+    error: map['error'] as String?,
+    createdAt: DateTime.parse(map['createdAt'] as String),
+    completedAt: map['completedAt'] != null
+        ? DateTime.parse(map['completedAt'] as String)
+        : null,
+    statusChangedAt: map['statusChangedAt'] != null
+        ? DateTime.parse(map['statusChangedAt'] as String)
+        : null,
+  );
 }
 
 // ============================================================================
@@ -122,8 +123,8 @@ class BackgroundTask {
 
 final backgroundTasksProvider =
     StateNotifierProvider<BackgroundTaskNotifier, List<BackgroundTask>>(
-  (ref) => BackgroundTaskNotifier(),
-);
+      (ref) => BackgroundTaskNotifier(),
+    );
 
 class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   final _uuid = const Uuid();
@@ -131,16 +132,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   BackgroundTaskNotifier() : super([]);
 
   /// Add a new background task (running) and return its ID.
-  String addTask({
-    required BackgroundTaskType type,
-    required String title,
-  }) {
+  String addTask({required BackgroundTaskType type, required String title}) {
     final id = _uuid.v4();
-    final task = BackgroundTask(
-      id: id,
-      type: type,
-      title: title,
-    );
+    final task = BackgroundTask(id: id, type: type, title: title);
     state = [task, ...state];
     _persistTasks();
     return id;
@@ -172,7 +166,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     _persistTasks();
   }
 
-  void _updateTask(String taskId, TaskStatus status, {String? error, int? progress}) {
+  void _updateTask(
+    String taskId,
+    TaskStatus status, {
+    String? error,
+    int? progress,
+  }) {
     BackgroundTask? oldTask;
     state = state.map((t) {
       if (t.id != taskId) return t;
@@ -183,8 +182,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         error: error,
         completedAt:
             status == TaskStatus.completed || status == TaskStatus.failed
-                ? DateTime.now()
-                : null,
+            ? DateTime.now()
+            : null,
       );
     }).toList();
     _persistTasks();
@@ -196,7 +195,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     }
   }
 
-  void _sendTaskNotification(BackgroundTask task, TaskStatus status, String? error) {
+  void _sendTaskNotification(
+    BackgroundTask task,
+    TaskStatus status,
+    String? error,
+  ) {
     // Fire-and-forget: notifications should never crash the task state update
     try {
       final future = NotificationService().showTaskCompletionNotification(
@@ -235,8 +238,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       if (content.isEmpty) return [];
       final list = jsonDecode(content) as List;
       return list
-          .map((m) =>
-              BackgroundTask.fromMap(Map<String, dynamic>.from(m as Map)))
+          .map(
+            (m) => BackgroundTask.fromMap(Map<String, dynamic>.from(m as Map)),
+          )
           .toList();
     } catch (e) {
       debugPrint('[BackgroundTaskNotifier] Failed to load persisted tasks: $e');
@@ -274,6 +278,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       ...state,
     ];
     debugPrint(
-        '[BackgroundTaskNotifier] Restored ${tasks.length} tasks from persistence');
+      '[BackgroundTaskNotifier] Restored ${tasks.length} tasks from persistence',
+    );
   }
 }

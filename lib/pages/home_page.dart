@@ -4,6 +4,7 @@ import 'home_shared.dart';
 
 import '../main.dart' as main_lib;
 import 'assistant_selection_page.dart';
+import 'files_page_shared.dart';
 import 'topic_selection_page.dart';
 import 'catcatch_page.dart' hide showMediaPreview;
 import 'unified_task_list_page.dart';
@@ -19,12 +20,7 @@ import 'asr_page.dart';
 import 'audio_separation_page.dart';
 
 /// 页面枚举，定义应用中的主要页面（不含加号按钮）
-enum AppPage {
-  home,
-  chat,
-  files,
-  settings,
-}
+enum AppPage { home, chat, files, settings }
 
 /// 当前选中页面的状态提供器
 final selectedPageProvider = StateProvider<AppPage>((ref) => AppPage.home);
@@ -58,8 +54,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   void _resetChatNavigator() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_chatNavigatorKey.currentState != null) {
-        _chatNavigatorKey.currentState!
-            .popUntil((route) => route.isFirst);
+        _chatNavigatorKey.currentState!.popUntil((route) => route.isFirst);
       }
     });
   }
@@ -98,7 +93,10 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   /// 显示媒体资源选择弹框（供 CatCatch userSelecting 步骤使用）
-  void _showMediaSelectionDialog(BuildContext context, catcatch_task.CatCatchTask task) {
+  void _showMediaSelectionDialog(
+    BuildContext context,
+    catcatch_task.CatCatchTask task,
+  ) {
     final selectedUrls = <String>{};
     showDialog(
       context: context,
@@ -107,9 +105,11 @@ class _HomePageState extends ConsumerState<HomePage> {
         builder: (ctx, setDlgState) {
           final mediaList = task.detectedMedia;
           return AlertDialog(
-            title: Text(selectedUrls.isNotEmpty
-                ? '已选 ${selectedUrls.length}/${mediaList.length} 个资源'
-                : '选择要下载的资源'),
+            title: Text(
+              selectedUrls.isNotEmpty
+                  ? '已选 ${selectedUrls.length}/${mediaList.length} 个资源'
+                  : '选择要下载的资源',
+            ),
             content: SizedBox(
               width: double.maxFinite,
               child: mediaList.isEmpty
@@ -120,14 +120,23 @@ class _HomePageState extends ConsumerState<HomePage> {
                       itemBuilder: (_, i) {
                         final media = mediaList[i];
                         final isSel = selectedUrls.contains(media.url);
-                        final isAudio = ['mp3', 'wav', 'm4a', 'aac', 'opus', 'weba'].contains(media.ext.toLowerCase());
+                        final isAudio = [
+                          'mp3',
+                          'wav',
+                          'm4a',
+                          'aac',
+                          'opus',
+                          'weba',
+                        ].contains(media.ext.toLowerCase());
                         return Card(
                           elevation: 0,
                           margin: const EdgeInsets.only(bottom: 6),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                             side: BorderSide(
-                              color: isSel ? Theme.of(ctx).colorScheme.primary : Theme.of(ctx).colorScheme.outlineVariant,
+                              color: isSel
+                                  ? Theme.of(ctx).colorScheme.primary
+                                  : Theme.of(ctx).colorScheme.outlineVariant,
                               width: isSel ? 1.5 : 0.5,
                             ),
                           ),
@@ -143,31 +152,43 @@ class _HomePageState extends ConsumerState<HomePage> {
                               });
                             },
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 8,
+                              ),
                               child: Row(
                                 children: [
                                   Icon(
                                     isAudio ? Icons.audiotrack : Icons.videocam,
                                     size: 18,
-                                    color: isAudio ? Colors.purple : Colors.blue,
+                                    color: isAudio
+                                        ? Colors.purple
+                                        : Colors.blue,
                                   ),
                                   const SizedBox(width: 8),
                                   Icon(
-                                    isSel ? Icons.check_box : Icons.check_box_outline_blank,
-                                    color: isSel ? Theme.of(ctx).colorScheme.primary : Colors.grey,
+                                    isSel
+                                        ? Icons.check_box
+                                        : Icons.check_box_outline_blank,
+                                    color: isSel
+                                        ? Theme.of(ctx).colorScheme.primary
+                                        : Colors.grey,
                                     size: 20,
                                   ),
                                   const SizedBox(width: 4),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           '${media.name}.${media.ext}',
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
-                                            fontWeight: isSel ? FontWeight.w600 : FontWeight.w500,
+                                            fontWeight: isSel
+                                                ? FontWeight.w600
+                                                : FontWeight.w500,
                                             fontSize: 14,
                                           ),
                                         ),
@@ -176,15 +197,20 @@ class _HomePageState extends ConsumerState<HomePage> {
                                             '时长: ${formatDurationShort(media.duration!)}',
                                             style: TextStyle(
                                               fontSize: 11,
-                                              color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                                              color: Theme.of(
+                                                ctx,
+                                              ).colorScheme.onSurfaceVariant,
                                             ),
                                           ),
-                                        if (media.width != null && media.height != null)
+                                        if (media.width != null &&
+                                            media.height != null)
                                           Text(
                                             '分辨率: ${media.width}x${media.height}',
                                             style: TextStyle(
                                               fontSize: 11,
-                                              color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                                              color: Theme.of(
+                                                ctx,
+                                              ).colorScheme.onSurfaceVariant,
                                             ),
                                           ),
                                       ],
@@ -194,7 +220,9 @@ class _HomePageState extends ConsumerState<HomePage> {
                                     IconButton(
                                       icon: Icon(
                                         Icons.play_circle_filled,
-                                        color: Theme.of(ctx).colorScheme.primary,
+                                        color: Theme.of(
+                                          ctx,
+                                        ).colorScheme.primary,
                                         size: 22,
                                       ),
                                       tooltip: '预览',
@@ -202,11 +230,16 @@ class _HomePageState extends ConsumerState<HomePage> {
                                         showMediaPreview(
                                           ctx,
                                           media,
-                                          task.title.isNotEmpty ? task.title : task.url,
+                                          task.title.isNotEmpty
+                                              ? task.title
+                                              : task.url,
                                         );
                                       },
                                       padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                                      constraints: const BoxConstraints(
+                                        minWidth: 36,
+                                        minHeight: 36,
+                                      ),
                                     ),
                                 ],
                               ),
@@ -217,23 +250,29 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('取消'),
+              ),
               FilledButton(
                 onPressed: selectedUrls.isNotEmpty || mediaList.length == 1
                     ? () {
                         final selectedMediaList = mediaList.length == 1
                             ? mediaList
-                            : mediaList.where((m) => selectedUrls.contains(m.url)).toList();
+                            : mediaList
+                                  .where((m) => selectedUrls.contains(m.url))
+                                  .toList();
                         Navigator.pop(ctx);
-                        ref.read(catcatchTasksProvider.notifier).batchSelectMedia(
-                          task.id,
-                          selectedMediaList,
-                        );
+                        ref
+                            .read(catcatchTasksProvider.notifier)
+                            .batchSelectMedia(task.id, selectedMediaList);
                       }
                     : null,
-                child: Text(selectedUrls.isNotEmpty
-                    ? '下载选中的 ${selectedUrls.length} 个资源'
-                    : '确认下载'),
+                child: Text(
+                  selectedUrls.isNotEmpty
+                      ? '下载选中的 ${selectedUrls.length} 个资源'
+                      : '确认下载',
+                ),
               ),
             ],
           );
@@ -277,27 +316,35 @@ class _HomePageState extends ConsumerState<HomePage> {
           selectedIcon: Badge(
             isLabelVisible: activeTaskCount > 0,
             label: Text('$activeTaskCount'),
-            child: Icon(_getPageIcon(AppPage.home),
-                color: Theme.of(context).colorScheme.primary),
+            child: Icon(
+              _getPageIcon(AppPage.home),
+              color: Theme.of(context).colorScheme.primary,
+            ),
           ),
           label: Text(_getPageTitle(AppPage.home)),
         ),
         NavigationRailDestination(
           icon: Icon(_getPageIcon(AppPage.chat)),
-          selectedIcon: Icon(_getPageIcon(AppPage.chat),
-              color: Theme.of(context).colorScheme.primary),
+          selectedIcon: Icon(
+            _getPageIcon(AppPage.chat),
+            color: Theme.of(context).colorScheme.primary,
+          ),
           label: Text(_getPageTitle(AppPage.chat)),
         ),
         NavigationRailDestination(
           icon: Icon(_getPageIcon(AppPage.files)),
-          selectedIcon: Icon(_getPageIcon(AppPage.files),
-              color: Theme.of(context).colorScheme.primary),
+          selectedIcon: Icon(
+            _getPageIcon(AppPage.files),
+            color: Theme.of(context).colorScheme.primary,
+          ),
           label: Text(_getPageTitle(AppPage.files)),
         ),
         NavigationRailDestination(
           icon: Icon(_getPageIcon(AppPage.settings)),
-          selectedIcon: Icon(_getPageIcon(AppPage.settings),
-              color: Theme.of(context).colorScheme.primary),
+          selectedIcon: Icon(
+            _getPageIcon(AppPage.settings),
+            color: Theme.of(context).colorScheme.primary,
+          ),
           label: Text(_getPageTitle(AppPage.settings)),
         ),
       ],
@@ -409,18 +456,29 @@ class _HomePageState extends ConsumerState<HomePage> {
     final lastRead = ref.watch(taskListLastReadProvider);
     final activeTaskCount =
         catcatchTasks
-            .where((t) =>
-              t.status.name != 'completed' && (
-                (t.statusChangedAt ?? t.createdAt).isAfter(lastRead) ||
-                (t.status.name == 'running' &&
-                 t.steps.any((s) => s.type.name == 'userSelecting' && s.running))
-              )
-            ).length +
+            .where(
+              (t) =>
+                  t.status.name != 'completed' &&
+                  ((t.statusChangedAt ?? t.createdAt).isAfter(lastRead) ||
+                      (t.status.name == 'running' &&
+                          t.steps.any(
+                            (s) => s.type.name == 'userSelecting' && s.running,
+                          ))),
+            )
+            .length +
         synthesisTasks
-            .where((t) => t.status.name != 'completed' && (t.statusChangedAt ?? t.createdAt).isAfter(lastRead))
+            .where(
+              (t) =>
+                  t.status.name != 'completed' &&
+                  (t.statusChangedAt ?? t.createdAt).isAfter(lastRead),
+            )
             .length +
         backgroundTasks
-            .where((t) => t.status != TaskStatus.completed && (t.statusChangedAt ?? t.createdAt).isAfter(lastRead))
+            .where(
+              (t) =>
+                  t.status != TaskStatus.completed &&
+                  (t.statusChangedAt ?? t.createdAt).isAfter(lastRead),
+            )
             .length;
 
     return SafeArea(
@@ -428,124 +486,123 @@ class _HomePageState extends ConsumerState<HomePage> {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
         child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header — notification button integrated into the row
-          // so it never overlaps or causes overflow on small screens.
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Row(
-              children: [
-                Icon(Icons.auto_awesome, size: 24, color: cs.primary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '欢迎使用 Stroom',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: cs.onSurface,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                InkWell(
-                  borderRadius: BorderRadius.circular(20),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const UnifiedTaskListPage()),
-                    );
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Badge(
-                      isLabelVisible: activeTaskCount > 0,
-                      label: Text('$activeTaskCount'),
-                      child: const Icon(Icons.pending_actions, size: 22),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header — notification button integrated into the row
+            // so it never overlaps or causes overflow on small screens.
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                children: [
+                  Icon(Icons.auto_awesome, size: 24, color: cs.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '欢迎使用 Stroom',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: cs.onSurface,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '选择一个功能模块开始使用',
-            style: TextStyle(
-              fontSize: 14,
-              color: cs.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 24),
-          // Module grid
-          Expanded(
-            child: GridView(
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 180,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 1.2,
+                  InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const UnifiedTaskListPage(),
+                        ),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Badge(
+                        isLabelVisible: activeTaskCount > 0,
+                        label: Text('$activeTaskCount'),
+                        child: const Icon(Icons.pending_actions, size: 22),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              children: [
-                _buildModuleCard(
-                  icon: Icons.text_snippet,
-                  label: 'OCR',
-                  subtitle: '文字识别',
-                  color: Colors.teal,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const OcrPage()),
-                    );
-                  },
-                ),
-                _buildModuleCard(
-                  icon: Icons.multitrack_audio,
-                  label: '语音识别',
-                  subtitle: '语音转文字',
-                  color: Colors.deepPurple,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const AsrPage()),
-                    );
-                  },
-                ),
-                _buildModuleCard(
-                  icon: Icons.language,
-                  label: '下载网页资源',
-                  subtitle: '下载网页中的资源',
-                  color: Colors.purple,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const CatCatchPage()),
-                    );
-                  },
-                ),
-                _buildModuleCard(
-                  icon: Icons.music_note,
-                  label: '音频分离',
-                  subtitle: '从视频中提取音频',
-                  color: Colors.indigo,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const AudioSeparationPage()),
-                    );
-                  },
-                ),
-              ],
             ),
-          ),
-        ],
+            const SizedBox(height: 4),
+            Text(
+              '选择一个功能模块开始使用',
+              style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 24),
+            // Module grid
+            Expanded(
+              child: GridView(
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 180,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 1.2,
+                ),
+                children: [
+                  _buildModuleCard(
+                    icon: Icons.text_snippet,
+                    label: 'OCR',
+                    subtitle: '文字识别',
+                    color: Colors.teal,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const OcrPage()),
+                      );
+                    },
+                  ),
+                  _buildModuleCard(
+                    icon: Icons.multitrack_audio,
+                    label: '音频转写',
+                    subtitle: '语音转文字',
+                    color: Colors.deepPurple,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const AsrPage()),
+                      );
+                    },
+                  ),
+                  _buildModuleCard(
+                    icon: Icons.language,
+                    label: '下载网页资源',
+                    subtitle: '下载网页中的资源',
+                    color: Colors.purple,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const CatCatchPage()),
+                      );
+                    },
+                  ),
+                  _buildModuleCard(
+                    icon: Icons.music_note,
+                    label: '音频分离',
+                    subtitle: '从视频中提取音频',
+                    color: Colors.indigo,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const AudioSeparationPage(),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   /// 构建模块卡片
   Widget _buildModuleCard({
@@ -594,10 +651,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               const SizedBox(height: 1),
               Text(
                 subtitle,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: cs.onSurfaceVariant,
-                ),
+                style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -622,25 +676,38 @@ class _HomePageState extends ConsumerState<HomePage> {
     final lastRead = ref.watch(taskListLastReadProvider);
     final activeTaskCount =
         catcatchTasks
-            .where((t) =>
-              t.status.name != 'completed' && (
-                (t.statusChangedAt ?? t.createdAt).isAfter(lastRead) ||
-                (t.status.name == 'running' &&
-                 t.steps.any((s) => s.type.name == 'userSelecting' && s.running))
-              )
-            ).length +
+            .where(
+              (t) =>
+                  t.status.name != 'completed' &&
+                  ((t.statusChangedAt ?? t.createdAt).isAfter(lastRead) ||
+                      (t.status.name == 'running' &&
+                          t.steps.any(
+                            (s) => s.type.name == 'userSelecting' && s.running,
+                          ))),
+            )
+            .length +
         synthesisTasks
-            .where((t) => t.status.name != 'completed' && (t.statusChangedAt ?? t.createdAt).isAfter(lastRead))
+            .where(
+              (t) =>
+                  t.status.name != 'completed' &&
+                  (t.statusChangedAt ?? t.createdAt).isAfter(lastRead),
+            )
             .length +
         backgroundTasks
-            .where((t) => t.status != TaskStatus.completed && (t.statusChangedAt ?? t.createdAt).isAfter(lastRead))
+            .where(
+              (t) =>
+                  t.status != TaskStatus.completed &&
+                  (t.statusChangedAt ?? t.createdAt).isAfter(lastRead),
+            )
             .length;
 
     ref.listen(catcatchTasksProvider, (prev, next) {
       if (!mounted) return;
       for (final task in next) {
         if (task.status.name == 'running' &&
-            task.steps.any((s) => s.type.name == 'userSelecting' && s.running) &&
+            task.steps.any(
+              (s) => s.type.name == 'userSelecting' && s.running,
+            ) &&
             task.detectedMedia.isNotEmpty &&
             task.selectedMedia == null) {
           _showMediaSelectionDialog(context, task);
@@ -666,12 +733,20 @@ class _HomePageState extends ConsumerState<HomePage> {
           });
           return;
         }
-        // 2. 如果在非主页标签页（对话根路由、文件、设置），跳转到主页（上一级页面）
+        // 2. 如果在文件页面且文件管理器已处理返回（导航到父文件夹），不重复跳转
+        if (currentPage == AppPage.files) {
+          if (ref.read(filesPageBackHandledProvider)) {
+            // 文件管理器的内部 PopScope 已处理返回事件 → 重置标记并跳过
+            ref.read(filesPageBackHandledProvider.notifier).state = false;
+            return;
+          }
+        }
+        // 3. 如果在非主页标签页（对话根路由、文件、设置），跳转到主页（上一级页面）
         if (currentPage != AppPage.home) {
           ref.read(selectedPageProvider.notifier).state = AppPage.home;
           return;
         }
-        // 3. 如果在主页，不做任何操作，不退出应用
+        // 4. 如果在主页，不做任何操作，不退出应用
       },
       child: Scaffold(
         body: Row(
@@ -689,9 +764,10 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
           ],
         ),
-        bottomNavigationBar: isMobile ? _buildBottomNavigationBar(context, activeTaskCount) : null,
+        bottomNavigationBar: isMobile
+            ? _buildBottomNavigationBar(context, activeTaskCount)
+            : null,
       ),
     );
   }
 }
-
