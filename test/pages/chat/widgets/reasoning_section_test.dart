@@ -1,58 +1,144 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stroom/pages/chat/widgets/reasoning_section.dart';
+import 'package:stroom/providers/chat_stream_provider.dart';
+
+/// Helper to create a test app with the ReasoningSection widget.
+Widget createReasoningTestApp({
+  required String reasoningText,
+  bool isStreaming = false,
+}) {
+  return ProviderScope(
+    overrides: [
+      if (isStreaming)
+        streamingReasoningProvider.overrideWith((ref) => reasoningText)
+      else
+        streamingReasoningProvider.overrideWith((ref) => ''),
+    ],
+    child: MaterialApp(
+      home: Scaffold(
+        body: ReasoningSection(
+          reasoningText: reasoningText,
+          isStreaming: isStreaming,
+          messageId: 'test-msg-id',
+        ),
+      ),
+    ),
+  );
+}
 
 void main() {
-  group('ReasoningSection', () {
-    testWidgets('renders collapsed by default', (tester) async {
+  group('ReasoningSection (Panel mode)', () {
+    testWidgets('shows orange button with reasoning text when content exists', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ReasoningSection(reasoningText: 'Test reasoning'),
-          ),
+        createReasoningTestApp(
+          reasoningText: 'Test reasoning content',
+          isStreaming: false,
         ),
       );
 
-      // Should show title but not the reasoning text
+      // Should show the button with icon and "推理过程" text
       expect(find.text('推理过程'), findsOneWidget);
-      // Collapsed so reasoning text should NOT be visible
-      expect(find.text('Test reasoning'), findsNothing);
+      // The content should NOT be visible inline (it's a panel now)
+      expect(find.text('Test reasoning content'), findsNothing);
     });
 
-    testWidgets('expands to show reasoning text on tap', (tester) async {
+    testWidgets('shows "推理中" when streaming', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ReasoningSection(reasoningText: 'Test reasoning'),
-          ),
+        createReasoningTestApp(
+          reasoningText: 'Streaming reasoning...',
+          isStreaming: true,
         ),
       );
 
-      // Tap to expand
-      await tester.tap(find.text('推理过程'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Test reasoning'), findsOneWidget);
+      expect(find.text('推理中'), findsOneWidget);
     });
 
-    testWidgets('toggles between expanded and collapsed', (tester) async {
+    testWidgets('opens dialog panel on tap', (tester) async {
+      await tester.pumpWidget(createReasoningTestApp(
+        reasoningText: 'Panel reasoning content',
+        isStreaming: false,
+      ));
+
+      // Tap the reasoning button
+      await tester.tap(find.text('推理过程'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Should open a dialog
+      expect(find.byType(Dialog), findsOneWidget);
+    });
+
+    testWidgets('dialog has close button', (tester) async {
+      await tester.pumpWidget(createReasoningTestApp(
+        reasoningText: 'Test reasoning',
+        isStreaming: false,
+      ));
+
+      // Open the panel
+      await tester.tap(find.text('推理过程'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Dialog should have a close button
+      expect(find.byIcon(Icons.close), findsOneWidget);
+    });
+
+    testWidgets('dialog closes on close button tap', (tester) async {
+      await tester.pumpWidget(createReasoningTestApp(
+        reasoningText: 'Test reasoning',
+        isStreaming: false,
+      ));
+
+      // Open the panel
+      await tester.tap(find.text('推理过程'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(Dialog), findsOneWidget);
+
+      // Close
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(Dialog), findsNothing);
+    });
+
+    testWidgets('dialog has close button', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ReasoningSection(reasoningText: 'Toggle test'),
-          ),
+        createReasoningTestApp(
+          reasoningText: 'Test reasoning',
+          isStreaming: false,
         ),
       );
 
-      // Expand
+      // Open the panel
       await tester.tap(find.text('推理过程'));
       await tester.pumpAndSettle();
-      expect(find.text('Toggle test'), findsOneWidget);
 
-      // Collapse
+      // Dialog should have a close button
+      expect(find.byIcon(Icons.close), findsOneWidget);
+    });
+
+    testWidgets('dialog closes on close button tap', (tester) async {
+      await tester.pumpWidget(
+        createReasoningTestApp(
+          reasoningText: 'Test reasoning',
+          isStreaming: false,
+        ),
+      );
+
+      // Open the panel
       await tester.tap(find.text('推理过程'));
       await tester.pumpAndSettle();
-      expect(find.text('Toggle test'), findsNothing);
+      expect(find.byType(Dialog), findsOneWidget);
+
+      // Close
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+      expect(find.byType(Dialog), findsNothing);
     });
   });
 }

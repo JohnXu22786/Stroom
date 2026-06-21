@@ -1,6 +1,8 @@
 import 'tool_call.dart';
 
-sealed class ChatEvent {}
+sealed class ChatEvent {
+  const ChatEvent();
+}
 
 class TextEvent extends ChatEvent {
   final String text;
@@ -16,4 +18,12 @@ class ToolCallCompleteEvent extends ChatEvent {
   final String toolCallId;
   final String result;
   ToolCallCompleteEvent(this.toolCallId, this.result);
+}
+
+/// Reasoning text chunk emitted during streaming.
+/// Contains a partial snippet of the model's reasoning/thinking process
+/// that can be rendered incrementally in a reasoning display panel.
+class ReasoningEvent extends ChatEvent {
+  final String text;
+  const ReasoningEvent(this.text);
 }
