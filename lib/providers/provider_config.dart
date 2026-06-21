@@ -14,8 +14,10 @@ export '../models/tts_models.dart';
 enum ModelConfigStyle {
   /// TTS 样式：音色、音量、语速、裁切、流式输出、instruction 等
   tts,
+
   /// LLM 样式：模型ID、上下文长度、自定义参数
   llm,
+
   /// 简洁样式：模型ID、自定义参数（无上下文长度要求），用于 OCR、ASR
   simple,
 }
@@ -51,30 +53,40 @@ class ProviderTypeRegistry {
 }
 
 void registerBuiltinProviderTypes() {
-  ProviderTypeRegistry.register(const ProviderTypeDefinition(
-    type: 'llm',
-    hostHint: '例如: https://api.openai.com/v1/chat/completions',
-    modelConfigStyle: ModelConfigStyle.llm,
-  ));
-  ProviderTypeRegistry.register(const ProviderTypeDefinition(
-    type: 'tts',
-    hostHint: '例如: https://api.openai.com/v1/audio/speech',
-    modelConfigStyle: ModelConfigStyle.tts,
-  ));
-  ProviderTypeRegistry.register(const ProviderTypeDefinition(
-    type: 'ocr',
-    hostHint: '例如: https://api.openai.com/v1/chat/completions',
-    modelConfigStyle: ModelConfigStyle.simple,
-  ));
-  ProviderTypeRegistry.register(const ProviderTypeDefinition(
-    type: 'asr',
-    hostHint: '例如: https://api.openai.com/v1/audio/transcriptions',
-    modelConfigStyle: ModelConfigStyle.simple,
-  ));
-  ProviderTypeRegistry.register(const ProviderTypeDefinition(
-    type: 'mcp',
-    hostHint: '例如: http://localhost:3001/sse',
-  ));
+  ProviderTypeRegistry.register(
+    const ProviderTypeDefinition(
+      type: 'llm',
+      hostHint: '例如: https://api.openai.com/v1/chat/completions',
+      modelConfigStyle: ModelConfigStyle.llm,
+    ),
+  );
+  ProviderTypeRegistry.register(
+    const ProviderTypeDefinition(
+      type: 'tts',
+      hostHint: '例如: https://api.openai.com/v1/audio/speech',
+      modelConfigStyle: ModelConfigStyle.tts,
+    ),
+  );
+  ProviderTypeRegistry.register(
+    const ProviderTypeDefinition(
+      type: 'ocr',
+      hostHint: '例如: https://api.openai.com/v1/chat/completions',
+      modelConfigStyle: ModelConfigStyle.simple,
+    ),
+  );
+  ProviderTypeRegistry.register(
+    const ProviderTypeDefinition(
+      type: 'asr',
+      hostHint: '例如: https://api.openai.com/v1/audio/transcriptions',
+      modelConfigStyle: ModelConfigStyle.simple,
+    ),
+  );
+  ProviderTypeRegistry.register(
+    const ProviderTypeDefinition(
+      type: 'mcp',
+      hostHint: '例如: http://localhost:3001/sse',
+    ),
+  );
 }
 
 // ============================================================================
@@ -90,10 +102,10 @@ class ProviderEntriesState {
 /// 供应商条目列表提供器（持久化）
 final providerEntriesProvider =
     StateNotifierProvider<ProviderEntriesNotifier, ProviderEntriesState>((ref) {
-  final notifier = ProviderEntriesNotifier();
-  notifier.load();
-  return notifier;
-});
+      final notifier = ProviderEntriesNotifier();
+      notifier.load();
+      return notifier;
+    });
 
 class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   ProviderEntriesNotifier() : super(const ProviderEntriesState());
@@ -117,11 +129,9 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         // 第4步：确保 OCR 条目存在（已有用户升级时自动迁移）
         final hasOcr = entries.any((e) => e.type == 'ocr');
         if (!hasOcr) {
-          entries.add(ProviderEntry(
-            id: 'builtin_ocr',
-            type: 'ocr',
-            name: 'OCR供应商',
-          ));
+          entries.add(
+            ProviderEntry(id: 'builtin_ocr', type: 'ocr', name: 'OCR供应商'),
+          );
           await prefs.setString(
             'provider_entries',
             jsonEncode(entries.map((e) => e.toMap()).toList()),
@@ -131,11 +141,9 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         // 第5步：确保 ASR（语音识别）条目存在（已有用户升级时自动迁移）
         final hasAsr = entries.any((e) => e.type == 'asr');
         if (!hasAsr) {
-          entries.add(ProviderEntry(
-            id: 'builtin_asr',
-            type: 'asr',
-            name: '语音识别供应商',
-          ));
+          entries.add(
+            ProviderEntry(id: 'builtin_asr', type: 'asr', name: '音频转写供应商'),
+          );
           await prefs.setString(
             'provider_entries',
             jsonEncode(entries.map((e) => e.toMap()).toList()),
@@ -145,11 +153,9 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         // 第6步：确保 MCP 条目存在（已有用户升级时自动迁移）
         final hasMcp = entries.any((e) => e.type == 'mcp');
         if (!hasMcp) {
-          entries.add(ProviderEntry(
-            id: 'builtin_mcp',
-            type: 'mcp',
-            name: 'MCP供应商',
-          ));
+          entries.add(
+            ProviderEntry(id: 'builtin_mcp', type: 'mcp', name: 'MCP供应商'),
+          );
           await prefs.setString(
             'provider_entries',
             jsonEncode(entries.map((e) => e.toMap()).toList()),
@@ -164,33 +170,15 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     }
 
     // 默认预置
-    state = ProviderEntriesState(entries: [
-      ProviderEntry(
-        id: 'builtin_tts',
-        type: 'tts',
-        name: 'TTS供应商',
-      ),
-      ProviderEntry(
-        id: 'builtin_llm',
-        type: 'llm',
-        name: 'LLM供应商',
-      ),
-      ProviderEntry(
-        id: 'builtin_ocr',
-        type: 'ocr',
-        name: 'OCR供应商',
-      ),
-      ProviderEntry(
-        id: 'builtin_asr',
-        type: 'asr',
-        name: '语音识别供应商',
-      ),
-      ProviderEntry(
-        id: 'builtin_mcp',
-        type: 'mcp',
-        name: 'MCP供应商',
-      ),
-    ]);
+    state = ProviderEntriesState(
+      entries: [
+        ProviderEntry(id: 'builtin_tts', type: 'tts', name: 'TTS供应商'),
+        ProviderEntry(id: 'builtin_llm', type: 'llm', name: 'LLM供应商'),
+        ProviderEntry(id: 'builtin_ocr', type: 'ocr', name: 'OCR供应商'),
+        ProviderEntry(id: 'builtin_asr', type: 'asr', name: '音频转写供应商'),
+        ProviderEntry(id: 'builtin_mcp', type: 'mcp', name: 'MCP供应商'),
+      ],
+    );
   }
 
   /// 迁移旧版 chat_configs（被重构删除的 ChatProviderConfigItem 格式）到 provider_entries
@@ -199,15 +187,14 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     if (oldJson == null || oldJson.isEmpty) return;
 
     try {
-      final oldList =
-          (jsonDecode(oldJson) as List).cast<Map<String, dynamic>>();
+      final oldList = (jsonDecode(oldJson) as List)
+          .cast<Map<String, dynamic>>();
       if (oldList.isEmpty) return;
 
       final migratedConfigs = <ProviderConfigItem>[];
       for (final oldItem in oldList) {
-        final oldModels = (oldItem['models'] as List?)
-                ?.cast<Map<String, dynamic>>() ??
-            [];
+        final oldModels =
+            (oldItem['models'] as List?)?.cast<Map<String, dynamic>>() ?? [];
 
         final models = oldModels.map((m) {
           final typeConfig = <String, dynamic>{};
@@ -224,12 +211,14 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
           );
         }).toList();
 
-        migratedConfigs.add(ProviderConfigItem(
-          providerName: oldItem['providerName'] as String? ?? '',
-          host: oldItem['host'] as String? ?? '',
-          key: oldItem['key'] as String? ?? '',
-          models: models,
-        ));
+        migratedConfigs.add(
+          ProviderConfigItem(
+            providerName: oldItem['providerName'] as String? ?? '',
+            host: oldItem['host'] as String? ?? '',
+            key: oldItem['key'] as String? ?? '',
+            models: models,
+          ),
+        );
       }
 
       if (migratedConfigs.isEmpty) return;
@@ -242,13 +231,14 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
 
       List<Map<String, dynamic>> existingEntries = [];
       if (existingJson != null && existingJson.isNotEmpty) {
-        existingEntries =
-            (jsonDecode(existingJson) as List).cast<Map<String, dynamic>>();
+        existingEntries = (jsonDecode(existingJson) as List)
+            .cast<Map<String, dynamic>>();
       }
 
       // 如果已有 llm 类型条目则不覆盖
-      final hasLlmEntry =
-          existingEntries.any((e) => e['type'] == 'llm' && e['id'] != 'builtin_llm');
+      final hasLlmEntry = existingEntries.any(
+        (e) => e['type'] == 'llm' && e['id'] != 'builtin_llm',
+      );
       if (!hasLlmEntry) {
         existingEntries.add({
           'id': 'migrated_llm',
@@ -264,7 +254,8 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       await prefs.remove('chat_configs');
       await prefs.remove('chat_selected_config_id');
       debugPrint(
-          'Migrated ${oldList.length} old chat config(s) to provider_entries');
+        'Migrated ${oldList.length} old chat config(s) to provider_entries',
+      );
     } catch (e) {
       debugPrint('Failed to migrate old chat configs: $e');
     }

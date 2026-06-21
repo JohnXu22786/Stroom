@@ -54,7 +54,7 @@ String _savedDataWithAsr() {
     {
       'id': 'builtin_asr',
       'type': 'asr',
-      'name': '语音识别供应商',
+      'name': '音频转写供应商',
       'configs': <Map<String, dynamic>>[],
     },
   ];
@@ -85,7 +85,7 @@ String _savedDataWithAsrConfig() {
     {
       'id': 'my_asr',
       'type': 'asr',
-      'name': '我的语音识别',
+      'name': '我的音频转写',
       'configs': [
         {
           'providerName': '自定义ASR',
@@ -98,7 +98,7 @@ String _savedDataWithAsrConfig() {
               'voices': <Map<String, dynamic>>[],
               'customParams': <Map<String, dynamic>>[],
               'typeConfig': <String, dynamic>{},
-            }
+            },
           ],
         },
       ],
@@ -123,14 +123,10 @@ void main() {
     });
 
     test('ASR provider entry can be created', () {
-      final entry = ProviderEntry(
-        id: 'test_asr',
-        type: 'asr',
-        name: '语音识别供应商',
-      );
+      final entry = ProviderEntry(id: 'test_asr', type: 'asr', name: '音频转写供应商');
       expect(entry.id, equals('test_asr'));
       expect(entry.type, equals('asr'));
-      expect(entry.name, equals('语音识别供应商'));
+      expect(entry.name, equals('音频转写供应商'));
     });
 
     test('ASR provider entry with config', () {
@@ -138,17 +134,12 @@ void main() {
         providerName: 'Test ASR',
         host: 'https://api.test.com/v1',
         key: 'test-key',
-        models: [
-          ModelConfig(
-            name: 'whisper-1',
-            modelId: 'whisper-1',
-          ),
-        ],
+        models: [ModelConfig(name: 'whisper-1', modelId: 'whisper-1')],
       );
       final entry = ProviderEntry(
         id: 'asr_1',
         type: 'asr',
-        name: '语音识别供应商',
+        name: '音频转写供应商',
         configs: [config],
       );
       expect(entry.configs.length, equals(1));
@@ -162,21 +153,19 @@ void main() {
         providerName: 'My ASR',
         host: 'https://asr.example.com',
         key: 'sk-5678',
-        models: [
-          ModelConfig(name: 'whisper-1', modelId: 'whisper-1'),
-        ],
+        models: [ModelConfig(name: 'whisper-1', modelId: 'whisper-1')],
       );
       final entry = ProviderEntry(
         id: 'asr_roundtrip',
         type: 'asr',
-        name: '语音识别供应商',
+        name: '音频转写供应商',
         configs: [config],
       );
 
       // Serialize to map
       final map = entry.toMap();
       expect(map['type'], equals('asr'));
-      expect(map['name'], equals('语音识别供应商'));
+      expect(map['name'], equals('音频转写供应商'));
 
       // Deserialize back
       final restored = ProviderEntry.fromMap(map);
@@ -225,65 +214,84 @@ void main() {
       await container.read(providerEntriesProvider.notifier).load();
 
       final state = container.read(providerEntriesProvider);
-      expect(state.entries.any((e) => e.type == 'asr'), isTrue,
-          reason: 'ASR entry should be migrated in');
-      expect(state.entries.any((e) => e.id == 'builtin_tts'), isTrue,
-          reason: 'TTS entry should be preserved');
-      expect(state.entries.any((e) => e.id == 'builtin_llm'), isTrue,
-          reason: 'LLM entry should be preserved');
-      expect(state.entries.any((e) => e.id == 'builtin_ocr'), isTrue,
-          reason: 'OCR entry should be preserved');
-    });
-
-    test('ASR entry is not duplicated when it already exists in saved data',
-        () async {
-      SharedPreferences.setMockInitialValues({
-        'provider_entries': _savedDataWithAsr(),
-      });
-      final container = ProviderContainer(
-        overrides: [
-          providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
-          ),
-        ],
+      expect(
+        state.entries.any((e) => e.type == 'asr'),
+        isTrue,
+        reason: 'ASR entry should be migrated in',
       );
-      addTearDown(() => container.dispose());
-
-      // Wait for load() to complete
-      await container.read(providerEntriesProvider.notifier).load();
-
-      final state = container.read(providerEntriesProvider);
-      final asrEntries = state.entries.where((e) => e.type == 'asr').toList();
-      expect(asrEntries.length, equals(1),
-          reason: 'Should have exactly one ASR entry, not duplicated');
-    });
-
-    test('ASR entry preserves existing provider configs (TTS, LLM, OCR)',
-        () async {
-      SharedPreferences.setMockInitialValues({
-        'provider_entries': _savedDataWithoutAsr(),
-      });
-      final container = ProviderContainer(
-        overrides: [
-          providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
-          ),
-        ],
+      expect(
+        state.entries.any((e) => e.id == 'builtin_tts'),
+        isTrue,
+        reason: 'TTS entry should be preserved',
       );
-      addTearDown(() => container.dispose());
-
-      // Wait for load() to complete
-      await container.read(providerEntriesProvider.notifier).load();
-
-      final state = container.read(providerEntriesProvider);
-      // Verify existing entries are still present (includes MCP auto-migration)
-      expect(state.entries.length, equals(5));
-      expect(state.entries[0].type, equals('tts'));
-      expect(state.entries[1].type, equals('llm'));
-      expect(state.entries[2].type, equals('ocr'));
-      expect(state.entries[3].type, equals('asr'));
-      expect(state.entries[4].type, equals('mcp'));
+      expect(
+        state.entries.any((e) => e.id == 'builtin_llm'),
+        isTrue,
+        reason: 'LLM entry should be preserved',
+      );
+      expect(
+        state.entries.any((e) => e.id == 'builtin_ocr'),
+        isTrue,
+        reason: 'OCR entry should be preserved',
+      );
     });
+
+    test(
+      'ASR entry is not duplicated when it already exists in saved data',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'provider_entries': _savedDataWithAsr(),
+        });
+        final container = ProviderContainer(
+          overrides: [
+            providerEntriesProvider.overrideWith(
+              (ref) => ProviderEntriesNotifier(),
+            ),
+          ],
+        );
+        addTearDown(() => container.dispose());
+
+        // Wait for load() to complete
+        await container.read(providerEntriesProvider.notifier).load();
+
+        final state = container.read(providerEntriesProvider);
+        final asrEntries = state.entries.where((e) => e.type == 'asr').toList();
+        expect(
+          asrEntries.length,
+          equals(1),
+          reason: 'Should have exactly one ASR entry, not duplicated',
+        );
+      },
+    );
+
+    test(
+      'ASR entry preserves existing provider configs (TTS, LLM, OCR)',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'provider_entries': _savedDataWithoutAsr(),
+        });
+        final container = ProviderContainer(
+          overrides: [
+            providerEntriesProvider.overrideWith(
+              (ref) => ProviderEntriesNotifier(),
+            ),
+          ],
+        );
+        addTearDown(() => container.dispose());
+
+        // Wait for load() to complete
+        await container.read(providerEntriesProvider.notifier).load();
+
+        final state = container.read(providerEntriesProvider);
+        // Verify existing entries are still present (includes MCP auto-migration)
+        expect(state.entries.length, equals(5));
+        expect(state.entries[0].type, equals('tts'));
+        expect(state.entries[1].type, equals('llm'));
+        expect(state.entries[2].type, equals('ocr'));
+        expect(state.entries[3].type, equals('asr'));
+        expect(state.entries[4].type, equals('mcp'));
+      },
+    );
 
     test('saved ASR config is preserved through load', () async {
       SharedPreferences.setMockInitialValues({
@@ -304,7 +312,7 @@ void main() {
       final state = container.read(providerEntriesProvider);
       final asrEntry = state.entries.firstWhere((e) => e.type == 'asr');
       expect(asrEntry.id, equals('my_asr'));
-      expect(asrEntry.name, equals('我的语音识别'));
+      expect(asrEntry.name, equals('我的音频转写'));
       expect(asrEntry.configs.length, equals(1));
       expect(asrEntry.configs[0].host, equals('https://asr.example.com'));
       expect(asrEntry.configs[0].key, equals('sk-asr-test'));

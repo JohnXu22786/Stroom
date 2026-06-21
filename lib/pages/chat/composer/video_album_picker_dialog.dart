@@ -14,13 +14,16 @@ class VideoPickerResult {
 
 /// Shows a dialog for selecting videos from the app's internal album.
 ///
-/// Supports folder navigation and single selection.
-/// Returns the selected [VideoPickerResult], or null if the user cancels.
+/// Supports folder navigation. When [multiSelect] is true (default), allows
+/// selecting multiple videos and returns a list of [VideoPickerResult].
+/// When false, returns a list with at most one entry.
+/// Returns null if the user cancels.
 ///
 /// This is now a thin wrapper over the unified [showMediaPickerDialog].
-Future<VideoPickerResult?> showAppVideoPickerDialog(
-  BuildContext context,
-) async {
+Future<List<VideoPickerResult>?> showAppVideoPickerDialog(
+  BuildContext context, {
+  bool multiSelect = true,
+}) async {
   final result = await showMediaPickerDialog<VideoRecord>(
     context,
     MediaPickerConfig<VideoRecord>(
@@ -29,7 +32,7 @@ Future<VideoPickerResult?> showAppVideoPickerDialog(
       emptyText: '暂无视频',
       fileIcon: Icons.videocam,
       fileIconColor: Colors.indigo,
-      multiSelect: false,
+      multiSelect: multiSelect,
       loadRecords: () async {
         VideoManifest.invalidateCache();
         return VideoManifest.loadRecords();
@@ -80,32 +83,35 @@ Future<VideoPickerResult?> showAppVideoPickerDialog(
 
   if (result == null || result.isEmpty) return null;
 
-  final entry = result.first;
-
-  // Look up the matching VideoRecord by matching file name.
-  // Since the unified picker uses displayName (record.name), we need to
-  // find the record whose name matches.
-  // Records were already loaded fresh inside the picker via loadRecords.
+  // Look up matching VideoRecords for all selected entries
   final records = await VideoManifest.loadRecords();
-  VideoRecord? matchedRecord;
-  for (final r in records) {
-    if (r.name == entry.key || '${r.name}.${r.format}' == entry.key) {
-      matchedRecord = r;
-      break;
+  final results = <VideoPickerResult>[];
+
+  for (final entry in result) {
+    VideoRecord? matchedRecord;
+    for (final r in records) {
+      if (r.name == entry.key || '${r.name}.${r.format}' == entry.key) {
+        matchedRecord = r;
+        break;
+      }
     }
+
+    results.add(
+      VideoPickerResult(
+        record: matchedRecord ??
+            VideoRecord(
+              name: entry.key,
+              hash: '',
+              format: 'mp4',
+              createdAt: DateTime.now(),
+              size: entry.value.length,
+            ),
+        bytes: entry.value,
+      ),
+    );
   }
 
-  return VideoPickerResult(
-    record: matchedRecord ??
-        VideoRecord(
-          name: entry.key,
-          hash: '',
-          format: 'mp4',
-          createdAt: DateTime.now(),
-          size: entry.value.length,
-        ),
-    bytes: entry.value,
-  );
+  return results;
 }
 
 String _formatSize(int bytes) {
