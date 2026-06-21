@@ -28,10 +28,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final themeNotifier = ref.read(themeProvider.notifier);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('设置'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('设置'), centerTitle: true),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -162,11 +159,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         ),
                       );
                     }
-                    return; // Don't toggle on - user didn't grant permission
+                    // Still toggle ON so user can try again later.
+                    // The notification service will silently fail if
+                    // permission is denied, but the toggle reflects
+                    // user intent rather than system state.
                   }
                 }
                 if (context.mounted) {
-                  ref.read(notificationSettingsProvider.notifier).setEnabled(value);
+                  ref
+                      .read(notificationSettingsProvider.notifier)
+                      .setEnabled(value);
                 }
               },
             ),
@@ -175,10 +177,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 padding: const EdgeInsets.only(left: 56, bottom: 8),
                 child: Text(
                   '通知已关闭，任务完成后将不会收到通知',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[500],
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                 ),
               ),
           ],
@@ -209,9 +208,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               decoration: BoxDecoration(
                 color: Colors.orange.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: Colors.orange.withValues(alpha: 0.3),
-                ),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
               ),
               child: Text(
                 NotificationService().blockedGuide,
@@ -225,10 +222,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             const SizedBox(height: 8),
             Text(
               '如果仍无法收到通知，请检查系统设置中是否开启了"勿扰模式"。',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
           ],
         ),
@@ -258,9 +252,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ...entries.map((entry) => _buildProviderEntryTile(entry)),
-          ],
+          children: [...entries.map((entry) => _buildProviderEntryTile(entry))],
         ),
       ),
     );
@@ -282,9 +274,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   void _openProviderConfig(String entryId) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => ProviderConfigPage(entryId: entryId),
-      ),
+      MaterialPageRoute(builder: (_) => ProviderConfigPage(entryId: entryId)),
     );
   }
 
@@ -304,9 +294,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           onTap: () {
             Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (_) => const BackupRestorePage(),
-              ),
+              MaterialPageRoute(builder: (_) => const BackupRestorePage()),
             );
           },
         ),
@@ -384,7 +372,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 trailing: updateState.updateAvailable
                     ? Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.red,
                           borderRadius: BorderRadius.circular(10),
@@ -395,9 +385,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         ),
                       )
                     : const Icon(Icons.chevron_right),
-                onTap: updateState.isChecking
-                    ? () {}
-                    : () => _checkForUpdate(),
+                onTap: updateState.isChecking ? () {} : () => _checkForUpdate(),
               ),
               const Divider(height: 1),
             ],
@@ -429,7 +417,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               subtitle: 'GNU General Public License v3.0',
               trailing: const Icon(Icons.open_in_new, size: 18),
               onTap: () => _openUrl(
-                  'https://github.com/JohnXu22786/Stroom/blob/main/LICENSE'),
+                'https://github.com/JohnXu22786/Stroom/blob/main/LICENSE',
+              ),
             ),
             const Divider(height: 1),
             _buildListTile(
@@ -437,8 +426,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: '问题反馈',
               subtitle: 'GitHub Issues',
               trailing: const Icon(Icons.open_in_new, size: 18),
-              onTap: () => _openUrl(
-                  'https://github.com/JohnXu22786/Stroom/issues'),
+              onTap: () =>
+                  _openUrl('https://github.com/JohnXu22786/Stroom/issues'),
             ),
           ],
         ),
@@ -531,7 +520,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         return AlertDialog(
           title: Row(
             children: [
-              Icon(Icons.privacy_tip, color: Theme.of(context).colorScheme.primary),
+              Icon(
+                Icons.privacy_tip,
+                color: Theme.of(context).colorScheme.primary,
+              ),
               const SizedBox(width: 8),
               const Text('隐私政策'),
             ],

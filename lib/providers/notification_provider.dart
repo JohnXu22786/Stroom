@@ -8,8 +8,9 @@ import '../services/notification_service.dart';
 
 /// Provider that holds the current active in-app notification payload.
 /// Set to null to dismiss.
-final inAppNotificationProvider =
-    StateProvider<NotificationPayload?>((ref) => null);
+final inAppNotificationProvider = StateProvider<NotificationPayload?>(
+  (ref) => null,
+);
 
 // ============================================================================
 // Notification Settings Provider
@@ -17,11 +18,11 @@ final inAppNotificationProvider =
 
 final notificationSettingsProvider =
     StateNotifierProvider<NotificationSettingsNotifier, bool>((ref) {
-  return NotificationSettingsNotifier();
-});
+      return NotificationSettingsNotifier();
+    });
 
 class NotificationSettingsNotifier extends StateNotifier<bool> {
-  NotificationSettingsNotifier() : super(true);
+  NotificationSettingsNotifier() : super(false);
 
   Future<void> load() async {
     final enabled = await NotificationService().isEnabled;
