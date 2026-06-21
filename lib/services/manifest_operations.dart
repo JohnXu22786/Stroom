@@ -143,7 +143,6 @@ class ManifestOperations<T extends FileRecord> {
       final rows = await _dbGetAllRecords();
       _cache = rows.map((m) => fromMap(m)).toList();
       _folderCache = (await ManifestDatabase.getAllFolders()).toSet();
-      await _cleanEmptyFoldersFromCache();
     } catch (e) {
       debugPrint('ManifestOperations($manifestKey).loadRecords error: $e');
       _cache = [];
@@ -159,6 +158,7 @@ class ManifestOperations<T extends FileRecord> {
     await loadRecords();
     await _dbInsertRecord(toMap(record));
     _cache!.add(record);
+    await _ensureFolderPathTracked(folderOf(record));
   }
 
   Future<void> _deleteEntityFiles(T record) async {
@@ -288,6 +288,7 @@ class ManifestOperations<T extends FileRecord> {
     if (index != -1) {
       _cache![index] = copyFolder(_cache![index], targetFolder);
       await _dbUpdateRecord(id, toMap(_cache![index]));
+      await _ensureFolderPathTracked(targetFolder);
     }
   }
 
@@ -517,24 +518,26 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
-  Future<void> _cleanEmptyFoldersFromCache() async {
-    final validFolders = <String>{};
-    for (final r in _cache ?? []) {
-      final f = folderOf(r);
-      if (f.isNotEmpty) validFolders.add(f);
-      var parent = FolderPathUtils.getParentFolderPath(f);
-      while (parent.isNotEmpty) {
-        validFolders.add(parent);
-        parent = FolderPathUtils.getParentFolderPath(parent);
+  /// Ensure a folder path (and all its ancestors) is tracked in [_folderCache]
+  /// and the database, so the folder won't disappear when all records are removed.
+  Future<void> _ensureFolderPathTracked(String folderPath) async {
+    if (folderPath.isEmpty) return;
+    final pathsToAdd = <String>[folderPath];
+    var parent = FolderPathUtils.getParentFolderPath(folderPath);
+    while (parent.isNotEmpty) {
+      pathsToAdd.add(parent);
+      parent = FolderPathUtils.getParentFolderPath(parent);
+    }
+    for (final p in pathsToAdd) {
+      if (!_folderCache.contains(p)) {
+        _folderCache.add(p);
+        await ManifestDatabase.insertFolder(p);
       }
     }
-    final toRemove =
-        _folderCache.where((f) => !validFolders.contains(f)).toList();
-    for (final f in toRemove) {
-      _folderCache.remove(f);
-      await ManifestDatabase.deleteFolder(f);
-    }
   }
+
+  // _cleanEmptyFoldersFromCache was intentionally removed.
+  // See git history for the deleted implementation.
 
   void invalidateCache() {
     _dirty = true;
