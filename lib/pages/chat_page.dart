@@ -1974,7 +1974,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                           ),
                                           child: TextButton.icon(
                                             icon: const Icon(
-                                              Icons.preview,
+                                              Icons.info_outline,
                                               size: 14,
                                             ),
                                             label: const Text(
@@ -2227,7 +2227,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                           ((isAi && m.rawResponse != null) ||
                                               (!isAi && m.rawRequest != null))))
                                         ActionButton(
-                                          icon: Icons.data_exploration,
+                                          icon: Icons.info_outline,
                                           tooltip: isAi ? '查看响应数据' : '查看请求数据',
                                           onPressed: () => _showRawDataDialog(
                                             message.id,
@@ -2344,6 +2344,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       context: context,
       rawRequest: chatMsg.rawRequest,
       rawResponse: chatMsg.rawResponse,
+      messageContent: chatMsg.content,
     );
   }
 
@@ -2361,6 +2362,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
           context: context,
           rawRequest: null,
           rawResponse: chatMsg.rawResponse,
+          messageContent: chatMsg.content,
         );
       }
     } else {
@@ -2370,6 +2372,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
           context: context,
           rawRequest: chatMsg.rawRequest,
           rawResponse: null,
+          messageContent: chatMsg.content,
         );
       }
     }
