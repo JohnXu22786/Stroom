@@ -60,11 +60,6 @@ class AudioSeparationEngine {
       final player = Player();
       try {
         // 配置 mpv 编码参数 (通过 NativePlayer 的 setProperty)
-        // --o=output.mp3: 输出文件路径
-        // --oac=libmp3lame: 音频编码器为 MP3
-        // --ovc=no: 不编码视频
-        // --ao=null: 禁止音频输出（防止编码过程中播放音频到扬声器）
-        // --keep-open=no: 编码完成后不保持文件打开状态（默认 keep-open=yes 会干扰编码完成事件）
         if (player.platform != null) {
           await (player.platform as dynamic).setProperty('ao', 'null');
           await (player.platform as dynamic).setProperty('keep-open', 'no');
@@ -73,8 +68,25 @@ class AudioSeparationEngine {
           await (player.platform as dynamic).setProperty('ovc', 'no');
         }
 
-        // 注册取消回调
+        // ── 等待编码完成 ──────────────────────────────────────────────
+        // 使用 Completer，配合三种完成检测方式：
+        //   1. player.stream.completed 事件（首选）
+        //   2. 输出文件轮询检测（后备）
+        //   3. 5 分钟超时（终极保底）
+        // ──────────────────────────────────────────────────────────────
+        final completer = Completer<void>();
+        StreamSubscription? completionSub;
+        StreamSubscription? errorSub;
+        Timer? filePollTimer;
+        StreamSubscription<Duration>? positionSub;
+
+        // 注册取消回调（必须在 completer 声明之后）
         cancelToken?.whenCancel.then((_) async {
+          try {
+            if (!completer.isCompleted) {
+              completer.completeError(Exception('音频提取被取消'));
+            }
+          } catch (_) {}
           try {
             await player.dispose();
           } catch (_) {}
@@ -86,17 +98,15 @@ class AudioSeparationEngine {
           play: true,
         );
 
-        // 等待编码完成 - 监听完成事件或超时
-        final completer = Completer<void>();
-        StreamSubscription? completionSub;
-        StreamSubscription? errorSub;
-
+        // 方式1: 监听 completed 事件（mpv 完成编码时触发）
         completionSub = player.stream.completed.listen((completed) {
           if (completed && !completer.isCompleted) {
+            debugPrint('[AudioSeparationEngine] Completed event received');
             completer.complete();
           }
         });
 
+        // 监听错误事件
         errorSub = player.stream.error.listen((error) {
           if (error.isNotEmpty && !completer.isCompleted) {
             completer.completeError(Exception('音频提取失败: $error'));
@@ -104,53 +114,104 @@ class AudioSeparationEngine {
         });
 
         // 进度更新
-        StreamSubscription<Duration>? positionSub;
         if (onProgress != null) {
+          // 使用 position 流获取编码进度
           positionSub = player.stream.position.listen((position) {
             final duration = player.state.duration;
             if (duration.inMilliseconds > 0) {
-              final progress = ((position.inMilliseconds / duration.inMilliseconds) * 100).round().clamp(0, 100);
+              final progress = ((position.inMilliseconds / duration.inMilliseconds) * 100)
+                  .round()
+                  .clamp(0, 100);
               onProgress(progress);
             }
           });
         }
 
-      // 设置超时（5分钟）
-      final timeout = Future.delayed(const Duration(minutes: 5), () {
-        if (!completer.isCompleted) {
-          completer.completeError(Exception('音频提取超时'));
+        // 方式2: 输出文件轮询（completed 事件在编码模式下可能不触发）
+        int lastFileSize = 0;
+        int stableCount = 0;
+        const stableThreshold = 4; // 连续 4 次（~2 秒）文件大小不变 = 编码完成
+        filePollTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+          if (completer.isCompleted) return;
+
+          try {
+            final outputFile = File(outputPath);
+            if (!outputFile.existsSync()) return;
+
+            final currentSize = outputFile.lengthSync();
+
+            // 确保文件非空后再进行稳定性判断
+            if (currentSize > 0) {
+              // 文件非空，进入稳定性判断
+            } else {
+              // 空文件，跳过本轮
+              return;
+            }
+
+            // 向外部报告基于文件大小的进度（当 duration 不可用时）
+            if (onProgress != null) {
+              // 使用输入文件大小作为估算基准：输出 mp3 通常为输入的 5-15%
+              // 保守估算：用当前文件大小 / (输入大小 * 0.15) 作为上限
+              final estimatedMax = (videoBytes.length * 0.15).round().clamp(1, videoBytes.length);
+              final fileProgress = (currentSize * 100 ~/ estimatedMax).clamp(0, 95);
+              onProgress(fileProgress);
+            }
+
+            if (currentSize == lastFileSize) {
+              stableCount++;
+              if (stableCount >= stableThreshold) {
+                debugPrint('[AudioSeparationEngine] Output file stable for ${stableThreshold * 500}ms, assuming encoding complete');
+                if (onProgress != null) {
+                  onProgress(100);
+                }
+                completer.complete();
+              }
+            } else {
+              stableCount = 0;
+              lastFileSize = currentSize;
+            }
+          } catch (_) {
+            // 文件尚未就绪，忽略
+          }
+        });
+
+        // 方式3: 超时（5分钟）
+        final timeout = Future.delayed(const Duration(minutes: 5), () {
+          if (!completer.isCompleted) {
+            completer.completeError(Exception('音频提取超时'));
+          }
+        });
+
+        try {
+          await completer.future;
+        } finally {
+          timeout.ignore();
+          filePollTimer?.cancel();
+          completionSub?.cancel();
+          errorSub?.cancel();
+          positionSub?.cancel();
         }
-      });
 
-      try {
-        await completer.future;
-      } finally {
-        timeout.ignore();
-        completionSub?.cancel();
-        errorSub?.cancel();
-        positionSub?.cancel();
-      }
+        // 等待一小段时间确保文件写入完成
+        await Future.delayed(const Duration(milliseconds: 500));
 
-      // 等待一小段时间确保文件写入完成
-      await Future.delayed(const Duration(milliseconds: 500));
+        // 读取输出音频文件
+        if (cancelToken?.isCancelled ?? false) {
+          throw Exception('音频提取被取消');
+        }
 
-      // 读取输出音频文件
-      if (cancelToken?.isCancelled ?? false) {
-        throw Exception('音频提取被取消');
-      }
+        if (!await File(outputPath).exists()) {
+          throw Exception('输出文件未生成');
+        }
 
-      if (!await File(outputPath).exists()) {
-        throw Exception('输出文件未生成');
-      }
+        final audioBytes = await File(outputPath).readAsBytes();
 
-      final audioBytes = await File(outputPath).readAsBytes();
+        if (audioBytes.isEmpty) {
+          throw Exception('提取的音频数据为空');
+        }
 
-      if (audioBytes.isEmpty) {
-        throw Exception('提取的音频数据为空');
-      }
-
-      debugPrint('[AudioSeparationEngine] Audio extracted: ${audioBytes.length} bytes');
-      return audioBytes;
+        debugPrint('[AudioSeparationEngine] Audio extracted: ${audioBytes.length} bytes');
+        return audioBytes;
       } finally {
         try {
           await player.dispose();

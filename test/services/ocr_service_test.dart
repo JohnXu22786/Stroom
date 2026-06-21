@@ -168,6 +168,39 @@ void main() {
         expect(service, isNotNull);
       });
 
+      test('Dio has sendTimeout configured', () {
+        const config = OcrConfig(
+          model: 'gpt-4o',
+          apiKey: 'test-key',
+          host: 'https://api.openai.com/v1',
+        );
+        final service = OcrService(config: config);
+        expect(service.sendTimeout, isNotNull);
+        expect(service.sendTimeout!.inSeconds, equals(60));
+      });
+
+      test('Dio has connectTimeout configured', () {
+        const config = OcrConfig(
+          model: 'gpt-4o',
+          apiKey: 'test-key',
+          host: 'https://api.openai.com/v1',
+        );
+        final service = OcrService(config: config);
+        expect(service.connectTimeout, isNotNull);
+        expect(service.connectTimeout!.inSeconds, equals(30));
+      });
+
+      test('Dio has receiveTimeout configured', () {
+        const config = OcrConfig(
+          model: 'gpt-4o',
+          apiKey: 'test-key',
+          host: 'https://api.openai.com/v1',
+        );
+        final service = OcrService(config: config);
+        expect(service.receiveTimeout, isNotNull);
+        expect(service.receiveTimeout!.inSeconds, equals(120));
+      });
+
       test('recognize throws on empty host', () async {
         const config = OcrConfig(
           model: 'gpt-4o',
