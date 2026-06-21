@@ -1,58 +1,63 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stroom/pages/chat/widgets/reasoning_section.dart';
+import 'package:stroom/providers/chat_stream_provider.dart';
+
+/// Helper to create a test app with the ReasoningSection widget.
+Widget createReasoningTestApp({
+  required String reasoningText,
+  bool isStreaming = false,
+}) {
+  return ProviderScope(
+    overrides: [
+      if (isStreaming)
+        streamingReasoningProvider.overrideWith((ref) => reasoningText)
+      else
+        streamingReasoningProvider.overrideWith((ref) => ''),
+    ],
+    child: MaterialApp(
+      home: Scaffold(
+        body: ReasoningSection(
+          reasoningText: reasoningText,
+          isStreaming: isStreaming,
+          messageId: 'test-msg-id',
+        ),
+      ),
+    ),
+  );
+}
 
 void main() {
-  group('ReasoningSection', () {
-    testWidgets('renders collapsed by default', (tester) async {
+  group('ReasoningSection (Panel mode)', () {
+    testWidgets('shows reasoning button with label when content exists', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ReasoningSection(reasoningText: 'Test reasoning'),
-          ),
+        createReasoningTestApp(
+          reasoningText: 'Test reasoning content',
+          isStreaming: false,
         ),
       );
 
-      // Should show title but not the reasoning text
+      // Should show the button with icon and "推理过程" label
       expect(find.text('推理过程'), findsOneWidget);
-      // Collapsed so reasoning text should NOT be visible
-      expect(find.text('Test reasoning'), findsNothing);
+      // Should show the psychology icon
+      expect(find.byIcon(Icons.psychology_outlined), findsOneWidget);
+      // The content should NOT be visible inline (it's a panel now)
+      expect(find.text('Test reasoning content'), findsNothing);
     });
 
-    testWidgets('expands to show reasoning text on tap', (tester) async {
+    testWidgets('shows reasoning in progress label when streaming', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ReasoningSection(reasoningText: 'Test reasoning'),
-          ),
+        createReasoningTestApp(
+          reasoningText: 'Streaming reasoning...',
+          isStreaming: true,
         ),
       );
 
-      // Tap to expand
-      await tester.tap(find.text('推理过程'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Test reasoning'), findsOneWidget);
-    });
-
-    testWidgets('toggles between expanded and collapsed', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ReasoningSection(reasoningText: 'Toggle test'),
-          ),
-        ),
-      );
-
-      // Expand
-      await tester.tap(find.text('推理过程'));
-      await tester.pumpAndSettle();
-      expect(find.text('Toggle test'), findsOneWidget);
-
-      // Collapse
-      await tester.tap(find.text('推理过程'));
-      await tester.pumpAndSettle();
-      expect(find.text('Toggle test'), findsNothing);
+      // Should show "推理中" label when streaming
+      expect(find.text('推理中'), findsOneWidget);
     });
   });
 }

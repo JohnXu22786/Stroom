@@ -273,6 +273,9 @@ class ChatService {
                   if (_isCancelledByUser) return;
                   if (event.isReasoning) {
                     _reasoningBuffer += event.text;
+                    // Emit reasoning text as ReasoningEvent so the UI
+                    // can stream it in real-time to the reasoning panel.
+                    controller.add(ReasoningEvent(event.text));
                   } else if (event.isToolCallEvent) {
                     toolCallRefs.addAll(event.toolCalls!);
                   } else if (event.text.isNotEmpty) {
