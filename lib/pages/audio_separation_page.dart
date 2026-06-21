@@ -28,14 +28,25 @@ class AudioSeparationPage extends ConsumerStatefulWidget {
       _AudioSeparationPageState();
 }
 
+/// Represents a single selected video file for audio separation.
+class SelectedVideo {
+  final Uint8List bytes;
+  final String name;
+  final String format;
+
+  SelectedVideo({
+    required this.bytes,
+    required this.name,
+    this.format = 'mp4',
+  });
+}
+
 class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   // 音频分离引擎
   final AudioSeparationEngine _engine = AudioSeparationEngine();
 
-  // 选中的视频文件信息
-  Uint8List? _videoBytes;
-  String? _videoName;
-  String? _videoFormat;
+  // 选中的视频文件列表（支持多选）
+  final List<SelectedVideo> _selectedVideos = [];
 
   bool _isProcessing = false;
   bool _hasError = false;
@@ -81,7 +92,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
         title: const Text('视频音频分离'),
         centerTitle: true,
         actions: [
-          if (_videoBytes != null && !_isProcessing)
+          if (_selectedVideos.isNotEmpty && !_isProcessing)
             TextButton.icon(
               onPressed: _clearAll,
               icon: const Icon(Icons.clear_all, size: 18),
@@ -130,9 +141,10 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
                   ),
                 ),
                 icon: const Icon(Icons.video_file_outlined, size: 20),
-                label: const Text('选择视频来源',
-                    style:
-                        TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                label: const Text(
+                  '选择视频来源',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
           ),
@@ -166,13 +178,24 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
               const SizedBox(height: 24),
               Text(
                 '选择视频来源',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
               Column(
                 children: [
+                  ChoiceCard(
+                    icon: Icons.video_library,
+                    title: '从应用相册选择',
+                    subtitle: '从应用内已保存的视频中选择',
+                    color: Colors.green,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _pickFromVideoLibrary();
+                    },
+                  ),
+                  const SizedBox(height: 8),
                   ChoiceCard(
                     icon: Icons.file_present,
                     title: '从系统相册选择',
@@ -181,17 +204,6 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
                     onTap: () {
                       Navigator.pop(ctx);
                       _pickVideoFile();
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  ChoiceCard(
-                    icon: Icons.video_library,
-                    title: '从应用相册选择',
-                    subtitle: '从应用内已保存的视频中选择',
-                    color: Colors.purple,
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _pickFromVideoLibrary();
                     },
                   ),
                 ],
@@ -206,21 +218,32 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   /// Pick from video library - shows folder-navigable video album picker.
   Future<void> _pickFromVideoLibrary() async {
     try {
-      final result = await showAppVideoPickerDialog(context);
-      if (result == null || !mounted) return;
+      final results =
+          await showAppVideoPickerDialog(context, multiSelect: true);
+      if (results == null || results.isEmpty || !mounted) return;
+
+      final newVideos = <SelectedVideo>[];
+      for (final result in results) {
+        newVideos.add(
+          SelectedVideo(
+            bytes: result.bytes,
+            name: result.record.name,
+            format: result.record.format,
+          ),
+        );
+      }
+
       setState(() {
-        _videoBytes = result.bytes;
-        _videoName = result.record.name;
-        _videoFormat = result.record.format;
+        _selectedVideos.addAll(newVideos);
         _hasError = false;
         _errorMessage = '';
         _success = false;
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('选择视频失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('选择视频失败: $e')));
       }
     }
   }
@@ -240,14 +263,16 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
         children: [
           Row(
             children: [
-              const Icon(Icons.warning_amber_rounded,
-                  size: 18, color: Colors.orange),
+              const Icon(
+                Icons.warning_amber_rounded,
+                size: 18,
+                color: Colors.orange,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   '未检测到 media_kit 引擎',
-                  style:
-                      TextStyle(fontSize: 12, color: Colors.orange[800]),
+                  style: TextStyle(fontSize: 12, color: Colors.orange[800]),
                 ),
               ),
             ],
@@ -257,8 +282,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
             padding: const EdgeInsets.only(left: 26),
             child: Text(
               '请重启应用或检查应用资源完整性。',
-              style:
-                  TextStyle(fontSize: 11, color: Colors.orange[600]),
+              style: TextStyle(fontSize: 11, color: Colors.orange[600]),
             ),
           ),
         ],
@@ -267,11 +291,11 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   }
 
   Widget _buildContent(ColorScheme cs) {
-    if (_videoBytes == null) {
+    if (_selectedVideos.isEmpty) {
       return _buildEmptyState(cs);
     }
 
-    return _buildVideoInfo(cs);
+    return _buildVideoList(cs);
   }
 
   Widget _buildEmptyState(ColorScheme cs) {
@@ -279,8 +303,11 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.video_file_outlined,
-              size: 64, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+          Icon(
+            Icons.video_file_outlined,
+            size: 64,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+          ),
           const SizedBox(height: 16),
           Text(
             '暂未选择视频文件',
@@ -302,54 +329,72 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     );
   }
 
-  Widget _buildVideoInfo(ColorScheme cs) {
-    return Padding(
+  Widget _buildVideoList(ColorScheme cs) {
+    return ListView.builder(
       padding: const EdgeInsets.all(16),
-      child: Card(
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: cs.outlineVariant, width: 0.5),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.videocam, size: 48, color: cs.primary),
-              const SizedBox(height: 12),
-              Text(
-                _videoName ?? '未知文件',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: cs.onSurface,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '格式: ${_videoFormat?.toUpperCase() ?? 'N/A'}  |  大小: ${formatFileSize(_videoBytes!.length)}',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: cs.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _isProcessing ? null : _showVideoSourcePanel,
-                  icon: const Icon(Icons.refresh, size: 18),
-                  label: const Text('重新选择'),
-                ),
-              ),
-            ],
+      itemCount: _selectedVideos.length,
+      itemBuilder: (context, index) {
+        final video = _selectedVideos[index];
+        return Card(
+          key: ValueKey('video_${video.name}_$index'),
+          elevation: 0,
+          margin: const EdgeInsets.only(bottom: 8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: cs.outlineVariant, width: 0.5),
           ),
-        ),
-      ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: cs.primaryContainer.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.videocam, color: cs.primary, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        video.name,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: cs.onSurface,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${video.format.toUpperCase()}  |  ${formatFileSize(video.bytes.length)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (!_isProcessing)
+                  IconButton(
+                    icon:
+                        Icon(Icons.close, size: 18, color: cs.onSurfaceVariant),
+                    onPressed: () => _removeVideo(index),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -362,8 +407,11 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
         children: [
           Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: Icon(Icons.error_outline,
-                color: cs.onErrorContainer, size: 18),
+            child: Icon(
+              Icons.error_outline,
+              color: cs.onErrorContainer,
+              size: 18,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -401,10 +449,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
               style: TextStyle(color: cs.onPrimaryContainer, fontSize: 13),
             ),
           ),
-          TextButton(
-            onPressed: _goToAudioLibrary,
-            child: const Text('查看'),
-          ),
+          TextButton(onPressed: _goToAudioLibrary, child: const Text('查看')),
           IconButton(
             icon: Icon(Icons.close, color: cs.onPrimaryContainer, size: 18),
             onPressed: () => setState(() => _success = false),
@@ -424,22 +469,42 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
         decoration: BoxDecoration(
           color: cs.surface,
-          border: Border(
-            top: BorderSide(color: cs.outlineVariant, width: 0.5),
-          ),
+          border: Border(top: BorderSide(color: cs.outlineVariant, width: 0.5)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             // Save-to folder selector (above start button)
             _buildSaveToSelector(cs),
+            if (_selectedVideos.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 4, top: 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.videocam,
+                      size: 14,
+                      color: cs.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '已选 ${_selectedVideos.length} 个视频',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 4),
             SizedBox(
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed:
-                    _videoBytes == null || _isProcessing ? null : _startSeparation,
+                onPressed: _selectedVideos.isEmpty || _isProcessing
+                    ? null
+                    : _startSeparation,
                 icon: _isProcessing
                     ? const SizedBox(
                         width: 18,
@@ -452,8 +517,10 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
                     : const Icon(Icons.audio_file, size: 20),
                 label: Text(
                   _isProcessing ? '提取中...' : '提取音频',
-                  style:
-                      const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
@@ -472,9 +539,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.4),
-        ),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -487,10 +552,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
               const SizedBox(width: 8),
               Text(
                 '保存至',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: cs.onSurfaceVariant,
-                ),
+                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
               ),
               const SizedBox(width: 4),
               Text(
@@ -502,11 +564,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
                 ),
               ),
               const Spacer(),
-              Icon(
-                Icons.chevron_right,
-                size: 16,
-                color: cs.onSurfaceVariant,
-              ),
+              Icon(Icons.chevron_right, size: 16, color: cs.onSurfaceVariant),
             ],
           ),
         ),
@@ -536,47 +594,61 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     try {
       final result = await FilePicker.pickFiles(
         type: FileType.video,
-        allowMultiple: false,
+        allowMultiple: true,
         withData: true,
       );
       if (result == null || result.files.isEmpty) return;
 
-      final file = result.files.first;
-      final bytes = file.bytes;
-      if (bytes == null || bytes.isEmpty) {
+      final newVideos = <SelectedVideo>[];
+      for (final file in result.files) {
+        final bytes = file.bytes;
+        if (bytes == null || bytes.isEmpty) continue;
+        newVideos.add(
+          SelectedVideo(
+            bytes: bytes,
+            name: file.name,
+            format: detectFormat(file.name),
+          ),
+        );
+      }
+
+      if (newVideos.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('无法读取视频文件')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('无法读取视频文件')));
         }
         return;
       }
 
       setState(() {
-        _videoBytes = bytes;
-        _videoName = file.name;
-        _videoFormat = detectFormat(file.name);
+        _selectedVideos.addAll(newVideos);
         _hasError = false;
         _errorMessage = '';
         _success = false;
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('选择视频文件失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('选择视频文件失败: $e')));
       }
     }
   }
 
   void _clearAll() {
     setState(() {
-      _videoBytes = null;
-      _videoName = null;
-      _videoFormat = null;
+      _selectedVideos.clear();
       _hasError = false;
       _errorMessage = '';
       _success = false;
+    });
+  }
+
+  void _removeVideo(int index) {
+    if (index < 0 || index >= _selectedVideos.length) return;
+    setState(() {
+      _selectedVideos.removeAt(index);
     });
   }
 
@@ -585,7 +657,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   // ==================================================================
 
   Future<void> _startSeparation() async {
-    if (_videoBytes == null) return;
+    if (_selectedVideos.isEmpty) return;
 
     if (!_engineAvailable) {
       setState(() {
@@ -595,56 +667,66 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       return;
     }
 
-    // Create a background task for tracking
-    final videoName = _videoName ?? '视频音频';
-    final now = DateTime.now();
-    final title = '音频分离_${p.basenameWithoutExtension(videoName)}_${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    final taskId = ref.read(backgroundTasksProvider.notifier).addTask(
-      type: BackgroundTaskType.audioSeparation,
-      title: title,
-    );
+    // Check engine for each video before proceeding
+    final videosToProcess = List<SelectedVideo>.from(_selectedVideos);
 
     // Pop back to home page immediately so user can see task progress
     if (mounted) {
       Navigator.pop(context);
     }
 
-    // Continue processing in the background using the engine
-    try {
-      final audioBytes = await _engine.extractAudio(
-        videoBytes: _videoBytes!,
-        videoFormat: _videoFormat ?? 'mp4',
-        onProgress: (progress) {
-          ref.read(backgroundTasksProvider.notifier).updateProgress(
-                taskId,
-                progress,
-              );
-        },
-      );
+    // Process each video as a separate background task
+    for (int i = 0; i < videosToProcess.length; i++) {
+      final video = videosToProcess[i];
+      final now = DateTime.now();
+      final title =
+          '音频分离_${p.basenameWithoutExtension(video.name)}_${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final taskId = ref
+          .read(backgroundTasksProvider.notifier)
+          .addTask(type: BackgroundTaskType.audioSeparation, title: title);
 
-      // 保存到音频库
-      await _saveAudioToLibrary(audioBytes, displayName: title);
+      try {
+        final audioBytes = await _engine.extractAudio(
+          videoBytes: video.bytes,
+          videoFormat: video.format,
+          onProgress: (progress) {
+            ref
+                .read(backgroundTasksProvider.notifier)
+                .updateProgress(taskId, progress);
+          },
+        );
 
-      // Mark task as completed
-      ref.read(backgroundTasksProvider.notifier).completeTask(taskId);
-    } catch (e) {
-      // Mark task as failed (widget may be gone, but notifier is independent)
-      ref.read(backgroundTasksProvider.notifier).failTask(
-        taskId,
-        error: '音频提取失败: $e',
-      );
+        // 保存到音频库
+        await _saveAudioToLibrary(
+          audioBytes,
+          displayName: title,
+          videoName: video.name,
+        );
+
+        // Mark task as completed
+        ref.read(backgroundTasksProvider.notifier).completeTask(taskId);
+      } catch (e) {
+        // Mark task as failed (widget may be gone, but notifier is independent)
+        ref
+            .read(backgroundTasksProvider.notifier)
+            .failTask(taskId, error: '音频提取失败: $e');
+      }
     }
   }
 
-  Future<void> _saveAudioToLibrary(Uint8List audioBytes,
-      {String? displayName}) async {
+  Future<void> _saveAudioToLibrary(
+    Uint8List audioBytes, {
+    String? displayName,
+    String? videoName,
+  }) async {
     if (audioBytes.isEmpty) {
       throw Exception('提取的音频数据为空');
     }
 
     final timestamp = DateTime.now();
-    final name =
-        displayName ?? '音频分离_${p.basenameWithoutExtension(_videoName ?? '视频音频')}_${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}';
+    final effectiveVideoName = videoName ?? '视频音频';
+    final name = displayName ??
+        '音频分离_${p.basenameWithoutExtension(effectiveVideoName)}_${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}';
 
     final hash = computeAudioHash(audioBytes);
     final format = 'mp3';
@@ -675,6 +757,4 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       MaterialPageRoute(builder: (_) => const TtsPage()),
     );
   }
-
-  }
-
+}

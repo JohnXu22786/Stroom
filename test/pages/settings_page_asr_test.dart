@@ -16,19 +16,15 @@ Widget _buildTestApp() {
   return ProviderScope(
     overrides: [
       themeProvider.overrideWith((ref) => ThemeNotifier()),
-      providerEntriesProvider.overrideWith(
-        (ref) {
-          final notifier = ProviderEntriesNotifier();
-          // load() is normally called in the provider factory, so we call it here too.
-          notifier.load();
-          return notifier;
-        },
-      ),
+      providerEntriesProvider.overrideWith((ref) {
+        final notifier = ProviderEntriesNotifier();
+        // load() is normally called in the provider factory, so we call it here too.
+        notifier.load();
+        return notifier;
+      }),
       updateProvider.overrideWith((ref) => UpdateNotifier()),
     ],
-    child: const MaterialApp(
-      home: SettingsPage(),
-    ),
+    child: const MaterialApp(home: SettingsPage()),
   );
 }
 
@@ -58,9 +54,10 @@ String _savedDataWithoutAsr() {
 }
 
 void main() {
-  group('SettingsPage - ASR (语音识别) supplier display', () {
-    testWidgets('shows ASR supplier entry when loaded with default entries',
-        (tester) async {
+  group('SettingsPage - ASR (音频转写) supplier display', () {
+    testWidgets('shows ASR supplier entry when loaded with default entries', (
+      tester,
+    ) async {
       // Use a large viewport so all content is visible
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1.0;
@@ -78,36 +75,37 @@ void main() {
       expect(find.text('TTS供应商'), findsOneWidget);
       expect(find.text('LLM供应商'), findsOneWidget);
       expect(find.text('OCR供应商'), findsOneWidget);
-      expect(find.text('语音识别供应商'), findsOneWidget);
+      expect(find.text('音频转写供应商'), findsOneWidget);
     });
 
     testWidgets(
-        'shows ASR supplier after migration from saved data without it',
-        (tester) async {
-      tester.view.physicalSize = const Size(1080, 4000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
+      'shows ASR supplier after migration from saved data without it',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 4000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
 
-      SharedPreferences.setMockInitialValues({
-        'provider_entries': _savedDataWithoutAsr(),
-      });
+        SharedPreferences.setMockInitialValues({
+          'provider_entries': _savedDataWithoutAsr(),
+        });
 
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
 
-      // ASR should be migrated in and displayed
-      expect(find.text('TTS供应商'), findsOneWidget);
-      expect(find.text('LLM供应商'), findsOneWidget);
-      expect(find.text('OCR供应商'), findsOneWidget);
-      expect(find.text('语音识别供应商'), findsOneWidget);
-    });
+        // ASR should be migrated in and displayed
+        expect(find.text('TTS供应商'), findsOneWidget);
+        expect(find.text('LLM供应商'), findsOneWidget);
+        expect(find.text('OCR供应商'), findsOneWidget);
+        expect(find.text('音频转写供应商'), findsOneWidget);
+      },
+    );
 
-    testWidgets(
-        'ASR supplier entry is tappable and navigates to config page',
-        (tester) async {
+    testWidgets('ASR supplier entry is tappable and navigates to config page', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -121,10 +119,10 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify ASR supplier is visible
-      expect(find.text('语音识别供应商'), findsOneWidget);
+      expect(find.text('音频转写供应商'), findsOneWidget);
 
       // Tap the ASR supplier entry
-      await tester.tap(find.text('语音识别供应商'));
+      await tester.tap(find.text('音频转写供应商'));
       await tester.pumpAndSettle();
 
       // Should navigate to ProviderConfigPage which has title "供应商配置"

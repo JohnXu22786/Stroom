@@ -18,6 +18,7 @@ import '../utils/manifest_bridge.dart';
 import '../utils/thumbnail_utils.dart';
 import '../widgets/file_manager_view.dart';
 import '../widgets/folder_picker_dialog.dart';
+import 'files_page_shared.dart';
 import 'video_capture_page.dart';
 
 class VideoGalleryPage extends ConsumerStatefulWidget {
@@ -100,8 +101,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
 
     final result = await Navigator.push<String>(
       context,
-      MaterialPageRoute(
-          builder: (_) => VideoCapturePage(folder: folder)),
+      MaterialPageRoute(builder: (_) => VideoCapturePage(folder: folder)),
     );
 
     await ref.read(videoRecordsProvider.notifier).loadRecords();
@@ -110,12 +110,16 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       if (result != null && result.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('视频已保存'), duration: Duration(seconds: 2)),
+            content: Text('视频已保存'),
+            duration: Duration(seconds: 2),
+          ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('视频列表已刷新'), duration: Duration(seconds: 2)),
+            content: Text('视频列表已刷新'),
+            duration: Duration(seconds: 2),
+          ),
         );
       }
     }
@@ -168,7 +172,10 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         if (videoPath.isNotEmpty && !kIsWeb) {
           final probePlayer = Player();
           try {
-            await probePlayer.open(Media(Uri.file(videoPath).toString()), play: false);
+            await probePlayer.open(
+              Media(Uri.file(videoPath).toString()),
+              play: false,
+            );
             // Wait for media to load
             await Future.delayed(const Duration(milliseconds: 500));
             videoDurationMs = probePlayer.state.duration.inMilliseconds;
@@ -194,15 +201,17 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
             }
           } catch (_) {}
         }
-        await VideoManifest.addRecord(VideoRecord(
-          name: displayName,
-          hash: hash,
-          format: format,
-          createdAt: DateTime.now(),
-          size: bytes.length,
-          folder: _currentFolder,
-          duration: videoDurationMs,
-        ));
+        await VideoManifest.addRecord(
+          VideoRecord(
+            name: displayName,
+            hash: hash,
+            format: format,
+            createdAt: DateTime.now(),
+            size: bytes.length,
+            folder: _currentFolder,
+            duration: videoDurationMs,
+          ),
+        );
       }
 
       // Close loading indicator
@@ -227,7 +236,9 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         } catch (_) {}
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('导入失败: $e'), duration: const Duration(seconds: 3)),
+            content: Text('导入失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
         );
       }
     }
@@ -241,9 +252,9 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     final filePath = await VideoManifest.readFilePath(file.storagePath);
     if (filePath == null || filePath.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('无法加载视频文件')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('无法加载视频文件')));
       }
       return;
     }
@@ -272,9 +283,9 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       final data = await VideoManifest.readFile(file.storagePath);
       if (data == null || data.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('文件数据读取失败')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('文件数据读取失败')));
         }
         return;
       }
@@ -299,7 +310,9 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('导出失败: $e'), duration: const Duration(seconds: 3)),
+            content: Text('导出失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
         );
       }
     }
@@ -313,9 +326,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       } else {
         outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
         if (outputDir == null) {
-          outputDir = await FilePicker.getDirectoryPath(
-            dialogTitle: '选择导出目录',
-          );
+          outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
           if (outputDir == null) return;
         }
       }
@@ -368,7 +379,9 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
   }
 
   Future<void> _exportFolders(
-      List<String> names, String targetDirectory) async {
+    List<String> names,
+    String targetDirectory,
+  ) async {
     try {
       if (kIsWeb) {
         if (!mounted) return;
@@ -376,8 +389,9 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('文件夹导出'),
-            content:
-                const Text('浏览器暂不支持选择导出目录，你可以逐个导出文件夹内的文件，或使用 App 以获得完整体验。'),
+            content: const Text(
+              '浏览器暂不支持选择导出目录，你可以逐个导出文件夹内的文件，或使用 App 以获得完整体验。',
+            ),
             actions: [
               TextButton(
                 key: const Key('fm_web_export_cancel_btn'),
@@ -398,8 +412,9 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         final records = ref.read(videoRecordsProvider);
         var exportedCount = 0;
         for (final folderName in names) {
-          final folderFiles =
-              records.where((r) => r.folder == folderName).toList();
+          final folderFiles = records
+              .where((r) => r.folder == folderName)
+              .toList();
           for (final file in folderFiles) {
             final data = await VideoManifest.readFile(file.storagePath);
             if (data == null || data.isEmpty) continue;
@@ -427,9 +442,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
 
       String? outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
       if (outputDir == null) {
-        outputDir = await FilePicker.getDirectoryPath(
-          dialogTitle: '选择导出目录',
-        );
+        outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
         if (outputDir == null) return;
       }
 
@@ -439,8 +452,9 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       var exportedCount = 0;
 
       for (final folderName in names) {
-        final folderFiles =
-            records.where((r) => r.folder == folderName).toList();
+        final folderFiles = records
+            .where((r) => r.folder == folderName)
+            .toList();
         if (folderFiles.isEmpty) continue;
 
         final folderOutputDir = p.join(outputDir, folderName);
@@ -500,8 +514,8 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         case SortField.createdAt:
           getCmp = (x, y) => x.createdAt.compareTo(y.createdAt);
         case SortField.name:
-          getCmp =
-              (x, y) => x.name.toLowerCase().compareTo(y.name.toLowerCase());
+          getCmp = (x, y) =>
+              x.name.toLowerCase().compareTo(y.name.toLowerCase());
         case SortField.size:
           getCmp = (x, y) => x.size.compareTo(y.size);
       }
@@ -525,9 +539,10 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
                   ),
                 ),
                 icon: const Icon(Icons.videocam, size: 20),
-                label: const Text('录制视频',
-                    style:
-                        TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                label: const Text(
+                  '录制视频',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
           ),
@@ -543,9 +558,10 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
                   ),
                 ),
                 icon: const Icon(Icons.photo_library_outlined, size: 20),
-                label: const Text('从相册导入',
-                    style:
-                        TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                label: const Text(
+                  '从相册导入',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
           ),
@@ -568,18 +584,17 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
                 bottom: 4,
                 right: 4,
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black54,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
                     formatDuration(file.duration),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 11),
                   ),
                 ),
               ),
@@ -602,8 +617,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       }
 
       try {
-        final videoPath =
-            await VideoManifest.readFilePath(file.storagePath);
+        final videoPath = await VideoManifest.readFilePath(file.storagePath);
         if (videoPath == null) return null;
 
         Uint8List? thumbBytes;
@@ -618,7 +632,10 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
           // Native: use media_kit Player.screenshot()
           final thumbPlayer = Player();
           try {
-            await thumbPlayer.open(Media(Uri.file(videoPath).toString()), play: false);
+            await thumbPlayer.open(
+              Media(Uri.file(videoPath).toString()),
+              play: false,
+            );
             await Future.delayed(const Duration(milliseconds: 500));
             await thumbPlayer.seek(const Duration(seconds: 1));
             await Future.delayed(const Duration(milliseconds: 200));
@@ -657,8 +674,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
                     fit: BoxFit.cover,
                     width: double.infinity,
                     height: double.infinity,
-                    errorBuilder: (_, __, ___) =>
-                        buildThumbnailFallback(file),
+                    errorBuilder: (_, __, ___) => buildThumbnailFallback(file),
                   ),
                   if (file.duration > 0)
                     Positioned(
@@ -666,7 +682,9 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
                       right: 4,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 4, vertical: 2),
+                          horizontal: 4,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.black54,
                           borderRadius: BorderRadius.circular(4),
@@ -700,7 +718,12 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       initialGridView: viewMode,
       onGridViewChanged: (v) =>
           ref.read(videoViewModeProvider.notifier).setViewMode(v),
-      onCurrentFolderChanged: (f) => _currentFolder = f,
+      onCurrentFolderChanged: (f) {
+        _currentFolder = f;
+        ref.read(filesPageBackHandledProvider.notifier).state = false;
+      },
+      onBackToParent: () =>
+          ref.read(filesPageBackHandledProvider.notifier).state = true,
       extraPopupMenuItems: (file) => [
         const PopupMenuItem(
           value: 'play',
@@ -750,19 +773,22 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         final source = records.firstWhere((r) => r.id == id);
         String copyName = '${source.name}_副本';
         int copyIdx = 2;
-        while (records
-            .any((r) => r.name == copyName && r.folder == selectedFolder)) {
+        while (records.any(
+          (r) => r.name == copyName && r.folder == selectedFolder,
+        )) {
           copyName = '${source.name}_副本 ($copyIdx)';
           copyIdx++;
         }
-        await VideoManifest.addRecord(VideoRecord(
-          name: copyName,
-          hash: source.hash,
-          format: source.format,
-          createdAt: DateTime.now(),
-          size: source.size,
-          folder: selectedFolder,
-        ));
+        await VideoManifest.addRecord(
+          VideoRecord(
+            name: copyName,
+            hash: source.hash,
+            format: source.format,
+            createdAt: DateTime.now(),
+            size: source.size,
+            folder: selectedFolder,
+          ),
+        );
         await ref.read(videoRecordsProvider.notifier).loadRecords();
         await ref.read(videoFolderListProvider.notifier).loadFolders();
       },
@@ -871,4 +897,3 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     }
   }
 }
-

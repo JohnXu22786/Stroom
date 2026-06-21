@@ -14,6 +14,7 @@ import '../utils/manifest_bridge.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
 import '../widgets/file_manager_view.dart';
+import 'files_page_shared.dart';
 import 'text_preview_edit_page.dart';
 import 'text_storage_shared.dart';
 
@@ -71,7 +72,10 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
   }
 
   String _uniqueTextName(
-      String baseName, List<TextRecord> records, Set<String> usedInBatch) {
+    String baseName,
+    List<TextRecord> records,
+    Set<String> usedInBatch,
+  ) {
     bool taken(String name) =>
         usedInBatch.contains(name) ||
         records.any((r) => r.name == name && r.folder == _currentFolder);
@@ -130,9 +134,9 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         final format = ext.isNotEmpty ? ext : 'txt';
         if (!_supportedFormats.contains(format)) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('跳过不支持格式: $format')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('跳过不支持格式: $format')));
           }
           continue;
         }
@@ -146,15 +150,17 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         usedInBatch.add(displayName);
 
         await TextManifest.writeFile(storageFileName, bytes);
-        await TextManifest.addRecord(TextRecord(
-          name: displayName,
-          hash: hash,
-          format: format,
-          createdAt: DateTime.now(),
-          size: bytes.length,
-          folder: _currentFolder,
-          textLength: content.length,
-        ));
+        await TextManifest.addRecord(
+          TextRecord(
+            name: displayName,
+            hash: hash,
+            format: format,
+            createdAt: DateTime.now(),
+            size: bytes.length,
+            folder: _currentFolder,
+            textLength: content.length,
+          ),
+        );
         count++;
       }
 
@@ -204,10 +210,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       await ref.read(textRecordsProvider.notifier).loadRecords();
       await ref.read(textFolderListProvider.notifier).loadFolders();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('文本已保存'),
-          duration: Duration(seconds: 2),
-        ),
+        const SnackBar(content: Text('文本已保存'), duration: Duration(seconds: 2)),
       );
     }
   }
@@ -220,19 +223,17 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     final content = await TextManifest.readText(file.storagePath);
     if (!mounted) return;
     if (content == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('无法加载文本内容')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('无法加载文本内容')));
       return;
     }
 
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => TextPreviewEditPage(
-          file: file,
-          initialContent: content,
-        ),
+        builder: (_) =>
+            TextPreviewEditPage(file: file, initialContent: content),
       ),
     );
 
@@ -253,9 +254,9 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       final content = await TextManifest.readText(file.storagePath);
       if (content == null || content.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('文件数据读取失败')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('文件数据读取失败')));
         }
         return;
       }
@@ -297,9 +298,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       } else {
         outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
         if (outputDir == null) {
-          outputDir = await FilePicker.getDirectoryPath(
-            dialogTitle: '选择导出目录',
-          );
+          outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
           if (outputDir == null) return;
         }
       }
@@ -353,7 +352,9 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
   }
 
   Future<void> _exportFolders(
-      List<String> names, String targetDirectory) async {
+    List<String> names,
+    String targetDirectory,
+  ) async {
     try {
       if (kIsWeb) {
         if (!mounted) return;
@@ -361,8 +362,9 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('文件夹导出'),
-            content:
-                const Text('浏览器暂不支持选择导出目录，你可以逐个导出文件夹内的文件，或使用 App 以获得完整体验。'),
+            content: const Text(
+              '浏览器暂不支持选择导出目录，你可以逐个导出文件夹内的文件，或使用 App 以获得完整体验。',
+            ),
             actions: [
               TextButton(
                 key: const Key('fm_web_export_cancel_btn'),
@@ -383,8 +385,9 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         final records = ref.read(textRecordsProvider);
         var exportedCount = 0;
         for (final folderName in names) {
-          final folderFiles =
-              records.where((r) => r.folder == folderName).toList();
+          final folderFiles = records
+              .where((r) => r.folder == folderName)
+              .toList();
           for (final file in folderFiles) {
             final content = await TextManifest.readText(file.storagePath);
             if (content == null || content.isEmpty) continue;
@@ -413,9 +416,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
 
       String? outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
       if (outputDir == null) {
-        outputDir = await FilePicker.getDirectoryPath(
-          dialogTitle: '选择导出目录',
-        );
+        outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
         if (outputDir == null) return;
       }
 
@@ -425,8 +426,9 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       var exportedCount = 0;
 
       for (final folderName in names) {
-        final folderFiles =
-            records.where((r) => r.folder == folderName).toList();
+        final folderFiles = records
+            .where((r) => r.folder == folderName)
+            .toList();
         if (folderFiles.isEmpty) continue;
 
         final folderOutputDir = p.join(outputDir, folderName);
@@ -477,20 +479,23 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       final source = records.firstWhere((r) => r.id == id);
       String copyName = '${source.name}_副本';
       int copyIdx = 2;
-      while (records
-          .any((r) => r.name == copyName && r.folder == selectedFolder)) {
+      while (records.any(
+        (r) => r.name == copyName && r.folder == selectedFolder,
+      )) {
         copyName = '${source.name}_副本 ($copyIdx)';
         copyIdx++;
       }
-      await TextManifest.addRecord(TextRecord(
-        name: copyName,
-        hash: source.hash,
-        format: source.format,
-        createdAt: DateTime.now(),
-        size: source.size,
-        folder: selectedFolder,
-        textLength: source.textLength,
-      ));
+      await TextManifest.addRecord(
+        TextRecord(
+          name: copyName,
+          hash: source.hash,
+          format: source.format,
+          createdAt: DateTime.now(),
+          size: source.size,
+          folder: selectedFolder,
+          textLength: source.textLength,
+        ),
+      );
       await ref.read(textRecordsProvider.notifier).loadRecords();
       await ref.read(textFolderListProvider.notifier).loadFolders();
     } catch (e) {
@@ -547,9 +552,10 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
                   ),
                 ),
                 icon: const Icon(Icons.add_circle_outline, size: 20),
-                label: const Text('新建文本',
-                    style:
-                        TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                label: const Text(
+                  '新建文本',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
           ),
@@ -565,9 +571,10 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
                   ),
                 ),
                 icon: const Icon(Icons.file_download_outlined, size: 20),
-                label: const Text('导入文本',
-                    style:
-                        TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                label: const Text(
+                  '导入文本',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
           ),
@@ -608,7 +615,12 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       initialGridView: viewMode,
       onGridViewChanged: (v) =>
           ref.read(textViewModeProvider.notifier).setViewMode(v),
-      onCurrentFolderChanged: (f) => _currentFolder = f,
+      onCurrentFolderChanged: (f) {
+        _currentFolder = f;
+        ref.read(filesPageBackHandledProvider.notifier).state = false;
+      },
+      onBackToParent: () =>
+          ref.read(filesPageBackHandledProvider.notifier).state = true,
       extraPopupMenuItems: (file) => [
         const PopupMenuItem(
           value: 'preview',
@@ -731,4 +743,3 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     );
   }
 }
-
