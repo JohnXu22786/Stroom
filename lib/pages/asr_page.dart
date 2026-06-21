@@ -804,21 +804,34 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       Navigator.pop(context);
     }
 
-    // Use the selected model from dropdown
-    final models = _getAsrModels(ref);
-    AsrConfig effectiveConfig;
-    if (_selectedModelIndex < models.length) {
-      final selectedModel = models[_selectedModelIndex];
-      effectiveConfig = asrConfig.copyWith(model: selectedModel.modelId);
-    } else {
-      effectiveConfig = asrConfig;
-    }
+    try {
+      // Use the selected model from dropdown
+      final models = _getAsrModels(ref);
+      AsrConfig effectiveConfig;
+      if (_selectedModelIndex < models.length) {
+        final selectedModel = models[_selectedModelIndex];
+        effectiveConfig = asrConfig.copyWith(model: selectedModel.modelId);
+      } else {
+        effectiveConfig = asrConfig;
+      }
 
-    // Continue processing in the background
-    late final AsrService service;
+      await _performTranscription(effectiveConfig, taskId, title: title);
+    } catch (e) {
+      // If an unexpected error occurs before _performTranscription's own catch,
+      // mark the task as failed so it doesn't stay in limbo.
+      ref.read(backgroundTasksProvider.notifier).failTask(
+        taskId,
+        error: 'ASR启动失败: $e',
+      );
+    }
+  }
+
+  Future<void> _performTranscription(AsrConfig asrConfig, String taskId,
+      {String? title}) async {
     try {
       ref.read(backgroundTasksProvider.notifier).updateProgress(taskId, 10);
-      service = AsrService(config: effectiveConfig);
+      late final AsrService service;
+      service = AsrService(config: asrConfig);
       final result = await service.transcribe(
         audioBytes: _selectedAudio!.bytes,
         audioFormat: _selectedAudio!.format,
