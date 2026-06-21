@@ -1201,29 +1201,39 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       Navigator.pop(context);
     }
 
-    // Use the selected model from dropdown
-    final models = _getOcrModels(ref);
-    if (_selectedModelIndex < models.length) {
-      final selectedModel = models[_selectedModelIndex];
-      final updatedConfig = ocrConfig.copyWith(model: selectedModel.modelId);
-      await _performOcr(updatedConfig, taskId, title: title);
-    } else {
-      await _performOcr(ocrConfig, taskId, title: title);
+    try {
+      // Use the selected model from dropdown
+      final models = _getOcrModels(ref);
+      if (_selectedModelIndex < models.length) {
+        final selectedModel = models[_selectedModelIndex];
+        final updatedConfig = ocrConfig.copyWith(model: selectedModel.modelId);
+        await _performOcr(updatedConfig, taskId, title: title);
+      } else {
+        await _performOcr(ocrConfig, taskId, title: title);
+      }
+    } catch (e) {
+      // If an unexpected error occurs before _performOcr's own catch,
+      // mark the task as failed so it doesn't stay in limbo.
+      ref.read(backgroundTasksProvider.notifier).failTask(
+        taskId,
+        error: 'OCR启动失败: $e',
+      );
     }
   }
-
   Future<void> _performOcr(
     OcrConfig ocrConfig,
     String taskId, {
     String? title,
   }) async {
-    setState(() {
-      _isProcessing = true;
-      _errorMessage = null;
-    });
-
     OcrService? service;
     try {
+      if (mounted) {
+        setState(() {
+          _isProcessing = true;
+          _errorMessage = null;
+        });
+      }
+
       service = OcrService(config: ocrConfig);
       OcrResult result;
 

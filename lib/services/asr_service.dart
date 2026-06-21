@@ -127,11 +127,21 @@ class AsrService {
               },
               connectTimeout: const Duration(seconds: 30),
               receiveTimeout: const Duration(seconds: 120),
+              sendTimeout: const Duration(seconds: 60),
             ),
           );
 
   /// Dio default headers, exposed for testing.
   Map<String, dynamic> get defaultHeaders => _dio.options.headers;
+
+  /// Dio send timeout, exposed for diagnostic and testing.
+  Duration? get sendTimeout => _dio.options.sendTimeout;
+
+  /// Dio connect timeout, exposed for diagnostic and testing.
+  Duration? get connectTimeout => _dio.options.connectTimeout;
+
+  /// Dio receive timeout, exposed for diagnostic and testing.
+  Duration? get receiveTimeout => _dio.options.receiveTimeout;
 
   /// Transcribe audio bytes into text.
   ///
