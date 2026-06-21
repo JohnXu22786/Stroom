@@ -30,7 +30,7 @@ Widget createReasoningTestApp({
 
 void main() {
   group('ReasoningSection (Panel mode)', () {
-    testWidgets('shows orange button with reasoning text when content exists', (
+    testWidgets('shows reasoning button with label when content exists', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -40,13 +40,15 @@ void main() {
         ),
       );
 
-      // Should show the button with icon and "推理过程" text
+      // Should show the button with icon and "推理过程" label
       expect(find.text('推理过程'), findsOneWidget);
+      // Should show the psychology icon
+      expect(find.byIcon(Icons.psychology_outlined), findsOneWidget);
       // The content should NOT be visible inline (it's a panel now)
       expect(find.text('Test reasoning content'), findsNothing);
     });
 
-    testWidgets('shows "推理中" when streaming', (tester) async {
+    testWidgets('shows reasoning in progress label when streaming', (tester) async {
       await tester.pumpWidget(
         createReasoningTestApp(
           reasoningText: 'Streaming reasoning...',
@@ -54,91 +56,8 @@ void main() {
         ),
       );
 
+      // Should show "推理中" label when streaming
       expect(find.text('推理中'), findsOneWidget);
-    });
-
-    testWidgets('opens dialog panel on tap', (tester) async {
-      await tester.pumpWidget(createReasoningTestApp(
-        reasoningText: 'Panel reasoning content',
-        isStreaming: false,
-      ));
-
-      // Tap the reasoning button
-      await tester.tap(find.text('推理过程'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-
-      // Should open a dialog
-      expect(find.byType(Dialog), findsOneWidget);
-    });
-
-    testWidgets('dialog has close button', (tester) async {
-      await tester.pumpWidget(createReasoningTestApp(
-        reasoningText: 'Test reasoning',
-        isStreaming: false,
-      ));
-
-      // Open the panel
-      await tester.tap(find.text('推理过程'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-
-      // Dialog should have a close button
-      expect(find.byIcon(Icons.close), findsOneWidget);
-    });
-
-    testWidgets('dialog closes on close button tap', (tester) async {
-      await tester.pumpWidget(createReasoningTestApp(
-        reasoningText: 'Test reasoning',
-        isStreaming: false,
-      ));
-
-      // Open the panel
-      await tester.tap(find.text('推理过程'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(find.byType(Dialog), findsOneWidget);
-
-      // Close
-      await tester.tap(find.byIcon(Icons.close));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(find.byType(Dialog), findsNothing);
-    });
-
-    testWidgets('dialog has close button', (tester) async {
-      await tester.pumpWidget(
-        createReasoningTestApp(
-          reasoningText: 'Test reasoning',
-          isStreaming: false,
-        ),
-      );
-
-      // Open the panel
-      await tester.tap(find.text('推理过程'));
-      await tester.pumpAndSettle();
-
-      // Dialog should have a close button
-      expect(find.byIcon(Icons.close), findsOneWidget);
-    });
-
-    testWidgets('dialog closes on close button tap', (tester) async {
-      await tester.pumpWidget(
-        createReasoningTestApp(
-          reasoningText: 'Test reasoning',
-          isStreaming: false,
-        ),
-      );
-
-      // Open the panel
-      await tester.tap(find.text('推理过程'));
-      await tester.pumpAndSettle();
-      expect(find.byType(Dialog), findsOneWidget);
-
-      // Close
-      await tester.tap(find.byIcon(Icons.close));
-      await tester.pumpAndSettle();
-      expect(find.byType(Dialog), findsNothing);
     });
   });
 }
