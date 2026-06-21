@@ -14,7 +14,11 @@ class BackgroundTaskCard extends ConsumerStatefulWidget {
   final BackgroundTask task;
   final bool isUnread;
 
-  const BackgroundTaskCard({super.key, required this.task, this.isUnread = false});
+  const BackgroundTaskCard({
+    super.key,
+    required this.task,
+    this.isUnread = false,
+  });
 
   @override
   ConsumerState<BackgroundTaskCard> createState() => _BackgroundTaskCardState();
@@ -72,7 +76,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                         shape: BoxShape.circle,
                       ),
                     ),
-                  Icon(statusIcon, color: statusColor, size: 24),
+                  _buildStatusIcon(task.status, colorScheme),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -172,12 +176,20 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         // Type and time info
         _buildInfoRow(cs, Icons.category_outlined, '任务类型', task.type.label),
         const SizedBox(height: 6),
-        _buildInfoRow(cs, Icons.access_time, '创建时间',
-            formatRelativeTime(task.createdAt)),
+        _buildInfoRow(
+          cs,
+          Icons.access_time,
+          '创建时间',
+          formatRelativeTime(task.createdAt),
+        ),
         if (task.completedAt != null) ...[
           const SizedBox(height: 6),
-          _buildInfoRow(cs, Icons.check_circle_outline, '完成时间',
-              formatRelativeTime(task.completedAt!)),
+          _buildInfoRow(
+            cs,
+            Icons.check_circle_outline,
+            '完成时间',
+            formatRelativeTime(task.completedAt!),
+          ),
         ],
 
         // Progress bar for running tasks
@@ -197,10 +209,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
             alignment: Alignment.centerRight,
             child: Text(
               '进度 ${task.progress}%',
-              style: TextStyle(
-                fontSize: 11,
-                color: cs.onSurfaceVariant,
-              ),
+              style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
             ),
           ),
         ],
@@ -214,16 +223,18 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
             decoration: BoxDecoration(
               color: Colors.red.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: Colors.red.withValues(alpha: 0.25),
-              ),
+              border: Border.all(color: Colors.red.withValues(alpha: 0.25)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.error_outline, size: 14, color: Colors.red),
+                    const Icon(
+                      Icons.error_outline,
+                      size: 14,
+                      color: Colors.red,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       '错误详情',
@@ -256,7 +267,12 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
     );
   }
 
-  Widget _buildInfoRow(ColorScheme cs, IconData icon, String label, String value) {
+  Widget _buildInfoRow(
+    ColorScheme cs,
+    IconData icon,
+    String label,
+    String value,
+  ) {
     return Row(
       children: [
         Icon(icon, size: 14, color: cs.onSurfaceVariant),
@@ -272,10 +288,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         Expanded(
           child: Text(
             value,
-            style: TextStyle(
-              fontSize: 12,
-              color: cs.onSurface,
-            ),
+            style: TextStyle(fontSize: 12, color: cs.onSurface),
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -292,10 +305,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
             ref.read(backgroundTasksProvider.notifier).removeTask(task.id);
           },
           icon: Icon(Icons.delete_outline, size: 18, color: cs.error),
-          label: Text(
-            '删除',
-            style: TextStyle(fontSize: 13, color: cs.error),
-          ),
+          label: Text('删除', style: TextStyle(fontSize: 13, color: cs.error)),
           style: TextButton.styleFrom(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             minimumSize: Size.zero,
@@ -320,11 +330,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            _taskTypeIcon(type),
-            size: 12,
-            color: _taskTypeColor(type),
-          ),
+          Icon(_taskTypeIcon(type), size: 12, color: _taskTypeColor(type)),
           const SizedBox(width: 3),
           Text(
             type.label,
@@ -363,6 +369,19 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
       case TaskStatus.paused:
         return Icons.pause_circle;
     }
+  }
+
+  /// Returns a spinning animation widget for running tasks,
+  /// or a static icon for other states.
+  Widget _buildStatusIcon(TaskStatus status, ColorScheme colorScheme) {
+    if (status == TaskStatus.running) {
+      return _SpinningIcon(
+        icon: Icons.sync,
+        color: _statusColor(status),
+        size: 24,
+      );
+    }
+    return Icon(_statusIcon(status), color: _statusColor(status), size: 24);
   }
 
   static Widget _buildStatusChip(TaskStatus status) {
@@ -438,5 +457,55 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
       case BackgroundTaskType.audioSeparation:
         return Colors.indigo;
     }
+  }
+}
+
+/// An icon that spins continuously, used to indicate a running task.
+class _SpinningIcon extends StatefulWidget {
+  final IconData icon;
+  final Color color;
+  final double size;
+
+  const _SpinningIcon({
+    required this.icon,
+    required this.color,
+    this.size = 24,
+  });
+
+  @override
+  State<_SpinningIcon> createState() => _SpinningIconState();
+}
+
+class _SpinningIconState extends State<_SpinningIcon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Transform.rotate(
+          angle: _controller.value * 2 * 3.1415927,
+          child: child,
+        );
+      },
+      child: Icon(widget.icon, color: widget.color, size: widget.size),
+    );
   }
 }

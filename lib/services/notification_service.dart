@@ -15,7 +15,8 @@ import '../services/storage_service.dart';
 // ============================================================================
 
 const _notificationsEnabledKey = 'notifications_enabled';
-const _notificationsPermissionRequestedKey = 'notifications_permission_requested';
+const _notificationsPermissionRequestedKey =
+    'notifications_permission_requested';
 
 // ============================================================================
 // Notification Service
@@ -50,7 +51,9 @@ class NotificationService {
     try {
       _plugin = FlutterLocalNotificationsPlugin();
 
-      const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const androidSettings = AndroidInitializationSettings(
+        '@mipmap/ic_launcher',
+      );
       const iosSettings = DarwinInitializationSettings(
         requestAlertPermission: true,
         requestBadgePermission: true,
@@ -82,7 +85,7 @@ class NotificationService {
   Future<bool> get isEnabled async {
     if (kIsWeb) return false;
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_notificationsEnabledKey) ?? true;
+    return prefs.getBool(_notificationsEnabledKey) ?? false;
   }
 
   /// Set whether notifications are enabled.
@@ -163,7 +166,9 @@ class NotificationService {
 
     final payload = NotificationPayload(
       taskId: taskId,
-      type: success ? NotificationType.taskCompleted : NotificationType.taskFailed,
+      type: success
+          ? NotificationType.taskCompleted
+          : NotificationType.taskFailed,
       title: title,
       typeLabel: typeLabel,
       error: error,
@@ -215,13 +220,17 @@ class NotificationService {
         payload: payload.taskId,
       );
     } catch (e) {
-      debugPrint('[NotificationService] Failed to show system notification: $e');
+      debugPrint(
+        '[NotificationService] Failed to show system notification: $e',
+      );
     }
   }
 
   void _onNotificationResponse(NotificationResponse response) {
     // Handle notification tap - navigate to task list
-    debugPrint('[NotificationService] Notification tapped: ${response.payload}');
+    debugPrint(
+      '[NotificationService] Notification tapped: ${response.payload}',
+    );
   }
 
   // ========================================================================
@@ -298,10 +307,7 @@ class _InAppNotificationBannerState extends State<InAppNotificationBanner>
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, -1),
       end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutCubic,
-    ));
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
 
     _controller.forward();
 
