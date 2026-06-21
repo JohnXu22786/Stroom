@@ -17,22 +17,24 @@ class _ErrorSection {
   });
 }
 
-/// Shows a dialog with detailed API error information.
+/// Shows a dialog with detailed request/response data information.
 ///
-/// Displays a list of available sections (Request URL, Request Headers,
-/// Request Body, Status Code, Response Headers, Response Body, Error).
-/// Tap any section to view its detail. Use the back button to return
-/// to the section list.
+/// Displays a list of available sections (Message Content, Request URL,
+/// Request Headers, Request Body, Status Code, Response Headers,
+/// Response Body, Error). Tap any section to view its detail.
+/// Use the back button to return to the section list.
 void showErrorDetailDialog({
   required BuildContext context,
   required Map<String, dynamic>? rawRequest,
   required Map<String, dynamic>? rawResponse,
+  String? messageContent,
 }) {
   showDialog(
     context: context,
     builder: (ctx) => _ErrorDetailDialogContent(
       rawRequest: rawRequest,
       rawResponse: rawResponse,
+      messageContent: messageContent,
     ),
   );
 }
@@ -40,10 +42,12 @@ void showErrorDetailDialog({
 class _ErrorDetailDialogContent extends StatefulWidget {
   final Map<String, dynamic>? rawRequest;
   final Map<String, dynamic>? rawResponse;
+  final String? messageContent;
 
   const _ErrorDetailDialogContent({
     required this.rawRequest,
     required this.rawResponse,
+    this.messageContent,
   });
 
   @override
@@ -51,22 +55,21 @@ class _ErrorDetailDialogContent extends StatefulWidget {
       _ErrorDetailDialogContentState();
 }
 
-class _ErrorDetailDialogContentState
-    extends State<_ErrorDetailDialogContent> {
+class _ErrorDetailDialogContentState extends State<_ErrorDetailDialogContent> {
   /// Currently selected section id, or null to show the section list.
   String? _selectedSectionId;
 
   /// Cached sections list, rebuilt when widget data changes.
   List<_ErrorSection>? _cachedSections;
 
-  List<_ErrorSection> get _sections =>
-      _cachedSections ??= _buildSections();
+  List<_ErrorSection> get _sections => _cachedSections ??= _buildSections();
 
   @override
   void didUpdateWidget(covariant _ErrorDetailDialogContent oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.rawRequest != widget.rawRequest ||
-        oldWidget.rawResponse != widget.rawResponse) {
+        oldWidget.rawResponse != widget.rawResponse ||
+        oldWidget.messageContent != widget.messageContent) {
       _cachedSections = null;
     }
   }
@@ -103,7 +106,7 @@ class _ErrorDetailDialogContentState
                 width: double.infinity,
                 child: OutlinedButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Close'),
+                  child: const Text('关闭'),
                 ),
               ),
             ),
@@ -115,10 +118,15 @@ class _ErrorDetailDialogContentState
 
   /// Builds the dialog header, optionally with a back button.
   Widget _buildHeader(BuildContext context, bool isDark) {
+    final hasError = _sections.any((s) => s.id == 'error');
+    final headerColor = hasError ? Colors.red[700] : Colors.grey[700];
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.red.withOpacity(0.1),
+        color: hasError
+            ? Colors.red.withOpacity(0.1)
+            : (isDark ? Colors.grey[800] : Colors.grey[200]),
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(4),
           topRight: Radius.circular(4),
@@ -136,19 +144,23 @@ class _ErrorDetailDialogContentState
               },
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
-              tooltip: 'Back',
+              tooltip: '返回',
             ),
           if (_selectedSectionId != null) const SizedBox(width: 8),
-          Icon(Icons.error_outline, size: 18, color: Colors.red[700]),
+          Icon(
+            hasError ? Icons.error_outline : Icons.info_outline,
+            size: 18,
+            color: headerColor,
+          ),
           const SizedBox(width: 8),
           Text(
             _selectedSectionId != null
                 ? _findSectionLabel(_selectedSectionId!)
-                : 'Error Details',
+                : '数据详情',
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: Colors.red[700],
+              color: headerColor,
             ),
           ),
           const Spacer(),
@@ -176,6 +188,16 @@ class _ErrorDetailDialogContentState
     final sections = <_ErrorSection>[];
     final req = widget.rawRequest ?? {};
     final resp = widget.rawResponse ?? {};
+
+    // Message content section (shows the actual message text)
+    if (widget.messageContent != null && widget.messageContent!.isNotEmpty) {
+      sections.add(_ErrorSection(
+        id: 'message_content',
+        label: '消息内容',
+        icon: Icons.subject,
+        value: widget.messageContent,
+      ));
+    }
 
     // Check if this is a network error (no HTTP response)
     final isNetworkError = resp.containsKey('error');
