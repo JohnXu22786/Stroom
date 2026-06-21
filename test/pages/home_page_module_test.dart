@@ -112,6 +112,20 @@ void main() {
       expect(find.text('下载网页资源'), findsOneWidget);
     });
 
+    testWidgets('下载网页资源 card subtitle shows 下载网页中的音视频', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Scroll to find the module card with subtitle
+      final cardFinder = find.text('下载网页资源');
+      await tester.ensureVisible(cardFinder);
+      await tester.pumpAndSettle();
+
+      // The subtitle should be the new text, not the old one
+      expect(find.text('下载网页中的音视频'), findsOneWidget);
+      expect(find.text('下载网页中的资源'), findsNothing);
+    });
+
     testWidgets('下载网页资源 card navigates to CatCatchPage', (tester) async {
       _setSmallScreen(tester);
 
@@ -162,32 +176,35 @@ void main() {
   });
 
   group('HomePage responsive layout', () {
-    testWidgets('welcome text and notification button both visible on small screen',
-        (tester) async {
-      _setSmallScreen(tester);
+    testWidgets(
+      'welcome text and notification button both visible on small screen',
+      (tester) async {
+        _setSmallScreen(tester);
 
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
 
-      // Welcome text should be visible
-      expect(find.text('欢迎使用 Stroom'), findsOneWidget);
+        // Welcome text should be visible
+        expect(find.text('欢迎使用 Stroom'), findsOneWidget);
 
-      // Notification button should be visible
-      expect(find.byIcon(Icons.pending_actions), findsOneWidget);
+        // Notification button should be visible
+        expect(find.byIcon(Icons.pending_actions), findsOneWidget);
 
-      // Subtitle should be visible
-      expect(find.text('选择一个功能模块开始使用'), findsOneWidget);
+        // Subtitle should be visible
+        expect(find.text('选择一个功能模块开始使用'), findsOneWidget);
 
-      // Module card labels should be visible
-      expect(find.text('OCR'), findsOneWidget);
-      expect(find.text('语音识别'), findsOneWidget);
+        // Module card labels should be visible
+        expect(find.text('OCR'), findsOneWidget);
+        expect(find.text('语音识别'), findsOneWidget);
 
-      // No overflow exceptions should have been thrown
-      expect(tester.takeException(), isNull);
-    });
+        // No overflow exceptions should have been thrown
+        expect(tester.takeException(), isNull);
+      },
+    );
 
-    testWidgets('no RenderFlex overflow error on very narrow screen (320px)',
-        (tester) async {
+    testWidgets('no RenderFlex overflow error on very narrow screen (320px)', (
+      tester,
+    ) async {
       _setVeryNarrowScreen(tester);
 
       await tester.pumpWidget(_buildTestApp());
@@ -203,8 +220,9 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('notification button does not overlap with header text',
-        (tester) async {
+    testWidgets('notification button does not overlap with header text', (
+      tester,
+    ) async {
       _setSmallScreen(tester);
 
       await tester.pumpWidget(_buildTestApp());
@@ -214,9 +232,11 @@ void main() {
       final welcomeTextFinder = find.text('欢迎使用 Stroom');
       expect(welcomeTextFinder, findsOneWidget);
 
-      final welcomeRenderBox = tester.renderObject<RenderBox>(welcomeTextFinder);
-      final welcomeRect = welcomeRenderBox.localToGlobal(Offset.zero) &
-          welcomeRenderBox.size;
+      final welcomeRenderBox = tester.renderObject<RenderBox>(
+        welcomeTextFinder,
+      );
+      final welcomeRect =
+          welcomeRenderBox.localToGlobal(Offset.zero) & welcomeRenderBox.size;
 
       // Get the render box of the notification button
       final notifBtnFinder = find.byIcon(Icons.pending_actions);
@@ -228,13 +248,14 @@ void main() {
 
       // The notification button should be to the RIGHT of the welcome text
       // (not overlapping horizontally)
-      expect(notifRect.left, greaterThanOrEqualTo(welcomeRect.right - 8),
-          reason:
-              'Notification button should not overlap with welcome text');
+      expect(
+        notifRect.left,
+        greaterThanOrEqualTo(welcomeRect.right - 8),
+        reason: 'Notification button should not overlap with welcome text',
+      );
     });
 
-    testWidgets('module card texts fit within card bounds',
-        (tester) async {
+    testWidgets('module card texts fit within card bounds', (tester) async {
       _setSmallScreen(tester);
 
       await tester.pumpWidget(_buildTestApp());
@@ -248,8 +269,14 @@ void main() {
       expect(ocrSubtitle, findsOneWidget);
 
       // Verify they're rendered (rendering means they fit)
-      expect(tester.renderObject<RenderBox>(ocrCard).size.width, greaterThan(0));
-      expect(tester.renderObject<RenderBox>(ocrSubtitle).size.width, greaterThan(0));
+      expect(
+        tester.renderObject<RenderBox>(ocrCard).size.width,
+        greaterThan(0),
+      );
+      expect(
+        tester.renderObject<RenderBox>(ocrSubtitle).size.width,
+        greaterThan(0),
+      );
 
       // Verify no overflow
       expect(tester.takeException(), isNull);
@@ -257,8 +284,9 @@ void main() {
   });
 
   group('HomePage tablet adaptation', () {
-    testWidgets('SafeArea is present on home page content (tablet)',
-        (tester) async {
+    testWidgets('SafeArea is present on home page content (tablet)', (
+      tester,
+    ) async {
       _setTabletScreen(tester);
 
       await tester.pumpWidget(_buildTestApp());
@@ -268,8 +296,9 @@ void main() {
       expect(find.byType(SafeArea), findsNWidgets(2));
     });
 
-    testWidgets('welcome text is positioned below status bar area on tablet',
-        (tester) async {
+    testWidgets('welcome text is positioned below status bar area on tablet', (
+      tester,
+    ) async {
       _setTabletScreen(tester);
 
       await tester.pumpWidget(_buildTestApp());
@@ -287,13 +316,18 @@ void main() {
       // (24px) + the SafeArea's own content padding (which includes the
       // top padding from EdgeInsets.fromLTRB(16, 16, 16, 0) = 16px)
       // So minimum top should be 24 (status bar) + some margin
-      expect(topLeft.dy, greaterThanOrEqualTo(24.0),
-          reason: 'Welcome text top position ($topLeft) should be '
-              'below the status bar area (>= 24px)');
+      expect(
+        topLeft.dy,
+        greaterThanOrEqualTo(24.0),
+        reason:
+            'Welcome text top position ($topLeft) should be '
+            'below the status bar area (>= 24px)',
+      );
     });
 
-    testWidgets('all key elements are visible on tablet screen',
-        (tester) async {
+    testWidgets('all key elements are visible on tablet screen', (
+      tester,
+    ) async {
       _setTabletScreen(tester);
 
       await tester.pumpWidget(_buildTestApp());
