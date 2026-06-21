@@ -34,11 +34,7 @@ OcrConfig? _resolveOcrConfig(WidgetRef ref) {
         final model = config.models.isNotEmpty
             ? config.models.first.modelId
             : 'gpt-4o';
-        return OcrConfig(
-          host: config.host,
-          apiKey: config.key,
-          model: model,
-        );
+        return OcrConfig(host: config.host, apiKey: config.key, model: model);
       }
     }
   }
@@ -195,9 +191,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: cs.outlineVariant.withValues(alpha: 0.4),
-          ),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         child: Row(
@@ -287,9 +281,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   ),
                 ),
                 icon: const Icon(Icons.camera_alt_outlined, size: 20),
-                label: const Text('拍照识别',
-                    style:
-                        TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                label: const Text(
+                  '拍照识别',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
           ),
@@ -305,9 +300,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   ),
                 ),
                 icon: const Icon(Icons.photo_library_outlined, size: 20),
-                label: const Text('相册选择',
-                    style:
-                        TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                label: const Text(
+                  '相册选择',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
           ),
@@ -321,8 +317,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.text_snippet_outlined,
-              size: 64, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+          Icon(
+            Icons.text_snippet_outlined,
+            size: 64,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+          ),
           const SizedBox(height: 16),
           Text(
             '暂无选中图片',
@@ -407,7 +406,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                         setState(() {
                           if (_dragTargetIndex == index) {
                             _dragTargetIndex = null;
-}
+                          }
                         });
                       },
                       onAcceptWithDetails: (details) {
@@ -452,8 +451,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                                       errorBuilder: (_, __, ___) => Container(
                                         color: cs.surfaceContainerHigh,
                                         child: const Icon(
-                                            Icons.broken_image,
-                                            color: Colors.grey),
+                                          Icons.broken_image,
+                                          color: Colors.grey,
+                                        ),
                                       ),
                                     ),
                                     if (_selectedImages.length > 1)
@@ -461,20 +461,22 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                                         bottom: 4,
                                         left: 4,
                                         child: Container(
-                                          padding:
-                                              const EdgeInsets.symmetric(
-                                                  horizontal: 6,
-                                                  vertical: 2),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
                                           decoration: BoxDecoration(
                                             color: cs.primary,
-                                            borderRadius:
-                                                BorderRadius.circular(8),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
                                           ),
                                           child: Text(
                                             '${index + 1}',
                                             style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 11),
+                                              color: Colors.white,
+                                              fontSize: 11,
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -484,7 +486,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                             ),
                           ),
                           childWhenDragging: _buildDimmedPlaceholder(
-                            image, index, cs, isCandidate || isHoverTarget),
+                            image,
+                            index,
+                            cs,
+                            isCandidate || isHoverTarget,
+                          ),
                           child: ImageGridItem(
                             key: ValueKey('ocr_grid_item_$index'),
                             image: image,
@@ -510,15 +516,17 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   /// Placeholder shown at original position while item is being dragged.
   Widget _buildDimmedPlaceholder(
-      SelectedImage image, int index, ColorScheme cs, bool isTarget) {
+    SelectedImage image,
+    int index,
+    ColorScheme cs,
+    bool isTarget,
+  ) {
     return Opacity(
       opacity: 0.3,
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
-          border: isTarget
-              ? Border.all(color: cs.primary, width: 2)
-              : null,
+          border: isTarget ? Border.all(color: cs.primary, width: 2) : null,
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(8),
@@ -592,8 +600,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                           bottomLeft: Radius.circular(8),
                         ),
                       ),
-                      child: Icon(Icons.drag_handle,
-                          color: cs.onSurfaceVariant, size: 20),
+                      child: Icon(
+                        Icons.drag_handle,
+                        color: cs.onSurfaceVariant,
+                        size: 20,
+                      ),
                     ),
                   ),
                   ClipRRect(
@@ -606,8 +617,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => Container(
                           color: cs.surfaceContainerHigh,
-                          child: const Icon(Icons.broken_image,
-                              color: Colors.grey, size: 20),
+                          child: const Icon(
+                            Icons.broken_image,
+                            color: Colors.grey,
+                            size: 20,
+                          ),
                         ),
                       ),
                     ),
@@ -646,7 +660,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         children: [
           Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: Icon(Icons.error_outline, color: cs.onErrorContainer, size: 18),
+            child: Icon(
+              Icons.error_outline,
+              color: cs.onErrorContainer,
+              size: 18,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -702,9 +720,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
         decoration: BoxDecoration(
           color: cs.surface,
-          border: Border(
-            top: BorderSide(color: cs.outlineVariant, width: 0.5),
-          ),
+          border: Border(top: BorderSide(color: cs.outlineVariant, width: 0.5)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -717,18 +733,16 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
                   '已选 ${_selectedImages.length} 张图片',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: cs.onSurfaceVariant,
-                  ),
+                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                 ),
               ),
             SizedBox(
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed:
-                    _selectedImages.isEmpty || _isProcessing ? null : _startOcr,
+                onPressed: _selectedImages.isEmpty || _isProcessing
+                    ? null
+                    : _startOcr,
                 icon: _isProcessing
                     ? const SizedBox(
                         width: 18,
@@ -742,7 +756,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 label: Text(
                   _isProcessing ? '识别中...' : '开始识别',
                   style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w600),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
@@ -761,9 +777,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.4),
-        ),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -776,10 +790,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               const SizedBox(width: 8),
               Text(
                 '保存至',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: cs.onSurfaceVariant,
-                ),
+                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
               ),
               const SizedBox(width: 4),
               Text(
@@ -791,11 +802,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 ),
               ),
               const Spacer(),
-              Icon(
-                Icons.chevron_right,
-                size: 16,
-                color: cs.onSurfaceVariant,
-              ),
+              Icon(Icons.chevron_right, size: 16, color: cs.onSurfaceVariant),
             ],
           ),
         ),
@@ -823,11 +830,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   /// Show camera choice panel (app camera / system camera, no save-to, no edit toggle)
   void _showCameraChoicePanel() {
-
-    showCameraChoiceDialog(
-      context,
-      showFolderSection: false,
-    ).then((result) {
+    showCameraChoiceDialog(context, showFolderSection: false).then((result) {
       if (result == null || !mounted) return;
       if (result.choice == CameraChoice.app) {
         _takePhotoWithAppCamera();
@@ -835,7 +838,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         _takePhotoWithSystemCamera();
       }
     });
-
   }
 
   /// Show album choice panel (system album / app album)
@@ -863,13 +865,24 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               const SizedBox(height: 24),
               Text(
                 '选择图片来源',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
               Column(
                 children: [
+                  ChoiceCard(
+                    icon: Icons.collections_bookmark,
+                    title: '从应用相册选择',
+                    subtitle: '从应用内已保存的图片中选择',
+                    color: Colors.green,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _pickFromAppAlbum();
+                    },
+                  ),
+                  const SizedBox(height: 8),
                   ChoiceCard(
                     icon: Icons.photo_library,
                     title: '从系统相册选择',
@@ -878,17 +891,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     onTap: () {
                       Navigator.pop(ctx);
                       _pickFromSystemGallery();
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  ChoiceCard(
-                    icon: Icons.collections_bookmark,
-                    title: '从应用相册选择',
-                    subtitle: '从应用内已保存的图片中选择',
-                    color: Colors.purple,
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _pickFromAppAlbum();
                     },
                   ),
                 ],
@@ -915,17 +917,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       if (!mounted) return;
 
       setState(() {
-        _selectedImages.add(SelectedImage(
-          bytes: bytes,
-          provider: _createProvider(bytes),
-          format: _detectFormat(savedFilePath),
-        ));
+        _selectedImages.add(
+          SelectedImage(
+            bytes: bytes,
+            provider: _createProvider(bytes),
+            format: _detectFormat(savedFilePath),
+          ),
+        );
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('拍照失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('拍照失败: $e')));
       }
     }
   }
@@ -945,17 +949,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       final bytes = await file.readAsBytes();
 
       setState(() {
-        _selectedImages.add(SelectedImage(
-          bytes: bytes,
-          provider: _createProvider(bytes),
-          format: _detectFormat(file.path),
-        ));
+        _selectedImages.add(
+          SelectedImage(
+            bytes: bytes,
+            provider: _createProvider(bytes),
+            format: _detectFormat(file.path),
+          ),
+        );
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('拍照失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('拍照失败: $e')));
       }
     }
   }
@@ -974,11 +980,13 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       final newImages = <SelectedImage>[];
       for (final file in files) {
         final bytes = await file.readAsBytes();
-        newImages.add(SelectedImage(
-          bytes: bytes,
-          provider: _createProvider(bytes),
-          format: _detectFormat(file.path),
-        ));
+        newImages.add(
+          SelectedImage(
+            bytes: bytes,
+            provider: _createProvider(bytes),
+            format: _detectFormat(file.path),
+          ),
+        );
       }
 
       setState(() {
@@ -986,9 +994,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('选择图片失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('选择图片失败: $e')));
       }
     }
   }
@@ -1011,9 +1019,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('选择图片失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('选择图片失败: $e')));
       }
     }
   }
@@ -1025,17 +1033,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           ? fileName.split('.').last.toLowerCase()
           : 'png';
       setState(() {
-        _selectedImages.add(SelectedImage(
-          bytes: data,
-          provider: MemoryImage(data),
-          format: format,
-        ));
+        _selectedImages.add(
+          SelectedImage(
+            bytes: data,
+            provider: MemoryImage(data),
+            format: format,
+          ),
+        );
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('处理图片失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('处理图片失败: $e')));
       }
     }
   }
@@ -1046,25 +1056,27 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       final bytes = await ImageManifest.readFile(record.storagePath);
       if (bytes == null || bytes.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('无法读取图片文件')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('无法读取图片文件')));
         }
         return;
       }
 
       setState(() {
-        _selectedImages.add(SelectedImage(
-          bytes: bytes,
-          provider: MemoryImage(bytes),
-          format: record.format,
-        ));
+        _selectedImages.add(
+          SelectedImage(
+            bytes: bytes,
+            provider: MemoryImage(bytes),
+            format: record.format,
+          ),
+        );
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('读取图片失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('读取图片失败: $e')));
       }
     }
   }
@@ -1106,11 +1118,16 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.broken_image,
-                              size: 48, color: Colors.white54),
+                          Icon(
+                            Icons.broken_image,
+                            size: 48,
+                            color: Colors.white54,
+                          ),
                           SizedBox(height: 8),
-                          Text('无法加载图片',
-                              style: TextStyle(color: Colors.white54)),
+                          Text(
+                            '无法加载图片',
+                            style: TextStyle(color: Colors.white54),
+                          ),
                         ],
                       ),
                     ),
@@ -1175,10 +1192,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     // Create a background task for tracking
     final timestamp = _currentTimestamp();
     final title = 'OCR_$timestamp';
-    final taskId = ref.read(backgroundTasksProvider.notifier).addTask(
-      type: BackgroundTaskType.ocr,
-      title: title,
-    );
+    final taskId = ref
+        .read(backgroundTasksProvider.notifier)
+        .addTask(type: BackgroundTaskType.ocr, title: title);
 
     // Pop back to home page immediately so user can see task progress
     if (mounted) {
@@ -1204,9 +1220,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       );
     }
   }
-
-  Future<void> _performOcr(OcrConfig ocrConfig, String taskId,
-      {String? title}) async {
+  Future<void> _performOcr(
+    OcrConfig ocrConfig,
+    String taskId, {
+    String? title,
+  }) async {
     OcrService? service;
     try {
       if (mounted) {
@@ -1232,9 +1250,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         final batchInput = _selectedImages
             .map((img) => (img.bytes, img.format))
             .toList();
-        result = await service.recognizeBatch(
-          imageBytesList: batchInput,
-        );
+        result = await service.recognizeBatch(imageBytesList: batchInput);
       }
 
       // Save the OCR result as a text file using TextManifest
@@ -1245,10 +1261,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       ref.read(backgroundTasksProvider.notifier).completeTask(taskId);
     } catch (e) {
       // Mark task as failed (widget may be gone, but notifier is independent)
-      ref.read(backgroundTasksProvider.notifier).failTask(
-        taskId,
-        error: 'OCR识别失败: $e',
-      );
+      ref
+          .read(backgroundTasksProvider.notifier)
+          .failTask(taskId, error: 'OCR识别失败: $e');
     }
   }
 
@@ -1266,15 +1281,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final storageFileName = '$hash.txt';
 
     await TextManifest.writeText(storageFileName, text);
-    await TextManifest.addRecord(TextRecord(
-      name: title ?? 'OCR_${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}',
-      hash: hash,
-      format: 'txt',
-      createdAt: now,
-      size: bytes.length,
-      folder: _saveFolder,
-      textLength: text.length,
-    ));
+    await TextManifest.addRecord(
+      TextRecord(
+        name:
+            title ??
+            'OCR_${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}',
+        hash: hash,
+        format: 'txt',
+        createdAt: now,
+        size: bytes.length,
+        folder: _saveFolder,
+        textLength: text.length,
+      ),
+    );
   }
 
   // ==================================================================
@@ -1299,7 +1318,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             children: [
               // Header
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.red.withValues(alpha: 0.1),
                   borderRadius: const BorderRadius.only(
@@ -1335,11 +1357,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                         shrinkWrap: true,
                         children: [
                           if (_lastRawRequest != null) ...[
-                            _buildJsonBlock('请求 (Request)', _lastRawRequest, isDark),
+                            _buildJsonBlock(
+                              '请求 (Request)',
+                              _lastRawRequest,
+                              isDark,
+                            ),
                             const SizedBox(height: 12),
                           ],
                           if (_lastRawResponse != null)
-                            _buildJsonBlock('响应 (Response)', _lastRawResponse, isDark),
+                            _buildJsonBlock(
+                              '响应 (Response)',
+                              _lastRawResponse,
+                              isDark,
+                            ),
                         ],
                       )
                     : const Padding(
@@ -1347,7 +1377,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                         child: Center(
                           child: Text(
                             '无详细数据',
-                            style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontStyle: FontStyle.italic,
+                            ),
                           ),
                         ),
                       ),

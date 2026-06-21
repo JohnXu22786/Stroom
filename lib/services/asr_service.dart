@@ -49,13 +49,12 @@ class AsrConfig {
     String? apiKey,
     String? host,
     String? language,
-  }) =>
-      AsrConfig(
-        model: model ?? this.model,
-        apiKey: apiKey ?? this.apiKey,
-        host: host ?? this.host,
-        language: language ?? this.language,
-      );
+  }) => AsrConfig(
+    model: model ?? this.model,
+    apiKey: apiKey ?? this.apiKey,
+    host: host ?? this.host,
+    language: language ?? this.language,
+  );
 }
 
 // ============================================================================
@@ -67,10 +66,7 @@ class AsrResult {
   final String text;
   final int processingTimeMs;
 
-  const AsrResult({
-    required this.text,
-    this.processingTimeMs = 0,
-  });
+  const AsrResult({required this.text, this.processingTimeMs = 0});
 }
 
 // ============================================================================
@@ -119,11 +115,11 @@ class AsrService {
     return '${key.substring(0, 8)}...${key.substring(key.length - 4)}';
   }
 
-  AsrService({
-    required this.config,
-    Dio? dio,
-  }) : _dio = dio ??
-            Dio(BaseOptions(
+  AsrService({required this.config, Dio? dio})
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
               headers: {
                 if (config.apiKey.isNotEmpty)
                   'Authorization': 'Bearer ${config.apiKey}',
@@ -132,7 +128,8 @@ class AsrService {
               connectTimeout: const Duration(seconds: 30),
               receiveTimeout: const Duration(seconds: 120),
               sendTimeout: const Duration(seconds: 60),
-            ));
+            ),
+          );
 
   /// Dio default headers, exposed for testing.
   Map<String, dynamic> get defaultHeaders => _dio.options.headers;
@@ -183,7 +180,8 @@ class AsrService {
     };
     lastRequestUrl = config.transcribeUrl;
     lastRequestHeaders = {
-      if (config.apiKey.isNotEmpty) 'Authorization': 'Bearer ${_maskApiKey(config.apiKey)}',
+      if (config.apiKey.isNotEmpty)
+        'Authorization': 'Bearer ${_maskApiKey(config.apiKey)}',
     };
     lastResponseData = null;
     lastResponseStatusCode = null;
@@ -193,9 +191,7 @@ class AsrService {
       final response = await _dio.post(
         config.transcribeUrl,
         data: formData,
-        options: Options(
-          contentType: 'multipart/form-data',
-        ),
+        options: Options(contentType: 'multipart/form-data'),
       );
 
       stopwatch.stop();
@@ -223,11 +219,9 @@ class AsrService {
   /// Capture response-level diagnostic fields from a [DioException].
   void _captureDioExceptionDiagnostics(DioException e) {
     if (e.response?.data is Map) {
-      lastResponseData =
-          Map<String, dynamic>.from(e.response!.data as Map);
+      lastResponseData = Map<String, dynamic>.from(e.response!.data as Map);
     } else if (e.response?.data is String) {
-      lastResponseData =
-          <String, dynamic>{'raw': e.response!.data as String};
+      lastResponseData = <String, dynamic>{'raw': e.response!.data as String};
     } else {
       lastResponseData = null;
     }
@@ -243,11 +237,11 @@ class AsrService {
       }
       final text = responseData['text'];
       if (text is! String || text.trim().isEmpty) {
-        throw Exception('语音识别返回了空的文本');
+        throw Exception('音频转写返回了空的文本');
       }
       return text;
     } catch (e) {
-      throw Exception('解析语音识别结果失败: $e');
+      throw Exception('解析音频转写结果失败: $e');
     }
   }
 }
