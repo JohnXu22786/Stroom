@@ -16,6 +16,7 @@ class FileManagerConfig<T extends FileRecord> {
   final void Function(T, String)? onExtraMenuAction;
   final void Function(T)? onLongPress;
   final void Function(String)? onCurrentFolderChanged;
+  final VoidCallback? onBackToParent;
   final List<Widget> Function()? extraAppBarActions;
 
   const FileManagerConfig({
@@ -31,6 +32,7 @@ class FileManagerConfig<T extends FileRecord> {
     this.onExtraMenuAction,
     this.onLongPress,
     this.onCurrentFolderChanged,
+    this.onBackToParent,
     this.extraAppBarActions,
   });
 
