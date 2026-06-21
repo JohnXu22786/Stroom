@@ -12,6 +12,7 @@ import '../services/asr_service.dart';
 import '../utils/data_sanitizer.dart';
 import '../utils/file_manifest.dart';
 import '../utils/text_manifest.dart';
+import '../widgets/app_media_picker_dialog.dart';
 import '../widgets/folder_picker_dialog.dart';
 import 'ocr/ocr_shared.dart';
 
@@ -30,11 +31,7 @@ AsrConfig? _resolveAsrConfig(WidgetRef ref) {
         final model = config.models.isNotEmpty
             ? config.models.first.modelId
             : 'whisper-1';
-        return AsrConfig(
-          host: config.host,
-          apiKey: config.key,
-          model: model,
-        );
+        return AsrConfig(host: config.host, apiKey: config.key, model: model);
       }
     }
   }
@@ -65,11 +62,7 @@ class SelectedAudio {
   final String name;
   final String format;
 
-  SelectedAudio({
-    required this.bytes,
-    required this.name,
-    this.format = 'wav',
-  });
+  SelectedAudio({required this.bytes, required this.name, this.format = 'wav'});
 }
 
 // ============================================================================
@@ -174,9 +167,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: cs.outlineVariant.withValues(alpha: 0.4),
-          ),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         child: Row(
@@ -266,9 +257,10 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   ),
                 ),
                 icon: const Icon(Icons.mic, size: 20),
-                label: const Text('录音选择',
-                    style: TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w600)),
+                label: const Text(
+                  '录音选择',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
           ),
@@ -284,9 +276,10 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   ),
                 ),
                 icon: const Icon(Icons.audio_file_outlined, size: 20),
-                label: const Text('音频文件',
-                    style: TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w600)),
+                label: const Text(
+                  '音频文件',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
           ),
@@ -300,8 +293,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.multitrack_audio_outlined,
-              size: 64, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+          Icon(
+            Icons.multitrack_audio_outlined,
+            size: 64,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+          ),
           const SizedBox(height: 16),
           Text(
             '暂未选择音频文件',
@@ -353,10 +349,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               const SizedBox(height: 8),
               Text(
                 '格式: ${_selectedAudio!.format.toUpperCase()}  |  大小: ${_formatFileSize(_selectedAudio!.bytes.length)}',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: cs.onSurfaceVariant,
-                ),
+                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
               ),
               const SizedBox(height: 16),
               SizedBox(
@@ -384,7 +377,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         children: [
           Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: Icon(Icons.error_outline, color: cs.onErrorContainer, size: 18),
+            child: Icon(
+              Icons.error_outline,
+              color: cs.onErrorContainer,
+              size: 18,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -460,10 +457,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   _transcriptionResult!.length > 200
                       ? '${_transcriptionResult!.substring(0, 200)}...'
                       : _transcriptionResult!,
-                  style: TextStyle(
-                    color: cs.onPrimaryContainer,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: cs.onPrimaryContainer, fontSize: 12),
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -489,9 +483,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
         decoration: BoxDecoration(
           color: cs.surface,
-          border: Border(
-            top: BorderSide(color: cs.outlineVariant, width: 0.5),
-          ),
+          border: Border(top: BorderSide(color: cs.outlineVariant, width: 0.5)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -519,7 +511,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                 label: Text(
                   _isProcessing ? '识别中...' : '开始识别',
                   style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w600),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
@@ -538,9 +532,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.4),
-        ),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -553,10 +545,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               const SizedBox(width: 8),
               Text(
                 '保存至',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: cs.onSurfaceVariant,
-                ),
+                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
               ),
               const SizedBox(width: 4),
               Text(
@@ -568,11 +557,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                 ),
               ),
               const Spacer(),
-              Icon(
-                Icons.chevron_right,
-                size: 16,
-                color: cs.onSurfaceVariant,
-              ),
+              Icon(Icons.chevron_right, size: 16, color: cs.onSurfaceVariant),
             ],
           ),
         ),
@@ -623,9 +608,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               const SizedBox(height: 24),
               Text(
                 '选择音频来源',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
               Column(
@@ -674,9 +659,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       final bytes = file.bytes;
       if (bytes == null || bytes.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('无法读取音频文件')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('无法读取音频文件')));
         }
         return;
       }
@@ -692,134 +677,96 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('选择音频文件失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('选择音频文件失败: $e')));
       }
     }
   }
 
-  /// Show a dialog to pick from in-app audio recordings.
+  /// Show a dialog to pick from in-app audio recordings using the unified
+  /// media picker (matching the OCR image picker pattern).
   Future<void> _showInAppAudioPicker() async {
-    // Load latest records
-    await ref.read(audioRecordsProvider.notifier).loadRecords();
-    final records = ref.read(audioRecordsProvider);
-
-    if (!mounted) return;
-
-    if (records.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('暂无可用的应用内录音')),
-      );
-      return;
-    }
-
-    final cs = Theme.of(context).colorScheme;
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        child: Container(
-          constraints: BoxConstraints(
-            maxWidth: 500,
-            maxHeight: MediaQuery.of(ctx).size.height * 0.6,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Header
+    final result = await showMediaPickerDialog<AudioRecord>(
+      context,
+      MediaPickerConfig<AudioRecord>(
+        title: '选择应用内录音',
+        emptyIcon: Icons.multitrack_audio_outlined,
+        emptyText: '暂无录音',
+        fileIcon: Icons.audiotrack,
+        fileIconColor: Colors.green,
+        multiSelect: false,
+        loadRecords: () async {
+          await ref.read(audioRecordsProvider.notifier).loadRecords();
+          return ref.read(audioRecordsProvider);
+        },
+        loadFolders: () => FileManifest.getAllFolders(),
+        readFile: (record) => FileManifest.readFile(record.storagePath),
+        displayName: (record) => record.name,
+        subtitleBuilder: (record) => Row(
+          children: [
+            Text(
+              record.format.toUpperCase(),
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              width: 3,
+              height: 3,
+              decoration: BoxDecoration(
+                color: Colors.grey[400]!,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              _formatFileSize(record.size),
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            if (record.duration > 0) ...[
+              const SizedBox(width: 6),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Row(
-                  children: [
-                    Icon(Icons.library_music_outlined,
-                        size: 18, color: cs.primary),
-                    const SizedBox(width: 8),
-                    Text(
-                      '选择应用内录音',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: cs.onSurface,
-                      ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 18),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ],
+                width: 3,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: Colors.grey[400]!,
+                  shape: BoxShape.circle,
                 ),
               ),
-              const Divider(height: 1),
-              // List
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: records.length,
-                  itemBuilder: (context, index) {
-                    final record = records[index];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: cs.primaryContainer,
-                        child: Icon(Icons.audiotrack,
-                            color: cs.onPrimaryContainer, size: 20),
-                      ),
-                      title: Text(
-                        record.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 14),
-                      ),
-                      subtitle: Text(
-                        '${record.format.toUpperCase()}  ${_formatFileSize(record.size)}  ${record.duration > 0 ? '${record.duration}秒' : ''}',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      onTap: () async {
-                        Navigator.pop(ctx);
-                        await _selectFromInAppAudio(record);
-                      },
-                    );
-                  },
-                ),
+              const SizedBox(width: 6),
+              Text(
+                '${record.duration}秒',
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
               ),
             ],
-          ),
+          ],
         ),
       ),
     );
-  }
 
-  /// Select an in-app audio record and read its bytes.
-  Future<void> _selectFromInAppAudio(AudioRecord record) async {
-    try {
-      final bytes = await FileManifest.readFile(record.storagePath);
-      if (bytes == null || bytes.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('无法读取录音文件')),
-          );
-        }
-        return;
-      }
+    if (result == null || result.isEmpty || !mounted) return;
 
-      setState(() {
-        _selectedAudio = SelectedAudio(
-          bytes: bytes,
-          name: record.name,
-          format: record.format,
-        );
-        _errorMessage = null;
-        _transcriptionResult = null;
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('读取录音失败: $e')),
-        );
+    final entry = result.first;
+
+    // Look up the AudioRecord to get the correct format (displayName is bare name)
+    String format = 'wav';
+    final records = ref.read(audioRecordsProvider);
+    for (final r in records) {
+      if (r.name == entry.key) {
+        format = r.format;
+        break;
       }
     }
+
+    setState(() {
+      _selectedAudio = SelectedAudio(
+        bytes: entry.value,
+        name: entry.key,
+        format: format,
+      );
+      _errorMessage = null;
+      _transcriptionResult = null;
+    });
   }
 
   void _clearAll() {
@@ -848,10 +795,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     // Create a background task for tracking
     final timestamp = _currentTimestamp();
     final title = 'ASR_$timestamp';
-    final taskId = ref.read(backgroundTasksProvider.notifier).addTask(
-      type: BackgroundTaskType.asr,
-      title: title,
-    );
+    final taskId = ref
+        .read(backgroundTasksProvider.notifier)
+        .addTask(type: BackgroundTaskType.asr, title: title);
 
     // Pop back to home page immediately so user can see task progress
     if (mounted) {
@@ -886,10 +832,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       ref.read(backgroundTasksProvider.notifier).completeTask(taskId);
     } catch (e) {
       // Mark task as failed (widget may be gone, but notifier is independent)
-      ref.read(backgroundTasksProvider.notifier).failTask(
-        taskId,
-        error: 'ASR识别失败: $e',
-      );
+      ref
+          .read(backgroundTasksProvider.notifier)
+          .failTask(taskId, error: 'ASR识别失败: $e');
     }
   }
 
@@ -907,15 +852,18 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     final storageFileName = '$hash.txt';
 
     await TextManifest.writeText(storageFileName, text);
-    await TextManifest.addRecord(TextRecord(
-      name: title ?? 'ASR_${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}',
-      hash: hash,
-      format: 'txt',
-      createdAt: now,
-      size: bytes.length,
-      folder: _saveFolder,
-      textLength: text.length,
-    ));
+    await TextManifest.addRecord(
+      TextRecord(
+        name: title ??
+            'ASR_${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}',
+        hash: hash,
+        format: 'txt',
+        createdAt: now,
+        size: bytes.length,
+        folder: _saveFolder,
+        textLength: text.length,
+      ),
+    );
   }
 
   // ==================================================================
@@ -940,7 +888,10 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             children: [
               // Header
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.red.withValues(alpha: 0.1),
                   borderRadius: const BorderRadius.only(
@@ -976,11 +927,19 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                         shrinkWrap: true,
                         children: [
                           if (_lastRawRequest != null) ...[
-                            _buildJsonBlock('请求 (Request)', _lastRawRequest, isDark),
+                            _buildJsonBlock(
+                              '请求 (Request)',
+                              _lastRawRequest,
+                              isDark,
+                            ),
                             const SizedBox(height: 12),
                           ],
                           if (_lastRawResponse != null)
-                            _buildJsonBlock('响应 (Response)', _lastRawResponse, isDark),
+                            _buildJsonBlock(
+                              '响应 (Response)',
+                              _lastRawResponse,
+                              isDark,
+                            ),
                         ],
                       )
                     : const Padding(
@@ -988,7 +947,10 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                         child: Center(
                           child: Text(
                             '无详细数据',
-                            style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontStyle: FontStyle.italic,
+                            ),
                           ),
                         ),
                       ),
