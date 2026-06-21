@@ -15,6 +15,7 @@ import '../utils/sort_config.dart';
 import '../utils/audio_playback.dart';
 import '../utils/audio_utils.dart';
 import '../widgets/file_manager_view.dart';
+import 'files_page_shared.dart';
 import 'tts_create_page.dart';
 import 'audio_player_page.dart';
 import 'audio_recording_page.dart';
@@ -53,8 +54,9 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           .where((t) => t.status == TaskStatus.running)
           .toList();
       if (runningTasks.isNotEmpty) {
-        final errorMsg =
-            state == AppLifecycleState.detached ? '应用已退出，合成中断' : '应用进入后台，合成中断';
+        final errorMsg = state == AppLifecycleState.detached
+            ? '应用已退出，合成中断'
+            : '应用进入后台，合成中断';
         ref
             .read(taskListProvider.notifier)
             .failAllRunningTasks(error: errorMsg);
@@ -77,7 +79,10 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
   }
 
   String _uniqueAudioName(
-      String baseName, List<AudioRecord> records, Set<String> usedInBatch) {
+    String baseName,
+    List<AudioRecord> records,
+    Set<String> usedInBatch,
+  ) {
     bool taken(String name) =>
         usedInBatch.contains(name) ||
         records.any((r) => r.name == name && r.folder == _currentFolder);
@@ -136,14 +141,16 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         usedInBatch.add(displayName);
 
         await FileManifest.writeFile('$hash.$format', bytes);
-        await FileManifest.addRecord(AudioRecord(
-          name: displayName,
-          hash: hash,
-          format: format,
-          createdAt: DateTime.now(),
-          size: bytes.length,
-          folder: _currentFolder,
-        ));
+        await FileManifest.addRecord(
+          AudioRecord(
+            name: displayName,
+            hash: hash,
+            format: format,
+            createdAt: DateTime.now(),
+            size: bytes.length,
+            folder: _currentFolder,
+          ),
+        );
         count++;
       }
 
@@ -154,8 +161,9 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('已导入 $count 个音频文件'),
-              duration: const Duration(seconds: 2)),
+            content: Text('已导入 $count 个音频文件'),
+            duration: const Duration(seconds: 2),
+          ),
         );
       }
     } catch (e) {
@@ -165,9 +173,10 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         } catch (_) {}
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('导入失败: $e'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 3)),
+            content: Text('导入失败: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
         );
       }
     } finally {
@@ -193,16 +202,19 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       var data = await FileManifest.readFile(file.storagePath);
       if (data == null || data.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('文件数据读取失败')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('文件数据读取失败')));
         }
         return;
       }
 
       var exportFormat = file.format;
-      final fixed = ensureValidAudioFormat(data,
-          requestedFormat: exportFormat, sampleRate: 24000);
+      final fixed = ensureValidAudioFormat(
+        data,
+        requestedFormat: exportFormat,
+        sampleRate: 24000,
+      );
       data = fixed.$1;
       exportFormat = fixed.$2;
 
@@ -220,16 +232,16 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           bytes: data,
         );
         if (outputPath != null && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('已导出到: $outputPath')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('已导出到: $outputPath')));
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('导出失败: $e')));
       }
     }
   }
@@ -247,14 +259,19 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
             const SizedBox(height: 12),
             Row(
               children: [
-                const Icon(Icons.warning_amber_rounded,
-                    size: 18, color: Colors.orange),
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  size: 18,
+                  color: Colors.orange,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     '重新生成后将覆盖原音频文件。',
                     style: TextStyle(
-                        color: Colors.orange[700], fontWeight: FontWeight.w500),
+                      color: Colors.orange[700],
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ],
@@ -263,8 +280,9 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('取消')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
@@ -299,8 +317,9 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('分享: $storagePath'),
-            duration: const Duration(seconds: 2)),
+          content: Text('分享: $storagePath'),
+          duration: const Duration(seconds: 2),
+        ),
       );
     }
   }
@@ -311,7 +330,9 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('文件列表已刷新'), duration: Duration(seconds: 2)),
+          content: Text('文件列表已刷新'),
+          duration: Duration(seconds: 2),
+        ),
       );
     }
   }
@@ -325,27 +346,32 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       final source = records.firstWhere((r) => r.id == id);
       String copyName = '${source.name}_副本';
       int copyIdx = 2;
-      while (records
-          .any((r) => r.name == copyName && r.folder == selectedFolder)) {
+      while (records.any(
+        (r) => r.name == copyName && r.folder == selectedFolder,
+      )) {
         copyName = '${source.name}_副本 ($copyIdx)';
         copyIdx++;
       }
-      await FileManifest.addRecord(AudioRecord(
-        name: copyName,
-        hash: source.hash,
-        format: source.format,
-        createdAt: DateTime.now(),
-        size: source.size,
-        folder: selectedFolder,
-        sourceText: source.sourceText,
-      ));
+      await FileManifest.addRecord(
+        AudioRecord(
+          name: copyName,
+          hash: source.hash,
+          format: source.format,
+          createdAt: DateTime.now(),
+          size: source.size,
+          folder: selectedFolder,
+          sourceText: source.sourceText,
+        ),
+      );
       await ref.read(audioRecordsProvider.notifier).loadRecords();
       await ref.read(folderListProvider.notifier).loadFolders();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('复制失败: $e'), duration: const Duration(seconds: 2)),
+            content: Text('复制失败: $e'),
+            duration: const Duration(seconds: 2),
+          ),
         );
       }
     }
@@ -359,9 +385,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       } else {
         outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
         if (outputDir == null) {
-          outputDir = await FilePicker.getDirectoryPath(
-            dialogTitle: '选择导出目录',
-          );
+          outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
           if (outputDir == null) return;
         }
       }
@@ -378,8 +402,11 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         if (data == null || data.isEmpty) continue;
 
         var exportFormat = file.format;
-        final fixed = ensureValidAudioFormat(data,
-            requestedFormat: exportFormat, sampleRate: 24000);
+        final fixed = ensureValidAudioFormat(
+          data,
+          requestedFormat: exportFormat,
+          sampleRate: 24000,
+        );
         data = fixed.$1;
         exportFormat = fixed.$2;
 
@@ -416,7 +443,9 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
   }
 
   Future<void> _exportFolders(
-      List<String> names, String targetDirectory) async {
+    List<String> names,
+    String targetDirectory,
+  ) async {
     try {
       if (kIsWeb) {
         if (!mounted) return;
@@ -424,8 +453,9 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('文件夹导出'),
-            content:
-                const Text('浏览器暂不支持选择导出目录，你可以逐个导出文件夹内的文件，或使用 App 以获得完整体验。'),
+            content: const Text(
+              '浏览器暂不支持选择导出目录，你可以逐个导出文件夹内的文件，或使用 App 以获得完整体验。',
+            ),
             actions: [
               TextButton(
                 key: const Key('fm_web_export_cancel_btn'),
@@ -447,15 +477,19 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         final records = ref.read(audioRecordsProvider);
         var exportedCount = 0;
         for (final folderName in names) {
-          final folderFiles =
-              records.where((r) => r.folder == folderName).toList();
+          final folderFiles = records
+              .where((r) => r.folder == folderName)
+              .toList();
           for (final file in folderFiles) {
             var data = await FileManifest.readFile(file.storagePath);
             if (data == null || data.isEmpty) continue;
 
             var exportFormat = file.format;
-            final fixed = ensureValidAudioFormat(data,
-                requestedFormat: exportFormat, sampleRate: 24000);
+            final fixed = ensureValidAudioFormat(
+              data,
+              requestedFormat: exportFormat,
+              sampleRate: 24000,
+            );
             data = fixed.$1;
             exportFormat = fixed.$2;
 
@@ -478,9 +512,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
 
       String? outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
       if (outputDir == null) {
-        outputDir = await FilePicker.getDirectoryPath(
-          dialogTitle: '选择导出目录',
-        );
+        outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
         if (outputDir == null) return;
       }
 
@@ -490,8 +522,9 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       var exportedCount = 0;
 
       for (final folderName in names) {
-        final folderFiles =
-            records.where((r) => r.folder == folderName).toList();
+        final folderFiles = records
+            .where((r) => r.folder == folderName)
+            .toList();
         if (folderFiles.isEmpty) continue;
 
         // Create folder in output directory (recreate folder hierarchy)
@@ -503,8 +536,11 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           if (data == null || data.isEmpty) continue;
 
           var exportFormat = file.format;
-          final fixed = ensureValidAudioFormat(data,
-              requestedFormat: exportFormat, sampleRate: 24000);
+          final fixed = ensureValidAudioFormat(
+            data,
+            requestedFormat: exportFormat,
+            sampleRate: 24000,
+          );
           data = fixed.$1;
           exportFormat = fixed.$2;
 
@@ -576,18 +612,22 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
                 child: ElevatedButton.icon(
                   onPressed: () {
                     Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const AudioRecordingPage()));
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AudioRecordingPage(),
+                      ),
+                    );
                   },
                   style: ElevatedButton.styleFrom(
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   icon: const Icon(Icons.mic, size: 20),
-                  label: const Text('开始录音',
-                      style: TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w600)),
+                  label: const Text(
+                    '开始录音',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
                 ),
               ),
             ),
@@ -599,18 +639,20 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
                 child: ElevatedButton.icon(
                   onPressed: () {
                     Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const TTSCreatePage()));
+                      context,
+                      MaterialPageRoute(builder: (_) => const TTSCreatePage()),
+                    );
                   },
                   style: ElevatedButton.styleFrom(
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   icon: const Icon(Icons.add_circle_outline, size: 20),
-                  label: const Text('生成录音',
-                      style: TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w600)),
+                  label: const Text(
+                    '生成录音',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
                 ),
               ),
             ),
@@ -623,19 +665,26 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
                   onPressed: _importAudio,
                   style: ElevatedButton.styleFrom(
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   icon: const Icon(Icons.file_download_outlined, size: 20),
-                  label: const Text('导入音频',
-                      style: TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w600)),
+                  label: const Text(
+                    '导入音频',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
                 ),
               ),
             ),
           ],
         ),
       ),
-      onCurrentFolderChanged: (f) => _currentFolder = f,
+      onCurrentFolderChanged: (f) {
+        _currentFolder = f;
+        ref.read(filesPageBackHandledProvider.notifier).state = false;
+      },
+      onBackToParent: () =>
+          ref.read(filesPageBackHandledProvider.notifier).state = true,
       showThumbnailToggle: false,
       fileIconBuilder: (file) => Container(
         width: 44,
@@ -661,34 +710,38 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         const PopupMenuItem(
           value: 'play',
           child: ListTile(
-              leading: Icon(Icons.play_arrow, size: 20),
-              title: Text('播放'),
-              dense: true,
-              contentPadding: EdgeInsets.zero),
+            leading: Icon(Icons.play_arrow, size: 20),
+            title: Text('播放'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
         ),
         const PopupMenuItem(
           value: 'regenerate',
           child: ListTile(
-              leading: Icon(Icons.refresh, size: 20),
-              title: Text('重新生成'),
-              dense: true,
-              contentPadding: EdgeInsets.zero),
+            leading: Icon(Icons.refresh, size: 20),
+            title: Text('重新生成'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
         ),
         const PopupMenuItem(
           value: 'share',
           child: ListTile(
-              leading: Icon(Icons.share, size: 20),
-              title: Text('分享'),
-              dense: true,
-              contentPadding: EdgeInsets.zero),
+            leading: Icon(Icons.share, size: 20),
+            title: Text('分享'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
         ),
         const PopupMenuItem(
           value: 'export',
           child: ListTile(
-              leading: Icon(Icons.file_download, size: 20),
-              title: Text('导出到本地'),
-              dense: true,
-              contentPadding: EdgeInsets.zero),
+            leading: Icon(Icons.file_download, size: 20),
+            title: Text('导出到本地'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
         ),
       ],
       onExtraMenuAction: (file, value) {

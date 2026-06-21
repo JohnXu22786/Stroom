@@ -18,6 +18,7 @@ import '../widgets/camera_choice_dialog.dart';
 import '../widgets/file_manager_view.dart';
 import '../widgets/image_preview_dialog.dart';
 import 'camera_page.dart';
+import 'files_page_shared.dart';
 import 'gallery_shared.dart';
 import 'image_editor_page.dart';
 
@@ -56,8 +57,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   bool _isImporting = false;
 
   /// 生成缩略图（最大 256x256，保持宽高比）
-  Future<Uint8List> generateThumbnail(Uint8List imageData,
-      {int maxDimension = 256}) async {
+  Future<Uint8List> generateThumbnail(
+    Uint8List imageData, {
+    int maxDimension = 256,
+  }) async {
     try {
       final codec = await ui.instantiateImageCodec(
         imageData,
@@ -65,8 +68,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         targetHeight: maxDimension,
       );
       final frame = await codec.getNextFrame();
-      final byteData =
-          await frame.image.toByteData(format: ui.ImageByteFormat.png);
+      final byteData = await frame.image.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
       if (byteData == null) return imageData;
       return byteData.buffer.asUint8List();
     } catch (e) {
@@ -135,9 +139,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     final data = await ImageManifest.readFile(file.storagePath);
     if (data == null || data.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('无法加载图片')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('无法加载图片')));
       }
       return;
     }
@@ -156,9 +160,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     if (shouldEdit == true && mounted) {
       final result = await Navigator.push<ImageEditorResult>(
         context,
-        MaterialPageRoute(
-          builder: (_) => ImageEditorPage(imageBytes: data),
-        ),
+        MaterialPageRoute(builder: (_) => ImageEditorPage(imageBytes: data)),
       );
 
       if (result == null || !mounted) return;
@@ -178,14 +180,16 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           }
 
           // Create new record
-          await ImageManifest.addRecord(ImageRecord(
-            name: '${file.name}_编辑版',
-            hash: newHash,
-            format: file.format,
-            createdAt: DateTime.now(),
-            size: editedBytes.length,
-            folder: file.folder,
-          ));
+          await ImageManifest.addRecord(
+            ImageRecord(
+              name: '${file.name}_编辑版',
+              hash: newHash,
+              format: file.format,
+              createdAt: DateTime.now(),
+              size: editedBytes.length,
+              folder: file.folder,
+            ),
+          );
 
           // Refresh
           await ref.read(imageRecordsProvider.notifier).loadRecords();
@@ -200,10 +204,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         } catch (e) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('另存失败: $e'),
-                backgroundColor: Colors.red,
-              ),
+              SnackBar(content: Text('另存失败: $e'), backgroundColor: Colors.red),
             );
           }
         }
@@ -230,14 +231,16 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           // Since copyWith doesn't allow changing hash, update via manifest
           // Delete old record and create new one
           await ImageManifest.deleteRecord(file.id);
-          await ImageManifest.addRecord(ImageRecord(
-            name: file.name,
-            hash: newHash,
-            format: file.format,
-            createdAt: file.createdAt,
-            size: editedBytes.length,
-            folder: file.folder,
-          ));
+          await ImageManifest.addRecord(
+            ImageRecord(
+              name: file.name,
+              hash: newHash,
+              format: file.format,
+              createdAt: file.createdAt,
+              size: editedBytes.length,
+              folder: file.folder,
+            ),
+          );
 
           // Refresh
           await ref.read(imageRecordsProvider.notifier).loadRecords();
@@ -286,10 +289,11 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       filePath = await Navigator.push<String>(
         context,
         MaterialPageRoute(
-            builder: (_) => CameraPage(
-                  folder: selectedFolder,
-                  editAfterCapture: result.editAfterCapture,
-                )),
+          builder: (_) => CameraPage(
+            folder: selectedFolder,
+            editAfterCapture: result.editAfterCapture,
+          ),
+        ),
       );
     } else {
       try {
@@ -307,20 +311,25 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           final now = DateTime.now();
           final timestamp =
               '${now.year}${padInt(now.month)}${padInt(now.day)}_${padInt(now.hour)}${padInt(now.minute)}${padInt(now.second)}';
-          await ImageManifest.addRecord(ImageRecord(
-            name: '照片_$timestamp',
-            hash: hash,
-            format: format,
-            createdAt: DateTime.now(),
-            size: bytes.length,
-            folder: selectedFolder,
-          ));
+          await ImageManifest.addRecord(
+            ImageRecord(
+              name: '照片_$timestamp',
+              hash: hash,
+              format: format,
+              createdAt: DateTime.now(),
+              size: bytes.length,
+              folder: selectedFolder,
+            ),
+          );
           filePath = await ImageManifest.readFilePath(fileName);
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('拍照失败: $e'), duration: const Duration(seconds: 2)),
+            SnackBar(
+              content: Text('拍照失败: $e'),
+              duration: const Duration(seconds: 2),
+            ),
           );
         }
       }
@@ -332,12 +341,16 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       if (filePath != null && filePath.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('照片已保存'), duration: Duration(seconds: 2)),
+            content: Text('照片已保存'),
+            duration: Duration(seconds: 2),
+          ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('图片列表已刷新'), duration: Duration(seconds: 2)),
+            content: Text('图片列表已刷新'),
+            duration: Duration(seconds: 2),
+          ),
         );
       }
     }
@@ -381,9 +394,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         final format = ext.isNotEmpty ? ext : 'jpg';
         if (!_supportedFormats.contains(format)) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('跳过不支持格式: $format')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('跳过不支持格式: $format')));
           }
           continue;
         }
@@ -399,13 +412,16 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         final thumbnailBytes = await generateThumbnail(bytes);
         final thumbFileName = '${hash}_thumb.png';
         await ImageManifest.writeFile(thumbFileName, thumbnailBytes);
-        await ImageManifest.addRecord(ImageRecord(
+        await ImageManifest.addRecord(
+          ImageRecord(
             name: displayName,
             hash: hash,
             format: format,
             createdAt: DateTime.now(),
             size: bytes.length,
-            folder: _currentFolder));
+            folder: _currentFolder,
+          ),
+        );
         count++;
       }
 
@@ -431,7 +447,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         } catch (_) {}
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('导入失败: $e'), duration: const Duration(seconds: 3)),
+            content: Text('导入失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
         );
       }
     }
@@ -445,9 +463,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       final data = await ImageManifest.readFile(file.storagePath);
       if (data == null || data.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('文件数据读取失败')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('文件数据读取失败')));
         }
         return;
       }
@@ -472,7 +490,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('导出失败: $e'), duration: const Duration(seconds: 3)),
+            content: Text('导出失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
         );
       }
     }
@@ -488,9 +508,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       } else {
         outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
         if (outputDir == null) {
-          outputDir = await FilePicker.getDirectoryPath(
-            dialogTitle: '选择导出目录',
-          );
+          outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
           if (outputDir == null) return;
         }
       }
@@ -545,7 +563,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   }
 
   Future<void> _exportFolders(
-      List<String> names, String targetDirectory) async {
+    List<String> names,
+    String targetDirectory,
+  ) async {
     // For each folder, export all files within preserving folder structure
     try {
       if (kIsWeb) {
@@ -554,8 +574,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('文件夹导出'),
-            content:
-                const Text('浏览器暂不支持选择导出目录，你可以逐个导出文件夹内的文件，或使用 App 以获得完整体验。'),
+            content: const Text(
+              '浏览器暂不支持选择导出目录，你可以逐个导出文件夹内的文件，或使用 App 以获得完整体验。',
+            ),
             actions: [
               TextButton(
                 key: const Key('fm_web_export_cancel_btn'),
@@ -577,8 +598,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         final records = ref.read(imageRecordsProvider);
         var exportedCount = 0;
         for (final folderName in names) {
-          final folderFiles =
-              records.where((r) => r.folder == folderName).toList();
+          final folderFiles = records
+              .where((r) => r.folder == folderName)
+              .toList();
           for (final file in folderFiles) {
             final data = await ImageManifest.readFile(file.storagePath);
             if (data == null || data.isEmpty) continue;
@@ -606,9 +628,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
 
       String? outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
       if (outputDir == null) {
-        outputDir = await FilePicker.getDirectoryPath(
-          dialogTitle: '选择导出目录',
-        );
+        outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
         if (outputDir == null) return;
       }
 
@@ -618,8 +638,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       var exportedCount = 0;
 
       for (final folderName in names) {
-        final folderFiles =
-            records.where((r) => r.folder == folderName).toList();
+        final folderFiles = records
+            .where((r) => r.folder == folderName)
+            .toList();
         if (folderFiles.isEmpty) continue;
 
         // Create folder in output directory (recreate folder hierarchy)
@@ -704,9 +725,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
                   ),
                 ),
                 icon: const Icon(Icons.camera_alt_outlined, size: 20),
-                label: const Text('拍照',
-                    style:
-                        TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                label: const Text(
+                  '拍照',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
           ),
@@ -722,9 +744,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
                   ),
                 ),
                 icon: const Icon(Icons.photo_library_outlined, size: 20),
-                label: const Text('从相册导入',
-                    style:
-                        TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                label: const Text(
+                  '从相册导入',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
           ),
@@ -738,8 +761,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       if (canPreview) {
         return FutureBuilder<Uint8List?>(
           future: (() async {
-            final thumb =
-                await ImageManifest.readFile('${file.hash}_thumb.png');
+            final thumb = await ImageManifest.readFile(
+              '${file.hash}_thumb.png',
+            );
             if (thumb != null) return thumb;
             return ImageManifest.readFile(file.storagePath);
           })(),
@@ -772,7 +796,12 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       initialGridView: viewMode,
       onGridViewChanged: (v) =>
           ref.read(imageViewModeProvider.notifier).setViewMode(v),
-      onCurrentFolderChanged: (f) => _currentFolder = f,
+      onCurrentFolderChanged: (f) {
+        _currentFolder = f;
+        ref.read(filesPageBackHandledProvider.notifier).state = false;
+      },
+      onBackToParent: () =>
+          ref.read(filesPageBackHandledProvider.notifier).state = true,
       extraPopupMenuItems: (file) => [
         const PopupMenuItem(
           value: 'export',
@@ -808,19 +837,22 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         final source = records.firstWhere((r) => r.id == id);
         String copyName = '${source.name}_副本';
         int copyIdx = 2;
-        while (records
-            .any((r) => r.name == copyName && r.folder == selectedFolder)) {
+        while (records.any(
+          (r) => r.name == copyName && r.folder == selectedFolder,
+        )) {
           copyName = '${source.name}_副本 ($copyIdx)';
           copyIdx++;
         }
-        await ImageManifest.addRecord(ImageRecord(
-          name: copyName,
-          hash: source.hash,
-          format: source.format,
-          createdAt: DateTime.now(),
-          size: source.size,
-          folder: selectedFolder,
-        ));
+        await ImageManifest.addRecord(
+          ImageRecord(
+            name: copyName,
+            hash: source.hash,
+            format: source.format,
+            createdAt: DateTime.now(),
+            size: source.size,
+            folder: selectedFolder,
+          ),
+        );
         await ref.read(imageRecordsProvider.notifier).loadRecords();
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
