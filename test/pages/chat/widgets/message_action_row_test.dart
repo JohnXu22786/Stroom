@@ -86,7 +86,7 @@ void main() {
         expect(find.byIcon(Icons.delete_outline), findsOneWidget);
 
         // No conditional buttons
-        expect(find.byIcon(Icons.info_outline), findsNothing);
+        expect(find.byIcon(Icons.data_exploration), findsNothing);
         expect(find.byIcon(Icons.code), findsNothing);
       },
     );
@@ -143,7 +143,7 @@ void main() {
 
         expect(find.byIcon(Icons.copy), findsOneWidget);
         expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
-        expect(find.byIcon(Icons.info_outline), findsOneWidget);
+        expect(find.byIcon(Icons.data_exploration), findsOneWidget);
         expect(find.byIcon(Icons.delete_outline), findsOneWidget);
       },
     );
@@ -169,7 +169,7 @@ void main() {
 
         expect(find.byIcon(Icons.copy), findsOneWidget);
         expect(find.byIcon(Icons.refresh), findsOneWidget);
-        expect(find.byIcon(Icons.info_outline), findsOneWidget);
+        expect(find.byIcon(Icons.data_exploration), findsOneWidget);
         expect(find.byIcon(Icons.delete_outline), findsOneWidget);
       },
     );
@@ -229,7 +229,7 @@ void main() {
 
         expect(find.byIcon(Icons.copy), findsOneWidget);
         expect(find.byIcon(Icons.refresh), findsOneWidget);
-        expect(find.byIcon(Icons.info_outline), findsOneWidget);
+        expect(find.byIcon(Icons.data_exploration), findsOneWidget);
         expect(find.byIcon(Icons.code), findsOneWidget);
         expect(find.byIcon(Icons.delete_outline), findsOneWidget);
       },
