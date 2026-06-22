@@ -333,31 +333,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     }
     // Restore saved model selection and restore per-model settings
     SharedPreferences.getInstance().then((prefs) {
-      // Restore saved model order (drag-sort persistence) first,
-      // so model names resolve correctly.
-      final savedOrder = prefs.getStringList('model_order');
-      if (savedOrder != null && savedOrder.isNotEmpty) {
-        setState(() {
-          _savedModelOrder = savedOrder;
-        });
-      }
-
-      // Restore saved model selection — clear stale index if out of range
-      final entriesState = ref.read(providerEntriesProvider);
-      final models = _adapter.availableModels(entriesState);
-      final saved = prefs.getInt('selected_model_index');
-      int selectedIdx = 0;
-      if (saved != null && saved >= 0 && saved < models.length) {
-        selectedIdx = saved;
-        final model = models[saved];
-        _adapter.selectModel(entriesState, model.configIndex, model.modelIndex);
-      } else {
-        prefs.remove('selected_model_index');
-      }
-      setState(() => _selectedModelIndex = selectedIdx);
-
-      // Restore per-model settings for the currently selected model
-      _restorePerModelSettings(prefs, selectedIdx);
+      if (!mounted) return;
+      _restoreSavedModelSelection(prefs);
     });
     _loadConversationMessages();
     // Restore streaming state if a stream was active when the page was
@@ -1520,7 +1497,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
     ref.listen(providerEntriesProvider, (prev, next) {
       if (prev != next) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _configureAdapter();
+          if (!mounted) return;
+          _configureAdapter();
+          // _configureAdapter resets the adapter to model 0. Restore the
+          // saved model selection so the adapter and reasoning params
+          // stay in sync with the persisted choice.
+          SharedPreferences.getInstance().then((prefs) {
+            if (mounted) _restoreSavedModelSelection(prefs);
+          });
         });
       }
     });
@@ -2478,6 +2462,40 @@ class _ChatPageState extends ConsumerState<ChatPage>
       'reasoningParamValues': ref.read(reasoningParamValuesProvider),
     };
     prefs.setString('per_model_chat_settings', jsonEncode(allSettings));
+  }
+
+  /// Restores the saved model selection (index + adapter state + per-model
+  /// settings) from SharedPreferences. Also restores drag-sort order.
+  ///
+  /// This is used both on initial page load and after [_configureAdapter]
+  /// resets the adapter state (e.g. when [providerEntriesProvider] changes),
+  /// ensuring the adapter and UI stay in sync with the persisted selection.
+  void _restoreSavedModelSelection(SharedPreferences prefs) {
+    // Restore saved model order (drag-sort persistence) first,
+    // so model names resolve correctly.
+    final savedOrder = prefs.getStringList('model_order');
+    if (savedOrder != null && savedOrder.isNotEmpty) {
+      setState(() {
+        _savedModelOrder = savedOrder;
+      });
+    }
+
+    // Restore saved model selection — clear stale index if out of range
+    final entriesState = ref.read(providerEntriesProvider);
+    final models = _adapter.availableModels(entriesState);
+    final saved = prefs.getInt('selected_model_index');
+    int selectedIdx = 0;
+    if (saved != null && saved >= 0 && saved < models.length) {
+      selectedIdx = saved;
+      final model = models[saved];
+      _adapter.selectModel(entriesState, model.configIndex, model.modelIndex);
+    } else {
+      prefs.remove('selected_model_index');
+    }
+    setState(() => _selectedModelIndex = selectedIdx);
+
+    // Restore per-model settings for the currently selected model
+    _restorePerModelSettings(prefs, selectedIdx);
   }
 
   /// Restores the reasoning/reasoning-effort/reasoning-param settings
