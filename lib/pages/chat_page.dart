@@ -868,6 +868,30 @@ class _ChatPageState extends ConsumerState<ChatPage>
           rawResponse: rawResponseCapture,
         );
         _history.add(msg);
+        // Also attach the raw request data to the triggering user message so
+        // the "查看请求数据" (info_outline) button is visible for user messages.
+        // Without this, user messages never show the raw data button because
+        // rawRequest is only set on the AI response message.
+        if (rawRequestCapture != null) {
+          final userIdx = _history.lastIndexWhere(
+            (m) => m.role == 'user' && m.rawRequest == null,
+          );
+          if (userIdx >= 0) {
+            final userMsg = _history[userIdx];
+            _history[userIdx] = ChatMessage(
+              role: userMsg.role,
+              content: userMsg.content,
+              id: userMsg.id,
+              createdAt: userMsg.createdAt,
+              attachments: userMsg.attachments,
+              isStreaming: userMsg.isStreaming,
+              isError: userMsg.isError,
+              reasoningContent: userMsg.reasoningContent,
+              rawRequest: rawRequestCapture,
+              rawResponse: userMsg.rawResponse,
+            );
+          }
+        }
         if (reasoningBuffer.isNotEmpty) {
           _reasoningContents[aiMsgId] = reasoningBuffer;
         }
