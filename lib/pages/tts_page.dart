@@ -54,9 +54,8 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           .where((t) => t.status == TaskStatus.running)
           .toList();
       if (runningTasks.isNotEmpty) {
-        final errorMsg = state == AppLifecycleState.detached
-            ? '应用已退出，合成中断'
-            : '应用进入后台，合成中断';
+        final errorMsg =
+            state == AppLifecycleState.detached ? '应用已退出，合成中断' : '应用进入后台，合成中断';
         ref
             .read(taskListProvider.notifier)
             .failAllRunningTasks(error: errorMsg);
@@ -477,9 +476,8 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         final records = ref.read(audioRecordsProvider);
         var exportedCount = 0;
         for (final folderName in names) {
-          final folderFiles = records
-              .where((r) => r.folder == folderName)
-              .toList();
+          final folderFiles =
+              records.where((r) => r.folder == folderName).toList();
           for (final file in folderFiles) {
             var data = await FileManifest.readFile(file.storagePath);
             if (data == null || data.isEmpty) continue;
@@ -522,9 +520,8 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       var exportedCount = 0;
 
       for (final folderName in names) {
-        final folderFiles = records
-            .where((r) => r.folder == folderName)
-            .toList();
+        final folderFiles =
+            records.where((r) => r.folder == folderName).toList();
         if (folderFiles.isEmpty) continue;
 
         // Create folder in output directory (recreate folder hierarchy)
@@ -681,10 +678,8 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       ),
       onCurrentFolderChanged: (f) {
         _currentFolder = f;
-        ref.read(filesPageBackHandledProvider.notifier).state = false;
+        ref.read(filesPageCurrentFolderProvider.notifier).state = f;
       },
-      onBackToParent: () =>
-          ref.read(filesPageBackHandledProvider.notifier).state = true,
       showThumbnailToggle: false,
       fileIconBuilder: (file) => Container(
         width: 44,
@@ -757,7 +752,11 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       extraAppBarActions: () => [],
     );
 
+    final navigateToParentSignal =
+        ref.watch(filesPageNavigateToParentSignalProvider);
+
     return FileManagerView<AudioRecord>(
+      navigateToParentSignal: navigateToParentSignal,
       sortedRecords: sortedRecords,
       folders: folders,
       sortConfig: sortConfig,

@@ -36,33 +36,33 @@ class _TestFileRecord
     DateTime? createdAt,
     this.size = 1024,
     this.folder = '',
-  }) : id = id ?? 'file_${DateTime.now().millisecondsSinceEpoch}',
-       createdAt = createdAt ?? DateTime.now();
+  })  : id = id ?? 'file_${DateTime.now().millisecondsSinceEpoch}',
+        createdAt = createdAt ?? DateTime.now();
 
   @override
   String get storagePath => '$hash.$format';
 
   @override
   _TestFileRecord copyWithName(String name) => _TestFileRecord(
-    id: id,
-    name: name,
-    hash: hash,
-    format: format,
-    createdAt: createdAt,
-    size: size,
-    folder: folder,
-  );
+        id: id,
+        name: name,
+        hash: hash,
+        format: format,
+        createdAt: createdAt,
+        size: size,
+        folder: folder,
+      );
 
   @override
   _TestFileRecord copyWithFolder(String folder) => _TestFileRecord(
-    id: id,
-    name: name,
-    hash: hash,
-    format: format,
-    createdAt: createdAt,
-    size: size,
-    folder: folder,
-  );
+        id: id,
+        name: name,
+        hash: hash,
+        format: format,
+        createdAt: createdAt,
+        size: size,
+        folder: folder,
+      );
 }
 
 Widget _buildTestApp(Widget body) {
@@ -98,15 +98,17 @@ final sortConfig = SortConfig(
 );
 
 ManifestBridge get testManifestBridge => ManifestBridge(
-  getFolderBaseName: (path) => path.split('/').last,
-  getParentFolderPath: (path) {
-    final parts = path.split('/');
-    return parts.length > 1 ? parts.sublist(0, -1).join('/') : '';
-  },
-  getChildFolderPaths: (parent, allPaths) => [],
-  validateFolderName: (_) => null,
-  getAllDescendantFolderPaths: (parentPath, allPaths) => [],
-);
+      getFolderBaseName: (path) => path.split('/').last,
+      getParentFolderPath: (path) {
+        final parts = path.split('/');
+        return parts.length > 1
+            ? parts.sublist(0, parts.length - 1).join('/')
+            : '';
+      },
+      getChildFolderPaths: (parent, allPaths) => [],
+      validateFolderName: (_) => null,
+      getAllDescendantFolderPaths: (parentPath, allPaths) => [],
+    );
 
 void main() {
   group('FileManagerView thumbnail display', () {
@@ -294,7 +296,9 @@ void main() {
         getParentFolderPath: (path) {
           if (path.isEmpty) return '';
           final parts = path.split('/');
-          return parts.length > 1 ? parts.sublist(0, -1).join('/') : '';
+          return parts.length > 1
+              ? parts.sublist(0, parts.length - 1).join('/')
+              : '';
         },
         getChildFolderPaths: (parent, allPaths) => [],
         validateFolderName: (_) => null,
@@ -341,104 +345,19 @@ void main() {
       expect(find.byKey(const Key('fm_back_item')), findsOneWidget);
     });
 
-    testWidgets('calls onBackToParent when system back pressed in subfolder', (
-      tester,
-    ) async {
-      int backToParentCallCount = 0;
-
-      final bridge = ManifestBridge(
-        getFolderBaseName: (path) => path.split('/').last,
-        getParentFolderPath: (path) {
-          if (path.isEmpty) return '';
-          final parts = path.split('/');
-          return parts.length > 1 ? parts.sublist(0, -1).join('/') : '';
-        },
-        getChildFolderPaths: (parent, allPaths) => [],
-        validateFolderName: (_) => null,
-        getAllDescendantFolderPaths: (parentPath, allPaths) => [],
-      );
-
-      final config = FileManagerConfig<_TestFileRecord>(
-        title: 'Test',
-        fileIconBuilder: (_) =>
-            const Icon(Icons.videocam, key: Key('fallback_icon')),
-        onFileTap: (_) {},
-        onBackToParent: () {
-          backToParentCallCount++;
-        },
-      );
-
-      // Create a navigator key so we can simulate system back
-      final navKey = GlobalKey<NavigatorState>();
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Navigator(
-            key: navKey,
-            onGenerateRoute: (settings) {
-              return MaterialPageRoute(
-                builder: (_) => Scaffold(
-                  body: FileManagerView<_TestFileRecord>(
-                    sortedRecords: [],
-                    folders: {'subfolder'},
-                    sortConfig: sortConfig,
-                    config: config,
-                    onRefresh: () async {},
-                    onRenameFile: (_, __) async {},
-                    onMoveFile: (_, __) async {},
-                    onCopyFile: (_, __) async {},
-                    onDeleteFile: (_) async {},
-                    onDeleteFiles: (_) async {},
-                    onDeleteFolders: (_) async {},
-                    onMoveFiles: (_, __) async {},
-                    onMoveFolders: (_, __) async {},
-                    onExportFile: (_) async {},
-                    onRenameFolder: (_, __) async {},
-                    onMoveFolder: (_, __) async {},
-                    onCopyFolder: (_, __) async {},
-                    onDeleteFolder: (_) async {},
-                    onCreateFolder: (_) async {},
-                    onToggleSort: (_) {},
-                    manifestBridge: bridge,
-                  ),
-                ),
-                settings: settings,
-              );
-            },
-          ),
-          localizationsDelegates: const [
-            DefaultMaterialLocalizations.delegate,
-            DefaultWidgetsLocalizations.delegate,
-          ],
-        ),
-      );
-
-      // Navigate into subfolder by tapping on it
-      await tester.tap(find.text('subfolder'));
-      await tester.pumpAndSettle();
-
-      // Verify we're inside the subfolder (back button visible)
-      expect(find.byKey(const Key('fm_back_btn')), findsOneWidget);
-
-      // Simulate system back
-      await navKey.currentState?.maybePop();
-      await tester.pumpAndSettle();
-
-      // onBackToParent should have been called
-      expect(backToParentCallCount, greaterThanOrEqualTo(1));
-    });
-
     testWidgets(
-      'does NOT call onBackToParent when at root and system back pressed',
+      'navigates to parent when navigateToParentSignal changes in subfolder',
       (tester) async {
-        int backToParentCallCount = 0;
+        String? capturedCurrentFolder;
 
         final bridge = ManifestBridge(
           getFolderBaseName: (path) => path.split('/').last,
           getParentFolderPath: (path) {
             if (path.isEmpty) return '';
             final parts = path.split('/');
-            return parts.length > 1 ? parts.sublist(0, -1).join('/') : '';
+            return parts.length > 1
+                ? parts.sublist(0, parts.length - 1).join('/')
+                : '';
           },
           getChildFolderPaths: (parent, allPaths) => [],
           validateFolderName: (_) => null,
@@ -450,64 +369,180 @@ void main() {
           fileIconBuilder: (_) =>
               const Icon(Icons.videocam, key: Key('fallback_icon')),
           onFileTap: (_) {},
-          onBackToParent: () {
-            backToParentCallCount++;
+          onCurrentFolderChanged: (f) {
+            capturedCurrentFolder = f;
           },
         );
 
-        final navKey = GlobalKey<NavigatorState>();
-
         await tester.pumpWidget(
-          MaterialApp(
-            home: Navigator(
-              key: navKey,
-              onGenerateRoute: (settings) {
-                return MaterialPageRoute(
-                  builder: (_) => Scaffold(
-                    body: FileManagerView<_TestFileRecord>(
-                      sortedRecords: testFiles,
-                      folders: {},
-                      sortConfig: sortConfig,
-                      config: config,
-                      onRefresh: () async {},
-                      onRenameFile: (_, __) async {},
-                      onMoveFile: (_, __) async {},
-                      onCopyFile: (_, __) async {},
-                      onDeleteFile: (_) async {},
-                      onDeleteFiles: (_) async {},
-                      onDeleteFolders: (_) async {},
-                      onMoveFiles: (_, __) async {},
-                      onMoveFolders: (_, __) async {},
-                      onExportFile: (_) async {},
-                      onRenameFolder: (_, __) async {},
-                      onMoveFolder: (_, __) async {},
-                      onCopyFolder: (_, __) async {},
-                      onDeleteFolder: (_) async {},
-                      onCreateFolder: (_) async {},
-                      onToggleSort: (_) {},
-                      manifestBridge: bridge,
-                    ),
-                  ),
-                  settings: settings,
-                );
-              },
+          _buildTestApp(
+            FileManagerView<_TestFileRecord>(
+              sortedRecords: [],
+              folders: {'subfolder'},
+              sortConfig: sortConfig,
+              config: config,
+              navigateToParentSignal: 0,
+              onRefresh: () async {},
+              onRenameFile: (_, __) async {},
+              onMoveFile: (_, __) async {},
+              onCopyFile: (_, __) async {},
+              onDeleteFile: (_) async {},
+              onDeleteFiles: (_) async {},
+              onDeleteFolders: (_) async {},
+              onMoveFiles: (_, __) async {},
+              onMoveFolders: (_, __) async {},
+              onExportFile: (_) async {},
+              onRenameFolder: (_, __) async {},
+              onMoveFolder: (_, __) async {},
+              onCopyFolder: (_, __) async {},
+              onDeleteFolder: (_) async {},
+              onCreateFolder: (_) async {},
+              onToggleSort: (_) {},
+              manifestBridge: bridge,
             ),
-            localizationsDelegates: const [
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
-            ],
           ),
         );
 
-        // We're at root - no back button visible
-        expect(find.byKey(const Key('fm_back_btn')), findsNothing);
+        // Navigate into subfolder by tapping on it
+        await tester.tap(find.text('subfolder'));
+        await tester.pumpAndSettle();
+        expect(capturedCurrentFolder, 'subfolder');
 
-        // Simulate system back
-        await navKey.currentState?.maybePop();
+        // Now rebuild with incremented signal to simulate outer PopScope request
+        await tester.pumpWidget(
+          _buildTestApp(
+            FileManagerView<_TestFileRecord>(
+              sortedRecords: [],
+              folders: {'subfolder'},
+              sortConfig: sortConfig,
+              config: config,
+              navigateToParentSignal: 1, // Signal incremented
+              onRefresh: () async {},
+              onRenameFile: (_, __) async {},
+              onMoveFile: (_, __) async {},
+              onCopyFile: (_, __) async {},
+              onDeleteFile: (_) async {},
+              onDeleteFiles: (_) async {},
+              onDeleteFolders: (_) async {},
+              onMoveFiles: (_, __) async {},
+              onMoveFolders: (_, __) async {},
+              onExportFile: (_) async {},
+              onRenameFolder: (_, __) async {},
+              onMoveFolder: (_, __) async {},
+              onCopyFolder: (_, __) async {},
+              onDeleteFolder: (_) async {},
+              onCreateFolder: (_) async {},
+              onToggleSort: (_) {},
+              manifestBridge: bridge,
+            ),
+          ),
+        );
         await tester.pumpAndSettle();
 
-        // onBackToParent should NOT have been called (we're at root)
-        expect(backToParentCallCount, 0);
+        // Should have navigated to parent folder (root = '')
+        expect(capturedCurrentFolder, '');
+      },
+    );
+
+    testWidgets(
+      'does NOT navigate when navigateToParentSignal changes at root',
+      (tester) async {
+        String? capturedCurrentFolder;
+        int changeCount = 0;
+
+        final bridge = ManifestBridge(
+          getFolderBaseName: (path) => path.split('/').last,
+          getParentFolderPath: (path) {
+            if (path.isEmpty) return '';
+            final parts = path.split('/');
+            return parts.length > 1
+                ? parts.sublist(0, parts.length - 1).join('/')
+                : '';
+          },
+          getChildFolderPaths: (parent, allPaths) => [],
+          validateFolderName: (_) => null,
+          getAllDescendantFolderPaths: (parentPath, allPaths) => [],
+        );
+
+        final config = FileManagerConfig<_TestFileRecord>(
+          title: 'Test',
+          fileIconBuilder: (_) =>
+              const Icon(Icons.videocam, key: Key('fallback_icon')),
+          onFileTap: (_) {},
+          onCurrentFolderChanged: (f) {
+            capturedCurrentFolder = f;
+            changeCount++;
+          },
+        );
+
+        // Start at root with signal = 0
+        await tester.pumpWidget(
+          _buildTestApp(
+            FileManagerView<_TestFileRecord>(
+              sortedRecords: testFiles,
+              folders: {},
+              sortConfig: sortConfig,
+              config: config,
+              navigateToParentSignal: 0,
+              onRefresh: () async {},
+              onRenameFile: (_, __) async {},
+              onMoveFile: (_, __) async {},
+              onCopyFile: (_, __) async {},
+              onDeleteFile: (_) async {},
+              onDeleteFiles: (_) async {},
+              onDeleteFolders: (_) async {},
+              onMoveFiles: (_, __) async {},
+              onMoveFolders: (_, __) async {},
+              onExportFile: (_) async {},
+              onRenameFolder: (_, __) async {},
+              onMoveFolder: (_, __) async {},
+              onCopyFolder: (_, __) async {},
+              onDeleteFolder: (_) async {},
+              onCreateFolder: (_) async {},
+              onToggleSort: (_) {},
+              manifestBridge: bridge,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // We're at root - no back button visible
+        expect(find.byKey(const Key('fm_back_btn')), findsNothing);
+        final countBeforeSignal = changeCount;
+
+        // Rebuild with incremented signal - at root this should be a no-op
+        await tester.pumpWidget(
+          _buildTestApp(
+            FileManagerView<_TestFileRecord>(
+              sortedRecords: testFiles,
+              folders: {},
+              sortConfig: sortConfig,
+              config: config,
+              navigateToParentSignal: 1, // Signal incremented
+              onRefresh: () async {},
+              onRenameFile: (_, __) async {},
+              onMoveFile: (_, __) async {},
+              onCopyFile: (_, __) async {},
+              onDeleteFile: (_) async {},
+              onDeleteFiles: (_) async {},
+              onDeleteFolders: (_) async {},
+              onMoveFiles: (_, __) async {},
+              onMoveFolders: (_, __) async {},
+              onExportFile: (_) async {},
+              onRenameFolder: (_, __) async {},
+              onMoveFolder: (_, __) async {},
+              onCopyFolder: (_, __) async {},
+              onDeleteFolder: (_) async {},
+              onCreateFolder: (_) async {},
+              onToggleSort: (_) {},
+              manifestBridge: bridge,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // onCurrentFolderChanged should NOT have been called (still at root)
+        expect(changeCount, countBeforeSignal);
       },
     );
   });
