@@ -8,7 +8,6 @@ import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/pages/chat_page.dart';
-import 'package:stroom/widgets/camera_choice_dialog.dart';
 
 /// Helper that creates a MaterialApp wrapped in ProviderScope with
 /// all providers needed to render ChatPage.
@@ -20,14 +19,13 @@ Widget createChatTestApp({String? activeConversationId}) {
         return ConversationsNotifier(ref);
       }),
       activeConversationIdProvider.overrideWith(
-          (ref) => activeConversationId ?? 'test-conv-id'),
+        (ref) => activeConversationId ?? 'test-conv-id',
+      ),
       providerEntriesProvider.overrideWith((ref) {
         return ProviderEntriesNotifier();
       }),
     ],
-    child: MaterialApp(
-      home: const ChatPage(),
-    ),
+    child: MaterialApp(home: const ChatPage()),
   );
 }
 
@@ -36,46 +34,52 @@ void main() {
   // Req 1: Incremental Markdown Rendering Support
   // ═══════════════════════════════════════════════════════════
   group('TextSegment incremental accumulation (Req 1)', () {
-    test('TextSegments can be accumulated in a list for incremental rendering', () {
-      final segments = <TextSegment>[];
+    test(
+      'TextSegments can be accumulated in a list for incremental rendering',
+      () {
+        final segments = <TextSegment>[];
 
-      // Simulate streaming: add text in chunks
-      segments.add(TextSegment('Hello, '));
-      segments.add(TextSegment('this is '));
-      segments.add(TextSegment('incremental '));
-      segments.add(TextSegment('rendering!'));
+        // Simulate streaming: add text in chunks
+        segments.add(TextSegment('Hello, '));
+        segments.add(TextSegment('this is '));
+        segments.add(TextSegment('incremental '));
+        segments.add(TextSegment('rendering!'));
 
-      expect(segments.length, 4);
-      expect(segments[0].text, 'Hello, ');
-      expect(segments[1].text, 'this is ');
-      expect(segments[2].text, 'incremental ');
-      expect(segments[3].text, 'rendering!');
+        expect(segments.length, 4);
+        expect(segments[0].text, 'Hello, ');
+        expect(segments[1].text, 'this is ');
+        expect(segments[2].text, 'incremental ');
+        expect(segments[3].text, 'rendering!');
 
-      // Verify full text can be reconstructed
-      final fullText = segments.map((s) => s.text).join();
-      expect(fullText, 'Hello, this is incremental rendering!');
-    });
+        // Verify full text can be reconstructed
+        final fullText = segments.map((s) => s.text).join();
+        expect(fullText, 'Hello, this is incremental rendering!');
+      },
+    );
 
-    test('TextSegments support tracking rendered length for incremental approach', () {
-      final segments = <TextSegment>[];
-      String accumulatedText = '';
-      int renderedLength = 0;
-      final chunks = ['First part. ', 'Second part. ', 'Third part.'];
+    test(
+      'TextSegments support tracking rendered length for incremental approach',
+      () {
+        final segments = <TextSegment>[];
+        String accumulatedText = '';
+        int renderedLength = 0;
+        final chunks = ['First part. ', 'Second part. ', 'Third part.'];
 
-      for (final chunk in chunks) {
-        accumulatedText += chunk;
-        // Only render the new portion
-        final newChunk = accumulatedText.substring(renderedLength);
-        segments.add(TextSegment(newChunk));
-        renderedLength = accumulatedText.length;
-      }
+        for (final chunk in chunks) {
+          accumulatedText += chunk;
+          // Only render the new portion
+          final newChunk = accumulatedText.substring(renderedLength);
+          segments.add(TextSegment(newChunk));
+          renderedLength = accumulatedText.length;
+        }
 
-      expect(segments.length, 3);
-      expect(segments[0].text, 'First part. ');
-      expect(segments[1].text, 'Second part. ');
-      expect(segments[2].text, 'Third part.');
-      expect(accumulatedText.length, renderedLength);
-    });
+        expect(segments.length, 3);
+        expect(segments[0].text, 'First part. ');
+        expect(segments[1].text, 'Second part. ');
+        expect(segments[2].text, 'Third part.');
+        expect(accumulatedText.length, renderedLength);
+      },
+    );
 
     test('Empty text segment list renders nothing', () {
       final segments = <TextSegment>[];
@@ -185,45 +189,49 @@ void main() {
       expect(isMobile(TargetPlatform.fuchsia), false);
     });
 
-    test('Shift+Enter should insert newline, Enter alone should send on desktop', () {
-      // This verifies the logic used in onKeyEvent handler
-      // For desktop: if isShiftPressed → insert newline, else → send
-      // For mobile: Enter → insert newline (controlled by textInputAction)
+    test(
+      'Shift+Enter should insert newline, Enter alone should send on desktop',
+      () {
+        // This verifies the logic used in onKeyEvent handler
+        // For desktop: if isShiftPressed → insert newline, else → send
+        // For mobile: Enter → insert newline (controlled by textInputAction)
 
-      // Simulate the desktop onKeyEvent logic:
-      String? capturedSend;
-      final controller = TextEditingController();
+        // Simulate the desktop onKeyEvent logic:
+        String? capturedSend;
+        final controller = TextEditingController();
 
-      KeyEventResult handleKeyEvent(KeyEvent event) {
-        if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter) {
-          final isShift = HardwareKeyboard.instance.isShiftPressed;
-          if (isShift) {
-            // Shift+Enter: let default behavior insert newline
-            return KeyEventResult.ignored;
-          } else {
-            // Enter without Shift: send
-            capturedSend = controller.text;
-            return KeyEventResult.handled;
+        KeyEventResult handleKeyEvent(KeyEvent event) {
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.enter) {
+            final isShift = HardwareKeyboard.instance.isShiftPressed;
+            if (isShift) {
+              // Shift+Enter: let default behavior insert newline
+              return KeyEventResult.ignored;
+            } else {
+              // Enter without Shift: send
+              capturedSend = controller.text;
+              return KeyEventResult.handled;
+            }
           }
+          return KeyEventResult.ignored;
         }
-        return KeyEventResult.ignored;
-      }
 
-      // Test that the function signature and logic is correct
-      // (HardwareKeyboard state is empty in tests, so isShiftPressed is false)
-      controller.text = 'test message';
-      final event = KeyDownEvent(
-        logicalKey: LogicalKeyboardKey.enter,
-        physicalKey: PhysicalKeyboardKey.enter,
-        timeStamp: const Duration(),
-      );
-      final result = handleKeyEvent(event);
+        // Test that the function signature and logic is correct
+        // (HardwareKeyboard state is empty in tests, so isShiftPressed is false)
+        controller.text = 'test message';
+        final event = KeyDownEvent(
+          logicalKey: LogicalKeyboardKey.enter,
+          physicalKey: PhysicalKeyboardKey.enter,
+          timeStamp: const Duration(),
+        );
+        final result = handleKeyEvent(event);
 
-      // Since no shift is pressed, it should handle the event (send)
-      expect(result, KeyEventResult.handled);
-      expect(capturedSend, 'test message');
-      controller.dispose();
-    });
+        // Since no shift is pressed, it should handle the event (send)
+        expect(result, KeyEventResult.handled);
+        expect(capturedSend, 'test message');
+        controller.dispose();
+      },
+    );
   });
 
   // ═══════════════════════════════════════════════════════════
@@ -292,19 +300,21 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
     }
 
-    testWidgets('settings row shows model, tools, reasoning buttons above input',
-        (tester) async {
-      await setupSurface(tester);
-      await tester.pumpWidget(createChatTestApp());
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-      tester.takeException();
+    testWidgets(
+      'settings row shows model, tools, reasoning buttons above input',
+      (tester) async {
+        await setupSurface(tester);
+        await tester.pumpWidget(createChatTestApp());
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        tester.takeException();
 
-      // The settings row buttons should be visible above the input
-      expect(find.text('模型'), findsOneWidget);
-      expect(find.text('工具'), findsOneWidget);
-      expect(find.text('推理'), findsOneWidget);
-    });
+        // The settings row buttons should be visible above the input
+        expect(find.text('模型'), findsOneWidget);
+        expect(find.text('工具'), findsOneWidget);
+        expect(find.text('推理'), findsOneWidget);
+      },
+    );
 
     testWidgets('each settings button has an icon', (tester) async {
       await setupSurface(tester);
@@ -392,8 +402,7 @@ void main() {
   // Req: ChatComposerWidget without Positioned
   // ═══════════════════════════════════════════════════════════
   group('ChatComposerWidget layout (no Positioned)', () {
-    testWidgets('composer renders without Positioned wrapper',
-        (tester) async {
+    testWidgets('composer renders without Positioned wrapper', (tester) async {
       await tester.pumpWidget(createChatTestApp());
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
@@ -411,8 +420,9 @@ void main() {
       expect(find.text('推理'), findsOneWidget);
     });
 
-    testWidgets('composer does not use its own Positioned widget',
-        (tester) async {
+    testWidgets('composer does not use its own Positioned widget', (
+      tester,
+    ) async {
       await tester.pumpWidget(createChatTestApp());
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
@@ -427,22 +437,26 @@ void main() {
   // Req: File button works during streaming
   // ═══════════════════════════════════════════════════════════
   group('File button works during streaming', () {
-    testWidgets('file button is tappable during streaming state',
-        (tester) async {
+    testWidgets('file button is tappable during streaming state', (
+      tester,
+    ) async {
       // Set streaming to true
       SharedPreferences.setMockInitialValues({});
-      await tester.pumpWidget(ProviderScope(
-        overrides: [
-          isStreamingProvider.overrideWith((ref) => true),
-          conversationsProvider
-              .overrideWith((ref) => ConversationsNotifier(ref)),
-          activeConversationIdProvider
-              .overrideWith((ref) => 'test-conv-id'),
-          providerEntriesProvider
-              .overrideWith((ref) => ProviderEntriesNotifier()),
-        ],
-        child: const MaterialApp(home: ChatPage()),
-      ));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            isStreamingProvider.overrideWith((ref) => true),
+            conversationsProvider.overrideWith(
+              (ref) => ConversationsNotifier(ref),
+            ),
+            activeConversationIdProvider.overrideWith((ref) => 'test-conv-id'),
+            providerEntriesProvider.overrideWith(
+              (ref) => ProviderEntriesNotifier(),
+            ),
+          ],
+          child: const MaterialApp(home: ChatPage()),
+        ),
+      );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
       tester.takeException();
@@ -461,21 +475,25 @@ void main() {
       expect(find.text('传文件'), findsOneWidget);
     });
 
-    testWidgets('stop button shows during streaming, not send button',
-        (tester) async {
+    testWidgets('stop button shows during streaming, not send button', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({});
-      await tester.pumpWidget(ProviderScope(
-        overrides: [
-          isStreamingProvider.overrideWith((ref) => true),
-          conversationsProvider
-              .overrideWith((ref) => ConversationsNotifier(ref)),
-          activeConversationIdProvider
-              .overrideWith((ref) => 'test-conv-id'),
-          providerEntriesProvider
-              .overrideWith((ref) => ProviderEntriesNotifier()),
-        ],
-        child: const MaterialApp(home: ChatPage()),
-      ));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            isStreamingProvider.overrideWith((ref) => true),
+            conversationsProvider.overrideWith(
+              (ref) => ConversationsNotifier(ref),
+            ),
+            activeConversationIdProvider.overrideWith((ref) => 'test-conv-id'),
+            providerEntriesProvider.overrideWith(
+              (ref) => ProviderEntriesNotifier(),
+            ),
+          ],
+          child: const MaterialApp(home: ChatPage()),
+        ),
+      );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
       tester.takeException();
@@ -489,80 +507,64 @@ void main() {
   });
 
   // ═══════════════════════════════════════════════════════════
-  // Req: Camera picker with showFolderSection:false
-  // ═══════════════════════════════════════════════════════════
-  group('Camera picker from chat (showFolderSection:false)', () {
-    test('pickFromCamera does not use folder or editAfterCapture fields of result',
-        () {
-      // This test verifies the logic in _pickFromCamera only uses
-      // choice.choice and ignores folder/editAfterCapture.
-      // When called from chat page context, showFolderSection:false
-      // hides those UI elements because they are irrelevant for chat.
-
-      // Simulate the chat pick flow:
-      CameraChoice choice = CameraChoice.app;
-
-      // The chat picker only uses choice field
-      expect(choice, CameraChoice.app);
-
-      choice = CameraChoice.system;
-      expect(choice, CameraChoice.system);
-    });
-  });
-
-  // ═══════════════════════════════════════════════════════════
   // Req: Gallery picker uses updated attachment panel
   // ═══════════════════════════════════════════════════════════
-  group('Gallery picker shows camera/gallery/file/app-file options (file-only panel)', () {
-    testWidgets('gallery picker opens file-only panel with 4 action buttons',
-        (tester) async {
-      await tester.pumpWidget(createChatTestApp());
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-      tester.takeException();
+  group(
+    'Gallery picker shows camera/gallery/file/app-file options (file-only panel)',
+    () {
+      testWidgets('gallery picker opens file-only panel with 4 action buttons', (
+        tester,
+      ) async {
+        await tester.pumpWidget(createChatTestApp());
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        tester.takeException();
 
-      // Tap the attach file button to open file-only panel
-      await tester.tap(find.byIcon(Icons.attach_file_outlined));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
+        // Tap the attach file button to open file-only panel
+        await tester.tap(find.byIcon(Icons.attach_file_outlined));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
 
-      // The file-only panel should show all 4 file action buttons
-      expect(find.text('拍照'), findsOneWidget);
-      expect(find.text('相册'), findsOneWidget);
-      expect(find.text('文件'), findsOneWidget);
-      expect(find.text('应用内文件'), findsOneWidget);
+        // The file-only panel should show all 4 file action buttons
+        expect(find.text('拍照'), findsOneWidget);
+        expect(find.text('相册'), findsOneWidget);
+        expect(find.text('文件'), findsOneWidget);
+        expect(find.text('应用内文件'), findsOneWidget);
 
-      // Old settings section "推理设置" should not appear (it's not the button label)
-      expect(find.text('推理设置'), findsNothing);
+        // Old settings section "推理设置" should not appear (it's not the button label)
+        expect(find.text('推理设置'), findsNothing);
 
-      // "模型" and "工具" are now visible in the settings row (always above input),
-      // so they are expected to exist even when the file panel is open.
-      expect(find.text('模型'), findsOneWidget);
-      expect(find.text('工具'), findsOneWidget);
-    });
-  });
+        // "模型" and "工具" are now visible in the settings row (always above input),
+        // so they are expected to exist even when the file panel is open.
+        expect(find.text('模型'), findsOneWidget);
+        expect(find.text('工具'), findsOneWidget);
+      });
+    },
+  );
 
   // ═══════════════════════════════════════════════════════════
   // Req: File-only panel on attach file button
   // ═══════════════════════════════════════════════════════════
   group('Attachment button opens file-only panel (no settings)', () {
-    testWidgets('attach file button opens file-only panel, not old settings panel',
-        (tester) async {
-      await tester.pumpWidget(createChatTestApp());
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-      tester.takeException();
+    testWidgets(
+      'attach file button opens file-only panel, not old settings panel',
+      (tester) async {
+        await tester.pumpWidget(createChatTestApp());
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        tester.takeException();
 
-      // Tap the attach file button
-      await tester.tap(find.byIcon(Icons.attach_file_outlined));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
+        // Tap the attach file button
+        await tester.tap(find.byIcon(Icons.attach_file_outlined));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
 
-      // The panel title should be about file transfer, not settings
-      expect(find.text('传文件'), findsOneWidget);
+        // The panel title should be about file transfer, not settings
+        expect(find.text('传文件'), findsOneWidget);
 
-      // Old settings section headers should not exist
-      expect(find.text('Chat 设置'), findsNothing);
-    });
+        // Old settings section headers should not exist
+        expect(find.text('Chat 设置'), findsNothing);
+      },
+    );
   });
 }

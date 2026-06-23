@@ -20,12 +20,9 @@ dependencies:
   intl: ^0.20.2
 
   # Camera/Photo Functionality Dependencies
-  camerawesome: ^2.5.0
   image_picker: ^1.1.0
-  gal: ^2.3.0
   path_provider: ^2.1.0
   path: ^1.8.3
-  flutter_image_compress: ^2.3.0
 
   # TTS Functionality Dependencies
   dio: ^5.4.0+1

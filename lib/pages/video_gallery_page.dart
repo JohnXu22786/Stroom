@@ -19,7 +19,6 @@ import '../utils/thumbnail_utils.dart';
 import '../widgets/file_manager_view.dart';
 import '../widgets/folder_picker_dialog.dart';
 import 'files_page_shared.dart';
-import 'video_capture_page.dart';
 
 class VideoGalleryPage extends ConsumerStatefulWidget {
   const VideoGalleryPage({super.key});
@@ -99,26 +98,109 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     );
     if (folder == null || !mounted) return;
 
-    final result = await Navigator.push<String>(
-      context,
-      MaterialPageRoute(builder: (_) => VideoCapturePage(folder: folder)),
-    );
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickVideo(source: ImageSource.camera);
+      if (pickedFile == null) return;
+      if (!mounted) return;
 
-    await ref.read(videoRecordsProvider.notifier).loadRecords();
-    await ref.read(videoFolderListProvider.notifier).loadFolders();
-    if (mounted) {
-      if (result != null && result.isNotEmpty) {
+      // Loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: CircularProgressIndicator(),
+            ),
+          ),
+        ),
+      );
+
+      final bytes = await pickedFile.readAsBytes();
+      if (bytes.isNotEmpty) {
+        final hash = computeVideoHash(bytes);
+        final rawName = _sanitizeName(pickedFile.name);
+        final ext = p.extension(rawName).replaceAll('.', '').toLowerCase();
+        final format = ext.isNotEmpty ? ext : 'mp4';
+        final storageFileName = '$hash.$format';
+
+        final records = ref.read(videoRecordsProvider);
+        final displayName = _uniqueVideoName(
+          p.basenameWithoutExtension(rawName),
+          records,
+          <String>{},
+        );
+
+        await VideoManifest.writeFile(storageFileName, bytes);
+        // Try to obtain video duration and thumbnail from the file using media_kit
+        int videoDurationMs = 0;
+        final videoPath = await VideoManifest.readFilePath(storageFileName);
+        if (videoPath != null && videoPath.isNotEmpty && !kIsWeb) {
+          final probePlayer = Player();
+          try {
+            await probePlayer.open(
+              Media(Uri.file(videoPath).toString()),
+              play: false,
+            );
+            await Future.delayed(const Duration(milliseconds: 500));
+            videoDurationMs = probePlayer.state.duration.inMilliseconds;
+            await probePlayer.seek(const Duration(seconds: 1));
+            await Future.delayed(const Duration(milliseconds: 200));
+            final thumbBytes = await probePlayer.screenshot();
+            if (thumbBytes != null && thumbBytes.isNotEmpty) {
+              await VideoManifest.writeThumbnail(hash, thumbBytes);
+            }
+          } catch (_) {
+            // Duration/thumbnail detection failed
+          } finally {
+            await probePlayer.dispose();
+          }
+        }
+        if (kIsWeb && videoPath != null && videoPath.isNotEmpty) {
+          try {
+            final thumbBytes = await _generateThumbnailFromBytes(bytes);
+            if (thumbBytes != null) {
+              await VideoManifest.writeThumbnail(hash, thumbBytes);
+            }
+          } catch (_) {}
+        }
+        await VideoManifest.addRecord(
+          VideoRecord(
+            name: displayName,
+            hash: hash,
+            format: format,
+            createdAt: DateTime.now(),
+            size: bytes.length,
+            folder: folder,
+            duration: videoDurationMs,
+          ),
+        );
+      }
+
+      // Close loading indicator
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+
+      await ref.read(videoRecordsProvider.notifier).loadRecords();
+      await ref.read(videoFolderListProvider.notifier).loadFolders();
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('视频已保存'),
             duration: Duration(seconds: 2),
           ),
         );
-      } else {
+      }
+    } catch (e) {
+      if (mounted) {
+        try {
+          Navigator.of(context, rootNavigator: true).pop();
+        } catch (_) {}
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('视频列表已刷新'),
-            duration: Duration(seconds: 2),
+          SnackBar(
+            content: Text('录制失败: $e'),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -747,8 +829,9 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       },
     );
 
-    final navigateToParentSignal =
-        ref.watch(filesPageNavigateToParentSignalProvider);
+    final navigateToParentSignal = ref.watch(
+      filesPageNavigateToParentSignalProvider,
+    );
 
     return FileManagerView<VideoRecord>(
       navigateToParentSignal: navigateToParentSignal,

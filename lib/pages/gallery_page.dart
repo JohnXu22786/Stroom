@@ -14,10 +14,9 @@ import '../utils/image_manifest.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
-import '../widgets/camera_choice_dialog.dart';
 import '../widgets/file_manager_view.dart';
+import '../widgets/folder_picker_dialog.dart';
 import '../widgets/image_preview_dialog.dart';
-import 'camera_page.dart';
 import 'files_page_shared.dart';
 import 'gallery_shared.dart';
 import 'image_editor_page.dart';
@@ -271,88 +270,65 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
 
   Future<void> _takePhoto() async {
     final folders = ref.read(imageFolderListProvider);
-    final result = await showCameraChoiceDialog(
+    final selectedFolder = await FolderPickerDialog.show(
       context,
-      initialFolder: _currentFolder,
+      currentFolder: _currentFolder,
       availableFolders: folders,
+      title: '拍照添加至文件夹',
       onCreateFolder: (name) async {
         await ref.read(imageRecordsProvider.notifier).createFolder(name);
         await ref.read(imageFolderListProvider.notifier).loadFolders();
         return null;
       },
     );
-    if (result == null || !mounted) return;
-    final selectedFolder = result.folder;
+    if (selectedFolder == null || !mounted) return;
 
-    String? filePath;
-    if (result.choice == CameraChoice.app) {
-      filePath = await Navigator.push<String>(
-        context,
-        MaterialPageRoute(
-          builder: (_) => CameraPage(
-            folder: selectedFolder,
-            editAfterCapture: result.editAfterCapture,
-          ),
+    var success = false;
+    try {
+      final picker = ImagePicker();
+      final file = await picker.pickImage(source: ImageSource.camera);
+      if (file == null) return;
+      if (!mounted) return;
+
+      final bytes = await file.readAsBytes();
+      final hash = computeImageHash(bytes);
+      const format = 'jpg';
+      final fileName = '$hash.$format';
+      await ImageManifest.writeFile(fileName, bytes);
+      final thumbnailBytes = await generateThumbnail(bytes);
+      final thumbFileName = '${hash}_thumb.png';
+      await ImageManifest.writeFile(thumbFileName, thumbnailBytes);
+      final now = DateTime.now();
+      final timestamp =
+          '${now.year}${padInt(now.month)}${padInt(now.day)}_${padInt(now.hour)}${padInt(now.minute)}${padInt(now.second)}';
+      await ImageManifest.addRecord(
+        ImageRecord(
+          name: '照片_$timestamp',
+          hash: hash,
+          format: format,
+          createdAt: DateTime.now(),
+          size: bytes.length,
+          folder: selectedFolder,
         ),
       );
-    } else {
-      try {
-        final picker = ImagePicker();
-        final file = await picker.pickImage(source: ImageSource.camera);
-        if (file != null) {
-          final bytes = await file.readAsBytes();
-          final hash = computeImageHash(bytes);
-          const format = 'jpg';
-          final fileName = '$hash.$format';
-          await ImageManifest.writeFile(fileName, bytes);
-          final thumbnailBytes = await generateThumbnail(bytes);
-          final thumbFileName = '${hash}_thumb.png';
-          await ImageManifest.writeFile(thumbFileName, thumbnailBytes);
-          final now = DateTime.now();
-          final timestamp =
-              '${now.year}${padInt(now.month)}${padInt(now.day)}_${padInt(now.hour)}${padInt(now.minute)}${padInt(now.second)}';
-          await ImageManifest.addRecord(
-            ImageRecord(
-              name: '照片_$timestamp',
-              hash: hash,
-              format: format,
-              createdAt: DateTime.now(),
-              size: bytes.length,
-              folder: selectedFolder,
-            ),
-          );
-          filePath = await ImageManifest.readFilePath(fileName);
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('拍照失败: $e'),
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
+      success = true;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('拍照失败: $e'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
       }
     }
 
     await ref.read(imageRecordsProvider.notifier).loadRecords();
     await ref.read(imageFolderListProvider.notifier).loadFolders();
-    if (mounted) {
-      if (filePath != null && filePath.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('照片已保存'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('图片列表已刷新'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
+    if (mounted && success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('照片已保存'), duration: Duration(seconds: 2)),
+      );
     }
   }
 
@@ -598,8 +574,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         final records = ref.read(imageRecordsProvider);
         var exportedCount = 0;
         for (final folderName in names) {
-          final folderFiles =
-              records.where((r) => r.folder == folderName).toList();
+          final folderFiles = records
+              .where((r) => r.folder == folderName)
+              .toList();
           for (final file in folderFiles) {
             final data = await ImageManifest.readFile(file.storagePath);
             if (data == null || data.isEmpty) continue;
@@ -637,8 +614,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       var exportedCount = 0;
 
       for (final folderName in names) {
-        final folderFiles =
-            records.where((r) => r.folder == folderName).toList();
+        final folderFiles = records
+            .where((r) => r.folder == folderName)
+            .toList();
         if (folderFiles.isEmpty) continue;
 
         // Create folder in output directory (recreate folder hierarchy)
@@ -811,8 +789,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       ],
     );
 
-    final navigateToParentSignal =
-        ref.watch(filesPageNavigateToParentSignalProvider);
+    final navigateToParentSignal = ref.watch(
+      filesPageNavigateToParentSignalProvider,
+    );
 
     return FileManagerView<ImageRecord>(
       navigateToParentSignal: navigateToParentSignal,
