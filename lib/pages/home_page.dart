@@ -161,9 +161,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                                   Icon(
                                     isAudio ? Icons.audiotrack : Icons.videocam,
                                     size: 18,
-                                    color: isAudio
-                                        ? Colors.purple
-                                        : Colors.blue,
+                                    color:
+                                        isAudio ? Colors.purple : Colors.blue,
                                   ),
                                   const SizedBox(width: 8),
                                   Icon(
@@ -260,8 +259,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                         final selectedMediaList = mediaList.length == 1
                             ? mediaList
                             : mediaList
-                                  .where((m) => selectedUrls.contains(m.url))
-                                  .toList();
+                                .where((m) => selectedUrls.contains(m.url))
+                                .toList();
                         Navigator.pop(ctx);
                         ref
                             .read(catcatchTasksProvider.notifier)
@@ -454,8 +453,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final synthesisTasks = ref.watch(taskListProvider);
     final backgroundTasks = ref.watch(backgroundTasksProvider);
     final lastRead = ref.watch(taskListLastReadProvider);
-    final activeTaskCount =
-        catcatchTasks
+    final activeTaskCount = catcatchTasks
             .where(
               (t) =>
                   t.status.name != 'completed' &&
@@ -674,8 +672,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final synthesisTasks = ref.watch(taskListProvider);
     final backgroundTasks = ref.watch(backgroundTasksProvider);
     final lastRead = ref.watch(taskListLastReadProvider);
-    final activeTaskCount =
-        catcatchTasks
+    final activeTaskCount = catcatchTasks
             .where(
               (t) =>
                   t.status.name != 'completed' &&
@@ -733,11 +730,16 @@ class _HomePageState extends ConsumerState<HomePage> {
           });
           return;
         }
-        // 2. 如果在文件页面且文件管理器已处理返回（导航到父文件夹），不重复跳转
+        // 2. 如果在文件页面，读取共享的文件夹状态：
+        //    - 如果非空（在子文件夹中），通过信号通知文件管理器导航到父文件夹，
+        //      然后不跳转到主页。
+        //    - 如果为空（在根目录），跳转到主页。
         if (currentPage == AppPage.files) {
-          if (ref.read(filesPageBackHandledProvider)) {
-            // 文件管理器的内部 PopScope 已处理返回事件 → 重置标记并跳过
-            ref.read(filesPageBackHandledProvider.notifier).state = false;
+          final currentFolder = ref.read(filesPageCurrentFolderProvider);
+          if (currentFolder.isNotEmpty) {
+            // 在子文件夹中 → 发送导航到父文件夹的信号
+            ref.read(filesPageNavigateToParentSignalProvider.notifier).state =
+                ref.read(filesPageNavigateToParentSignalProvider) + 1;
             return;
           }
         }

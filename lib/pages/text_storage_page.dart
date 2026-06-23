@@ -385,9 +385,8 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         final records = ref.read(textRecordsProvider);
         var exportedCount = 0;
         for (final folderName in names) {
-          final folderFiles = records
-              .where((r) => r.folder == folderName)
-              .toList();
+          final folderFiles =
+              records.where((r) => r.folder == folderName).toList();
           for (final file in folderFiles) {
             final content = await TextManifest.readText(file.storagePath);
             if (content == null || content.isEmpty) continue;
@@ -426,9 +425,8 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       var exportedCount = 0;
 
       for (final folderName in names) {
-        final folderFiles = records
-            .where((r) => r.folder == folderName)
-            .toList();
+        final folderFiles =
+            records.where((r) => r.folder == folderName).toList();
         if (folderFiles.isEmpty) continue;
 
         final folderOutputDir = p.join(outputDir, folderName);
@@ -617,10 +615,8 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
           ref.read(textViewModeProvider.notifier).setViewMode(v),
       onCurrentFolderChanged: (f) {
         _currentFolder = f;
-        ref.read(filesPageBackHandledProvider.notifier).state = false;
+        ref.read(filesPageCurrentFolderProvider.notifier).state = f;
       },
-      onBackToParent: () =>
-          ref.read(filesPageBackHandledProvider.notifier).state = true,
       extraPopupMenuItems: (file) => [
         const PopupMenuItem(
           value: 'preview',
@@ -643,7 +639,11 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       ],
     );
 
+    final navigateToParentSignal =
+        ref.watch(filesPageNavigateToParentSignalProvider);
+
     return FileManagerView<TextRecord>(
+      navigateToParentSignal: navigateToParentSignal,
       sortedRecords: sortedRecords,
       folders: folders,
       sortConfig: sortConfig,
