@@ -29,14 +29,14 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
   final Future<void> Function(List<String> ids) onDeleteFiles;
   final Future<void> Function(List<String> names) onDeleteFolders;
   final Future<void> Function(List<String> ids, String targetFolder)
-  onMoveFiles;
+      onMoveFiles;
   final Future<void> Function(List<String> names, String targetFolder)
-  onMoveFolders;
+      onMoveFolders;
   final Future<void> Function(String id) onExportFile;
   final Future<void> Function(List<String> ids, String targetDirectory)?
-  onExportFiles;
+      onExportFiles;
   final Future<void> Function(List<String> names, String targetDirectory)?
-  onExportFolders;
+      onExportFolders;
   final Future<void> Function(String name)? onExportFolder;
   final Future<void> Function(String oldName, String newName) onRenameFolder;
   final Future<void> Function(String name, String targetParent) onMoveFolder;
@@ -48,6 +48,17 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
 
   // Manifest helper statics
   final ManifestBridge manifestBridge;
+
+  /// External signal from the outer PopScope in [HomePage].
+  /// When this counter changes and [FileManagerView] is in a subfolder,
+  /// it navigates to the parent folder.
+  /// This replaces the inner PopScope that previously handled back navigation.
+  final int navigateToParentSignal;
+
+  /// Whether this [FileManagerView] is the currently active tab in [TabBarView].
+  /// When false, the widget ignores [navigateToParentSignal] changes to prevent
+  /// silent navigation in inactive tabs that were left in a subfolder.
+  final bool isActiveTab;
 
   const FileManagerView({
     super.key,
@@ -76,6 +87,8 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
     required this.onToggleSort,
     this.onImport,
     required this.manifestBridge,
+    this.navigateToParentSignal = 0,
+    this.isActiveTab = true,
   });
 
   @override
@@ -101,6 +114,9 @@ class _FileManagerViewState<T extends FileRecord>
   void initState() {
     super.initState();
     _showGridView = widget.config.initialGridView;
+    // 同步初始文件夹状态到外部 Provider，确保 filesPageCurrentFolderProvider
+    // 在新标签页首次创建时正确地反映当前文件夹
+    widget.config.onCurrentFolderChanged?.call(_currentFolder);
   }
 
   @override
@@ -109,6 +125,19 @@ class _FileManagerViewState<T extends FileRecord>
     // 数据记录引用变化时清空缩略图缓存
     if (oldWidget.sortedRecords != widget.sortedRecords) {
       _thumbnailCache.clear();
+    }
+    // 检测外部导航到父文件夹的信号（仅活动标签页响应）
+    if (widget.isActiveTab &&
+        widget.navigateToParentSignal != oldWidget.navigateToParentSignal &&
+        _currentFolder.isNotEmpty) {
+      // 计算信号差值，处理快速连续点击导致的信号合并
+      final signalDiff =
+          widget.navigateToParentSignal - oldWidget.navigateToParentSignal;
+      for (int i = 0; i < signalDiff && _currentFolder.isNotEmpty; i++) {
+        _setCurrentFolder(
+          widget.manifestBridge.getParentFolderPath(_currentFolder),
+        );
+      }
     }
   }
 
@@ -223,98 +252,85 @@ class _FileManagerViewState<T extends FileRecord>
     final showGrid =
         widget.config.fileThumbnailBuilder != null && _showGridView;
 
-    return PopScope(
-      canPop: _currentFolder.isEmpty, // 在根目录时允许系统返回，在子文件夹中拦截
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _currentFolder.isNotEmpty) {
-          // 先导航到父文件夹（此操作会触发 onCurrentFolderChanged，将标记重置为 false）
-          _setCurrentFolder(
-            widget.manifestBridge.getParentFolderPath(_currentFolder),
-          );
-          // 然后再通知外层 PopScope 已处理返回事件，确保标记为最终状态
-          widget.config.onBackToParent?.call();
-        }
-      },
-      child: Scaffold(
-        key: const Key('fm_scaffold'),
-        appBar: _buildAppBar(grouped),
-        body: Column(
-          children: [
-            if (widget.config.topActionBar != null) widget.config.topActionBar!,
-            Expanded(
-              child: showGrid
-                  ? _buildGridView(grouped)
-                  : _buildFileListView(grouped),
-            ),
-          ],
-        ),
-        bottomNavigationBar: _selectionMode
-            ? SafeArea(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).scaffoldBackgroundColor,
-                    border: Border(top: BorderSide(color: Colors.grey[300]!)),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          key: const Key('fm_selection_copy_btn'),
-                          onPressed: _copySelected,
-                          icon: const Icon(Icons.copy, size: 20),
-                          label: const Text('复制'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          key: const Key('fm_selection_move_btn'),
-                          onPressed: _moveSelected,
-                          icon: const Icon(
-                            Icons.drive_file_move_outline,
-                            size: 20,
-                          ),
-                          label: const Text('移动'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          key: const Key('fm_selection_export_btn'),
-                          onPressed: _exportSelected,
-                          icon: const Icon(
-                            Icons.file_download_outlined,
-                            size: 20,
-                          ),
-                          label: const Text('导出'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          key: const Key('fm_selection_delete_btn'),
-                          onPressed: _deleteSelected,
-                          icon: const Icon(
-                            Icons.delete_outline,
-                            color: Colors.red,
-                            size: 20,
-                          ),
-                          label: const Text(
-                            '删除',
-                            style: TextStyle(color: Colors.red),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            : null,
+    return Scaffold(
+      key: const Key('fm_scaffold'),
+      appBar: _buildAppBar(grouped),
+      body: Column(
+        children: [
+          if (widget.config.topActionBar != null) widget.config.topActionBar!,
+          Expanded(
+            child: showGrid
+                ? _buildGridView(grouped)
+                : _buildFileListView(grouped),
+          ),
+        ],
       ),
+      bottomNavigationBar: _selectionMode
+          ? SafeArea(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  border: Border(top: BorderSide(color: Colors.grey[300]!)),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        key: const Key('fm_selection_copy_btn'),
+                        onPressed: _copySelected,
+                        icon: const Icon(Icons.copy, size: 20),
+                        label: const Text('复制'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        key: const Key('fm_selection_move_btn'),
+                        onPressed: _moveSelected,
+                        icon: const Icon(
+                          Icons.drive_file_move_outline,
+                          size: 20,
+                        ),
+                        label: const Text('移动'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        key: const Key('fm_selection_export_btn'),
+                        onPressed: _exportSelected,
+                        icon: const Icon(
+                          Icons.file_download_outlined,
+                          size: 20,
+                        ),
+                        label: const Text('导出'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        key: const Key('fm_selection_delete_btn'),
+                        onPressed: _deleteSelected,
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: Colors.red,
+                          size: 20,
+                        ),
+                        label: const Text(
+                          '删除',
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : null,
     );
   }
 
@@ -325,8 +341,8 @@ class _FileManagerViewState<T extends FileRecord>
         _selectionMode
             ? '已选择 ${_selectedIds.length} 项'
             : _currentFolder.isNotEmpty
-            ? _currentFolder
-            : widget.config.title,
+                ? _currentFolder
+                : widget.config.title,
       ),
       centerTitle: true,
       leading: _selectionMode
@@ -336,18 +352,18 @@ class _FileManagerViewState<T extends FileRecord>
               onPressed: _exitSelectionMode,
             )
           : (_currentFolder.isNotEmpty
-                ? IconButton(
-                    key: const Key('fm_back_btn'),
-                    icon: const Icon(Icons.arrow_back),
-                    onPressed: () {
-                      _setCurrentFolder(
-                        widget.manifestBridge.getParentFolderPath(
-                          _currentFolder,
-                        ),
-                      );
-                    },
-                  )
-                : null),
+              ? IconButton(
+                  key: const Key('fm_back_btn'),
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () {
+                    _setCurrentFolder(
+                      widget.manifestBridge.getParentFolderPath(
+                        _currentFolder,
+                      ),
+                    );
+                  },
+                )
+              : null),
       actions: [
         if (_selectionMode) ...[
           IconButton(
@@ -449,9 +465,8 @@ class _FileManagerViewState<T extends FileRecord>
           : nameA.compareTo(nameB);
     });
 
-    final currentFiles = isInFolder
-        ? (grouped[_currentFolder] ?? [])
-        : (grouped[''] ?? []);
+    final currentFiles =
+        isInFolder ? (grouped[_currentFolder] ?? []) : (grouped[''] ?? []);
 
     final hasContent = subFolders.isNotEmpty || currentFiles.isNotEmpty;
 
@@ -549,9 +564,8 @@ class _FileManagerViewState<T extends FileRecord>
           : nameA.compareTo(nameB);
     });
 
-    final currentFiles = isInFolder
-        ? (grouped[_currentFolder] ?? [])
-        : (grouped[''] ?? []);
+    final currentFiles =
+        isInFolder ? (grouped[_currentFolder] ?? []) : (grouped[''] ?? []);
 
     final hasContent = subFolders.isNotEmpty || currentFiles.isNotEmpty;
 
@@ -1558,9 +1572,8 @@ class _FileManagerViewState<T extends FileRecord>
       }
       _folderNameController.clear();
       // Prepend the current folder path to create subfolder hierarchy
-      final fullPath = _currentFolder.isEmpty
-          ? result
-          : '$_currentFolder/$result';
+      final fullPath =
+          _currentFolder.isEmpty ? result : '$_currentFolder/$result';
       await widget.onCreateFolder(fullPath);
       // If we're at root, navigate into the newly created folder
       if (_currentFolder.isEmpty) {
@@ -1652,9 +1665,8 @@ class _FileManagerViewState<T extends FileRecord>
       widget.folders,
     );
     final excluded = {folderName, ...descendants};
-    final targetFolders = widget.folders
-        .where((f) => !excluded.contains(f))
-        .toSet();
+    final targetFolders =
+        widget.folders.where((f) => !excluded.contains(f)).toSet();
 
     final selectedFolder = await _showFolderPickerDialog(
       targetFolders,
@@ -1678,9 +1690,8 @@ class _FileManagerViewState<T extends FileRecord>
       widget.folders,
     );
     final excluded = {folderName, ...descendants};
-    final targetFolders = widget.folders
-        .where((f) => !excluded.contains(f))
-        .toSet();
+    final targetFolders =
+        widget.folders.where((f) => !excluded.contains(f)).toSet();
 
     final selectedFolder = await _showFolderPickerDialog(
       targetFolders,
@@ -1696,18 +1707,16 @@ class _FileManagerViewState<T extends FileRecord>
   }
 
   Future<void> _deleteFolder(String folderName) async {
-    final directCount = widget.sortedRecords
-        .where((r) => r.folder == folderName)
-        .length;
+    final directCount =
+        widget.sortedRecords.where((r) => r.folder == folderName).length;
     final descendants = widget.manifestBridge.getAllDescendantFolderPaths(
       folderName,
       widget.folders,
     );
     int subFileCount = 0;
     for (final desc in descendants) {
-      subFileCount += widget.sortedRecords
-          .where((r) => r.folder == desc)
-          .length;
+      subFileCount +=
+          widget.sortedRecords.where((r) => r.folder == desc).length;
     }
     final fileCount = directCount + subFileCount;
     final message = fileCount > 0

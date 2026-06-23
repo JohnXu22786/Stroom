@@ -598,9 +598,8 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         final records = ref.read(imageRecordsProvider);
         var exportedCount = 0;
         for (final folderName in names) {
-          final folderFiles = records
-              .where((r) => r.folder == folderName)
-              .toList();
+          final folderFiles =
+              records.where((r) => r.folder == folderName).toList();
           for (final file in folderFiles) {
             final data = await ImageManifest.readFile(file.storagePath);
             if (data == null || data.isEmpty) continue;
@@ -638,9 +637,8 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       var exportedCount = 0;
 
       for (final folderName in names) {
-        final folderFiles = records
-            .where((r) => r.folder == folderName)
-            .toList();
+        final folderFiles =
+            records.where((r) => r.folder == folderName).toList();
         if (folderFiles.isEmpty) continue;
 
         // Create folder in output directory (recreate folder hierarchy)
@@ -798,10 +796,8 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           ref.read(imageViewModeProvider.notifier).setViewMode(v),
       onCurrentFolderChanged: (f) {
         _currentFolder = f;
-        ref.read(filesPageBackHandledProvider.notifier).state = false;
+        ref.read(filesPageCurrentFolderProvider.notifier).state = f;
       },
-      onBackToParent: () =>
-          ref.read(filesPageBackHandledProvider.notifier).state = true,
       extraPopupMenuItems: (file) => [
         const PopupMenuItem(
           value: 'export',
@@ -815,7 +811,11 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       ],
     );
 
+    final navigateToParentSignal =
+        ref.watch(filesPageNavigateToParentSignalProvider);
+
     return FileManagerView<ImageRecord>(
+      navigateToParentSignal: navigateToParentSignal,
       sortedRecords: sortedRecords,
       folders: folders,
       sortConfig: sortConfig,

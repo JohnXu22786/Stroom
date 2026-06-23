@@ -412,9 +412,8 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         final records = ref.read(videoRecordsProvider);
         var exportedCount = 0;
         for (final folderName in names) {
-          final folderFiles = records
-              .where((r) => r.folder == folderName)
-              .toList();
+          final folderFiles =
+              records.where((r) => r.folder == folderName).toList();
           for (final file in folderFiles) {
             final data = await VideoManifest.readFile(file.storagePath);
             if (data == null || data.isEmpty) continue;
@@ -452,9 +451,8 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       var exportedCount = 0;
 
       for (final folderName in names) {
-        final folderFiles = records
-            .where((r) => r.folder == folderName)
-            .toList();
+        final folderFiles =
+            records.where((r) => r.folder == folderName).toList();
         if (folderFiles.isEmpty) continue;
 
         final folderOutputDir = p.join(outputDir, folderName);
@@ -514,8 +512,8 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         case SortField.createdAt:
           getCmp = (x, y) => x.createdAt.compareTo(y.createdAt);
         case SortField.name:
-          getCmp = (x, y) =>
-              x.name.toLowerCase().compareTo(y.name.toLowerCase());
+          getCmp =
+              (x, y) => x.name.toLowerCase().compareTo(y.name.toLowerCase());
         case SortField.size:
           getCmp = (x, y) => x.size.compareTo(y.size);
       }
@@ -720,10 +718,8 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
           ref.read(videoViewModeProvider.notifier).setViewMode(v),
       onCurrentFolderChanged: (f) {
         _currentFolder = f;
-        ref.read(filesPageBackHandledProvider.notifier).state = false;
+        ref.read(filesPageCurrentFolderProvider.notifier).state = f;
       },
-      onBackToParent: () =>
-          ref.read(filesPageBackHandledProvider.notifier).state = true,
       extraPopupMenuItems: (file) => [
         const PopupMenuItem(
           value: 'play',
@@ -751,7 +747,11 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       },
     );
 
+    final navigateToParentSignal =
+        ref.watch(filesPageNavigateToParentSignalProvider);
+
     return FileManagerView<VideoRecord>(
+      navigateToParentSignal: navigateToParentSignal,
       sortedRecords: sortedRecords,
       folders: folders,
       sortConfig: sortConfig,
