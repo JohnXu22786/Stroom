@@ -1556,34 +1556,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
       canPop: !isStreaming,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        // Streaming is active — confirm before navigating away
-        final shouldStop = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('停止生成？'),
-            content: const Text('AI正在生成回复，返回上一级将中断生成。'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('取消'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                style: TextButton.styleFrom(
-                  foregroundColor: Theme.of(context).colorScheme.error,
-                ),
-                child: const Text('停止并返回'),
-              ),
-            ],
-          ),
-        );
-        if (shouldStop == true && mounted) {
-          _stopStreaming();
-          // Use post-frame callback to pop after the widget has rebuilt
-          // with canPop: true (isStreaming is now false).
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) Navigator.of(context).pop();
-          });
+        // Streaming is active — keep the page alive and inform the user.
+        // The stream continues, messages are saved, and the page stays
+        // mounted until streaming completes (isStreaming becomes false
+        // and canPop becomes true automatically via PopScope).
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('AI正在生成回复，请等待回复完成后返回'),
+              duration: Duration(seconds: 2),
+            ),
+          );
         }
       },
       child: SafeArea(
@@ -1611,7 +1594,22 @@ class _ChatPageState extends ConsumerState<ChatPage>
                       IconButton(
                         icon: const Icon(Icons.arrow_back),
                         tooltip: 'Back',
-                        onPressed: () => Navigator.of(context).pop(),
+                        onPressed: () {
+                          if (isStreaming) {
+                            // Streaming is active — block back navigation
+                            // and inform the user.  The page stays alive,
+                            // the stream continues, and the full message
+                            // is saved before the user can leave.
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('AI正在生成回复，请等待回复完成后返回'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          } else {
+                            Navigator.of(context).pop();
+                          }
+                        },
                       ),
                     Expanded(
                       child: GestureDetector(
