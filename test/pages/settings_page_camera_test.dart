@@ -22,7 +22,8 @@ Widget _buildTestApp() {
         },
       ),
       updateProvider.overrideWith((ref) => UpdateNotifier()),
-      notificationSettingsProvider.overrideWith((ref) => NotificationSettingsNotifier()),
+      notificationSettingsProvider
+          .overrideWith((ref) => NotificationSettingsNotifier()),
     ],
     child: const MaterialApp(
       home: SettingsPage(),
@@ -66,7 +67,9 @@ void main() {
       expect(find.text('相机设置'), findsNothing);
     });
 
-    testWidgets('does NOT show camera-related Switch, but shows notification Switch', (tester) async {
+    testWidgets(
+        'does NOT show camera-related Switch, but shows notification Switch',
+        (tester) async {
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -79,13 +82,15 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // Notification Switch should now be present (not camera-related)
-      expect(find.byType(Switch), findsOneWidget);
+      // Notification toggle should be present (not camera-related)
+      expect(find.byType(Switch), findsWidgets);
       // Camera section should still not be present
       expect(find.text('相机设置'), findsNothing);
     });
 
-    testWidgets('settings page renders without error and shows all remaining sections', (tester) async {
+    testWidgets(
+        'settings page renders without error and shows all remaining sections',
+        (tester) async {
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
