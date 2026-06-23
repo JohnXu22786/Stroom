@@ -195,7 +195,7 @@ void main() {
 
         // Module card labels should be visible
         expect(find.text('OCR'), findsOneWidget);
-        expect(find.text('音频转写'), findsOneWidget);
+        expect(find.text('语音识别'), findsOneWidget);
 
         // No overflow exceptions should have been thrown
         expect(tester.takeException(), isNull);
@@ -213,7 +213,7 @@ void main() {
       // Verify all key elements are still present
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
       expect(find.text('OCR'), findsOneWidget);
-      expect(find.text('音频转写'), findsOneWidget);
+      expect(find.text('语音识别'), findsOneWidget);
       expect(find.byIcon(Icons.pending_actions), findsOneWidget);
 
       // No overflow exceptions
@@ -337,7 +337,7 @@ void main() {
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
       expect(find.text('选择一个功能模块开始使用'), findsOneWidget);
       expect(find.text('OCR'), findsOneWidget);
-      expect(find.text('音频转写'), findsOneWidget);
+      expect(find.text('语音识别'), findsOneWidget);
       expect(find.byIcon(Icons.pending_actions), findsOneWidget);
 
       // No overflow exceptions
