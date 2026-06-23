@@ -18,6 +18,8 @@ import 'package:stroom/widgets/gallery_choice_dialog.dart';
 import 'package:stroom/widgets/file_preview.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/widgets/chat_attachment_panel.dart';
+import 'package:stroom/widgets/image_preview_dialog.dart';
+import 'package:stroom/pages/image_editor_page.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'chat_setting_panels.dart';
@@ -183,9 +185,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     // If the text hasn't changed since last save, skip
     if (w == widget && _lastSavedDraft == _textController.text) return;
     final textToSave = _textController.text;
-    ref
-        .read(conversationsProvider.notifier)
-        .saveDraft(convId, textToSave);
+    ref.read(conversationsProvider.notifier).saveDraft(convId, textToSave);
     _lastSavedDraft = textToSave;
   }
 
@@ -199,9 +199,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
       if (!mounted) return;
       final convId = widget.conversationId;
       if (convId == null) return;
-      ref
-          .read(conversationsProvider.notifier)
-          .saveDraft(convId, text);
+      ref.read(conversationsProvider.notifier).saveDraft(convId, text);
       _lastSavedDraft = text;
     });
   }
@@ -223,8 +221,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   }
 
   void _showComposerFullscreenEditor() {
-    final editingController =
-        TextEditingController(text: _textController.text);
+    final editingController = TextEditingController(text: _textController.text);
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
@@ -237,8 +234,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                 children: [
                   const Text(
                     '编辑消息',
-                    style:
-                        TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                   const Spacer(),
                   IconButton(
@@ -334,16 +330,19 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
       reasoningParams: widget.reasoningParams,
       onReasoningToggle: (value) {
         ref.read(reasoningEnabledProvider.notifier).state = value;
-        SharedPreferences.getInstance()
-            .then((prefs) => prefs.setBool('reasoning_enabled', value));
+        SharedPreferences.getInstance().then(
+          (prefs) => prefs.setBool('reasoning_enabled', value),
+        );
       },
       onReasoningParamChanged: (paramName, value) {
         final current = Map<String, String>.from(
-            ref.read(reasoningParamValuesProvider));
+          ref.read(reasoningParamValuesProvider),
+        );
         current[paramName] = value;
         ref.read(reasoningParamValuesProvider.notifier).state = current;
-        SharedPreferences.getInstance().then((prefs) =>
-            prefs.setString('reasoning_params', current.toString()));
+        SharedPreferences.getInstance().then(
+          (prefs) => prefs.setString('reasoning_params', current.toString()),
+        );
       },
     );
   }
@@ -423,10 +422,10 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     if (choice == null) return;
     try {
       if (choice.choice == CameraChoice.app) {
-        final result =
-            await Navigator.of(context, rootNavigator: true).push<String>(
-          MaterialPageRoute(builder: (_) => const CameraPage()),
-        );
+        final result = await Navigator.of(
+          context,
+          rootNavigator: true,
+        ).push<String>(MaterialPageRoute(builder: (_) => const CameraPage()));
         if (result != null && result.isNotEmpty) {
           final file = File(result);
           final bytes = await file.readAsBytes();
@@ -496,8 +495,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     }
   }
 
-  Future<void> _addPendingAttachment(
-      String fileName, Uint8List bytes) async {
+  Future<void> _addPendingAttachment(String fileName, Uint8List bytes) async {
     final mimeType = lookupMimeType(fileName) ?? 'application/octet-stream';
     final fileType = mimeType.startsWith('image/')
         ? 'image'
@@ -562,6 +560,121 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     });
   }
 
+  /// Reorder handler for [ReorderableListView].
+  /// Adjusts indices per ReorderableListView convention:
+  /// when [newIndex] > [oldIndex], subtract 1 because the item is already
+  /// removed from its old position before being inserted at newIndex.
+  void _onReorderPendingAttachment(int oldIndex, int newIndex) {
+    if (newIndex > oldIndex) newIndex--;
+    final item = _pendingAttachments.removeAt(oldIndex);
+    setState(() {
+      _pendingAttachments.insert(newIndex, item);
+    });
+  }
+
+  /// Called when a pending attachment chip is tapped.
+  /// For image attachments: shows [ImagePreviewDialog] with edit button.
+  ///   If user taps edit, opens [ImageEditorPage]; on save, updates the
+  ///   pending attachment with edited bytes.
+  /// For non-image attachments: delegates to [widget.onPreviewAttachment].
+  Future<void> _onTapPendingAttachment(int index) async {
+    if (index < 0 || index >= _pendingAttachments.length) return;
+    final att = _pendingAttachments[index];
+    final isImage = att.fileType == 'image';
+
+    if (!isImage) {
+      widget.onPreviewAttachment?.call(att);
+      return;
+    }
+
+    // For images: show preview dialog with edit button
+    final imageBytes = _pendingImageBytes[att.id];
+    if (imageBytes == null) return;
+    if (!mounted) return;
+
+    final shouldEdit = await showDialog<bool>(
+      context: context,
+      builder: (ctx) =>
+          ImagePreviewDialog(imageData: imageBytes, fileName: att.fileName),
+    );
+
+    if (shouldEdit != true || !mounted) return;
+
+    // User tapped edit — open the image editor
+    final result = await Navigator.push<ImageEditorResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            ImageEditorPage(imageBytes: imageBytes, fromCamera: false),
+      ),
+    );
+
+    if (result == null || !mounted) return;
+    if (index >= _pendingAttachments.length) return;
+    // Verify the attachment at this index is still the same one we tapped
+    if (_pendingAttachments[index].id != att.id) return;
+
+    // Editor returned edited bytes — update the pending attachment
+    await _updatePendingAttachmentAfterEdit(index, result.editedBytes);
+  }
+
+  /// Updates the pending attachment at [index] with [editedBytes].
+  /// Re-saves the file via [AttachmentStorage] and updates both
+  /// [_pendingAttachments] and [_pendingImageBytes].
+  ///
+  /// If saving the edited file fails, the old attachment is preserved
+  /// and an error snackbar is shown.
+  Future<void> _updatePendingAttachmentAfterEdit(
+    int index,
+    Uint8List editedBytes,
+  ) async {
+    final oldAtt = _pendingAttachments[index];
+
+    try {
+      // Save the edited file
+      final newStoragePath = await AttachmentStorage.saveFile(
+        oldAtt.fileName,
+        editedBytes,
+      );
+      final newHash = AttachmentStorage.computeHash(editedBytes);
+
+      // Compute base64 for the new bytes
+      final newBase64 = base64Encode(editedBytes);
+
+      // Delete the old file from storage (no longer needed).
+      // If this fails, the new file is already saved so it's safe
+      // to proceed — the old file will be cleaned up later.
+      try {
+        await AttachmentStorage.deleteFile(oldAtt.storagePath);
+      } catch (_) {
+        // Old file cleanup failure is non-fatal
+      }
+
+      // Update attachment with new properties
+      final updatedAtt = oldAtt.copyWith(
+        hash: newHash,
+        storagePath: newStoragePath,
+        fileSize: editedBytes.length,
+        base64Data: newBase64,
+      );
+
+      setState(() {
+        _pendingAttachments[index] = updatedAtt;
+        _pendingImageBytes[updatedAtt.id] = editedBytes;
+      });
+    } catch (e) {
+      debugPrint('[ChatComposer] _updatePendingAttachmentAfterEdit error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('保存编辑后的图片失败'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isStreaming = ref.watch(isStreamingProvider);
@@ -575,30 +688,32 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         key: _composerKey,
         decoration: BoxDecoration(
           color: cs.surfaceContainerLow,
-          border: Border(
-            top: BorderSide(color: cs.outlineVariant, width: 0.5),
-          ),
+          border: Border(top: BorderSide(color: cs.outlineVariant, width: 0.5)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ── Pending attachments row ──
+            // ── Pending attachments row (reorderable) ──
             if (hasAttachments)
               Container(
                 height: 80,
                 padding: const EdgeInsets.only(left: 12, top: 8),
-                child: ListView.builder(
+                child: ReorderableListView.builder(
                   scrollDirection: Axis.horizontal,
+                  buildDefaultDragHandles: false,
                   itemCount: _pendingAttachments.length,
+                  onReorder: _onReorderPendingAttachment,
                   itemBuilder: (ctx, i) {
                     final att = _pendingAttachments[i];
-                    return FilePreviewChip(
-                      attachment: att,
-                      imageBytes: _pendingImageBytes[att.id],
-                      onRemove: () => _removePendingAttachment(i),
-                      onTap: widget.onPreviewAttachment != null
-                          ? () => widget.onPreviewAttachment!(att)
-                          : null,
+                    return ReorderableDelayedDragStartListener(
+                      key: ValueKey('pending_att_${att.id}'),
+                      index: i,
+                      child: FilePreviewChip(
+                        attachment: att,
+                        imageBytes: _pendingImageBytes[att.id],
+                        onRemove: () => _removePendingAttachment(i),
+                        onTap: () => _onTapPendingAttachment(i),
+                      ),
                     );
                   },
                 ),
@@ -632,9 +747,8 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                     icon: Icons.psychology_outlined,
                     label: '推理',
                     color: Colors.purple,
-                    onTap: widget.hasReasoningParams
-                        ? _showReasoningPanel
-                        : null,
+                    onTap:
+                        widget.hasReasoningParams ? _showReasoningPanel : null,
                     enabled: widget.hasReasoningParams,
                   ),
                 ],
@@ -652,8 +766,10 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
               child: Row(
                 children: [
                   IconButton(
-                    icon:
-                        Icon(Icons.attach_file_outlined, color: cs.onSurfaceVariant),
+                    icon: Icon(
+                      Icons.attach_file_outlined,
+                      color: cs.onSurfaceVariant,
+                    ),
                     tooltip: '附件',
                     onPressed: _showAttachmentPicker,
                   ),
@@ -682,21 +798,28 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                           vertical: 10,
                         ),
                         suffixIcon: IconButton(
-                          icon: Icon(Icons.fullscreen,
-                              size: 20, color: cs.onSurfaceVariant),
+                          icon: Icon(
+                            Icons.fullscreen,
+                            size: 20,
+                            color: cs.onSurfaceVariant,
+                          ),
                           tooltip: '全屏编辑',
                           onPressed: _showComposerFullscreenEditor,
                         ),
-                        suffixIconConstraints:
-                            const BoxConstraints(minWidth: 36, minHeight: 0),
+                        suffixIconConstraints: const BoxConstraints(
+                          minWidth: 36,
+                          minHeight: 0,
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 4),
                   if (isStreaming)
                     IconButton(
-                      icon: Icon(Icons.stop_circle_outlined,
-                          color: Colors.red[400]),
+                      icon: Icon(
+                        Icons.stop_circle_outlined,
+                        color: Colors.red[400],
+                      ),
                       tooltip: '停止生成',
                       onPressed: widget.onStop,
                     )
@@ -705,8 +828,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                       icon: Icon(Icons.send_rounded, color: cs.primary),
                       tooltip: '发送',
                       onPressed: (hasText || hasAttachments)
-                          ? () =>
-                              _handleSubmitted(_textController.text)
+                          ? () => _handleSubmitted(_textController.text)
                           : null,
                     ),
                 ],
