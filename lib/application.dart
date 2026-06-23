@@ -2,14 +2,14 @@ import 'dart:io' show exit, Platform;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show debugPrint, defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:flutter/foundation.dart'
+    show debugPrint, defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 
 import 'pages/home_page.dart';
-import 'pages/camera_page.dart';
 import 'pages/chat_page.dart';
 import 'pages/files_page.dart';
 import 'pages/settings_page.dart';
@@ -98,9 +98,8 @@ class _ApplicationState extends ConsumerState<Application> {
       final shouldExit = await showDialog<bool>(
         context: navigatorContext,
         barrierDismissible: false, // 不可通过点击背景关闭
-        builder: (_) => MigrationDialog(
-          future: DataMigrationService.checkAndMigrate(),
-        ),
+        builder: (_) =>
+            MigrationDialog(future: DataMigrationService.checkAndMigrate()),
       );
 
       // 如果返回 true，表示需要重启应用
@@ -126,9 +125,7 @@ class _ApplicationState extends ConsumerState<Application> {
       if (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS) {
         SystemNavigator.pop();
-      } else if (Platform.isWindows ||
-          Platform.isMacOS ||
-          Platform.isLinux) {
+      } else if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
         exit(0);
       }
     } catch (e) {
@@ -184,64 +181,63 @@ class _ApplicationState extends ConsumerState<Application> {
         final colorScheme = themeMode == ThemeMode.light
             ? lightColorScheme
             : themeMode == ThemeMode.dark
-                ? darkColorScheme
-                : MediaQuery.platformBrightnessOf(context) == Brightness.light
-                    ? lightColorScheme
-                    : darkColorScheme;
+            ? darkColorScheme
+            : MediaQuery.platformBrightnessOf(context) == Brightness.light
+            ? lightColorScheme
+            : darkColorScheme;
 
         return Directionality(
           textDirection: TextDirection.ltr,
           child: Stack(
-          children: [
-            MaterialApp(
-              title: 'Stroom',
-              navigatorKey: _navigatorKey,
-              theme: ThemeData(
-                useMaterial3: true,
-                colorScheme: colorScheme,
-                pageTransitionsTheme: PageTransitionsTheme(
-                  builders: {
-                    TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-                    TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-                  },
+            children: [
+              MaterialApp(
+                title: 'Stroom',
+                navigatorKey: _navigatorKey,
+                theme: ThemeData(
+                  useMaterial3: true,
+                  colorScheme: colorScheme,
+                  pageTransitionsTheme: PageTransitionsTheme(
+                    builders: {
+                      TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+                      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+                    },
+                  ),
                 ),
-              ),
-              darkTheme: ThemeData(
-                useMaterial3: true,
-                colorScheme: darkColorScheme,
-                pageTransitionsTheme: PageTransitionsTheme(
-                  builders: {
-                    TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-                    TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-                  },
+                darkTheme: ThemeData(
+                  useMaterial3: true,
+                  colorScheme: darkColorScheme,
+                  pageTransitionsTheme: PageTransitionsTheme(
+                    builders: {
+                      TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+                      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+                    },
+                  ),
                 ),
+                themeMode: themeMode,
+                localizationsDelegates: const [
+                  GlobalMaterialLocalizations.delegate,
+                  GlobalWidgetsLocalizations.delegate,
+                  GlobalCupertinoLocalizations.delegate,
+                ],
+                supportedLocales: const [
+                  Locale('zh', 'CN'),
+                  Locale('en', 'US'),
+                ],
+                locale: const Locale('zh', 'CN'),
+                home: const HomePage(),
+                routes: {
+                  '/home': (context) => const HomePage(),
+                  '/chat': (context) => const ChatPage(),
+                  '/files': (context) => const FilesPage(),
+                  '/settings': (context) => const SettingsPage(),
+                },
+                debugShowCheckedModeBanner: false,
               ),
-              themeMode: themeMode,
-              localizationsDelegates: const [
-                GlobalMaterialLocalizations.delegate,
-                GlobalWidgetsLocalizations.delegate,
-                GlobalCupertinoLocalizations.delegate,
-              ],
-              supportedLocales: const [
-                Locale('zh', 'CN'),
-                Locale('en', 'US'),
-              ],
-              locale: const Locale('zh', 'CN'),
-              home: const HomePage(),
-              routes: {
-                '/home': (context) => const HomePage(),
-                '/camera': (context) => const CameraPage(),
-                '/chat': (context) => const ChatPage(),
-                '/files': (context) => const FilesPage(),
-                '/settings': (context) => const SettingsPage(),
-              },
-              debugShowCheckedModeBanner: false,
-            ),
-            // In-app notification banner overlay
-            _InAppBannerOverlay(),
-          ],
-        ),
-      );
+              // In-app notification banner overlay
+              _InAppBannerOverlay(),
+            ],
+          ),
+        );
       },
     );
   }

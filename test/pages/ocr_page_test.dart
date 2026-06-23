@@ -188,66 +188,20 @@ void main() {
     });
   });
 
-  group('OcrPage - camera choice panel', () {
-    testWidgets('tapping camera button shows choice panel', (tester) async {
+  group('OcrPage - camera button (no choice panel)', () {
+    testWidgets('tapping camera button does NOT show choice panel',
+        (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // Tap the camera button
+      // Tap the camera button - it now directly opens system camera
       await tester.tap(find.text('拍照识别'));
       await tester.pumpAndSettle();
 
-      // Should show choice panel with app and system camera
-      expect(find.text('应用相机'), findsOneWidget);
-      expect(find.text('系统相机'), findsOneWidget);
-    });
-
-    testWidgets('camera choice panel shows icons', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('拍照识别'));
-      await tester.pumpAndSettle();
-
-      // Should show camera icons in the panel
-      expect(find.byIcon(Icons.camera_alt), findsOneWidget);
-      expect(find.byIcon(Icons.phone_android), findsOneWidget);
-    });
-
-    testWidgets('camera choice panel has title', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('拍照识别'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('选择拍照方式'), findsOneWidget);
-    });
-
-    testWidgets('camera choice panel does NOT show save-to folder section', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('拍照识别'));
-      await tester.pumpAndSettle();
-
-      // Should NOT show the save-to folder section (unlike gallery page)
-      expect(find.text('添加至文件夹'), findsNothing);
-    });
-
-    testWidgets('camera choice panel does NOT show edit toggle', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('拍照识别'));
-      await tester.pumpAndSettle();
-
-      // Should NOT show the edit after capture toggle
-      expect(find.text('拍完编辑'), findsNothing);
+      // The old choice panel should NOT appear
+      expect(find.text('应用相机'), findsNothing);
+      expect(find.text('系统相机'), findsNothing);
+      expect(find.text('选择拍照方式'), findsNothing);
     });
   });
 
