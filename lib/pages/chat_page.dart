@@ -499,9 +499,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
     }
   }
 
-  Future<void> _saveMessages() async {
+  Future<void> _saveMessages({String? capturedConvId}) async {
     try {
-      final convId = ref.read(activeConversationIdProvider);
+      final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
       if (convId == null) return;
       await ref.read(conversationsProvider.notifier).updateMessages(convId, [
         ..._history,
@@ -514,7 +514,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
         final prefs = await SharedPreferences.getInstance();
         final allJson = prefs.getString('conversations');
         if (allJson == null) return;
-        final convId = ref.read(activeConversationIdProvider);
+        final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
         if (convId == null) return;
         final list = (jsonDecode(allJson) as List).cast<Map<String, dynamic>>();
         final conv = list.where((c) => c['id'] == convId).firstOrNull;
@@ -548,9 +548,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Future<void> _onMessageSend(String text, List<Attachment> attachments) async {
     if (ref.read(isStreamingProvider)) return;
 
-    final convId = ref.read(activeConversationIdProvider);
+    String? convId = ref.read(activeConversationIdProvider);
     if (convId == null) {
       ref.read(conversationsProvider.notifier).createConversation();
+      convId = ref.read(activeConversationIdProvider);
     }
 
     final userMsgId = 'u${DateTime.now().millisecondsSinceEpoch}';
@@ -572,10 +573,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
       ),
     );
 
-    await _startStreaming(text);
+    await _startStreaming(text, capturedConvId: convId);
   }
 
-  Future<void> _startStreaming(String text) async {
+  Future<void> _startStreaming(String text, {String? capturedConvId}) async {
     if (ref.read(isStreamingProvider)) return;
     ref.read(isStreamingProvider.notifier).state = true;
     _isStreamingActive = true;
@@ -612,6 +613,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
     Map<String, dynamic>? rawResponseCapture;
 
     void updateMessage(String content) {
+      // Skip UI update if the page was disposed (user navigated away during
+      // streaming). The streaming continues in the background and will save
+      // the completed result via _saveMessages() when it finishes.
+      if (!mounted) return;
       _controller?.updateMessage(
         placeholder,
         Message.text(
@@ -904,7 +909,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // streaming result to SharedPreferences so it shows up when the user
     // navigates back to the chat page. Uses ref.read which works at the
     // ProviderScope level and does not require mounted to be true.
-    await _saveMessages();
+    // Use capturedConvId (set at stream start) to avoid saving to the wrong
+    // conversation if the user switched conversations during background
+    // streaming (e.g. navigated back and selected a different topic).
+    await _saveMessages(capturedConvId: capturedConvId);
 
     // Clean up the adapter after background streaming completes. If the page
     // was disposed while streaming, dispose() skipped adapter cleanup, so we
@@ -1604,22 +1612,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     }
 
     return PopScope(
-      canPop: !isStreaming,
-      onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) return;
-        // Streaming is active — keep the page alive and inform the user.
-        // The stream continues, messages are saved, and the page stays
-        // mounted until streaming completes (isStreaming becomes false
-        // and canPop becomes true automatically via PopScope).
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('AI正在生成回复，请等待回复完成后返回'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      },
+      canPop: true,
       child: SafeArea(
         child: Container(
           color: Theme.of(context).colorScheme.surfaceContainerLow,
@@ -1646,20 +1639,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
                         icon: const Icon(Icons.arrow_back),
                         tooltip: 'Back',
                         onPressed: () {
-                          if (isStreaming) {
-                            // Streaming is active — block back navigation
-                            // and inform the user.  The page stays alive,
-                            // the stream continues, and the full message
-                            // is saved before the user can leave.
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('AI正在生成回复，请等待回复完成后返回'),
-                                duration: Duration(seconds: 2),
-                              ),
-                            );
-                          } else {
-                            Navigator.of(context).pop();
-                          }
+                          // Allow navigation back at any time, even during
+                          // streaming. The stream continues in the background,
+                          // messages are saved when streaming completes.
+                          Navigator.of(context).pop();
                         },
                       ),
                     Expanded(
@@ -2545,6 +2528,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// This is used both on initial page load and after [_configureAdapter]
   /// resets the adapter state (e.g. when [providerEntriesProvider] changes),
   /// ensuring the adapter and UI stay in sync with the persisted selection.
+  ///
+  /// IMPORTANT: The saved [selected_model_index] is a DISPLAY index (from the
+  /// possibly-reordered model list shown to the user). We must map it through
+  /// the model's display name to find the correct flat index in the adapter's
+  /// [availableModels] list. Using the saved index directly on the flat list
+  /// would select the wrong model when the display order differs from the flat
+  /// order (e.g. after drag-and-drop reordering in the model panel).
   void _restoreSavedModelSelection(SharedPreferences prefs) {
     // Restore saved model order (drag-sort persistence) first,
     // so model names resolve correctly.
@@ -2560,10 +2550,36 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final models = _adapter.availableModels(entriesState);
     final saved = prefs.getInt('selected_model_index');
     int selectedIdx = 0;
-    if (saved != null && saved >= 0 && saved < models.length) {
-      selectedIdx = saved;
-      final model = models[saved];
-      _adapter.selectModel(entriesState, model.configIndex, model.modelIndex);
+    if (saved != null && saved >= 0) {
+      // Map display index to flat index via display name:
+      // The saved index is a DISPLAY index (from the user-facing reorderable
+      // list). We need to find the corresponding model in the flat list by
+      // resolving through the display name, not by using the index directly.
+      final displayNames = _getModelNames();
+      if (saved < displayNames.length) {
+        selectedIdx = saved;
+        final selectedName = displayNames[saved];
+        final flatIdx = models.indexWhere(
+          (m) => m.displayName == selectedName,
+        );
+        if (flatIdx >= 0) {
+          final model = models[flatIdx];
+          _adapter.selectModel(
+            entriesState,
+            model.configIndex,
+            model.modelIndex,
+          );
+        } else {
+          // Saved model not found in current list (e.g. deleted from
+          // provider config). Fall back to the default (first model).
+          selectedIdx = 0;
+          prefs.remove('selected_model_index');
+        }
+      } else {
+        // Saved index out of range for current display names — discard
+        selectedIdx = 0;
+        prefs.remove('selected_model_index');
+      }
     } else {
       prefs.remove('selected_model_index');
     }

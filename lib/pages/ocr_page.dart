@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -13,8 +12,6 @@ import '../utils/data_sanitizer.dart';
 import '../utils/image_manifest.dart';
 import '../utils/text_manifest.dart';
 import '../widgets/folder_picker_dialog.dart';
-import '../widgets/camera_choice_dialog.dart';
-import 'camera_page.dart';
 import 'chat/composer/chat_album_picker_dialog.dart';
 import 'ocr/ocr_shared.dart';
 export 'ocr/ocr_shared.dart';
@@ -828,16 +825,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   // Photo Source Methods
   // ==================================================================
 
-  /// Show camera choice panel (app camera / system camera, no save-to, no edit toggle)
+  /// Open system camera directly.
   void _showCameraChoicePanel() {
-    showCameraChoiceDialog(context, showFolderSection: false).then((result) {
-      if (result == null || !mounted) return;
-      if (result.choice == CameraChoice.app) {
-        _takePhotoWithAppCamera();
-      } else {
-        _takePhotoWithSystemCamera();
-      }
-    });
+    _takePhotoWithSystemCamera();
   }
 
   /// Show album choice panel (system album / app album)
@@ -900,38 +890,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         ),
       ),
     );
-  }
-
-  /// Take a photo using the app's camera (camerawesome).
-  Future<void> _takePhotoWithAppCamera() async {
-    try {
-      final savedFilePath = await Navigator.push<String>(
-        context,
-        MaterialPageRoute(builder: (_) => const CameraPage()),
-      );
-      if (savedFilePath == null || savedFilePath.isEmpty) return;
-      if (!mounted) return;
-
-      final file = File(savedFilePath);
-      final bytes = await file.readAsBytes();
-      if (!mounted) return;
-
-      setState(() {
-        _selectedImages.add(
-          SelectedImage(
-            bytes: bytes,
-            provider: _createProvider(bytes),
-            format: _detectFormat(savedFilePath),
-          ),
-        );
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('拍照失败: $e')));
-      }
-    }
   }
 
   /// Take a photo using the system camera.
@@ -1214,12 +1172,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     } catch (e) {
       // If an unexpected error occurs before _performOcr's own catch,
       // mark the task as failed so it doesn't stay in limbo.
-      ref.read(backgroundTasksProvider.notifier).failTask(
-        taskId,
-        error: 'OCR启动失败: $e',
-      );
+      ref
+          .read(backgroundTasksProvider.notifier)
+          .failTask(taskId, error: 'OCR启动失败: $e');
     }
   }
+
   Future<void> _performOcr(
     OcrConfig ocrConfig,
     String taskId, {

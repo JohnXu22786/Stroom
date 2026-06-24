@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,8 +11,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/providers/provider_config.dart' show ReasoningParam;
 import 'package:stroom/services/attachment_storage.dart';
-import 'package:stroom/pages/camera_page.dart';
-import 'package:stroom/widgets/camera_choice_dialog.dart';
 import 'package:stroom/widgets/gallery_choice_dialog.dart';
 import 'package:stroom/widgets/file_preview.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
@@ -521,30 +518,12 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   }
 
   Future<void> _pickFromCamera() async {
-    final choice = await showCameraChoiceDialog(
-      context,
-      showFolderSection: false,
-    );
-    if (choice == null) return;
     try {
-      if (choice.choice == CameraChoice.app) {
-        final result = await Navigator.of(
-          context,
-          rootNavigator: true,
-        ).push<String>(MaterialPageRoute(builder: (_) => const CameraPage()));
-        if (result != null && result.isNotEmpty) {
-          final file = File(result);
-          final bytes = await file.readAsBytes();
-          final fileName = result.split(RegExp(r'[/\\]')).last;
-          await _addPendingAttachment(fileName, bytes);
-        }
-      } else {
-        final picker = ImagePicker();
-        final file = await picker.pickImage(source: ImageSource.camera);
-        if (file == null) return;
-        final bytes = await file.readAsBytes();
-        await _addPendingAttachment(file.name, bytes);
-      }
+      final picker = ImagePicker();
+      final file = await picker.pickImage(source: ImageSource.camera);
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      await _addPendingAttachment(file.name, bytes);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -606,10 +585,10 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     final fileType = mimeType.startsWith('image/')
         ? 'image'
         : mimeType.startsWith('video/')
-            ? 'video'
-            : mimeType.startsWith('audio/')
-                ? 'audio'
-                : 'document';
+        ? 'video'
+        : mimeType.startsWith('audio/')
+        ? 'audio'
+        : 'document';
     final storagePath = await AttachmentStorage.saveFile(fileName, bytes);
     final hash = AttachmentStorage.computeHash(bytes);
 
@@ -853,8 +832,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                     icon: Icons.psychology_outlined,
                     label: '推理',
                     color: Colors.purple,
-                    onTap:
-                        widget.hasReasoningParams ? _showReasoningPanel : null,
+                    onTap: widget.hasReasoningParams
+                        ? _showReasoningPanel
+                        : null,
                     enabled: widget.hasReasoningParams,
                   ),
                 ],
