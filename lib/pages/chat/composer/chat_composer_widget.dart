@@ -50,8 +50,14 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   /// The text to pre-fill when entering edit mode.
   final String? editingMessageText;
 
+  /// The original attachments of the message being edited, pre-populated
+  /// in the pending area so the user can see, add, or remove them.
+  final List<Attachment>? editingMessageAttachments;
+
   /// Called when user taps send in edit mode.
-  final void Function(String messageId, String text)? onEditSend;
+  /// Passes the message id, edited text, and all pending attachments
+  /// (original + newly added, minus any removed).
+  final void Function(String messageId, String text, List<Attachment> attachments)? onEditSend;
 
   /// Called when user taps X on the edit capsule to cancel editing.
   final VoidCallback? onEditCancel;
@@ -74,6 +80,7 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     this.hasReasoningParams = false,
     this.editingMessageId,
     this.editingMessageText,
+    this.editingMessageAttachments,
     this.onEditSend,
     this.onEditCancel,
   });
@@ -127,9 +134,12 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     }
 
     // If entering edit mode, pre-fill with the message text
-    if (widget.editingMessageId != null && widget.editingMessageText != null) {
+    // and pre-populate pending attachments with the original attachments.
+    if (widget.editingMessageId != null &&
+        widget.editingMessageText != null) {
       _textController.text = widget.editingMessageText!;
       _lastSavedDraft = widget.editingMessageText!;
+      _loadEditingAttachments(widget.editingMessageAttachments);
     }
 
     _focusNode.onKeyEvent = (node, event) {
@@ -158,8 +168,8 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     super.didUpdateWidget(oldWidget);
 
     // Detect edit mode change: if editingMessageId changed, update the
-    // text field with the new message text. If edit was cancelled
-    // (editingMessageId became null), clear the field.
+    // text field with the new message text and pre-populate attachments.
+    // If edit was cancelled (editingMessageId became null), clear everything.
     if (oldWidget.editingMessageId != widget.editingMessageId) {
       _draftTimer?.cancel();
       if (widget.editingMessageId != null &&
@@ -169,11 +179,16 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         _lastSavedDraft = widget.editingMessageText!;
         // Auto-focus the text field so keyboard appears on mobile
         _focusNode.requestFocus();
+        // Pre-populate pending attachments with the original message's
+        // attachments, and load image bytes for preview.
+        _loadEditingAttachments(widget.editingMessageAttachments);
       } else if (widget.editingMessageId == null &&
           oldWidget.editingMessageId != null) {
-        // Edit mode cancelled - clear the field
+        // Edit mode cancelled - clear everything
         _textController.clear();
         _lastSavedDraft = '';
+        _pendingAttachments.clear();
+        _pendingImageBytes.clear();
       }
       return;
     }
@@ -234,6 +249,30 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     _lastSavedDraft = textToSave;
   }
 
+  /// Pre-populates the pending attachments area with the original message's
+  /// attachments when entering edit mode. For image attachments, loads the
+  /// bytes from storage so the preview chip can display the thumbnail.
+  void _loadEditingAttachments(List<Attachment>? attachments) {
+    if (attachments == null || attachments.isEmpty) return;
+    setState(() {
+      _pendingAttachments.clear();
+      _pendingImageBytes.clear();
+      _pendingAttachments.addAll(attachments);
+    });
+    // Load image bytes asynchronously for preview
+    for (final att in attachments) {
+      if (att.fileType == 'image' && att.storagePath.isNotEmpty) {
+        AttachmentStorage.readFile(att.storagePath).then((bytes) {
+          if (bytes != null && mounted) {
+            setState(() {
+              _pendingImageBytes[att.id] = bytes;
+            });
+          }
+        });
+      }
+    }
+  }
+
   /// Debounced draft save triggered by text changes.
   void _onTextChanged(String text) {
     setState(() {});
@@ -256,8 +295,14 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     if (text.trim().isEmpty && _pendingAttachments.isEmpty) return;
 
     if (widget.editingMessageId != null) {
-      // Edit mode: call onEditSend instead of onSend
-      widget.onEditSend?.call(widget.editingMessageId!, text.trim());
+      // Edit mode: call onEditSend with the message id, edited text,
+      // and all pending attachments (original + newly added, minus removed).
+      final attachments = [..._pendingAttachments];
+      widget.onEditSend?.call(
+        widget.editingMessageId!,
+        text.trim(),
+        attachments,
+      );
       _pendingAttachments.clear();
       _pendingImageBytes.clear();
       _textController.clear();
@@ -884,17 +929,14 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
               ),
               child: Row(
                 children: [
-                  // Hide attach button in edit mode — attachments from the
-                  // original message are preserved and re-sent automatically.
-                  if (widget.editingMessageId == null)
-                    IconButton(
-                      icon: Icon(
-                        Icons.attach_file_outlined,
-                        color: cs.onSurfaceVariant,
-                      ),
-                      tooltip: '附件',
-                      onPressed: _showAttachmentPicker,
+                  IconButton(
+                    icon: Icon(
+                      Icons.attach_file_outlined,
+                      color: cs.onSurfaceVariant,
                     ),
+                    tooltip: '附件',
+                    onPressed: _showAttachmentPicker,
+                  ),
                   const SizedBox(width: 4),
                   Expanded(
                     child: TextField(

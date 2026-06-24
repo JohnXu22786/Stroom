@@ -101,6 +101,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// The text of the message being edited.
   String? _editingMessageText;
 
+  /// The original attachments of the message being edited.
+  List<Attachment>? _editingMessageAttachments;
+
   // ── Infinite Scroll / Lazy Load pagination state ──
   /// Number of messages to load per page.
   static const int _pageSize = 20;
@@ -459,6 +462,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // being edited no longer exists in the new conversation.
       _editingMessageId = null;
       _editingMessageText = null;
+      _editingMessageAttachments = null;
 
       // Initialize pagination state: reset any in-flight load and
       // let the loop below set the correct loaded index.
@@ -937,23 +941,30 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final msg = _history[index];
 
     // Instead of showing a separate dialog, enter edit mode in the composer.
-    // The composer will pre-fill with the message text and show an edit
-    // capsule. On send, _handleEditSend is called. On cancel, _handleEditCancel.
+    // The composer will pre-fill with the message text, show the original
+    // attachments in the pending area, and show an edit capsule.
+    // On send, _handleEditSend is called. On cancel, _handleEditCancel.
     setState(() {
       _editingMessageId = messageId;
       _editingMessageText = msg.content;
+      _editingMessageAttachments = msg.attachments;
     });
   }
 
-  void _handleEditSend(String messageId, String newText) {
+  void _handleEditSend(
+    String messageId,
+    String newText,
+    List<Attachment> attachments,
+  ) {
     if (!mounted) return;
     // Clear edit state
     setState(() {
       _editingMessageId = null;
       _editingMessageText = null;
+      _editingMessageAttachments = null;
     });
-    // Perform the edit
-    _editUserMessageWithText(messageId, newText);
+    // Perform the edit with the combined attachments
+    _editUserMessageWithText(messageId, newText, attachments);
   }
 
   void _handleEditCancel() {
@@ -961,16 +972,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
     setState(() {
       _editingMessageId = null;
       _editingMessageText = null;
+      _editingMessageAttachments = null;
     });
   }
 
   Future<void> _editUserMessageWithText(
     String messageId,
     String newText,
+    List<Attachment> newAttachments,
   ) async {
     final index = _history.indexWhere((m) => m.id == messageId);
     if (index == -1 || index >= _history.length) return;
-    final msg = _history[index];
 
     // Remove this message and all after from history
     try {
@@ -991,8 +1003,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
       debugPrint('[ChatPage] _editUserMessageWithText remove failed: $e');
     }
 
-    // Send with edited text
-    await _onMessageSend(newText, msg.attachments);
+    // Send with edited text and the combined attachments (original + new)
+    await _onMessageSend(newText, newAttachments);
   }
 
   Future<void> _retryAssistantMessage(String messageId) async {
@@ -2375,6 +2387,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 hasReasoningParams: _adapter.hasReasoningParams,
                 editingMessageId: _editingMessageId,
                 editingMessageText: _editingMessageText,
+                editingMessageAttachments: _editingMessageAttachments,
                 onEditSend: _handleEditSend,
                 onEditCancel: _handleEditCancel,
               ),
