@@ -37,7 +37,6 @@ import 'chat/widgets/action_button.dart';
 import 'chat/widgets/reasoning_section.dart';
 import 'chat/dialogs/error_detail_dialog.dart';
 import 'chat/dialogs/confirm_dialog.dart';
-import 'chat/dialogs/edit_message_dialog.dart';
 import 'chat/dialogs/image_preview_dialog.dart';
 import 'chat/dialogs/file_info_dialog.dart';
 import 'chat/dialogs/json_inspection_dialog.dart';
@@ -94,6 +93,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   bool _developerMode = false;
   final Map<String, bool> _expandedErrors = {};
+
+  // ── Edit mode state ──
+  /// When set, the composer enters edit mode for this message.
+  String? _editingMessageId;
+
+  /// The text of the message being edited.
+  String? _editingMessageText;
+
+  /// The original attachments of the message being edited.
+  List<Attachment>? _editingMessageAttachments;
 
   // ── Infinite Scroll / Lazy Load pagination state ──
   /// Number of messages to load per page.
@@ -448,6 +457,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
       _searchQuery = '';
       _searchMatches.clear();
       _currentMatchIndex = 0;
+
+      // Clear edit mode state when switching conversations — the message
+      // being edited no longer exists in the new conversation.
+      _editingMessageId = null;
+      _editingMessageText = null;
+      _editingMessageAttachments = null;
 
       // Initialize pagination state: reset any in-flight load and
       // let the loop below set the correct loaded index.
@@ -922,60 +937,60 @@ class _ChatPageState extends ConsumerState<ChatPage>
       context: context,
       isUser: isUser,
       newerMessagesExist: newerMessagesExist,
-      onEdit: () => _editUserMessage(messageId),
+      onEdit: () => _startEditMessage(messageId),
       onRetry: () => _retryAssistantMessage(messageId),
     );
   }
 
-  Future<void> _editUserMessage(String messageId) async {
-    final index = _history.indexWhere((m) => m.id == messageId);
-    if (index == -1 || index >= _history.length) return;
-    final msg = _history[index];
-
-    // Remove this message and all after from history
-    try {
-      if (index < _history.length) {
-        final removed = _history.sublist(index);
-        _history.removeRange(index, _history.length);
-        for (final r in removed) {
-          final ctrlMsg =
-              _controller?.messages.where((m) => m.id == r.id).firstOrNull;
-          if (ctrlMsg != null) {
-            await _controller?.removeMessage(ctrlMsg);
-          }
-        }
-        // Safety: keep pagination index within bounds
-        _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
-      }
-    } catch (e) {
-      debugPrint('[ChatPage] _editUserMessage remove failed: $e');
-    }
-
-    // Re-send with same content (acts as edit)
-    await _onMessageSend(msg.content, msg.attachments);
-  }
-
-  void _showEditMessageDialog(String messageId) {
+  void _startEditMessage(String messageId) {
     final index = _history.indexWhere((m) => m.id == messageId);
     if (index == -1) return;
+    if (ref.read(isStreamingProvider)) return;
     final msg = _history[index];
 
-    showEditMessageDialog(context: context, currentText: msg.content).then((
-      newText,
-    ) {
-      if (newText != null && newText.isNotEmpty && mounted) {
-        _editUserMessageWithText(messageId, newText);
-      }
+    // Instead of showing a separate dialog, enter edit mode in the composer.
+    // The composer will pre-fill with the message text, show the original
+    // attachments in the pending area, and show an edit capsule.
+    // On send, _handleEditSend is called. On cancel, _handleEditCancel.
+    setState(() {
+      _editingMessageId = messageId;
+      _editingMessageText = msg.content;
+      _editingMessageAttachments = msg.attachments;
+    });
+  }
+
+  void _handleEditSend(
+    String messageId,
+    String newText,
+    List<Attachment> attachments,
+  ) {
+    if (!mounted) return;
+    // Clear edit state
+    setState(() {
+      _editingMessageId = null;
+      _editingMessageText = null;
+      _editingMessageAttachments = null;
+    });
+    // Perform the edit with the combined attachments
+    _editUserMessageWithText(messageId, newText, attachments);
+  }
+
+  void _handleEditCancel() {
+    if (!mounted) return;
+    setState(() {
+      _editingMessageId = null;
+      _editingMessageText = null;
+      _editingMessageAttachments = null;
     });
   }
 
   Future<void> _editUserMessageWithText(
     String messageId,
     String newText,
+    List<Attachment> newAttachments,
   ) async {
     final index = _history.indexWhere((m) => m.id == messageId);
     if (index == -1 || index >= _history.length) return;
-    final msg = _history[index];
 
     // Remove this message and all after from history
     try {
@@ -996,8 +1011,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
       debugPrint('[ChatPage] _editUserMessageWithText remove failed: $e');
     }
 
-    // Send with edited text
-    await _onMessageSend(newText, msg.attachments);
+    // Send with edited text and the combined attachments (original + new)
+    await _onMessageSend(newText, newAttachments);
   }
 
   Future<void> _retryAssistantMessage(String messageId) async {
@@ -2237,8 +2252,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                         ActionButton(
                                           icon: Icons.edit_outlined,
                                           tooltip: '编辑',
-                                          onPressed: () =>
-                                              _showEditMessageDialog(
+                                          onPressed: () => _startEditMessage(
                                             message.id,
                                           ),
                                         ),
@@ -2354,6 +2368,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 onModelsReordered: _onModelsReordered,
                 reasoningParams: _adapter.reasoningParams,
                 hasReasoningParams: _adapter.hasReasoningParams,
+                editingMessageId: _editingMessageId,
+                editingMessageText: _editingMessageText,
+                editingMessageAttachments: _editingMessageAttachments,
+                onEditSend: _handleEditSend,
+                onEditCancel: _handleEditCancel,
               ),
             ],
           ),

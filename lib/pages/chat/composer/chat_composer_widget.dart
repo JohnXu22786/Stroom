@@ -40,6 +40,25 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   final List<ReasoningParam> reasoningParams;
   final bool hasReasoningParams;
 
+  // ── Edit mode support ──
+  /// When non-null, the composer enters edit mode for the given message.
+  final String? editingMessageId;
+
+  /// The text to pre-fill when entering edit mode.
+  final String? editingMessageText;
+
+  /// The original attachments of the message being edited, pre-populated
+  /// in the pending area so the user can see, add, or remove them.
+  final List<Attachment>? editingMessageAttachments;
+
+  /// Called when user taps send in edit mode.
+  /// Passes the message id, edited text, and all pending attachments
+  /// (original + newly added, minus any removed).
+  final void Function(String messageId, String text, List<Attachment> attachments)? onEditSend;
+
+  /// Called when user taps X on the edit capsule to cancel editing.
+  final VoidCallback? onEditCancel;
+
   const ChatComposerWidget({
     super.key,
     required this.onSend,
@@ -56,6 +75,11 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     this.onModelsReordered,
     this.reasoningParams = const [],
     this.hasReasoningParams = false,
+    this.editingMessageId,
+    this.editingMessageText,
+    this.editingMessageAttachments,
+    this.onEditSend,
+    this.onEditCancel,
   });
 
   @override
@@ -106,6 +130,15 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
       _lastSavedDraft = widget.initialDraftText;
     }
 
+    // If entering edit mode, pre-fill with the message text
+    // and pre-populate pending attachments with the original attachments.
+    if (widget.editingMessageId != null &&
+        widget.editingMessageText != null) {
+      _textController.text = widget.editingMessageText!;
+      _lastSavedDraft = widget.editingMessageText!;
+      _loadEditingAttachments(widget.editingMessageAttachments);
+    }
+
     _focusNode.onKeyEvent = (node, event) {
       // Only intercept Enter key for desktop platforms.
       // On mobile, soft keyboard events don't trigger
@@ -130,6 +163,33 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   @override
   void didUpdateWidget(ChatComposerWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    // Detect edit mode change: if editingMessageId changed, update the
+    // text field with the new message text and pre-populate attachments.
+    // If edit was cancelled (editingMessageId became null), clear everything.
+    if (oldWidget.editingMessageId != widget.editingMessageId) {
+      _draftTimer?.cancel();
+      if (widget.editingMessageId != null &&
+          widget.editingMessageText != null) {
+        // Entering edit mode (or switching to a different message)
+        _textController.text = widget.editingMessageText!;
+        _lastSavedDraft = widget.editingMessageText!;
+        // Auto-focus the text field so keyboard appears on mobile
+        _focusNode.requestFocus();
+        // Pre-populate pending attachments with the original message's
+        // attachments, and load image bytes for preview.
+        _loadEditingAttachments(widget.editingMessageAttachments);
+      } else if (widget.editingMessageId == null &&
+          oldWidget.editingMessageId != null) {
+        // Edit mode cancelled - clear everything
+        _textController.clear();
+        _lastSavedDraft = '';
+        _pendingAttachments.clear();
+        _pendingImageBytes.clear();
+      }
+      return;
+    }
+
     // Detect conversation change: save draft for old conversation,
     // then restore draft for the new one
     if (oldWidget.conversationId != widget.conversationId) {
@@ -186,9 +246,36 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     _lastSavedDraft = textToSave;
   }
 
+  /// Pre-populates the pending attachments area with the original message's
+  /// attachments when entering edit mode. For image attachments, loads the
+  /// bytes from storage so the preview chip can display the thumbnail.
+  void _loadEditingAttachments(List<Attachment>? attachments) {
+    if (attachments == null || attachments.isEmpty) return;
+    setState(() {
+      _pendingAttachments.clear();
+      _pendingImageBytes.clear();
+      _pendingAttachments.addAll(attachments);
+    });
+    // Load image bytes asynchronously for preview
+    for (final att in attachments) {
+      if (att.fileType == 'image' && att.storagePath.isNotEmpty) {
+        AttachmentStorage.readFile(att.storagePath).then((bytes) {
+          if (bytes != null && mounted) {
+            setState(() {
+              _pendingImageBytes[att.id] = bytes;
+            });
+          }
+        });
+      }
+    }
+  }
+
   /// Debounced draft save triggered by text changes.
   void _onTextChanged(String text) {
     setState(() {});
+    // Skip draft saving in edit mode — the text is for editing a sent
+    // message, not composing a new one.
+    if (widget.editingMessageId != null) return;
     _draftTimer?.cancel();
     // Skip saving if the text hasn't actually changed since last save
     if (text == _lastSavedDraft) return;
@@ -203,6 +290,25 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
 
   void _handleSubmitted(String text) {
     if (text.trim().isEmpty && _pendingAttachments.isEmpty) return;
+
+    if (widget.editingMessageId != null) {
+      // Edit mode: call onEditSend with the message id, edited text,
+      // and all pending attachments (original + newly added, minus removed).
+      final attachments = [..._pendingAttachments];
+      widget.onEditSend?.call(
+        widget.editingMessageId!,
+        text.trim(),
+        attachments,
+      );
+      _pendingAttachments.clear();
+      _pendingImageBytes.clear();
+      _textController.clear();
+      // Cancel any pending draft timer in edit mode
+      _draftTimer?.cancel();
+      _lastSavedDraft = '';
+      return;
+    }
+
     widget.onSend(text.trim(), [..._pendingAttachments]);
     _pendingAttachments.clear();
     _pendingImageBytes.clear();
@@ -734,6 +840,64 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                 ],
               ),
             ),
+
+            // ── Edit mode capsule ──
+            if (widget.editingMessageId != null)
+              Padding(
+                padding: const EdgeInsets.only(
+                  left: 12,
+                  right: 12,
+                  top: 6,
+                  bottom: 0,
+                ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: cs.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: cs.primary.withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.edit,
+                        size: 14,
+                        color: cs.primary,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '编辑消息',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: cs.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 24),
+                      GestureDetector(
+                        onTap: widget.onEditCancel,
+                        // Add padding around the close icon for a larger
+                        // touch target on mobile.
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Icon(
+                            Icons.close,
+                            size: 16,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
 
             // ── Input row ──
             Padding(
