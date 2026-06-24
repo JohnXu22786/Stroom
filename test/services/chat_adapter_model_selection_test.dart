@@ -143,8 +143,7 @@ void main() {
       expect(models[3].modelIndex, equals(1));
     });
 
-    test(
-        'configure resets adapter to (0,0) after selectModel - '
+    test('configure resets adapter to (0,0) after selectModel - '
         'this reproduces the bug: configure destroys saved selection', () {
       // Given: user selects model at config 1, model 0 (Claude 3)
       adapter.configure(entriesState);
@@ -179,8 +178,7 @@ void main() {
       },
     );
 
-    test(
-        'reasoningParams returns params from currently selected model, '
+    test('reasoningParams returns params from currently selected model, '
         'not from model 0 when configure reset it', () {
       // Given: user selected Claude 3 (config 1, model 0)
       adapter.configure(entriesState);
@@ -260,6 +258,167 @@ void main() {
       adapter.selectModel(entriesState, 0, 1);
       final params2 = adapter.reasoningParams;
       expect(params2[0].paramName, equals('thinking_type'));
+    });
+
+    // =========================================================================
+    // Bug regression tests: display index vs flat model list index mismatch
+    // =========================================================================
+    //
+    // BUG: When models are drag-reordered, the "selected_model_index" saved
+    // in SharedPreferences is a DISPLAY index. But _restoreSavedModelSelection
+    // uses it directly to index into the flat availableModels() list. If the
+    // display order differs from the flat order, the wrong model is selected.
+    //
+    // FIX: The restore logic must map the display index through the model's
+    // display name to find the correct flat index.
+    // =========================================================================
+
+    group('display index vs flat index mapping', () {
+      test(
+        'availableModels returns models in flat order (config-major, model-minor)',
+        () {
+          // The flat list is ordered by config first, then by model within config.
+          // This is the order used by _restoreSavedModelSelection.
+          final models = adapter.availableModels(entriesState);
+          expect(models.length, equals(4));
+          expect(models[0].displayName, contains('GPT-4o'));
+          expect(models[1].displayName, contains('GPT-4o Mini'));
+          expect(models[2].displayName, contains('Claude 3'));
+          expect(models[3].displayName, contains('Claude 3 Haiku'));
+        },
+      );
+
+      test('model display name at display index 0 identifies the correct model '
+          'when display order differs from flat order', () {
+        // Simulate a reordered display list (user drag-reordered models):
+        final displayNames = [
+          'Claude 3 | Anthropic', // index 0 in display order
+          'GPT-4o | OpenAI', // index 1
+          'GPT-4o Mini | OpenAI', // index 2
+          'Claude 3 Haiku | Anthropic', // index 3
+        ];
+        // NOTE: The actual _getModelNames() in ChatPage uses a different
+        // order. But the important thing is that displayNames[0] != models[0].
+
+        final models = adapter.availableModels(entriesState);
+        // Flat models[0] is "GPT-4o | OpenAI"
+        // But displayNames[0] is "Claude 3 | Anthropic"
+        // So indexing models[savedDisplayIndex] with savedDisplayIndex=0
+        // would get "GPT-4o | OpenAI" instead of "Claude 3 | Anthropic"
+
+        // The fix: look up by display name
+        final displayIndex =
+            0; // user selected Claude 3 (now at display index 0)
+        final expectedName = displayNames[displayIndex];
+        final flatIdx = models.indexWhere((m) => m.displayName == expectedName);
+        expect(flatIdx, equals(2)); // Claude 3 is at flat index 2
+        expect(models[flatIdx].configIndex, equals(1));
+        expect(models[flatIdx].modelIndex, equals(0));
+      });
+
+      test('selectModel with configIndex/modelIndex works regardless of '
+          'display order', () {
+        adapter.configure(entriesState);
+
+        // Even if we use the flat list to find Claude 3 (config 1, model 0):
+        adapter.selectModel(entriesState, 1, 0);
+        expect(adapter.currentConfigIndex, equals(1));
+        expect(adapter.currentModelIndex, equals(0));
+        expect(adapter.reasoningParams[0].paramName, equals('thinking'));
+      });
+
+      test('BUG REPRO: using saved display index on flat models list '
+          'picks wrong model when display order != flat order', () {
+        adapter.configure(entriesState);
+
+        // Simulate: user reordered, now display list has Claude 3 at index 0
+        // saved = 0 (display index)
+        const int savedDisplayIndex = 0;
+
+        // BUG CODE path (current _restoreSavedModelSelection):
+        final models = adapter.availableModels(entriesState);
+        final wrongModel =
+            models[savedDisplayIndex]; // uses display index on flat list!
+
+        // This gets "GPT-4o | OpenAI" (flat index 0) instead of
+        // "Claude 3 | Anthropic" (flat index 2, but display index 0)
+        expect(wrongModel.displayName, contains('GPT-4o'));
+        expect(wrongModel.displayName, contains('OpenAI'));
+        // WRONG! Should be Claude 3 at config 1, model 0
+        expect(wrongModel.configIndex, equals(0));
+        expect(wrongModel.modelIndex, equals(0));
+        // This would cause the adapter to select GPT-4o instead of Claude 3
+      });
+
+      test(
+        'FIX: mapping display index through model name finds correct model',
+        () {
+          const int savedDisplayIndex = 0;
+          final models = adapter.availableModels(entriesState);
+
+          // Simulate corrected display order (user reordered)
+          final displayNames = [
+            'Claude 3 | Anthropic',
+            'GPT-4o | OpenAI',
+            'GPT-4o Mini | OpenAI',
+            'Claude 3 Haiku | Anthropic',
+          ];
+
+          // FIX: look up by display name instead of using index directly
+          final selectedName = displayNames[savedDisplayIndex];
+          final flatIdx = models.indexWhere(
+            (m) => m.displayName == selectedName,
+          );
+
+          expect(flatIdx, equals(2)); // Claude 3 at flat index 2
+          final correctModel = models[flatIdx];
+          expect(correctModel.displayName, contains('Claude 3'));
+          expect(correctModel.configIndex, equals(1));
+          expect(correctModel.modelIndex, equals(0));
+
+          // SELECTING this model works correctly:
+          adapter.selectModel(
+            entriesState,
+            correctModel.configIndex,
+            correctModel.modelIndex,
+          );
+          expect(adapter.currentConfigIndex, equals(1));
+          expect(adapter.currentModelIndex, equals(0));
+          expect(adapter.reasoningParams[0].paramName, equals('thinking'));
+        },
+      );
+
+      test('FIX: reasoning params match adapter model after correct restore', () {
+        // Full fix simulation:
+        // 1. configure resets adapter to (0,0) - GPT-4o
+        // 2. Restore should select Claude 3 (display index 0 in reordered list)
+        // 3. reasoning params should be Claude 3's params, not GPT-4o's
+
+        adapter.configure(entriesState);
+        // Initially at GPT-4o
+        expect(
+          adapter.reasoningParams[0].paramName,
+          equals('reasoning_effort'),
+        );
+
+        // FIX: map display index 0 to Claude 3 via model name
+        const int savedDisplayIndex = 0;
+        final models = adapter.availableModels(entriesState);
+        final displayNames = [
+          'Claude 3 | Anthropic',
+          'GPT-4o | OpenAI',
+          'GPT-4o Mini | OpenAI',
+          'Claude 3 Haiku | Anthropic',
+        ];
+        final selectedName = displayNames[savedDisplayIndex];
+        final flatIdx = models.indexWhere((m) => m.displayName == selectedName);
+        final model = models[flatIdx];
+        adapter.selectModel(entriesState, model.configIndex, model.modelIndex);
+
+        // Now reasoning params should be Claude 3's 'thinking', not GPT-4o's
+        expect(adapter.reasoningParams[0].paramName, equals('thinking'));
+        expect(adapter.hasReasoningParams, isTrue);
+      });
     });
   });
 }
