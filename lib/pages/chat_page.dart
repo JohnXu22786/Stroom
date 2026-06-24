@@ -2509,6 +2509,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// This is used both on initial page load and after [_configureAdapter]
   /// resets the adapter state (e.g. when [providerEntriesProvider] changes),
   /// ensuring the adapter and UI stay in sync with the persisted selection.
+  ///
+  /// IMPORTANT: The saved [selected_model_index] is a DISPLAY index (from the
+  /// possibly-reordered model list shown to the user). We must map it through
+  /// the model's display name to find the correct flat index in the adapter's
+  /// [availableModels] list. Using the saved index directly on the flat list
+  /// would select the wrong model when the display order differs from the flat
+  /// order (e.g. after drag-and-drop reordering in the model panel).
   void _restoreSavedModelSelection(SharedPreferences prefs) {
     // Restore saved model order (drag-sort persistence) first,
     // so model names resolve correctly.
@@ -2524,10 +2531,36 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final models = _adapter.availableModels(entriesState);
     final saved = prefs.getInt('selected_model_index');
     int selectedIdx = 0;
-    if (saved != null && saved >= 0 && saved < models.length) {
-      selectedIdx = saved;
-      final model = models[saved];
-      _adapter.selectModel(entriesState, model.configIndex, model.modelIndex);
+    if (saved != null && saved >= 0) {
+      // Map display index to flat index via display name:
+      // The saved index is a DISPLAY index (from the user-facing reorderable
+      // list). We need to find the corresponding model in the flat list by
+      // resolving through the display name, not by using the index directly.
+      final displayNames = _getModelNames();
+      if (saved < displayNames.length) {
+        selectedIdx = saved;
+        final selectedName = displayNames[saved];
+        final flatIdx = models.indexWhere(
+          (m) => m.displayName == selectedName,
+        );
+        if (flatIdx >= 0) {
+          final model = models[flatIdx];
+          _adapter.selectModel(
+            entriesState,
+            model.configIndex,
+            model.modelIndex,
+          );
+        } else {
+          // Saved model not found in current list (e.g. deleted from
+          // provider config). Fall back to the default (first model).
+          selectedIdx = 0;
+          prefs.remove('selected_model_index');
+        }
+      } else {
+        // Saved index out of range for current display names — discard
+        selectedIdx = 0;
+        prefs.remove('selected_model_index');
+      }
     } else {
       prefs.remove('selected_model_index');
     }
