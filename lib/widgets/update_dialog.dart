@@ -1,5 +1,6 @@
 import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb, TargetPlatform, defaultTargetPlatform;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -38,6 +39,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(updateProvider);
+    final cs = Theme.of(context).colorScheme;
 
     // Prevent dialog dismissal during download or install.
     // The user must not accidentally dismiss the dialog while
@@ -47,98 +49,100 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
     return PopScope(
       canPop: canPop,
       child: AlertDialog(
-        title: const Row(
-        children: [
-          Icon(Icons.system_update, color: Colors.blue),
-          SizedBox(width: 8),
-          Expanded(child: Text('发现新版本')),
-        ],
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
+        title: Row(
           children: [
-            Text('最新版本: ${state.latestVersion ?? ''}'),
-            if (state.releaseNotes != null &&
-                state.releaseNotes!.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              const Text('更新内容:',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
-              Text(state.releaseNotes!),
-            ],
-            // Installing state — shown briefly while the app auto-installs
-            if (state.isInstalling) ...[
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.green.shade200),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.green.shade700),
-                      ),
+            Icon(Icons.system_update, color: cs.primary),
+            SizedBox(width: 8),
+            Expanded(child: Text('发现新版本')),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('最新版本: ${state.latestVersion ?? ''}'),
+              if (state.releaseNotes != null &&
+                  state.releaseNotes!.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Text('更新内容:',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text(state.releaseNotes!),
+              ],
+              // Installing state — shown briefly while the app auto-installs
+              if (state.isInstalling) ...[
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: cs.tertiaryContainer.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: cs.tertiaryContainer,
+                      width: 0.5,
                     ),
-                    const SizedBox(width: 10),
-                    Text(
-                      '正在安装...',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.green.shade700,
-                        fontSize: 15,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                              cs.onTertiaryContainer),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        '正在安装...',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: cs.onTertiaryContainer,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              // Download error section
+              if (state.downloadError != null) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(Icons.error_outline, color: cs.error, size: 18),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        state.downloadError!,
+                        style: TextStyle(color: cs.error),
                       ),
                     ),
                   ],
                 ),
-              ),
-            ],
-            // Download error section
-            if (state.downloadError != null) ...[
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Icon(Icons.error_outline, color: Colors.red, size: 18),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      state.downloadError!,
-                      style: TextStyle(color: Colors.red.shade700),
+              ],
+              // Download complete section (shown briefly before auto-close triggers)
+              if (state.downloadComplete && !state.isInstalling) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(Icons.check_circle, color: cs.primary, size: 18),
+                    const SizedBox(width: 4),
+                    Text(
+                      '下载完成',
+                      style: TextStyle(color: cs.primary),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+              ],
             ],
-            // Download complete section (shown briefly before auto-close triggers)
-            if (state.downloadComplete && !state.isInstalling) ...[
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Icon(Icons.check_circle,
-                      color: Colors.green, size: 18),
-                  const SizedBox(width: 4),
-                  const Text(
-                    '下载完成',
-                    style: TextStyle(color: Colors.green),
-                  ),
-                ],
-              ),
-            ],
-          ],
+          ),
         ),
-      ),
-      actions: _buildActions(state),
+        actions: _buildActions(state),
       ),
     );
   }
@@ -255,24 +259,31 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
 
   /// Builds the download progress card shown in the actions area.
   Widget _buildDownloadProgress(UpdateState state) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.blue.shade50,
+        color: cs.primaryContainer.withOpacity(0.3),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.blue.shade200),
+        border: Border.all(
+          color: cs.primaryContainer,
+          width: 0.5,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.download, size: 18, color: Colors.blue),
-              SizedBox(width: 6),
+              Icon(Icons.download, size: 18, color: cs.primary),
+              const SizedBox(width: 6),
               Text('正在下载更新...',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: cs.onSurface,
+                  )),
             ],
           ),
           const SizedBox(height: 10),
@@ -281,9 +292,8 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
             child: LinearProgressIndicator(
               value: state.downloadProgress,
               minHeight: 10,
-              backgroundColor: Colors.blue.shade100,
-              valueColor:
-                  AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+              backgroundColor: cs.surfaceContainerHighest,
+              valueColor: AlwaysStoppedAnimation<Color>(cs.primary),
             ),
           ),
           const SizedBox(height: 6),
@@ -294,7 +304,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 16,
-                color: Colors.blue.shade700,
+                color: cs.primary,
               ),
             ),
           ),
@@ -310,5 +320,4 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
-
 }
