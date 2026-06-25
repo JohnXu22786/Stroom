@@ -111,7 +111,8 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('删除对话'),
-        content: Text('确定要删除对话「${topic.title.isEmpty ? '新对话' : topic.title}」吗？'),
+        content:
+            Text('确定要删除对话「${topic.title.isEmpty ? '新对话' : topic.title}」吗？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -194,7 +195,8 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     final assistantId = ref.read(selectedAssistantIdProvider);
     if (assistantId == null) return;
 
-    ref.read(conversationsProvider.notifier)
+    ref
+        .read(conversationsProvider.notifier)
         .createConversation(assistantId: assistantId);
 
     Navigator.of(context).pushNamed('/chat');
@@ -241,8 +243,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
           const SizedBox(height: 8),
           Text('创建一个新对话开始对话',
               style: TextStyle(
-                  fontSize: 13,
-                  color: cs.onSurfaceVariant.withOpacity(0.7))),
+                  fontSize: 13, color: cs.onSurfaceVariant.withOpacity(0.7))),
         ],
       ),
     );
@@ -275,14 +276,11 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
             IconButton(
               icon: const Icon(Icons.delete),
               tooltip: '删除选中',
-              onPressed:
-                  _selectedIds.isNotEmpty ? _batchDelete : null,
+              onPressed: _selectedIds.isNotEmpty ? _batchDelete : null,
             ),
           IconButton(
             icon: Icon(
-              _selectionMode
-                  ? Icons.close
-                  : Icons.checklist,
+              _selectionMode ? Icons.close : Icons.checklist,
             ),
             tooltip: _selectionMode ? '取消选择' : '选择',
             onPressed: _toggleSelectionMode,
@@ -297,8 +295,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                   Icon(Icons.error_outline,
                       size: 48, color: cs.onSurfaceVariant.withOpacity(0.4)),
                   const SizedBox(height: 16),
-                  Text('未选择助手',
-                      style: TextStyle(color: cs.onSurfaceVariant)),
+                  Text('未选择助手', style: TextStyle(color: cs.onSurfaceVariant)),
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: () {
@@ -369,6 +366,29 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                   ),
                 ),
 
+                // Fixed hint: long-press drag to reorder
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.drag_indicator,
+                        size: 16,
+                        color: cs.onSurfaceVariant.withOpacity(0.5),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '长按拖拽即可调整对话顺序',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant.withOpacity(0.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
                 // Conversation list
                 Expanded(
                   child: sorted.isEmpty
@@ -413,25 +433,30 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                               topic: topic,
                               selectionMode: _selectionMode,
                               isSelected: _selectedIds.contains(topic.id),
-                              isActive: topic.id == ref.watch(activeConversationIdProvider),
+                              isActive: topic.id ==
+                                  ref.watch(activeConversationIdProvider),
                               onTap: () {
                                 if (_selectionMode) {
                                   _toggleSelection(topic.id);
                                 } else {
                                   _onTopicSelected(topic);
-}
+                                }
                               },
                               onDelete: () => _deleteTopic(topic),
                               onPinToggle: () {
-                                ref.read(conversationsProvider.notifier)
+                                ref
+                                    .read(conversationsProvider.notifier)
                                     .togglePin(topic.id);
                               },
-                              onRename: () => _renameTopic(topic.id, topic.title),
+                              onRename: () =>
+                                  _renameTopic(topic.id, topic.title),
                               onAutoRename: () {
-                                ref.read(conversationsProvider.notifier)
+                                ref
+                                    .read(conversationsProvider.notifier)
                                     .autoRenameConversation(topic.id);
                               },
-                              onSelectionToggle: () => _toggleSelection(topic.id),
+                              onSelectionToggle: () =>
+                                  _toggleSelection(topic.id),
                             );
                             // When NOT in selection mode, wrap in long-press drag listener
                             if (!_selectionMode) {
