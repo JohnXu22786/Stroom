@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:stroom/services/image_cache.dart';
 import 'package:stroom/utils/image_manifest.dart';
 
 // ====================================================================
@@ -34,10 +35,22 @@ class AlbumImageThumbnailState extends State<AlbumImageThumbnail> {
   }
 
   Future<Uint8List?> _loadImageData() async {
+    final cacheKey = 'thumb:${widget.record.hash}';
+    // Check thumbnail cache first
+    final cachedThumb = ImageBytesCache.get(cacheKey);
+    if (cachedThumb != null) return cachedThumb;
+    // Try reading thumbnail file from disk
     final thumb =
         await ImageManifest.readFile('${widget.record.hash}_thumb.png');
-    if (thumb != null) return thumb;
-    return ImageManifest.readFile(widget.record.storagePath);
+    if (thumb != null) {
+      ImageBytesCache.put(cacheKey, thumb);
+      return thumb;
+    }
+    // Fall back to full image — cache under separate key
+    return ImageBytesCache.getOrFetch(
+      'full:${widget.record.hash}',
+      () => ImageManifest.readFile(widget.record.storagePath),
+    );
   }
 
   @override
