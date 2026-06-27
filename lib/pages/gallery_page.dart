@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 
 import '../providers/image_provider.dart';
+import '../services/image_cache.dart';
 import '../utils/image_manifest.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/folder_path_utils.dart';
@@ -135,7 +136,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       return;
     }
 
-    final data = await ImageManifest.readFile(file.storagePath);
+    final data = await ImageBytesCache.getOrFetch(
+      'full:${file.hash}',
+      () => ImageManifest.readFile(file.storagePath),
+    );
     if (data == null || data.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -735,14 +739,26 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     Widget fileThumbnailBuilder(ImageRecord file) {
       final canPreview = _supportedFormats.contains(file.format);
       if (canPreview) {
+        final cacheKey = 'thumb:${file.hash}';
         return FutureBuilder<Uint8List?>(
-          future: (() async {
+          future: () async {
+            // Check thumbnail cache first
+            final cachedThumb = ImageBytesCache.get(cacheKey);
+            if (cachedThumb != null) return cachedThumb;
+            // Try reading thumbnail file from disk
             final thumb = await ImageManifest.readFile(
               '${file.hash}_thumb.png',
             );
-            if (thumb != null) return thumb;
-            return ImageManifest.readFile(file.storagePath);
-          })(),
+            if (thumb != null) {
+              ImageBytesCache.put(cacheKey, thumb);
+              return thumb;
+            }
+            // Fall back to full image — cache under separate key
+            return ImageBytesCache.getOrFetch(
+              'full:${file.hash}',
+              () => ImageManifest.readFile(file.storagePath),
+            );
+          }(),
           builder: (context, snapshot) {
             final data = snapshot.data;
             if (data == null || data.isEmpty) {

@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../models/chat_message.dart';
 import '../services/attachment_storage.dart';
+import '../services/image_cache.dart';
 import '../utils/format_file_size.dart';
 
 /// A larger, clickable attachment preview chip for sent messages.
@@ -132,7 +133,10 @@ class _ImageThumbnailState extends State<_ImageThumbnail> {
   @override
   void initState() {
     super.initState();
-    _loadFuture = AttachmentStorage.readFile(widget.storagePath);
+    _loadFuture = ImageBytesCache.getOrFetch(
+      'att:${widget.storagePath}',
+      () => AttachmentStorage.readFile(widget.storagePath),
+    );
   }
 
   @override
