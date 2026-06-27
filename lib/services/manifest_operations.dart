@@ -142,7 +142,7 @@ class ManifestOperations<T extends FileRecord> {
     try {
       final rows = await _dbGetAllRecords();
       _cache = rows.map((m) => fromMap(m)).toList();
-      _folderCache = (await ManifestDatabase.getAllFolders()).toSet();
+      _folderCache = (await ManifestDatabase.getAllFolders(recordTable: tableName)).toSet();
     } catch (e) {
       debugPrint('ManifestOperations($manifestKey).loadRecords error: $e');
       _cache = [];
@@ -382,7 +382,7 @@ class ManifestOperations<T extends FileRecord> {
     if (err != null) return;
     if (!_folderCache.contains(name)) {
       _folderCache.add(name);
-      await ManifestDatabase.insertFolder(name);
+      await ManifestDatabase.insertFolder(name, recordTable: tableName);
     }
   }
 
@@ -390,7 +390,7 @@ class ManifestOperations<T extends FileRecord> {
     await loadRecords();
     if (!_folderCache.contains(folderPath)) {
       _folderCache.add(folderPath);
-      await ManifestDatabase.insertFolder(folderPath);
+      await ManifestDatabase.insertFolder(folderPath, recordTable: tableName);
     }
   }
 
@@ -416,7 +416,7 @@ class ManifestOperations<T extends FileRecord> {
       for (final record in childRecords) {
         idsToDelete.add(record.id);
       }
-      await ManifestDatabase.deleteFolder(child);
+      await ManifestDatabase.deleteFolder(child, recordTable: tableName);
     }
 
     _folderCache.remove(folderName);
@@ -427,7 +427,7 @@ class ManifestOperations<T extends FileRecord> {
     for (final record in folderRecords) {
       idsToDelete.add(record.id);
     }
-    await ManifestDatabase.deleteFolder(folderName);
+    await ManifestDatabase.deleteFolder(folderName, recordTable: tableName);
 
     // Pre-count storage names and hash counts across ALL records before deletion
     final storageNameCount = <String, int>{};
@@ -502,7 +502,7 @@ class ManifestOperations<T extends FileRecord> {
     }
     for (final f in toRemove) {
       _folderCache.remove(f);
-      await ManifestDatabase.deleteFolder(f);
+      await ManifestDatabase.deleteFolder(f, recordTable: tableName);
     }
 
     // Move records in the removed folder path to root
@@ -531,7 +531,7 @@ class ManifestOperations<T extends FileRecord> {
     for (final p in pathsToAdd) {
       if (!_folderCache.contains(p)) {
         _folderCache.add(p);
-        await ManifestDatabase.insertFolder(p);
+        await ManifestDatabase.insertFolder(p, recordTable: tableName);
       }
     }
   }

@@ -67,7 +67,7 @@ class ManifestDatabase {
     final dbPath = p.join(dir.path, 'stroom_manifest.db');
     final db = await openDatabase(
       dbPath,
-      version: 3,
+      version: 4,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE IF NOT EXISTS image_records (
@@ -122,6 +122,26 @@ class ManifestDatabase {
             path TEXT PRIMARY KEY
           )
         ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS text_folders (
+            path TEXT PRIMARY KEY
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS audio_folders (
+            path TEXT PRIMARY KEY
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS image_folders (
+            path TEXT PRIMARY KEY
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS video_folders (
+            path TEXT PRIMARY KEY
+          )
+        ''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -149,6 +169,58 @@ class ManifestDatabase {
             ''');
           } catch (_) {
             // 表可能已存在，忽略
+          }
+        }
+        if (oldVersion < 4) {
+          // V4: 引入每个类型独立的文件夹表，替代共享的 folders 表
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS text_folders (
+              path TEXT PRIMARY KEY
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS audio_folders (
+              path TEXT PRIMARY KEY
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS image_folders (
+              path TEXT PRIMARY KEY
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS video_folders (
+              path TEXT PRIMARY KEY
+            )
+          ''');
+          // 将已有文件夹迁移到四个独立的表，保持向后兼容
+          try {
+            final existingFolders = await db.query(ManifestTables.folders);
+            for (final row in existingFolders) {
+              final path = row['path'] as String;
+              await db.insert(
+                ManifestTables.textFolders,
+                {'path': path},
+                conflictAlgorithm: ConflictAlgorithm.ignore,
+              );
+              await db.insert(
+                ManifestTables.audioFolders,
+                {'path': path},
+                conflictAlgorithm: ConflictAlgorithm.ignore,
+              );
+              await db.insert(
+                ManifestTables.imageFolders,
+                {'path': path},
+                conflictAlgorithm: ConflictAlgorithm.ignore,
+              );
+              await db.insert(
+                ManifestTables.videoFolders,
+                {'path': path},
+                conflictAlgorithm: ConflictAlgorithm.ignore,
+              );
+            }
+          } catch (_) {
+            // 忽略迁移错误
           }
         }
       },
@@ -240,6 +312,26 @@ class ManifestDatabase {
     await prefs.setBool('migrated_video_records', true);
   }
 
+  /// Migrate legacy folders from the shared [ManifestTables.folders] list
+  /// to per-type folder lists for backward compatibility.
+  static Future<void> _migrateLegacyFoldersJson() async {
+    final legacyFolders =
+        _webData![ManifestTables.folders] as List<dynamic>? ?? [];
+    if (legacyFolders.isEmpty) return;
+
+    for (final folderTable in [
+      ManifestTables.textFolders,
+      ManifestTables.audioFolders,
+      ManifestTables.imageFolders,
+      ManifestTables.videoFolders,
+    ]) {
+      final existing =
+          (_webData![folderTable] as List<dynamic>?)?.cast<String>() ?? [];
+      final merged = {...existing, ...legacyFolders.cast<String>()}.toList();
+      _webData![folderTable] = merged;
+    }
+  }
+
   // ==================================================================
   // Web 端数据加载与持久化（全量 JSON 通过 WebFileStore）
   // ==================================================================
@@ -260,6 +352,8 @@ class ManifestDatabase {
       _webData = emptyWebData();
     }
     await _migrateOldVideoRecordsJson();
+    // V4 migration: migrate legacy shared folders to per-type folder lists
+    await _migrateLegacyFoldersJson();
     return _webData!;
   }
 
@@ -664,22 +758,43 @@ class ManifestDatabase {
   // ==================================================================
 
   /// 获取所有文件夹路径
-  static Future<List<String>> getAllFolders() async {
+  ///
+  /// [recordTable] 指定记录表名，用于选择对应的文件夹表。
+  /// 为 null 时使用旧版共享 folders 表（兼容旧代码）。
+  static Future<List<String>> getAllFolders({String? recordTable}) async {
+    final folderTable = recordTable != null
+        ? ManifestTables.folderTableFor(recordTable)
+        : ManifestTables.folders;
     if (_useJsonStore) {
       final data = await _loadWebData();
-      final list = data[ManifestTables.folders] as List<dynamic>? ?? [];
+      final list = data[folderTable] as List<dynamic>? ?? [];
+      if (recordTable != null) {
+        // 向后兼容：同时包含旧版共享 folders 表中的条目
+        final legacyList = data[ManifestTables.folders] as List<dynamic>? ?? [];
+        return {...list.cast<String>(), ...legacyList.cast<String>()}.toList();
+      }
       return list.cast<String>();
     }
     final db = await database;
-    final rows = await db.query(ManifestTables.folders);
-    return rows.map((r) => r['path'] as String).toList();
+    final rows = await db.query(folderTable);
+    final folders = rows.map((r) => r['path'] as String).toList();
+    if (recordTable != null) {
+      // 向后兼容：同时包含旧版共享 folders 表中的条目
+      final legacyRows = await db.query(ManifestTables.folders);
+      final legacyFolders = legacyRows.map((r) => r['path'] as String);
+      return {...folders, ...legacyFolders}.toList();
+    }
+    return folders;
   }
 
   /// 插入一个文件夹路径
-  static Future<void> insertFolder(String path) async {
+  static Future<void> insertFolder(String path, {String? recordTable}) async {
+    final folderTable = recordTable != null
+        ? ManifestTables.folderTableFor(recordTable)
+        : ManifestTables.folders;
     if (_useJsonStore) {
       final data = await _loadWebData();
-      final list = data[ManifestTables.folders] as List<dynamic>? ?? [];
+      final list = data[folderTable] as List<dynamic>? ?? [];
       if (!list.contains(path)) {
         list.add(path);
         await _saveWebData();
@@ -688,39 +803,45 @@ class ManifestDatabase {
     }
     final db = await database;
     await db.insert(
-      ManifestTables.folders,
+      folderTable,
       {'path': path},
       conflictAlgorithm: ConflictAlgorithm.ignore,
     );
   }
 
   /// 删除一个文件夹路径
-  static Future<void> deleteFolder(String path) async {
+  static Future<void> deleteFolder(String path, {String? recordTable}) async {
+    final folderTable = recordTable != null
+        ? ManifestTables.folderTableFor(recordTable)
+        : ManifestTables.folders;
     if (_useJsonStore) {
       final data = await _loadWebData();
-      final list = data[ManifestTables.folders] as List<dynamic>? ?? [];
+      final list = data[folderTable] as List<dynamic>? ?? [];
       list.remove(path);
       await _saveWebData();
       return;
     }
     final db = await database;
     await db.delete(
-      ManifestTables.folders,
+      folderTable,
       where: 'path = ?',
       whereArgs: [path],
     );
   }
 
   /// 检查文件夹路径是否存在
-  static Future<bool> folderExists(String path) async {
+  static Future<bool> folderExists(String path, {String? recordTable}) async {
+    final folderTable = recordTable != null
+        ? ManifestTables.folderTableFor(recordTable)
+        : ManifestTables.folders;
     if (_useJsonStore) {
       final data = await _loadWebData();
-      final list = data[ManifestTables.folders] as List<dynamic>? ?? [];
+      final list = data[folderTable] as List<dynamic>? ?? [];
       return list.contains(path);
     }
     final db = await database;
     final count = Sqflite.firstIntValue(await db.rawQuery(
-      'SELECT COUNT(*) FROM folders WHERE path = ?',
+      'SELECT COUNT(*) FROM $folderTable WHERE path = ?',
       [path],
     ));
     return (count ?? 0) > 0;

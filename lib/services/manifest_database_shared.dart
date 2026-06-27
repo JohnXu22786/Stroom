@@ -11,6 +11,29 @@ class ManifestTables {
   static const String videoRecords = 'video_records';
   static const String textRecords = 'text_records';
   static const String folders = 'folders';
+
+  // Per-type folder tables (replaces the shared [folders] table)
+  static const String textFolders = 'text_folders';
+  static const String audioFolders = 'audio_folders';
+  static const String imageFolders = 'image_folders';
+  static const String videoFolders = 'video_folders';
+
+  /// Derive the folder table name from a record table name.
+  /// Falls back to the shared [folders] table for unknown tables.
+  static String folderTableFor(String recordTable) {
+    switch (recordTable) {
+      case ManifestTables.textRecords:
+        return ManifestTables.textFolders;
+      case ManifestTables.audioRecords:
+        return ManifestTables.audioFolders;
+      case ManifestTables.imageRecords:
+        return ManifestTables.imageFolders;
+      case ManifestTables.videoRecords:
+        return ManifestTables.videoFolders;
+      default:
+        return ManifestTables.folders;
+    }
+  }
 }
 
 /// Dart camelCase -> DB snake_case column name mapping.
@@ -62,4 +85,8 @@ Map<String, dynamic> emptyWebData() => {
       ManifestTables.videoRecords: <Map<String, dynamic>>[],
       ManifestTables.textRecords: <Map<String, dynamic>>[],
       ManifestTables.folders: <String>[],
+      ManifestTables.textFolders: <String>[],
+      ManifestTables.audioFolders: <String>[],
+      ManifestTables.imageFolders: <String>[],
+      ManifestTables.videoFolders: <String>[],
     };
