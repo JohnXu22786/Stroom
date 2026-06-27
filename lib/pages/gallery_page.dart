@@ -277,8 +277,11 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       title: '拍照添加至文件夹',
       onCreateFolder: (name) async {
         await ref.read(imageRecordsProvider.notifier).createFolder(name);
-        await ref.read(imageFolderListProvider.notifier).loadFolders();
         return null;
+      },
+      onRefreshFolders: () async {
+        await ref.read(imageFolderListProvider.notifier).loadFolders();
+        return ref.read(imageFolderListProvider);
       },
     );
     if (selectedFolder == null || !mounted) return;

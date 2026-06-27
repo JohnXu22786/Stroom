@@ -92,8 +92,13 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       availableFolders: folders,
       title: '录像添加至文件夹',
       onCreateFolder: (name) async {
+        // addFolder internally calls loadFolders()
         await ref.read(videoFolderListProvider.notifier).addFolder(name);
         return null;
+      },
+      onRefreshFolders: () async {
+        // Provider state already updated by addFolder() above
+        return ref.read(videoFolderListProvider);
       },
     );
     if (folder == null || !mounted) return;
