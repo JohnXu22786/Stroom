@@ -7,7 +7,6 @@ import 'package:path/path.dart' as p;
 
 import 'storage_service.dart';
 import 'manifest_database.dart';
-
 /// The key used in SharedPreferences to store the data format version.
 const String _kDataFormatVersionKey = 'data_format_version';
 
@@ -111,12 +110,67 @@ class DataMigrationService {
   // ================================================================
 
   /// 备份目录名称
-  static const String _backupRootName = 'data_backup';
+  static const String _backupRootName = 'StroomBackups';
 
-  /// 获取备份根目录路径。
+  /// 获取外部备份根目录路径。
+  ///
+  /// 备份位置不在应用数据目录内，以防止应用数据被删除时备份也丢失。
+  ///
+  /// 位置策略：
+  /// - Windows: %USERPROFILE%\Documents\StroomBackups\
+  /// - macOS:   ~/Documents/StroomBackups/
+  /// - Linux:   ~/Documents/StroomBackups/
+  /// - Android/iOS: 回退到系统临时目录（移动平台无可靠的"外部"可写目录）
+  /// - 测试环境: Directory.systemTemp/stroom_backup_test/
+  static Future<String> getExternalBackupRootPath() async {
+    if (kIsWeb) {
+      return '/stroom_backups';
+    }
+
+    // 测试环境：使用临时目录
+    try {
+      if (Platform.environment['FLUTTER_TEST'] == 'true') {
+        return '${Directory.systemTemp.path}/stroom_backup_test';
+      }
+    } catch (e) {
+      debugPrint('[DataMigrationService] Error checking test env: $e');
+    }
+
+    // Windows
+    try {
+      if (Platform.isWindows) {
+        final userProfile = Platform.environment['USERPROFILE'];
+        if (userProfile != null && userProfile.isNotEmpty) {
+          return p.join(userProfile, 'Documents', _backupRootName);
+        }
+      }
+    } catch (e) {
+      debugPrint('[DataMigrationService] Error resolving Windows backup path: $e');
+    }
+
+    // macOS / Linux
+    try {
+      if (Platform.isMacOS || Platform.isLinux) {
+        final home = Platform.environment['HOME'];
+        if (home != null && home.isNotEmpty) {
+          return p.join(home, 'Documents', _backupRootName);
+        }
+      }
+    } catch (e) {
+      debugPrint('[DataMigrationService] Error resolving Unix backup path: $e');
+    }
+
+    // Fallback: system temp directory (not app data)
+    try {
+      return '${Directory.systemTemp.path}/$_backupRootName';
+    } catch (_) {
+      return '/tmp/$_backupRootName';
+    }
+  }
+
+  /// 获取备份根目录路径（使用外部位置）。
   static Future<String> _getBackupRootPath() async {
-    final appDir = await AppStorage.directory;
-    return p.join(appDir, _backupRootName);
+    return getExternalBackupRootPath();
   }
 
   /// 创建当前数据的时间戳备份。

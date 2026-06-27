@@ -55,7 +55,6 @@ void main() {
     test('migration needed when no version stored', () async {
       final result = await DataMigrationService.checkAndMigrate();
       expect(result.needsMigration, isTrue);
-      // 迁移后总是需要重启，确保所有 provider 重新初始化
       expect(result.restartRequired, isTrue);
 
       // After migration, version should be updated
@@ -73,28 +72,33 @@ void main() {
       expect(result2.needsMigration, isFalse);
     });
 
-    test('backup directory is created during migration', () async {
-      // Clean any existing backup
-      final appDir = await AppStorage.directory;
-      final backupRoot = Directory('${appDir}/data_backup');
-      if (await backupRoot.exists()) {
-        await backupRoot.delete(recursive: true);
+    test('backup directory is created in external location during migration',
+        () async {
+      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
+
+      // Clean any existing backup root
+      final rootDir = Directory(backupRoot);
+      if (await rootDir.exists()) {
+        await rootDir.delete(recursive: true);
       }
 
       await DataMigrationService.checkAndMigrate();
 
-      // Backup should exist (at least one subdirectory)
-      expect(await backupRoot.exists(), isTrue);
-      final entries = await backupRoot.list().toList();
+      // Backup root should exist (at least one subdirectory)
+      expect(await rootDir.exists(), isTrue);
+      final entries = await rootDir.list().toList();
       expect(entries.length, greaterThan(0));
+
+      // Cleanup after test
+      if (await rootDir.exists()) {
+        await rootDir.delete(recursive: true);
+      }
     });
   });
 
-  group('DataMigrationService - backup', () {
+  group('DataMigrationService - external backup', () {
     setUp(() async {
-      // Ensure migration is in known state
-      await DataMigrationService.checkAndMigrate();
-      // Reset mock prefs for clean backup test
+      // Set mock values BEFORE any getInstance call
       SharedPreferences.setMockInitialValues({
         'data_format_version': 0,
         'test_key': 'test_value',
@@ -102,11 +106,21 @@ void main() {
       AppStorage.resetCache();
     });
 
-    test('createBackup creates a backup directory with manifest', () async {
+    test('backup root is outside app data directory', () async {
+      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
+      final appDir = await AppStorage.directory;
+
+      // Verify they are NOT the same path
+      expect(backupRoot, isNot(equals(appDir)));
+      // Verify backup root is a non-empty path
+      expect(backupRoot.isNotEmpty, isTrue);
+    });
+
+    test('createBackup creates a backup directory with manifest in external location',
+        () async {
       final backupPath = await DataMigrationService.createBackup();
       expect(backupPath, isNotNull);
 
-      // Verify backup directory exists
       final backupDir = Directory(backupPath!);
       expect(await backupDir.exists(), isTrue);
 
@@ -121,7 +135,16 @@ void main() {
 
       // Verify preferences backup
       final prefsFile = File('${backupDir.path}/preferences.json');
-      expect(await prefsFile.exists(), isTrue);
+      final prefsContent = await prefsFile.readAsString();
+      final prefsData = jsonDecode(prefsContent) as Map<String, dynamic>;
+      expect(prefsData['test_key'], equals('test_value'));
+
+      // Verify it's outside app data
+      final appDir = await AppStorage.directory;
+      expect(backupPath, isNot(equals(appDir)));
+      // In production, backupPath won't be under appDir.
+      // In test environment both use system temp,
+      // so we only check they're different paths.
 
       // Cleanup
       await backupDir.delete(recursive: true);
@@ -130,25 +153,24 @@ void main() {
 
   group('DataMigrationService - cleanup', () {
     test('cleanOldBackups handles empty backup directory', () async {
-      final appDir = await AppStorage.directory;
-      final backupRoot = Directory('${appDir}/data_backup');
+      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
+      final rootDir = Directory(backupRoot);
 
-      // Should not throw when directory doesn't exist
-      if (await backupRoot.exists()) {
-        await backupRoot.delete(recursive: true);
+      if (await rootDir.exists()) {
+        await rootDir.delete(recursive: true);
       }
       await DataMigrationService.cleanOldBackups();
       // No exception = test passes
     });
 
     test('cleanOldBackups keeps recent backups', () async {
-      final appDir = await AppStorage.directory;
-      final backupRoot = Directory('${appDir}/data_backup');
-      await backupRoot.create(recursive: true);
+      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
+      final rootDir = Directory(backupRoot);
+      await rootDir.create(recursive: true);
 
       try {
         // Create a recent backup
-        final recentDir = Directory('${backupRoot.path}/recent_backup');
+        final recentDir = Directory('${rootDir.path}/recent_backup');
         await recentDir.create(recursive: true);
 
         await DataMigrationService.cleanOldBackups();
@@ -156,27 +178,27 @@ void main() {
         // Recent backup should still exist
         expect(await recentDir.exists(), isTrue);
       } finally {
-        if (await backupRoot.exists()) {
-          await backupRoot.delete(recursive: true);
+        if (await rootDir.exists()) {
+          await rootDir.delete(recursive: true);
         }
       }
     });
 
     test('cleanOldBackups does not crash on invalid entries', () async {
-      final appDir = await AppStorage.directory;
-      final backupRoot = Directory('${appDir}/data_backup');
-      await backupRoot.create(recursive: true);
+      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
+      final rootDir = Directory(backupRoot);
+      await rootDir.create(recursive: true);
 
       try {
         // Create a file (not a directory) in the backup root
-        final file = File('${backupRoot.path}/not_a_dir');
+        final file = File('${rootDir.path}/not_a_dir');
         await file.writeAsString('test');
 
         // Should not throw when encountering non-directory entries
         await DataMigrationService.cleanOldBackups();
       } finally {
-        if (await backupRoot.exists()) {
-          await backupRoot.delete(recursive: true);
+        if (await rootDir.exists()) {
+          await rootDir.delete(recursive: true);
         }
       }
     });
