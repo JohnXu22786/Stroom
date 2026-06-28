@@ -16,7 +16,7 @@ void main() {
 
   group('DataMigrationService - format version', () {
     test('returns current format version constant', () {
-      expect(DataMigrationService.currentFormatVersion, equals(1));
+      expect(DataMigrationService.currentFormatVersion, equals(2));
     });
 
     test('default stored version is 0 (not yet set)', () async {
@@ -37,7 +37,7 @@ void main() {
   group('DataMigrationService - checkAndMigrate', () {
     test('no migration needed when version matches current', () async {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('data_format_version', 1);
+      await prefs.setInt('data_format_version', 2);
 
       final result = await DataMigrationService.checkAndMigrate();
       expect(result.needsMigration, isFalse);
@@ -60,7 +60,7 @@ void main() {
 
       // After migration, version should be updated
       final storedVersion = await DataMigrationService.getStoredFormatVersion();
-      expect(storedVersion, equals(1));
+      expect(storedVersion, equals(2));
     });
 
     test('subsequent call does not need migration', () async {

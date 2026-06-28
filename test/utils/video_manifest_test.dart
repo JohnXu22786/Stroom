@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/services/manifest_database_shared.dart' show ManifestTables;
 import 'package:stroom/utils/video_manifest.dart';
 
 void main() {
@@ -73,18 +74,24 @@ void main() {
 
   group('ManifestDatabase folders', () {
     testWidgets('insert and list', (WidgetTester t) async {
-      await ManifestDatabase.insertFolder('folder_a');
-      await ManifestDatabase.insertFolder('folder_b/sub');
-      final folders = await ManifestDatabase.getAllFolders();
+      await ManifestDatabase.insertFolder('folder_a',
+          recordTable: ManifestTables.videoRecords);
+      await ManifestDatabase.insertFolder('folder_b/sub',
+          recordTable: ManifestTables.videoRecords);
+      final folders = await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.videoRecords);
       expect(folders.length, equals(2));
       expect(folders, contains('folder_a'));
       expect(folders, contains('folder_b/sub'));
     });
 
     testWidgets('delete folder', (WidgetTester t) async {
-      await ManifestDatabase.insertFolder('to_remove');
-      await ManifestDatabase.deleteFolder('to_remove');
-      final folders = await ManifestDatabase.getAllFolders();
+      await ManifestDatabase.insertFolder('to_remove',
+          recordTable: ManifestTables.videoRecords);
+      await ManifestDatabase.deleteFolder('to_remove',
+          recordTable: ManifestTables.videoRecords);
+      final folders = await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.videoRecords);
       expect(folders, isNot(contains('to_remove')));
     });
   });

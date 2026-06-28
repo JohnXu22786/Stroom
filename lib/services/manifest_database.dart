@@ -67,7 +67,7 @@ class ManifestDatabase {
     final dbPath = p.join(dir.path, 'stroom_manifest.db');
     final db = await openDatabase(
       dbPath,
-      version: 3,
+      version: 4,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE IF NOT EXISTS image_records (
@@ -117,8 +117,26 @@ class ManifestDatabase {
             text_length INTEGER NOT NULL DEFAULT 0
           )
         ''');
+        // ⛔ Legacy shared `folders` table is no longer created since v2 format.
+        // Per-type folder tables (text_folders, audio_folders, image_folders,
+        // video_folders) are used instead. See v2 migration for details.
         await db.execute('''
-          CREATE TABLE IF NOT EXISTS folders (
+          CREATE TABLE IF NOT EXISTS text_folders (
+            path TEXT PRIMARY KEY
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS audio_folders (
+            path TEXT PRIMARY KEY
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS image_folders (
+            path TEXT PRIMARY KEY
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS video_folders (
             path TEXT PRIMARY KEY
           )
         ''');
@@ -149,6 +167,64 @@ class ManifestDatabase {
             ''');
           } catch (_) {
             // 表可能已存在，忽略
+          }
+        }
+        if (oldVersion < 4) {
+          // V4: 引入每个类型独立的文件夹表，替代共享的 folders 表
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS text_folders (
+              path TEXT PRIMARY KEY
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS audio_folders (
+              path TEXT PRIMARY KEY
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS image_folders (
+              path TEXT PRIMARY KEY
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS video_folders (
+              path TEXT PRIMARY KEY
+            )
+          ''');
+          // 将已有文件夹迁移到四个独立的表
+          try {
+            final existingFolders = await db.query(ManifestTables.folders);
+            for (final row in existingFolders) {
+              final path = row['path'] as String;
+              await db.insert(
+                ManifestTables.textFolders,
+                {'path': path},
+                conflictAlgorithm: ConflictAlgorithm.ignore,
+              );
+              await db.insert(
+                ManifestTables.audioFolders,
+                {'path': path},
+                conflictAlgorithm: ConflictAlgorithm.ignore,
+              );
+              await db.insert(
+                ManifestTables.imageFolders,
+                {'path': path},
+                conflictAlgorithm: ConflictAlgorithm.ignore,
+              );
+              await db.insert(
+                ManifestTables.videoFolders,
+                {'path': path},
+                conflictAlgorithm: ConflictAlgorithm.ignore,
+              );
+            }
+          } catch (_) {
+            // 忽略迁移错误
+          }
+          // 删除旧版共享 folders 表（v2 格式不再使用）
+          try {
+            await db.execute('DROP TABLE IF EXISTS ${ManifestTables.folders}');
+          } catch (_) {
+            // 忽略删除错误
           }
         }
       },
@@ -238,6 +314,94 @@ class ManifestDatabase {
     _webData![ManifestTables.videoRecords] = videoList;
     await _saveWebData();
     await prefs.setBool('migrated_video_records', true);
+  }
+
+  /// v1→v2 migration: migrate legacy shared folders to per-type tables,
+  /// then remove the shared folders table entirely.
+  ///
+  /// After this migration, only per-type folder tables remain.
+  ///
+  /// Call this before [database] or [_loadWebData] is first accessed,
+  /// so the migration runs before the new code (which does not read
+  /// from the legacy table) takes effect.
+  static Future<bool> hasLegacyFolders() async {
+    if (_useJsonStore) {
+      await _loadWebData();
+      return _webData!.containsKey(ManifestTables.folders);
+    }
+    // SQLite: check if the table exists (it won't be in _database yet)
+    return false; // onUpgrade already handles it for SQLite
+  }
+
+  /// Migrate legacy shared folders from `folders` table to all 4 per-type
+  /// tables, then drop the legacy table. Idempotent — safe to call multiple
+  /// times.
+  static Future<void> migrateLegacyFoldersToPerType() async {
+    if (_useJsonStore) {
+      await _loadWebData();
+      await _migrateLegacyFoldersJsonV2();
+      return;
+    }
+    // For SQLite, the onUpgrade path in _initDatabase already copies
+    // legacy folders to per-type tables and drops the legacy table.
+    // We verify this by checking the legacy table no longer exists
+    // after the DB is initialized.
+    Database? db;
+    try {
+      db = await database;
+    } catch (e) {
+      // Database not available (e.g. in test mode without enableTestMode).
+      // The migration will be handled by onUpgrade when the DB is
+      // actually initialized.
+      debugPrint(
+          '[ManifestDatabase] migrateLegacyFoldersToPerType: DB not available, '
+          'skipping: $e');
+      return;
+    }
+    try {
+      // If the legacy table somehow still exists (e.g. from an intermediate
+      // version), migrate and drop it.
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        [ManifestTables.folders],
+      );
+      if (tables.isNotEmpty) {
+        final rows = await db.query(ManifestTables.folders);
+        if (rows.isNotEmpty) {
+          for (final row in rows) {
+            final path = row['path'] as String;
+            for (final ft in ManifestTables.allPerTypeFolderTables) {
+              await db.insert(ft, {'path': path},
+                  conflictAlgorithm: ConflictAlgorithm.ignore);
+            }
+          }
+        }
+        await db.execute('DROP TABLE IF EXISTS ${ManifestTables.folders}');
+      }
+    } catch (e) {
+      debugPrint(
+          '[ManifestDatabase] migrateLegacyFoldersToPerType SQLite error: $e');
+    }
+  }
+
+  /// Internal: migrate legacy folders in JSON/web mode (v2 format).
+  /// Removes the legacy [ManifestTables.folders] key after migrating.
+  static Future<void> _migrateLegacyFoldersJsonV2() async {
+    final legacyFolders =
+        _webData![ManifestTables.folders] as List<dynamic>? ?? [];
+    if (legacyFolders.isEmpty) return;
+
+    for (final folderTable in ManifestTables.allPerTypeFolderTables) {
+      final existing =
+          (_webData![folderTable] as List<dynamic>?)?.cast<String>() ?? [];
+      final merged = <String>{...existing, ...legacyFolders.cast<String>()};
+      _webData![folderTable] = merged.toList();
+    }
+
+    // Remove the legacy key
+    _webData!.remove(ManifestTables.folders);
+    await _saveWebData();
+    debugPrint('[ManifestDatabase] Migrated legacy folders to per-type (JSON)');
   }
 
   // ==================================================================
@@ -664,22 +828,52 @@ class ManifestDatabase {
   // ==================================================================
 
   /// 获取所有文件夹路径
-  static Future<List<String>> getAllFolders() async {
+  ///
+  /// [recordTable] 指定记录表名，用于选择对应的文件夹表。
+  /// 为 null 时返回所有四种类型的文件夹合并结果。
+  static Future<List<String>> getAllFolders({String? recordTable}) async {
     if (_useJsonStore) {
       final data = await _loadWebData();
-      final list = data[ManifestTables.folders] as List<dynamic>? ?? [];
-      return list.cast<String>();
+      if (recordTable != null) {
+        final folderTable = ManifestTables.folderTableFor(recordTable);
+        final list = data[folderTable] as List<dynamic>? ?? [];
+        return list.cast<String>();
+      }
+      // 无 recordTable 时合并所有四种类型的文件夹
+      final all = <String>{};
+      for (final ft in ManifestTables.allPerTypeFolderTables) {
+        final list = data[ft] as List<dynamic>? ?? [];
+        all.addAll(list.cast<String>());
+      }
+      return all.toList();
     }
     final db = await database;
-    final rows = await db.query(ManifestTables.folders);
-    return rows.map((r) => r['path'] as String).toList();
+    if (recordTable != null) {
+      final folderTable = ManifestTables.folderTableFor(recordTable);
+      final rows = await db.query(folderTable);
+      return rows.map((r) => r['path'] as String).toList();
+    }
+    // 无 recordTable 时合并所有四种类型的文件夹
+    final all = <String>{};
+    for (final ft in ManifestTables.allPerTypeFolderTables) {
+      final rows = await db.query(ft);
+      all.addAll(rows.map((r) => r['path'] as String));
+    }
+    return all.toList();
   }
 
   /// 插入一个文件夹路径
-  static Future<void> insertFolder(String path) async {
+  ///
+  /// [recordTable] 必须指定，v2+ 格式不再使用共享 folders 表。
+  static Future<void> insertFolder(String path,
+      {String? recordTable}) async {
+    if (recordTable == null) {
+      throw ArgumentError('recordTable is required in v2+ format');
+    }
+    final folderTable = ManifestTables.folderTableFor(recordTable);
     if (_useJsonStore) {
       final data = await _loadWebData();
-      final list = data[ManifestTables.folders] as List<dynamic>? ?? [];
+      final list = data[folderTable] as List<dynamic>? ?? [];
       if (!list.contains(path)) {
         list.add(path);
         await _saveWebData();
@@ -688,39 +882,52 @@ class ManifestDatabase {
     }
     final db = await database;
     await db.insert(
-      ManifestTables.folders,
+      folderTable,
       {'path': path},
       conflictAlgorithm: ConflictAlgorithm.ignore,
     );
   }
 
   /// 删除一个文件夹路径
-  static Future<void> deleteFolder(String path) async {
+  ///
+  /// [recordTable] 必须指定，v2+ 格式不再使用共享 folders 表。
+  static Future<void> deleteFolder(String path, {String? recordTable}) async {
+    if (recordTable == null) {
+      throw ArgumentError('recordTable is required in v2+ format');
+    }
+    final folderTable = ManifestTables.folderTableFor(recordTable);
     if (_useJsonStore) {
       final data = await _loadWebData();
-      final list = data[ManifestTables.folders] as List<dynamic>? ?? [];
+      final list = data[folderTable] as List<dynamic>? ?? [];
       list.remove(path);
       await _saveWebData();
       return;
     }
     final db = await database;
     await db.delete(
-      ManifestTables.folders,
+      folderTable,
       where: 'path = ?',
       whereArgs: [path],
     );
   }
 
   /// 检查文件夹路径是否存在
-  static Future<bool> folderExists(String path) async {
+  ///
+  /// [recordTable] 必须指定，v2+ 格式不再使用共享 folders 表。
+  static Future<bool> folderExists(String path,
+      {String? recordTable}) async {
+    if (recordTable == null) {
+      throw ArgumentError('recordTable is required in v2+ format');
+    }
+    final folderTable = ManifestTables.folderTableFor(recordTable);
     if (_useJsonStore) {
       final data = await _loadWebData();
-      final list = data[ManifestTables.folders] as List<dynamic>? ?? [];
+      final list = data[folderTable] as List<dynamic>? ?? [];
       return list.contains(path);
     }
     final db = await database;
     final count = Sqflite.firstIntValue(await db.rawQuery(
-      'SELECT COUNT(*) FROM folders WHERE path = ?',
+      'SELECT COUNT(*) FROM $folderTable WHERE path = ?',
       [path],
     ));
     return (count ?? 0) > 0;
