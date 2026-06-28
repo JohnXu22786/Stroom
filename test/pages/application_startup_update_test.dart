@@ -74,11 +74,11 @@ Widget _buildTestApp({Dio? dio}) {
 
 /// Pumps the test app through the full startup flow.
 ///
-/// Sets initial preferences with [dataFormatVersion] (default 1 = current)
+/// Sets initial preferences with [dataFormatVersion] (default 2 = current)
 /// so migration is skipped, allowing the test to focus on update check behavior.
 ///
 /// [extraPrefs] allows setting additional SharedPreferences keys.
-Future<void> _pumpThroughStartup(WidgetTester tester, {required Dio dio, int dataFormatVersion = 1, Map<String, Object>? extraPrefs}) async {
+Future<void> _pumpThroughStartup(WidgetTester tester, {required Dio dio, int dataFormatVersion = 2, Map<String, Object>? extraPrefs}) async {
   final prefs = <String, Object>{'data_format_version': dataFormatVersion};
   if (extraPrefs != null) {
     prefs.addAll(extraPrefs);
