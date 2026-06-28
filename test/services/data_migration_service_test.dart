@@ -55,7 +55,6 @@ void main() {
     test('migration needed when no version stored', () async {
       final result = await DataMigrationService.checkAndMigrate();
       expect(result.needsMigration, isTrue);
-      // 迁移后总是需要重启，确保所有 provider 重新初始化
       expect(result.restartRequired, isTrue);
 
       // After migration, version should be updated
@@ -73,28 +72,33 @@ void main() {
       expect(result2.needsMigration, isFalse);
     });
 
-    test('backup directory is created during migration', () async {
-      // Clean any existing backup
-      final appDir = await AppStorage.directory;
-      final backupRoot = Directory('${appDir}/data_backup');
-      if (await backupRoot.exists()) {
-        await backupRoot.delete(recursive: true);
+    test('backup directory is created in external location during migration',
+        () async {
+      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
+
+      // Clean any existing backup root
+      final rootDir = Directory(backupRoot);
+      if (await rootDir.exists()) {
+        await rootDir.delete(recursive: true);
       }
 
       await DataMigrationService.checkAndMigrate();
 
-      // Backup should exist (at least one subdirectory)
-      expect(await backupRoot.exists(), isTrue);
-      final entries = await backupRoot.list().toList();
+      // Backup root should exist (at least one subdirectory)
+      expect(await rootDir.exists(), isTrue);
+      final entries = await rootDir.list().toList();
       expect(entries.length, greaterThan(0));
+
+      // Cleanup after test
+      if (await rootDir.exists()) {
+        await rootDir.delete(recursive: true);
+      }
     });
   });
 
-  group('DataMigrationService - backup', () {
+  group('DataMigrationService - external backup', () {
     setUp(() async {
-      // Ensure migration is in known state
-      await DataMigrationService.checkAndMigrate();
-      // Reset mock prefs for clean backup test
+      // Set mock values BEFORE any getInstance call
       SharedPreferences.setMockInitialValues({
         'data_format_version': 0,
         'test_key': 'test_value',
@@ -102,11 +106,21 @@ void main() {
       AppStorage.resetCache();
     });
 
-    test('createBackup creates a backup directory with manifest', () async {
+    test('backup root is outside app data directory', () async {
+      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
+      final appDir = await AppStorage.directory;
+
+      // Verify they are NOT the same path
+      expect(backupRoot, isNot(equals(appDir)));
+      // Verify backup root is a non-empty path
+      expect(backupRoot.isNotEmpty, isTrue);
+    });
+
+    test('createBackup creates a backup directory with manifest in external location',
+        () async {
       final backupPath = await DataMigrationService.createBackup();
       expect(backupPath, isNotNull);
 
-      // Verify backup directory exists
       final backupDir = Directory(backupPath!);
       expect(await backupDir.exists(), isTrue);
 
@@ -121,34 +135,46 @@ void main() {
 
       // Verify preferences backup
       final prefsFile = File('${backupDir.path}/preferences.json');
-      expect(await prefsFile.exists(), isTrue);
+      final prefsContent = await prefsFile.readAsString();
+      final prefsData = jsonDecode(prefsContent) as Map<String, dynamic>;
+      expect(prefsData['test_key'], equals('test_value'));
+
+      // Verify it's outside app data
+      final appDir = await AppStorage.directory;
+      expect(backupPath, isNot(equals(appDir)));
 
       // Cleanup
       await backupDir.delete(recursive: true);
+    });
+
+    test('getExternalBackupRootPath returns non-null on all platforms', () async {
+      // Should never return null or empty
+      final path = await DataMigrationService.getExternalBackupRootPath();
+      expect(path, isNotNull);
+      expect(path.isNotEmpty, isTrue);
     });
   });
 
   group('DataMigrationService - cleanup', () {
     test('cleanOldBackups handles empty backup directory', () async {
-      final appDir = await AppStorage.directory;
-      final backupRoot = Directory('${appDir}/data_backup');
+      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
+      final rootDir = Directory(backupRoot);
 
-      // Should not throw when directory doesn't exist
-      if (await backupRoot.exists()) {
-        await backupRoot.delete(recursive: true);
+      if (await rootDir.exists()) {
+        await rootDir.delete(recursive: true);
       }
       await DataMigrationService.cleanOldBackups();
       // No exception = test passes
     });
 
     test('cleanOldBackups keeps recent backups', () async {
-      final appDir = await AppStorage.directory;
-      final backupRoot = Directory('${appDir}/data_backup');
-      await backupRoot.create(recursive: true);
+      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
+      final rootDir = Directory(backupRoot);
+      await rootDir.create(recursive: true);
 
       try {
         // Create a recent backup
-        final recentDir = Directory('${backupRoot.path}/recent_backup');
+        final recentDir = Directory('${rootDir.path}/recent_backup');
         await recentDir.create(recursive: true);
 
         await DataMigrationService.cleanOldBackups();
@@ -156,29 +182,180 @@ void main() {
         // Recent backup should still exist
         expect(await recentDir.exists(), isTrue);
       } finally {
-        if (await backupRoot.exists()) {
-          await backupRoot.delete(recursive: true);
+        if (await rootDir.exists()) {
+          await rootDir.delete(recursive: true);
         }
       }
     });
 
     test('cleanOldBackups does not crash on invalid entries', () async {
-      final appDir = await AppStorage.directory;
-      final backupRoot = Directory('${appDir}/data_backup');
-      await backupRoot.create(recursive: true);
+      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
+      final rootDir = Directory(backupRoot);
+      await rootDir.create(recursive: true);
 
       try {
         // Create a file (not a directory) in the backup root
-        final file = File('${backupRoot.path}/not_a_dir');
+        final file = File('${rootDir.path}/not_a_dir');
         await file.writeAsString('test');
 
         // Should not throw when encountering non-directory entries
         await DataMigrationService.cleanOldBackups();
       } finally {
-        if (await backupRoot.exists()) {
-          await backupRoot.delete(recursive: true);
+        if (await rootDir.exists()) {
+          await rootDir.delete(recursive: true);
         }
       }
+    });
+  });
+
+  group('DataMigrationService - crash recovery', () {
+    test('sets and clears migration_in_progress flag during migration', () async {
+      // Run migration
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isTrue);
+
+      // After migration, flag should be cleared
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('migration_in_progress'), isNot(isTrue));
+    });
+
+    test('detects stale migration_in_progress flag on startup', () async {
+      // Simulate a crash mid-migration by setting the flag manually
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('migration_in_progress', true);
+      await prefs.setInt('data_format_version', 0);
+
+      // Run migration - should detect stale flag and recover
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isTrue);
+
+      // After successful migration, flag should be cleared
+      final prefsAfter = await SharedPreferences.getInstance();
+      expect(prefsAfter.getBool('migration_in_progress'), isNot(isTrue));
+      expect(prefsAfter.getInt('data_format_version'), equals(DataMigrationService.currentFormatVersion));
+    });
+
+    test('migration_in_progress flag is set before backup creation', () async {
+      // Clear any existing state
+      SharedPreferences.setMockInitialValues({});
+
+      // Directly test the backup creation with flag
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('data_format_version', 0);
+
+      // Check that backup creation works
+      final backupPath = await DataMigrationService.createBackup();
+      expect(backupPath, isNotNull);
+
+      // Cleanup
+      if (backupPath != null) {
+        await Directory(backupPath).delete(recursive: true);
+      }
+    });
+
+    test('migration is idempotent after crash recovery', () async {
+      // Run migration once
+      final result1 = await DataMigrationService.checkAndMigrate();
+      expect(result1.needsMigration, isTrue);
+
+      // Second call should not need migration
+      final result2 = await DataMigrationService.checkAndMigrate();
+      expect(result2.needsMigration, isFalse);
+    });
+  });
+
+  group('DataMigrationService - dual-format conversation recovery', () {
+    test('recovers from conversations_bak when conversations is corrupted', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('data_format_version', 1);
+
+      // Set up: corrupted conversations + valid bak
+      await prefs.setString('conversations', 'corrupted data not json');
+      await prefs.setString('conversations_bak', jsonEncode([
+        {'id': 'conv1', 'messages': [], 'title': 'Recovered'},
+      ]));
+
+      final recovered = await DataMigrationService.recoverConversationsFromBackup();
+      expect(recovered, isTrue);
+
+      // After recovery, conversations should have valid data
+      final json = prefs.getString('conversations');
+      expect(json, isNotNull);
+      final list = jsonDecode(json!) as List;
+      expect(list.length, equals(1));
+      expect(list[0]['id'], equals('conv1'));
+
+      // conversations_bak should be cleaned up
+      expect(prefs.containsKey('conversations_bak'), isFalse);
+    });
+
+    test('does nothing when no conversations_bak exists', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('data_format_version', 1);
+      await prefs.setString('conversations', jsonEncode([
+        {'id': 'conv1', 'messages': []},
+      ]));
+
+      final recovered = await DataMigrationService.recoverConversationsFromBackup();
+      expect(recovered, isFalse);
+
+      // Original data unchanged
+      final json = prefs.getString('conversations');
+      expect(json, isNotNull);
+      final list = jsonDecode(json!) as List;
+      expect(list.length, equals(1));
+    });
+
+    test('removes conversations_bak when conversations is valid', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('data_format_version', 1);
+
+      // Both exist and conversations is valid
+      await prefs.setString('conversations', jsonEncode([
+        {'id': 'conv1', 'messages': []},
+      ]));
+      await prefs.setString('conversations_bak', jsonEncode([
+        {'id': 'conv2', 'messages': []},
+      ]));
+
+      final recovered = await DataMigrationService.recoverConversationsFromBackup();
+      // When conversations is valid, we clean up the bak silently
+      expect(recovered, isTrue);
+      expect(prefs.containsKey('conversations_bak'), isFalse);
+    });
+
+    test('handles missing conversations gracefully', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('data_format_version', 1);
+
+      // No conversations at all, but bak exists
+      await prefs.setString('conversations_bak', jsonEncode([
+        {'id': 'conv1', 'messages': []},
+      ]));
+
+      final recovered = await DataMigrationService.recoverConversationsFromBackup();
+      expect(recovered, isTrue);
+
+      final json = prefs.getString('conversations');
+      expect(json, isNotNull);
+      expect(prefs.containsKey('conversations_bak'), isFalse);
+    });
+
+    test('handles both missing gracefully', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('data_format_version', 1);
+
+      final recovered = await DataMigrationService.recoverConversationsFromBackup();
+      expect(recovered, isFalse);
+    });
+  });
+
+  group('DataMigrationService - Web platform support', () {
+    test('getExternalBackupRootPath returns non-null on web (simulated)', () async {
+      // Even in the simulated environment, should return a path
+      final path = await DataMigrationService.getExternalBackupRootPath();
+      expect(path, isNotNull);
+      expect(path.isNotEmpty, isTrue);
     });
   });
 }

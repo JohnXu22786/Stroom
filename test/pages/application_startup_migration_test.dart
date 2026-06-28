@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/application.dart';
 import 'package:stroom/providers/theme_provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/material.dart';
 
 /// Builds the test app matching the real app structure.
 Widget _buildTestApp() {
@@ -18,23 +18,21 @@ Widget _buildTestApp() {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('Application - Startup Migration', () {
-    testWidgets('shows migration dialog when data format is outdated',
-        (tester) async {
+  group('Application - Startup (migration handled by StartupApp)', () {
+    testWidgets('does not show migration dialog when data format is outdated'
+        ' (migration is handled by StartupPage)', (tester) async {
       SharedPreferences.setMockInitialValues({
-        'data_format_version': 0, // 旧版本，需要迁移
+        'data_format_version': 0, // 旧版本 — 但 Application 不再处理迁移
       });
 
       await tester.pumpWidget(_buildTestApp());
-      // Process post-frame callback → _performStartupChecks starts
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump();
 
-      // Migration dialog should appear with spinner
-      expect(find.text('数据迁移'), findsOneWidget);
-      expect(find.text('正在数据迁移到新版本'), findsOneWidget);
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      // Application no longer shows migration dialog — it now shows
+      // HomePage directly. Migration is handled by StartupPage.
+      expect(find.text('数据迁移'), findsNothing);
     });
 
     testWidgets('does not show migration dialog when format is current',
@@ -48,7 +46,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump();
 
-      // No migration dialog
+      // No migration dialog (migration is handled by StartupPage)
       expect(find.text('数据迁移'), findsNothing);
     });
   });

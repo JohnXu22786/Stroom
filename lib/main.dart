@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatf
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 
-import 'application.dart';
+import 'startup/startup_app.dart';
 import 'providers/tts_config.dart';
 import 'providers/provider_config.dart';
 import 'catcatch/providers/catcatch_provider.dart';
@@ -38,9 +38,10 @@ Future<void> main() async {
     registerBuiltinProviders();
     registerBuiltinProviderTypes();
 
+    // 使用 StartupApp 作为入口，它会在启动页面完成后切换到 Application
     runApp(
       const ProviderScope(
-        child: Application(),
+        child: StartupApp(),
       ),
     );
   } catch (e, s) {

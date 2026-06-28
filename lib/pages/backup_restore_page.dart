@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/backup_service.dart';
+import '../services/data_migration_service.dart';
 
 class BackupRestorePage extends ConsumerStatefulWidget {
   const BackupRestorePage({super.key});
@@ -13,6 +14,22 @@ class BackupRestorePage extends ConsumerStatefulWidget {
 class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   bool _isExporting = false;
   bool _isImporting = false;
+  String? _externalBackupPath;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExternalBackupPath();
+  }
+
+  Future<void> _loadExternalBackupPath() async {
+    try {
+      final path = await DataMigrationService.getExternalBackupRootPath();
+      if (mounted) {
+        setState(() => _externalBackupPath = path);
+      }
+    } catch (_) {}
+  }
 
   Future<void> _onExport() async {
     setState(() => _isExporting = true);
@@ -103,6 +120,73 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                   Expanded(
                     child: Text(
                       '导出将打包所有数据（照片、音频、视频、对话、配置等）为一个 .zip 文件。导入将覆盖当前所有数据。',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // External backup location info card
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.folder_open, color: Colors.orange.shade700, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        '自动备份位置',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                          color: Colors.orange.shade800,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '应用在数据格式升级或版本迁移时，会自动将当前数据备份到以下外部位置（不在应用数据目录内，防止应用删除时备份丢失）：',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.folder, size: 16, color: Colors.grey.shade600),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _externalBackupPath ?? '正在获取...',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontFamily: 'monospace',
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '如果数据丢失，可以在此路径下找到自动备份的文件夹（格式：backup_YYYY-MM-DDTHH-MM-SS），'
+                    '其中包含 preferences.json（配置数据）。超过2天的自动备份会被自动清理。',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade500,
                     ),
                   ),
                 ],
