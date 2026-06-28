@@ -1,35 +1,37 @@
-import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:dio/dio.dart' show CancelToken;
-import 'package:media_kit/media_kit.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+import 'audio_utils.dart' show pcmToWav;
 
-const _supportedVideoFormats = [
-  'mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'm4v', '3gp',
-];
-
-/// 音频分离引擎（原生平台实现）
+/// Pure-Dart MP4/ISOBMFF audio extraction engine.
 ///
-/// 使用 media_kit 的 Player + mpv 编码引擎从视频中提取音频并保存为 MP3 文件。
+/// Parses MP4/MOV/M4V/3GP container format and extracts the audio track.
+/// Supports AAC and PCM audio codecs commonly found in MP4 containers.
+/// - PCM audio: output as WAV format
+/// - AAC audio: output as ADTS-wrapped AAC (playable by all major players)
+///
+/// This is a Dart port of FFmpeg's audio demuxing approach:
+/// 1. Parse container (ffmpeg: avformat_open_input)
+/// 2. Find audio stream (ffmpeg: av_find_best_stream)
+/// 3. Read audio packets (ffmpeg: av_read_frame)
+/// 4. Output as playable audio file
 class AudioSeparationEngine {
-  /// 始终可用（media_kit 已集成）
-  Future<bool> isAvailable() async {
-    return true;
-  }
+  /// Always available — pure Dart implementation with no platform dependencies.
+  Future<bool> isAvailable() async => true;
 
-  /// 检查是否支持指定的视频格式
+  /// Supported video formats (ISOBMFF-based containers).
+  static const _supportedFormats = ['mp4', 'mov', 'm4v', '3gp'];
+
   bool canHandleVideoFormat(String format) {
     if (format.isEmpty) return false;
-    return _supportedVideoFormats.contains(format.toLowerCase().trim());
+    return _supportedFormats.contains(format.toLowerCase().trim());
   }
 
-  /// 从视频文件中提取音频
+  /// Extract audio from a video file.
   ///
-  /// 使用 media_kit 的 Player 打开视频文件，通过 mpv 编码引擎输出音频到文件。
+  /// [videoBytes] must contain a valid ISOBMFF container (MP4/MOV).
+  /// Returns audio bytes. For PCM tracks, returns WAV format data.
+  /// For AAC tracks, returns ADTS-wrapped AAC frames.
   Future<Uint8List> extractAudio({
     required Uint8List videoBytes,
     required String videoFormat,
@@ -37,198 +39,492 @@ class AudioSeparationEngine {
     CancelToken? cancelToken,
   }) async {
     if (videoBytes.isEmpty) {
-      throw Exception('视频数据为空');
+      throw Exception('Video data is empty');
     }
-
     if (!canHandleVideoFormat(videoFormat)) {
-      throw Exception('不支持的视频格式: $videoFormat');
+      throw Exception('Unsupported video format: $videoFormat');
     }
 
-    final tempDir = await getTemporaryDirectory();
-    final inputName = 'input_${DateTime.now().millisecondsSinceEpoch}.$videoFormat';
-    final outputName = 'output_${DateTime.now().millisecondsSinceEpoch}.mp3';
-    final inputPath = p.join(tempDir.path, inputName);
-    final outputPath = p.join(tempDir.path, outputName);
+    onProgress?.call(0);
 
-    try {
-      // 写入输入视频文件
-      await File(inputPath).writeAsBytes(videoBytes);
+    // Step 1: Parse MP4 container and find audio track
+    final mp4 = _Mp4Demuxer(videoBytes);
+    final audioTrack = mp4.findAudioTrack();
+    if (audioTrack == null) {
+      throw Exception('No audio track found in video');
+    }
 
-      debugPrint('[AudioSeparationEngine] Input written: $inputPath');
+    onProgress?.call(30);
 
-      // 创建 Player 并配置 mpv 编码输出
-      final player = Player();
-      try {
-        // 配置 mpv 编码参数 (通过 NativePlayer 的 setProperty)
-        if (player.platform != null) {
-          await (player.platform as dynamic).setProperty('ao', 'null');
-          await (player.platform as dynamic).setProperty('keep-open', 'no');
-          await (player.platform as dynamic).setProperty('o', outputPath);
-          await (player.platform as dynamic).setProperty('oac', 'libmp3lame');
-          await (player.platform as dynamic).setProperty('ovc', 'no');
-        }
+    // Step 2: Extract audio sample data as individual frames with their sizes
+    final frames = mp4.extractAudioFrames(audioTrack);
+    if (frames.isEmpty) {
+      throw Exception('No audio data extracted');
+    }
 
-        // ── 等待编码完成 ──────────────────────────────────────────────
-        // 使用 Completer，配合三种完成检测方式：
-        //   1. player.stream.completed 事件（首选）
-        //   2. 输出文件轮询检测（后备）
-        //   3. 5 分钟超时（终极保底）
-        // ──────────────────────────────────────────────────────────────
-        final completer = Completer<void>();
-        StreamSubscription? completionSub;
-        StreamSubscription? errorSub;
-        Timer? filePollTimer;
-        StreamSubscription<Duration>? positionSub;
+    onProgress?.call(60);
 
-        // 注册取消回调（必须在 completer 声明之后）
-        cancelToken?.whenCancel.then((_) async {
-          try {
-            if (!completer.isCompleted) {
-              completer.completeError(Exception('音频提取被取消'));
-            }
-          } catch (_) {}
-          try {
-            await player.dispose();
-          } catch (_) {}
-        });
+    // Step 3: Package into playable format
+    final result = _packageFrames(frames, audioTrack);
+    if (cancelToken?.isCancelled ?? false) {
+      throw Exception('Audio extraction was cancelled');
+    }
 
-        // 打开媒体文件（mpv 会进入编码模式，直接输出到文件）
-        await player.open(
-          Media(Uri.file(inputPath).toString()),
-          play: true,
-        );
+    onProgress?.call(100);
+    return result;
+  }
 
-        // 方式1: 监听 completed 事件（mpv 完成编码时触发）
-        completionSub = player.stream.completed.listen((completed) {
-          if (completed && !completer.isCompleted) {
-            debugPrint('[AudioSeparationEngine] Completed event received');
-            completer.complete();
-          }
-        });
-
-        // 监听错误事件
-        errorSub = player.stream.error.listen((error) {
-          if (error.isNotEmpty && !completer.isCompleted) {
-            completer.completeError(Exception('音频提取失败: $error'));
-          }
-        });
-
-        // 进度更新
-        if (onProgress != null) {
-          // 使用 position 流获取编码进度
-          positionSub = player.stream.position.listen((position) {
-            final duration = player.state.duration;
-            if (duration.inMilliseconds > 0) {
-              final progress = ((position.inMilliseconds / duration.inMilliseconds) * 100)
-                  .round()
-                  .clamp(0, 100);
-              onProgress(progress);
-            }
-          });
-        }
-
-        // 方式2: 输出文件轮询（completed 事件在编码模式下可能不触发）
-        int lastFileSize = 0;
-        int stableCount = 0;
-        const stableThreshold = 4; // 连续 4 次（~2 秒）文件大小不变 = 编码完成
-        filePollTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
-          if (completer.isCompleted) return;
-
-          try {
-            final outputFile = File(outputPath);
-            if (!outputFile.existsSync()) return;
-
-            final currentSize = outputFile.lengthSync();
-
-            // 确保文件非空后再进行稳定性判断
-            if (currentSize > 0) {
-              // 文件非空，进入稳定性判断
-            } else {
-              // 空文件，跳过本轮
-              return;
-            }
-
-            // 向外部报告基于文件大小的进度（当 duration 不可用时）
-            if (onProgress != null) {
-              // 使用输入文件大小作为估算基准：输出 mp3 通常为输入的 5-15%
-              // 保守估算：用当前文件大小 / (输入大小 * 0.15) 作为上限
-              final estimatedMax = (videoBytes.length * 0.15).round().clamp(1, videoBytes.length);
-              final fileProgress = (currentSize * 100 ~/ estimatedMax).clamp(0, 95);
-              onProgress(fileProgress);
-            }
-
-            if (currentSize == lastFileSize) {
-              stableCount++;
-              if (stableCount >= stableThreshold) {
-                debugPrint('[AudioSeparationEngine] Output file stable for ${stableThreshold * 500}ms, assuming encoding complete');
-                if (onProgress != null) {
-                  onProgress(100);
-                }
-                completer.complete();
-              }
-            } else {
-              stableCount = 0;
-              lastFileSize = currentSize;
-            }
-          } catch (_) {
-            // 文件尚未就绪，忽略
-          }
-        });
-
-        // 方式3: 超时（5分钟）
-        final timeout = Future.delayed(const Duration(minutes: 5), () {
-          if (!completer.isCompleted) {
-            completer.completeError(Exception('音频提取超时'));
-          }
-        });
-
-        try {
-          await completer.future;
-        } finally {
-          timeout.ignore();
-          filePollTimer?.cancel();
-          completionSub?.cancel();
-          errorSub?.cancel();
-          positionSub?.cancel();
-        }
-
-        // 等待一小段时间确保文件写入完成
-        await Future.delayed(const Duration(milliseconds: 500));
-
-        // 读取输出音频文件
-        if (cancelToken?.isCancelled ?? false) {
-          throw Exception('音频提取被取消');
-        }
-
-        if (!await File(outputPath).exists()) {
-          throw Exception('输出文件未生成');
-        }
-
-        final audioBytes = await File(outputPath).readAsBytes();
-
-        if (audioBytes.isEmpty) {
-          throw Exception('提取的音频数据为空');
-        }
-
-        debugPrint('[AudioSeparationEngine] Audio extracted: ${audioBytes.length} bytes');
-        return audioBytes;
-      } finally {
-        try {
-          await player.dispose();
-        } catch (_) {}
+  /// Package audio frames into a playable format.
+  /// For raw PCM, wrap in WAV. For AAC, add ADTS headers to each frame.
+  Uint8List _packageFrames(List<_AudioFrame> frames, _AudioTrackInfo track) {
+    if (track.codec == 'raw ') {
+      // PCM audio — concatenate frames and wrap in WAV
+      final concatenated = BytesBuilder();
+      for (final frame in frames) {
+        concatenated.add(frame.data);
       }
-    } finally {
-      // 清理临时文件
-      try {
-        if (await File(inputPath).exists()) {
-          await File(inputPath).delete();
+      final sampleRate = track.sampleRate > 0 ? track.sampleRate : 44100;
+      return pcmToWav(
+        concatenated.toBytes(),
+        sampleRate: sampleRate,
+        bitsPerSample: track.bitsPerSample > 0 ? track.bitsPerSample : 16,
+        numChannels: track.channels > 0 ? track.channels : 2,
+      );
+    }
+
+    // AAC — add ADTS header to each frame using the actual frame size
+    return _addAdtsHeadersToFrames(frames, track);
+  }
+
+  /// Add ADTS headers to individual AAC frames using actual frame sizes.
+  Uint8List _addAdtsHeadersToFrames(
+      List<_AudioFrame> frames, _AudioTrackInfo track) {
+    const freqMap = {
+      96000: 0, 88200: 1, 64000: 2, 48000: 3, 44100: 4,
+      32000: 5, 24000: 6, 22050: 7, 16000: 8, 12000: 9,
+      11025: 10, 8000: 11, 7350: 12,
+    };
+    final sampleRate = track.sampleRate > 0 ? track.sampleRate : 44100;
+    final freqIdx = freqMap[sampleRate] ?? 4;
+    final channels = track.channels > 0 ? track.channels : 2;
+    final chanConfig = channels > 6 ? 6 : channels;
+    const profile = 2; // AAC-LC
+
+    final result = BytesBuilder();
+
+    for (final frame in frames) {
+      final dataLen = frame.data.length;
+      final adtsHeaderLen = 7;
+      final fullLen = adtsHeaderLen + dataLen;
+
+      // ADTS fixed header (7 bytes)
+      result.addByte(0xFF); // Sync word byte 1
+      result.addByte(0xF1); // Sync word byte 2: MPEG-4, layer 0, protection absent
+      // profile (2 bits), sampling_frequency_index (4 bits), channel_configuration (2 bits high)
+      result.addByte(((profile - 1) << 6) | (freqIdx << 2) | (chanConfig >> 2));
+      // channel_configuration low 2 bits + frame_length high 2 bits
+      result.addByte(((chanConfig & 0x03) << 6) | ((fullLen >> 11) & 0x03));
+      // frame_length middle 8 bits
+      result.addByte((fullLen >> 3) & 0xFF);
+      // frame_length low 3 bits + buffer fullness (2 bits) + number_of_raw_data_blocks (2 bits)
+      result.addByte(((fullLen & 0x07) << 5) | 0x1F);
+      result.addByte(0xFC);
+
+      // AAC frame data
+      result.add(frame.data);
+    }
+
+    return result.toBytes();
+  }
+}
+
+// ============================================================================
+// MP4/ISOBMFF Demuxer — Pure Dart implementation
+// ============================================================================
+
+/// A single audio frame extracted from the MP4 file.
+class _AudioFrame {
+  final Uint8List data;
+  _AudioFrame(this.data);
+}
+
+/// Information about an audio track in the MP4 file.
+class _AudioTrackInfo {
+  final int trackId;
+  final String codec; // 'mp4a' (AAC), 'raw ' (PCM), etc.
+  final int sampleRate;
+  final int channels;
+  final int bitsPerSample;
+  final int sampleCount;
+  final List<int> sampleSizes; // size of each sample
+  final List<int> chunkOffsets; // offset of each chunk in mdat data
+  final List<int> sampleToChunkMap; // samples per chunk for each chunk index
+  int mdatDataOffset; // offset where mdat payload starts in file
+
+  _AudioTrackInfo({
+    required this.trackId,
+    required this.codec,
+    required this.sampleRate,
+    required this.channels,
+    required this.bitsPerSample,
+    required this.sampleCount,
+    required this.sampleSizes,
+    required this.chunkOffsets,
+    required this.sampleToChunkMap,
+    required this.mdatDataOffset,
+  });
+}
+
+/// Type for an stsc entry: (firstChunk, samplesPerChunk)
+typedef _StscEntry = (int, int);
+
+/// Pure-Dart MP4/ISOBMFF container parser.
+class _Mp4Demuxer {
+  final Uint8List _data;
+  int _offset = 0;
+
+  _Mp4Demuxer(this._data);
+
+  /// Find the first audio track in the MP4 file.
+  _AudioTrackInfo? findAudioTrack() {
+    try {
+      _offset = 0;
+
+      int moovOffset = -1;
+      int mdatOffset = -1;
+
+      while (_offset < _data.length) {
+        final boxStart = _offset;
+        if (_offset + 8 > _data.length) break;
+
+        final boxSize = _readUint32();
+        final boxType = _readString(4);
+
+        if (boxType == 'moov') {
+          moovOffset = boxStart;
+        } else if (boxType == 'mdat') {
+          mdatOffset = boxStart;
         }
-      } catch (_) {}
-      try {
-        if (await File(outputPath).exists()) {
-          await File(outputPath).delete();
+
+        if (boxSize == 0) break;
+        _offset = boxStart + boxSize;
+      }
+
+      if (moovOffset < 0 || mdatOffset < 0) return null;
+
+      final mdatPayloadOffset = mdatOffset + 8;
+
+      _offset = moovOffset + 8;
+      final moovEnd = moovOffset + _boxSizeAt(moovOffset);
+
+      _AudioTrackInfo? audioTrack;
+
+      while (_offset < moovEnd) {
+        final childStart = _offset;
+        if (_offset + 8 > _data.length) break;
+
+        _readUint32(); // size
+        final childType = _readString(4);
+
+        if (childType == 'trak') {
+          final trackInfo = _parseTrack();
+          if (trackInfo != null) {
+            trackInfo.mdatDataOffset = mdatPayloadOffset;
+            if (trackInfo.codec == 'mp4a' ||
+                trackInfo.codec == 'raw ' ||
+                trackInfo.codec == 'twos' ||
+                trackInfo.codec == 'sowt') {
+              audioTrack = trackInfo;
+            }
+          }
+          _offset = childStart + _boxSizeAt(childStart);
+        } else {
+          _offset = childStart + _boxSizeAt(childStart);
         }
-      } catch (_) {}
+      }
+
+      return audioTrack;
+    } catch (e) {
+      debugPrint('[Mp4Demuxer] parse error: $e');
+      return null;
     }
   }
+
+  /// Parse a single trak box.
+  _AudioTrackInfo? _parseTrack() {
+    final trackStart = _offset;
+    final trackSize = _boxSizeAt(trackStart - 8);
+    final trackEnd = trackStart + trackSize - 8;
+
+    int trackId = 0;
+    String? handlerType;
+    String? codec;
+    int sampleRate = 0;
+    int channels = 0;
+    int bitsPerSample = 16;
+    int sampleCount = 0;
+    List<int> sampleSizes = [];
+    List<int> chunkOffsets = [];
+    final stscEntries = <_StscEntry>[];
+
+    while (_offset < trackEnd) {
+      final childStart = _offset;
+      if (_offset + 8 > _data.length) break;
+
+      final childSize = _readUint32();
+      final childType = _readString(4);
+
+      if (childType == 'tkhd') {
+        _offset += 4; // version(1) + flags(3)
+        _offset += 4; // creation time
+        _offset += 4; // modification time
+        trackId = _readUint32();
+        _offset = childStart + childSize;
+      } else if (childType == 'mdia') {
+        final mdiaEnd = childStart + childSize;
+
+        while (_offset < mdiaEnd) {
+          final mcStart = _offset;
+          final mcSize = _readUint32();
+          final mcType = _readString(4);
+
+          if (mcType == 'hdlr') {
+            _offset += 4; // version + flags
+            _offset += 4; // component type
+            handlerType = _readString(4);
+            _offset = mcStart + mcSize;
+          } else if (mcType == 'minf') {
+            final minfEnd = mcStart + mcSize;
+
+            while (_offset < minfEnd) {
+              final icStart = _offset;
+              final icSize = _readUint32();
+              final icType = _readString(4);
+
+              if (icType == 'stbl') {
+                final stblEnd = icStart + icSize;
+
+                while (_offset < stblEnd) {
+                  final scStart = _offset;
+                  final scSize = _readUint32();
+                  final scType = _readString(4);
+
+                  if (scType == 'stsd') {
+                    _offset += 4; // version + flags
+                    final entryCount = _readUint32();
+                    for (var i = 0; i < entryCount; i++) {
+                      final es = _offset;
+                      _readUint32(); // entrySize
+                      codec = _readString(4);
+                      _offset += 6; // reserved
+                      _offset += 2; // data reference index
+                      if (codec == 'mp4a' || codec == 'raw ') {
+                        _offset += 8; // reserved
+                        channels = _readUint16();
+                        bitsPerSample = _readUint16();
+                        _offset += 4; // pre-defined + reserved
+                        sampleRate = _readUint32() >> 16;
+                      }
+                      _offset = es + _boxSizeAt(es);
+                    }
+                  } else if (scType == 'stts') {
+                    _offset += 4; // version + flags
+                    final entryCount = _readUint32();
+                    int total = 0;
+                    for (var i = 0; i < entryCount; i++) {
+                      total += _readUint32(); // sample count
+                      _offset += 4; // sample duration
+                    }
+                    sampleCount = total;
+                  } else if (scType == 'stsc') {
+                    _offset += 4; // version + flags
+                    final entryCount = _readUint32();
+                    for (var i = 0; i < entryCount; i++) {
+                      final firstChunk = _readUint32();
+                      final spc = _readUint32();
+                      _readUint32(); // sample description index
+                      stscEntries.add((firstChunk, spc));
+                    }
+                  } else if (scType == 'stsz') {
+                    _offset += 4; // version + flags
+                    final sampleSize = _readUint32();
+                    sampleCount = _readUint32();
+                    if (sampleSize == 0) {
+                      for (var i = 0; i < sampleCount; i++) {
+                        sampleSizes.add(_readUint32());
+                      }
+                    } else {
+                      sampleSizes = List.filled(sampleCount, sampleSize);
+                    }
+                  } else if (scType == 'stco') {
+                    _offset += 4; // version + flags
+                    final entryCount = _readUint32();
+                    for (var i = 0; i < entryCount; i++) {
+                      chunkOffsets.add(_readUint32());
+                    }
+                  } else if (scType == 'co64') {
+                    _offset += 4; // version + flags
+                    final entryCount = _readUint32();
+                    for (var i = 0; i < entryCount; i++) {
+                      final high = _readUint32();
+                      final low = _readUint32();
+                      chunkOffsets.add((high << 32) | low);
+                    }
+                  } else {
+                    _offset = scStart + _boxSizeAt(scStart);
+                  }
+                }
+              } else {
+                _offset = icStart + _boxSizeAt(icStart);
+              }
+            }
+          } else {
+            _offset = mcStart + _boxSizeAt(mcStart);
+          }
+        }
+      } else {
+        _offset = childStart + _boxSizeAt(childStart);
+      }
+    }
+
+    if (handlerType != 'soun' || codec == null) return null;
+    if (sampleSizes.isEmpty || chunkOffsets.isEmpty) return null;
+
+    // Build per-chunk samples-per-chunk map from stsc entries.
+    // Each stsc entry specifies: firstChunk (1-based), samplesPerChunk.
+    // The entry applies from firstChunk to the next entry's firstChunk - 1.
+    final sampleToChunk = List.filled(chunkOffsets.length, 1);
+    if (stscEntries.isNotEmpty) {
+      for (var i = 0; i < stscEntries.length; i++) {
+        final (firstChunk, spc) = stscEntries[i];
+        final endChunk = (i + 1 < stscEntries.length)
+            ? stscEntries[i + 1].$1 - 1
+            : chunkOffsets.length;
+        for (var c = firstChunk - 1; c < endChunk && c < chunkOffsets.length; c++) {
+          sampleToChunk[c] = spc;
+        }
+      }
+    }
+
+    return _AudioTrackInfo(
+      trackId: trackId,
+      codec: codec,
+      sampleRate: sampleRate,
+      channels: channels,
+      bitsPerSample: bitsPerSample,
+      sampleCount: sampleCount,
+      sampleSizes: sampleSizes,
+      chunkOffsets: chunkOffsets,
+      sampleToChunkMap: sampleToChunk,
+      mdatDataOffset: 0,
+    );
+  }
+
+  /// Extract audio frames from mdat box using sample table metadata.
+  /// Returns individual frames with their raw data.
+  List<_AudioFrame> extractAudioFrames(_AudioTrackInfo track) {
+    if (track.sampleSizes.isEmpty || track.chunkOffsets.isEmpty) {
+      return [];
+    }
+
+    final frames = <_AudioFrame>[];
+    int sampleIdx = 0;
+
+    for (var chunkIdx = 0;
+        chunkIdx < track.chunkOffsets.length && sampleIdx < track.sampleSizes.length;
+        chunkIdx++) {
+      final chunkMdatOffset = track.chunkOffsets[chunkIdx];
+      final spc = chunkIdx < track.sampleToChunkMap.length
+          ? track.sampleToChunkMap[chunkIdx]
+          : 1;
+
+      for (var s = 0; s < spc && sampleIdx < track.sampleSizes.length; s++) {
+        final sampleSize = track.sampleSizes[sampleIdx];
+
+        // Calculate offset within chunk: sum of sizes of previously read samples in this chunk
+        int offsetInChunk = 0;
+        if (s > 0) {
+          for (var ps = sampleIdx - s; ps < sampleIdx; ps++) {
+            offsetInChunk += track.sampleSizes[ps];
+          }
+        }
+
+        final fileOffset = track.mdatDataOffset + chunkMdatOffset + offsetInChunk;
+        if (fileOffset + sampleSize <= _data.length) {
+          frames.add(_AudioFrame(
+            Uint8List.sublistView(_data, fileOffset, fileOffset + sampleSize),
+          ));
+        }
+        sampleIdx++;
+      }
+    }
+
+    return frames;
+  }
+
+  // ====================================================================
+  // Binary reader helpers
+  // ====================================================================
+
+  int _readUint32() {
+    if (_offset + 4 > _data.length) return 0;
+    final value = (_data[_offset] << 24) |
+        (_data[_offset + 1] << 16) |
+        (_data[_offset + 2] << 8) |
+        _data[_offset + 3];
+    _offset += 4;
+    return value;
+  }
+
+  int _readUint16() {
+    if (_offset + 2 > _data.length) return 0;
+    final value = (_data[_offset] << 8) | _data[_offset + 1];
+    _offset += 2;
+    return value;
+  }
+
+  String _readString(int length) {
+    if (_offset + length > _data.length) return '';
+    final s = String.fromCharCodes(_data.sublist(_offset, _offset + length));
+    _offset += length;
+    return s;
+  }
+
+  int _boxSizeAt(int offset) {
+    if (offset + 4 > _data.length) return 0;
+    return (_data[offset] << 24) |
+        (_data[offset + 1] << 16) |
+        (_data[offset + 2] << 8) |
+        _data[offset + 3];
+  }
+}
+
+// ============================================================================
+// WAV Writer
+// ============================================================================
+
+class _WavWriter {
+  final BytesBuilder _builder = BytesBuilder();
+
+  void writeString(String s) {
+    _builder.add(s.codeUnits.map((c) => c.toInt()).toList());
+  }
+
+  void writeInt32(int value) {
+    _builder.addByte(value & 0xff);
+    _builder.addByte((value >> 8) & 0xff);
+    _builder.addByte((value >> 16) & 0xff);
+    _builder.addByte((value >> 24) & 0xff);
+  }
+
+  void writeInt16(int value) {
+    _builder.addByte(value & 0xff);
+    _builder.addByte((value >> 8) & 0xff);
+  }
+
+  void writeBytes(Uint8List bytes) {
+    _builder.add(bytes);
+  }
+
+  Uint8List toBytes() => _builder.toBytes();
 }

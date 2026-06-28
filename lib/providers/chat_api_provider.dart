@@ -92,7 +92,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     return {
       'model': model ?? defaultParams['model'],
       'messages': messages,
-      'max_tokens': maxTokens ?? defaultParams['max_tokens'],
+      if (maxTokens != null) 'max_tokens': maxTokens,
       if (temperature != null) 'temperature': temperature,
       'stream': stream,
       if (tools != null && tools.isNotEmpty) 'tools': tools,
