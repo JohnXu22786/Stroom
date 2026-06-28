@@ -512,6 +512,48 @@ class DataMigrationService {
     }
   }
 
+  /// Migrate the stored data to the current format if needed, WITHOUT
+  /// the startup-side effects of [checkAndMigrate].
+  ///
+  /// Unlike [checkAndMigrate], this method:
+  /// - Does NOT create external backups
+  /// - Does NOT check crash recovery flags
+  /// - Does NOT clean old backups
+  /// - ONLY runs the migration steps and updates the version
+  ///
+  /// This is suitable for situations where data has been freshly restored
+  /// from a backup and needs to be brought up to date, or when running
+  /// migration in contexts where file system backup is not needed.
+  static Future<MigrationResult> migrateDataFormatIfNeeded() async {
+    final storedVersion = await getStoredFormatVersion();
+
+    if (storedVersion >= currentFormatVersion) {
+      return const MigrationResult(needsMigration: false);
+    }
+
+    try {
+      await _performMigration(storedVersion, currentFormatVersion);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_kDataFormatVersionKey, currentFormatVersion);
+      // Clear any stale migration_in_progress flag that may have been
+      // restored from a backup (e.g. a backup created mid-migration).
+      // Prevents the next startup from attempting unnecessary recovery.
+      await prefs.remove(_kMigrationInProgressKey);
+      debugPrint(
+        '[DataMigrationService] Migrated data format from v$storedVersion '
+        'to v$currentFormatVersion',
+      );
+    } catch (e) {
+      debugPrint('[DataMigrationService] Data format migration failed: $e');
+      rethrow;
+    }
+
+    return const MigrationResult(
+      needsMigration: true,
+      restartRequired: true,
+    );
+  }
+
   /// v0 → v1: 实际的 SharedPreferences 数据格式迁移。
   ///
   /// 将旧版数据格式统一迁移到新版格式，确保所有 provider 在迁移完成
