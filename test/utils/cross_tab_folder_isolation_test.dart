@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/manifest_database.dart';
@@ -5,6 +7,9 @@ import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/utils/video_manifest.dart';
+import 'package:stroom/services/manifest_database_shared.dart'
+    show utf8Encode, ManifestTables;
+import 'package:stroom/utils/web_file_store.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -354,32 +359,51 @@ void main() {
           reason: 'BUG: Video should not see image_empty');
     });
 
-    testWidgets('legacy folders from shared table still appear in all manifests',
+    testWidgets(
+        'v1→v2 migration: legacy shared folders are migrated to '
+        'all four per-type tables and legacy key is removed',
         (WidgetTester t) async {
-      // Simulate legacy data by manually inserting a folder into the shared
-      // folders table (bypassing the manifest-specific addFolder)
-      await ManifestDatabase.insertFolder('legacy_folder');
+      // Simulate v1 format data with legacy shared folders key
+      final legacyData = <String, dynamic>{
+        'image_records': <Map<String, dynamic>>[],
+        'audio_records': <Map<String, dynamic>>[],
+        'video_records': <Map<String, dynamic>>[],
+        'text_records': <Map<String, dynamic>>[],
+        'folders': <String>['legacy_folder', 'shared_folder'],
+        'text_folders': <String>[],
+        'audio_folders': <String>[],
+        'image_folders': <String>[],
+        'video_folders': <String>[],
+      };
+      await WebFileStore.write(
+        'manifest_database_data',
+        utf8Encode(jsonEncode(legacyData)),
+      );
 
-      // Reload all manifests
-      TextManifest.invalidateCache();
-      FileManifest.invalidateCache();
-      ImageManifest.invalidateCache();
-      VideoManifest.invalidateCache();
+      // Run the migration
+      await ManifestDatabase.migrateLegacyFoldersToPerType();
 
-      await TextManifest.loadRecords();
-      await FileManifest.loadRecords();
-      await ImageManifest.loadRecords();
-      await VideoManifest.loadRecords();
+      // Verify legacy folders appear in all four per-type tables
+      final textFolders = await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.textRecords);
+      final audioFolders = await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.audioRecords);
+      final imageFolders = await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.imageRecords);
+      final videoFolders = await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.videoRecords);
 
-      // Legacy folders should still appear in all
-      expect(await TextManifest.getAllFolders(), contains('legacy_folder'),
-          reason: 'Legacy folder should appear in TextManifest');
-      expect(await FileManifest.getAllFolders(), contains('legacy_folder'),
-          reason: 'Legacy folder should appear in AudioManifest');
-      expect(await ImageManifest.getAllFolders(), contains('legacy_folder'),
-          reason: 'Legacy folder should appear in ImageManifest');
-      expect(await VideoManifest.getAllFolders(), contains('legacy_folder'),
-          reason: 'Legacy folder should appear in VideoManifest');
+      expect(textFolders, containsAll(['legacy_folder', 'shared_folder']));
+      expect(audioFolders, containsAll(['legacy_folder', 'shared_folder']));
+      expect(imageFolders, containsAll(['legacy_folder', 'shared_folder']));
+      expect(videoFolders, containsAll(['legacy_folder', 'shared_folder']));
+
+      // Verify no-legacy-folders key exists in the web data
+      // (We can indirectly check by reloading from WebFileStore and looking at JSON)
+      final raw = await WebFileStore.read('manifest_database_data');
+      final data = jsonDecode(utf8.decode(raw!)) as Map<String, dynamic>;
+      expect(data.containsKey('folders'), isFalse,
+          reason: 'Legacy folders key should have been removed after migration');
     });
   });
 }

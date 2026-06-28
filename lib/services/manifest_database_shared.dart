@@ -10,6 +10,11 @@ class ManifestTables {
   static const String audioRecords = 'audio_records';
   static const String videoRecords = 'video_records';
   static const String textRecords = 'text_records';
+
+  // ⛔ Legacy shared folders table no longer used since v2 format migration.
+  // The constant is kept for migration detection purposes only.
+  @Deprecated('Legacy shared folders table — not used in v2+ format. '
+      'Kept for migration detection.')
   static const String folders = 'folders';
 
   // Per-type folder tables (replaces the shared [folders] table)
@@ -18,8 +23,15 @@ class ManifestTables {
   static const String imageFolders = 'image_folders';
   static const String videoFolders = 'video_folders';
 
+  /// All per-type folder table names.
+  static const List<String> allPerTypeFolderTables = [
+    textFolders,
+    audioFolders,
+    imageFolders,
+    videoFolders,
+  ];
+
   /// Derive the folder table name from a record table name.
-  /// Falls back to the shared [folders] table for unknown tables.
   static String folderTableFor(String recordTable) {
     switch (recordTable) {
       case ManifestTables.textRecords:
@@ -31,7 +43,7 @@ class ManifestTables {
       case ManifestTables.videoRecords:
         return ManifestTables.videoFolders;
       default:
-        return ManifestTables.folders;
+        throw ArgumentError('Unknown record table: $recordTable');
     }
   }
 }
@@ -84,7 +96,6 @@ Map<String, dynamic> emptyWebData() => {
       ManifestTables.audioRecords: <Map<String, dynamic>>[],
       ManifestTables.videoRecords: <Map<String, dynamic>>[],
       ManifestTables.textRecords: <Map<String, dynamic>>[],
-      ManifestTables.folders: <String>[],
       ManifestTables.textFolders: <String>[],
       ManifestTables.audioFolders: <String>[],
       ManifestTables.imageFolders: <String>[],

@@ -350,10 +350,12 @@ class BackupService {
         await ManifestDatabase.insertFolder(folder, recordTable: ManifestTables.videoRecords);
       }
     } else {
-      // v1 backup (legacy): restore to shared table only
-      // Per-type reads will pick them up via backward-compat merge in getAllFolders
+      // v1 backup (legacy): distribute shared folders to all 4 per-type tables
       for (final folder in folders) {
-        await ManifestDatabase.insertFolder(folder);
+        await ManifestDatabase.insertFolder(folder, recordTable: ManifestTables.textRecords);
+        await ManifestDatabase.insertFolder(folder, recordTable: ManifestTables.audioRecords);
+        await ManifestDatabase.insertFolder(folder, recordTable: ManifestTables.imageRecords);
+        await ManifestDatabase.insertFolder(folder, recordTable: ManifestTables.videoRecords);
       }
     }
   }
