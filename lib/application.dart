@@ -1,10 +1,7 @@
-import 'dart:io' show exit, Platform;
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'
     show debugPrint, defaultTargetPlatform, kIsWeb, TargetPlatform;
-import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:dynamic_color/dynamic_color.dart';
@@ -16,9 +13,7 @@ import 'pages/settings_page.dart';
 import 'providers/theme_provider.dart';
 import 'providers/update_provider.dart';
 import 'providers/notification_provider.dart';
-import 'services/data_migration_service.dart';
 import 'services/notification_service.dart';
-import 'widgets/migration_dialog.dart';
 import 'widgets/update_dialog.dart';
 
 class Application extends ConsumerStatefulWidget {
@@ -42,10 +37,10 @@ class _ApplicationState extends ConsumerState<Application> {
   @override
   void initState() {
     super.initState();
-    // Web端不提供更新功能和数据迁移
+    // Web端不提供更新功能
     if (!kIsWeb) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _performStartupChecks();
+        _checkForUpdatesOnStartup();
       });
     }
     // Set up in-app notification handler
@@ -54,83 +49,6 @@ class _ApplicationState extends ConsumerState<Application> {
         ref.read(inAppNotificationProvider.notifier).state = payload;
       }
     };
-  }
-
-  /// 执行启动时的检查流程（按顺序）：
-  /// 1. 数据格式版本检查与迁移
-  /// 2. 应用版本更新检查
-  Future<void> _performStartupChecks() async {
-    // 第一步：数据格式迁移
-    final migrationCompleted = await _performDataMigration();
-    if (!migrationCompleted) return;
-
-    // 第二步：检查应用更新
-    await _checkForUpdatesOnStartup();
-  }
-
-  /// 执行数据格式迁移。
-  ///
-  /// 如果存储的数据格式版本低于当前版本，弹出不可关闭的迁移对话框，
-  /// 执行备份和迁移。迁移完成后自动关闭对话框并退出应用，
-  /// 确保所有 provider 和服务以新的数据格式重新初始化。
-  ///
-  /// 返回 `true` 表示迁移已处理完毕（或无迁移需求），可继续下一步；
-  /// 返回 `false` 表示应用需要退出，不应继续。
-  Future<bool> _performDataMigration() async {
-    try {
-      // 先快速检查是否需要迁移（不执行备份和迁移）
-      final storedVersion = await DataMigrationService.getStoredFormatVersion();
-      if (storedVersion >= DataMigrationService.currentFormatVersion) {
-        // 数据格式已是最新，不需要迁移
-        return true;
-      }
-
-      // 需要迁移：弹出对话框并执行迁移
-      final navigatorContext = _navigatorKey.currentContext;
-      if (navigatorContext == null || !navigatorContext.mounted) {
-        // 没有有效的 context，直接执行静默迁移后退出应用
-        await DataMigrationService.checkAndMigrate();
-        _exitApp();
-        return false;
-      }
-
-      // 在对话框内执行迁移
-      final shouldExit = await showDialog<bool>(
-        context: navigatorContext,
-        barrierDismissible: false, // 不可通过点击背景关闭
-        builder: (_) =>
-            MigrationDialog(future: DataMigrationService.checkAndMigrate()),
-      );
-
-      // 如果返回 true，表示需要重启应用
-      if (shouldExit == true) {
-        _exitApp();
-        return false;
-      }
-
-      // 迁移出错或无退出信号时，继续启动流程
-      return true;
-    } catch (e) {
-      debugPrint('[Application] Data migration failed: $e');
-      // 迁移失败不应阻塞启动，记录日志后继续
-      return true;
-    }
-  }
-
-  /// 安全退出应用。
-  void _exitApp() {
-    // 移动端使用 SystemNavigator.pop() 退出
-    // 桌面端使用 dart:io exit()
-    try {
-      if (defaultTargetPlatform == TargetPlatform.android ||
-          defaultTargetPlatform == TargetPlatform.iOS) {
-        SystemNavigator.pop();
-      } else if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-        exit(0);
-      }
-    } catch (e) {
-      debugPrint('[Application] Failed to exit app: $e');
-    }
   }
 
   Future<void> _checkForUpdatesOnStartup() async {
