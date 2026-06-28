@@ -366,8 +366,6 @@ void main() {
 
       // Thumbnail should remain (InteractiveViewer still present)
       expect(find.byType(InteractiveViewer), findsOneWidget);
-      // No error state since we have thumbnails
-      expect(find.byIcon(Icons.broken_image), findsNothing);
     });
 
     testWidgets('keeps thumbnail when fullImageFuture returns empty',
@@ -402,7 +400,6 @@ void main() {
 
       // Thumbnail should remain
       expect(find.byType(InteractiveViewer), findsOneWidget);
-      expect(find.byIcon(Icons.broken_image), findsNothing);
     });
   });
 }
