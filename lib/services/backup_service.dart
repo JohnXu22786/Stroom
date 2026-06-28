@@ -76,12 +76,21 @@ class BackupService {
     final videoRecords = await ManifestDatabase.getAllVideoRecords();
     final textRecords = await ManifestDatabase.getAllTextRecords();
     final folders = await ManifestDatabase.getAllFolders();
+    // Per-type folder tables
+    final textFolders = await ManifestDatabase.getAllFolders(recordTable: ManifestTables.textRecords);
+    final audioFolders = await ManifestDatabase.getAllFolders(recordTable: ManifestTables.audioRecords);
+    final imageFolders = await ManifestDatabase.getAllFolders(recordTable: ManifestTables.imageRecords);
+    final videoFolders = await ManifestDatabase.getAllFolders(recordTable: ManifestTables.videoRecords);
     final dbData = {
       'image_records': imageRecords,
       'audio_records': audioRecords,
       'video_records': videoRecords,
       'text_records': textRecords,
       'folders': folders,
+      ManifestTables.textFolders: textFolders,
+      ManifestTables.audioFolders: audioFolders,
+      ManifestTables.imageFolders: imageFolders,
+      ManifestTables.videoFolders: videoFolders,
     };
     addStringToArchive(
         archive, 'stroom_manifest.json', jsonEncode(dbData));
@@ -294,6 +303,20 @@ class BackupService {
         [];
     final folders = (data['folders'] as List<dynamic>?)?.cast<String>() ?? [];
 
+    // Per-type folders (v2+ backups)
+    final textFolders = (data[ManifestTables.textFolders] as List<dynamic>?)
+            ?.cast<String>() ??
+        <String>[];
+    final audioFolders = (data[ManifestTables.audioFolders] as List<dynamic>?)
+            ?.cast<String>() ??
+        <String>[];
+    final imageFolders = (data[ManifestTables.imageFolders] as List<dynamic>?)
+            ?.cast<String>() ??
+        <String>[];
+    final videoFolders = (data[ManifestTables.videoFolders] as List<dynamic>?)
+            ?.cast<String>() ??
+        <String>[];
+
     await ManifestDatabase.clearAllData();
 
     for (final record in imageRecords) {
@@ -308,8 +331,32 @@ class BackupService {
     for (final record in textRecords) {
       await ManifestDatabase.insertTextRecord(record);
     }
-    for (final folder in folders) {
-      await ManifestDatabase.insertFolder(folder);
+
+    // Restore per-type folders if available (v2+); otherwise fall back to shared folders
+    if (textFolders.isNotEmpty ||
+        audioFolders.isNotEmpty ||
+        imageFolders.isNotEmpty ||
+        videoFolders.isNotEmpty) {
+      for (final folder in textFolders) {
+        await ManifestDatabase.insertFolder(folder, recordTable: ManifestTables.textRecords);
+      }
+      for (final folder in audioFolders) {
+        await ManifestDatabase.insertFolder(folder, recordTable: ManifestTables.audioRecords);
+      }
+      for (final folder in imageFolders) {
+        await ManifestDatabase.insertFolder(folder, recordTable: ManifestTables.imageRecords);
+      }
+      for (final folder in videoFolders) {
+        await ManifestDatabase.insertFolder(folder, recordTable: ManifestTables.videoRecords);
+      }
+    } else {
+      // v1 backup (legacy): distribute shared folders to all 4 per-type tables
+      for (final folder in folders) {
+        await ManifestDatabase.insertFolder(folder, recordTable: ManifestTables.textRecords);
+        await ManifestDatabase.insertFolder(folder, recordTable: ManifestTables.audioRecords);
+        await ManifestDatabase.insertFolder(folder, recordTable: ManifestTables.imageRecords);
+        await ManifestDatabase.insertFolder(folder, recordTable: ManifestTables.videoRecords);
+      }
     }
   }
 

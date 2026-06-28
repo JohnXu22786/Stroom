@@ -40,7 +40,7 @@ void main() {
     testWidgets('does not show migration dialog when format is current',
         (tester) async {
       SharedPreferences.setMockInitialValues({
-        'data_format_version': 1, // 当前版本，不需要迁移
+        'data_format_version': 2, // 当前版本，不需要迁移
       });
 
       await tester.pumpWidget(_buildTestApp());

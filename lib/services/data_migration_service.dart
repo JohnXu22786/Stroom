@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 
 import 'storage_service.dart';
+import 'manifest_database.dart';
 
 /// The key used in SharedPreferences to store the data format version.
 const String _kDataFormatVersionKey = 'data_format_version';
@@ -48,7 +49,12 @@ class DataMigrationService {
   ///
   /// 每次数据格式变更（非兼容变更）时，递增此值。
   /// 低版本的数据会在启动时自动迁移到当前版本。
-  static const int currentFormatVersion = 1;
+  ///
+  /// # 版本历史
+  /// - v0: 初始版本（无版本号记录）
+  /// - v1: 引入 data_format_version; 迁移 old chat_configs → provider_entries
+  /// - v2: 移除共享 folders 表, 全部改为每个类型独立的文件夹表
+  static const int currentFormatVersion = 2;
 
   // ================================================================
   // 版本检查
@@ -213,17 +219,16 @@ class DataMigrationService {
   /// 执行从指定版本的迁移。
   ///
   /// 每个 case 对应一个版本的迁移逻辑。
-  /// v0 → v1: 首次引入数据格式版本，执行实际的 SharedPreferences 数据迁移。
+  /// - v0 → v1: 首次引入数据格式版本，执行实际的 SharedPreferences 数据迁移。
+  /// - v1 → v2: 移除共享 folders 表，数据迁移到每个类型独立的文件夹表。
   static Future<void> _migrateFrom(int version) async {
     switch (version) {
       case 0:
         await _migrateV0ToV1();
         break;
-      // 未来版本：
-      // case 1:
-      //   // v1 → v2: 示例迁移步骤
-      //   await _migrateV1ToV2();
-      //   break;
+      case 1:
+        await _migrateV1ToV2();
+        break;
       default:
         debugPrint('[DataMigrationService] No migration steps defined '
             'for version v$version');
@@ -399,6 +404,28 @@ class DataMigrationService {
       }
     } catch (e) {
       debugPrint('[DataMigrationService] Failed to fix provider entries: $e');
+    }
+  }
+
+  /// v1 → v2: 移除共享 folders 表，完全迁移到每个类型独立的文件夹表。
+  ///
+  /// 迁移步骤：
+  /// 1. 检测并迁移旧版共享 folders 表中的数据到 text/audio/image/video_folders
+  /// 2. 删除旧版共享 folders 表（SQLite）或 key（JSON/web）
+  /// 3. 迁移完成后，只保留每种类型独立的文件夹表
+  ///
+  /// 此迁移是幂等的：即使重复执行也不会有副作用。
+  static Future<void> _migrateV1ToV2() async {
+    try {
+      debugPrint('[DataMigrationService] v1→v2: Migrating legacy shared folders '
+          'to per-type folder tables');
+
+      await ManifestDatabase.migrateLegacyFoldersToPerType();
+
+      debugPrint('[DataMigrationService] v1→v2: Migration completed successfully');
+    } catch (e) {
+      // 迁移失败不阻塞启动，记录日志后继续
+      debugPrint('[DataMigrationService] v1→v2 migration failed: $e');
     }
   }
 }
