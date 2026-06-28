@@ -27,3 +27,10 @@ class ReasoningEvent extends ChatEvent {
   final String text;
   const ReasoningEvent(this.text);
 }
+
+/// Signals that the current reasoning section has ended and a new one will
+/// begin. Used by the UI to split multi-step reasoning chains into separate
+/// panels when tool calls create distinct reasoning rounds.
+class ReasoningSectionEndEvent extends ChatEvent {
+  const ReasoningSectionEndEvent();
+}

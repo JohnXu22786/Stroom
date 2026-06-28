@@ -73,7 +73,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Tracks streaming state locally so dispose() can check it without
   /// calling ref.read() (which throws after the widget is marked disposed).
   bool _isStreamingActive = false;
-  final Map<String, String> _reasoningContents = {};
+  final Map<String, List<String>> _reasoningContents = {};
   final Map<String, List<MessageSegment>> _chatSegments = {};
 
   /// Tracks how many characters of [_history] text have been rendered as
@@ -291,13 +291,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final fullReply = ref.read(streamingFullReplyProvider);
-      final reasoningText = ref.read(streamingReasoningProvider);
+      final reasoningSections = ref.read(streamingReasoningSectionsProvider);
       _streamingMsgId = msgId;
       _chatSegments[msgId] = [];
       _streamingRenderedLengths[msgId] = 0;
-      // Restore reasoning content from provider so the button shows up
-      if (reasoningText.isNotEmpty) {
-        _reasoningContents[msgId] = reasoningText;
+      // Restore reasoning sections from provider so the buttons show up
+      if (reasoningSections.isNotEmpty) {
+        _reasoningContents[msgId] = List.of(reasoningSections);
       }
 
       final placeholder = Message.textStream(
@@ -478,7 +478,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
         _history.add(msg);
         // Restore reasoning content from persisted ChatMessage
         if (msg.reasoningContent != null && msg.reasoningContent!.isNotEmpty) {
-          _reasoningContents[msg.id] = msg.reasoningContent!;
+          _reasoningContents[msg.id] = [msg.reasoningContent!];
         }
       }
       _loadedUpToIndex =
@@ -592,6 +592,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _streamingMsgId = aiMsgId;
     _chatSegments[aiMsgId] = [];
     _streamingRenderedLengths[aiMsgId] = 0;
+    // Initialize reasoning sections for multi-step reasoning chain support
+    _reasoningContents[aiMsgId] = [''];
     // Persist streaming message ID in provider so it survives page disposal
     ref.read(streamingMsgIdProvider.notifier).state = aiMsgId;
 
@@ -611,8 +613,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
     DateTime lastReasoningUpdate = DateTime.now();
     const minInterval = Duration(milliseconds: 50);
     const reasoningMinInterval = Duration(milliseconds: 100);
-    // Reset reasoning provider at start of new streaming session
+    // Reset reasoning providers at start of new streaming session
     ref.read(streamingReasoningProvider.notifier).state = '';
+    ref.read(streamingReasoningSectionsProvider.notifier).state = [''];
     bool hasReceivedFirstToken = false;
     Map<String, dynamic>? rawRequestCapture;
     Map<String, dynamic>? rawResponseCapture;
@@ -720,9 +723,29 @@ class _ChatPageState extends ConsumerState<ChatPage>
               lastReasoningUpdate = now;
               ref.read(streamingReasoningProvider.notifier).state =
                   reasoningBuffer;
-              _reasoningContents[aiMsgId] = reasoningBuffer;
+              // Update the last section in the sections list for multi-step
+              // reasoning chain support.
+              final sections =
+                  [...ref.read(streamingReasoningSectionsProvider)];
+              if (sections.isNotEmpty) {
+                sections[sections.length - 1] = reasoningBuffer;
+              }
+              ref.read(streamingReasoningSectionsProvider.notifier).state =
+                  sections;
+              _reasoningContents[aiMsgId] = sections;
               if (mounted) setState(() {});
             }
+
+          case ReasoningSectionEndEvent():
+            // Finalize current reasoning section and start a new empty one
+            // for the next tool call round.
+            final sections =
+                [...ref.read(streamingReasoningSectionsProvider)];
+            sections.add('');
+            ref.read(streamingReasoningSectionsProvider.notifier).state =
+                sections;
+            _reasoningContents[aiMsgId] = sections;
+            if (mounted) setState(() {});
 
           case ToolCallStartEvent e:
             // Flush any text not yet rendered as segments before tool call
@@ -846,6 +869,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // the reasoning toggle only controls whether the params are SENT.
       reasoningBuffer = _adapter.reasoningContent;
       ref.read(streamingReasoningProvider.notifier).state = reasoningBuffer;
+      // Update the last reasoning section with final content
+      final finalSections = [...ref.read(streamingReasoningSectionsProvider)];
+      if (finalSections.isNotEmpty) {
+        finalSections[finalSections.length - 1] = reasoningBuffer;
+      } else {
+        finalSections.add(reasoningBuffer);
+      }
+      ref.read(streamingReasoningSectionsProvider.notifier).state =
+          finalSections;
+      _reasoningContents[aiMsgId] = finalSections;
     }
 
     // Wrap post-stream processing in try-catch so that isStreamingProvider
@@ -889,7 +922,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
           }
         }
         if (reasoningBuffer.isNotEmpty) {
-          _reasoningContents[aiMsgId] = reasoningBuffer;
+          // Reasoning sections already updated above via provider.
+          // Ensure _reasoningContents has the latest sections.
+          final sections = List<String>.from(
+            ref.read(streamingReasoningSectionsProvider),
+          );
+          _reasoningContents[aiMsgId] = sections;
         }
       }
     } catch (e, s) {
@@ -901,11 +939,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
       ref.read(streamingMsgIdProvider.notifier).state = null;
       ref.read(streamingFullReplyProvider.notifier).state = '';
       ref.read(streamingHasFirstTokenProvider.notifier).state = false;
-      // NOTE: streamingReasoningProvider is deliberately NOT reset here.
-      // The dialog panel watches this provider, and clearing it would cause
-      // the dialog to lose its content. The provider is reset at the START
-      // of a new streaming session instead (see _startStreaming), and
-      // preserves the final reasoning content from the completed stream.
+      // NOTE: streamingReasoningProvider and streamingReasoningSectionsProvider
+      // are deliberately NOT reset here. The dialog panels watch these
+      // providers, and clearing them would cause open dialogs to lose their
+      // content. These providers are reset at the START of a new streaming
+      // session instead (see _startStreaming), preserving the final reasoning
+      // content from the completed stream.
       _cancelledByUser = false;
       if (mounted) setState(() {});
     }
@@ -2041,7 +2080,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                   ),
                                 );
                               } else {
-                                final reasoningText =
+                                final reasoningSections =
                                     _reasoningContents[message.id];
                                 final segments = _chatSegments[message.id];
                                 final isWaitingForFirstToken =
@@ -2073,18 +2112,22 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                         CrossAxisAlignment.start,
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      if (reasoningText != null)
+                                      if (reasoningSections != null &&
+                                          reasoningSections.isNotEmpty)
                                         ReasoningSection(
-                                          reasoningText: reasoningText,
-                                          isStreaming:
-                                              message.id == _streamingMsgId,
+                                          sections: ReasoningSectionData(
+                                            texts: reasoningSections,
+                                            streaming:
+                                                message.id == _streamingMsgId,
+                                          ),
                                           messageId: message.id,
                                         ),
                                       // During streaming, when first token hasn't arrived
-                                      // and we have reasoning content, hide the JumpingDots
-                                      // since the reasoning button already shows "推理中".
+                                      // and we don't have reasoning content, show JumpingDots.
+                                      // Reasoning content already shows "推理中" button.
                                       if (isWaitingForFirstToken &&
-                                          reasoningText == null)
+                                          (reasoningSections == null ||
+                                              reasoningSections.isEmpty))
                                         const Padding(
                                           padding: EdgeInsets.symmetric(
                                             vertical: 8,

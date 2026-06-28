@@ -915,11 +915,10 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         final audio = _selectedAudios[i];
         final fileTitle = 'ASR_${audio.name}_$timestamp';
 
-        // Update progress for current file
-        final baseProgress = (i * 100) ~/ total;
+        // Set current status
         ref
             .read(backgroundTasksProvider.notifier)
-            .updateProgress(taskId, baseProgress + (10 ~/ total));
+            .setResult(taskId, '正在转写: ${audio.name} (${i + 1}/$total)');
 
         // Transcribe this audio file
         final result = await service.transcribe(
@@ -930,7 +929,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         // Save the transcription result
         ref
             .read(backgroundTasksProvider.notifier)
-            .updateProgress(taskId, baseProgress + (70 ~/ total));
+            .setResult(taskId, result.text);
         await _saveTranscriptionResult(result.text, title: fileTitle);
       }
 

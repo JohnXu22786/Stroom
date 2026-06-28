@@ -1195,8 +1195,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       service = OcrService(config: ocrConfig);
       OcrResult result;
 
-      // Update progress to show processing
-      ref.read(backgroundTasksProvider.notifier).updateProgress(taskId, 10);
+      // Set initial result to show task is processing
+      ref.read(backgroundTasksProvider.notifier).setResult(taskId, '正在识别...');
 
       if (_selectedImages.length == 1) {
         final img = _selectedImages.first;
@@ -1211,8 +1211,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         result = await service.recognizeBatch(imageBytesList: batchInput);
       }
 
-      // Save the OCR result as a text file using TextManifest
-      ref.read(backgroundTasksProvider.notifier).updateProgress(taskId, 70);
+      // Store the OCR result and save to file
+      ref.read(backgroundTasksProvider.notifier).setResult(taskId, result.text);
       await _saveOcrResult(result.text, title: title);
 
       // Mark task as completed (widget may be gone, but notifier is independent)

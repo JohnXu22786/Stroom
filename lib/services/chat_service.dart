@@ -306,6 +306,11 @@ class ChatService {
           // No tool calls → done
           if (toolCallRefs.isEmpty) break;
 
+          // Emit ReasoningSectionEndEvent before starting the next round.
+          // This allows the UI to split multi-step reasoning chains into
+          // separate panels.
+          controller.add(const ReasoningSectionEndEvent());
+
           // Capture the current round's reasoning content (what was added
           // since the last round). Per the DeepSeek Tool Calls guide,
           // messages.append(message) preserves the complete assistant message
