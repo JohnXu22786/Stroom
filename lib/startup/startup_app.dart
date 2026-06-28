@@ -18,7 +18,7 @@ import '../application.dart';
 //
 // 流程：
 // 1. 立即显示启动页面（至少 1 秒）
-// 2. 并行执行启动检查
+// 2. 依次执行：崩溃恢复 → 数据格式版本检查 → 格式验证 → 完整性检查
 // 3. 检查完成后，如果进行了数据迁移，提示用户重启
 // 4. 否则无缝过渡到主应用
 // ====================================================================
@@ -55,50 +55,73 @@ class _StartupAppState extends State<StartupApp> {
   Future<void> _runStartupSequence() async {
     final stopwatch = Stopwatch()..start();
 
-    // Update status as we go
-    await _updateStatus('正在检查数据格式版本...', '1/3');
-    final migrationResult = await StartupCheckService.checkFormatVersion();
-    final didMigration = migrationResult.needsMigration;
+    try {
+      // Step 0: Crash recovery — recover from interrupted writes/migrations
+      await _updateStatus('正在恢复崩溃数据...', '恢复中');
+      final crashRecovered = await StartupCheckService.recoverCrashData();
+      if (crashRecovered) {
+        debugPrint('[StartupApp] Crash data recovered successfully');
+      }
 
-    await _updateStatus('正在验证数据格式...', '2/3');
-    final formatIssues = await StartupCheckService.validateDataFormats();
+      // Update status as we go
+      await _updateStatus('正在检查数据格式版本...', '1/4');
+      final migrationResult = await StartupCheckService.checkFormatVersion();
+      final didMigration = migrationResult.needsMigration;
 
-    await _updateStatus('正在检查数据完整性...', '3/3');
-    final integrityIssues = await StartupCheckService.checkDataIntegrity();
+      await _updateStatus('正在验证数据格式...', '2/4');
+      final formatIssues = await StartupCheckService.validateDataFormats();
 
-    final allIssues = <StartupIssue>[
-      ...formatIssues,
-      ...integrityIssues,
-    ];
+      await _updateStatus('正在检查数据完整性...', '3/4');
+      final integrityIssues = await StartupCheckService.checkDataIntegrity();
 
-    // Log all issues found
-    for (final issue in allIssues) {
-      debugPrint('[StartupApp] ${issue.severity.name}: ${issue.message}');
-    }
+      await _updateStatus('正在准备应用...', '4/4');
 
-    // Ensure minimum display time
-    final elapsed = stopwatch.elapsedMilliseconds;
-    if (elapsed < _minimumDisplayMs) {
-      await Future.delayed(Duration(milliseconds: _minimumDisplayMs - elapsed));
-    }
+      final allIssues = <StartupIssue>[
+        ...formatIssues,
+        ...integrityIssues,
+      ];
 
-    if (!mounted) return;
+      // Log all issues found
+      for (final issue in allIssues) {
+        debugPrint('[StartupApp] ${issue.severity.name}: ${issue.message}');
+      }
 
-    setState(() {
-      _isWorking = false;
-      _migrationPerformed = didMigration;
-      _statusMessage = didMigration ? '数据检查完成，准备启动应用' : '准备启动应用';
-    });
+      // Ensure minimum display time
+      final elapsed = stopwatch.elapsedMilliseconds;
+      if (elapsed < _minimumDisplayMs) {
+        await Future.delayed(Duration(milliseconds: _minimumDisplayMs - elapsed));
+      }
 
-    // Wait a moment so the user can see the completion state
-    await Future.delayed(const Duration(milliseconds: 600));
+      if (!mounted) return;
 
-    if (!mounted) return;
+      setState(() {
+        _isWorking = false;
+        _migrationPerformed = didMigration;
+        _statusMessage = didMigration ? '数据检查完成，准备启动应用' : '准备启动应用';
+      });
 
-    // If migration was performed, show a restart prompt
-    if (didMigration) {
-      await _showRestartDialog();
-    } else {
+      // Wait a moment so the user can see the completion state
+      await Future.delayed(const Duration(milliseconds: 600));
+
+      if (!mounted) return;
+
+      // If migration was performed, show a restart prompt
+      if (didMigration) {
+        await _showRestartDialog();
+      } else {
+        setState(() {
+          _checkingComplete = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('[StartupApp] Startup sequence failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _isWorking = false;
+        _statusMessage = '启动检查失败，可继续使用应用';
+      });
+      await Future.delayed(const Duration(milliseconds: 1500));
+      if (!mounted) return;
       setState(() {
         _checkingComplete = true;
       });
