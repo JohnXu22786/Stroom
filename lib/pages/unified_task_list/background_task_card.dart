@@ -7,7 +7,7 @@ import 'task_utils.dart';
 
 // =============================================================================
 // 后台任务卡片（OCR / ASR / 音频分离）
-// 设计参考 CatCatchTaskCard：可展开/折叠，圆形进度条，步骤信息
+// 展开后显示任务结果文字（而非进度条）
 // =============================================================================
 
 class BackgroundTaskCard extends ConsumerStatefulWidget {
@@ -117,33 +117,8 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Circular progress or completion icon
-                  if (task.status == TaskStatus.running)
-                    SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          CircularProgressIndicator(
-                            value: task.progress / 100.0,
-                            strokeWidth: 3,
-                            color: Colors.blue,
-                            backgroundColor: colorScheme.outlineVariant,
-                          ),
-                          Text(
-                            '${task.progress}%',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: colorScheme.onSurface,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  else
-                    Icon(statusIcon, color: statusColor, size: 28),
+                  // Status icon (no progress bar — OCR/ASR use result display)
+                  Icon(statusIcon, color: statusColor, size: 28),
                   const SizedBox(width: 4),
                   AnimatedRotation(
                     turns: _expanded ? 0.5 : 0.0,
@@ -192,24 +167,46 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
           ),
         ],
 
-        // Progress bar for running tasks
-        if (task.status == TaskStatus.running) ...[
+        // Result text (OCR extracted text, ASR transcription, etc.)
+        if (task.result != null && task.result!.isNotEmpty) ...[
           const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: task.progress / 100.0,
-              minHeight: 6,
-              backgroundColor: cs.outlineVariant,
-              color: Colors.blue,
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest.withAlpha(80),
+              borderRadius: BorderRadius.circular(6),
             ),
-          ),
-          const SizedBox(height: 4),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              '进度 ${task.progress}%',
-              style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.text_snippet_outlined,
+                      size: 14,
+                      color: cs.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '识别结果',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                SelectableText(
+                  task.result!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.5,
+                  ),
+                ),
+              ],
             ),
           ),
         ],

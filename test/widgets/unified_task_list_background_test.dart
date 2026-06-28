@@ -49,14 +49,48 @@ Future<void> pumpPageWithBackground(
 // Helpers to create test background tasks
 // =============================================================================
 
-BackgroundTask _createRunningOcrTask({required String id, String title = 'OCR任务', int progress = 0}) {
+BackgroundTask _createRunningOcrTask({
+  required String id,
+  String title = 'OCR任务',
+}) {
   return BackgroundTask(
     id: id,
     type: BackgroundTaskType.ocr,
     title: title,
     status: TaskStatus.running,
     createdAt: DateTime(2025, 6, 1),
-    progress: progress,
+  );
+}
+
+BackgroundTask _createRunningOcrTaskWithResult({
+  required String id,
+  String title = 'OCR任务',
+  String result = '',
+}) {
+  return BackgroundTask(
+    id: id,
+    type: BackgroundTaskType.ocr,
+    title: title,
+    status: TaskStatus.running,
+    createdAt: DateTime(2025, 6, 1),
+    result: result,
+  );
+}
+
+BackgroundTask _createCompletedOcrTask({
+  required String id,
+  String title = '已完成任务',
+  String result = '',
+}) {
+  return BackgroundTask(
+    id: id,
+    type: BackgroundTaskType.ocr,
+    title: title,
+    status: TaskStatus.completed,
+    createdAt: DateTime(2025, 6, 1),
+    completedAt: DateTime(2025, 6, 1, 0, 3),
+    statusChangedAt: DateTime(2025, 6, 1, 0, 3),
+    result: result,
   );
 }
 
@@ -70,19 +104,6 @@ BackgroundTask _createFailedAudioTask({required String id}) {
     completedAt: DateTime(2025, 6, 1, 0, 3),
     statusChangedAt: DateTime(2025, 6, 1, 0, 3),
     error: '提取失败: FFmpeg未安装',
-  );
-}
-
-BackgroundTask _createCompletedTask({required String id, String title = '已完成任务', int progress = 100}) {
-  return BackgroundTask(
-    id: id,
-    type: BackgroundTaskType.ocr,
-    title: title,
-    status: TaskStatus.completed,
-    createdAt: DateTime(2025, 6, 1),
-    completedAt: DateTime(2025, 6, 1, 0, 3),
-    statusChangedAt: DateTime(2025, 6, 1, 0, 3),
-    progress: progress,
   );
 }
 
@@ -130,14 +151,13 @@ void main() {
     testWidgets(
         'completed background task via completeTask is shown with completed status',
         (tester) async {
-      // Create a notifier and add a running task, then complete it (which keeps it with status=completed)
+      // Create a notifier and add a running task, then complete it
       final bgNotifier = BackgroundTaskNotifier();
       final taskId = bgNotifier.addTask(
         type: BackgroundTaskType.ocr,
         title: 'OCR已完成',
       );
-      bgNotifier.completeTask(taskId); // Updates status to completed, keeps task visible
-      // Now the notifier state has 1 task with status=completed
+      bgNotifier.completeTask(taskId);
 
       await tester.pumpWidget(
         ProviderScope(
@@ -249,7 +269,7 @@ void main() {
       expect(find.text('音频分离任务'), findsOneWidget);
     });
 
-    testWidgets('background task cards show correct icons for running',
+    testWidgets('running background task does NOT show circular progress indicator',
         (tester) async {
       await pumpPageWithBackground(tester, [
         _createRunningOcrTask(id: 'ocr-1'),
@@ -260,15 +280,15 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      // Running task should show a spinner icon (CircularProgressIndicator)
-      expect(find.byType(CircularProgressIndicator), findsOneWidget,
-          reason: '进行中的任务应显示加载指示器');
+      // Running task should NOT show a CircularProgressIndicator (progress removed)
+      expect(find.byType(CircularProgressIndicator), findsNothing,
+          reason: '进行中的OCR/ASR任务不应显示进度指示器');
     });
 
-    testWidgets('running background task shows progress percentage in circular indicator',
+    testWidgets('running background task does NOT show progress percentage',
         (tester) async {
       await pumpPageWithBackground(tester, [
-        _createRunningOcrTask(id: 'ocr-1', progress: 65),
+        _createRunningOcrTask(id: 'ocr-1'),
       ]);
 
       // Switch to "其他" tab
@@ -276,15 +296,15 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      // Should show the progress number
-      expect(find.text('65%'), findsOneWidget,
-          reason: '进行中的任务应显示进度百分比');
+      // Should NOT show the progress number
+      expect(find.textContaining('%'), findsNothing,
+          reason: '进行中的任务不应显示进度百分比');
     });
 
-    testWidgets('completed background task does not show progress percentage',
+    testWidgets('completed background task shows check icon',
         (tester) async {
       await pumpPageWithBackground(tester, [
-        _createCompletedTask(id: 'done-1'),
+        _createCompletedOcrTask(id: 'done-1'),
       ]);
 
       // Switch to "其他" tab
@@ -292,17 +312,17 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      // Should show completed icon (appears at least once - status icon + right icon)
+      // Should show completed icon
       expect(find.byIcon(Icons.check_circle), findsAtLeast(1),
           reason: '已完成的任务应显示完成图标');
       // Should show "已完成" label
       expect(find.text('已完成'), findsOneWidget);
     });
 
-    testWidgets('running background task card shows progress and status info',
+    testWidgets('running background task card shows status info',
         (tester) async {
       await pumpPageWithBackground(tester, [
-        _createRunningOcrTask(id: 'ocr-1', title: '运行中任务', progress: 30),
+        _createRunningOcrTask(id: 'ocr-1', title: '运行中任务'),
       ]);
 
       // Switch to "其他" tab
@@ -337,6 +357,10 @@ void main() {
       // After expand, error message should be visible
       expect(find.text('提取失败: FFmpeg未安装'), findsOneWidget,
           reason: '展开后应显示错误详情');
+
+      // After expand, NO LinearProgressIndicator should be visible (progress removed)
+      expect(find.byType(LinearProgressIndicator), findsNothing,
+          reason: '展开后不应显示线性进度条');
     });
 
     testWidgets('background task card delete action removes the task',
@@ -363,6 +387,84 @@ void main() {
       // Task should be removed - "暂无任务" appears
       expect(find.text('暂无任务'), findsOneWidget,
           reason: '删除任务后应显示空状态');
+    });
+
+    testWidgets('expanded completed task shows result text',
+        (tester) async {
+      await pumpPageWithBackground(tester, [
+        _createCompletedOcrTask(
+          id: 'done-1',
+          title: '已完成OCR',
+          result: '这是OCR识别出来的文字内容',
+        ),
+      ]);
+
+      // Switch to "其他" tab
+      await tester.tap(find.text('其他'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Tap to expand
+      await tester.tap(find.text('已完成OCR'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // "识别结果" label should be visible
+      expect(find.text('识别结果'), findsOneWidget,
+          reason: '展开后应显示"识别结果"标签');
+
+      // SelectableText should exist with the result content
+      expect(find.byType(SelectableText), findsOneWidget,
+          reason: '展开后应显示可选择的结果文字');
+    });
+
+    testWidgets('expanded running task with partial result shows current text',
+        (tester) async {
+      await pumpPageWithBackground(tester, [
+        _createRunningOcrTaskWithResult(
+          id: 'run-1',
+          title: '处理中OCR',
+          result: '当前已识别的部分文字...',
+        ),
+      ]);
+
+      // Switch to "其他" tab
+      await tester.tap(find.text('其他'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Running tasks start expanded; "识别结果" label should be visible
+      expect(find.text('识别结果'), findsOneWidget,
+          reason: '展开后应显示"识别结果"标签');
+
+      // SelectableText should exist
+      expect(find.byType(SelectableText), findsOneWidget,
+          reason: '展开后应显示可选择的结果文字');
+    });
+
+    testWidgets('running background task does not show progress in expanded view',
+        (tester) async {
+      await pumpPageWithBackground(tester, [
+        _createRunningOcrTask(id: 'ocr-1', title: '运行中任务'),
+      ]);
+
+      // Switch to "其他" tab
+      await tester.tap(find.text('其他'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Tap to expand
+      await tester.tap(find.text('运行中任务'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Expanded view should NOT contain progress bar or percentage
+      expect(find.byType(LinearProgressIndicator), findsNothing,
+          reason: '展开后不应显示线性进度条');
+      expect(find.textContaining('进度'), findsNothing,
+          reason: '展开后不应显示进度文本');
+      expect(find.textContaining('%'), findsNothing,
+          reason: '展开后不应显示百分比');
     });
   });
 }

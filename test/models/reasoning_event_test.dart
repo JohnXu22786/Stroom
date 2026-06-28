@@ -34,6 +34,43 @@ void main() {
     });
   });
 
+  group('ReasoningSectionEndEvent', () {
+    test('can be created with default constructor', () {
+      const event = ReasoningSectionEndEvent();
+      expect(event, isA<ReasoningSectionEndEvent>());
+    });
+
+    test('is a ChatEvent', () {
+      const event = ReasoningSectionEndEvent();
+      expect(event, isA<ChatEvent>());
+    });
+
+    test('can be used in a switch statement', () {
+      final ChatEvent event = ReasoningSectionEndEvent();
+      String result = '';
+      switch (event) {
+        case ReasoningSectionEndEvent():
+          result = 'section_end';
+        case ReasoningEvent e:
+          result = 'reasoning: ${e.text}';
+        case TextEvent e:
+          result = 'text: ${e.text}';
+        default:
+          result = 'unknown';
+      }
+      expect(result, 'section_end');
+    });
+
+    test('is distinct from ReasoningEvent and TextEvent', () {
+      final end = ReasoningSectionEndEvent();
+      final reasoning = ReasoningEvent('think');
+      final text = TextEvent('speak');
+
+      expect(end.runtimeType, isNot(reasoning.runtimeType));
+      expect(end.runtimeType, isNot(text.runtimeType));
+    });
+  });
+
   group('ChatMessage reasoningContent serialization', () {
     test('reasoningContent is serialized and deserialized correctly', () {
       final msg = ChatMessage(
@@ -107,6 +144,15 @@ void main() {
       final text = TextEvent('speak');
 
       expect(reasoning.runtimeType, isNot(text.runtimeType));
+    });
+
+    test('ReasoningSectionEndEvent is distinct from ReasoningEvent and TextEvent', () {
+      final end = ReasoningSectionEndEvent();
+      final reasoning = ReasoningEvent('think');
+      final text = TextEvent('speak');
+
+      expect(end.runtimeType, isNot(reasoning.runtimeType));
+      expect(end.runtimeType, isNot(text.runtimeType));
     });
   });
 }
