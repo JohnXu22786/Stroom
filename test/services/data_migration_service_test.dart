@@ -232,7 +232,7 @@ void main() {
       // After successful migration, flag should be cleared
       final prefsAfter = await SharedPreferences.getInstance();
       expect(prefsAfter.getBool('migration_in_progress'), isNot(isTrue));
-      expect(prefsAfter.getInt('data_format_version'), equals(1));
+      expect(prefsAfter.getInt('data_format_version'), equals(DataMigrationService.currentFormatVersion));
     });
 
     test('migration_in_progress flag is set before backup creation', () async {

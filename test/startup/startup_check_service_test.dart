@@ -18,7 +18,7 @@ void main() {
   group('StartupCheckService - format version check', () {
     test('returns needsMigration=false when version matches', () async {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('data_format_version', 1);
+      await prefs.setInt('data_format_version', DataMigrationService.currentFormatVersion);
 
       final result = await StartupCheckService.checkFormatVersion();
       expect(result.needsMigration, isFalse);

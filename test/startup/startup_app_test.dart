@@ -38,7 +38,7 @@ void main() {
       // migration_in_progress should be cleared
       expect(prefs.containsKey('migration_in_progress'), isFalse);
       // Version should be updated
-      expect(prefs.getInt('data_format_version'), equals(1));
+      expect(prefs.getInt('data_format_version'), equals(DataMigrationService.currentFormatVersion));
     });
 
     test('recovers conversations from bak when main is corrupted', () async {
