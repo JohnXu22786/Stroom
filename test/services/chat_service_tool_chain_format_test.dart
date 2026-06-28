@@ -163,28 +163,34 @@ void main() {
           )
           .asFuture();
 
-      // Expect: ToolCallStartEvent, ToolCallCompleteEvent, TextEvent
-      expect(events.length, equals(3));
+      // Expect: ReasoningSectionEndEvent (between rounds), ToolCallStartEvent,
+      // ToolCallCompleteEvent, then TextEvent (from round 2)
+      expect(events.length, equals(4));
+
+      // The ReasoningSectionEndEvent is emitted between tool call rounds
+      // to signal the UI to split reasoning chains.
+      expect(events[0], isA<ReasoningSectionEndEvent>(),
+          reason: 'ReasoningSectionEndEvent is emitted between tool call rounds');
 
       // Verify event sequence and types
-      expect(events[0], isA<ToolCallStartEvent>());
-      expect(events[1], isA<ToolCallCompleteEvent>());
-      expect(events[2], isA<TextEvent>());
+      expect(events[1], isA<ToolCallStartEvent>());
+      expect(events[2], isA<ToolCallCompleteEvent>());
+      expect(events[3], isA<TextEvent>());
 
       // Verify tool call start event
-      final toolStart = events[0] as ToolCallStartEvent;
+      final toolStart = events[1] as ToolCallStartEvent;
       expect(toolStart.toolCall.id, equals('call_weather_001'));
       expect(toolStart.toolCall.name, equals('get_weather'));
       expect(toolStart.toolCall.arguments, equals({'location': 'Hangzhou'}));
       expect(toolStart.toolCall.status, equals(ToolCallStatus.running));
 
       // Verify tool call complete event
-      final toolComplete = events[1] as ToolCallCompleteEvent;
+      final toolComplete = events[2] as ToolCallCompleteEvent;
       expect(toolComplete.toolCallId, equals('call_weather_001'));
       expect(toolComplete.result, equals('24°C'));
 
       // Verify final text event
-      final textEvent = events[2] as TextEvent;
+      final textEvent = events[3] as TextEvent;
       expect(textEvent.text, contains('24°C'));
     });
 
