@@ -39,12 +39,13 @@ enum BackgroundTaskType {
 
 /// A lightweight task model for OCR, ASR, and Audio Separation operations.
 /// These are simple start → complete/fail tasks without complex step tracking.
+/// Progress bars have been removed; expanded view shows result text instead.
 class BackgroundTask {
   final String id;
   final BackgroundTaskType type;
   final String title;
   final TaskStatus status;
-  final int progress; // 0-100
+  final String? result; // The text result (OCR extracted text, ASR transcription)
   final String? error;
   final DateTime createdAt;
   final DateTime? completedAt;
@@ -55,7 +56,7 @@ class BackgroundTask {
     required this.type,
     required this.title,
     this.status = TaskStatus.running,
-    this.progress = 0,
+    this.result,
     this.error,
     DateTime? createdAt,
     this.completedAt,
@@ -64,7 +65,7 @@ class BackgroundTask {
 
   BackgroundTask copyWith({
     TaskStatus? status,
-    int? progress,
+    String? result,
     String? error,
     DateTime? completedAt,
     DateTime? statusChangedAt,
@@ -80,7 +81,7 @@ class BackgroundTask {
       type: type,
       title: title,
       status: newStatus,
-      progress: progress ?? this.progress,
+      result: result ?? this.result,
       error: error,
       createdAt: createdAt,
       completedAt: completedAt ?? this.completedAt,
@@ -93,7 +94,7 @@ class BackgroundTask {
     'type': type.name,
     'title': title,
     'status': status.name,
-    'progress': progress,
+    if (result != null) 'result': result,
     'error': error,
     'createdAt': createdAt.toIso8601String(),
     'completedAt': completedAt?.toIso8601String(),
@@ -105,7 +106,7 @@ class BackgroundTask {
     type: BackgroundTaskType.values.byName(map['type'] as String),
     title: map['title'] as String,
     status: TaskStatus.values.byName(map['status'] as String),
-    progress: map['progress'] as int? ?? 0,
+    result: map['result'] as String?,
     error: map['error'] as String?,
     createdAt: DateTime.parse(map['createdAt'] as String),
     completedAt: map['completedAt'] != null
@@ -142,7 +143,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   /// Mark a task as completed and keep it in the list (visible to user).
   void completeTask(String taskId) {
-    _updateTask(taskId, TaskStatus.completed, progress: 100);
+    _updateTask(taskId, TaskStatus.completed);
   }
 
   /// Mark a task as failed with an optional error message.
@@ -150,12 +151,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     _updateTask(taskId, TaskStatus.failed, error: error);
   }
 
-  /// Update the progress of a running task.
-  void updateProgress(String taskId, int progress) {
+  /// Set the result text for a task (OCR extracted text, ASR transcription, etc.).
+  /// Can be called multiple times to update partial/intermediate results.
+  void setResult(String taskId, String result) {
     state = state.map((t) {
       if (t.id != taskId) return t;
-      if (t.status != TaskStatus.running) return t;
-      return t.copyWith(progress: progress.clamp(0, 100));
+      return t.copyWith(result: result);
     }).toList();
     _persistTasks();
   }
@@ -170,7 +171,6 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     String taskId,
     TaskStatus status, {
     String? error,
-    int? progress,
   }) {
     BackgroundTask? oldTask;
     state = state.map((t) {
@@ -178,7 +178,6 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       oldTask = t;
       return t.copyWith(
         status: status,
-        progress: progress ?? t.progress,
         error: error,
         completedAt:
             status == TaskStatus.completed || status == TaskStatus.failed

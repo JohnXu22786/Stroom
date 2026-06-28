@@ -229,64 +229,54 @@ void main() {
     });
 
     // ==================================================================
-    // Progress tests
+    // Result field tests (replaces old progress tests)
     // ==================================================================
 
-    test('addTask initializes task with progress=0', () {
+    test('addTask initializes task without result', () {
       final notifier = BackgroundTaskNotifier();
       
       final id = notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR');
       
-      expect(notifier.state[0].progress, 0);
+      expect(notifier.state[0].result, isNull);
     });
 
-    test('updateProgress updates task progress correctly', () {
+    test('setResult stores result text on task', () {
       final notifier = BackgroundTaskNotifier();
       
       final id = notifier.addTask(type: BackgroundTaskType.audioSeparation, title: '音频分离');
       
-      notifier.updateProgress(id, 50);
-      expect(notifier.state[0].progress, 50);
-
-      notifier.updateProgress(id, 100);
-      expect(notifier.state[0].progress, 100);
+      notifier.setResult(id, '这是结果文本');
+      expect(notifier.state[0].result, '这是结果文本');
     });
 
-    test('updateProgress does not affect other tasks', () {
+    test('setResult does not affect other tasks', () {
       final notifier = BackgroundTaskNotifier();
       
       final id1 = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR');
       final id2 = notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR');
       
-      notifier.updateProgress(id1, 75);
+      notifier.setResult(id1, 'OCR结果');
       
-      expect(notifier.state.where((t) => t.id == id1).single.progress, 75);
-      expect(notifier.state.where((t) => t.id == id2).single.progress, 0);
+      expect(notifier.state.where((t) => t.id == id1).single.result, 'OCR结果');
+      expect(notifier.state.where((t) => t.id == id2).single.result, isNull);
     });
 
-    test('updateProgress with non-existent id does nothing', () {
-      final notifier = BackgroundTaskNotifier();
-      
-      notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
-      
-      expect(() => notifier.updateProgress('non-existent', 50), returnsNormally);
-      expect(notifier.state[0].progress, 0);
-    });
-
-    test('toMap/fromMap preserves progress field', () {
+    test('toMap/fromMap preserves result field', () {
       final notifier = BackgroundTaskNotifier();
       
       final id = notifier.addTask(type: BackgroundTaskType.audioSeparation, title: '音频分离');
-      notifier.updateProgress(id, 65);
+      notifier.setResult(id, '结果文本');
       
       final task = notifier.state[0];
       final map = task.toMap();
+      // result field should be present in serialized map
+      expect(map['result'], '结果文本');
       final restored = BackgroundTask.fromMap(map);
 
-      expect(restored.progress, 65);
+      expect(restored.result, '结果文本');
     });
 
-    test('fromMap handles missing progress key (backward compatibility)', () {
+    test('fromMap handles missing result key (backward compatibility)', () {
       final map = {
         'id': 'test-id',
         'type': 'ocr',
@@ -297,7 +287,7 @@ void main() {
       
       final restored = BackgroundTask.fromMap(map);
       
-      expect(restored.progress, 0);
+      expect(restored.result, isNull);
       expect(restored.title, '旧数据任务');
       expect(restored.status, TaskStatus.running);
     });

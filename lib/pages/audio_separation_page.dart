@@ -692,7 +692,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
           onProgress: (progress) {
             ref
                 .read(backgroundTasksProvider.notifier)
-                .updateProgress(taskId, progress);
+                .setResult(taskId, '正在提取音频... $progress%');
           },
         );
 
