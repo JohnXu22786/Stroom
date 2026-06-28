@@ -88,6 +88,8 @@ void main() {
           'seed': 12345,
           'enableTemperature': true,
           'temperature': 0.7,
+          'enableMaxTokens': true,
+          'maxTokens': 4096,
         },
         customParams: [
           CustomParam(paramName: 'style', defaultValue: 'cheerful', type: 'string'),
