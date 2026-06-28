@@ -35,9 +35,6 @@ class _ImagePreviewDialogState extends State<ImagePreviewDialog> {
   /// 当前显示的数据：初始为缩略图，完整图加载完成后替换为完整图
   Uint8List? _displayData;
 
-  /// 完整图是否已加载完成
-  bool _isFullImageLoaded = false;
-
   /// 完整图加载是否失败（无有效数据可显示时的最终错误态）
   bool _hasError = false;
 
@@ -59,7 +56,6 @@ class _ImagePreviewDialogState extends State<ImagePreviewDialog> {
         // 完整图加载成功 → 替换显示
         setState(() {
           _displayData = fullData;
-          _isFullImageLoaded = true;
         });
       } else if (_displayData == null) {
         // 没有缩略图且完整图返回空/null → 显示错误
@@ -99,24 +95,18 @@ class _ImagePreviewDialogState extends State<ImagePreviewDialog> {
               onPressed: () => Navigator.pop(context, false),
             ),
           ),
-          // Edit button (top right) — 仅在完整图加载完成后可编辑
-          // 旧逻辑：编辑按钮始终可用（完整图在打开对话框前已加载完成）
-          // 新逻辑：完整图在后台加载中，加载完成前编辑按钮不可用
+          // Edit button (top right) — 始终可用，由编辑组件加载图片
           Positioned(
             top: MediaQuery.of(context).padding.top + 8,
             right: 8,
             child: IconButton(
-              icon: Icon(
+              icon: const Icon(
                 Icons.edit,
-                color: _isFullImageLoaded
-                    ? Colors.white
-                    : Colors.white.withOpacity(0.3),
+                color: Colors.white,
                 size: 28,
               ),
-              tooltip: _isFullImageLoaded ? '编辑图片' : '图片加载中，请稍后...',
-              onPressed: _isFullImageLoaded
-                  ? () => Navigator.pop(context, true)
-                  : null,
+              tooltip: '编辑图片',
+              onPressed: () => Navigator.pop(context, true),
             ),
           ),
           // Bottom file-name

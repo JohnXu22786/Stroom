@@ -203,7 +203,7 @@ void main() {
       expect(result, true);
     });
 
-    testWidgets('edit button is disabled when full image not yet loaded',
+    testWidgets('edit button is always enabled (even before full image loads)',
         (tester) async {
       final delayedFuture = Future<Uint8List?>.delayed(
         const Duration(seconds: 5),
@@ -237,38 +237,25 @@ void main() {
       await tester.pump();
 
       // At this point, full image has NOT loaded yet (5s delay)
-      // Find the IconButton that wraps the edit Icon
+      // Edit button should be enabled immediately
       final editIcon = find.byIcon(Icons.edit);
       final editButton = tester.widget<IconButton>(
         find.ancestor(of: editIcon, matching: find.byType(IconButton)),
       );
-      expect(editButton.onPressed, isNull,
-          reason: 'Edit button should be disabled before full image loads');
+      expect(editButton.onPressed, isNotNull,
+          reason: 'Edit button should be enabled even before full image loads');
 
-      // Tapping disabled button should not pop dialog
+      // Tapping edit button immediately pops dialog with true
       await tester.tap(editIcon);
       await tester.pump();
-      expect(dialogClosed, isNull,
-          reason: 'Dialog should remain open after tapping disabled edit button');
-
-      // Now let the delayed future complete
-      await tester.pump(const Duration(seconds: 5));
-      await tester.pump();
-
-      // Edit button should now be enabled
-      final editButtonAfter = tester.widget<IconButton>(
-        find.ancestor(of: find.byIcon(Icons.edit), matching: find.byType(IconButton)),
-      );
-      expect(editButtonAfter.onPressed, isNotNull,
-          reason: 'Edit button should be enabled after full image loads');
-
-      // Tapping enabled button should pop dialog
-      await tester.tap(find.byIcon(Icons.edit));
-      await tester.pump();
       expect(dialogClosed, isTrue,
-          reason: 'Dialog should close after tapping enabled edit button');
+          reason: 'Dialog should close immediately after tapping edit button');
       expect(result, isTrue,
           reason: 'Edit button should pop with true');
+
+      // Let the delayed future (used by the dialog's _loadFullImage) complete
+      // to avoid pending timer assertion.
+      await tester.pump(const Duration(seconds: 5));
     });
 
     // ================================================================
