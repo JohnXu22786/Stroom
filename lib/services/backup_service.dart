@@ -9,11 +9,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'backup_service_shared.dart';
+import 'data_migration_service.dart';
 import 'manifest_database.dart';
+import 'storage_service.dart';
 import '../utils/app_version.dart';
 import '../utils/web_file_store.dart';
-import 'backup_service_shared.dart';
-import 'storage_service.dart';
 
 // ====================================================================
 // BackupService — 数据备份与恢复
@@ -280,6 +281,11 @@ class BackupService {
       // 普通二进制文件
       await writeBackupFile(matchedDir, relativePath, entry.value);
     }
+
+    // 数据迁移：确保恢复后的数据格式是最新的
+    // 旧格式备份（pre-migration）中包含 chat_configs、null IDs 等，
+    // 需要迁移到当前数据格式才能正常使用。
+    await DataMigrationService.migrateDataFormatIfNeeded();
     onProgress?.call(1.0);
   }
 
