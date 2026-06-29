@@ -1,0 +1,36 @@
+name: Basic Checks
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  basic-checks:
+    name: i18n / DB / Changelog Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Dart
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: i18n Check
+        run: |
+          chmod +x scripts/i18n_check.sh
+          bash scripts/i18n_check.sh
+
+      - name: DB Migration Check
+        run: |
+          chmod +x scripts/db_migration_check.sh
+          bash scripts/db_migration_check.sh
+
+      - name: Changelog Check
+        run: |
+          chmod +x scripts/changelog_check.sh
+          bash scripts/changelog_check.sh
