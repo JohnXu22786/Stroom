@@ -86,6 +86,10 @@ void main() {
           'frequencyPenalty': 0.2,
           'presencePenalty': 0.1,
           'seed': 12345,
+          'enableTemperature': true,
+          'temperature': 0.7,
+          'enableMaxTokens': true,
+          'maxTokens': 4096,
         },
         customParams: [
           CustomParam(paramName: 'style', defaultValue: 'cheerful', type: 'string'),

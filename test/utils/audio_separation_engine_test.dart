@@ -1,6 +1,4 @@
-import 'dart:io';
 import 'dart:typed_data';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/audio_separation.dart'
     show AudioSeparationEngine;
@@ -9,43 +7,46 @@ void main() {
   // Ensure Flutter bindings are initialized for platform plugin testing
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('AudioSeparationEngine', () {
+  group('AudioSeparationEngine (pure Dart)', () {
     late AudioSeparationEngine engine;
 
     setUp(() {
       engine = AudioSeparationEngine();
     });
 
-    test('isAvailable returns a boolean', () async {
+    test('isAvailable returns true', () async {
+      // Pure Dart implementation — always available, no platform deps
       final available = await engine.isAvailable();
-      // With media_kit, isAvailable should return true (engine is always available)
       expect(available, isA<bool>());
       expect(available, isTrue);
     });
 
-    test('canHandleVideoFormat returns correct results', () {
-      // All major video formats should be claimable
+    test('canHandleVideoFormat returns correct results for ISOBMFF formats', () {
+      // ISOBMFF-based formats (MP4, MOV, M4V, 3GP) are supported
       expect(engine.canHandleVideoFormat('mp4'), isTrue);
       expect(engine.canHandleVideoFormat('mov'), isTrue);
-      expect(engine.canHandleVideoFormat('avi'), isTrue);
-      expect(engine.canHandleVideoFormat('mkv'), isTrue);
-      expect(engine.canHandleVideoFormat('webm'), isTrue);
-      expect(engine.canHandleVideoFormat('flv'), isTrue);
       expect(engine.canHandleVideoFormat('m4v'), isTrue);
       expect(engine.canHandleVideoFormat('3gp'), isTrue);
     });
 
+    test('canHandleVideoFormat rejects non-ISOBMFF formats', () {
+      // Non-ISOBMFF containers require container-specific parsers
+      expect(engine.canHandleVideoFormat('avi'), isFalse);
+      expect(engine.canHandleVideoFormat('mkv'), isFalse);
+      expect(engine.canHandleVideoFormat('webm'), isFalse);
+      expect(engine.canHandleVideoFormat('flv'), isFalse);
+    });
+
     test('extractAudio throws when engine is not available', () async {
-      final available = await engine.isAvailable();
-      if (!available) {
-        await expectLater(
-          engine.extractAudio(
-            videoBytes: Uint8List.fromList([0, 1, 2, 3]),
-            videoFormat: 'mp4',
-          ),
-          throwsA(isA<Exception>()),
-        );
-      }
+      // Pure Dart engine is always available, so this test verifies
+      // that the error path for invalid data works correctly
+      await expectLater(
+        engine.extractAudio(
+          videoBytes: Uint8List.fromList([0, 1, 2, 3]),
+          videoFormat: 'mp4',
+        ),
+        throwsA(isA<Exception>()),
+      );
     });
 
     test('extractAudio throws on empty video bytes', () async {
@@ -62,121 +63,55 @@ void main() {
       await expectLater(
         engine.extractAudio(
           videoBytes: Uint8List.fromList([0, 1, 2, 3]),
-          videoFormat: 'unknown',
+          videoFormat: 'avi',
         ),
         throwsA(isA<Exception>()),
       );
     });
 
-    test('canHandleVideoFormat rejects null or empty format', () {
+    test('canHandleVideoFormat rejects empty format', () {
       expect(engine.canHandleVideoFormat(''), isFalse);
       expect(engine.canHandleVideoFormat('  '), isFalse);
     });
 
-    test('isAvailable returns true with media_kit', () async {
-      // media_kit is integrated as a dependency, engine should be available
+    test('isAvailable returns true (pure Dart)', () async {
+      // Pure Dart implementation — no platform dependencies needed
       final available = await engine.isAvailable();
       expect(available, isTrue);
     });
 
-    // ==================================================================
-    // Crash regression: verify setProperty calls do NOT pass waitForInitialization.
-    // media_kit's NativePlayer.setProperty(String, String, {bool waitForInitialization = true})
-    // skips player initialization when waitForInitialization=false, causing a native segfault
-    // when mpv_set_property_string() is called on an uninitialized mpv context.
-    // ==================================================================
-    test('source code has no setProperty calls with waitForInitialization', () {
-      // Read the source files and verify no setProperty calls use waitForInitialization.
-      // This prevents regression if someone reintroduces the crash pattern.
-      final sourcePaths = [
-        'lib/utils/audio_separation_native.dart',
-        'lib/catcatch/engine/ffmpeg_converter.dart',
-      ];
-
-      for (final path in sourcePaths) {
-        final file = File(path);
-        expect(file.existsSync(), isTrue, reason: 'Source file $path must exist');
-
-        final content = file.readAsStringSync();
-        final lines = content.split('\n');
-        for (var i = 0; i < lines.length; i++) {
-          final line = lines[i];
-          if (line.contains('setProperty') && line.contains('waitForInitialization')) {
-            fail('Line ${i + 1} in $path contains setProperty with waitForInitialization: '
-                '${line.trim()}');
-          }
-        }
-      }
+    test('canHandleVideoFormat is case-insensitive', () {
+      expect(engine.canHandleVideoFormat('MP4'), isTrue);
+      expect(engine.canHandleVideoFormat('MOV'), isTrue);
+      expect(engine.canHandleVideoFormat('Mp4'), isTrue);
     });
 
-    test('setProperty calls only pass two positional arguments', () {
-      // Verify that setProperty calls use the correct signature:
-      // setProperty(String property, String value) — no extra named params.
-      final sourcePaths = [
-        'lib/utils/audio_separation_native.dart',
-        'lib/catcatch/engine/ffmpeg_converter.dart',
-      ];
-
-      for (final path in sourcePaths) {
-        final file = File(path);
-        expect(file.existsSync(), isTrue, reason: 'Source file $path must exist');
-
-        final content = file.readAsStringSync();
-        final lines = content.split('\n');
-        for (var i = 0; i < lines.length; i++) {
-          final line = lines[i];
-          // Match setProperty(...) calls: should be `setProperty('key', 'value')`
-          if (line.trimLeft().startsWith('await') && line.contains('setProperty')) {
-            // Should not contain more than 2 string arguments + closing paren
-            expect(line.contains(', waitForInitialization'), isFalse,
-                reason: 'Line ${i + 1} in $path must not use waitForInitialization parameter');
-            expect(line.contains(', true)'), isFalse,
-                reason: 'Line ${i + 1} in $path must not pass explicit positional after value');
-          }
-        }
-      }
+    test('extractAudio throws on invalid MP4 data (too small)', () async {
+      await expectLater(
+        engine.extractAudio(
+          videoBytes: Uint8List.fromList([0, 0, 0, 0, 0, 0, 0, 0]),
+          videoFormat: 'mp4',
+        ),
+        throwsA(isA<Exception>()),
+      );
     });
 
-    group('audio_separation_native.dart - audio playback prevention', () {
-      test('engine sets ao=null to prevent audio playback', () {
-        final file = File('lib/utils/audio_separation_native.dart');
-        expect(file.existsSync(), isTrue);
-
-        final content = file.readAsStringSync();
-        // The engine must set ao=null to prevent audio from playing through speakers
-        // during the extraction/encoding process
-        expect(content.contains("setProperty('ao', 'null')"), isTrue,
-            reason: 'Engine must set ao=null to prevent audio playback during extraction');
-      });
-
-      test('engine sets keep-open=no for proper encoding completion', () {
-        final file = File('lib/utils/audio_separation_native.dart');
-        expect(file.existsSync(), isTrue);
-
-        final content = file.readAsStringSync();
-        // The engine must set keep-open=no to allow encoding to complete naturally
-        expect(content.contains("setProperty('keep-open', 'no')"), isTrue,
-            reason: 'Engine must set keep-open=no for proper encoding completion');
-      });
-
-      test('engine sets encoding properties (o, oac, ovc) before opening media', () {
-        final file = File('lib/utils/audio_separation_native.dart');
-        expect(file.existsSync(), isTrue);
-
-        final content = file.readAsStringSync();
-        final oIndex = content.indexOf("setProperty('o',");
-        final ovcIndex = content.indexOf("setProperty('ovc',");
-        final oacIndex = content.indexOf("setProperty('oac',");
-        final openIndex = content.indexOf('player.open(');
-
-        // All encoding properties must be set BEFORE player.open()
-        expect(oIndex, lessThan(openIndex),
-            reason: 'setProperty(\'o\', ...) must come before player.open()');
-        expect(ovcIndex, lessThan(openIndex),
-            reason: 'setProperty(\'ovc\', ...) must come before player.open()');
-        expect(oacIndex, lessThan(openIndex),
-            reason: 'setProperty(\'oac\', ...) must come before player.open()');
-      });
+    test('extractAudio throws on MP4 without audio track', () async {
+      // Minimal MP4 with ftyp but no moov/mdat with audio
+      final mp4Bytes = Uint8List.fromList([
+        0x00, 0x00, 0x00, 0x14, // box size = 20
+        0x66, 0x74, 0x79, 0x70, // 'ftyp'
+        0x69, 0x73, 0x6F, 0x6D, // 'isom'
+        0x00, 0x00, 0x02, 0x00, // version
+        0x69, 0x73, 0x6F, 0x6D, // 'isom'
+      ]);
+      await expectLater(
+        engine.extractAudio(
+          videoBytes: mp4Bytes,
+          videoFormat: 'mp4',
+        ),
+        throwsA(isA<Exception>()),
+      );
     });
   });
 }

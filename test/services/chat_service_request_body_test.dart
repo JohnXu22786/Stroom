@@ -158,14 +158,15 @@ void main() {
       provider = _RequestCaptureProvider();
     });
 
-    test('sendStream includes temperature in _lastRequestBody when not configured',
+    test('sendStream omits temperature from _lastRequestBody when toggle is off',
         () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
         typeConfig: {
           'context': 4096,
-          // No temperature in typeConfig
+          'enableTemperature': false,
+          // Temperature exists but toggle is OFF
         },
       );
 
@@ -176,21 +177,21 @@ void main() {
         events.add(event);
       }
 
-      // _lastRequestBody should contain temperature (effective temperature is always non-null)
+      // _lastRequestBody should NOT contain temperature when toggle is OFF
       final lastBody = service.lastRequestBody;
       expect(lastBody, isNotNull);
-      expect(lastBody!.containsKey('temperature'), isTrue,
-          reason: 'temperature should be in _lastRequestBody (effectiveTemperature always returns a value)');
+      expect(lastBody!.containsKey('temperature'), isFalse,
+          reason: 'temperature should NOT be in _lastRequestBody when toggle is off');
     });
 
-    test('sendStream passes default temperature to provider when not configured',
+    test('sendStream does NOT pass temperature to provider when toggle is off',
         () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
         typeConfig: {
           'context': 4096,
-          // No temperature in typeConfig
+          'enableTemperature': false,
         },
       );
 
@@ -201,18 +202,19 @@ void main() {
         events.add(event);
       }
 
-      // Provider should receive default temperature (0.7) when not in typeConfig
-      expect(provider.capturedTemperature, isNotNull,
-          reason: 'temperature should be non-null (effectiveTemperature falls back to default)');
+      // Provider should NOT receive temperature when toggle is OFF
+      expect(provider.capturedTemperature, isNull,
+          reason: 'temperature should be null when toggle is off');
     });
 
-    test('sendStream includes temperature in _lastRequestBody when configured',
+    test('sendStream includes temperature in _lastRequestBody when toggle is on',
         () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
         typeConfig: {
           'context': 4096,
+          'enableTemperature': true,
           'temperature': 0.3,
         },
       );
@@ -229,12 +231,13 @@ void main() {
       expect(lastBody!['temperature'], closeTo(0.3, 0.001));
     });
 
-    test('sendStream passes configured temperature to provider when set', () async {
+    test('sendStream passes configured temperature to provider when toggle is on', () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
         typeConfig: {
           'context': 4096,
+          'enableTemperature': true,
           'temperature': 0.3,
         },
       );
@@ -249,14 +252,13 @@ void main() {
       expect(provider.capturedTemperature, closeTo(0.3, 0.001));
     });
 
-    test('sendStreamWithTools includes temperature in _lastRequestBody when not configured',
-        () async {
+    test('sendStreamWithTools omits temperature when toggle is off', () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
         typeConfig: {
           'context': 4096,
-          // No temperature in typeConfig
+          'enableTemperature': false,
         },
       );
 
@@ -269,17 +271,18 @@ void main() {
 
       final lastBody = service.lastRequestBody;
       expect(lastBody, isNotNull);
-      expect(lastBody!.containsKey('temperature'), isTrue,
-          reason: 'temperature should be in _lastRequestBody (effectiveTemperature always returns a value)');
+      expect(lastBody!.containsKey('temperature'), isFalse,
+          reason: 'temperature should NOT be in _lastRequestBody when toggle is off');
     });
 
-    test('sendStreamWithTools passes default temperature to provider when not configured',
+    test('sendStreamWithTools does NOT pass temperature to provider when toggle off',
         () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
         typeConfig: {
           'context': 4096,
+          'enableTemperature': false,
         },
       );
 
@@ -290,8 +293,8 @@ void main() {
         events.add(event);
       }
 
-      expect(provider.capturedTemperature, isNotNull,
-          reason: 'temperature should be non-null (effectiveTemperature falls back to default)');
+      expect(provider.capturedTemperature, isNull,
+          reason: 'temperature should be null when toggle is off');
     });
   });
 
@@ -310,7 +313,7 @@ void main() {
       );
     });
 
-    test('sendStreamWithTools has null tools in _lastRequestBody when empty list',
+    test('sendStreamWithTools has no tools key in _lastRequestBody when empty list',
         () async {
       final service = ChatService(provider: provider, modelConfig: modelConfig);
       provider.reset();
@@ -326,10 +329,8 @@ void main() {
 
       final lastBody = service.lastRequestBody;
       expect(lastBody, isNotNull);
-      expect(lastBody!.containsKey('tools'), isTrue,
-          reason: 'tools key should be in _lastRequestBody (value may be null)');
-      expect(lastBody['tools'], isNull,
-          reason: 'tools should be null when empty list is passed');
+      expect(lastBody!.containsKey('tools'), isFalse,
+          reason: 'tools key should NOT be in _lastRequestBody when empty list');
     });
 
     test('sendStreamWithTools passes null tools to provider when empty list', () async {
@@ -345,7 +346,7 @@ void main() {
         events.add(event);
       }
 
-      // Provider should receive null or empty tools (it handles both)
+      // Provider should receive null when empty list is passed
       // The provider's _buildBody conditionally excludes null/empty tools
       expect(provider.capturedTools, isNull,
           reason: 'tools should be null when empty list is passed');

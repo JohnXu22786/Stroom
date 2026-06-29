@@ -336,15 +336,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
     try {
       await _adapter.initializeMcpServers(entriesState);
     } finally {
-      // Always initialize enabled tool names with all available tools.
-      // Using finally ensures the provider is populated even if MCP
-      // discovery fails, so built-in tools (registered in initState)
-      // still work by default.
-      final allToolNames =
-          _adapter.getAllToolDefinitions().map((t) => t.name).toSet();
-      if (allToolNames.isNotEmpty) {
-        ref.read(enabledToolNamesProvider.notifier).state = allToolNames;
-      }
+      // Do NOT auto-enable all tools. All tools default to OFF.
+      // Per-conversation enabled tools are restored in _loadConversationMessages.
+      // Using finally ensures MCP discovery errors don't prevent the rest.
     }
     // Restore saved model selection and restore per-model settings
     SharedPreferences.getInstance().then((prefs) {
@@ -441,6 +435,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
       final convs = ref.read(conversationsProvider);
       final conv = convs.where((c) => c.id == activeId).firstOrNull;
+
+      // Restore per-conversation enabled MCP/built-in tool names.
+      // If the conversation has saved tool preferences, use them.
+      // Otherwise, all tools are OFF by default.
+      ref.read(enabledToolNamesProvider.notifier).state =
+          (conv != null) ? Set<String>.from(conv.enabledMcpToolNames) : {};
       if (conv == null || conv.messages.isEmpty) {
         if (mounted) setState(() {});
         return;
@@ -497,6 +497,29 @@ class _ChatPageState extends ConsumerState<ChatPage>
       if (mounted) setState(() {});
     } catch (e, s) {
       debugPrint('[ChatPage] _loadConversationMessages error: $e\n$s');
+    }
+  }
+
+  /// Saves the currently enabled tool names to the active conversation.
+  /// This ensures per-conversation tool preferences persist across sessions.
+  void _saveEnabledToolsToConversation() {
+    final convId = ref.read(activeConversationIdProvider);
+    if (convId == null) return;
+    final enabledTools = ref.read(enabledToolNamesProvider);
+    final convs = ref.read(conversationsProvider);
+    final conv = convs.where((c) => c.id == convId).firstOrNull;
+    if (conv == null) return;
+    // Only persist if the set actually changed to avoid unnecessary writes
+    if (conv.enabledMcpToolNames.length != enabledTools.length ||
+        !conv.enabledMcpToolNames.containsAll(enabledTools)) {
+      // We need to update the conversation's enabledMcpToolNames.
+      // Since Conversation is mutable, we update it in-place and let
+      // the existing _persist mechanism handle the save.
+      // Access the notifier to trigger persistence.
+      ref.read(conversationsProvider.notifier).updateEnabledTools(
+            convId,
+            enabledTools,
+          );
     }
   }
 
@@ -558,6 +581,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
       ref.read(conversationsProvider.notifier).createConversation();
       convId = ref.read(activeConversationIdProvider);
     }
+
+    // Save the current enabled tools to the conversation before sending.
+    // This ensures the tool preferences are persisted even if the user
+    // switches conversations or navigates away during streaming.
+    _saveEnabledToolsToConversation();
 
     final userMsgId = 'u${DateTime.now().millisecondsSinceEpoch}';
 
@@ -2409,6 +2437,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 enabledTools: ref.watch(enabledToolNamesProvider),
                 onEnabledToolsChanged: (tools) {
                   ref.read(enabledToolNamesProvider.notifier).state = tools;
+                  _saveEnabledToolsToConversation();
                 },
                 modelNames: _getModelNames(),
                 selectedModelIndex: _selectedModelIndex,

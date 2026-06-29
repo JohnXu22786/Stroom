@@ -84,6 +84,7 @@ void main() {
         typeConfig: {
           'context': 8192,
           'temperature': 0.5,
+          'enableTemperature': true,
           'topP': 0.95,
           'frequencyPenalty': 0.2,
           'presencePenalty': 0.1,
@@ -143,6 +144,7 @@ void main() {
         typeConfig: {
           'context': 8192,
           'temperature': 0.5,
+          'enableTemperature': true,
           'topP': 0.95,
         },
       );
@@ -356,6 +358,7 @@ void main() {
         typeConfig: {
           'context': 8192,
           'temperature': 0.7,
+          'enableTemperature': true,
           'topP': 0.9,
           'frequencyPenalty': 0.1,
           'presencePenalty': 0.0,
@@ -431,6 +434,7 @@ void main() {
         typeConfig: {
           'context': 8192,
           'temperature': 0.5,
+          'enableTemperature': true,
           'topP': 0.95,
         },
       );
@@ -464,6 +468,8 @@ void main() {
         typeConfig: {
           'context': 8192,
           'temperature': 0.7,
+          'enableMaxTokens': true,
+          'maxTokens': 8192,
         },
       );
 
@@ -478,7 +484,7 @@ void main() {
         events.add(event);
       }
 
-      // Model maxTokens (from typeConfig.context) should be used
+      // Model maxTokens (from typeConfig.maxTokens) should be used
       expect(provider.capturedMaxTokens, equals(8192));
     });
 
