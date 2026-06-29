@@ -6,109 +6,172 @@ on:
     - cron: "0 17 * * *" # 01:00 Beijing Time (UTC+8)
 
 permissions:
-  contents: write
+  contents: read
   actions: write
 
 jobs:
-  cleanup-artifacts:
+  check-repository:
     runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ github.repository == 'JohnXu22786/Stroom' }}
     steps:
-      - name: Delete old artifacts (>14 days)
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: |
-          cutoff_date=$(date -d "14 days ago" +%Y-%m-%d)
-          gh api repos/$REPO/actions/artifacts --paginate | \
-          jq -r '.artifacts[] | select(.name | startswith("stroom-nightly-")) | select(.created_at < "'$cutoff_date'") | .id' | \
-          while read artifact_id; do
-            echo "Deleting artifact $artifact_id"
-            gh api repos/$REPO/actions/artifacts/$artifact_id -X DELETE
-          done
+      - run: echo "Repository: ${{ github.repository }}"
 
-  nightly-build:
-    needs: cleanup-artifacts
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-15]
-      fail-fast: false
-
+  # ── Full Test Suite + Coverage ───────────────────────────────────────────
+  coverage:
+    name: Full Test Suite + Coverage
+    runs-on: ubuntu-latest
+    needs: check-repository
+    if: needs.check-repository.outputs.should_run == 'true'
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: main
-
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+      - run: flutter pub get
+      - name: Run all tests with coverage
+        run: flutter test --coverage
+      - name: Install lcov
+        run: sudo apt-get install -y lcov
+      - name: Generate HTML coverage report
+        run: genhtml coverage/lcov.info -o coverage/html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/html
 
+  # ── E2E Tests ────────────────────────────────────────────────────────────
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: check-repository
+    if: needs.check-repository.outputs.should_run == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Build web
+        run: flutter build web --release
+      - name: Run integration tests
+        run: flutter test integration_test/ --platform=chrome
+
+  # ── Linux Build ──────────────────────────────────────────────────────────
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    needs: check-repository
+    if: needs.check-repository.outputs.should_run == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
       - name: Install Linux dependencies
-        if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update -y
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev
-
-      - name: Generate date tag
-        id: date
-        run: echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
-        shell: bash
-
+      - run: flutter create --platforms=linux .
       - run: flutter pub get
+      - run: flutter build linux --release
 
-      - name: Build Linux
-        if: matrix.os == 'ubuntu-latest'
-        run: flutter build linux --release
-
-      - name: Build Windows
-        if: matrix.os == 'windows-latest'
-        run: flutter build windows --release
-
-      - name: Build macOS
-        if: matrix.os == 'macos-15'
-        run: |
-          flutter create --platforms=macos .
-          flutter pub get
-          flutter build macos --release
-
-      - name: Package artifacts
-        shell: bash
-        run: |
-          mkdir -p renamed-artifacts
-          DATE=${{ steps.date.outputs.date }}
-
-          if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
-            cd build/linux/x64/release/bundle
-            zip -r "$OLDPWD/renamed-artifacts/stroom-nightly-${DATE}-linux-x64.zip" .
-            cd "$OLDPWD"
-          fi
-
-          if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            # Need to use PowerShell for Windows paths
-            echo "Windows packaging uses pwsh"
-          fi
-
-          if [ "${{ matrix.os }}" == "macos-15" ]; then
-            cd build/macos/Build/Products/Release
-            zip -r "$OLDPWD/renamed-artifacts/stroom-nightly-${DATE}-macos-arm64.zip" "Stroom.app"
-            cd "$OLDPWD"
-            hdiutil create -volname "Stroom" \
-              -srcfolder build/macos/Build/Products/Release/Stroom.app \
-              -ov -format UDZO \
-              "renamed-artifacts/stroom-nightly-${DATE}-macos-arm64.dmg" 2>/dev/null || true
-          fi
-
-      - name: Package Windows artifacts (pwsh)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          $DATE = "${{ steps.date.outputs.date }}"
-          New-Item -ItemType Directory -Path renamed-artifacts -Force
-          Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "renamed-artifacts\stroom-nightly-$DATE-windows-x64.zip"
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+  # ── Web Build ────────────────────────────────────────────────────────────
+  build-web:
+    name: Build Web
+    runs-on: ubuntu-latest
+    needs: check-repository
+    if: needs.check-repository.outputs.should_run == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
         with:
-          name: stroom-nightly-${{ steps.date.outputs.date }}-${{ matrix.os }}
-          path: renamed-artifacts/*
-          retention-days: 3
+          channel: stable
+      - run: flutter pub get
+      - run: flutter build web --release
+
+  # ── Android Build ────────────────────────────────────────────────────────
+  build-android:
+    name: Build Android
+    runs-on: ubuntu-latest
+    needs: check-repository
+    if: needs.check-repository.outputs.should_run == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - uses: actions/cache@v4
+        with:
+          path: ~/.gradle
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*') }}
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14"
+      - run: flutter pub get
+      - name: Create dummy keystore for CI
+        run: keytool -genkey -v -keystore android/upload-keystore.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=CI, OU=Build, O=Stroom, L=Unknown, ST=Unknown, C=XX"
+      - run: flutter build apk --release
+
+  # ── Windows Build ────────────────────────────────────────────────────────
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    needs: check-repository
+    if: needs.check-repository.outputs.should_run == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - run: flutter build windows --release
+
+  # ── macOS Build ──────────────────────────────────────────────────────────
+  build-macos:
+    name: Build macOS
+    runs-on: macos-15
+    needs: check-repository
+    if: needs.check-repository.outputs.should_run == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter create --platforms=macos .
+      - run: flutter pub get
+      - name: Clean SwiftPM cache
+        run: |
+          rm -rf ~/Library/Caches/org.swift.swiftpm
+          rm -rf ~/Library/Developer/Xcode/DerivedData
+      - name: Configure CocoaPods
+        run: |
+          pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
+      - run: flutter build macos --release
+
+  # ── iOS Build ────────────────────────────────────────────────────────────
+  build-ios:
+    name: Build iOS
+    runs-on: macos-15
+    needs: check-repository
+    if: needs.check-repository.outputs.should_run == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter create --platforms=ios .
+      - run: flutter pub get
+      - name: Clean SwiftPM cache
+        run: |
+          rm -rf ~/Library/Caches/org.swift.swiftpm
+          rm -rf ~/Library/Developer/Xcode/DerivedData
+      - name: Configure CocoaPods
+        run: |
+          pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
+      - name: Build unsigned iOS app
+        run: flutter build ios --release --no-codesign
