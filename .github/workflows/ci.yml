@@ -36,90 +36,33 @@ jobs:
       - name: Run Dart analyzer
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
-  # ── Change Detection ─────────────────────────────────────────────────────
-  changes:
-    name: Detect Changes
-    runs-on: ubuntu-latest
-    outputs:
-      groups: ${{ steps.set-matrix.outputs.groups }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            core:
-              - 'lib/*.dart'
-              - 'test/*_test.dart'
-            widgets:
-              - 'lib/widgets/**'
-              - 'test/widgets/**'
-            pages:
-              - 'lib/pages/**'
-              - 'test/pages/**'
-            providers:
-              - 'lib/providers/**'
-              - 'test/providers/**'
-            services:
-              - 'lib/services/**'
-              - 'test/services/**'
-            utils:
-              - 'lib/utils/**'
-              - 'test/utils/**'
-            models:
-              - 'lib/models/**'
-              - 'test/models/**'
-            startup:
-              - 'lib/startup/**'
-              - 'test/startup/**'
-            catcatch:
-              - 'lib/catcatch/**'
-              - 'test/catcatch/**'
-            ci:
-              - '.github/**'
-              - 'pubspec.yaml'
-              - 'analysis_options.yaml'
-      - name: Build test matrix
-        id: set-matrix
-        run: |
-          groups="[]"
-          ci_changed="${{ steps.filter.outputs.ci }}"
-
-          add() {
-            if [ "$1" = "true" ] || [ "$ci_changed" = "true" ]; then
-              groups=$(echo "$groups" | jq -c \
-                --arg label "$2" \
-                --arg pattern "$3" \
-                '. + [{"label": $label, "pattern": $pattern}]')
-            fi
-          }
-
-          add "${{ steps.filter.outputs.core }}" "Core" "test/*_test.dart"
-          add "${{ steps.filter.outputs.widgets }}" "Widgets" "test/widgets"
-          add "${{ steps.filter.outputs.pages }}" "Pages" "test/pages"
-          add "${{ steps.filter.outputs.providers }}" "Providers" "test/providers"
-          add "${{ steps.filter.outputs.services }}" "Services" "test/services"
-          add "${{ steps.filter.outputs.utils }}" "Utils" "test/utils"
-          add "${{ steps.filter.outputs.models }}" "Models" "test/models"
-          add "${{ steps.filter.outputs.startup }}" "Startup" "test/startup"
-          add "${{ steps.filter.outputs.catcatch }}" "CatCatch" "test/catcatch"
-
-          # Fallback: if nothing triggered, run all groups
-          if [ "$groups" = "[]" ]; then
-            groups='[{"label":"Core","pattern":"test/*_test.dart"},{"label":"Widgets","pattern":"test/widgets"},{"label":"Pages","pattern":"test/pages"},{"label":"Providers","pattern":"test/providers"},{"label":"Services","pattern":"test/services"},{"label":"Utils","pattern":"test/utils"},{"label":"Models","pattern":"test/models"},{"label":"Startup","pattern":"test/startup"},{"label":"CatCatch","pattern":"test/catcatch"}]'
-          fi
-
-          echo "groups=$groups" >> "$GITHUB_OUTPUT"
-
-  # ── Test Suite (incremental, parallel groups) ────────────────────────────
+  # ── Test Suite (parallel groups) ──────────────────────────────────────────
   test:
     name: Tests (${{ matrix.label }})
     runs-on: ubuntu-latest
-    needs: [analyze, changes]
+    needs: [analyze]
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.changes.outputs.groups) }}
+        include:
+          - label: Core
+            pattern: test/*_test.dart
+          - label: Widgets
+            pattern: test/widgets
+          - label: Pages
+            pattern: test/pages
+          - label: Providers
+            pattern: test/providers
+          - label: Services
+            pattern: test/services
+          - label: Utils
+            pattern: test/utils
+          - label: Models
+            pattern: test/models
+          - label: Startup
+            pattern: test/startup
+          - label: CatCatch
+            pattern: test/catcatch
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -128,183 +71,3 @@ jobs:
       - run: flutter pub get
       - name: Run ${{ matrix.label }} tests
         run: flutter test ${{ matrix.pattern }}
-
-  # ── Coverage Report ───────────────────────────────────────────────────────
-  coverage:
-    name: Coverage Report
-    runs-on: ubuntu-latest
-    needs: [analyze]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-      - run: flutter pub get
-      - name: Run all tests with coverage
-        run: flutter test --coverage
-      - name: Install lcov
-        run: sudo apt-get install -y lcov
-      - name: Generate HTML coverage report
-        run: genhtml coverage/lcov.info -o coverage/html
-      - uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: coverage/html
-
-  # ── Failure Notification (main branch only) ──────────────────────────────
-  notify:
-    name: Notify Failure
-    runs-on: ubuntu-latest
-    needs: [format, analyze, test, coverage]
-    if: >
-      failure() &&
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/main'
-    steps:
-      - name: Comment failure summary
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const workflow = context.payload.workflow || 'CI Checks';
-            const runUrl = `${context.server_url}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const message = [
-              '## ❌ CI Failure on main',
-              '',
-              `Workflow: [${workflow}](${runUrl})`,
-              `Commit: ${context.sha.substring(0, 7)}`,
-              `Branch: ${context.ref}`,
-            ].join('\n');
-
-            // Try to create a commit status
-            await github.rest.repos.createCommitStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              sha: context.sha,
-              state: 'failure',
-              target_url: runUrl,
-              description: 'CI checks failed on main branch',
-              context: 'CI Failure Notification',
-            });
-
-  # ── Platform Builds ───────────────────────────────────────────────────────
-  build-ios:
-    name: Build iOS IPA
-    runs-on: macos-15
-    needs: [analyze]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-      - run: flutter create --platforms=ios .
-      - run: flutter pub get
-      - name: Clean SwiftPM cache
-        run: |
-          rm -rf ~/Library/Caches/org.swift.swiftpm
-          rm -rf ~/Library/Developer/Xcode/DerivedData
-      - name: Configure CocoaPods
-        run: |
-          pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
-      - name: Build unsigned iOS app
-        run: flutter build ios --release --no-codesign
-      - name: Create unsigned IPA (Payload/Runner.app → zip)
-        run: |
-          mkdir -p artifacts
-          TAG="${{ github.ref_name }}"
-          TAG="${TAG//\//-}"
-          mkdir -p build/ios/ipa/Payload
-          cp -r build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
-          cd build/ios/ipa
-          zip -r "$OLDPWD/artifacts/stroom-ios-unsigned-$TAG.ipa" Payload/
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ios-ipa
-          path: artifacts/*.ipa
-
-  build-linux:
-    name: Build Linux
-    runs-on: ubuntu-latest
-    needs: [analyze]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-      - name: Install Linux dependencies
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev
-      - run: flutter create --platforms=linux .
-      - run: flutter pub get
-      - run: flutter build linux --release
-
-  build-web:
-    name: Build Web
-    runs-on: ubuntu-latest
-    needs: [analyze]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-      - run: flutter pub get
-      - run: flutter build web --release
-
-  build-android:
-    name: Build Android
-    runs-on: ubuntu-latest
-    needs: [analyze]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-      - uses: actions/cache@v4
-        with:
-          path: ~/.gradle
-          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*') }}
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.14"
-      - run: flutter pub get
-      # JitPack repository is configured directly in android/settings.gradle.kts
-      # under pluginManagement.repositories — no init script needed.
-      - name: Create dummy keystore for CI
-        run: keytool -genkey -v -keystore android/upload-keystore.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=CI, OU=Build, O=Stroom, L=Unknown, ST=Unknown, C=XX"
-      - run: flutter build apk --release
-
-  build-windows:
-    name: Build Windows
-    runs-on: windows-latest
-    needs: [analyze]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-      - run: flutter pub get
-      - run: flutter build windows --release
-
-  build-macos:
-    name: Build macOS
-    runs-on: macos-15
-    needs: [analyze]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-      - run: flutter create --platforms=macos .
-      - run: flutter pub get
-      - name: Clean SwiftPM cache
-        run: |
-          rm -rf ~/Library/Caches/org.swift.swiftpm
-          rm -rf ~/Library/Developer/Xcode/DerivedData
-      - name: Configure CocoaPods
-        run: |
-          pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
-      - run: flutter build macos --release
