@@ -44,7 +44,8 @@ Dio mockDioSuccess(dynamic data) {
 
 /// Create a mock Dio that returns the given [body] at [statusCode].
 Dio mockDioStatus(String body, int statusCode) {
-  return Dio()..interceptors.add(SuccessInterceptor(body, statusCode: statusCode));
+  return Dio()
+    ..interceptors.add(SuccessInterceptor(body, statusCode: statusCode));
 }
 
 /// Create a mock Dio that returns a successful response after [delay].
@@ -85,7 +86,8 @@ Dio mockDioHttpError({
 }
 
 /// Create a mock Dio that throws a connection timeout error.
-Dio mockDioConnectionError({String path = 'http://example.com/chat/completions'}) {
+Dio mockDioConnectionError(
+    {String path = 'http://example.com/chat/completions'}) {
   final exception = DioException(
     type: DioExceptionType.connectionTimeout,
     requestOptions: RequestOptions(path: path),
