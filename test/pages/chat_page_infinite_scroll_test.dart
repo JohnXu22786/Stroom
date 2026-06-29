@@ -53,8 +53,8 @@ Widget createChatTestAppWithMessages({
       conversationsProvider.overrideWith((ref) {
         return ConversationsNotifier(ref);
       }),
-      activeConversationIdProvider.overrideWith(
-          (ref) => conversationId ?? 'test-conv-id'),
+      activeConversationIdProvider
+          .overrideWith((ref) => conversationId ?? 'test-conv-id'),
       providerEntriesProvider.overrideWith((ref) {
         return ProviderEntriesNotifier();
       }),
@@ -70,7 +70,9 @@ void main() {
     // ====== UNIT TESTS: Pagination Logic ======
 
     group('Pagination state calculation', () {
-      test('initial load with more than pageSize messages loads only the last page', () {
+      test(
+          'initial load with more than pageSize messages loads only the last page',
+          () {
         const pageSize = 20;
         final allMessages = createTestMessages(100);
         final totalCount = allMessages.length;
@@ -111,7 +113,8 @@ void main() {
         expect(loadedStartIndex > 0, true); // hasMore = true
 
         // Load more: get messages from index 60 to 79
-        final newStart = (loadedStartIndex - pageSize).clamp(0, allMessages.length);
+        final newStart =
+            (loadedStartIndex - pageSize).clamp(0, allMessages.length);
         final batch = allMessages.sublist(newStart, loadedStartIndex);
         loadedStartIndex = newStart;
 
@@ -129,7 +132,8 @@ void main() {
         int loadedStartIndex = 5;
 
         // Load more 1: get messages from index 0 to 4
-        final newStart = (loadedStartIndex - pageSize).clamp(0, allMessages.length);
+        final newStart =
+            (loadedStartIndex - pageSize).clamp(0, allMessages.length);
         final batch = allMessages.sublist(newStart, loadedStartIndex);
         loadedStartIndex = newStart;
 
@@ -161,7 +165,8 @@ void main() {
         final steps = <int>[];
 
         while (loadedStartIndex > 0) {
-          final newStart = (loadedStartIndex - pageSize).clamp(0, allMessages.length);
+          final newStart =
+              (loadedStartIndex - pageSize).clamp(0, allMessages.length);
           final batch = allMessages.sublist(newStart, loadedStartIndex);
           loadedStartIndex = newStart;
           steps.add(batch.length);
@@ -180,7 +185,8 @@ void main() {
         final allMessages = createTestMessages(30);
         const pageSize = 20;
 
-        final loadedStartIndex = (allMessages.length - pageSize).clamp(0, allMessages.length);
+        final loadedStartIndex =
+            (allMessages.length - pageSize).clamp(0, allMessages.length);
         final initialBatch = allMessages.sublist(loadedStartIndex);
 
         // Verify chronological order (oldest first = index 0)
@@ -193,23 +199,30 @@ void main() {
         }
       });
 
-      test('prepended batch maintains chronological order when inserted at position 0', () {
+      test(
+          'prepended batch maintains chronological order when inserted at position 0',
+          () {
         const pageSize = 20;
         final allMessages = createTestMessages(60);
         int loadedStartIndex = 40; // initially loaded [40..59]
 
         // First load more: get [20..39] to prepend
-        int newStart = (loadedStartIndex - pageSize).clamp(0, allMessages.length);
+        int newStart =
+            (loadedStartIndex - pageSize).clamp(0, allMessages.length);
         final batch1 = allMessages.sublist(newStart, loadedStartIndex);
 
         // After prepending at index 0, the order should be:
         // [20..39, 40..59] → all in chronological order
-        final afterLoad1 = [...batch1, ...allMessages.sublist(loadedStartIndex)];
+        final afterLoad1 = [
+          ...batch1,
+          ...allMessages.sublist(loadedStartIndex)
+        ];
         for (var i = 1; i < afterLoad1.length; i++) {
           expect(
             afterLoad1[i].createdAt.isAfter(afterLoad1[i - 1].createdAt),
             true,
-            reason: 'After prepend, messages should maintain chronological order',
+            reason:
+                'After prepend, messages should maintain chronological order',
           );
         }
 
@@ -224,7 +237,8 @@ void main() {
           expect(
             afterLoad2[i].createdAt.isAfter(afterLoad2[i - 1].createdAt),
             true,
-            reason: 'After second prepend, messages should maintain chronological order',
+            reason:
+                'After second prepend, messages should maintain chronological order',
           );
         }
       });
@@ -250,12 +264,13 @@ void main() {
 
       testWidgets('renders without crash with many messages', (tester) async {
         await pumpChatPageWithMessages(tester, messageCount: 25);
-        
+
         // Should render the chat page without crashing
         expect(find.byType(ChatPage), findsOneWidget);
       });
 
-      testWidgets('test app creates conversation with messages', (tester) async {
+      testWidgets('test app creates conversation with messages',
+          (tester) async {
         SharedPreferences.setMockInitialValues({});
         final messages = createTestMessages(10);
         await tester.pumpWidget(createChatTestAppWithMessages(
@@ -264,26 +279,27 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 50));
         tester.takeException();
-        
+
         // Page renders
         expect(find.byType(ChatPage), findsOneWidget);
       });
 
       testWidgets('empty conversation renders without crash', (tester) async {
         await pumpChatPageWithMessages(tester, messageCount: 0);
-        
+
         // Should render without crash
         expect(find.byType(ChatPage), findsOneWidget);
       });
 
-      testWidgets('custom chatAnimatedListBuilder is used by Chat widget', (tester) async {
+      testWidgets('custom chatAnimatedListBuilder is used by Chat widget',
+          (tester) async {
         // This tests that the Chat widget receives a custom chatAnimatedListBuilder.
         // The builder creates a ChatAnimatedList with onEndReached callback.
         await pumpChatPageWithMessages(tester, messageCount: 5);
-        
+
         // Verify the chat page renders
         expect(find.byType(ChatPage), findsOneWidget);
-        
+
         // The Chat widget should exist
         expect(find.byType(Chat), findsOneWidget);
       });

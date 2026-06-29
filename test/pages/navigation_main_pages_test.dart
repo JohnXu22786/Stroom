@@ -57,7 +57,8 @@ void main() {
   });
 
   group('Main page navigation (4 buttons, state preservation)', () {
-    testWidgets('renders four nav destinations on mobile, no plus button', (tester) async {
+    testWidgets('renders four nav destinations on mobile, no plus button',
+        (tester) async {
       // Use mobile width so bottom nav bar is shown
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
       await tester.pumpAndSettle();
@@ -103,8 +104,7 @@ void main() {
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
     });
 
-    testWidgets('horizontal swipe does NOT change main page',
-        (tester) async {
+    testWidgets('horizontal swipe does NOT change main page', (tester) async {
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
       await tester.pumpAndSettle();
 
@@ -144,8 +144,7 @@ void main() {
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
     });
 
-    testWidgets('back from Files page returns to Home',
-        (tester) async {
+    testWidgets('back from Files page returns to Home', (tester) async {
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
       await tester.pumpAndSettle();
 
@@ -163,8 +162,7 @@ void main() {
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
     });
 
-    testWidgets('back from Settings page returns to Home',
-        (tester) async {
+    testWidgets('back from Settings page returns to Home', (tester) async {
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
       await tester.pumpAndSettle();
 
@@ -243,7 +241,8 @@ void main() {
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
     });
 
-    testWidgets('double-tap Chat tab stays on assistant selection (already at home)',
+    testWidgets(
+        'double-tap Chat tab stays on assistant selection (already at home)',
         (tester) async {
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
       await tester.pumpAndSettle();

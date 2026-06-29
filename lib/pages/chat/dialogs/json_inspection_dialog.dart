@@ -26,8 +26,8 @@ void showJsonInspectionDialog({
                   children: [
                     const Text(
                       'JSON 审查',
-                      style: TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w600),
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                     const Spacer(),
                     IconButton(

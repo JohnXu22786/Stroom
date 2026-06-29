@@ -183,8 +183,8 @@ class ImageGridItem extends StatelessWidget {
                       ),
                       child: Text(
                         '${index + 1}',
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 11),
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 11),
                       ),
                     ),
                   ),

@@ -224,10 +224,11 @@ class McpServerConfig {
       transportType: McpTransportType.stdio,
       command: command,
       args: args,
-      env: env ?? <String, String>{
-        // 确保 PATH 环境变量传递给子进程
-        'PATH': _defaultPath(),
-      },
+      env: env ??
+          <String, String>{
+            // 确保 PATH 环境变量传递给子进程
+            'PATH': _defaultPath(),
+          },
       isVendor: isVendor,
     );
   }

@@ -57,7 +57,8 @@ void main() {
         expect(find.text('重试'), findsOneWidget);
       });
 
-      testWidgets('calls onEdit when确认 tapped for user message', (tester) async {
+      testWidgets('calls onEdit when确认 tapped for user message',
+          (tester) async {
         bool confirmed = false;
         await tester.pumpWidget(
           MaterialApp(

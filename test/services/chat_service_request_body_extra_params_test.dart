@@ -75,7 +75,8 @@ void main() {
       provider = _RequestCaptureProvider();
     });
 
-    test('sendStream _lastRequestBody includes extraParams (top_p, reasoning, etc.)',
+    test(
+        'sendStream _lastRequestBody includes extraParams (top_p, reasoning, etc.)',
         () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',
@@ -92,9 +93,11 @@ void main() {
           'maxTokens': 4096,
         },
         customParams: [
-          CustomParam(paramName: 'style', defaultValue: 'cheerful', type: 'string'),
+          CustomParam(
+              paramName: 'style', defaultValue: 'cheerful', type: 'string'),
           CustomParam(paramName: 'speed', defaultValue: '1.5', type: 'number'),
-          CustomParam(paramName: 'enhanced', defaultValue: 'true', type: 'boolean'),
+          CustomParam(
+              paramName: 'enhanced', defaultValue: 'true', type: 'boolean'),
         ],
         reasoningParams: [
           ReasoningParam(
@@ -154,8 +157,7 @@ void main() {
       expect((lastBody['thinking'] as Map)['budget'], equals('high'));
     });
 
-    test('sendStreamWithTools _lastRequestBody includes extraParams',
-        () async {
+    test('sendStreamWithTools _lastRequestBody includes extraParams', () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
@@ -204,7 +206,8 @@ void main() {
       expect(lastBody['reasoning_effort'], equals('high'));
     });
 
-    test('sendStream _lastRequestBody includes no extra params when reasoning is off',
+    test(
+        'sendStream _lastRequestBody includes no extra params when reasoning is off',
         () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',
@@ -245,8 +248,10 @@ void main() {
         typeConfig: {'context': 4096},
         customParams: [
           CustomParam(paramName: 'count', defaultValue: '42', type: 'number'),
-          CustomParam(paramName: 'active', defaultValue: 'true', type: 'boolean'),
-          CustomParam(paramName: 'style', defaultValue: 'happy', type: 'string'),
+          CustomParam(
+              paramName: 'active', defaultValue: 'true', type: 'boolean'),
+          CustomParam(
+              paramName: 'style', defaultValue: 'happy', type: 'string'),
         ],
       );
 
@@ -273,7 +278,10 @@ void main() {
         name: 'Test',
         typeConfig: {'context': 4096},
         customParams: [
-          CustomParam(paramName: 'config', defaultValue: '{"key": "value"}', type: 'json'),
+          CustomParam(
+              paramName: 'config',
+              defaultValue: '{"key": "value"}',
+              type: 'json'),
         ],
       );
 
@@ -292,7 +300,8 @@ void main() {
       expect((lastBody['config'] as Map)['key'], equals('value'));
     });
 
-    test('sendStream _lastRequestBody includes reasoning param with type: number',
+    test(
+        'sendStream _lastRequestBody includes reasoning param with type: number',
         () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',

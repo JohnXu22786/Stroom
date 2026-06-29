@@ -105,12 +105,13 @@ void main() {
       expect(provider.capturedExtraParams!['top_p'], closeTo(0.95, 0.001));
       expect(provider.capturedExtraParams!['frequency_penalty'],
           closeTo(0.2, 0.001));
-      expect(
-          provider.capturedExtraParams!['presence_penalty'], closeTo(0.1, 0.001));
+      expect(provider.capturedExtraParams!['presence_penalty'],
+          closeTo(0.1, 0.001));
       expect(provider.capturedExtraParams!['seed'], equals(12345));
     });
 
-    test('assistant settings override model temperature when enabled', () async {
+    test('assistant settings override model temperature when enabled',
+        () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
@@ -393,7 +394,8 @@ void main() {
       expect(provider.capturedExtraParams!['top_p'], closeTo(0.9, 0.001));
       expect(provider.capturedExtraParams!['frequency_penalty'],
           closeTo(0.1, 0.001));
-      expect(provider.capturedExtraParams!['presence_penalty'], closeTo(0.0, 0.001));
+      expect(provider.capturedExtraParams!['presence_penalty'],
+          closeTo(0.0, 0.001));
       expect(provider.capturedExtraParams!['seed'], equals(42));
     });
 
@@ -488,8 +490,7 @@ void main() {
       expect(provider.capturedMaxTokens, equals(8192));
     });
 
-    test('assistant frequencyPenalty disabled does NOT override',
-        () async {
+    test('assistant frequencyPenalty disabled does NOT override', () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
@@ -515,8 +516,7 @@ void main() {
           closeTo(0.2, 0.001));
     });
 
-    test('assistant presencePenalty disabled does NOT override',
-        () async {
+    test('assistant presencePenalty disabled does NOT override', () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
@@ -542,8 +542,7 @@ void main() {
           closeTo(0.1, 0.001));
     });
 
-    test('assistant seed disabled does NOT override model seed',
-        () async {
+    test('assistant seed disabled does NOT override model seed', () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
@@ -568,8 +567,7 @@ void main() {
       expect(provider.capturedExtraParams!['seed'], equals(99999));
     });
 
-    test('assistant topP added when model has no topP in typeConfig',
-        () async {
+    test('assistant topP added when model has no topP in typeConfig', () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
@@ -595,8 +593,7 @@ void main() {
       expect(provider.capturedExtraParams!['top_p'], closeTo(0.3, 0.001));
     });
 
-    test('assistant enableSeed with null seed does not add seed',
-        () async {
+    test('assistant enableSeed with null seed does not add seed', () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',

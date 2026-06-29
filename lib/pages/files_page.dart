@@ -67,13 +67,15 @@ class _FilesPageState extends ConsumerState<FilesPage>
               children: tabOrder.map((i) {
                 switch (i) {
                   case 0:
-                    return TextStoragePage(key: ValueKey('text_storage_$refreshSignal'));
+                    return TextStoragePage(
+                        key: ValueKey('text_storage_$refreshSignal'));
                   case 1:
                     return TtsPage(key: ValueKey('tts_$refreshSignal'));
                   case 2:
                     return GalleryPage(key: ValueKey('gallery_$refreshSignal'));
                   case 3:
-                    return VideoGalleryPage(key: ValueKey('video_gallery_$refreshSignal'));
+                    return VideoGalleryPage(
+                        key: ValueKey('video_gallery_$refreshSignal'));
                   default:
                     return const SizedBox.shrink();
                 }

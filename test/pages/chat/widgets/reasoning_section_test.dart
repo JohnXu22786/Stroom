@@ -38,7 +38,8 @@ void main() {
       expect(find.text('Test reasoning content'), findsNothing);
     });
 
-    testWidgets('shows reasoning in progress label when streaming', (tester) async {
+    testWidgets('shows reasoning in progress label when streaming',
+        (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -92,10 +93,8 @@ void main() {
       );
 
       // Should show one "推理过程" for the first section and one "推理中" for the last
-      expect(find.text('推理过程'), findsOneWidget,
-          reason: '第一个已完成的推理应显示"推理过程"');
-      expect(find.text('推理中'), findsOneWidget,
-          reason: '第二个正在进行的推理应显示"推理中"');
+      expect(find.text('推理过程'), findsOneWidget, reason: '第一个已完成的推理应显示"推理过程"');
+      expect(find.text('推理中'), findsOneWidget, reason: '第二个正在进行的推理应显示"推理中"');
     });
 
     testWidgets('multiple reasoning buttons with index labels', (
@@ -123,10 +122,8 @@ void main() {
       );
 
       // Should show "推理 1 推理过程" and "推理 2 推理过程"
-      expect(find.text('推理 1'), findsOneWidget,
-          reason: '多推理时应显示序号');
-      expect(find.text('推理 2'), findsOneWidget,
-          reason: '多推理时应显示序号');
+      expect(find.text('推理 1'), findsOneWidget, reason: '多推理时应显示序号');
+      expect(find.text('推理 2'), findsOneWidget, reason: '多推理时应显示序号');
     });
 
     testWidgets('tapping reasoning button opens a dialog', (
@@ -159,8 +156,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
 
       // Dialog should be shown
-      expect(find.byType(Dialog), findsOneWidget,
-          reason: '点击推理按钮应弹出对话框');
+      expect(find.byType(Dialog), findsOneWidget, reason: '点击推理按钮应弹出对话框');
 
       // Dismiss the dialog to avoid pending timer issues
       // Use Navigator.pop via the tester's route mechanism

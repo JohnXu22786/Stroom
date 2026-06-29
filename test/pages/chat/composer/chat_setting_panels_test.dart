@@ -338,8 +338,7 @@ void main() {
   });
 
   group('ReasoningPanel tests (old API - with effort)', () {
-    testWidgets('reasoning panel shows toggle and params',
-        (tester) async {
+    testWidgets('reasoning panel shows toggle and params', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(

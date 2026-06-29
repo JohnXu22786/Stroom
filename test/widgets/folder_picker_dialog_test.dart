@@ -50,8 +50,7 @@ void main() {
       expect(hintFinder, findsOneWidget);
     });
 
-    testWidgets('shows only root-level folders at top level',
-        (tester) async {
+    testWidgets('shows only root-level folders at top level', (tester) async {
       await tester.pumpWidget(_buildTestApp(
         Builder(builder: (context) {
           return ElevatedButton(
@@ -335,7 +334,8 @@ void main() {
       expect(result, 'photos/work');
     });
 
-    testWidgets('hint text is small gray text below title with no border/background',
+    testWidgets(
+        'hint text is small gray text below title with no border/background',
         (tester) async {
       await tester.pumpWidget(_buildTestApp(
         Builder(builder: (context) {

@@ -4,7 +4,8 @@ import 'package:stroom/utils/data_sanitizer.dart';
 void main() {
   group('DataSanitizer.sanitizeBase64String', () {
     test('data URI image with base64 is hidden with placeholder', () {
-      const longBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk'
+      const longBase64 =
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk'
           'uP1fPQAIaAMONeFfTAAAAABJRU5ErkJggg==';
       final dataUri = 'data:image/png;base64,$longBase64';
       final result = DataSanitizer.sanitizeBase64String(dataUri);
@@ -83,12 +84,15 @@ void main() {
       expect(result, contains('[base64 data:'));
     });
 
-    test('non-image data URI (application/pdf) is not hidden by image regex but returns without freeze', () {
+    test(
+        'non-image data URI (application/pdf) is not hidden by image regex but returns without freeze',
+        () {
       // Non-image data URIs don't match the ^data:image/... regex.
       // The pure base64 check also won't match because the prefix
       // 'data:application/pdf;base64,' contains non-base64 characters.
       // Important: the function returns the string as-is (no freeze/crash).
-      final longB64 = 'aGVsbG8gd29ybGQgaGVsbG8gd29ybGQ=' * 20;  // >300 chars base64
+      final longB64 =
+          'aGVsbG8gd29ybGQgaGVsbG8gd29ybGQ=' * 20; // >300 chars base64
       final dataUri = 'data:application/pdf;base64,$longB64';
       final result = DataSanitizer.sanitizeBase64String(dataUri);
       // The prefix is preserved; the full string is returned (not hidden)
@@ -100,21 +104,32 @@ void main() {
       // Some base64 encoders insert newlines every 76 characters.
       // Need total >= 300 chars of base64 content (excluding newlines).
       // 76*4 = 304 + 3 newlines = 307 total
-      final b64WithNewlines = ('A' * 76) + '\n' + ('B' * 76) + '\n' + ('C' * 76) +
-          '\n' + ('D' * 76);
+      final b64WithNewlines = ('A' * 76) +
+          '\n' +
+          ('B' * 76) +
+          '\n' +
+          ('C' * 76) +
+          '\n' +
+          ('D' * 76);
       final result = DataSanitizer.sanitizeBase64String(b64WithNewlines);
       expect(result, '[base64 data: 307 bytes hidden]');
     });
 
     test('multi-line base64 with embedded carriage returns is detected', () {
       // 76*4 = 304 + 3*\r\n = 310 total chars, >= 300 threshold
-      final b64WithCR = ('X' * 76) + '\r\n' + ('Y' * 76) + '\r\n' +
-          ('Z' * 76) + '\r\n' + ('W' * 76);
+      final b64WithCR = ('X' * 76) +
+          '\r\n' +
+          ('Y' * 76) +
+          '\r\n' +
+          ('Z' * 76) +
+          '\r\n' +
+          ('W' * 76);
       final result = DataSanitizer.sanitizeBase64String(b64WithCR);
       expect(result, '[base64 data: 310 bytes hidden]');
     });
 
-    test('large pure-base64 string does not cause full-string regex freeze', () {
+    test('large pure-base64 string does not cause full-string regex freeze',
+        () {
       // Create a 1MB base64 string - the regex should only check first 100 chars
       final largeB64 = 'A' * 1000000;
       final result = DataSanitizer.sanitizeBase64String(largeB64);

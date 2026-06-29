@@ -39,11 +39,13 @@ void main() {
 
   group('ChatService.parseReasoningValue', () {
     test('string type returns the value as-is', () {
-      expect(ChatService.parseReasoningValue('hello', 'string'), equals('hello'));
+      expect(
+          ChatService.parseReasoningValue('hello', 'string'), equals('hello'));
     });
 
     test('number type parses decimal string to double', () {
-      expect(ChatService.parseReasoningValue('3.14', 'number'), closeTo(3.14, 0.001));
+      expect(ChatService.parseReasoningValue('3.14', 'number'),
+          closeTo(3.14, 0.001));
     });
 
     test('number type parses integer string to double', () {
@@ -78,11 +80,13 @@ void main() {
     });
 
     test('json type returns raw string for invalid JSON', () {
-      expect(ChatService.parseReasoningValue('not-json', 'json'), equals('not-json'));
+      expect(ChatService.parseReasoningValue('not-json', 'json'),
+          equals('not-json'));
     });
 
     test('default type (string) returns value as-is', () {
-      expect(ChatService.parseReasoningValue('anything', 'unknown_type'), equals('anything'));
+      expect(ChatService.parseReasoningValue('anything', 'unknown_type'),
+          equals('anything'));
     });
   });
 }

@@ -140,8 +140,7 @@ class ImageManifest {
       _ops.writeFile(fileName, data);
   static Future<Uint8List?> readFile(String fileName) =>
       _ops.readFile(fileName);
-  static Future<bool> deleteFile(String fileName) =>
-      _ops.deleteFile(fileName);
+  static Future<bool> deleteFile(String fileName) => _ops.deleteFile(fileName);
   static Future<String?> readFilePath(String fileName) =>
       _ops.readFilePath(fileName);
 

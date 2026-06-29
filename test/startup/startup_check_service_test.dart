@@ -18,7 +18,8 @@ void main() {
   group('StartupCheckService - format version check', () {
     test('returns needsMigration=false when version matches', () async {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('data_format_version', DataMigrationService.currentFormatVersion);
+      await prefs.setInt(
+          'data_format_version', DataMigrationService.currentFormatVersion);
 
       final result = await StartupCheckService.checkFormatVersion();
       expect(result.needsMigration, isFalse);
@@ -43,14 +44,16 @@ void main() {
     test('validates provider_entries JSON structure', () async {
       final prefs = await SharedPreferences.getInstance();
       // Valid provider_entries
-      await prefs.setString('provider_entries', jsonEncode([
-        {
-          'id': 'test_id',
-          'type': 'llm',
-          'name': 'Test Provider',
-          'configs': [],
-        }
-      ]));
+      await prefs.setString(
+          'provider_entries',
+          jsonEncode([
+            {
+              'id': 'test_id',
+              'type': 'llm',
+              'name': 'Test Provider',
+              'configs': [],
+            }
+          ]));
       await prefs.setInt('data_format_version', 1);
 
       final issues = await StartupCheckService.validateDataFormats();
@@ -76,14 +79,16 @@ void main() {
 
     test('detects provider_entries with null IDs', () async {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('provider_entries', jsonEncode([
-        {
-          'id': null,
-          'type': 'tts',
-          'name': 'Broken Provider',
-          'configs': [],
-        }
-      ]));
+      await prefs.setString(
+          'provider_entries',
+          jsonEncode([
+            {
+              'id': null,
+              'type': 'tts',
+              'name': 'Broken Provider',
+              'configs': [],
+            }
+          ]));
       await prefs.setInt('data_format_version', 1);
 
       final issues = await StartupCheckService.validateDataFormats();
@@ -96,14 +101,16 @@ void main() {
     test('validates conversation data structure', () async {
       final prefs = await SharedPreferences.getInstance();
       // Valid conversations
-      await prefs.setString('conversations', jsonEncode([
-        {
-          'id': 'conv1',
-          'title': 'Test',
-          'messages': [],
-          'createdAt': DateTime.now().toIso8601String(),
-        }
-      ]));
+      await prefs.setString(
+          'conversations',
+          jsonEncode([
+            {
+              'id': 'conv1',
+              'title': 'Test',
+              'messages': [],
+              'createdAt': DateTime.now().toIso8601String(),
+            }
+          ]));
       await prefs.setInt('data_format_version', 1);
 
       final issues = await StartupCheckService.validateDataFormats();
@@ -130,14 +137,16 @@ void main() {
     test('detects orphaned provider entries with missing type registration',
         () async {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('provider_entries', jsonEncode([
-        {
-          'id': 'unknown_provider',
-          'type': 'nonexistent_type',
-          'name': 'Unknown',
-          'configs': [],
-        }
-      ]));
+      await prefs.setString(
+          'provider_entries',
+          jsonEncode([
+            {
+              'id': 'unknown_provider',
+              'type': 'nonexistent_type',
+              'name': 'Unknown',
+              'configs': [],
+            }
+          ]));
       await prefs.setInt('data_format_version', 1);
 
       final issues = await StartupCheckService.checkDataIntegrity();
@@ -151,14 +160,16 @@ void main() {
   group('StartupCheckService - checkFormatVersion tests', () {
     test('runs format version check and returns result', () async {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('provider_entries', jsonEncode([
-        {
-          'id': 'test_llm',
-          'type': 'llm',
-          'name': 'Test',
-          'configs': [],
-        }
-      ]));
+      await prefs.setString(
+          'provider_entries',
+          jsonEncode([
+            {
+              'id': 'test_llm',
+              'type': 'llm',
+              'name': 'Test',
+              'configs': [],
+            }
+          ]));
       await prefs.setString('conversations', '[]');
 
       final result = await StartupCheckService.checkFormatVersion();
@@ -176,18 +187,23 @@ void main() {
   });
 
   group('StartupCheckService - conversation crash recovery', () {
-    test('recovers from conversations_bak when conversations is corrupted', () async {
+    test('recovers from conversations_bak when conversations is corrupted',
+        () async {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('conversations', '{corrupted');
-      await prefs.setString('conversations_bak', jsonEncode([
-        {'id': 'conv1', 'messages': [], 'title': 'Saved'},
-      ]));
+      await prefs.setString(
+          'conversations_bak',
+          jsonEncode([
+            {'id': 'conv1', 'messages': [], 'title': 'Saved'},
+          ]));
       await prefs.setInt('data_format_version', 1);
 
       // After validateDataFormats, recovery should be possible
       final issues = await StartupCheckService.validateDataFormats();
       expect(
-        issues.any((i) => i.message.contains('conversations') && i.severity == StartupIssueSeverity.error),
+        issues.any((i) =>
+            i.message.contains('conversations') &&
+            i.severity == StartupIssueSeverity.error),
         isTrue,
       );
 
@@ -205,23 +221,30 @@ void main() {
 
     test('does nothing when no crash data exists', () async {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('conversations', jsonEncode([
-        {'id': 'conv1', 'messages': []},
-      ]));
+      await prefs.setString(
+          'conversations',
+          jsonEncode([
+            {'id': 'conv1', 'messages': []},
+          ]));
       await prefs.setInt('data_format_version', 1);
 
       final recovered = await StartupCheckService.recoverCrashData();
       expect(recovered, isFalse);
     });
 
-    test('cleans up stale conversations_bak when conversations is valid', () async {
+    test('cleans up stale conversations_bak when conversations is valid',
+        () async {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('conversations', jsonEncode([
-        {'id': 'conv1', 'messages': []},
-      ]));
-      await prefs.setString('conversations_bak', jsonEncode([
-        {'id': 'conv2', 'messages': []},
-      ]));
+      await prefs.setString(
+          'conversations',
+          jsonEncode([
+            {'id': 'conv1', 'messages': []},
+          ]));
+      await prefs.setString(
+          'conversations_bak',
+          jsonEncode([
+            {'id': 'conv2', 'messages': []},
+          ]));
       await prefs.setInt('data_format_version', 1);
 
       // Should clean up the stale bak

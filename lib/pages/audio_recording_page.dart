@@ -16,8 +16,7 @@ class AudioRecordingPage extends ConsumerStatefulWidget {
   const AudioRecordingPage({super.key});
 
   @override
-  ConsumerState<AudioRecordingPage> createState() =>
-      _AudioRecordingPageState();
+  ConsumerState<AudioRecordingPage> createState() => _AudioRecordingPageState();
 }
 
 class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
@@ -241,8 +240,7 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
       await FileManifest.writeFile('$hash.$format', bytes);
 
       final now = DateTime.now();
-      final defaultName =
-          '录音_${now.month}${now.day}_${now.hour}${now.minute}';
+      final defaultName = '录音_${now.month}${now.day}_${now.hour}${now.minute}';
 
       await FileManifest.addRecord(AudioRecord(
         name: defaultName,
@@ -345,15 +343,16 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
                 child: Center(
                   child: _isRecording
                       ? const Icon(Icons.mic, size: 48, color: Colors.red)
-                      : Icon(Icons.mic_none,
-                          size: 48, color: Colors.grey[400]),
+                      : Icon(Icons.mic_none, size: 48, color: Colors.grey[400]),
                 ),
               ),
               const SizedBox(height: 24),
 
               // 录音时长显示
               Text(
-                _isRecording ? _formatDuration(_recordDurationSeconds) : '00:00',
+                _isRecording
+                    ? _formatDuration(_recordDurationSeconds)
+                    : '00:00',
                 style: const TextStyle(
                   fontSize: 48,
                   fontWeight: FontWeight.w200,

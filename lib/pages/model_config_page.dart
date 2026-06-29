@@ -18,7 +18,8 @@ class ModelConfigPage extends ConsumerStatefulWidget {
   final String entryId;
   final int configIndex;
   final int modelIndex; // -1 for new model
-  final ModelConfig? initialModel; // for editing pending models (configIndex == -1)
+  final ModelConfig?
+      initialModel; // for editing pending models (configIndex == -1)
 
   const ModelConfigPage({
     super.key,
@@ -1169,16 +1170,14 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                       label: '是',
                       value: true,
                       currentValue: _supportInstruction,
-                      onChanged: (v) =>
-                          setState(() => _supportInstruction = v),
+                      onChanged: (v) => setState(() => _supportInstruction = v),
                     ),
                     const SizedBox(width: 8),
                     ToggleButton(
                       label: '否',
                       value: false,
                       currentValue: _supportInstruction,
-                      onChanged: (v) =>
-                          setState(() => _supportInstruction = v),
+                      onChanged: (v) => setState(() => _supportInstruction = v),
                     ),
                   ],
                 ),

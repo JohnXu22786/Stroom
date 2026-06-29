@@ -143,7 +143,8 @@ void main() {
       expect(models[3].modelIndex, equals(1));
     });
 
-    test('configure resets adapter to (0,0) after selectModel - '
+    test(
+        'configure resets adapter to (0,0) after selectModel - '
         'this reproduces the bug: configure destroys saved selection', () {
       // Given: user selects model at config 1, model 0 (Claude 3)
       adapter.configure(entriesState);
@@ -178,7 +179,8 @@ void main() {
       },
     );
 
-    test('reasoningParams returns params from currently selected model, '
+    test(
+        'reasoningParams returns params from currently selected model, '
         'not from model 0 when configure reset it', () {
       // Given: user selected Claude 3 (config 1, model 0)
       adapter.configure(entriesState);
@@ -288,7 +290,8 @@ void main() {
         },
       );
 
-      test('model display name at display index 0 identifies the correct model '
+      test(
+          'model display name at display index 0 identifies the correct model '
           'when display order differs from flat order', () {
         // Simulate a reordered display list (user drag-reordered models):
         final displayNames = [
@@ -316,7 +319,8 @@ void main() {
         expect(models[flatIdx].modelIndex, equals(0));
       });
 
-      test('selectModel with configIndex/modelIndex works regardless of '
+      test(
+          'selectModel with configIndex/modelIndex works regardless of '
           'display order', () {
         adapter.configure(entriesState);
 
@@ -327,7 +331,8 @@ void main() {
         expect(adapter.reasoningParams[0].paramName, equals('thinking'));
       });
 
-      test('BUG REPRO: using saved display index on flat models list '
+      test(
+          'BUG REPRO: using saved display index on flat models list '
           'picks wrong model when display order != flat order', () {
         adapter.configure(entriesState);
 
@@ -388,7 +393,8 @@ void main() {
         },
       );
 
-      test('FIX: reasoning params match adapter model after correct restore', () {
+      test('FIX: reasoning params match adapter model after correct restore',
+          () {
         // Full fix simulation:
         // 1. configure resets adapter to (0,0) - GPT-4o
         // 2. Restore should select Claude 3 (display index 0 in reordered list)

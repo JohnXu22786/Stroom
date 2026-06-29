@@ -30,8 +30,7 @@ class _AppAlbumPickerDialog extends ConsumerStatefulWidget {
       _AppAlbumPickerDialogState();
 }
 
-class _AppAlbumPickerDialogState
-    extends ConsumerState<_AppAlbumPickerDialog> {
+class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   List<ImageRecord> _records = [];
   Set<String> _folders = {};
   bool _loading = true;
@@ -136,85 +135,85 @@ class _AppAlbumPickerDialogState
       },
       child: Scaffold(
         backgroundColor: cs.surface,
-      appBar: AppBar(
-        title: const Text('应用内相册'),
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.of(context).pop(null),
-        ),
-        actions: [
-          if (hasSelection)
-            TextButton(
-              key: const Key('album_picker_clear_btn'),
-              onPressed: _clearSelection,
-              child: Text(
-                '清除 (${_selectedItems.length})',
-                style: const TextStyle(color: Colors.red),
-              ),
-            ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Folder path indicator
-          if (!_isRoot)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Row(
-                children: [
-                  Icon(Icons.folder, size: 14,
-                      color: cs.primary.withOpacity(0.7)),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      _currentFolder,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: cs.onSurfaceVariant,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-          // Content
-          Expanded(
-            child: _buildContent(cs),
+        appBar: AppBar(
+          title: const Text('应用内相册'),
+          centerTitle: true,
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(null),
           ),
-
-          // Preview bar
-          if (hasSelection) _buildPreviewBar(cs),
-
-          // Confirm button
-          SafeArea(
-            top: false,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-              decoration: BoxDecoration(
-                color: cs.surface,
-                border: Border(
-                  top: BorderSide(color: cs.outlineVariant, width: 0.5),
+          actions: [
+            if (hasSelection)
+              TextButton(
+                key: const Key('album_picker_clear_btn'),
+                onPressed: _clearSelection,
+                child: Text(
+                  '清除 (${_selectedItems.length})',
+                  style: const TextStyle(color: Colors.red),
                 ),
               ),
-              child: FilledButton.icon(
-                key: const Key('album_picker_confirm_btn'),
-                onPressed: () {
-                  final result = _selectedItems.values.toList();
-                  Navigator.of(context).pop(result);
-                },
-                icon: const Icon(Icons.check, size: 18),
-                label: Text(hasSelection
-                    ? '确定 (${_selectedItems.length})'
-                    : '确定'),
+          ],
+        ),
+        body: Column(
+          children: [
+            // Folder path indicator
+            if (!_isRoot)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Row(
+                  children: [
+                    Icon(Icons.folder,
+                        size: 14, color: cs.primary.withOpacity(0.7)),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        _currentFolder,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // Content
+            Expanded(
+              child: _buildContent(cs),
+            ),
+
+            // Preview bar
+            if (hasSelection) _buildPreviewBar(cs),
+
+            // Confirm button
+            SafeArea(
+              top: false,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                decoration: BoxDecoration(
+                  color: cs.surface,
+                  border: Border(
+                    top: BorderSide(color: cs.outlineVariant, width: 0.5),
+                  ),
+                ),
+                child: FilledButton.icon(
+                  key: const Key('album_picker_confirm_btn'),
+                  onPressed: () {
+                    final result = _selectedItems.values.toList();
+                    Navigator.of(context).pop(result);
+                  },
+                  icon: const Icon(Icons.check, size: 18),
+                  label: Text(
+                      hasSelection ? '确定 (${_selectedItems.length})' : '确定'),
+                ),
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
@@ -246,9 +245,9 @@ class _AppAlbumPickerDialogState
                 color: cs.onSurfaceVariant,
               ),
             ),
-        ],
-      ),
-    );
+          ],
+        ),
+      );
     }
 
     return ListView(
@@ -407,8 +406,8 @@ class _AppAlbumPickerDialogState
                         ],
                         Text(
                           _formatSize(record.size),
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.grey[600]),
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey[600]),
                         ),
                       ],
                     ),

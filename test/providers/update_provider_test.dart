@@ -2,7 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Directory;
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show debugDefaultTargetPlatformOverride, defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/foundation.dart'
+    show
+        debugDefaultTargetPlatformOverride,
+        defaultTargetPlatform,
+        TargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -61,7 +65,8 @@ Dio _createNon200Dio(int statusCode) {
 }
 
 /// Build a GitHub releases API response for the given tag.
-String _githubRelease(String tagName, {String body = '', String? htmlUrl, List<Map<String, String>>? assets}) {
+String _githubRelease(String tagName,
+    {String body = '', String? htmlUrl, List<Map<String, String>>? assets}) {
   htmlUrl ??= 'https://github.com/JohnXu22786/Stroom/releases/tag/$tagName';
   final assetsJson = assets != null
       ? ',\n  "assets": [${assets.map((a) => '{\n      "name": "${a['name']}",\n      "browser_download_url": "${a['browser_download_url']}"\n    }').join(',\n    ')}]'
@@ -79,11 +84,31 @@ String _githubRelease(String tagName, {String body = '', String? htmlUrl, List<M
 List<Map<String, String>> _allPlatformAssets(String tagName) {
   final version = tagName.replaceAll(RegExp(r'^v'), '');
   return [
-    {'name': 'stroom-android-release-v$version.apk', 'browser_download_url': 'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-android-release-v$version.apk'},
-    {'name': 'stroom-windows-x64-release-v$version.zip', 'browser_download_url': 'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-windows-x64-release-v$version.zip'},
-    {'name': 'stroom-macos-arm64-release-v$version.zip', 'browser_download_url': 'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-macos-arm64-release-v$version.zip'},
-    {'name': 'stroom-linux-x64-release-v$version.zip', 'browser_download_url': 'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-linux-x64-release-v$version.zip'},
-    {'name': 'stroom-web-release-v$version.zip', 'browser_download_url': 'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-web-release-v$version.zip'},
+    {
+      'name': 'stroom-android-release-v$version.apk',
+      'browser_download_url':
+          'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-android-release-v$version.apk'
+    },
+    {
+      'name': 'stroom-windows-x64-release-v$version.zip',
+      'browser_download_url':
+          'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-windows-x64-release-v$version.zip'
+    },
+    {
+      'name': 'stroom-macos-arm64-release-v$version.zip',
+      'browser_download_url':
+          'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-macos-arm64-release-v$version.zip'
+    },
+    {
+      'name': 'stroom-linux-x64-release-v$version.zip',
+      'browser_download_url':
+          'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-linux-x64-release-v$version.zip'
+    },
+    {
+      'name': 'stroom-web-release-v$version.zip',
+      'browser_download_url':
+          'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-web-release-v$version.zip'
+    },
   ];
 }
 
@@ -308,7 +333,8 @@ void main() {
 
     test('getPendingUpdate returns saved update data', () async {
       SharedPreferences.setMockInitialValues({
-        'update_available_data': '{"latest_version":"0.2.14","release_notes":"","download_url":"https://github.com/JohnXu22786/Stroom/releases"}',
+        'update_available_data':
+            '{"latest_version":"0.2.14","release_notes":"","download_url":"https://github.com/JohnXu22786/Stroom/releases"}',
       });
       final dio = _createMockDio(_githubRelease('v0.2.14'));
       final notifier = UpdateNotifier(dio: dio);
@@ -362,10 +388,12 @@ void main() {
       expect(pending!['latest_version'], '0.2.14');
     });
 
-    test('downloadUrl is browser_download_url when asset found for platform', () async {
+    test('downloadUrl is browser_download_url when asset found for platform',
+        () async {
       SharedPreferences.setMockInitialValues({});
       final assets = _allPlatformAssets('v0.2.14');
-      final dio = _createMockDio(_githubRelease('v0.2.14', body: 'Bug fixes', assets: assets));
+      final dio = _createMockDio(
+          _githubRelease('v0.2.14', body: 'Bug fixes', assets: assets));
       final notifier = UpdateNotifier(dio: dio);
 
       await notifier.checkForUpdate();
@@ -373,11 +401,13 @@ void main() {
       expect(notifier.state.updateAvailable, true);
       expect(notifier.state.downloadUrl, isNotNull);
       // Should be a direct download URL, not the html_url
-      expect(notifier.state.downloadUrl, contains('github.com/JohnXu22786/Stroom/releases/download'));
+      expect(notifier.state.downloadUrl,
+          contains('github.com/JohnXu22786/Stroom/releases/download'));
       expect(notifier.state.downloadUrl, isNot(contains('releases/tag')));
     });
 
-    test('downloadUrl falls back to html_url when no assets provided', () async {
+    test('downloadUrl falls back to html_url when no assets provided',
+        () async {
       SharedPreferences.setMockInitialValues({});
       final dio = _createMockDio(_githubRelease('v0.2.14'));
       final notifier = UpdateNotifier(dio: dio);
@@ -390,7 +420,8 @@ void main() {
       expect(notifier.state.downloadUrl, contains('releases/tag'));
     });
 
-    test('downloadUrl falls back to html_url when assets list is empty', () async {
+    test('downloadUrl falls back to html_url when assets list is empty',
+        () async {
       SharedPreferences.setMockInitialValues({});
       final dio = _createMockDio(_githubRelease('v0.2.14', assets: []));
       final notifier = UpdateNotifier(dio: dio);
@@ -454,7 +485,8 @@ void main() {
       // Create a real temp directory for download tests
       tempDir = Directory.systemTemp.createTempSync('stroom_test_').path;
       // Save original platform and override to avoid auto-install side effects
-      originalPlatform = debugDefaultTargetPlatformOverride ?? defaultTargetPlatform;
+      originalPlatform =
+          debugDefaultTargetPlatformOverride ?? defaultTargetPlatform;
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     });
 
@@ -474,7 +506,9 @@ void main() {
       expect(notifier.state.isDownloading, false);
     });
 
-    test('downloadUpdate sets isDownloading, completes download, and auto-installs', () async {
+    test(
+        'downloadUpdate sets isDownloading, completes download, and auto-installs',
+        () async {
       dio.interceptors.add(InterceptorsWrapper(
         onRequest: (options, handler) {
           // Simulate download by resolving immediately
@@ -491,7 +525,8 @@ void main() {
       notifier.state = UpdateState(
         updateAvailable: true,
         latestVersion: '0.2.14',
-        downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+        downloadUrl:
+            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
         releaseNotes: '',
       );
 
@@ -506,7 +541,8 @@ void main() {
       // but that is acceptable - the key is download completed
     });
 
-    test('downloadUpdate transitions through download lifecycle states', () async {
+    test('downloadUpdate transitions through download lifecycle states',
+        () async {
       // Use Completer to control when download resolves
       final completer = Completer<Response>();
       dio.interceptors.add(InterceptorsWrapper(
@@ -521,7 +557,8 @@ void main() {
       notifier.state = UpdateState(
         updateAvailable: true,
         latestVersion: '0.2.14',
-        downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+        downloadUrl:
+            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
         releaseNotes: '',
       );
 
@@ -560,7 +597,8 @@ void main() {
       notifier.state = UpdateState(
         updateAvailable: true,
         latestVersion: '0.2.14',
-        downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+        downloadUrl:
+            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
         releaseNotes: '',
       );
 
@@ -587,7 +625,8 @@ void main() {
       notifier.state = UpdateState(
         updateAvailable: true,
         latestVersion: '0.2.14',
-        downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+        downloadUrl:
+            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
         releaseNotes: '',
       );
 
@@ -604,8 +643,10 @@ void main() {
 
     setUp(() {
       SharedPreferences.setMockInitialValues({});
-      tempDir = Directory.systemTemp.createTempSync('stroom_test_install_').path;
-      originalPlatform = debugDefaultTargetPlatformOverride ?? defaultTargetPlatform;
+      tempDir =
+          Directory.systemTemp.createTempSync('stroom_test_install_').path;
+      originalPlatform =
+          debugDefaultTargetPlatformOverride ?? defaultTargetPlatform;
       // Use iOS to avoid Android MethodChannel dependency in unit tests
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     });
@@ -617,7 +658,8 @@ void main() {
       } catch (_) {}
     });
 
-    test('installDownloadedFile does nothing when downloadedFilePath is null', () async {
+    test('installDownloadedFile does nothing when downloadedFilePath is null',
+        () async {
       final notifier = UpdateNotifier(dio: Dio(BaseOptions()));
       notifier.state = UpdateState(
         updateAvailable: true,
@@ -630,7 +672,8 @@ void main() {
       expect(notifier.state.downloadError, isNull);
     });
 
-    test('installDownloadedFile does nothing when downloadedFilePath is empty', () async {
+    test('installDownloadedFile does nothing when downloadedFilePath is empty',
+        () async {
       final notifier = UpdateNotifier(dio: Dio(BaseOptions()));
       notifier.state = UpdateState(
         updateAvailable: true,
@@ -644,7 +687,9 @@ void main() {
       expect(notifier.state.downloadError, isNull);
     });
 
-    test('installDownloadedFile clears previous downloadError before attempting install', () async {
+    test(
+        'installDownloadedFile clears previous downloadError before attempting install',
+        () async {
       final notifier = UpdateNotifier(dio: Dio(BaseOptions()));
       notifier.state = UpdateState(
         updateAvailable: true,

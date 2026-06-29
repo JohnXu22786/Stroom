@@ -396,7 +396,8 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       if (content.isEmpty) return [];
       final list = jsonDecode(content) as List;
       return list
-          .map((m) => SynthesisTask.fromMap(Map<String, dynamic>.from(m as Map)))
+          .map(
+              (m) => SynthesisTask.fromMap(Map<String, dynamic>.from(m as Map)))
           .toList();
     } catch (e) {
       debugPrint('[TaskListNotifier] Failed to load persisted tasks: $e');

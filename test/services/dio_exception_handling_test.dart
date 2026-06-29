@@ -68,10 +68,14 @@ const _asrConfig = AsrConfig(
 
 void main() {
   group('OcrService DioException handling', () {
-    test('DioException with HTTP 400 and JSON error body is wrapped as friendly Exception', () async {
+    test(
+        'DioException with HTTP 400 and JSON error body is wrapped as friendly Exception',
+        () async {
       final dio = _mockDioWithHttpError(
         statusCode: 400,
-        data: {'error': {'message': 'Invalid image format'}},
+        data: {
+          'error': {'message': 'Invalid image format'}
+        },
       );
       final service = OcrService(config: _ocrConfig, dio: dio);
 
@@ -108,7 +112,8 @@ void main() {
       expect(caught.toString(), contains('Internal Server Error'));
     });
 
-    test('DioException with no response (connection error) is wrapped', () async {
+    test('DioException with no response (connection error) is wrapped',
+        () async {
       final dio = _mockDioWithConnectionError();
       final service = OcrService(config: _ocrConfig, dio: dio);
 
@@ -129,7 +134,9 @@ void main() {
     test('DioException on recognizeBatch is also wrapped', () async {
       final dio = _mockDioWithHttpError(
         statusCode: 429,
-        data: {'error': {'message': 'Rate limit exceeded'}},
+        data: {
+          'error': {'message': 'Rate limit exceeded'}
+        },
       );
       final service = OcrService(config: _ocrConfig, dio: dio);
 
@@ -150,7 +157,8 @@ void main() {
       expect(caught.toString(), contains('Rate limit exceeded'));
     });
 
-    test('DioException with Map body (no error key) extracts full body', () async {
+    test('DioException with Map body (no error key) extracts full body',
+        () async {
       final dio = _mockDioWithHttpError(
         statusCode: 422,
         data: {'detail': 'Image too large'},
@@ -170,7 +178,8 @@ void main() {
       expect(caught.toString(), contains('Image too large'));
     });
 
-    test('DioException with null body falls back to exception string', () async {
+    test('DioException with null body falls back to exception string',
+        () async {
       final dio = _mockDioWithHttpError(
         statusCode: 503,
         data: null,
@@ -213,7 +222,9 @@ void main() {
     test('captures diagnostic fields on HTTP error', () async {
       final dio = _mockDioWithHttpError(
         statusCode: 400,
-        data: {'error': {'message': 'Bad request'}},
+        data: {
+          'error': {'message': 'Bad request'}
+        },
       );
       final service = OcrService(config: _ocrConfig, dio: dio);
 
@@ -247,10 +258,14 @@ void main() {
   });
 
   group('AsrService DioException handling', () {
-    test('DioException with HTTP 400 and JSON error body is wrapped as friendly Exception', () async {
+    test(
+        'DioException with HTTP 400 and JSON error body is wrapped as friendly Exception',
+        () async {
       final dio = _mockDioWithHttpError(
         statusCode: 400,
-        data: {'error': {'message': 'Invalid audio format'}},
+        data: {
+          'error': {'message': 'Invalid audio format'}
+        },
       );
       final service = AsrService(config: _asrConfig, dio: dio);
 
@@ -293,7 +308,8 @@ void main() {
       expect(caught.toString(), contains('Internal Server Error'));
     });
 
-    test('DioException with no response (connection error) is wrapped', () async {
+    test('DioException with no response (connection error) is wrapped',
+        () async {
       final dio = _mockDioWithConnectionError();
       final service = AsrService(config: _asrConfig, dio: dio);
 
@@ -314,7 +330,8 @@ void main() {
       expect(caught.toString(), isNot(contains('(HTTP')));
     });
 
-    test('DioException with Map body (no error key) extracts full body', () async {
+    test('DioException with Map body (no error key) extracts full body',
+        () async {
       final dio = _mockDioWithHttpError(
         statusCode: 413,
         data: {'detail': 'Audio file too large'},
@@ -337,7 +354,8 @@ void main() {
       expect(caught.toString(), contains('Audio file too large'));
     });
 
-    test('DioException with null body falls back to exception string', () async {
+    test('DioException with null body falls back to exception string',
+        () async {
       final dio = _mockDioWithHttpError(
         statusCode: 504,
         data: null,
@@ -386,7 +404,9 @@ void main() {
     test('captures diagnostic fields on HTTP error', () async {
       final dio = _mockDioWithHttpError(
         statusCode: 400,
-        data: {'error': {'message': 'Bad request'}},
+        data: {
+          'error': {'message': 'Bad request'}
+        },
       );
       final service = AsrService(config: _asrConfig, dio: dio);
 

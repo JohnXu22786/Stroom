@@ -167,7 +167,8 @@ class OcrService {
     lastRequestUrl = _chatUrl;
     lastRequestHeaders = {
       'Content-Type': 'application/json',
-      if (config.apiKey.isNotEmpty) 'Authorization': 'Bearer ${_maskApiKey(config.apiKey)}',
+      if (config.apiKey.isNotEmpty)
+        'Authorization': 'Bearer ${_maskApiKey(config.apiKey)}',
     };
     lastResponseData = null;
     lastResponseStatusCode = null;
@@ -235,7 +236,8 @@ class OcrService {
     lastRequestUrl = _chatUrl;
     lastRequestHeaders = {
       'Content-Type': 'application/json',
-      if (config.apiKey.isNotEmpty) 'Authorization': 'Bearer ${_maskApiKey(config.apiKey)}',
+      if (config.apiKey.isNotEmpty)
+        'Authorization': 'Bearer ${_maskApiKey(config.apiKey)}',
     };
     lastResponseData = null;
     lastResponseStatusCode = null;
@@ -274,11 +276,9 @@ class OcrService {
   /// Mirrors the pattern in [OpenAICompatibleChatProvider.chatStream].
   void _captureDioExceptionDiagnostics(DioException e) {
     if (e.response?.data is Map) {
-      lastResponseData =
-          Map<String, dynamic>.from(e.response!.data as Map);
+      lastResponseData = Map<String, dynamic>.from(e.response!.data as Map);
     } else if (e.response?.data is String) {
-      lastResponseData =
-          <String, dynamic>{'raw': e.response!.data as String};
+      lastResponseData = <String, dynamic>{'raw': e.response!.data as String};
     } else {
       lastResponseData = null;
     }
@@ -352,7 +352,9 @@ class OcrService {
         // Some providers return content as a list of text blocks
         final parts = <String>[];
         for (final block in content) {
-          if (block is Map && block['type'] == 'text' && block['text'] is String) {
+          if (block is Map &&
+              block['type'] == 'text' &&
+              block['text'] is String) {
             parts.add(block['text'] as String);
           }
         }

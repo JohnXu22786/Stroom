@@ -49,12 +49,12 @@ void main() {
       // ⚠️ BUG: TextManifest should NOT see this folder
       final textFolders = await TextManifest.getAllFolders();
       expect(textFolders, isNot(contains('my_video_folder')),
-          reason:
-              'BUG: TextManifest should NOT contain video folder. '
+          reason: 'BUG: TextManifest should NOT contain video folder. '
               'Folders must be isolated per tab type.');
     });
 
-    testWidgets('folder created in VideoManifest does NOT leak to ImageManifest',
+    testWidgets(
+        'folder created in VideoManifest does NOT leak to ImageManifest',
         (WidgetTester t) async {
       await VideoManifest.addFolder('video_only_folder');
 
@@ -71,11 +71,11 @@ void main() {
 
       final imageFolders = await ImageManifest.getAllFolders();
       expect(imageFolders, isNot(contains('video_only_folder')),
-          reason:
-              'BUG: ImageManifest should NOT contain video folder');
+          reason: 'BUG: ImageManifest should NOT contain video folder');
     });
 
-    testWidgets('folder created in VideoManifest does NOT leak to AudioManifest',
+    testWidgets(
+        'folder created in VideoManifest does NOT leak to AudioManifest',
         (WidgetTester t) async {
       await VideoManifest.addFolder('video_only_folder');
 
@@ -184,7 +184,8 @@ void main() {
           reason: 'BUG: VideoManifest should NOT contain audio_folder');
     });
 
-    testWidgets('deleting folder from VideoManifest does NOT affect TextManifest',
+    testWidgets(
+        'deleting folder from VideoManifest does NOT affect TextManifest',
         (WidgetTester t) async {
       // Create separate folders in different manifests
       await VideoManifest.addFolder('video_folder');
@@ -216,12 +217,12 @@ void main() {
       expect(videoFolders, isNot(contains('video_folder')),
           reason: 'VideoManifest should have video_folder removed');
       expect(textFolders, contains('text_folder'),
-          reason:
-              'BUG: TextManifest folder should NOT have been deleted when '
+          reason: 'BUG: TextManifest folder should NOT have been deleted when '
               'VideoManifest folder was deleted');
     });
 
-    testWidgets('deleting folder from one tab does NOT delete same-name folder from other tabs',
+    testWidgets(
+        'deleting folder from one tab does NOT delete same-name folder from other tabs',
         (WidgetTester t) async {
       // Create same-named folders in multiple manifests (they should be independent)
       await TextManifest.addFolder('shared_name');
@@ -247,8 +248,7 @@ void main() {
       expect(textFolders, isNot(contains('shared_name')),
           reason: 'TextManifest should have the folder removed');
       expect(imageFolders, contains('shared_name'),
-          reason:
-              'BUG: ImageManifest should still have its own copy of '
+          reason: 'BUG: ImageManifest should still have its own copy of '
               '"shared_name" folder');
     });
 
@@ -300,8 +300,7 @@ void main() {
           reason: 'BUG: VideoManifest folder should still exist');
     });
 
-    testWidgets(
-        'create-empty-folder across all 4 manifests - each independent',
+    testWidgets('create-empty-folder across all 4 manifests - each independent',
         (WidgetTester t) async {
       // Create one empty folder in each manifest
       await TextManifest.addFolder('text_empty');
@@ -403,7 +402,8 @@ void main() {
       final raw = await WebFileStore.read('manifest_database_data');
       final data = jsonDecode(utf8.decode(raw!)) as Map<String, dynamic>;
       expect(data.containsKey('folders'), isFalse,
-          reason: 'Legacy folders key should have been removed after migration');
+          reason:
+              'Legacy folders key should have been removed after migration');
     });
   });
 }

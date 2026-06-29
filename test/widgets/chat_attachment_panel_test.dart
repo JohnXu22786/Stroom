@@ -105,7 +105,8 @@ void main() {
       expect(filePickerCalled, true);
     });
 
-    testWidgets('app files callback fires when app internal file button is tapped',
+    testWidgets(
+        'app files callback fires when app internal file button is tapped',
         (tester) async {
       bool appFilesCalled = false;
       await showPanelForTest(

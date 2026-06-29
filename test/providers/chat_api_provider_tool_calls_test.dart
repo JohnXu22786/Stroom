@@ -10,7 +10,8 @@ void main() {
     // per DeepSeek's OpenAI-compatible API spec.
     // ====================================================================
 
-    test('parseStreamEvent does NOT handle tool_calls (accumulated externally)', () {
+    test('parseStreamEvent does NOT handle tool_calls (accumulated externally)',
+        () {
       // The parseStreamEvent method intentionally skips tool_calls
       // because accumulation requires cross-event state.
       // This test documents that behavior.
@@ -103,7 +104,8 @@ void main() {
       expect(events[0].text, contains('look up the weather'));
     });
 
-    test('parseStreamEvent handles OpenRouter delta.reasoning + tool_calls', () {
+    test('parseStreamEvent handles OpenRouter delta.reasoning + tool_calls',
+        () {
       // OpenRouter uses delta.reasoning (string) as an alternative reasoning format.
       final data = {
         'choices': [
@@ -134,7 +136,9 @@ void main() {
       expect(events[0].text, contains('Thinking about weather'));
     });
 
-    test('parseStreamEvent handles OpenRouter delta.reasoning_details + tool_calls', () {
+    test(
+        'parseStreamEvent handles OpenRouter delta.reasoning_details + tool_calls',
+        () {
       // OpenRouter uses delta.reasoning_details (array) as a structured reasoning format.
       final data = {
         'choices': [
@@ -262,8 +266,7 @@ void main() {
           .map((e) => {
                 'id': e.value['id'] as String? ?? 'call_${e.key}',
                 'type': e.value['type'] as String? ?? 'function',
-                'function':
-                    e.value['function'] as Map<String, dynamic>? ?? {},
+                'function': e.value['function'] as Map<String, dynamic>? ?? {},
               })
           .toList();
     }
@@ -278,13 +281,15 @@ void main() {
       expect(toolCalls[0]['id'], equals('call_weather_001'));
       expect(toolCalls[0]['type'], equals('function'));
       expect(toolCalls[0]['function']['name'], equals('get_weather'));
-      expect(toolCalls[0]['function']['arguments'], equals('{"location": "Hangzhou"}'));
+      expect(toolCalls[0]['function']['arguments'],
+          equals('{"location": "Hangzhou"}'));
 
       // Second tool call
       expect(toolCalls[1]['id'], equals('call_time_001'));
       expect(toolCalls[1]['type'], equals('function'));
       expect(toolCalls[1]['function']['name'], equals('get_time'));
-      expect(toolCalls[1]['function']['arguments'], equals('{"timezone": "UTC+8"}'));
+      expect(toolCalls[1]['function']['arguments'],
+          equals('{"timezone": "UTC+8"}'));
     });
 
     test('accumulated tool call format matches OpenRouter spec', () {
@@ -360,7 +365,9 @@ void main() {
   });
 
   group('Tool call content handling per DeepSeek spec', () {
-    test('assistant message with tool_calls has content: null per DeepSeek spec', () {
+    test(
+        'assistant message with tool_calls has content: null per DeepSeek spec',
+        () {
       // DeepSeek spec: when model provides tool_calls, content MUST be null
       // https://api-docs.deepseek.com/api/create-chat-completion
       final assistantMsg = {

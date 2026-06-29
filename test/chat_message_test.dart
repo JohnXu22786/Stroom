@@ -15,19 +15,18 @@ void main() {
         },
         rawResponse: {
           'statusCode': 404,
-          'data': {'error': {'message': 'Not Found'}},
+          'data': {
+            'error': {'message': 'Not Found'}
+          },
         },
       );
 
       final map = msg.toMap();
       expect(map['rawRequest'], isA<Map<String, dynamic>>());
       expect(map['rawResponse'], isA<Map<String, dynamic>>());
-      expect(
-          (map['rawRequest'] as Map<String, dynamic>)['url'],
+      expect((map['rawRequest'] as Map<String, dynamic>)['url'],
           'https://api.example.com/chat');
-      expect(
-          (map['rawResponse'] as Map<String, dynamic>)['statusCode'],
-          404);
+      expect((map['rawResponse'] as Map<String, dynamic>)['statusCode'], 404);
     });
 
     test('toMap does NOT include rawRequest/rawResponse when null', () {
@@ -56,7 +55,9 @@ void main() {
         },
         'rawResponse': {
           'statusCode': 404,
-          'data': {'error': {'message': 'Not Found'}},
+          'data': {
+            'error': {'message': 'Not Found'}
+          },
         },
       };
 
@@ -102,7 +103,10 @@ void main() {
         rawResponse: {
           'statusCode': 500,
           'data': {
-            'error': {'message': 'Internal Server Error', 'type': 'server_error'},
+            'error': {
+              'message': 'Internal Server Error',
+              'type': 'server_error'
+            },
           },
         },
       );
@@ -116,7 +120,9 @@ void main() {
       expect(restored.content, original.content);
     });
 
-    test('isError: true with null rawRequest/rawResponse does not include them in map', () {
+    test(
+        'isError: true with null rawRequest/rawResponse does not include them in map',
+        () {
       final msg = ChatMessage(
         role: 'assistant',
         content: '错误: Connection failed',
@@ -128,7 +134,9 @@ void main() {
       expect(map.containsKey('rawResponse'), false);
     });
 
-    test('isError: false with rawRequest/rawResponse set still includes them in map', () {
+    test(
+        'isError: false with rawRequest/rawResponse set still includes them in map',
+        () {
       final msg = ChatMessage(
         role: 'assistant',
         content: 'Normal response',

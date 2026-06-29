@@ -19,7 +19,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Application - Startup (migration handled by StartupApp)', () {
-    testWidgets('does not show migration dialog when data format is outdated'
+    testWidgets(
+        'does not show migration dialog when data format is outdated'
         ' (migration is handled by StartupPage)', (tester) async {
       SharedPreferences.setMockInitialValues({
         'data_format_version': 0, // 旧版本 — 但 Application 不再处理迁移

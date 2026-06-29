@@ -6,7 +6,9 @@ import 'package:stroom/services/chat_service.dart';
 
 void main() {
   group('ChatService - base64 cached attachment handling', () {
-    test('_prepareApiMessages uses cached base64 when attachment has base64Data', () async {
+    test(
+        '_prepareApiMessages uses cached base64 when attachment has base64Data',
+        () async {
       // Create a ChatMessage with an attachment that has cached base64
       final base64Content = base64Encode(utf8.encode('fake_image_data'));
       final att = Attachment(
@@ -61,7 +63,9 @@ void main() {
       );
     });
 
-    test('_prepareApiMessages falls back to description when cached base64 is null and file is image', () async {
+    test(
+        '_prepareApiMessages falls back to description when cached base64 is null and file is image',
+        () async {
       // Create a ChatMessage with an attachment that has NO base64Data
       final att = Attachment(
         fileName: 'photo.jpg',
@@ -113,7 +117,8 @@ void main() {
       );
     });
 
-    test('non-image attachments with base64Data do not use image_url format', () async {
+    test('non-image attachments with base64Data do not use image_url format',
+        () async {
       // Non-image attachments should not produce image_url even if base64Data is set
       final att = Attachment(
         fileName: 'doc.pdf',
@@ -154,7 +159,9 @@ void main() {
       expect(parts[1]['type'], 'text');
     });
 
-    test('cache is naturally tied to conversation lifecycle (base64Data cleared with attachment)', () async {
+    test(
+        'cache is naturally tied to conversation lifecycle (base64Data cleared with attachment)',
+        () async {
       // Verify that when attachments are replaced in a ChatMessage,
       // the old base64 data is naturally garbage collected
       final att1 = Attachment(

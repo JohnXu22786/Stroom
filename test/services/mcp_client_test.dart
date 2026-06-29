@@ -35,8 +35,14 @@ void main() {
     test('extracts tools from list response', () {
       final result = {
         'tools': [
-          {'name': 'tool1', 'inputSchema': {'type': 'object'}},
-          {'name': 'tool2', 'inputSchema': {'type': 'object'}},
+          {
+            'name': 'tool1',
+            'inputSchema': {'type': 'object'}
+          },
+          {
+            'name': 'tool2',
+            'inputSchema': {'type': 'object'}
+          },
         ],
       };
       final tools = JsonRpcUtils.extractTools(result);
@@ -103,10 +109,12 @@ void main() {
       final decoded = jsonDecode(json) as Map<String, dynamic>;
       expect(decoded['jsonrpc'], equals('2.0'));
       expect(decoded['method'], equals('tools/call'));
-      expect(decoded['params'], equals({
-        'name': 'test_tool',
-        'arguments': {'key': 'value'},
-      }));
+      expect(
+          decoded['params'],
+          equals({
+            'name': 'test_tool',
+            'arguments': {'key': 'value'},
+          }));
     });
 
     test('builds initialize request', () {
@@ -161,7 +169,8 @@ void main() {
     });
 
     test('throws on empty command for stdio config', () {
-      final config = McpServerConfig.stdio(name: 'Bad Stdio', command: '', args: []);
+      final config =
+          McpServerConfig.stdio(name: 'Bad Stdio', command: '', args: []);
       expect(() => McpClient(config: config), throwsArgumentError);
     });
 

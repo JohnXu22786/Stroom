@@ -100,8 +100,7 @@ class LlmToggleSlider extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(label,
-                      style:
-                          const TextStyle(fontWeight: FontWeight.w600)),
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
                 ),
                 Switch(
                   value: enabled,
@@ -191,8 +190,7 @@ class LlmToggleTextField extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text('$label${required ? ' *' : ''}',
-                      style:
-                          const TextStyle(fontWeight: FontWeight.w600)),
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
                 ),
                 Switch(
                   value: enabled,

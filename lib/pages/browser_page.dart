@@ -58,13 +58,16 @@ class _BrowserPageState extends State<BrowserPage> {
     final raw = prefs.getString(_scriptsKey);
     if (raw != null) {
       final list = jsonDecode(raw) as List;
-      _scripts = list.map((e) => UserScript.fromMap(e as Map<String, dynamic>)).toList();
+      _scripts = list
+          .map((e) => UserScript.fromMap(e as Map<String, dynamic>))
+          .toList();
     }
   }
 
   Future<void> _saveScripts() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_scriptsKey, jsonEncode(_scripts.map((s) => s.toMap()).toList()));
+    await prefs.setString(
+        _scriptsKey, jsonEncode(_scripts.map((s) => s.toMap()).toList()));
   }
 
   void _injectScripts() {
@@ -100,8 +103,12 @@ class _BrowserPageState extends State<BrowserPage> {
               borderSide: BorderSide.none,
             ),
             filled: true,
-            fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            fillColor: Theme.of(context)
+                .colorScheme
+                .surfaceContainerHighest
+                .withOpacity(0.5),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             suffixIcon: IconButton(
               icon: const Icon(Icons.arrow_forward, size: 18),
               onPressed: () => _goToUrl(_urlController.text),
@@ -128,7 +135,8 @@ class _BrowserPageState extends State<BrowserPage> {
               initialSettings: InAppWebViewSettings(
                 javaScriptEnabled: true,
                 domStorageEnabled: true,
-                mixedContentMode: MixedContentMode.MIXED_CONTENT_COMPATIBILITY_MODE,
+                mixedContentMode:
+                    MixedContentMode.MIXED_CONTENT_COMPATIBILITY_MODE,
                 useWideViewPort: true,
                 supportZoom: true,
               ),
@@ -244,7 +252,8 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
                           title: Text(s.name.isNotEmpty ? s.name : '未命名脚本'),
                           subtitle: Text('${s.matches.length} 个匹配规则'),
                           trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Colors.red),
+                            icon: const Icon(Icons.delete_outline,
+                                color: Colors.red),
                             onPressed: () {
                               setState(() => _scripts.removeAt(i));
                               _notifyChanged();
@@ -304,7 +313,8 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.script.name);
     _codeCtrl = TextEditingController(text: widget.script.code);
-    _matchesCtrl = TextEditingController(text: widget.script.matches.join('\n'));
+    _matchesCtrl =
+        TextEditingController(text: widget.script.matches.join('\n'));
   }
 
   @override
@@ -341,7 +351,8 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
                 decoration: const InputDecoration(
                   labelText: '脚本代码 (JavaScript)',
                   border: OutlineInputBorder(),
-                  hintText: '// ==UserScript==\n// @name\n// @match *://*/*\n// ==/UserScript==\n\nconsole.log("hello");',
+                  hintText:
+                      '// ==UserScript==\n// @name\n// @match *://*/*\n// ==/UserScript==\n\nconsole.log("hello");',
                 ),
                 style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
               ),

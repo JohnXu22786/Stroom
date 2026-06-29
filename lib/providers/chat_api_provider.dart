@@ -127,6 +127,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     if (key.length <= 16) return '${key.substring(0, 4)}****';
     return '${key.substring(0, 8)}...${key.substring(key.length - 4)}';
   }
+
   /// Parse a single SSE data event and return a list of [AIStreamEvent]s.
   ///
   /// Handles all known reasoning formats:
@@ -287,7 +288,9 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       if (e.response?.data is Map) {
         _lastResponseData = Map<String, dynamic>.from(e.response!.data as Map);
       } else if (e.response?.data is String) {
-        _lastResponseData = <String, dynamic>{'raw': e.response!.data as String};
+        _lastResponseData = <String, dynamic>{
+          'raw': e.response!.data as String
+        };
       }
       final statusCode = e.response?.statusCode ?? 0;
       String detail;
@@ -367,7 +370,8 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         // Guard: both sse implementations yield lines starting with "data: ",
         // but be defensive in case a future implementation forgets the prefix.
         if (!event.startsWith('data: ')) {
-          debugPrint('chat_api_provider: skipping unexpected SSE event (no data: prefix)');
+          debugPrint(
+              'chat_api_provider: skipping unexpected SSE event (no data: prefix)');
           continue;
         }
         final dataStr = event.substring('data: '.length).trim();
@@ -409,8 +413,9 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
                     final accFn = acc['function'] as Map<String, dynamic>;
                     if (fn['name'] != null) accFn['name'] = fn['name'];
                     if (fn['arguments'] != null) {
-                      accFn['arguments'] = (accFn['arguments'] as String? ?? '') +
-                          (fn['arguments'] as String);
+                      accFn['arguments'] =
+                          (accFn['arguments'] as String? ?? '') +
+                              (fn['arguments'] as String);
                     }
                   }
                 }
@@ -418,7 +423,8 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
             }
           }
         } catch (e) {
-          debugPrint('OpenAICompatibleChatProvider: failed to parse SSE chunk: $e');
+          debugPrint(
+              'OpenAICompatibleChatProvider: failed to parse SSE chunk: $e');
         }
       }
     } catch (e) {
@@ -430,8 +436,9 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
           _lastResponseData =
               Map<String, dynamic>.from(e.response!.data as Map);
         } else if (e.response?.data is String) {
-          _lastResponseData =
-              <String, dynamic>{'raw': e.response!.data as String};
+          _lastResponseData = <String, dynamic>{
+            'raw': e.response!.data as String
+          };
         } else {
           // When ResponseType.stream is used, non-2xx error response data
           // is a ResponseBody (unread stream). Try to read it to capture

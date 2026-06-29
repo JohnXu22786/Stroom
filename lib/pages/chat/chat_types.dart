@@ -37,7 +37,8 @@ enum SearchMode { current, global }
 ///
 /// Segments of different types (e.g. [ToolCallSegment]) act as natural
 /// boundaries and are never merged with adjacent [TextSegment]s.
-List<MessageSegment> mergeConsecutiveTextSegments(List<MessageSegment> segments) {
+List<MessageSegment> mergeConsecutiveTextSegments(
+    List<MessageSegment> segments) {
   if (segments.isEmpty) return [];
   final merged = <MessageSegment>[];
   for (final seg in segments) {

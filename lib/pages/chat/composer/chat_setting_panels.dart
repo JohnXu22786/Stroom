@@ -27,9 +27,11 @@ void showModelPanel({
     // Update selected index to follow the dragged model
     if (localSelectedIndex == oldIndex) {
       localSelectedIndex = newIndex;
-    } else if (oldIndex < localSelectedIndex && newIndex >= localSelectedIndex) {
+    } else if (oldIndex < localSelectedIndex &&
+        newIndex >= localSelectedIndex) {
       localSelectedIndex--;
-    } else if (oldIndex > localSelectedIndex && newIndex <= localSelectedIndex) {
+    } else if (oldIndex > localSelectedIndex &&
+        newIndex <= localSelectedIndex) {
       localSelectedIndex++;
     }
 
@@ -115,10 +117,9 @@ void showModelPanel({
                           return AnimatedBuilder(
                             animation: animation,
                             builder: (context, child) {
-                              final elevation =
-                                  Tween<double>(begin: 0, end: 4)
-                                      .animate(animation)
-                                      .value;
+                              final elevation = Tween<double>(begin: 0, end: 4)
+                                  .animate(animation)
+                                  .value;
                               return Material(
                                 elevation: elevation,
                                 color: Colors.transparent,
@@ -139,8 +140,7 @@ void showModelPanel({
                               elevation: 0,
                               color: isSelected
                                   ? cs.primaryContainer
-                                  : cs.surfaceContainerHighest
-                                      .withOpacity(0.3),
+                                  : cs.surfaceContainerHighest.withOpacity(0.3),
                               child: ListTile(
                                 dense: true,
                                 leading: ReorderableDragStartListener(
@@ -166,8 +166,7 @@ void showModelPanel({
                                         size: 18, color: cs.primary)
                                     : null,
                                 onTap: () {
-                                  setState(
-                                      () => localSelectedIndex = i);
+                                  setState(() => localSelectedIndex = i);
                                   onModelSelected(i);
                                   Navigator.pop(context);
                                 },
@@ -267,13 +266,11 @@ void showToolsPanel({
                     )
                   else
                     ...tools.map((tool) {
-                      final isEnabled =
-                          localEnabledTools.contains(tool.name);
+                      final isEnabled = localEnabledTools.contains(tool.name);
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 4),
                         child: Material(
-                          color: cs.surfaceContainerHighest
-                              .withOpacity(0.3),
+                          color: cs.surfaceContainerHighest.withOpacity(0.3),
                           borderRadius: BorderRadius.circular(10),
                           child: SwitchListTile(
                             dense: true,
@@ -337,7 +334,8 @@ void showReasoningPanel({
   required Map<String, String> reasoningParamSelections,
   required List<ReasoningParam> reasoningParams,
   required ValueChanged<bool> onReasoningToggle,
-  required void Function(String paramName, String value) onReasoningParamChanged,
+  required void Function(String paramName, String value)
+      onReasoningParamChanged,
 }) {
   var localEnabled = reasoningEnabled;
   var localSelections = Map<String, String>.from(reasoningParamSelections);
@@ -398,12 +396,11 @@ void showReasoningPanel({
                   // Reasoning toggle
                   Container(
                     decoration: BoxDecoration(
-                      color:
-                          cs.surfaceContainerHighest.withOpacity(0.5),
+                      color: cs.surfaceContainerHighest.withOpacity(0.5),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     child: Row(
                       children: [
                         Expanded(
@@ -433,11 +430,8 @@ void showReasoningPanel({
                   if (localEnabled && hasParams) ...[
                     const SizedBox(height: 12),
                     ...reasoningParams.map((param) {
-                      final currentValue =
-                          localSelections[param.paramName] ??
-                              (param.options.isNotEmpty
-                                  ? param.options.first
-                                  : '');
+                      final currentValue = localSelections[param.paramName] ??
+                          (param.options.isNotEmpty ? param.options.first : '');
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: Column(
@@ -456,15 +450,13 @@ void showReasoningPanel({
                               spacing: 8,
                               runSpacing: 8,
                               children: param.options.map((option) {
-                                final isSelected =
-                                    currentValue == option;
+                                final isSelected = currentValue == option;
                                 return _OptionChip(
                                   label: option,
                                   selected: isSelected,
                                   onTap: () {
                                     setState(() {
-                                      localSelections[param.paramName] =
-                                          option;
+                                      localSelections[param.paramName] = option;
                                     });
                                     onReasoningParamChanged(
                                         param.paramName, option);

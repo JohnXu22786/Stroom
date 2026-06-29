@@ -21,7 +21,8 @@ void main() {
     });
 
     group('streaming chatStream() path (401 FIX)', () {
-      test('Dio constructor stores full unmasked API key in defaultHeaders', () {
+      test('Dio constructor stores full unmasked API key in defaultHeaders',
+          () {
         // The streaming path (chatStream) creates a NEW Dio instance via
         // sseStream(). Unlike the non-streaming path, it must explicitly
         // pass headers to the function call.
@@ -69,7 +70,8 @@ void main() {
         expect(provider.defaultHeaders, isNot(contains('Authorization')));
       });
 
-      test('both chat() and chatStream() use the same auth pattern after fix', () {
+      test('both chat() and chatStream() use the same auth pattern after fix',
+          () {
         // chat() uses Dio default headers (full key). chatStream() passes
         // explicit headers to sseStream(). After the fix, both use the
         // full unmasked key rather than the masked version.

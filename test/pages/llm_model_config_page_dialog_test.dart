@@ -4,7 +4,8 @@ import 'package:stroom/pages/llm_model_config_page.dart';
 
 void main() {
   group('LlmModelConfigPage - inference section', () {
-    testWidgets('reasoning toggle section shows no toggle by default', (tester) async {
+    testWidgets('reasoning toggle section shows no toggle by default',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: LlmModelConfigPage(),
@@ -55,7 +56,8 @@ void main() {
   });
 
   group('ModelConfigPage - dialog button names', () {
-    testWidgets('LlmModelConfigPage back dialog uses 取消 and 放弃', (tester) async {
+    testWidgets('LlmModelConfigPage back dialog uses 取消 and 放弃',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: LlmModelConfigPage(),

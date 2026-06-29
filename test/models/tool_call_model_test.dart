@@ -71,15 +71,14 @@ void main() {
       // Verify matches DeepSeek example structure
       expect(json['type'], equals('function'));
       expect(json['function']['name'], equals('get_weather'));
-      expect(json['function']['description'],
-          equals('Get weather of a location, the user should supply a location first.'));
+      expect(
+          json['function']['description'],
+          equals(
+              'Get weather of a location, the user should supply a location first.'));
       expect(json['function']['parameters']['type'], equals('object'));
-      expect(
-          json['function']['parameters']['properties']['location']['type'],
+      expect(json['function']['parameters']['properties']['location']['type'],
           equals('string'));
-      expect(
-          json['function']['parameters']['required'],
-          equals(['location']));
+      expect(json['function']['parameters']['required'], equals(['location']));
     });
 
     test('toJson matches OpenRouter tool definition example', () {
@@ -87,8 +86,7 @@ void main() {
       // https://openrouter.ai/docs/guides/features/tool-calling
       final def = ToolDefinition(
         name: 'search_gutenberg_books',
-        description:
-            'Search for books in the Project Gutenberg library',
+        description: 'Search for books in the Project Gutenberg library',
         parameters: {
           'type': 'object',
           'properties': {
@@ -112,12 +110,11 @@ void main() {
           json['function']['parameters']['properties']['search_terms']['type'],
           equals('array'));
       expect(
-          json['function']['parameters']['properties']['search_terms']
-              ['items']['type'],
+          json['function']['parameters']['properties']['search_terms']['items']
+              ['type'],
           equals('string'));
       expect(
-          json['function']['parameters']['required'],
-          equals(['search_terms']));
+          json['function']['parameters']['required'], equals(['search_terms']));
     });
 
     test('ToolCallData copyWith preserves fields per spec', () {
@@ -147,7 +144,8 @@ void main() {
       expect(completed.status, equals(ToolCallStatus.completed));
       expect(completed.result, equals('24℃'));
       expect(completed.name, equals('get_weather')); // unchanged
-      expect(completed.arguments, equals({'location': 'Hangzhou'})); // unchanged
+      expect(
+          completed.arguments, equals({'location': 'Hangzhou'})); // unchanged
     });
   });
 

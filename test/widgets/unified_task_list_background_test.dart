@@ -127,8 +127,7 @@ void main() {
       ]);
 
       // Should show the OCR task in the "全部" tab
-      expect(find.text('OCR任务'), findsOneWidget,
-          reason: 'OCR任务应显示在任务列表中');
+      expect(find.text('OCR任务'), findsOneWidget, reason: 'OCR任务应显示在任务列表中');
     });
 
     testWidgets('background tasks tab shows running task', (tester) async {
@@ -142,10 +141,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
 
       // Should show the running task title and status
-      expect(find.text('OCR任务'), findsOneWidget,
-          reason: '"其他"标签页应显示进行中的OCR任务');
-      expect(find.text('进行中'), findsOneWidget,
-          reason: '进行中的任务应显示"进行中"状态');
+      expect(find.text('OCR任务'), findsOneWidget, reason: '"其他"标签页应显示进行中的OCR任务');
+      expect(find.text('进行中'), findsOneWidget, reason: '进行中的任务应显示"进行中"状态');
     });
 
     testWidgets(
@@ -189,10 +186,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
 
       // Completed task should appear with "已完成" status
-      expect(find.text('OCR已完成'), findsOneWidget,
-          reason: '已完成的任务应显示在列表中');
-      expect(find.text('已完成'), findsOneWidget,
-          reason: '已完成的任务应显示"已完成"状态');
+      expect(find.text('OCR已完成'), findsOneWidget, reason: '已完成的任务应显示在列表中');
+      expect(find.text('已完成'), findsOneWidget, reason: '已完成的任务应显示"已完成"状态');
     });
 
     testWidgets('background tasks tab shows failed task with error',
@@ -208,8 +203,7 @@ void main() {
 
       expect(find.text('音频分离任务'), findsOneWidget,
           reason: '"其他"标签页应显示失败的音频分离任务');
-      expect(find.text('失败'), findsOneWidget,
-          reason: '失败的任务应显示"失败"状态');
+      expect(find.text('失败'), findsOneWidget, reason: '失败的任务应显示"失败"状态');
 
       // Tap to expand the card
       await tester.tap(find.text('音频分离任务'));
@@ -229,11 +223,12 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      expect(find.text('暂无任务'), findsOneWidget,
-          reason: '空任务列表应显示"暂无任务"占位符');
+      expect(find.text('暂无任务'), findsOneWidget, reason: '空任务列表应显示"暂无任务"占位符');
     });
 
-    testWidgets('failed background task can be deleted via expanded delete button', (tester) async {
+    testWidgets(
+        'failed background task can be deleted via expanded delete button',
+        (tester) async {
       await pumpPageWithBackground(tester, [
         _createFailedAudioTask(id: 'audio-1'),
       ]);
@@ -249,8 +244,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       // Should show the delete button in the expanded section
-      expect(find.text('删除'), findsOneWidget,
-          reason: '展开后应显示"删除"按钮');
+      expect(find.text('删除'), findsOneWidget, reason: '展开后应显示"删除"按钮');
     });
 
     testWidgets('multiple background task types all display (running + failed)',
@@ -269,7 +263,8 @@ void main() {
       expect(find.text('音频分离任务'), findsOneWidget);
     });
 
-    testWidgets('running background task does NOT show circular progress indicator',
+    testWidgets(
+        'running background task does NOT show circular progress indicator',
         (tester) async {
       await pumpPageWithBackground(tester, [
         _createRunningOcrTask(id: 'ocr-1'),
@@ -297,12 +292,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
 
       // Should NOT show the progress number
-      expect(find.textContaining('%'), findsNothing,
-          reason: '进行中的任务不应显示进度百分比');
+      expect(find.textContaining('%'), findsNothing, reason: '进行中的任务不应显示进度百分比');
     });
 
-    testWidgets('completed background task shows check icon',
-        (tester) async {
+    testWidgets('completed background task shows check icon', (tester) async {
       await pumpPageWithBackground(tester, [
         _createCompletedOcrTask(id: 'done-1'),
       ]);
@@ -334,8 +327,7 @@ void main() {
       expect(find.text('运行中任务'), findsOneWidget);
 
       // Running task should show "进行中" status chip
-      expect(find.text('进行中'), findsOneWidget,
-          reason: '进行中的任务应显示"进行中"状态');
+      expect(find.text('进行中'), findsOneWidget, reason: '进行中的任务应显示"进行中"状态');
     });
 
     testWidgets('failed background task shows expandable error section',
@@ -385,12 +377,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       // Task should be removed - "暂无任务" appears
-      expect(find.text('暂无任务'), findsOneWidget,
-          reason: '删除任务后应显示空状态');
+      expect(find.text('暂无任务'), findsOneWidget, reason: '删除任务后应显示空状态');
     });
 
-    testWidgets('expanded completed task shows result text',
-        (tester) async {
+    testWidgets('expanded completed task shows result text', (tester) async {
       await pumpPageWithBackground(tester, [
         _createCompletedOcrTask(
           id: 'done-1',
@@ -410,8 +400,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       // "识别结果" label should be visible
-      expect(find.text('识别结果'), findsOneWidget,
-          reason: '展开后应显示"识别结果"标签');
+      expect(find.text('识别结果'), findsOneWidget, reason: '展开后应显示"识别结果"标签');
 
       // SelectableText should exist with the result content
       expect(find.byType(SelectableText), findsOneWidget,
@@ -434,15 +423,15 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
 
       // Running tasks start expanded; "识别结果" label should be visible
-      expect(find.text('识别结果'), findsOneWidget,
-          reason: '展开后应显示"识别结果"标签');
+      expect(find.text('识别结果'), findsOneWidget, reason: '展开后应显示"识别结果"标签');
 
       // SelectableText should exist
       expect(find.byType(SelectableText), findsOneWidget,
           reason: '展开后应显示可选择的结果文字');
     });
 
-    testWidgets('running background task does not show progress in expanded view',
+    testWidgets(
+        'running background task does not show progress in expanded view',
         (tester) async {
       await pumpPageWithBackground(tester, [
         _createRunningOcrTask(id: 'ocr-1', title: '运行中任务'),
@@ -461,10 +450,8 @@ void main() {
       // Expanded view should NOT contain progress bar or percentage
       expect(find.byType(LinearProgressIndicator), findsNothing,
           reason: '展开后不应显示线性进度条');
-      expect(find.textContaining('进度'), findsNothing,
-          reason: '展开后不应显示进度文本');
-      expect(find.textContaining('%'), findsNothing,
-          reason: '展开后不应显示百分比');
+      expect(find.textContaining('进度'), findsNothing, reason: '展开后不应显示进度文本');
+      expect(find.textContaining('%'), findsNothing, reason: '展开后不应显示百分比');
     });
   });
 }

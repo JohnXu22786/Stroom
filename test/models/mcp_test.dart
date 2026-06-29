@@ -36,7 +36,8 @@ void main() {
       );
       expect(msg.jsonrpc, equals('2.0'));
       expect(msg.id, equals('req-1'));
-      expect(msg.error, equals({'code': -32601, 'message': 'Method not found'}));
+      expect(
+          msg.error, equals({'code': -32601, 'message': 'Method not found'}));
     });
 
     test('toJson serializes request correctly', () {
@@ -68,7 +69,8 @@ void main() {
       final json = msg.toJson();
       expect(json['jsonrpc'], equals('2.0'));
       expect(json['id'], equals('req-1'));
-      expect(json['error'], equals({'code': -32601, 'message': 'Method not found'}));
+      expect(json['error'],
+          equals({'code': -32601, 'message': 'Method not found'}));
       expect(json.containsKey('result'), isFalse);
     });
 
@@ -92,9 +94,15 @@ void main() {
       final json = {
         'jsonrpc': '2.0',
         'id': 'req-1',
-        'result': {'tools': [
-          {'name': 'test_tool', 'description': 'A test tool', 'inputSchema': {'type': 'object'}},
-        ]},
+        'result': {
+          'tools': [
+            {
+              'name': 'test_tool',
+              'description': 'A test tool',
+              'inputSchema': {'type': 'object'}
+            },
+          ]
+        },
       };
       final msg = McpMessage.fromJson(json);
       expect(msg.jsonrpc, equals('2.0'));
@@ -168,9 +176,18 @@ void main() {
 
     test('multiple tools can be created from a list response', () {
       final maps = [
-        {'name': 'tool_a', 'inputSchema': {'type': 'object'}},
-        {'name': 'tool_b', 'inputSchema': {'type': 'object'}},
-        {'name': 'tool_c', 'inputSchema': {'type': 'object'}},
+        {
+          'name': 'tool_a',
+          'inputSchema': {'type': 'object'}
+        },
+        {
+          'name': 'tool_b',
+          'inputSchema': {'type': 'object'}
+        },
+        {
+          'name': 'tool_c',
+          'inputSchema': {'type': 'object'}
+        },
       ];
       final tools = maps.map((m) => McpTool.fromMap(m)).toList();
       expect(tools.length, equals(3));
@@ -208,7 +225,9 @@ void main() {
 
     test('default isError is false', () {
       final map = {
-        'content': [{'type': 'text', 'text': 'OK'}],
+        'content': [
+          {'type': 'text', 'text': 'OK'}
+        ],
       };
       final resp = McpToolCallResponse.fromMap(map);
       expect(resp.isError, isFalse);
@@ -216,7 +235,9 @@ void main() {
 
     test('isError true when set', () {
       final map = {
-        'content': [{'type': 'text', 'text': 'Error occurred'}],
+        'content': [
+          {'type': 'text', 'text': 'Error occurred'}
+        ],
         'isError': true,
       };
       final resp = McpToolCallResponse.fromMap(map);
@@ -246,7 +267,8 @@ void main() {
       expect(config.name, equals('Filesystem Server'));
       expect(config.transportType, equals(McpTransportType.stdio));
       expect(config.command, equals('npx'));
-      expect(config.args, equals(['-y', '@modelcontextprotocol/server-filesystem', '/tmp']));
+      expect(config.args,
+          equals(['-y', '@modelcontextprotocol/server-filesystem', '/tmp']));
     });
 
     test('creates sse config with url', () {
@@ -333,7 +355,9 @@ void main() {
           reason: 'Vendor stdio configs should include PATH');
     });
 
-    test('factory constructor creates McpServerConfig from ProviderConfigItem typeConfig', () {
+    test(
+        'factory constructor creates McpServerConfig from ProviderConfigItem typeConfig',
+        () {
       final factoryConfig = McpServerConfig.fromProviderConfig(
         providerName: 'My MCP',
         typeConfig: {

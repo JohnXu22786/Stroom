@@ -39,9 +39,7 @@ Future<void> showRetryEditConfirmDialog({
       builder: (ctx) => AlertDialog(
         title: const Text('重试'),
         content: Text(
-          newerMessagesExist
-              ? '确定要重试这条回复吗？此操作将删除此消息及之后的所有消息。'
-              : '确定要重新生成回复吗？',
+          newerMessagesExist ? '确定要重试这条回复吗？此操作将删除此消息及之后的所有消息。' : '确定要重新生成回复吗？',
         ),
         actions: [
           TextButton(
