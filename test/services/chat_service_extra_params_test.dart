@@ -81,6 +81,7 @@ void main() {
         typeConfig: {
           'context': 8192,
           'temperature': 0.5,
+          'enableTemperature': true,
           'topP': 0.95,
           'frequencyPenalty': 0.2,
           'presencePenalty': 0.1,
@@ -126,12 +127,13 @@ void main() {
       expect(provider.capturedExtraParams!.containsKey('seed'), isFalse);
     });
 
-    test('temperature is read from typeConfig and passed directly', () async {
+    test('temperature is read from typeConfig and passed directly when toggle is on', () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
         typeConfig: {
           'context': 4096,
+          'enableTemperature': true,
           'temperature': 0.3,
         },
       );
@@ -143,7 +145,7 @@ void main() {
         events.add(event);
       }
 
-      // Temperature is passed directly, not via extraParams
+      // Temperature is passed directly when toggle is on, not via extraParams
       expect(provider.capturedTemperature, closeTo(0.3, 0.001));
     });
   });

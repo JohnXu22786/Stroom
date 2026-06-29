@@ -79,21 +79,39 @@ class ChatService {
       _lastResponseHeaders ?? _provider?.lastResponseHeaders;
 
   /// Returns the effective temperature considering assistant overrides.
-  double get _effectiveTemperature {
+  /// Returns null when no temperature toggle is enabled (model or assistant).
+  double? get _effectiveTemperature {
+    // Assistant override takes priority when enabled
     if (_assistantSettings != null && _assistantSettings!.enableTemperature) {
       return _assistantSettings!.temperature;
     }
-    return (_modelConfig!.typeConfig['temperature'] as num?)?.toDouble() ?? 0.7;
+    // Model-level toggle check
+    final typeConfig = _modelConfig?.typeConfig;
+    final enableTemperature = typeConfig?['enableTemperature'] as bool? ?? false;
+    if (enableTemperature && typeConfig?.containsKey('temperature') == true) {
+      return (typeConfig!['temperature'] as num).toDouble();
+    }
+    // Neither toggle is on — return null so it's NOT sent in the request
+    return null;
   }
 
   /// Returns the effective maxTokens considering assistant overrides.
-  int get _effectiveMaxTokens {
+  /// Returns null when no max_tokens toggle is enabled (model or assistant).
+  int? get _effectiveMaxTokens {
+    // Assistant override takes priority when enabled
     if (_assistantSettings != null && _assistantSettings!.enableMaxTokens) {
       return _assistantSettings!.maxTokens;
     }
-    return (_modelConfig!.typeConfig['context'] as num?)?.toInt() ??
-        (_modelConfig!.typeConfig['maxTokens'] as num?)?.toInt() ??
-        4096;
+    // Model-level toggle check
+    final typeConfig = _modelConfig?.typeConfig;
+    final enableMaxTokens = typeConfig?['enableMaxTokens'] as bool? ?? false;
+    if (enableMaxTokens) {
+      final value = (typeConfig!['maxTokens'] as num?)?.toInt() ??
+          (typeConfig['context'] as num?)?.toInt();
+      if (value != null) return value;
+    }
+    // Neither toggle is on — return null so it's NOT sent in the request
+    return null;
   }
 
   // ── Instance methods ────────────────────────────────────────────
@@ -141,11 +159,12 @@ class ChatService {
         if (_isCancelledByUser) return;
         final apiMessages = await _prepareApiMessages(history);
         _lastRequestBody = {
-          ...extraParams,
-          'messages': apiMessages,
           'model': _modelConfig?.modelId,
-          'max_tokens': _effectiveMaxTokens,
-          'temperature': _effectiveTemperature,
+          'messages': apiMessages,
+          if (_effectiveMaxTokens != null) 'max_tokens': _effectiveMaxTokens,
+          if (_effectiveTemperature != null)
+            'temperature': _effectiveTemperature,
+          ...extraParams,
         };
         _cancelToken = CancelToken();
         _streamSubscription = _provider!
@@ -154,8 +173,8 @@ class ChatService {
               model: _modelConfig!.modelId,
               reasoning: reasoning,
               reasoningEffort: reasoningEffort,
-              maxTokens: _effectiveMaxTokens,
-              temperature: _effectiveTemperature,
+              maxTokens: _effectiveMaxTokens, // null when toggle is OFF
+              temperature: _effectiveTemperature, // null when toggle is OFF
               extraParams: extraParams,
               cancelToken: _cancelToken,
             )
@@ -238,12 +257,13 @@ class ChatService {
         if (_isCancelledByUser) return;
         var messages = await _prepareApiMessages(history);
         _lastRequestBody = {
-          ...extraParams,
-          'messages': messages,
           'model': _modelConfig?.modelId,
-          'max_tokens': _effectiveMaxTokens,
-          'temperature': _effectiveTemperature,
-          'tools': toolDefs.isNotEmpty ? toolDefs : null,
+          'messages': messages,
+          if (_effectiveMaxTokens != null) 'max_tokens': _effectiveMaxTokens,
+          if (_effectiveTemperature != null)
+            'temperature': _effectiveTemperature,
+          if (toolDefs.isNotEmpty) 'tools': toolDefs,
+          ...extraParams,
         };
         int loopProtection = 0;
 
@@ -262,8 +282,8 @@ class ChatService {
                 model: _modelConfig!.modelId,
                 reasoning: reasoning,
                 reasoningEffort: reasoningEffort,
-                maxTokens: _effectiveMaxTokens,
-                temperature: _effectiveTemperature,
+                maxTokens: _effectiveMaxTokens, // null when toggle is OFF
+                temperature: _effectiveTemperature, // null when toggle is OFF
                 tools: toolDefs.isNotEmpty ? toolDefs : null,
                 extraParams: extraParams,
                 cancelToken: _cancelToken,
@@ -725,7 +745,7 @@ class ChatService {
             cp.value is bool
                 ? cp.value
                 : (cp.value.toString().toLowerCase() == 'true'),
-          'json' => cp.value,
+          'json' => parseJsonParam(cp.value),
           'string' || _ => cp.value?.toString() ?? '',
         };
       }
@@ -824,6 +844,19 @@ class ChatService {
     } catch (_) {
       return value;
     }
+  }
+
+  /// Parse a JSON custom parameter value that may already be a parsed object
+  /// or a JSON string. If it's a String, tries to parse it as JSON.
+  /// If it's already a Map/List, returns it as-is.
+  /// Falls back to the string representation on parse failure.
+  @visibleForTesting
+  static dynamic parseJsonParam(dynamic value) {
+    if (value is String) {
+      return parseJsonValue(value);
+    }
+    // Already a parsed Map/List/bool/num — return as-is
+    return value;
   }
 
   /// Parse a reasoning parameter value according to its [type].

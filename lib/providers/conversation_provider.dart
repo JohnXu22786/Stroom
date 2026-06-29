@@ -106,6 +106,10 @@ class Conversation {
   String? assistantId;
   String draftText;
 
+  /// Per-conversation set of MCP/built-in tool names that the user has enabled.
+  /// Defaults to empty (all tools OFF). Persisted with the conversation.
+  Set<String> enabledMcpToolNames = {};
+
   Conversation({
     String? id,
     required this.title,
@@ -116,10 +120,12 @@ class Conversation {
     this.sortOrder = 0,
     this.assistantId,
     this.draftText = '',
+    Set<String>? enabledMcpToolNames,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now(),
-        messages = messages ?? [];
+        messages = messages ?? [],
+        enabledMcpToolNames = enabledMcpToolNames ?? {};
 
   Map<String, dynamic> toMap() => {
         'id': id,
@@ -131,6 +137,8 @@ class Conversation {
         'sortOrder': sortOrder,
         if (assistantId != null) 'assistantId': assistantId,
         'draftText': draftText,
+        if (enabledMcpToolNames.isNotEmpty)
+          'enabledMcpToolNames': enabledMcpToolNames.toList(),
       };
 
   factory Conversation.fromMap(Map<String, dynamic> map) => Conversation(
@@ -151,6 +159,10 @@ class Conversation {
         sortOrder: map['sortOrder'] as int? ?? 0,
         assistantId: map['assistantId'] as String?,
         draftText: map['draftText'] as String? ?? '',
+        enabledMcpToolNames: (map['enabledMcpToolNames'] as List?)
+                ?.map((e) => e.toString())
+                .toSet() ??
+            {},
       );
 
   @override
@@ -416,6 +428,17 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     state = state.map((c) {
       if (c.id != conversationId) return c;
       c.draftText = draftText;
+      return c;
+    }).toList();
+    _persist();
+  }
+
+  /// Updates the enabled MCP/built-in tool names for a conversation.
+  /// These are the tools the user has turned ON for this specific conversation.
+  void updateEnabledTools(String conversationId, Set<String> enabledTools) {
+    state = state.map((c) {
+      if (c.id != conversationId) return c;
+      c.enabledMcpToolNames = Set<String>.from(enabledTools);
       return c;
     }).toList();
     _persist();
