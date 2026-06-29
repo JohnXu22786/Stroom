@@ -20,8 +20,8 @@ Stream<String> sseStream(String url, Map<String, String> headers, String body,
     final fullText = xhr.responseText ?? '';
     final lines = fullText.split('\n');
     // 最后一行可能不完整，只处理前面完整的行
-      final completeCount = lines.length - 1;
-      if (completeCount <= processedLines) return;
+    final completeCount = lines.length - 1;
+    if (completeCount <= processedLines) return;
 
     for (var i = processedLines; i < completeCount; i++) {
       final line = lines[i];
@@ -36,7 +36,7 @@ Stream<String> sseStream(String url, Map<String, String> headers, String body,
         // strips the prefix, parses JSON, and handles content/reasoning/tool_calls.
         controller.add(line);
       }
-      }
+    }
     processedLines = completeCount;
   });
 

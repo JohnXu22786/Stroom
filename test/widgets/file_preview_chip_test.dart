@@ -78,7 +78,8 @@ void main() {
       expect(removed, false);
     });
 
-    testWidgets('tapping remove button fires onRemove, NOT onTap', (tester) async {
+    testWidgets('tapping remove button fires onRemove, NOT onTap',
+        (tester) async {
       bool tapped = false;
       bool removed = false;
 

@@ -8,9 +8,21 @@ import 'package:stroom/providers/conversation_provider.dart';
 /// Create test conversations with different dates.
 List<Conversation> _createOrderedConversations() {
   return [
-    Conversation(id: 'conv-1', title: '最旧对话', createdAt: DateTime(2026, 1, 1), updatedAt: DateTime(2026, 1, 1)),
-    Conversation(id: 'conv-2', title: '中间对话', createdAt: DateTime(2026, 3, 15), updatedAt: DateTime(2026, 3, 15)),
-    Conversation(id: 'conv-3', title: '最新对话', createdAt: DateTime(2026, 6, 1), updatedAt: DateTime(2026, 6, 1)),
+    Conversation(
+        id: 'conv-1',
+        title: '最旧对话',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1)),
+    Conversation(
+        id: 'conv-2',
+        title: '中间对话',
+        createdAt: DateTime(2026, 3, 15),
+        updatedAt: DateTime(2026, 3, 15)),
+    Conversation(
+        id: 'conv-3',
+        title: '最新对话',
+        createdAt: DateTime(2026, 6, 1),
+        updatedAt: DateTime(2026, 6, 1)),
   ];
 }
 
@@ -44,15 +56,15 @@ void main() {
       expect(find.text('最新对话'), findsOneWidget);
     });
 
-    testWidgets('pinned conversations appear first',
-        (tester) async {
+    testWidgets('pinned conversations appear first', (tester) async {
       final convs = [
         Conversation(id: 'c1', title: '普通A'),
         Conversation(id: 'c2', title: '置顶对话', isPinned: true),
         Conversation(id: 'c3', title: '普通B'),
       ];
 
-      await tester.pumpWidget(createTestApp(conversations: convs, activeId: 'c1'));
+      await tester
+          .pumpWidget(createTestApp(conversations: convs, activeId: 'c1'));
       await tester.pump();
 
       // All should be visible
@@ -72,7 +84,8 @@ void main() {
         Conversation(id: 'c3', title: '对话C'),
       ];
 
-      await tester.pumpWidget(createTestApp(conversations: convs, activeId: 'c2'));
+      await tester
+          .pumpWidget(createTestApp(conversations: convs, activeId: 'c2'));
       await tester.pump();
 
       // Click conversation A
@@ -106,8 +119,7 @@ void main() {
       expect(find.textContaining('14:30'), findsOneWidget);
     });
 
-    testWidgets('shows yyyy-MM-dd HH:mm format',
-        (tester) async {
+    testWidgets('shows yyyy-MM-dd HH:mm format', (tester) async {
       final now = DateTime.now();
       final convs = [
         Conversation(id: 'c1', title: '最近对话', createdAt: now, updatedAt: now),

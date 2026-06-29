@@ -22,8 +22,8 @@ Widget createChatTestApp({String? activeConversationId}) {
       conversationsProvider.overrideWith((ref) {
         return ConversationsNotifier(ref);
       }),
-      activeConversationIdProvider.overrideWith(
-          (ref) => activeConversationId ?? 'test-conv-id'),
+      activeConversationIdProvider
+          .overrideWith((ref) => activeConversationId ?? 'test-conv-id'),
       // Provide an empty provider config so adapter is unconfigured
       providerEntriesProvider.overrideWith((ref) {
         return ProviderEntriesNotifier();
@@ -64,7 +64,8 @@ void main() {
       expect(find.byIcon(Icons.history), findsNothing);
     });
 
-    testWidgets('new conversation button is removed from top bar', (tester) async {
+    testWidgets('new conversation button is removed from top bar',
+        (tester) async {
       await pumpChatPage(tester);
 
       // In merged design, new conversation button has been removed
@@ -102,7 +103,8 @@ void main() {
       tester.takeException();
     }
 
-    testWidgets('composer is visible at the bottom of the page', (tester) async {
+    testWidgets('composer is visible at the bottom of the page',
+        (tester) async {
       await pumpChatPage(tester);
 
       // Verify the composer's icon buttons exist (attach file and send)
@@ -124,7 +126,8 @@ void main() {
       expect(topBarRect.bottom, lessThan(sendRect.top));
     });
 
-    testWidgets('composer is not positioned at the top of the page', (tester) async {
+    testWidgets('composer is not positioned at the top of the page',
+        (tester) async {
       await pumpChatPage(tester);
 
       // The composer (send button) should be in the lower portion of the screen
@@ -200,7 +203,9 @@ void main() {
   });
 
   group('ChatMessage rawRequest/rawResponse serialization for ChatPage', () {
-    test('rawRequest/rawResponse survive conversation message list serialization', () {
+    test(
+        'rawRequest/rawResponse survive conversation message list serialization',
+        () {
       final messages = [
         ChatMessage(role: 'user', content: 'Hello', id: 'u1'),
         ChatMessage(
@@ -209,7 +214,10 @@ void main() {
           id: 'a1',
           isError: true,
           rawRequest: {'url': 'https://api.example.com/chat', 'body': {}},
-          rawResponse: {'statusCode': 500, 'data': {'error': 'Internal'}},
+          rawResponse: {
+            'statusCode': 500,
+            'data': {'error': 'Internal'}
+          },
         ),
       ];
 

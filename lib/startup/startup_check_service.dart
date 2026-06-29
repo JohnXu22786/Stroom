@@ -103,7 +103,8 @@ class StartupCheckService {
 
     try {
       // 双格式恢复：检查 conversations 损坏
-      final convRecovered = await DataMigrationService.recoverConversationsFromBackup();
+      final convRecovered =
+          await DataMigrationService.recoverConversationsFromBackup();
       if (convRecovered) {
         debugPrint('[StartupCheckService] Recovered conversations from backup');
         recovered = true;
@@ -302,9 +303,7 @@ class StartupCheckService {
       for (int i = 0; i < list.length; i++) {
         final entry = list[i] as Map<String, dynamic>;
         final type = entry['type'] as String?;
-        if (type != null &&
-            type.isNotEmpty &&
-            !_isKnownProviderType(type)) {
+        if (type != null && type.isNotEmpty && !_isKnownProviderType(type)) {
           issues.add(StartupIssue(
             message: 'provider_entries[$i]: 未知的供应商类型 "$type"，'
                 '应用可能无法正常使用该供应商',

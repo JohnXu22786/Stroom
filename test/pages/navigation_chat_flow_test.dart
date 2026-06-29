@@ -84,7 +84,8 @@ void main() {
     // =========================================================================
     // 1. Chat tab always starts at AssistantSelectionPage
     // =========================================================================
-    testWidgets('chat tab shows AssistantSelectionPage even when activeConversationId is set',
+    testWidgets(
+        'chat tab shows AssistantSelectionPage even when activeConversationId is set',
         (tester) async {
       await tester.pumpWidget(createChatFlowTestApp(
         assistants: [
@@ -100,7 +101,8 @@ void main() {
       expect(find.text('测试助手'), findsOneWidget);
     });
 
-    testWidgets('chat tab shows AssistantSelectionPage with no active conversation',
+    testWidgets(
+        'chat tab shows AssistantSelectionPage with no active conversation',
         (tester) async {
       await tester.pumpWidget(createChatFlowTestApp(
         assistants: [
@@ -122,7 +124,8 @@ void main() {
         (tester) async {
       await tester.pumpWidget(createChatFlowTestApp(
         assistants: [
-          Assistant(name: '助手1', prompt: 'P1', emoji: '🤖', description: '第一个助手'),
+          Assistant(
+              name: '助手1', prompt: 'P1', emoji: '🤖', description: '第一个助手'),
         ],
         selectedAssistantId: null,
       ));
@@ -141,8 +144,7 @@ void main() {
     // =========================================================================
     // 3. Selecting a conversation → ChatPage
     // =========================================================================
-    testWidgets('creating new topic navigates to chat page',
-        (tester) async {
+    testWidgets('creating new topic navigates to chat page', (tester) async {
       SharedPreferences.setMockInitialValues({});
       final assistant = Assistant(
         id: 'test-assistant-id',
@@ -255,7 +257,8 @@ void main() {
     // =========================================================================
     // 6. Switch assistant button → pops back to AssistantSelectionPage
     // =========================================================================
-    testWidgets('back navigation from select conversation returns to assistant selection',
+    testWidgets(
+        'back navigation from select conversation returns to assistant selection',
         (tester) async {
       await tester.pumpWidget(createChatFlowTestApp(
         assistants: [

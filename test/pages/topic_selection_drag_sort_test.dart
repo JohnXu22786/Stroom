@@ -121,7 +121,12 @@ void main() {
 
       await tester.pumpWidget(createTestApp(
         assistants: [
-          Assistant(id: 'test-asst', name: '助手', prompt: 'P', emoji: '🤖', description: '助手'),
+          Assistant(
+              id: 'test-asst',
+              name: '助手',
+              prompt: 'P',
+              emoji: '🤖',
+              description: '助手'),
         ],
         selectedAssistantId: 'test-asst',
         conversations: [conv1, conv2],
@@ -134,7 +139,8 @@ void main() {
       expect(find.byType(ListView), findsNothing);
     });
 
-    testWidgets('items are wrapped in ReorderableDelayedDragStartListener when not in selection mode',
+    testWidgets(
+        'items are wrapped in ReorderableDelayedDragStartListener when not in selection mode',
         (tester) async {
       final conv1 = Conversation(
         id: 'conv-1',
@@ -145,7 +151,12 @@ void main() {
 
       await tester.pumpWidget(createTestApp(
         assistants: [
-          Assistant(id: 'test-asst', name: '助手', prompt: 'P', emoji: '🤖', description: '助手'),
+          Assistant(
+              id: 'test-asst',
+              name: '助手',
+              prompt: 'P',
+              emoji: '🤖',
+              description: '助手'),
         ],
         selectedAssistantId: 'test-asst',
         conversations: [conv1],
@@ -157,7 +168,8 @@ void main() {
       expect(find.byType(ReorderableDelayedDragStartListener), findsOneWidget);
     });
 
-    testWidgets('items are NOT wrapped in ReorderableDelayedDragStartListener when in selection mode',
+    testWidgets(
+        'items are NOT wrapped in ReorderableDelayedDragStartListener when in selection mode',
         (tester) async {
       final conv1 = Conversation(
         id: 'conv-1',
@@ -168,7 +180,12 @@ void main() {
 
       await tester.pumpWidget(createTestApp(
         assistants: [
-          Assistant(id: 'test-asst', name: '助手', prompt: 'P', emoji: '🤖', description: '助手'),
+          Assistant(
+              id: 'test-asst',
+              name: '助手',
+              prompt: 'P',
+              emoji: '🤖',
+              description: '助手'),
         ],
         selectedAssistantId: 'test-asst',
         conversations: [conv1],
@@ -185,7 +202,8 @@ void main() {
       expect(find.byType(ReorderableDelayedDragStartListener), findsNothing);
     });
 
-    testWidgets('checklist button still enters selection mode (long press removed for drag)',
+    testWidgets(
+        'checklist button still enters selection mode (long press removed for drag)',
         (tester) async {
       final conv1 = Conversation(
         id: 'conv-1',
@@ -196,7 +214,12 @@ void main() {
 
       await tester.pumpWidget(createTestApp(
         assistants: [
-          Assistant(id: 'test-asst', name: '助手', prompt: 'P', emoji: '🤖', description: '助手'),
+          Assistant(
+              id: 'test-asst',
+              name: '助手',
+              prompt: 'P',
+              emoji: '🤖',
+              description: '助手'),
         ],
         selectedAssistantId: 'test-asst',
         conversations: [conv1],
@@ -233,7 +256,12 @@ void main() {
 
       await tester.pumpWidget(createTestApp(
         assistants: [
-          Assistant(id: 'test-asst', name: '助手', prompt: 'P', emoji: '🤖', description: '助手'),
+          Assistant(
+              id: 'test-asst',
+              name: '助手',
+              prompt: 'P',
+              emoji: '🤖',
+              description: '助手'),
         ],
         selectedAssistantId: 'test-asst',
         conversations: [conv1, conv2],
@@ -284,7 +312,12 @@ void main() {
 
       await tester.pumpWidget(createTestApp(
         assistants: [
-          Assistant(id: 'test-reorder', name: '助手', prompt: 'P', emoji: '🤖', description: '助手'),
+          Assistant(
+              id: 'test-reorder',
+              name: '助手',
+              prompt: 'P',
+              emoji: '🤖',
+              description: '助手'),
         ],
         selectedAssistantId: 'test-reorder',
         conversations: [conv1, conv2, conv3],
@@ -320,7 +353,12 @@ void main() {
 
       await tester.pumpWidget(createTestApp(
         assistants: [
-          Assistant(id: 'test-asst', name: '助手', prompt: 'P', emoji: '🤖', description: '助手'),
+          Assistant(
+              id: 'test-asst',
+              name: '助手',
+              prompt: 'P',
+              emoji: '🤖',
+              description: '助手'),
         ],
         selectedAssistantId: 'test-asst',
         conversations: [conv1, conv2],
@@ -344,7 +382,12 @@ void main() {
 
       await tester.pumpWidget(createTestAppWithNavigation(
         assistants: [
-          Assistant(id: 'test-asst', name: '助手', prompt: 'P', emoji: '🤖', description: '助手'),
+          Assistant(
+              id: 'test-asst',
+              name: '助手',
+              prompt: 'P',
+              emoji: '🤖',
+              description: '助手'),
         ],
         selectedAssistantId: 'test-asst',
         conversations: [conv1],
@@ -371,7 +414,12 @@ void main() {
 
       await tester.pumpWidget(createTestApp(
         assistants: [
-          Assistant(id: 'test-asst', name: '助手', prompt: 'P', emoji: '🤖', description: '助手'),
+          Assistant(
+              id: 'test-asst',
+              name: '助手',
+              prompt: 'P',
+              emoji: '🤖',
+              description: '助手'),
         ],
         selectedAssistantId: 'test-asst',
         conversations: [conv1],
@@ -402,7 +450,12 @@ void main() {
 
       await tester.pumpWidget(createTestApp(
         assistants: [
-          Assistant(id: 'test-asst', name: '助手', prompt: 'P', emoji: '🤖', description: '助手'),
+          Assistant(
+              id: 'test-asst',
+              name: '助手',
+              prompt: 'P',
+              emoji: '🤖',
+              description: '助手'),
         ],
         selectedAssistantId: 'test-asst',
         conversations: [conv1],
@@ -431,7 +484,12 @@ void main() {
 
       await tester.pumpWidget(createTestApp(
         assistants: [
-          Assistant(id: 'test-asst', name: '助手', prompt: 'P', emoji: '🤖', description: '助手'),
+          Assistant(
+              id: 'test-asst',
+              name: '助手',
+              prompt: 'P',
+              emoji: '🤖',
+              description: '助手'),
         ],
         selectedAssistantId: 'test-asst',
         conversations: [conv1],
@@ -466,7 +524,12 @@ void main() {
 
       await tester.pumpWidget(createTestApp(
         assistants: [
-          Assistant(id: 'test-reorder', name: '助手', prompt: 'P', emoji: '🤖', description: '助手'),
+          Assistant(
+              id: 'test-reorder',
+              name: '助手',
+              prompt: 'P',
+              emoji: '🤖',
+              description: '助手'),
         ],
         selectedAssistantId: 'test-reorder',
         conversations: [conv1, conv2],
@@ -492,7 +555,12 @@ void main() {
 
       await tester.pumpWidget(createTestApp(
         assistants: [
-          Assistant(id: 'test-reorder', name: '助手', prompt: 'P', emoji: '🤖', description: '助手'),
+          Assistant(
+              id: 'test-reorder',
+              name: '助手',
+              prompt: 'P',
+              emoji: '🤖',
+              description: '助手'),
         ],
         selectedAssistantId: 'test-reorder',
         conversations: [conv1],

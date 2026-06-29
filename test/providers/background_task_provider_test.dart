@@ -8,7 +8,7 @@ void main() {
   group('BackgroundTaskNotifier', () {
     test('addTask creates a running task with correct type', () {
       final notifier = BackgroundTaskNotifier();
-      
+
       final id = notifier.addTask(
         type: BackgroundTaskType.ocr,
         title: '测试OCR',
@@ -23,10 +23,11 @@ void main() {
 
     test('addTask creates tasks with different types', () {
       final notifier = BackgroundTaskNotifier();
-      
+
       notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR任务');
       notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR任务');
-      notifier.addTask(type: BackgroundTaskType.audioSeparation, title: '音频分离任务');
+      notifier.addTask(
+          type: BackgroundTaskType.audioSeparation, title: '音频分离任务');
 
       expect(notifier.state.length, 3);
       expect(notifier.state[0].type, BackgroundTaskType.audioSeparation);
@@ -34,9 +35,10 @@ void main() {
       expect(notifier.state[2].type, BackgroundTaskType.ocr);
     });
 
-    test('completeTask updates task status to completed (keeps task visible)', () {
+    test('completeTask updates task status to completed (keeps task visible)',
+        () {
       final notifier = BackgroundTaskNotifier();
-      
+
       final id = notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR');
       expect(notifier.state.length, 1);
       expect(notifier.state[0].status, TaskStatus.running);
@@ -51,7 +53,7 @@ void main() {
 
     test('completeTask updates only the specified task, keeps others', () {
       final notifier = BackgroundTaskNotifier();
-      
+
       final id1 = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
       final id2 = notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR1');
       expect(notifier.state.length, 2);
@@ -67,7 +69,7 @@ void main() {
 
     test('failTask keeps failed task in state with error (no auto-remove)', () {
       final notifier = BackgroundTaskNotifier();
-      
+
       final id = notifier.addTask(type: BackgroundTaskType.asr, title: '测试ASR');
       notifier.failTask(id, error: '网络连接超时');
 
@@ -80,11 +82,11 @@ void main() {
 
     test('removeTask removes task from list (manual removal)', () {
       final notifier = BackgroundTaskNotifier();
-      
+
       notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
       final id2 = notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR1');
       notifier.addTask(type: BackgroundTaskType.audioSeparation, title: 'Sep1');
-      
+
       notifier.removeTask(id2);
 
       expect(notifier.state.length, 2);
@@ -93,10 +95,13 @@ void main() {
 
     test('addTask returns unique IDs for each task', () {
       final notifier = BackgroundTaskNotifier();
-      
-      final id1 = notifier.addTask(type: BackgroundTaskType.ocr, title: 'Task1');
-      final id2 = notifier.addTask(type: BackgroundTaskType.ocr, title: 'Task2');
-      final id3 = notifier.addTask(type: BackgroundTaskType.ocr, title: 'Task3');
+
+      final id1 =
+          notifier.addTask(type: BackgroundTaskType.ocr, title: 'Task1');
+      final id2 =
+          notifier.addTask(type: BackgroundTaskType.ocr, title: 'Task2');
+      final id3 =
+          notifier.addTask(type: BackgroundTaskType.ocr, title: 'Task3');
 
       expect(id1, isNot(id2));
       expect(id1, isNot(id3));
@@ -105,9 +110,9 @@ void main() {
 
     test('completeTask with non-existent id does nothing', () {
       final notifier = BackgroundTaskNotifier();
-      
+
       notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
-      
+
       // Should not throw
       expect(() => notifier.completeTask('non-existent'), returnsNormally);
       expect(notifier.state.length, 1);
@@ -116,42 +121,46 @@ void main() {
 
     test('failTask with non-existent id does nothing', () {
       final notifier = BackgroundTaskNotifier();
-      
+
       notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
-      
-      expect(() => notifier.failTask('non-existent', error: 'error'), returnsNormally);
+
+      expect(() => notifier.failTask('non-existent', error: 'error'),
+          returnsNormally);
       expect(notifier.state.length, 1);
       expect(notifier.state[0].status, TaskStatus.running);
     });
 
     test('removeTask with non-existent id does nothing', () {
       final notifier = BackgroundTaskNotifier();
-      
+
       notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
-      
+
       expect(() => notifier.removeTask('non-existent'), returnsNormally);
       expect(notifier.state.length, 1);
     });
 
     test('tasks are ordered newest first', () {
       final notifier = BackgroundTaskNotifier();
-      
+
       notifier.addTask(type: BackgroundTaskType.ocr, title: 'First');
       notifier.addTask(type: BackgroundTaskType.asr, title: 'Second');
-      notifier.addTask(type: BackgroundTaskType.audioSeparation, title: 'Third');
+      notifier.addTask(
+          type: BackgroundTaskType.audioSeparation, title: 'Third');
 
       expect(notifier.state[0].title, 'Third');
       expect(notifier.state[1].title, 'Second');
       expect(notifier.state[2].title, 'First');
     });
 
-    test('toMap/fromMap round-trip preserves all fields (using failed task)', () {
+    test('toMap/fromMap round-trip preserves all fields (using failed task)',
+        () {
       final notifier = BackgroundTaskNotifier();
-      
+
       notifier.addTask(type: BackgroundTaskType.asr, title: '测试ASR任务');
-      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR任务');
+      final id =
+          notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR任务');
       notifier.failTask(id, error: '处理失败');
-      
+
       final task = notifier.state[0];
       final map = task.toMap();
       final restored = BackgroundTask.fromMap(map);
@@ -161,17 +170,21 @@ void main() {
       expect(restored.title, task.title);
       expect(restored.status, task.status);
       expect(restored.error, task.error);
-      expect(restored.createdAt.toIso8601String(), task.createdAt.toIso8601String());
-      expect(restored.completedAt?.toIso8601String(), task.completedAt?.toIso8601String());
-      expect(restored.statusChangedAt?.toIso8601String(), task.statusChangedAt?.toIso8601String());
+      expect(restored.createdAt.toIso8601String(),
+          task.createdAt.toIso8601String());
+      expect(restored.completedAt?.toIso8601String(),
+          task.completedAt?.toIso8601String());
+      expect(restored.statusChangedAt?.toIso8601String(),
+          task.statusChangedAt?.toIso8601String());
     });
 
     test('toMap/fromMap with failed task preserves error', () {
       final notifier = BackgroundTaskNotifier();
-      
-      final id = notifier.addTask(type: BackgroundTaskType.asr, title: '测试ASR任务');
+
+      final id =
+          notifier.addTask(type: BackgroundTaskType.asr, title: '测试ASR任务');
       notifier.failTask(id, error: '处理失败: API返回错误');
-      
+
       final task = notifier.state[0];
       final map = task.toMap();
       final restored = BackgroundTask.fromMap(map);
@@ -182,7 +195,7 @@ void main() {
 
     test('failTask without error sets status to failed', () {
       final notifier = BackgroundTaskNotifier();
-      
+
       final id = notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR');
       notifier.failTask(id);
 
@@ -192,40 +205,49 @@ void main() {
 
     test('multiple completed tasks all get status completed', () {
       final notifier = BackgroundTaskNotifier();
-      
+
       final id1 = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
       final id2 = notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR1');
-      final id3 = notifier.addTask(type: BackgroundTaskType.audioSeparation, title: 'Sep1');
+      final id3 = notifier.addTask(
+          type: BackgroundTaskType.audioSeparation, title: 'Sep1');
       expect(notifier.state.length, 3);
 
       notifier.completeTask(id1);
       expect(notifier.state.length, 3);
-      expect(notifier.state.where((t) => t.id == id1).single.status, TaskStatus.completed);
+      expect(notifier.state.where((t) => t.id == id1).single.status,
+          TaskStatus.completed);
 
       notifier.completeTask(id2);
       expect(notifier.state.length, 3);
-      expect(notifier.state.where((t) => t.id == id1).single.status, TaskStatus.completed);
-      expect(notifier.state.where((t) => t.id == id2).single.status, TaskStatus.completed);
+      expect(notifier.state.where((t) => t.id == id1).single.status,
+          TaskStatus.completed);
+      expect(notifier.state.where((t) => t.id == id2).single.status,
+          TaskStatus.completed);
 
       notifier.completeTask(id3);
       expect(notifier.state.length, 3);
-      expect(notifier.state.where((t) => t.id == id3).single.status, TaskStatus.completed);
+      expect(notifier.state.where((t) => t.id == id3).single.status,
+          TaskStatus.completed);
     });
 
     test('completed tasks and failed tasks coexist in state', () {
       final notifier = BackgroundTaskNotifier();
-      
+
       final id1 = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
       final id2 = notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR1');
-      final id3 = notifier.addTask(type: BackgroundTaskType.audioSeparation, title: 'Sep1');
+      final id3 = notifier.addTask(
+          type: BackgroundTaskType.audioSeparation, title: 'Sep1');
 
-      notifier.completeTask(id1);  // Should stay with status=completed
-      notifier.failTask(id2, error: 'ASR失败');  // Should stay with status=failed
+      notifier.completeTask(id1); // Should stay with status=completed
+      notifier.failTask(id2, error: 'ASR失败'); // Should stay with status=failed
 
       expect(notifier.state.length, 3);
-      expect(notifier.state.where((t) => t.id == id1).single.status, TaskStatus.completed);
-      expect(notifier.state.where((t) => t.id == id2).single.status, TaskStatus.failed);
-      expect(notifier.state.where((t) => t.id == id3).single.status, TaskStatus.running);
+      expect(notifier.state.where((t) => t.id == id1).single.status,
+          TaskStatus.completed);
+      expect(notifier.state.where((t) => t.id == id2).single.status,
+          TaskStatus.failed);
+      expect(notifier.state.where((t) => t.id == id3).single.status,
+          TaskStatus.running);
     });
 
     // ==================================================================
@@ -234,39 +256,41 @@ void main() {
 
     test('addTask initializes task without result', () {
       final notifier = BackgroundTaskNotifier();
-      
+
       final id = notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR');
-      
+
       expect(notifier.state[0].result, isNull);
     });
 
     test('setResult stores result text on task', () {
       final notifier = BackgroundTaskNotifier();
-      
-      final id = notifier.addTask(type: BackgroundTaskType.audioSeparation, title: '音频分离');
-      
+
+      final id = notifier.addTask(
+          type: BackgroundTaskType.audioSeparation, title: '音频分离');
+
       notifier.setResult(id, '这是结果文本');
       expect(notifier.state[0].result, '这是结果文本');
     });
 
     test('setResult does not affect other tasks', () {
       final notifier = BackgroundTaskNotifier();
-      
+
       final id1 = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR');
       final id2 = notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR');
-      
+
       notifier.setResult(id1, 'OCR结果');
-      
+
       expect(notifier.state.where((t) => t.id == id1).single.result, 'OCR结果');
       expect(notifier.state.where((t) => t.id == id2).single.result, isNull);
     });
 
     test('toMap/fromMap preserves result field', () {
       final notifier = BackgroundTaskNotifier();
-      
-      final id = notifier.addTask(type: BackgroundTaskType.audioSeparation, title: '音频分离');
+
+      final id = notifier.addTask(
+          type: BackgroundTaskType.audioSeparation, title: '音频分离');
       notifier.setResult(id, '结果文本');
-      
+
       final task = notifier.state[0];
       final map = task.toMap();
       // result field should be present in serialized map
@@ -284,9 +308,9 @@ void main() {
         'status': 'running',
         'createdAt': DateTime.now().toIso8601String(),
       };
-      
+
       final restored = BackgroundTask.fromMap(map);
-      
+
       expect(restored.result, isNull);
       expect(restored.title, '旧数据任务');
       expect(restored.status, TaskStatus.running);

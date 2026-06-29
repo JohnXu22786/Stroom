@@ -76,8 +76,7 @@ class FilePreviewChip extends StatelessWidget {
                           errorBuilder: (_, __, ___) =>
                               Icon(_fileIcon(), size: 24),
                         )
-                      : Icon(_fileIcon(),
-                          size: 24, color: cs.onSurfaceVariant),
+                      : Icon(_fileIcon(), size: 24, color: cs.onSurfaceVariant),
                 ),
                 if (onRemove != null)
                   Positioned(

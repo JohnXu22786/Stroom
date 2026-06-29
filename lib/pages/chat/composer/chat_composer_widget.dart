@@ -54,7 +54,8 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   /// Called when user taps send in edit mode.
   /// Passes the message id, edited text, and all pending attachments
   /// (original + newly added, minus any removed).
-  final void Function(String messageId, String text, List<Attachment> attachments)? onEditSend;
+  final void Function(
+      String messageId, String text, List<Attachment> attachments)? onEditSend;
 
   /// Called when user taps X on the edit capsule to cancel editing.
   final VoidCallback? onEditCancel;
@@ -132,8 +133,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
 
     // If entering edit mode, pre-fill with the message text
     // and pre-populate pending attachments with the original attachments.
-    if (widget.editingMessageId != null &&
-        widget.editingMessageText != null) {
+    if (widget.editingMessageId != null && widget.editingMessageText != null) {
       _textController.text = widget.editingMessageText!;
       _lastSavedDraft = widget.editingMessageText!;
       _loadEditingAttachments(widget.editingMessageAttachments);
@@ -585,10 +585,10 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     final fileType = mimeType.startsWith('image/')
         ? 'image'
         : mimeType.startsWith('video/')
-        ? 'video'
-        : mimeType.startsWith('audio/')
-        ? 'audio'
-        : 'document';
+            ? 'video'
+            : mimeType.startsWith('audio/')
+                ? 'audio'
+                : 'document';
     final storagePath = await AttachmentStorage.saveFile(fileName, bytes);
     final hash = AttachmentStorage.computeHash(bytes);
 
@@ -836,9 +836,8 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                     icon: Icons.psychology_outlined,
                     label: '推理',
                     color: Colors.purple,
-                    onTap: widget.hasReasoningParams
-                        ? _showReasoningPanel
-                        : null,
+                    onTap:
+                        widget.hasReasoningParams ? _showReasoningPanel : null,
                     enabled: widget.hasReasoningParams,
                   ),
                 ],

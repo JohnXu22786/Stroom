@@ -68,7 +68,8 @@ void main() {
         'createdAt': DateTime.now().toIso8601String(),
         'appVersion': 'test',
       };
-      archive.addFile(ArchiveFile('manifest.json',
+      archive.addFile(ArchiveFile(
+          'manifest.json',
           utf8.encode(jsonEncode(manifest)).length,
           utf8.encode(jsonEncode(manifest))));
 
@@ -79,11 +80,13 @@ void main() {
         'text_records': <Map<String, dynamic>>[],
         'folders': <String>[],
       };
-      archive.addFile(ArchiveFile('stroom_manifest.json',
+      archive.addFile(ArchiveFile(
+          'stroom_manifest.json',
           utf8.encode(jsonEncode(dbData)).length,
           utf8.encode(jsonEncode(dbData))));
 
-      archive.addFile(ArchiveFile('preferences.json',
+      archive.addFile(ArchiveFile(
+          'preferences.json',
           utf8.encode(jsonEncode(prefData)).length,
           utf8.encode(jsonEncode(prefData))));
 
@@ -107,13 +110,11 @@ void main() {
 
       // provider_entries should exist (from migration of chat_configs)
       expect(migratedPrefs.containsKey('provider_entries'), isTrue,
-          reason:
-              'After import+migration, provider_entries should exist');
+          reason: 'After import+migration, provider_entries should exist');
 
       // chat_configs should be removed (migration deletes old keys)
       expect(migratedPrefs.containsKey('chat_configs'), isFalse,
-          reason:
-              'After import+migration, chat_configs should be removed');
+          reason: 'After import+migration, chat_configs should be removed');
 
       // data_format_version should be updated
       expect(migratedPrefs.getInt('data_format_version'),
@@ -125,8 +126,7 @@ void main() {
       final providerEntriesJson = migratedPrefs.getString('provider_entries');
       expect(providerEntriesJson, isNotNull);
 
-      final providerEntries =
-          jsonDecode(providerEntriesJson!) as List<dynamic>;
+      final providerEntries = jsonDecode(providerEntriesJson!) as List<dynamic>;
       expect(providerEntries, isNotEmpty,
           reason: 'provider_entries should not be empty');
 
@@ -180,17 +180,32 @@ void main() {
       // Build backup
       // ===============================================================
       final archive = Archive();
-      archive.addFile(ArchiveFile('manifest.json',
+      archive.addFile(ArchiveFile(
+          'manifest.json',
           utf8.encode(jsonEncode({'version': 1})).length,
           utf8.encode(jsonEncode({'version': 1}))));
 
-      archive.addFile(ArchiveFile('stroom_manifest.json',
-          utf8.encode(jsonEncode({'image_records': [], 'audio_records': [],
-              'video_records': [], 'text_records': [], 'folders': []})).length,
-          utf8.encode(jsonEncode({'image_records': [], 'audio_records': [],
-              'video_records': [], 'text_records': [], 'folders': []}))));
+      archive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          utf8
+              .encode(jsonEncode({
+                'image_records': [],
+                'audio_records': [],
+                'video_records': [],
+                'text_records': [],
+                'folders': []
+              }))
+              .length,
+          utf8.encode(jsonEncode({
+            'image_records': [],
+            'audio_records': [],
+            'video_records': [],
+            'text_records': [],
+            'folders': []
+          }))));
 
-      archive.addFile(ArchiveFile('preferences.json',
+      archive.addFile(ArchiveFile(
+          'preferences.json',
           utf8.encode(jsonEncode(prefData)).length,
           utf8.encode(jsonEncode(prefData))));
 
@@ -260,21 +275,38 @@ void main() {
 
       // Build backup
       final archive = Archive();
-      archive.addFile(ArchiveFile('manifest.json',
+      archive.addFile(ArchiveFile(
+          'manifest.json',
           utf8.encode(jsonEncode({'version': 1})).length,
           utf8.encode(jsonEncode({'version': 1}))));
 
-      archive.addFile(ArchiveFile('stroom_manifest.json',
-          utf8.encode(jsonEncode({'image_records': [], 'audio_records': [],
-              'video_records': [], 'text_records': [],
-              'text_folders': [], 'audio_folders': [],
-              'image_folders': [], 'video_folders': []})).length,
-          utf8.encode(jsonEncode({'image_records': [], 'audio_records': [],
-              'video_records': [], 'text_records': [],
-              'text_folders': [], 'audio_folders': [],
-              'image_folders': [], 'video_folders': []}))));
+      archive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          utf8
+              .encode(jsonEncode({
+                'image_records': [],
+                'audio_records': [],
+                'video_records': [],
+                'text_records': [],
+                'text_folders': [],
+                'audio_folders': [],
+                'image_folders': [],
+                'video_folders': []
+              }))
+              .length,
+          utf8.encode(jsonEncode({
+            'image_records': [],
+            'audio_records': [],
+            'video_records': [],
+            'text_records': [],
+            'text_folders': [],
+            'audio_folders': [],
+            'image_folders': [],
+            'video_folders': []
+          }))));
 
-      archive.addFile(ArchiveFile('preferences.json',
+      archive.addFile(ArchiveFile(
+          'preferences.json',
           utf8.encode(jsonEncode(prefData)).length,
           utf8.encode(jsonEncode(prefData))));
 
@@ -297,15 +329,29 @@ void main() {
     test('restore without preferences skips migration gracefully', () async {
       // Build a backup WITHOUT preferences.json
       final archive = Archive();
-      archive.addFile(ArchiveFile('manifest.json',
+      archive.addFile(ArchiveFile(
+          'manifest.json',
           utf8.encode(jsonEncode({'version': 1})).length,
           utf8.encode(jsonEncode({'version': 1}))));
 
-      archive.addFile(ArchiveFile('stroom_manifest.json',
-          utf8.encode(jsonEncode({'image_records': [], 'audio_records': [],
-              'video_records': [], 'text_records': [], 'folders': []})).length,
-          utf8.encode(jsonEncode({'image_records': [], 'audio_records': [],
-              'video_records': [], 'text_records': [], 'folders': []}))));
+      archive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          utf8
+              .encode(jsonEncode({
+                'image_records': [],
+                'audio_records': [],
+                'video_records': [],
+                'text_records': [],
+                'folders': []
+              }))
+              .length,
+          utf8.encode(jsonEncode({
+            'image_records': [],
+            'audio_records': [],
+            'video_records': [],
+            'text_records': [],
+            'folders': []
+          }))));
 
       // NO preferences.json — migration will see whatever prefs exist
 

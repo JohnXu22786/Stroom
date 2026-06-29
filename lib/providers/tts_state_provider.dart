@@ -37,7 +37,14 @@ class SynthesisConfigNotifier extends StateNotifier<SynthesisConfig> {
 
   /// 已知的 voice ID 白名单（非语音名称）
   static const _knownVoiceIds = {
-    'female', 'male', 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer',
+    'female',
+    'male',
+    'alloy',
+    'echo',
+    'fable',
+    'onyx',
+    'nova',
+    'shimmer',
   };
 
   Future<void> loadConfig() async {

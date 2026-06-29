@@ -165,8 +165,10 @@ void main() {
       final results = MessageSearchPage.searchMessageContents(convs, query);
 
       // conv1, msg-1: "Flutter是什么框架？" -> match at start=0, end=7
-      final conv1Result = results.firstWhere((r) => r.conversation.id == 'conv-1');
-      final msg1Match = conv1Result.matches.firstWhere((m) => m.message.id == 'msg-1');
+      final conv1Result =
+          results.firstWhere((r) => r.conversation.id == 'conv-1');
+      final msg1Match =
+          conv1Result.matches.firstWhere((m) => m.message.id == 'msg-1');
       expect(msg1Match.matchStart, 0);
       expect(msg1Match.matchEnd, 7);
     });
@@ -206,7 +208,8 @@ void main() {
         ],
       );
 
-      final results = MessageSearchPage.searchMessageContents([conv1, conv2], 'apple');
+      final results =
+          MessageSearchPage.searchMessageContents([conv1, conv2], 'apple');
       expect(results.length, 2);
       // conv-a has 2 matches (a1, a2), conv-b has 1 match (b1)
       expect(results[0].conversation.id, 'conv-a');
@@ -290,8 +293,7 @@ void main() {
             home: Builder(
               builder: (context) => ElevatedButton(
                 onPressed: () async {
-                  final result = await Navigator.push<
-                                      Map<String, dynamic>>(
+                  final result = await Navigator.push<Map<String, dynamic>>(
                     context,
                     MaterialPageRoute(
                       builder: (_) => const MessageSearchPage(),
@@ -366,7 +368,8 @@ void main() {
         for (final match in result.matches) {
           expect(match.matchStart, greaterThanOrEqualTo(0));
           expect(match.matchEnd, greaterThan(match.matchStart));
-          expect(match.matchEnd, lessThanOrEqualTo(match.message.content.length));
+          expect(
+              match.matchEnd, lessThanOrEqualTo(match.message.content.length));
         }
       }
     });

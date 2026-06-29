@@ -90,8 +90,7 @@ class AssistantSettings {
         'enablePresencePenalty': enablePresencePenalty,
         if (seed != null) 'seed': seed,
         'enableSeed': enableSeed,
-        'customParameters':
-            customParameters.map((p) => p.toMap()).toList(),
+        'customParameters': customParameters.map((p) => p.toMap()).toList(),
       };
 
   factory AssistantSettings.fromMap(Map<String, dynamic> map) =>
@@ -106,14 +105,11 @@ class AssistantSettings {
         enableWebSearch: (map['enableWebSearch'] as bool?) ?? false,
         maxToolCalls: (map['maxToolCalls'] as int?) ?? 20,
         enableMaxToolCalls: (map['enableMaxToolCalls'] as bool?) ?? true,
-        frequencyPenalty:
-            (map['frequencyPenalty'] as num?)?.toDouble() ?? 0.0,
+        frequencyPenalty: (map['frequencyPenalty'] as num?)?.toDouble() ?? 0.0,
         enableFrequencyPenalty:
             (map['enableFrequencyPenalty'] as bool?) ?? false,
-        presencePenalty:
-            (map['presencePenalty'] as num?)?.toDouble() ?? 0.0,
-        enablePresencePenalty:
-            (map['enablePresencePenalty'] as bool?) ?? false,
+        presencePenalty: (map['presencePenalty'] as num?)?.toDouble() ?? 0.0,
+        enablePresencePenalty: (map['enablePresencePenalty'] as bool?) ?? false,
         seed: map['seed'] as int?,
         enableSeed: (map['enableSeed'] as bool?) ?? false,
         customParameters: (map['customParameters'] as List?)

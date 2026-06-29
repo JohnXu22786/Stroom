@@ -220,24 +220,29 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   Color iconColor;
 
                   if (entry.type == 'mcp') {
-                    final mcpTypeConfig =
-                        config.models.isNotEmpty ? config.models[0].typeConfig : null;
-                    final transport = mcpTypeConfig?['transport'] as String? ?? 'sse';
+                    final mcpTypeConfig = config.models.isNotEmpty
+                        ? config.models[0].typeConfig
+                        : null;
+                    final transport =
+                        mcpTypeConfig?['transport'] as String? ?? 'sse';
                     if (transport == 'stdio') {
                       final cmd = mcpTypeConfig?['command'] as String? ?? '';
                       leadIcon = Icons.desktop_windows;
                       iconColor = Colors.purple;
                       subtitle = '本地(stdio): $cmd';
                     } else {
-                      final url = mcpTypeConfig?['url'] as String? ?? config.host;
+                      final url =
+                          mcpTypeConfig?['url'] as String? ?? config.host;
                       leadIcon = Icons.cloud;
                       iconColor = Colors.blue;
-                      subtitle = '远程(SSE): ${url.isNotEmpty ? url : '(未设置 URL)'}';
+                      subtitle =
+                          '远程(SSE): ${url.isNotEmpty ? url : '(未设置 URL)'}';
                     }
                   } else {
                     leadIcon = Icons.dns;
                     iconColor = Colors.teal;
-                    subtitle = config.host.isNotEmpty ? config.host : '(未设置 Host)';
+                    subtitle =
+                        config.host.isNotEmpty ? config.host : '(未设置 Host)';
                   }
 
                   return Card(

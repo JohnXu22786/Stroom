@@ -11,7 +11,8 @@ void main() {
         hash: 'abc123',
         storagePath: 'attachments/abc123_12345.png',
         fileSize: 1024,
-      )..base64Data = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk';
+      )..base64Data =
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk';
 
       final map = att.toMap();
 
@@ -45,7 +46,8 @@ void main() {
         hash: 'def456',
         storagePath: 'attachments/def456_67890.jpg',
         fileSize: 2048,
-      )..base64Data = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcU';
+      )..base64Data =
+          '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcU';
 
       final map = att.toMap();
       final restored = Attachment.fromMap(map);
@@ -69,11 +71,13 @@ void main() {
         hash: 'ghi789',
         storagePath: 'attachments/ghi789_11111.pdf',
         fileSize: 4096,
-      )..base64Data = 'JVBERi0xLjQKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMCBSL0Zp';
+      )..base64Data =
+          'JVBERi0xLjQKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMCBSL0Zp';
 
       final copied = att.copyWith(fileName: 'renamed.pdf');
 
-      expect(copied.base64Data, 'JVBERi0xLjQKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMCBSL0Zp');
+      expect(copied.base64Data,
+          'JVBERi0xLjQKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMCBSL0Zp');
       expect(copied.fileName, 'renamed.pdf');
       expect(copied.hash, 'ghi789');
     });

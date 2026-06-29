@@ -177,9 +177,8 @@ class TaskExecutor {
             if (selectedMedia == null) {
               throw Exception('未能获取到可用媒体资源，请检查URL是否正确以及目标网站是否可达');
             }
-            final autoDetail = detectedMedia.length == 1
-                ? '剩余1个结果，自动进入下载'
-                : '自动选择第1个结果，进入下载';
+            final autoDetail =
+                detectedMedia.length == 1 ? '剩余1个结果，自动进入下载' : '自动选择第1个结果，进入下载';
             markExecutorStep(steps, i, done: true, detail: autoDetail);
             onUpdate(task.copyWith(
                 steps: steps,
@@ -263,11 +262,10 @@ class TaskExecutor {
                 .extension(downloadedFilePath)
                 .toLowerCase()
                 .replaceAll('.', '');
-            final isPlaylistSel =
-                task.selectedMedia?.isPlaylist ?? false;
+            final isPlaylistSel = task.selectedMedia?.isPlaylist ?? false;
             if (!isPlaylistSel && !isSpecialFormat(skipExt)) {
-              markExecutorStep(steps, i, skipped: true,
-                  detail: '.$skipExt 格式无需转换，已跳过');
+              markExecutorStep(steps, i,
+                  skipped: true, detail: '.$skipExt 格式无需转换，已跳过');
               onUpdate(task.copyWith(
                   steps: steps, progress: calcExecutorProgress(steps)));
               continue;
@@ -358,7 +356,8 @@ class TaskExecutor {
           timeout: const Duration(seconds: 30),
           cancelToken: cancelToken,
           onProgress: (step, progress) {
-            markExecutorStep(steps, 0, running: true, progress: 50 + (progress ~/ 2));
+            markExecutorStep(steps, 0,
+                running: true, progress: 50 + (progress ~/ 2));
             onUpdate(task.copyWith(
                 steps: steps, progress: 20 + (progress * 30 ~/ 100)));
           },
@@ -399,8 +398,8 @@ class TaskExecutor {
       resources = await probeMediaResources(resources);
     }
 
-    markExecutorStep(steps, 0, done: true,
-        detail: '获取到${resources.length}个媒体资源');
+    markExecutorStep(steps, 0,
+        done: true, detail: '获取到${resources.length}个媒体资源');
     markExecutorStep(steps, 1, done: true);
     onUpdate(task.copyWith(
         steps: steps,
@@ -459,14 +458,13 @@ class TaskExecutor {
             isPlaylist: false);
       }).toList();
       final totalCount = media.length + segmentMedia.length;
-      markExecutorStep(steps, 2, done: true,
-          detail: '获取到$totalCount个资源（播放列表${segments.length}个分段）');
+      markExecutorStep(steps, 2,
+          done: true, detail: '获取到$totalCount个资源（播放列表${segments.length}个分段）');
       return [...media, ...segmentMedia];
     }
     markExecutorStep(steps, 2, done: true);
     return null;
   }
-
 
   static Future<String?> _executeDownload({
     required CatCatchTask task,
@@ -503,20 +501,20 @@ class TaskExecutor {
               buildDownloadFileName(media, task.metadata));
           final mergedPath = await DownloadManager.downloadSegmentsAndMerge(
             segmentUrls: segments,
-            outputPath: p.join(downloadDir,
-                '${playlistBaseName}_merged.ts'),
+            outputPath: p.join(downloadDir, '${playlistBaseName}_merged.ts'),
             headers: browserHeaders,
             concurrency: DefaultRules.maxConcurrency,
             onProgress: (completed, total, progress) {
               markExecutorStep(steps, 5, running: true, progress: progress);
-              onUpdate(
-                  task.copyWith(steps: steps, progress: calcExecutorProgress(steps)));
+              onUpdate(task.copyWith(
+                  steps: steps, progress: calcExecutorProgress(steps)));
             },
             cancelToken: cancelToken,
             taskId: task.id,
           );
           markExecutorStep(steps, 5, done: true);
-          onUpdate(task.copyWith(steps: steps, progress: calcExecutorProgress(steps)));
+          onUpdate(task.copyWith(
+              steps: steps, progress: calcExecutorProgress(steps)));
           return mergedPath;
         }
         final fileName = buildDownloadFileName(media, task.metadata);
@@ -534,15 +532,16 @@ class TaskExecutor {
             final progress = total > 0 ? (received * 100 ~/ total) : 0;
             markExecutorStep(steps, 5,
                 running: true, progress: progress.clamp(0, 100));
-            onUpdate(
-                task.copyWith(steps: steps, progress: calcExecutorProgress(steps)));
+            onUpdate(task.copyWith(
+                steps: steps, progress: calcExecutorProgress(steps)));
           },
           cancelToken: cancelToken,
           taskId: task.id,
           existingPath: tempPath,
         );
         markExecutorStep(steps, 5, done: true);
-        onUpdate(task.copyWith(steps: steps, progress: calcExecutorProgress(steps)));
+        onUpdate(
+            task.copyWith(steps: steps, progress: calcExecutorProgress(steps)));
         return downloadedFilePath;
       },
       maxRetries: 2,
@@ -573,11 +572,13 @@ class TaskExecutor {
         outputPath: outputPath,
         onProgress: (progress) {
           markExecutorStep(steps, 6, running: true, progress: progress);
-          onUpdate(task.copyWith(steps: steps, progress: calcExecutorProgress(steps)));
+          onUpdate(task.copyWith(
+              steps: steps, progress: calcExecutorProgress(steps)));
         },
         cancelToken: cancelToken);
     markExecutorStep(steps, 6, done: true);
-    onUpdate(task.copyWith(steps: steps, progress: calcExecutorProgress(steps)));
+    onUpdate(
+        task.copyWith(steps: steps, progress: calcExecutorProgress(steps)));
     return result;
   }
 }

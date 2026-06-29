@@ -287,14 +287,12 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   }) {
     if (mediaList.isEmpty) return;
     if (mediaList.length == 1) {
-      selectMedia(parentTaskId, mediaList.first,
-          mergeAudioUrl: mergeAudioUrl);
+      selectMedia(parentTaskId, mediaList.first, mergeAudioUrl: mergeAudioUrl);
       return;
     }
 
     // 第一个资源：走正常流程
-    selectMedia(parentTaskId, mediaList.first,
-        mergeAudioUrl: mergeAudioUrl);
+    selectMedia(parentTaskId, mediaList.first, mergeAudioUrl: mergeAudioUrl);
 
     // 其余资源：创建子任务，跳过分析直接下载
     final parentIndex = state.indexWhere((t) => t.id == parentTaskId);
@@ -377,7 +375,8 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       // 迁移旧数据：userSelecting 中但 detectedMedia 为空的任务标记为失败
       final migrated = [
         for (final task in tasks)
-          if (task.steps.any((s) => s.type == StepType.userSelecting && s.running) &&
+          if (task.steps
+                  .any((s) => s.type == StepType.userSelecting && s.running) &&
               task.detectedMedia.isEmpty)
             task.copyWith(
               status: TaskStatus.failed,
@@ -443,8 +442,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   // ===========================================================================
 
   /// 检查是否有运行中的任务
-  bool _hasRunningTasks() =>
-      state.any((t) => t.status == TaskStatus.running);
+  bool _hasRunningTasks() => state.any((t) => t.status == TaskStatus.running);
 
   /// 执行任务
   Future<void> _executeTask(CatCatchTask task) async {
@@ -627,5 +625,4 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     }
     return File(p.join(catcatchDir.path, 'tasks.json'));
   }
-
 }

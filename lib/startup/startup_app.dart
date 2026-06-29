@@ -89,7 +89,8 @@ class _StartupAppState extends State<StartupApp> {
       // Ensure minimum display time
       final elapsed = stopwatch.elapsedMilliseconds;
       if (elapsed < _minimumDisplayMs) {
-        await Future.delayed(Duration(milliseconds: _minimumDisplayMs - elapsed));
+        await Future.delayed(
+            Duration(milliseconds: _minimumDisplayMs - elapsed));
       }
 
       if (!mounted) return;

@@ -42,7 +42,8 @@ void main() {
       expect(find.text('文本'), findsWidgets);
     });
 
-    testWidgets('text tab is placed before audio tab (new order)', (tester) async {
+    testWidgets('text tab is placed before audio tab (new order)',
+        (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 

@@ -6,7 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/pages/image_editor_page.dart';
 
 /// Helper to create a small test image (png bytes, 100x100, green)
-Future<Uint8List> createTestImageBytes({int width = 100, int height = 100}) async {
+Future<Uint8List> createTestImageBytes(
+    {int width = 100, int height = 100}) async {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
   canvas.drawRect(
@@ -66,8 +67,7 @@ void main() {
   // Widget tests for ImageEditorPage
   // ====================================================================
   group('ImageEditorPage page rendering', () {
-    testWidgets('page renders without crash with image bytes',
-        (tester) async {
+    testWidgets('page renders without crash with image bytes', (tester) async {
       await tester.pumpWidget(createTestApp(testImage));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));

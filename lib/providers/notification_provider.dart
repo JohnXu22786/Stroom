@@ -18,8 +18,8 @@ final inAppNotificationProvider = StateProvider<NotificationPayload?>(
 
 final notificationSettingsProvider =
     StateNotifierProvider<NotificationSettingsNotifier, bool>((ref) {
-      return NotificationSettingsNotifier();
-    });
+  return NotificationSettingsNotifier();
+});
 
 class NotificationSettingsNotifier extends StateNotifier<bool> {
   NotificationSettingsNotifier() : super(false);

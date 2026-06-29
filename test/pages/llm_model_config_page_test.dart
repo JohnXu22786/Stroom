@@ -31,8 +31,7 @@ void main() {
       expect(find.text('温度 (Temperature)'), findsOneWidget);
     });
 
-    testWidgets('toggle switches control slider availability',
-        (tester) async {
+    testWidgets('toggle switches control slider availability', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: LlmModelConfigPage(),
@@ -75,7 +74,7 @@ void main() {
 
       // Find all switches in LLM section
       final switches = find.byType(Switch);
-      
+
       // Toggle the first switch (temperature toggle)
       await tester.tap(switches.first);
       await tester.pump();
@@ -103,7 +102,7 @@ void main() {
       await tester.enterText(textFields.at(1), 'test-model');
       // Index 2 = context length
       await tester.enterText(textFields.at(2), '4096');
-      
+
       await tester.pump();
 
       // Save button should exist
@@ -112,7 +111,8 @@ void main() {
   });
 
   group('Reasoning params editing with options', () {
-    testWidgets('reasoning params section shows no toggle by default (must add manually)',
+    testWidgets(
+        'reasoning params section shows no toggle by default (must add manually)',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -139,8 +139,7 @@ void main() {
       expect(find.text('关闭时值'), findsOneWidget);
     });
 
-    testWidgets('can add reasoning param with options',
-        (tester) async {
+    testWidgets('can add reasoning param with options', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: LlmModelConfigPage(),
@@ -236,7 +235,8 @@ void main() {
       expect(find.text('推理参数错误：推理开关开启值不能为空'), findsOneWidget);
     });
 
-    testWidgets('save with fully empty toggle (all fields empty) should succeed',
+    testWidgets(
+        'save with fully empty toggle (all fields empty) should succeed',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(

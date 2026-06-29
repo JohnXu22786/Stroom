@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/models/assistant.dart' show AssistantSettings, CustomParameter;
+import 'package:stroom/models/assistant.dart'
+    show AssistantSettings, CustomParameter;
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/models/ai_stream_event.dart';
 import 'package:stroom/providers/chat_api_provider.dart';
@@ -23,10 +24,10 @@ class _CapturingProvider extends BaseChatProvider {
 
   @override
   Map<String, dynamic> get defaultParams => {
-    'model': 'test',
-    'max_tokens': 4096,
-    'temperature': 0.7,
-  };
+        'model': 'test',
+        'max_tokens': 4096,
+        'temperature': 0.7,
+      };
 
   @override
   Future<String> chat(
@@ -316,7 +317,8 @@ void main() {
           reason: 'custom params should be after max_tokens');
     });
 
-    test('extraParams spread AFTER standard params in sendStreamWithTools', () async {
+    test('extraParams spread AFTER standard params in sendStreamWithTools',
+        () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
@@ -334,7 +336,8 @@ void main() {
 
       final events = <dynamic>[];
       provider.reset();
-      await for (final event in service.sendStreamWithTools('Hi', history: [])) {
+      await for (final event
+          in service.sendStreamWithTools('Hi', history: [])) {
         events.add(event);
       }
 
@@ -356,14 +359,15 @@ void main() {
   });
 
   group('ChatService - temperature/maxTokens toggle behavior', () {
-    test('temperature NOT sent when enableTemperature is false (model-level)', () async {
+    test('temperature NOT sent when enableTemperature is false (model-level)',
+        () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
         typeConfig: {
           'context': 4096,
           'enableTemperature': false,
-          'temperature': 0.5,  // value exists but toggle is OFF
+          'temperature': 0.5, // value exists but toggle is OFF
         },
       );
 
@@ -387,14 +391,15 @@ void main() {
           reason: 'temperature should NOT be in body when toggle is OFF');
     });
 
-    test('max_tokens NOT sent when enableMaxTokens is false (model-level)', () async {
+    test('max_tokens NOT sent when enableMaxTokens is false (model-level)',
+        () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
         typeConfig: {
           'context': 4096,
           'enableMaxTokens': false,
-          'maxTokens': 2048,  // value exists but toggle is OFF
+          'maxTokens': 2048, // value exists but toggle is OFF
         },
       );
 
@@ -418,7 +423,8 @@ void main() {
           reason: 'max_tokens should NOT be in body when toggle is OFF');
     });
 
-    test('temperature sent when enableTemperature is true (model-level)', () async {
+    test('temperature sent when enableTemperature is true (model-level)',
+        () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
@@ -442,7 +448,8 @@ void main() {
       expect(provider.capturedTemperature, closeTo(0.3, 0.001));
     });
 
-    test('max_tokens sent when enableMaxTokens is true (model-level)', () async {
+    test('max_tokens sent when enableMaxTokens is true (model-level)',
+        () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
@@ -466,7 +473,8 @@ void main() {
       expect(provider.capturedMaxTokens, equals(2048));
     });
 
-    test('temperature NOT sent when neither model nor assistant has it enabled', () async {
+    test('temperature NOT sent when neither model nor assistant has it enabled',
+        () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
@@ -489,13 +497,14 @@ void main() {
       expect(provider.capturedTemperature, isNull);
     });
 
-    test('assistant override sends temperature when assistant enables it', () async {
+    test('assistant override sends temperature when assistant enables it',
+        () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
         typeConfig: {
           'context': 4096,
-          'enableTemperature': false,  // model toggle OFF
+          'enableTemperature': false, // model toggle OFF
           'temperature': 0.5,
         },
       );
@@ -533,7 +542,9 @@ void main() {
 
     test('extraParams spread at the END of body', () {
       final body = provider.buildBody(
-        [{'role': 'user', 'content': 'Hi'}],
+        [
+          {'role': 'user', 'content': 'Hi'}
+        ],
         model: 'test-model',
         maxTokens: 1024,
         temperature: 0.5,
@@ -563,11 +574,13 @@ void main() {
       // If an extraParam has the same key as a standard param,
       // the extraParam value wins (since it's spread after)
       final body = provider.buildBody(
-        [{'role': 'user', 'content': 'Hi'}],
+        [
+          {'role': 'user', 'content': 'Hi'}
+        ],
         model: 'test-model',
         temperature: 0.5,
         extraParams: {
-          'temperature': 0.9,  // override
+          'temperature': 0.9, // override
         },
       );
 
@@ -577,7 +590,8 @@ void main() {
   });
 
   group('ChatService setAssistantSettings integration', () {
-    test('assistant settings override model temperature when enableTemperature is true',
+    test(
+        'assistant settings override model temperature when enableTemperature is true',
         () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',
@@ -606,7 +620,8 @@ void main() {
       expect(provider.capturedTemperature, closeTo(0.9, 0.001));
     });
 
-    test('assistant settings do NOT send max_tokens when enableMaxTokens is false',
+    test(
+        'assistant settings do NOT send max_tokens when enableMaxTokens is false',
         () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',
@@ -632,7 +647,8 @@ void main() {
 
       // Neither model nor assistant has max_tokens enabled - should be null
       expect(provider.capturedMaxTokens, isNull,
-          reason: 'max_tokens should be null when both model and assistant toggles are OFF');
+          reason:
+              'max_tokens should be null when both model and assistant toggles are OFF');
     });
   });
 }

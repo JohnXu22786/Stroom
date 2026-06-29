@@ -70,8 +70,7 @@ void main() {
       );
 
       // Both registrations should succeed
-      expect(true, isTrue,
-          reason: 'Multiple tools should coexist');
+      expect(true, isTrue, reason: 'Multiple tools should coexist');
     });
 
     test('ToolDefinition from MCP has correct structure', () {
@@ -97,8 +96,7 @@ void main() {
 
       final params = json['function']['parameters'] as Map<String, dynamic>;
       expect(params['type'], equals('object'));
-      expect(
-          (params['properties'] as Map<String, dynamic>).containsKey('url'),
+      expect((params['properties'] as Map<String, dynamic>).containsKey('url'),
           isTrue);
     });
 

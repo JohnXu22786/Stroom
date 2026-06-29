@@ -54,8 +54,7 @@ class ReasoningSection extends ConsumerWidget {
             ),
             child: _ReasoningButton(
               reasoningText: sections.texts[i],
-              isStreaming: sections.streaming &&
-                  i == sections.texts.length - 1,
+              isStreaming: sections.streaming && i == sections.texts.length - 1,
               isMulti: sections.hasMultiple,
               index: i,
               messageId: messageId,
@@ -167,8 +166,7 @@ class _ReasoningPanelDialog extends ConsumerStatefulWidget {
       _ReasoningPanelDialogState();
 }
 
-class _ReasoningPanelDialogState
-    extends ConsumerState<_ReasoningPanelDialog> {
+class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog> {
   String _displayText = '';
 
   @override

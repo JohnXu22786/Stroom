@@ -117,7 +117,8 @@ class TrimSection extends ConsumerWidget {
                 const Icon(Icons.content_cut, size: 20),
                 const SizedBox(width: 8),
                 const Text('裁切设置',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                    style:
+                        TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
                 const Spacer(),
                 if (selectedPresetId != null &&
                     selectedPresetId != BuiltinTrimPresetIds.none)
@@ -179,8 +180,8 @@ class TrimSection extends ConsumerWidget {
                     // ignore: deprecated_member_use
                     onChanged: (v) => onPresetChanged(v),
                   ),
-                  title: Text(preset.name,
-                      style: const TextStyle(fontSize: 14)),
+                  title:
+                      Text(preset.name, style: const TextStyle(fontSize: 14)),
                   subtitle: Text(
                     '裁切$dirLabel ${preset.durationSeconds.toStringAsFixed(3)}s',
                     style: const TextStyle(fontSize: 12),

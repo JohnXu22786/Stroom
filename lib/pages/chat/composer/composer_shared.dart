@@ -42,18 +42,14 @@ class SettingsChip extends StatelessWidget {
           children: [
             Icon(icon,
                 size: 16,
-                color: isDisabled
-                    ? Colors.grey.withOpacity(0.4)
-                    : color),
+                color: isDisabled ? Colors.grey.withOpacity(0.4) : color),
             const SizedBox(width: 4),
             Text(
               label,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                color: isDisabled
-                    ? Colors.grey.withOpacity(0.4)
-                    : cs.onSurface,
+                color: isDisabled ? Colors.grey.withOpacity(0.4) : cs.onSurface,
               ),
             ),
           ],

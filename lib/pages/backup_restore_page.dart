@@ -62,8 +62,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                   ),
                   Expanded(
                     child: GestureDetector(
-                      onTap: () => setDialogState(
-                          () => backupFirst = !backupFirst),
+                      onTap: () =>
+                          setDialogState(() => backupFirst = !backupFirst),
                       child: const Text('先备份当前数据（推荐）'),
                     ),
                   ),
@@ -136,7 +136,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.folder_open, color: Colors.orange.shade700, size: 20),
+                      Icon(Icons.folder_open,
+                          color: Colors.orange.shade700, size: 20),
                       const SizedBox(width: 8),
                       Text(
                         '自动备份位置',
@@ -165,7 +166,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.folder, size: 16, color: Colors.grey.shade600),
+                        Icon(Icons.folder,
+                            size: 16, color: Colors.grey.shade600),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
