@@ -1,0 +1,114 @@
+name: Nightly Build
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 17 * * *" # 01:00 Beijing Time (UTC+8)
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  cleanup-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete old artifacts (>14 days)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          cutoff_date=$(date -d "14 days ago" +%Y-%m-%d)
+          gh api repos/$REPO/actions/artifacts --paginate | \
+          jq -r '.artifacts[] | select(.name | startswith("stroom-nightly-")) | select(.created_at < "'$cutoff_date'") | .id' | \
+          while read artifact_id; do
+            echo "Deleting artifact $artifact_id"
+            gh api repos/$REPO/actions/artifacts/$artifact_id -X DELETE
+          done
+
+  nightly-build:
+    needs: cleanup-artifacts
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev
+
+      - name: Generate date tag
+        id: date
+        run: echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - run: flutter pub get
+
+      - name: Build Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: flutter build linux --release
+
+      - name: Build Windows
+        if: matrix.os == 'windows-latest'
+        run: flutter build windows --release
+
+      - name: Build macOS
+        if: matrix.os == 'macos-15'
+        run: |
+          flutter create --platforms=macos .
+          flutter pub get
+          flutter build macos --release
+
+      - name: Package artifacts
+        shell: bash
+        run: |
+          mkdir -p renamed-artifacts
+          DATE=${{ steps.date.outputs.date }}
+
+          if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
+            cd build/linux/x64/release/bundle
+            zip -r "$OLDPWD/renamed-artifacts/stroom-nightly-${DATE}-linux-x64.zip" .
+            cd "$OLDPWD"
+          fi
+
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            # Need to use PowerShell for Windows paths
+            echo "Windows packaging uses pwsh"
+          fi
+
+          if [ "${{ matrix.os }}" == "macos-15" ]; then
+            cd build/macos/Build/Products/Release
+            zip -r "$OLDPWD/renamed-artifacts/stroom-nightly-${DATE}-macos-arm64.zip" "Stroom.app"
+            cd "$OLDPWD"
+            hdiutil create -volname "Stroom" \
+              -srcfolder build/macos/Build/Products/Release/Stroom.app \
+              -ov -format UDZO \
+              "renamed-artifacts/stroom-nightly-${DATE}-macos-arm64.dmg" 2>/dev/null || true
+          fi
+
+      - name: Package Windows artifacts (pwsh)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $DATE = "${{ steps.date.outputs.date }}"
+          New-Item -ItemType Directory -Path renamed-artifacts -Force
+          Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "renamed-artifacts\stroom-nightly-$DATE-windows-x64.zip"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: stroom-nightly-${{ steps.date.outputs.date }}-${{ matrix.os }}
+          path: renamed-artifacts/*
+          retention-days: 3
