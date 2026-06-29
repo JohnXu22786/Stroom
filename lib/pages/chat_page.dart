@@ -712,13 +712,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
               lastUpdate = now;
               // Update provider so streaming state survives page disposal
               ref.read(streamingFullReplyProvider.notifier).state = fullReply;
-              // Keep the controller updated so the Chat widget re-renders
-              // the streaming message. The textMessageBuilder will read
-              // from _chatSegments (incremental segments) for the actual
-              // markdown rendering, not from message.text directly.
-              if (mounted) {
-                updateMessage(fullReply);
-              }
+              // 流式过程中不调用 updateMessage 避免通过方法通道传大字符串。
+              // 实际渲染走 _chatSegments（增量分段），setState 触发重绘即可。
+              // 流结束后会调一次 updateMessage(fullReply) 把完整文本写入。
+              if (mounted) setState(() {});
               // Incremental rendering: add only the new text chunk as a
               // TextSegment, so MarkdownWidget only parses new content
               // instead of re-rendering the entire accumulated text.
@@ -877,7 +874,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
           );
         }
       }
-      // Final update — ensure last chunk is shown
+      // Final update — ensure last chunk is shown.
+      // 只在此处（流结束后）调一次 updateMessage，传完整文本。
       if (fullReply.isNotEmpty) {
         updateMessage(fullReply);
       }
