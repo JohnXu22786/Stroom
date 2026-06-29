@@ -29,12 +29,41 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
       - run: flutter pub get
       - name: Run Dart analyzer
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
+      - name: Check changed files have tests
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$BASE_SHA" ]; then
+            echo "Not a PR — skipping diff coverage check."
+            exit 0
+          fi
+          echo "### Changed lib/ files vs test/ coverage ###"
+          echo ""
+          UNCOVERED=0
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            test_f="test/${file#lib/}"
+            test_f="${test_f%.dart}_test.dart"
+            if [ -f "$test_f" ]; then
+              echo "  ✅ $file"
+            else
+              echo "  ⚠️  $file → missing $test_f"
+              UNCOVERED=1
+            fi
+          done < <(git diff --name-only "$BASE_SHA" -- 'lib/**/*.dart')
+          echo ""
+          if [ "$UNCOVERED" -eq 0 ]; then
+            echo "All changed files have matching tests. (But check that existing tests cover new logic.)"
+          else
+            echo "Some changed files lack dedicated test files. Add them or verify coverage via existing tests."
+          fi
 
   # ── Test Suite (parallel groups) ──────────────────────────────────────────
   test:
