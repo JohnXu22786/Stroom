@@ -50,7 +50,8 @@ void main() {
         'folder': '',
         'textLength': 200,
       });
-      await ManifestDatabase.updateTextRecord('txt_2', {'name': 'renamed', 'size': 400});
+      await ManifestDatabase.updateTextRecord(
+          'txt_2', {'name': 'renamed', 'size': 400});
       final records = await ManifestDatabase.getAllTextRecords();
       expect(records[0]['name'], equals('renamed'));
       expect(records[0]['size'], equals(400));
@@ -151,7 +152,8 @@ void main() {
         textLength: 100,
       );
       await TextManifest.addRecord(record);
-      await TextManifest.updateRecord(record.copyWith(name: 'after', size: 999));
+      await TextManifest.updateRecord(
+          record.copyWith(name: 'after', size: 999));
       final records = await TextManifest.loadRecords();
       expect(records[0].name, equals('after'));
       expect(records[0].size, equals(999));
@@ -180,8 +182,8 @@ void main() {
       expect(restored.size, equals(42));
       expect(restored.folder, equals('subfolder'));
       expect(restored.textLength, equals(42));
-      expect(restored.createdAt.toIso8601String(),
-          equals(now.toIso8601String()));
+      expect(
+          restored.createdAt.toIso8601String(), equals(now.toIso8601String()));
     });
 
     testWidgets('TextRecord copyWithName', (WidgetTester t) async {
@@ -229,8 +231,7 @@ void main() {
   group('TextManifest UTF-8 encoding', () {
     /// Demonstrate that `text.codeUnits` (the BUGGY approach) corrupts
     /// Chinese text by truncating 16-bit code units to 8 bits.
-    test('codeUnits truncates Chinese characters (demonstrates the bug)',
-        () {
+    test('codeUnits truncates Chinese characters (demonstrates the bug)', () {
       const chinese = '中文测试';
 
       // codeUnits returns each character as a 16-bit (or more) value
@@ -277,8 +278,7 @@ void main() {
     });
 
     /// Verify that codeUnits produces wrong byte count for Chinese text.
-    test('utf8.encode produces correct byte sizes vs codeUnits truncation',
-        () {
+    test('utf8.encode produces correct byte sizes vs codeUnits truncation', () {
       const chinese = '你好世界，这是中文OCR识别测试。';
 
       final utf8Bytes = Uint8List.fromList(utf8.encode(chinese));
@@ -303,8 +303,7 @@ void main() {
 
       expect(hash1, equals(hash2),
           reason: 'computeTextHash must return identical hash for same input.');
-      expect(hash1, isNotEmpty,
-          reason: 'Hash must not be empty.');
+      expect(hash1, isNotEmpty, reason: 'Hash must not be empty.');
     });
 
     /// Verify what OCR/ASR pages currently do: utf8.encode for hash.
@@ -335,8 +334,7 @@ void main() {
       final decoded = utf8.decode(writeBytes);
 
       expect(decoded, equals(chinese),
-          reason:
-              'The core encoding logic must roundtrip Chinese text. '
+          reason: 'The core encoding logic must roundtrip Chinese text. '
               'After fixing writeText to use utf8.encode and readText '
               'to use utf8.decode, this must pass.');
 
@@ -344,8 +342,7 @@ void main() {
       final buggyBytes = Uint8List.fromList(chinese.codeUnits);
       final buggyDecoded = String.fromCharCodes(buggyBytes);
       expect(buggyDecoded, isNot(equals(chinese)),
-          reason:
-              'The old codeUnits approach must still fail - this confirms '
+          reason: 'The old codeUnits approach must still fail - this confirms '
               'the bug exists and our fix is necessary.');
     });
 
@@ -359,8 +356,7 @@ void main() {
 
       // For pure ASCII, both produce the same bytes
       expect(utf8Bytes, equals(codeUnitsBytes),
-          reason:
-              'For ASCII-only text, both utf8.encode and codeUnits '
+          reason: 'For ASCII-only text, both utf8.encode and codeUnits '
               'produce identical bytes.');
 
       final utf8Decoded = utf8.decode(utf8Bytes);
@@ -374,7 +370,8 @@ void main() {
   // ====== Empty file handling ======
 
   group('TextManifest empty file handling', () {
-    test('readText returns empty string for empty bytes instead of null', () async {
+    test('readText returns empty string for empty bytes instead of null',
+        () async {
       // Create a test file with empty content
       const emptyContent = '';
       final bytes = Uint8List.fromList(utf8.encode(emptyContent));

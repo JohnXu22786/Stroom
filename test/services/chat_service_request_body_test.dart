@@ -81,7 +81,9 @@ void main() {
 
     test('omits temperature when null', () {
       final body = provider.buildBody(
-        [{'role': 'user', 'content': 'Hi'}],
+        [
+          {'role': 'user', 'content': 'Hi'}
+        ],
         model: 'test-model',
       );
       expect(body.containsKey('temperature'), isFalse,
@@ -90,7 +92,9 @@ void main() {
 
     test('includes temperature when value provided', () {
       final body = provider.buildBody(
-        [{'role': 'user', 'content': 'Hi'}],
+        [
+          {'role': 'user', 'content': 'Hi'}
+        ],
         model: 'test-model',
         temperature: 0.5,
       );
@@ -99,7 +103,9 @@ void main() {
 
     test('omits tools when tools is null', () {
       final body = provider.buildBody(
-        [{'role': 'user', 'content': 'Hi'}],
+        [
+          {'role': 'user', 'content': 'Hi'}
+        ],
         model: 'test-model',
         tools: null,
         stream: true,
@@ -110,7 +116,9 @@ void main() {
 
     test('omits tools when tools is empty list', () {
       final body = provider.buildBody(
-        [{'role': 'user', 'content': 'Hi'}],
+        [
+          {'role': 'user', 'content': 'Hi'}
+        ],
         model: 'test-model',
         tools: [],
         stream: true,
@@ -121,7 +129,9 @@ void main() {
 
     test('includes tools when non-empty', () {
       final body = provider.buildBody(
-        [{'role': 'user', 'content': 'Hi'}],
+        [
+          {'role': 'user', 'content': 'Hi'}
+        ],
         model: 'test-model',
         tools: [
           {
@@ -142,7 +152,9 @@ void main() {
 
     test('includes stream parameter', () {
       final body = provider.buildBody(
-        [{'role': 'user', 'content': 'Hi'}],
+        [
+          {'role': 'user', 'content': 'Hi'}
+        ],
         model: 'test-model',
         stream: true,
       );
@@ -158,7 +170,8 @@ void main() {
       provider = _RequestCaptureProvider();
     });
 
-    test('sendStream omits temperature from _lastRequestBody when toggle is off',
+    test(
+        'sendStream omits temperature from _lastRequestBody when toggle is off',
         () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
@@ -181,7 +194,8 @@ void main() {
       final lastBody = service.lastRequestBody;
       expect(lastBody, isNotNull);
       expect(lastBody!.containsKey('temperature'), isFalse,
-          reason: 'temperature should NOT be in _lastRequestBody when toggle is off');
+          reason:
+              'temperature should NOT be in _lastRequestBody when toggle is off');
     });
 
     test('sendStream does NOT pass temperature to provider when toggle is off',
@@ -207,7 +221,8 @@ void main() {
           reason: 'temperature should be null when toggle is off');
     });
 
-    test('sendStream includes temperature in _lastRequestBody when toggle is on',
+    test(
+        'sendStream includes temperature in _lastRequestBody when toggle is on',
         () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
@@ -231,7 +246,9 @@ void main() {
       expect(lastBody!['temperature'], closeTo(0.3, 0.001));
     });
 
-    test('sendStream passes configured temperature to provider when toggle is on', () async {
+    test(
+        'sendStream passes configured temperature to provider when toggle is on',
+        () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
@@ -265,17 +282,20 @@ void main() {
       final service = ChatService(provider: provider, modelConfig: modelConfig);
 
       final events = <dynamic>[];
-      await for (final event in service.sendStreamWithTools('Hi', history: [])) {
+      await for (final event
+          in service.sendStreamWithTools('Hi', history: [])) {
         events.add(event);
       }
 
       final lastBody = service.lastRequestBody;
       expect(lastBody, isNotNull);
       expect(lastBody!.containsKey('temperature'), isFalse,
-          reason: 'temperature should NOT be in _lastRequestBody when toggle is off');
+          reason:
+              'temperature should NOT be in _lastRequestBody when toggle is off');
     });
 
-    test('sendStreamWithTools does NOT pass temperature to provider when toggle off',
+    test(
+        'sendStreamWithTools does NOT pass temperature to provider when toggle off',
         () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
@@ -289,7 +309,8 @@ void main() {
       final service = ChatService(provider: provider, modelConfig: modelConfig);
 
       final events = <dynamic>[];
-      await for (final event in service.sendStreamWithTools('Hi', history: [])) {
+      await for (final event
+          in service.sendStreamWithTools('Hi', history: [])) {
         events.add(event);
       }
 
@@ -313,7 +334,8 @@ void main() {
       );
     });
 
-    test('sendStreamWithTools has no tools key in _lastRequestBody when empty list',
+    test(
+        'sendStreamWithTools has no tools key in _lastRequestBody when empty list',
         () async {
       final service = ChatService(provider: provider, modelConfig: modelConfig);
       provider.reset();
@@ -330,10 +352,12 @@ void main() {
       final lastBody = service.lastRequestBody;
       expect(lastBody, isNotNull);
       expect(lastBody!.containsKey('tools'), isFalse,
-          reason: 'tools key should NOT be in _lastRequestBody when empty list');
+          reason:
+              'tools key should NOT be in _lastRequestBody when empty list');
     });
 
-    test('sendStreamWithTools passes null tools to provider when empty list', () async {
+    test('sendStreamWithTools passes null tools to provider when empty list',
+        () async {
       final service = ChatService(provider: provider, modelConfig: modelConfig);
       provider.reset();
 
@@ -352,7 +376,8 @@ void main() {
           reason: 'tools should be null when empty list is passed');
     });
 
-    test('sendStreamWithTools includes tools from _lastRequestBody when non-empty',
+    test(
+        'sendStreamWithTools includes tools from _lastRequestBody when non-empty',
         () async {
       final service = ChatService(provider: provider, modelConfig: modelConfig);
 
@@ -387,7 +412,8 @@ void main() {
       provider = _RequestCaptureProvider();
     });
 
-    test('sendStream includes reasoning params in _lastRequestBody when reasoning enabled',
+    test(
+        'sendStream includes reasoning params in _lastRequestBody when reasoning enabled',
         () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',
@@ -432,11 +458,14 @@ void main() {
       expect(provider.capturedExtraParams!.containsKey('thinking'), isTrue,
           reason: 'reasoning params should be in extraParams');
       expect(provider.capturedExtraParams!['thinking'], isA<Map>());
-      expect((provider.capturedExtraParams!['thinking'] as Map)['type'], equals('enabled'));
-      expect((provider.capturedExtraParams!['thinking'] as Map)['budget'], equals('high'));
+      expect((provider.capturedExtraParams!['thinking'] as Map)['type'],
+          equals('enabled'));
+      expect((provider.capturedExtraParams!['thinking'] as Map)['budget'],
+          equals('high'));
     });
 
-    test('sendStreamWithTools includes reasoning params in extraParams when reasoning enabled',
+    test(
+        'sendStreamWithTools includes reasoning params in extraParams when reasoning enabled',
         () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',
@@ -478,8 +507,10 @@ void main() {
       expect(provider.capturedExtraParams!.containsKey('thinking'), isTrue,
           reason: 'reasoning params should be in extraParams');
       expect(provider.capturedExtraParams!['thinking'], isA<Map>());
-      expect((provider.capturedExtraParams!['thinking'] as Map)['type'], equals('enabled'));
-      expect((provider.capturedExtraParams!['thinking'] as Map)['budget'], equals('high'));
+      expect((provider.capturedExtraParams!['thinking'] as Map)['type'],
+          equals('enabled'));
+      expect((provider.capturedExtraParams!['thinking'] as Map)['budget'],
+          equals('high'));
     });
   });
 }

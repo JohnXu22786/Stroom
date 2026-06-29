@@ -72,8 +72,14 @@ void main() {
         'modelId': 'test',
         'typeConfig': {'context': 4096},
         'reasoningParams': [
-          {'paramName': 'reasoning_effort', 'options': ['low', 'medium', 'high']},
-          {'paramName': 'thinking.type', 'options': ['enabled', 'disabled']},
+          {
+            'paramName': 'reasoning_effort',
+            'options': ['low', 'medium', 'high']
+          },
+          {
+            'paramName': 'thinking.type',
+            'options': ['enabled', 'disabled']
+          },
         ],
       });
       expect(config.reasoningParams.length, 2);
@@ -83,15 +89,24 @@ void main() {
       expect(config.reasoningParams[1].options, ['enabled', 'disabled']);
     });
 
-    test('fromMap handles old format CustomParam reasoningParams gracefully', () {
+    test('fromMap handles old format CustomParam reasoningParams gracefully',
+        () {
       // Old format had paramName, defaultValue, type instead of options
       final config = ModelConfig.fromMap({
         'name': 'Test',
         'modelId': 'test',
         'typeConfig': {'context': 4096},
         'reasoningParams': [
-          {'paramName': 'thinking.type', 'defaultValue': 'enabled', 'type': 'string'},
-          {'paramName': 'reasoning_effort', 'defaultValue': 'medium', 'type': 'string'},
+          {
+            'paramName': 'thinking.type',
+            'defaultValue': 'enabled',
+            'type': 'string'
+          },
+          {
+            'paramName': 'reasoning_effort',
+            'defaultValue': 'medium',
+            'type': 'string'
+          },
         ],
       });
       // Should convert old format to new format gracefully

@@ -2,7 +2,8 @@ class DurationResult {
   final int hours;
   final int minutes;
   final int seconds;
-  const DurationResult({required this.hours, required this.minutes, required this.seconds});
+  const DurationResult(
+      {required this.hours, required this.minutes, required this.seconds});
 }
 
 int totalSeconds({int hours = 0, int minutes = 0, int seconds = 0}) {

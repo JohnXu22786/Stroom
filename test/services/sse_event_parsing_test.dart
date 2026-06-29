@@ -19,7 +19,8 @@ void main() {
     }
 
     test('yields parsed data for normal-length content lines', () {
-      final line = 'data: {"id":"1","choices":[{"delta":{"content":"Hello world"}}]}';
+      final line =
+          'data: {"id":"1","choices":[{"delta":{"content":"Hello world"}}]}';
       final result = processSseLine(line);
       expect(result, isNotNull);
       expect(result, contains('Hello world'));

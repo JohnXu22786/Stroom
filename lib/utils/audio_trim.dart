@@ -8,7 +8,7 @@ const int _wavHeaderSize = 44;
 
 /// 魔数字节
 const _magicWav = [0x52, 0x49, 0x46, 0x46]; // "RIFF"
-const _magicMp3Id3 = [0x49, 0x44, 0x33];    // "ID3"
+const _magicMp3Id3 = [0x49, 0x44, 0x33]; // "ID3"
 
 /// 检测音频实际格式（基于文件头魔数）
 ///
@@ -34,8 +34,10 @@ String _detectFormat(Uint8List data) {
   }
 
   if (data.length >= 4 &&
-      data[0] == 0x66 && data[1] == 0x4C &&
-      data[2] == 0x61 && data[3] == 0x43) {
+      data[0] == 0x66 &&
+      data[1] == 0x4C &&
+      data[2] == 0x61 &&
+      data[3] == 0x43) {
     return 'flac';
   }
 
@@ -105,13 +107,13 @@ Uint8List _pcmToWav(Uint8List pcmData, int sampleRate) {
 
   // fmt 子块
   writer.add([0x66, 0x6D, 0x74, 0x20]); // "fmt "
-  writeU32(16);          // Subchunk1Size (PCM)
-  writeU16(1);           // AudioFormat (1 = PCM)
-  writeU16(1);           // NumChannels (单声道)
+  writeU32(16); // Subchunk1Size (PCM)
+  writeU16(1); // AudioFormat (1 = PCM)
+  writeU16(1); // NumChannels (单声道)
   writeU32(sampleRate);
   writeU32(sampleRate * 2); // ByteRate
-  writeU16(2);           // BlockAlign
-  writeU16(16);          // BitsPerSample
+  writeU16(2); // BlockAlign
+  writeU16(16); // BitsPerSample
 
   // data 子块
   writer.add([0x64, 0x61, 0x74, 0x61]); // "data"

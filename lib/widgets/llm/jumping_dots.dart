@@ -51,8 +51,7 @@ class JumpingDotsProgressIndicator extends StatefulWidget {
 }
 
 class _JumpingDotsProgressIndicatorState
-    extends State<JumpingDotsProgressIndicator>
-    with TickerProviderStateMixin {
+    extends State<JumpingDotsProgressIndicator> with TickerProviderStateMixin {
   final _controllers = <AnimationController>[];
   final _animations = <Animation<double>>[];
   final _widgets = <Widget>[];
@@ -110,8 +109,8 @@ class _JumpingDotsProgressIndicatorState
   @override
   Widget build(BuildContext context) => SizedBox(
         height: widget.fontSize + (widget.fontSize * 0.5),
-        child:
-            Row(mainAxisAlignment: MainAxisAlignment.center, children: _widgets),
+        child: Row(
+            mainAxisAlignment: MainAxisAlignment.center, children: _widgets),
       );
 
   @override

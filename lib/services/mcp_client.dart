@@ -98,7 +98,7 @@ class McpClient {
   /// 是否曾连接过（避免重复调用 connect）
   bool get hasConnectedBefore =>
       _state == _McpClientState.connected ||
-      _state == _McpClientState.disconnected;  // 曾经连接过但已断开
+      _state == _McpClientState.disconnected; // 曾经连接过但已断开
 
   /// 获取缓存的工具列表
   List<McpTool> get cachedTools => List.unmodifiable(_cachedTools);
@@ -155,7 +155,8 @@ class McpClient {
         _state = _McpClientState.disconnected;
         for (final entry in _pendingRequests.entries) {
           if (!entry.value.isCompleted) {
-            entry.value.completeError(Exception('MCP process exited unexpectedly with code $code'));
+            entry.value.completeError(
+                Exception('MCP process exited unexpectedly with code $code'));
           }
         }
         _pendingRequests.clear();
@@ -167,7 +168,8 @@ class McpClient {
   }
 
   Future<void> _connectSse() async {
-    debugPrint('McpClient._connectSse: SSE transport not fully implemented yet');
+    debugPrint(
+        'McpClient._connectSse: SSE transport not fully implemented yet');
     _state = _McpClientState.disconnected;
   }
 
@@ -207,8 +209,8 @@ class McpClient {
     if (msg.id != null && _pendingRequests.containsKey(msg.id)) {
       final completer = _pendingRequests.remove(msg.id);
       if (msg.error != null) {
-        completer!.completeError(Exception(
-            'MCP error: ${msg.error!['message'] ?? msg.error}'));
+        completer!.completeError(
+            Exception('MCP error: ${msg.error!['message'] ?? msg.error}'));
       } else {
         completer!.complete(msg.result ?? {});
       }
@@ -260,8 +262,8 @@ class McpClient {
     }
   }
 
-  Future<Map<String, dynamic>> _sendRequest(
-      String method, [Map<String, dynamic>? params]) async {
+  Future<Map<String, dynamic>> _sendRequest(String method,
+      [Map<String, dynamic>? params]) async {
     final request = McpMessage.request(method, params);
     final completer = Completer<Map<String, dynamic>>();
     _pendingRequests[request.id!] = completer;
@@ -272,8 +274,8 @@ class McpClient {
     final timeout = Future.delayed(const Duration(seconds: 30), () {
       if (!completer.isCompleted) {
         _pendingRequests.remove(request.id);
-        completer.completeError(
-            TimeoutException('MCP request timed out: $method'));
+        completer
+            .completeError(TimeoutException('MCP request timed out: $method'));
       }
     });
 

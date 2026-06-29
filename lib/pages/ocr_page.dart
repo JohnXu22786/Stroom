@@ -28,9 +28,8 @@ OcrConfig? _resolveOcrConfig(WidgetRef ref) {
     if (entry.type == 'ocr' && entry.configs.isNotEmpty) {
       final config = entry.configs.first;
       if (config.host.isNotEmpty && config.key.isNotEmpty) {
-        final model = config.models.isNotEmpty
-            ? config.models.first.modelId
-            : 'gpt-4o';
+        final model =
+            config.models.isNotEmpty ? config.models.first.modelId : 'gpt-4o';
         return OcrConfig(host: config.host, apiKey: config.key, model: model);
       }
     }
@@ -360,9 +359,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           final int rowCount = itemCount == 0
               ? 0
               : (itemCount + crossAxisCount - 1) ~/ crossAxisCount;
-          final double totalHeight = rowCount > 0
-              ? rowCount * itemSize + (rowCount - 1) * spacing
-              : 0;
+          final double totalHeight =
+              rowCount > 0 ? rowCount * itemSize + (rowCount - 1) * spacing : 0;
 
           return SingleChildScrollView(
             child: SizedBox(
@@ -737,9 +735,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed: _selectedImages.isEmpty || _isProcessing
-                    ? null
-                    : _startOcr,
+                onPressed:
+                    _selectedImages.isEmpty || _isProcessing ? null : _startOcr,
                 icon: _isProcessing
                     ? const SizedBox(
                         width: 18,
@@ -1205,9 +1202,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           imageFormat: img.format,
         );
       } else {
-        final batchInput = _selectedImages
-            .map((img) => (img.bytes, img.format))
-            .toList();
+        final batchInput =
+            _selectedImages.map((img) => (img.bytes, img.format)).toList();
         result = await service.recognizeBatch(imageBytesList: batchInput);
       }
 
@@ -1241,8 +1237,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     await TextManifest.writeText(storageFileName, text);
     await TextManifest.addRecord(
       TextRecord(
-        name:
-            title ??
+        name: title ??
             'OCR_${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}',
         hash: hash,
         format: 'txt',

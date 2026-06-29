@@ -11,56 +11,51 @@ void main() {
     });
 
     test('returns "API key not configured" message', () {
-      final result = formatChatErrorMessage(Exception('API key not configured'));
+      final result =
+          formatChatErrorMessage(Exception('API key not configured'));
       expect(result, contains('错误:'));
       expect(result, contains('API Key 未配置'));
     });
 
     test('returns network error message for SocketException', () {
-      final result =
-          formatChatErrorMessage(Exception('SocketException: Connection refused'));
+      final result = formatChatErrorMessage(
+          Exception('SocketException: Connection refused'));
       expect(result, contains('错误:'));
       expect(result, contains('网络连接失败'));
     });
 
     test('returns network error message for Chinese 无法连接到服务器', () {
-      final result =
-          formatChatErrorMessage(Exception('无法连接到服务器'));
+      final result = formatChatErrorMessage(Exception('无法连接到服务器'));
       expect(result, contains('错误:'));
       expect(result, contains('无法连接到服务器'));
     });
 
     test('returns network error message for Chinese 连接错误', () {
-      final result =
-          formatChatErrorMessage(Exception('连接错误'));
+      final result = formatChatErrorMessage(Exception('连接错误'));
       expect(result, contains('错误:'));
       expect(result, contains('连接错误'));
     });
 
     test('returns network error message for Connection refused', () {
-      final result =
-          formatChatErrorMessage(Exception('Connection refused'));
+      final result = formatChatErrorMessage(Exception('Connection refused'));
       expect(result, contains('错误:'));
       expect(result, contains('网络连接失败'));
     });
 
     test('returns network error message for 连接失败', () {
-      final result =
-          formatChatErrorMessage(Exception('连接失败'));
+      final result = formatChatErrorMessage(Exception('连接失败'));
       expect(result, contains('错误:'));
       expect(result, contains('连接失败'));
     });
 
     test('returns timeout message for timeout errors', () {
-      final result =
-          formatChatErrorMessage(Exception('timeout'));
+      final result = formatChatErrorMessage(Exception('timeout'));
       expect(result, contains('错误:'));
       expect(result, contains('连接超时'));
     });
 
     test('returns timeout message for Chinese 超时', () {
-      final result =
-          formatChatErrorMessage(Exception('连接超时'));
+      final result = formatChatErrorMessage(Exception('连接超时'));
       expect(result, contains('错误:'));
       expect(result, contains('连接超时'));
     });
@@ -73,8 +68,7 @@ void main() {
     });
 
     test('returns generic error for unknown errors', () {
-      final result =
-          formatChatErrorMessage(Exception('Some unknown error'));
+      final result = formatChatErrorMessage(Exception('Some unknown error'));
       expect(result, '错误: Exception: Some unknown error');
     });
 
@@ -103,7 +97,9 @@ void main() {
   });
 
   group('ChatMessage rawRequest/rawResponse with error flow', () {
-    test('error message retains rawRequest/rawResponse through serialization round-trip', () {
+    test(
+        'error message retains rawRequest/rawResponse through serialization round-trip',
+        () {
       // Simulate the exact capture flow from ChatPage._startStreaming()
       final rawRequestCapture = <String, dynamic>{
         'url': 'https://api.example.com/v1/chat/completions',
@@ -149,13 +145,16 @@ void main() {
       expect(restored.isError, true);
       expect(restored.rawRequest, isNotNull);
       expect(restored.rawResponse, isNotNull);
-      expect(restored.rawRequest!['url'], 'https://api.example.com/v1/chat/completions');
+      expect(restored.rawRequest!['url'],
+          'https://api.example.com/v1/chat/completions');
       expect(restored.rawResponse!['statusCode'], 401);
       expect(restored.rawResponse!['data']['error']['message'],
           'Incorrect API key provided');
     });
 
-    test('ChatMessage with empty rawRequest/rawResponse empty maps round-trips correctly', () {
+    test(
+        'ChatMessage with empty rawRequest/rawResponse empty maps round-trips correctly',
+        () {
       final msg = ChatMessage(
         role: 'assistant',
         content: '错误: Connection failed',
@@ -285,14 +284,16 @@ void main() {
       expect(rawResponseCapture!['statusCode'], 429);
       expect(rawResponseCapture['headers']['retry-after'], ['120']);
       expect(rawResponseCapture['headers']['x-request-id'], ['req-abc-123']);
-      expect(rawResponseCapture['headers']['content-type'], ['application/json']);
+      expect(
+          rawResponseCapture['headers']['content-type'], ['application/json']);
     });
 
     test('network error (no response) captures error info in response', () {
       // Simulate a DNS failure or server-not-found error
       final statusCode = null;
       final respData = null;
-      final errorMessage = 'DioException [connectionError]: Failed to connect to host';
+      final errorMessage =
+          'DioException [connectionError]: Failed to connect to host';
 
       Map<String, dynamic>? rawResponseCapture;
       if (respData != null || statusCode != null) {
@@ -314,7 +315,8 @@ void main() {
 
     test('network error capture with timeout also works', () {
       // Simulate a timeout error
-      final errorMessage = 'DioException [connectionTimeout]: Timeout waiting for connection';
+      final errorMessage =
+          'DioException [connectionTimeout]: Timeout waiting for connection';
 
       Map<String, dynamic>? rawResponseCapture;
       rawResponseCapture = {
@@ -325,5 +327,4 @@ void main() {
       expect(rawResponseCapture!['error'], contains('Timeout'));
     });
   });
-
 }

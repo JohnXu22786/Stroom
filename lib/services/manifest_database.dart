@@ -236,7 +236,18 @@ class ManifestDatabase {
   static Future<void> _migrateOldVideoRecords(Database db) async {
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool('migrated_video_records') == true) return;
-    final videoFormats = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'wmv', 'm4v', '3gp', 'gif'];
+    final videoFormats = [
+      'mp4',
+      'mov',
+      'avi',
+      'mkv',
+      'webm',
+      'flv',
+      'wmv',
+      'm4v',
+      '3gp',
+      'gif'
+    ];
     final placeholders = videoFormats.map((_) => '?').join(',');
     final rows = await db.query(
       ManifestTables.audioRecords,
@@ -276,13 +287,26 @@ class ManifestDatabase {
   static Future<void> _migrateOldVideoRecordsJson() async {
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool('migrated_video_records') == true) return;
-    final audioList = _webData![ManifestTables.audioRecords] as List<dynamic>? ?? [];
-    final videoList = _webData![ManifestTables.videoRecords] as List<dynamic>? ?? [];
+    final audioList =
+        _webData![ManifestTables.audioRecords] as List<dynamic>? ?? [];
+    final videoList =
+        _webData![ManifestTables.videoRecords] as List<dynamic>? ?? [];
     if (videoList.isNotEmpty) {
       await prefs.setBool('migrated_video_records', true);
       return;
     }
-    final videoFormats = {'mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'wmv', 'm4v', '3gp', 'gif'};
+    final videoFormats = {
+      'mp4',
+      'mov',
+      'avi',
+      'mkv',
+      'webm',
+      'flv',
+      'wmv',
+      'm4v',
+      '3gp',
+      'gif'
+    };
     final toMigrate = <Map<String, dynamic>>[];
     final remaining = <Map<String, dynamic>>[];
     for (final item in audioList) {
@@ -865,8 +889,7 @@ class ManifestDatabase {
   /// 插入一个文件夹路径
   ///
   /// [recordTable] 必须指定，v2+ 格式不再使用共享 folders 表。
-  static Future<void> insertFolder(String path,
-      {String? recordTable}) async {
+  static Future<void> insertFolder(String path, {String? recordTable}) async {
     if (recordTable == null) {
       throw ArgumentError('recordTable is required in v2+ format');
     }
@@ -914,8 +937,7 @@ class ManifestDatabase {
   /// 检查文件夹路径是否存在
   ///
   /// [recordTable] 必须指定，v2+ 格式不再使用共享 folders 表。
-  static Future<bool> folderExists(String path,
-      {String? recordTable}) async {
+  static Future<bool> folderExists(String path, {String? recordTable}) async {
     if (recordTable == null) {
       throw ArgumentError('recordTable is required in v2+ format');
     }

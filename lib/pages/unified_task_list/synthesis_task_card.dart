@@ -12,7 +12,8 @@ class SynthesisTaskCard extends ConsumerWidget {
   final SynthesisTask task;
   final bool isUnread;
 
-  const SynthesisTaskCard({super.key, required this.task, this.isUnread = false});
+  const SynthesisTaskCard(
+      {super.key, required this.task, this.isUnread = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -61,8 +62,7 @@ class SynthesisTaskCard extends ConsumerWidget {
                       ),
                     ],
                   ),
-                  if (task.status == TaskStatus.failed &&
-                      task.error != null)
+                  if (task.status == TaskStatus.failed && task.error != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 6),
                       child: Container(
@@ -102,8 +102,8 @@ class SynthesisTaskCard extends ConsumerWidget {
                                 task.originalResponse != null) ...[
                               const SizedBox(width: 4),
                               GestureDetector(
-                                onTap: () => _showOriginalDetailDialog(
-                                    context, task),
+                                onTap: () =>
+                                    _showOriginalDetailDialog(context, task),
                                 child: const Text(
                                   '详情',
                                   style: TextStyle(
@@ -145,10 +145,9 @@ class SynthesisTaskCard extends ConsumerWidget {
                   const PopupMenuItem(
                     value: 'remove',
                     child: ListTile(
-                      leading:
-                          Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                      title: Text('清除任务',
-                          style: TextStyle(color: Colors.red)),
+                      leading: Icon(Icons.delete_outline,
+                          size: 20, color: Colors.red),
+                      title: Text('清除任务', style: TextStyle(color: Colors.red)),
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                     ),
@@ -163,13 +162,10 @@ class SynthesisTaskCard extends ConsumerWidget {
                     height: 32,
                     child: ElevatedButton.icon(
                       onPressed: () {
-                        ref
-                            .read(taskListProvider.notifier)
-                            .resumeTask(task.id);
+                        ref.read(taskListProvider.notifier).resumeTask(task.id);
                       },
                       icon: const Icon(Icons.play_arrow, size: 16),
-                      label:
-                          const Text('继续', style: TextStyle(fontSize: 13)),
+                      label: const Text('继续', style: TextStyle(fontSize: 13)),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 10),
                       ),
@@ -188,8 +184,8 @@ class SynthesisTaskCard extends ConsumerWidget {
                         child: ListTile(
                           leading: Icon(Icons.delete_outline,
                               size: 20, color: Colors.red),
-                          title: Text('清除任务',
-                              style: TextStyle(color: Colors.red)),
+                          title:
+                              Text('清除任务', style: TextStyle(color: Colors.red)),
                           dense: true,
                           contentPadding: EdgeInsets.zero,
                         ),
@@ -216,8 +212,7 @@ class SynthesisTaskCard extends ConsumerWidget {
                         );
                       },
                       icon: const Icon(Icons.refresh, size: 16),
-                      label:
-                          const Text('重试', style: TextStyle(fontSize: 13)),
+                      label: const Text('重试', style: TextStyle(fontSize: 13)),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 10),
                       ),
@@ -236,8 +231,8 @@ class SynthesisTaskCard extends ConsumerWidget {
                         child: ListTile(
                           leading: Icon(Icons.delete_outline,
                               size: 20, color: Colors.red),
-                          title: Text('清除任务',
-                              style: TextStyle(color: Colors.red)),
+                          title:
+                              Text('清除任务', style: TextStyle(color: Colors.red)),
                           dense: true,
                           contentPadding: EdgeInsets.zero,
                         ),

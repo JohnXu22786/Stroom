@@ -10,6 +10,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ── Format Check ──────────────────────────────────────────────────────────
+  format:
+    name: Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Check Dart formatting
+        run: dart format --set-exit-if-changed .
+
+  # ── Static Analysis ───────────────────────────────────────────────────────
   analyze:
     name: Static Analysis
     runs-on: ubuntu-latest
@@ -22,8 +36,45 @@ jobs:
       - name: Run Dart analyzer
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
+  # ── Test Suite (parallel groups) ──────────────────────────────────────────
   test:
-    name: Test Suite
+    name: Tests (${{ matrix.label }})
+    runs-on: ubuntu-latest
+    needs: [analyze]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Core
+            pattern: test/*_test.dart
+          - label: Widgets
+            pattern: test/widgets
+          - label: Pages
+            pattern: test/pages
+          - label: Providers
+            pattern: test/providers
+          - label: Services
+            pattern: test/services
+          - label: Utils
+            pattern: test/utils
+          - label: Models
+            pattern: test/models
+          - label: Startup
+            pattern: test/startup
+          - label: CatCatch
+            pattern: test/catcatch
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Run ${{ matrix.label }} tests
+        run: flutter test ${{ matrix.pattern }}
+
+  # ── Coverage Report ───────────────────────────────────────────────────────
+  coverage:
+    name: Coverage Report
     runs-on: ubuntu-latest
     needs: [analyze]
     steps:
@@ -32,9 +83,18 @@ jobs:
         with:
           channel: stable
       - run: flutter pub get
-      - name: Run full test suite
-        run: flutter test
+      - name: Run all tests with coverage
+        run: flutter test --coverage
+      - name: Install lcov
+        run: sudo apt-get install -y lcov
+      - name: Generate HTML coverage report
+        run: genhtml coverage/lcov.info -o coverage/html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/html
 
+  # ── Platform Builds ───────────────────────────────────────────────────────
   build-ios:
     name: Build iOS IPA
     runs-on: macos-15

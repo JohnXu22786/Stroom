@@ -121,7 +121,8 @@ void main() {
       expect(events.every((e) => e.isReasoning), isTrue);
     });
 
-    test('deduplicates reasoning when reasoning_content and reasoning have identical text',
+    test(
+        'deduplicates reasoning when reasoning_content and reasoning have identical text',
         () {
       final data = {
         'choices': [
@@ -143,7 +144,8 @@ void main() {
       expect(events[0].isReasoning, isTrue);
     });
 
-    test('deduplicates reasoning across reasoning_details, reasoning, and reasoning_content',
+    test(
+        'deduplicates reasoning across reasoning_details, reasoning, and reasoning_content',
         () {
       final data = {
         'choices': [
@@ -172,7 +174,8 @@ void main() {
       expect(events[0].isReasoning, isTrue);
     });
 
-    test('deduplicates reasoning_details items when they duplicate string reasoning fields',
+    test(
+        'deduplicates reasoning_details items when they duplicate string reasoning fields',
         () {
       final data = {
         'choices': [
@@ -247,8 +250,7 @@ void main() {
               'reasoning_details': [
                 {
                   'type': 'reasoning.summary',
-                  'summary':
-                      'The model analyzed by identifying constraints...',
+                  'summary': 'The model analyzed by identifying constraints...',
                   'id': 'reasoning-summary-1',
                   'index': 0,
                 },
@@ -261,7 +263,8 @@ void main() {
       final events = OpenAICompatibleChatProvider.parseStreamEvent(data);
 
       expect(events.length, 1);
-      expect(events[0].text, 'The model analyzed by identifying constraints...');
+      expect(
+          events[0].text, 'The model analyzed by identifying constraints...');
       expect(events[0].isReasoning, isTrue);
     });
 

@@ -126,9 +126,8 @@ void main() {
 
       // Simulate saving/loading a conversation
       final serialized = messages.map((m) => m.toMap()).toList();
-      final deserialized = serialized
-          .map((m) => ChatMessage.fromMap(m))
-          .toList();
+      final deserialized =
+          serialized.map((m) => ChatMessage.fromMap(m)).toList();
 
       expect(
         deserialized[1].reasoningContent,
@@ -146,7 +145,9 @@ void main() {
       expect(reasoning.runtimeType, isNot(text.runtimeType));
     });
 
-    test('ReasoningSectionEndEvent is distinct from ReasoningEvent and TextEvent', () {
+    test(
+        'ReasoningSectionEndEvent is distinct from ReasoningEvent and TextEvent',
+        () {
       final end = ReasoningSectionEndEvent();
       final reasoning = ReasoningEvent('think');
       final text = TextEvent('speak');

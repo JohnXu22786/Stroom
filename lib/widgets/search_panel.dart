@@ -129,7 +129,8 @@ class _SearchPanelState extends State<SearchPanel> {
                     FilterChip(
                       label: const Text('搜标题'),
                       selected: !_searchByContent,
-                      onSelected: (_) => setState(() => _searchByContent = false),
+                      onSelected: (_) =>
+                          setState(() => _searchByContent = false),
                       visualDensity: VisualDensity.compact,
                       showCheckmark: false,
                     ),
@@ -137,7 +138,8 @@ class _SearchPanelState extends State<SearchPanel> {
                     FilterChip(
                       label: const Text('搜内容'),
                       selected: _searchByContent,
-                      onSelected: (_) => setState(() => _searchByContent = true),
+                      onSelected: (_) =>
+                          setState(() => _searchByContent = true),
                       visualDensity: VisualDensity.compact,
                       showCheckmark: false,
                     ),
@@ -165,9 +167,7 @@ class _SearchPanelState extends State<SearchPanel> {
                                 color: cs.onSurfaceVariant.withOpacity(0.4)),
                             const SizedBox(height: 12),
                             Text(
-                              _query.isEmpty
-                                  ? '输入关键词开始搜索'
-                                  : '没有找到匹配的对话',
+                              _query.isEmpty ? '输入关键词开始搜索' : '没有找到匹配的对话',
                               style: TextStyle(color: cs.onSurfaceVariant),
                             ),
                           ],
@@ -226,9 +226,7 @@ class _SearchPanelState extends State<SearchPanel> {
                       ? Icons.push_pin
                       : Icons.chat_bubble_outline_rounded,
                   size: 20,
-                  color: conv.isPinned
-                      ? cs.primary
-                      : cs.onSurfaceVariant,
+                  color: conv.isPinned ? cs.primary : cs.onSurfaceVariant,
                 ),
               ),
               const SizedBox(width: 12),

@@ -208,8 +208,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                 child: ListTile(
                   leading:
                       Icon(Icons.error_outline, size: 20, color: Colors.red),
-                  title: Text('清除失败任务',
-                      style: TextStyle(color: Colors.red)),
+                  title: Text('清除失败任务', style: TextStyle(color: Colors.red)),
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                 ),
@@ -217,9 +216,9 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
               const PopupMenuItem(
                 value: 'clear_all',
                 child: ListTile(
-                  leading: Icon(Icons.delete_sweep, size: 20, color: Colors.red),
-                  title: Text('清除所有',
-                      style: TextStyle(color: Colors.red)),
+                  leading:
+                      Icon(Icons.delete_sweep, size: 20, color: Colors.red),
+                  title: Text('清除所有', style: TextStyle(color: Colors.red)),
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                 ),
@@ -299,19 +298,16 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
         final lastRead = ref.watch(taskListLastReadProvider);
         if (item.isCatCatch) {
           final t = item.catCatchTask!;
-          final isUnread =
-              (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
+          final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
           return CatCatchTaskCard(task: t, isUnread: isUnread);
         }
         if (item.isBackground) {
           final t = item.backgroundTask!;
-          final isUnread =
-              (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
+          final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
           return BackgroundTaskCard(task: t, isUnread: isUnread);
         }
         final t = item.synthesisTask!;
-        final isUnread =
-            (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
+        final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
         return SynthesisTaskCard(task: t, isUnread: isUnread);
       },
     );

@@ -142,7 +142,9 @@ class ManifestOperations<T extends FileRecord> {
     try {
       final rows = await _dbGetAllRecords();
       _cache = rows.map((m) => fromMap(m)).toList();
-      _folderCache = (await ManifestDatabase.getAllFolders(recordTable: tableName)).toSet();
+      _folderCache =
+          (await ManifestDatabase.getAllFolders(recordTable: tableName))
+              .toSet();
     } catch (e) {
       debugPrint('ManifestOperations($manifestKey).loadRecords error: $e');
       _cache = [];

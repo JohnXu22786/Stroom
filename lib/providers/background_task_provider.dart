@@ -45,7 +45,8 @@ class BackgroundTask {
   final BackgroundTaskType type;
   final String title;
   final TaskStatus status;
-  final String? result; // The text result (OCR extracted text, ASR transcription)
+  final String?
+      result; // The text result (OCR extracted text, ASR transcription)
   final String? error;
   final DateTime createdAt;
   final DateTime? completedAt;
@@ -71,8 +72,7 @@ class BackgroundTask {
     DateTime? statusChangedAt,
   }) {
     final newStatus = status ?? this.status;
-    final newStatusChangedAt =
-        statusChangedAt ??
+    final newStatusChangedAt = statusChangedAt ??
         (status != null && status != this.status
             ? DateTime.now()
             : this.statusChangedAt);
@@ -90,32 +90,32 @@ class BackgroundTask {
   }
 
   Map<String, dynamic> toMap() => {
-    'id': id,
-    'type': type.name,
-    'title': title,
-    'status': status.name,
-    if (result != null) 'result': result,
-    'error': error,
-    'createdAt': createdAt.toIso8601String(),
-    'completedAt': completedAt?.toIso8601String(),
-    'statusChangedAt': statusChangedAt?.toIso8601String(),
-  };
+        'id': id,
+        'type': type.name,
+        'title': title,
+        'status': status.name,
+        if (result != null) 'result': result,
+        'error': error,
+        'createdAt': createdAt.toIso8601String(),
+        'completedAt': completedAt?.toIso8601String(),
+        'statusChangedAt': statusChangedAt?.toIso8601String(),
+      };
 
   factory BackgroundTask.fromMap(Map<String, dynamic> map) => BackgroundTask(
-    id: map['id'] as String,
-    type: BackgroundTaskType.values.byName(map['type'] as String),
-    title: map['title'] as String,
-    status: TaskStatus.values.byName(map['status'] as String),
-    result: map['result'] as String?,
-    error: map['error'] as String?,
-    createdAt: DateTime.parse(map['createdAt'] as String),
-    completedAt: map['completedAt'] != null
-        ? DateTime.parse(map['completedAt'] as String)
-        : null,
-    statusChangedAt: map['statusChangedAt'] != null
-        ? DateTime.parse(map['statusChangedAt'] as String)
-        : null,
-  );
+        id: map['id'] as String,
+        type: BackgroundTaskType.values.byName(map['type'] as String),
+        title: map['title'] as String,
+        status: TaskStatus.values.byName(map['status'] as String),
+        result: map['result'] as String?,
+        error: map['error'] as String?,
+        createdAt: DateTime.parse(map['createdAt'] as String),
+        completedAt: map['completedAt'] != null
+            ? DateTime.parse(map['completedAt'] as String)
+            : null,
+        statusChangedAt: map['statusChangedAt'] != null
+            ? DateTime.parse(map['statusChangedAt'] as String)
+            : null,
+      );
 }
 
 // ============================================================================
@@ -124,8 +124,8 @@ class BackgroundTask {
 
 final backgroundTasksProvider =
     StateNotifierProvider<BackgroundTaskNotifier, List<BackgroundTask>>(
-      (ref) => BackgroundTaskNotifier(),
-    );
+  (ref) => BackgroundTaskNotifier(),
+);
 
 class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   final _uuid = const Uuid();
@@ -181,8 +181,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         error: error,
         completedAt:
             status == TaskStatus.completed || status == TaskStatus.failed
-            ? DateTime.now()
-            : null,
+                ? DateTime.now()
+                : null,
       );
     }).toList();
     _persistTasks();

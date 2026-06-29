@@ -147,8 +147,8 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   bool _isSelected(_FileTabType tabType, String recordId) =>
       _selectedItems.containsKey(_selectionKey(tabType, recordId));
 
-  void _toggleSelection(_FileTabType tabType, String recordId,
-      String fileName, Uint8List bytes) {
+  void _toggleSelection(
+      _FileTabType tabType, String recordId, String fileName, Uint8List bytes) {
     final key = _selectionKey(tabType, recordId);
     setState(() {
       if (_selectedItems.containsKey(key)) {
@@ -242,9 +242,8 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                   Navigator.of(context).pop(result);
                 },
                 icon: const Icon(Icons.check, size: 18),
-                label: Text(hasSelection
-                    ? '确定 (${_selectedItems.length})'
-                    : '确定'),
+                label:
+                    Text(hasSelection ? '确定 (${_selectedItems.length})' : '确定'),
               ),
             ),
           ),
@@ -286,7 +285,8 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     }).toList();
 
     // Sort by name
-    currentFiles.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    currentFiles
+        .sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
     final hasContent = subFolders.isNotEmpty || currentFiles.isNotEmpty;
 
@@ -299,7 +299,8 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Row(
               children: [
-                Icon(Icons.folder, size: 14, color: cs.primary.withOpacity(0.7)),
+                Icon(Icons.folder,
+                    size: 14, color: cs.primary.withOpacity(0.7)),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
@@ -342,8 +343,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                   padding: const EdgeInsets.only(bottom: 8),
                   children: [
                     // Back button (when in subfolder)
-                    if (!isRoot)
-                      _buildBackItem(type, currentFolder),
+                    if (!isRoot) _buildBackItem(type, currentFolder),
 
                     // Subfolders
                     for (final folder in subFolders)
@@ -477,10 +477,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                 decoration: BoxDecoration(
                   color: isImage
                       ? null
-                      : Theme.of(context)
-                          .colorScheme
-                          .primary
-                          .withOpacity(0.1),
+                      : Theme.of(context).colorScheme.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 clipBehavior: isImage ? Clip.antiAlias : Clip.none,
@@ -527,8 +524,8 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                         ],
                         Text(
                           formatFileSize(record.size),
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.grey[600]),
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey[600]),
                         ),
                       ],
                     ),
@@ -560,7 +557,8 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     _toggleSelection(type, record.id, fileName, bytes);
   }
 
-  Future<Uint8List?> _readFileBytes(_FileTabType type, FileRecord record) async {
+  Future<Uint8List?> _readFileBytes(
+      _FileTabType type, FileRecord record) async {
     switch (type) {
       case _FileTabType.text:
         return TextManifest.readFile((record as TextRecord).storagePath);
@@ -694,5 +692,4 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
       ),
     );
   }
-
 }

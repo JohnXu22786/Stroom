@@ -49,12 +49,13 @@ class AsrConfig {
     String? apiKey,
     String? host,
     String? language,
-  }) => AsrConfig(
-    model: model ?? this.model,
-    apiKey: apiKey ?? this.apiKey,
-    host: host ?? this.host,
-    language: language ?? this.language,
-  );
+  }) =>
+      AsrConfig(
+        model: model ?? this.model,
+        apiKey: apiKey ?? this.apiKey,
+        host: host ?? this.host,
+        language: language ?? this.language,
+      );
 }
 
 // ============================================================================
@@ -116,20 +117,19 @@ class AsrService {
   }
 
   AsrService({required this.config, Dio? dio})
-    : _dio =
-          dio ??
-          Dio(
-            BaseOptions(
-              headers: {
-                if (config.apiKey.isNotEmpty)
-                  'Authorization': 'Bearer ${config.apiKey}',
-                ...openRouterAppHeaders,
-              },
-              connectTimeout: const Duration(seconds: 30),
-              receiveTimeout: const Duration(seconds: 120),
-              sendTimeout: const Duration(seconds: 60),
-            ),
-          );
+      : _dio = dio ??
+            Dio(
+              BaseOptions(
+                headers: {
+                  if (config.apiKey.isNotEmpty)
+                    'Authorization': 'Bearer ${config.apiKey}',
+                  ...openRouterAppHeaders,
+                },
+                connectTimeout: const Duration(seconds: 30),
+                receiveTimeout: const Duration(seconds: 120),
+                sendTimeout: const Duration(seconds: 60),
+              ),
+            );
 
   /// Dio default headers, exposed for testing.
   Map<String, dynamic> get defaultHeaders => _dio.options.headers;

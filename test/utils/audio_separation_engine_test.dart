@@ -1,7 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/utils/audio_separation.dart'
-    show AudioSeparationEngine;
+import 'package:stroom/utils/audio_separation.dart' show AudioSeparationEngine;
 
 void main() {
   // Ensure Flutter bindings are initialized for platform plugin testing
@@ -21,7 +20,8 @@ void main() {
       expect(available, isTrue);
     });
 
-    test('canHandleVideoFormat returns correct results for ISOBMFF formats', () {
+    test('canHandleVideoFormat returns correct results for ISOBMFF formats',
+        () {
       // ISOBMFF-based formats (MP4, MOV, M4V, 3GP) are supported
       expect(engine.canHandleVideoFormat('mp4'), isTrue);
       expect(engine.canHandleVideoFormat('mov'), isTrue);

@@ -1,7 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/utils/audio_separation.dart'
-    show AudioSeparationEngine;
+import 'package:stroom/utils/audio_separation.dart' show AudioSeparationEngine;
 import 'package:stroom/utils/audio_utils.dart';
 
 /// Helper: read a little-endian 32-bit int from bytes at offset.
@@ -106,7 +105,8 @@ void main() {
       );
     });
 
-    test('extractAudio throws on MP4 without audio track (video only)', () async {
+    test('extractAudio throws on MP4 without audio track (video only)',
+        () async {
       // Build minimal MP4 with only a video track (vide handler, no soun)
       // This is complex to construct - skip for now, test via different means
       // Just verify it throws for an MP4 that exists but has issues
@@ -204,7 +204,8 @@ void main() {
   group('audio_utils - ensureValidAudioFormat', () {
     test('wraps PCM data in WAV when requested format is wav', () {
       final pcm = Uint8List.fromList([100, 200, 150, 50, 0, 50, 150, 200]);
-      final (result, format) = ensureValidAudioFormat(pcm, requestedFormat: 'wav');
+      final (result, format) =
+          ensureValidAudioFormat(pcm, requestedFormat: 'wav');
 
       expect(format, equals('wav'));
       expect(result.length, greaterThan(pcm.length));
@@ -214,7 +215,8 @@ void main() {
 
     test('passes through valid WAV data', () {
       final wav = pcmToWav(Uint8List.fromList([100, 200, 150]));
-      final (result, format) = ensureValidAudioFormat(wav, requestedFormat: 'wav');
+      final (result, format) =
+          ensureValidAudioFormat(wav, requestedFormat: 'wav');
 
       expect(format, equals('wav'));
       expect(result, equals(wav));

@@ -23,7 +23,8 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
   void initState() {
     super.initState();
     _voices = widget.initialVoices.map((v) => v.copy()).toList();
-    _nameCtrls = _voices.map((v) => TextEditingController(text: v.name)).toList();
+    _nameCtrls =
+        _voices.map((v) => TextEditingController(text: v.name)).toList();
     _idCtrls = _voices.map((v) => TextEditingController(text: v.id)).toList();
     _idFocusNodes = _voices.map((_) => FocusNode()).toList();
     for (var i = 0; i < _idFocusNodes.length; i++) {
@@ -181,7 +182,9 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
 
     if (duplicateList.isNotEmpty) {
       final result = await _showDuplicateResolveDialog(
-        nonEmpty, duplicateList, idToFirstIdx,
+        nonEmpty,
+        duplicateList,
+        idToFirstIdx,
       );
       if (result == null) return; // 用户取消
       nonEmpty.clear();
@@ -384,7 +387,8 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
                   suffixIcon: isDuplicate
                       ? const Padding(
                           padding: EdgeInsets.only(right: 4),
-                          child: Icon(Icons.warning_amber, size: 16, color: Colors.orange),
+                          child: Icon(Icons.warning_amber,
+                              size: 16, color: Colors.orange),
                         )
                       : null,
                 ),
@@ -404,5 +408,3 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
     );
   }
 }
-
-

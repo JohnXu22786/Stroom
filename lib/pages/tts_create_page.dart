@@ -9,7 +9,6 @@ import '../providers/task_provider.dart';
 import 'provider_config_page.dart';
 import 'tts_create_shared.dart';
 
-
 /// TTS创建页面 - 用于文本转语音转换
 class TTSCreatePage extends ConsumerStatefulWidget {
   final String? initialText;
@@ -17,7 +16,12 @@ class TTSCreatePage extends ConsumerStatefulWidget {
   final String? originalTitle;
   final SynthesisTask? retryTask;
 
-  const TTSCreatePage({super.key, this.initialText, this.isOverwrite = false, this.originalTitle, this.retryTask});
+  const TTSCreatePage(
+      {super.key,
+      this.initialText,
+      this.isOverwrite = false,
+      this.originalTitle,
+      this.retryTask});
 
   @override
   ConsumerState<TTSCreatePage> createState() => _TTSCreatePageState();
@@ -27,7 +31,6 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   final _textController = TextEditingController();
   final _titleController = TextEditingController();
   final _focusNode = FocusNode();
-
 
   // 当前选中的模型配置
   ModelConfig? _modelConfig;
@@ -65,7 +68,9 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     if (widget.initialText != null && widget.initialText!.isNotEmpty) {
       _textController.text = widget.initialText!;
     }
-    if (widget.originalTitle != null && widget.originalTitle!.isNotEmpty && _useOriginalTitle) {
+    if (widget.originalTitle != null &&
+        widget.originalTitle!.isNotEmpty &&
+        _useOriginalTitle) {
       _titleController.text = widget.originalTitle!;
     }
     _textController.addListener(_onTextChanged);
@@ -99,7 +104,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
   /// 根据最新的 providerEntriesState 刷新可用模型列表
   void _refreshModels(ProviderEntriesState entriesState) {
-    final ttsEntry = entriesState.entries.where((e) => e.name == 'TTS供应商').firstOrNull;
+    final ttsEntry =
+        entriesState.entries.where((e) => e.name == 'TTS供应商').firstOrNull;
 
     // 未找到 TTS 条目时不做任何事（UI 会显示未配置提示）
     if (ttsEntry == null) {
@@ -137,19 +143,22 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
       } else {
         // 如果之前选的模型在列表中，保留选择
         final prevModelId = _modelConfig?.modelId;
-        final stillExists = prevModelId != null && allModels.any((o) => o.config.modelId == prevModelId);
+        final stillExists = prevModelId != null &&
+            allModels.any((o) => o.config.modelId == prevModelId);
         if (!stillExists) {
           _modelConfig = null;
           _selectedModelIndex = null;
         } else {
-          _selectedModelIndex = allModels.indexWhere((o) => o.config.modelId == prevModelId);
+          _selectedModelIndex =
+              allModels.indexWhere((o) => o.config.modelId == prevModelId);
           if (_modelConfig!.voices.isNotEmpty) {
             _selectedVoice = _modelConfig!.voices.first.id;
           }
         }
         _availableModels = allModels;
         // 清理多余的 controller
-        final keptKeys = _modelConfig?.customParams.map((p) => p.paramName).toSet() ?? {};
+        final keptKeys =
+            _modelConfig?.customParams.map((p) => p.paramName).toSet() ?? {};
         _customParamControllers.removeWhere((k, _) => !keptKeys.contains(k));
         // 如果切换了模型，清空 instruction 输入
         _instructionController.clear();
@@ -251,8 +260,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     Map<String, dynamic>? trimPreset;
     if (_modelConfig!.selectedTrimPresetId != null) {
       final customPresets = ref.read(customTrimPresetsProvider);
-      trimPreset = getTrimPresetById(
-          _modelConfig!.selectedTrimPresetId!, customPresets);
+      trimPreset =
+          getTrimPresetById(_modelConfig!.selectedTrimPresetId!, customPresets);
     }
 
     // 获取选中的供应商配置
@@ -273,13 +282,15 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
     // 添加到任务列表，在后台执行合成
     ref.read(taskListProvider.notifier).addTask(
-      title: title.isNotEmpty ? title : (text.length > 20 ? text.substring(0, 20) : text),
-      text: text,
-      providerConfig: modelOption.providerConfig,
-      modelConfig: modelOption.config,
-      customParams: customParams,
-      trimPreset: trimPreset,
-    );
+          title: title.isNotEmpty
+              ? title
+              : (text.length > 20 ? text.substring(0, 20) : text),
+          text: text,
+          providerConfig: modelOption.providerConfig,
+          modelConfig: modelOption.config,
+          customParams: customParams,
+          trimPreset: trimPreset,
+        );
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -341,7 +352,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
       ),
       child: Row(
         children: [
-          Icon(Icons.warning_amber_rounded, size: 20, color: Colors.orange[700]),
+          Icon(Icons.warning_amber_rounded,
+              size: 20, color: Colors.orange[700]),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -394,7 +406,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                               }
                             });
                           },
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
                           visualDensity: VisualDensity.compact,
                         ),
                       ),
@@ -428,7 +441,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                 hintText: '输入录音标题（可选）',
                 border: OutlineInputBorder(),
                 isDense: true,
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
             ),
             const Divider(height: 24),
@@ -459,7 +473,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                     ),
                   ],
                 ),
-                suffixIconConstraints: const BoxConstraints(minWidth: 72, minHeight: 0),
+                suffixIconConstraints:
+                    const BoxConstraints(minWidth: 72, minHeight: 0),
               ),
             ),
             const SizedBox(height: 8),
@@ -486,9 +501,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                 else
                   const Spacer(),
                 Text(
-                  limit > 0
-                      ? '$textLen/$limit'
-                      : textLen.toString(),
+                  limit > 0 ? '$textLen/$limit' : textLen.toString(),
                   style: TextStyle(
                     fontSize: 12,
                     color: isOverLimit ? Colors.red : Colors.grey,
@@ -514,7 +527,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
             padding: const EdgeInsets.all(24),
             child: Column(
               children: [
-                const Icon(Icons.warning_amber_rounded, size: 48, color: Colors.orange),
+                const Icon(Icons.warning_amber_rounded,
+                    size: 48, color: Colors.orange),
                 const SizedBox(height: 16),
                 const Text(
                   '未检测到可用模型',
@@ -713,7 +727,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
       // 初始化自定义参数控制器
       _customParamControllers.clear();
       for (final p in model.customParams) {
-        _customParamControllers[p.paramName] = TextEditingController(text: p.defaultValue);
+        _customParamControllers[p.paramName] =
+            TextEditingController(text: p.defaultValue);
       }
     });
   }
@@ -728,7 +743,9 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          initialValue: model.voices.any((v) => v.id == _selectedVoice) ? _selectedVoice : model.voices.first.id,
+          initialValue: model.voices.any((v) => v.id == _selectedVoice)
+              ? _selectedVoice
+              : model.voices.first.id,
           key: ValueKey('voice_$_selectedVoice'),
           decoration: const InputDecoration(
             border: OutlineInputBorder(),
@@ -777,7 +794,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
           value: _speed,
           min: model.speedMin,
           max: model.speedMax,
-          divisions: ((model.speedMax - model.speedMin) * 10).round().clamp(1, 100),
+          divisions:
+              ((model.speedMax - model.speedMin) * 10).round().clamp(1, 100),
           label: '${_speed.toStringAsFixed(1)}x',
           onChanged: (value) {
             setState(() => _speed = value);
@@ -821,7 +839,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
           value: _volume,
           min: model.volumeMin,
           max: model.volumeMax,
-          divisions: ((model.volumeMax - model.volumeMin) * 10).round().clamp(1, 100),
+          divisions:
+              ((model.volumeMax - model.volumeMin) * 10).round().clamp(1, 100),
           label: _volume.toStringAsFixed(1),
           onChanged: (value) {
             setState(() => _volume = value);
@@ -926,15 +945,14 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
           ),
         ),
         child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.audio_file),
-                  SizedBox(width: 12),
-                  Text('生成录音', style: TextStyle(fontSize: 16)),
-                ],
-              ),
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.audio_file),
+            SizedBox(width: 12),
+            Text('生成录音', style: TextStyle(fontSize: 16)),
+          ],
+        ),
       ),
     );
   }
-
 }

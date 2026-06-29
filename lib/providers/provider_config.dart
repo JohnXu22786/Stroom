@@ -102,10 +102,10 @@ class ProviderEntriesState {
 /// 供应商条目列表提供器（持久化）
 final providerEntriesProvider =
     StateNotifierProvider<ProviderEntriesNotifier, ProviderEntriesState>((ref) {
-      final notifier = ProviderEntriesNotifier();
-      notifier.load();
-      return notifier;
-    });
+  final notifier = ProviderEntriesNotifier();
+  notifier.load();
+  return notifier;
+});
 
 class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   ProviderEntriesNotifier() : super(const ProviderEntriesState());
@@ -187,8 +187,8 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     if (oldJson == null || oldJson.isEmpty) return;
 
     try {
-      final oldList = (jsonDecode(oldJson) as List)
-          .cast<Map<String, dynamic>>();
+      final oldList =
+          (jsonDecode(oldJson) as List).cast<Map<String, dynamic>>();
       if (oldList.isEmpty) return;
 
       final migratedConfigs = <ProviderConfigItem>[];
@@ -231,8 +231,8 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
 
       List<Map<String, dynamic>> existingEntries = [];
       if (existingJson != null && existingJson.isNotEmpty) {
-        existingEntries = (jsonDecode(existingJson) as List)
-            .cast<Map<String, dynamic>>();
+        existingEntries =
+            (jsonDecode(existingJson) as List).cast<Map<String, dynamic>>();
       }
 
       // 如果已有 llm 类型条目则不覆盖

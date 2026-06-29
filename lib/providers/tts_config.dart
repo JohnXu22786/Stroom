@@ -28,22 +28,22 @@ class ModelInfo {
   });
 
   Map<String, dynamic> toMap() => {
-    'name': name,
-    'voices': voices,
-    'speedMin': speedMin,
-    'speedMax': speedMax,
-    'volumeMin': volumeMin,
-    'volumeMax': volumeMax,
-  };
+        'name': name,
+        'voices': voices,
+        'speedMin': speedMin,
+        'speedMax': speedMax,
+        'volumeMin': volumeMin,
+        'volumeMax': volumeMax,
+      };
 
   factory ModelInfo.fromMap(Map<String, dynamic> map) => ModelInfo(
-    name: map['name'] as String,
-    voices: (map['voices'] as List?)?.cast<String>() ?? [],
-    speedMin: (map['speedMin'] as num?)?.toDouble() ?? 0.5,
-    speedMax: (map['speedMax'] as num?)?.toDouble() ?? 2.0,
-    volumeMin: (map['volumeMin'] as num?)?.toDouble() ?? 0.0,
-    volumeMax: (map['volumeMax'] as num?)?.toDouble() ?? 2.0,
-  );
+        name: map['name'] as String,
+        voices: (map['voices'] as List?)?.cast<String>() ?? [],
+        speedMin: (map['speedMin'] as num?)?.toDouble() ?? 0.5,
+        speedMax: (map['speedMax'] as num?)?.toDouble() ?? 2.0,
+        volumeMin: (map['volumeMin'] as num?)?.toDouble() ?? 0.0,
+        volumeMax: (map['volumeMax'] as num?)?.toDouble() ?? 2.0,
+      );
 }
 
 /// 供应商定义：描述一个 TTS 供应商的全部元信息
@@ -99,16 +99,21 @@ class TTSProviderDefinition {
       label: map['label'] as String,
       defaultBaseUrl: map['defaultBaseUrl'] as String?,
       supportedVoices: (map['supportedVoices'] as List?)?.cast<String>() ?? [],
-      supportedFormats: (map['supportedFormats'] as List?)?.cast<String>() ?? ['wav', 'pcm'],
+      supportedFormats:
+          (map['supportedFormats'] as List?)?.cast<String>() ?? ['wav', 'pcm'],
       supportedModels: map['supportedModels'] is List
-          ? (map['supportedModels'] as List).map((m) => ModelInfo.fromMap(Map<String, dynamic>.from(m as Map))).toList()
+          ? (map['supportedModels'] as List)
+              .map(
+                  (m) => ModelInfo.fromMap(Map<String, dynamic>.from(m as Map)))
+              .toList()
           : [],
       speedMin: (map['speedMin'] as num?)?.toDouble() ?? 0.5,
       speedMax: (map['speedMax'] as num?)?.toDouble() ?? 2.0,
       volumeMin: (map['volumeMin'] as num?)?.toDouble() ?? 0.0,
       volumeMax: (map['volumeMax'] as num?)?.toDouble() ?? 2.0,
       defaultSampleRate: (map['defaultSampleRate'] as num?)?.toInt() ?? 24000,
-      defaultConfig: Map<String, dynamic>.from(map['defaultConfig'] as Map? ?? {}),
+      defaultConfig:
+          Map<String, dynamic>.from(map['defaultConfig'] as Map? ?? {}),
     );
   }
 }
@@ -242,7 +247,6 @@ bool isProviderSupported(String providerId) {
   return TTSProviderRegistry.isRegistered(providerId);
 }
 
-
 // ============================================================================
 // 裁切预设系统
 // ============================================================================
@@ -354,7 +358,8 @@ List<Map<String, dynamic>> getAllTrimPresets(List<TrimPreset> customPresets) {
 }
 
 /// 根据 ID 获取裁切预设详情（内置+自定义）
-Map<String, dynamic>? getTrimPresetById(String id, List<TrimPreset> customPresets) {
+Map<String, dynamic>? getTrimPresetById(
+    String id, List<TrimPreset> customPresets) {
   // 在内置中查找
   for (final builtin in getBuiltinTrimPresets()) {
     if (builtin['id'] == id) return builtin;

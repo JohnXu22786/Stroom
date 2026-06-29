@@ -25,13 +25,15 @@ DioException _makeStreamingDioException({
     );
   } else if (data is Map) {
     response = Response(
-      requestOptions: RequestOptions(path: 'http://example.com/chat/completions'),
+      requestOptions:
+          RequestOptions(path: 'http://example.com/chat/completions'),
       statusCode: statusCode,
       data: data,
     );
   } else {
     response = Response(
-      requestOptions: RequestOptions(path: 'http://example.com/chat/completions'),
+      requestOptions:
+          RequestOptions(path: 'http://example.com/chat/completions'),
       statusCode: statusCode,
     );
   }
@@ -62,7 +64,9 @@ void main() {
     test('returns null for Map data (non-stream error)', () async {
       final exception = _makeStreamingDioException(
         statusCode: 400,
-        data: {'error': {'message': 'Bad'}},
+        data: {
+          'error': {'message': 'Bad'}
+        },
       );
 
       final result = await parseStreamErrorBody(exception);
@@ -107,7 +111,8 @@ void main() {
       );
       final exception = DioException(
         type: DioExceptionType.badResponse,
-        requestOptions: RequestOptions(path: 'http://example.com/chat/completions'),
+        requestOptions:
+            RequestOptions(path: 'http://example.com/chat/completions'),
         response: response,
       );
 

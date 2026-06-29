@@ -367,7 +367,7 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
                       style: TextStyle(fontSize: _fontSize, height: 1.5),
                     ),
                   ),
-          ),
+      ),
     );
   }
 }

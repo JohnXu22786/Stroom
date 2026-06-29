@@ -104,7 +104,9 @@ void main() {
         expect(config.normalizedHost, equals('https://api.openai.com/v1'));
       });
 
-      test('normalizedHost preserves full endpoint path (no stripping of /chat/completions)', () {
+      test(
+          'normalizedHost preserves full endpoint path (no stripping of /chat/completions)',
+          () {
         // The service uses normalizedHost as the request URL directly.
         // Users enter the full endpoint URL (e.g. .../chat/completions),
         // and normalizedHost preserves it without stripping or appending.
@@ -209,7 +211,8 @@ void main() {
         );
         final service = OcrService(config: config);
         expect(
-          () => service.recognize(imageBytes: Uint8List(0), imageFormat: 'jpeg'),
+          () =>
+              service.recognize(imageBytes: Uint8List(0), imageFormat: 'jpeg'),
           throwsA(isA<Exception>()),
         );
       });
@@ -243,7 +246,8 @@ void main() {
     });
 
     group('OcrService response parsing', () {
-      test('recognize extracts text from standard response with String content', () async {
+      test('recognize extracts text from standard response with String content',
+          () async {
         final dio = _mockDioWithSuccess({
           'choices': [
             {
@@ -267,7 +271,8 @@ void main() {
         expect(result.imageCount, equals(1));
       });
 
-      test('recognize extracts text when content is a List of text blocks', () async {
+      test('recognize extracts text when content is a List of text blocks',
+          () async {
         final dio = _mockDioWithSuccess({
           'choices': [
             {
@@ -291,7 +296,9 @@ void main() {
         expect(result.text, contains('第二行文字'));
       });
 
-      test('recognize extracts text when content is a List with single text block', () async {
+      test(
+          'recognize extracts text when content is a List with single text block',
+          () async {
         final dio = _mockDioWithSuccess({
           'choices': [
             {

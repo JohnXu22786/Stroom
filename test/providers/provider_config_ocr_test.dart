@@ -74,7 +74,13 @@ String _savedDataWithOcrConfig() {
           'host': 'https://ocr.example.com',
           'key': 'sk-test123',
           'models': [
-            {'name': 'Qwen-VL', 'modelId': 'qwen-vl-max', 'voices': <Map<String, dynamic>>[], 'customParams': <Map<String, dynamic>>[], 'typeConfig': <String, dynamic>{}}
+            {
+              'name': 'Qwen-VL',
+              'modelId': 'qwen-vl-max',
+              'voices': <Map<String, dynamic>>[],
+              'customParams': <Map<String, dynamic>>[],
+              'typeConfig': <String, dynamic>{}
+            }
           ],
         },
       ],

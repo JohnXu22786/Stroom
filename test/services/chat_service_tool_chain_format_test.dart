@@ -111,7 +111,8 @@ void main() {
       service.dispose();
     });
 
-    test('tool call chain produces ToolCallStart, ToolCallComplete, then TextEvent',
+    test(
+        'tool call chain produces ToolCallStart, ToolCallComplete, then TextEvent',
         () async {
       mockProvider = _MockToolCallProvider([
         const [
@@ -170,7 +171,8 @@ void main() {
       // The ReasoningSectionEndEvent is emitted between tool call rounds
       // to signal the UI to split reasoning chains.
       expect(events[0], isA<ReasoningSectionEndEvent>(),
-          reason: 'ReasoningSectionEndEvent is emitted between tool call rounds');
+          reason:
+              'ReasoningSectionEndEvent is emitted between tool call rounds');
 
       // Verify event sequence and types
       expect(events[1], isA<ToolCallStartEvent>());
@@ -197,16 +199,18 @@ void main() {
     test('tool call chain respects loop protection (max 10 iterations)',
         () async {
       mockProvider = _MockToolCallProvider(
-        List.generate(15, (i) => [
-          {
-            'id': 'call_loop_$i',
-            'type': 'function',
-            'function': {
-              'name': 'loop_tool',
-              'arguments': '{"iteration": $i}',
-            },
-          },
-        ]),
+        List.generate(
+            15,
+            (i) => [
+                  {
+                    'id': 'call_loop_$i',
+                    'type': 'function',
+                    'function': {
+                      'name': 'loop_tool',
+                      'arguments': '{"iteration": $i}',
+                    },
+                  },
+                ]),
       );
       service = ChatService(
         provider: mockProvider,
@@ -252,8 +256,7 @@ void main() {
       expect(toolStartEvents.length, greaterThan(0));
     });
 
-    test(
-        'assistant message with tool_calls has content:null per DeepSeek spec',
+    test('assistant message with tool_calls has content:null per DeepSeek spec',
         () async {
       mockProvider = _MockToolCallProvider([
         const [
@@ -296,8 +299,8 @@ void main() {
       expect(lastMessages, isNotNull);
 
       // Find the assistant message with tool_calls
-      final assistantWithToolCalls = lastMessages!.where((m) =>
-          m['role'] == 'assistant' && m.containsKey('tool_calls'));
+      final assistantWithToolCalls = lastMessages!.where(
+          (m) => m['role'] == 'assistant' && m.containsKey('tool_calls'));
       expect(assistantWithToolCalls, isNotEmpty,
           reason: 'Should have at least one assistant message with tool_calls');
 
@@ -320,7 +323,9 @@ void main() {
       }
     });
 
-    test('multiple parallel tool calls produce ONE assistant message per DeepSeek spec', () async {
+    test(
+        'multiple parallel tool calls produce ONE assistant message per DeepSeek spec',
+        () async {
       // DeepSeek spec: ALL tool_calls in a single assistant message,
       // not separate assistant messages per tool call.
       mockProvider = _MockToolCallProvider([
@@ -379,8 +384,8 @@ void main() {
 
       // Should have exactly ONE assistant message with tool_calls,
       // not separate messages per tool call
-      final assistantWithToolCalls = lastMessages!.where((m) =>
-          m['role'] == 'assistant' && m.containsKey('tool_calls'));
+      final assistantWithToolCalls = lastMessages!.where(
+          (m) => m['role'] == 'assistant' && m.containsKey('tool_calls'));
       expect(assistantWithToolCalls.length, equals(1),
           reason:
               'DeepSeek spec: ALL tool_calls must be in ONE assistant message');
@@ -400,7 +405,9 @@ void main() {
       expect(toolResults.length, equals(2));
     });
 
-    test('assistant message with tool_calls has content:null per OpenAI-compatible spec', () async {
+    test(
+        'assistant message with tool_calls has content:null per OpenAI-compatible spec',
+        () async {
       // OpenAI-compatible spec (followed by DeepSeek, OpenRouter):
       // assistant message with tool_calls has content: null
       // and tool_calls: [{id, type: "function", function: {name, arguments}}]
@@ -441,8 +448,8 @@ void main() {
       final lastMessages = mockProvider.lastStreamMessages;
       expect(lastMessages, isNotNull);
 
-      final assistantWithToolCalls = lastMessages!.where((m) =>
-          m['role'] == 'assistant' && m.containsKey('tool_calls'));
+      final assistantWithToolCalls = lastMessages!.where(
+          (m) => m['role'] == 'assistant' && m.containsKey('tool_calls'));
 
       // Each assistant message should have content: null when tool_calls present
       for (final msg in assistantWithToolCalls) {
@@ -547,7 +554,8 @@ void main() {
         final matchingResult =
             toolResults.where((r) => r['tool_call_id'] == id).toList();
         expect(matchingResult.length, equals(1),
-            reason: 'Each tool call $id should have exactly one matching result');
+            reason:
+                'Each tool call $id should have exactly one matching result');
       }
     });
   });

@@ -134,12 +134,11 @@ class _AudioPreviewDialogState extends State<AudioPreviewDialog> {
             if (_isInitialized) ...[
               Slider(
                 value: _duration.inMilliseconds > 0
-                    ? _position.inMilliseconds /
-                        _duration.inMilliseconds
+                    ? _position.inMilliseconds / _duration.inMilliseconds
                     : 0.0,
                 onChanged: (v) {
-                  final pos =
-                      Duration(milliseconds: (v * _duration.inMilliseconds).round());
+                  final pos = Duration(
+                      milliseconds: (v * _duration.inMilliseconds).round());
                   _player?.seek(pos);
                 },
               ),
@@ -177,7 +176,9 @@ class _AudioPreviewDialogState extends State<AudioPreviewDialog> {
               children: [
                 IconButton(
                   icon: Icon(
-                    _isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
+                    _isPlaying
+                        ? Icons.pause_circle_filled
+                        : Icons.play_circle_filled,
                     size: 48,
                     color: cs.primary,
                   ),

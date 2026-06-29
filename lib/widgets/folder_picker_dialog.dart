@@ -256,8 +256,7 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                         folder,
                         // 显示文件夹基名（不含父路径）
                         _isInSubFolder
-                            ? folder.substring(
-                                _currentPath.length + 1)
+                            ? folder.substring(_currentPath.length + 1)
                             : folder,
                         Icons.folder_outlined,
                       ),
@@ -307,8 +306,7 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                         ? const SizedBox(
                             width: 16,
                             height: 16,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2),
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.add, size: 20),
                   ),
@@ -360,15 +358,19 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                   Icon(
                     icon,
                     size: 20,
-                    color: isSelected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+                    color: isSelected
+                        ? cs.onPrimaryContainer
+                        : cs.onSurfaceVariant,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       displayName,
                       style: TextStyle(
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                        color: isSelected ? cs.onPrimaryContainer : cs.onSurface,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.normal,
+                        color:
+                            isSelected ? cs.onPrimaryContainer : cs.onSurface,
                       ),
                     ),
                   ),

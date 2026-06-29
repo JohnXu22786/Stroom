@@ -82,8 +82,10 @@ void main() {
     }
 
     /// 进入编辑模式（含初始化 widget）
-    Future<void> enterEditMode(WidgetTester tester, {TextRecord? file, String? content}) async {
-      await tester.pumpWidget(_buildTestApp(file ?? testFile, content ?? testContent));
+    Future<void> enterEditMode(WidgetTester tester,
+        {TextRecord? file, String? content}) async {
+      await tester
+          .pumpWidget(_buildTestApp(file ?? testFile, content ?? testContent));
       await navigateToEditor(tester);
       // Tap the edit icon button
       await tester.tap(find.byIcon(Icons.edit));
@@ -92,7 +94,8 @@ void main() {
 
     // ==================== View Mode ====================
 
-    testWidgets('renders in view mode with read-only text and icon-only edit button',
+    testWidgets(
+        'renders in view mode with read-only text and icon-only edit button',
         (tester) async {
       await tester.pumpWidget(_buildTestApp(testFile, testContent));
       await navigateToEditor(tester);
@@ -115,7 +118,8 @@ void main() {
 
     // ==================== Edit Mode: Icon-Only Buttons ====================
 
-    testWidgets('edit mode shows icon-only save, discard, undo, redo, font size buttons',
+    testWidgets(
+        'edit mode shows icon-only save, discard, undo, redo, font size buttons',
         (tester) async {
       await enterEditMode(tester);
 
@@ -447,8 +451,7 @@ void main() {
       expect(find.byIcon(Icons.save), findsOneWidget);
     });
 
-    testWidgets(
-        'back button confirmation "放弃" discards changes and pops',
+    testWidgets('back button confirmation "放弃" discards changes and pops',
         (tester) async {
       await enterEditMode(tester);
 
@@ -476,8 +479,7 @@ void main() {
 
     // ==================== Undo/Redo After Discard ====================
 
-    testWidgets('undo then redo becomes available',
-        (tester) async {
+    testWidgets('undo then redo becomes available', (tester) async {
       await enterEditMode(tester);
 
       // Make a change and undo it
@@ -519,6 +521,5 @@ void main() {
       // Should show empty content area (no crash)
       expect(find.byType(SelectableText), findsOneWidget);
     });
-
   });
 }

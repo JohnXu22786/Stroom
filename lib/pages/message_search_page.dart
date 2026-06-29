@@ -210,7 +210,8 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.manage_search, size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+          Icon(Icons.manage_search,
+              size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
           const SizedBox(height: 12),
           Text(
             '输入关键词搜索所有对话中的消息',
@@ -226,7 +227,8 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.search_off, size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+          Icon(Icons.search_off,
+              size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
           const SizedBox(height: 12),
           Text(
             '未找到匹配的消息',
@@ -256,7 +258,8 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
     // Build a preview of the first match
     const contextChars = 40;
     final firstMatch = result.matches.first;
-    final snippetStart = (firstMatch.matchStart - contextChars).clamp(0, firstMatch.message.content.length);
+    final snippetStart = (firstMatch.matchStart - contextChars)
+        .clamp(0, firstMatch.message.content.length);
     final snippet = MessageSearchPage.getSnippet(
       firstMatch.message.content,
       firstMatch.matchStart,
@@ -292,7 +295,8 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: cs.primaryContainer,
                     borderRadius: BorderRadius.circular(10),

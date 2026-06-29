@@ -512,7 +512,8 @@ void main() {
   group(
     'Gallery picker shows camera/gallery/file/app-file options (file-only panel)',
     () {
-      testWidgets('gallery picker opens file-only panel with 4 action buttons', (
+      testWidgets('gallery picker opens file-only panel with 4 action buttons',
+          (
         tester,
       ) async {
         await tester.pumpWidget(createChatTestApp());

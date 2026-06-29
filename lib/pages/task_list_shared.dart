@@ -83,8 +83,8 @@ class TaskCard extends ConsumerWidget {
                                 task.originalResponse != null) ...[
                               const SizedBox(width: 4),
                               GestureDetector(
-                                onTap: () => _showOriginalDetailDialog(
-                                    context, task),
+                                onTap: () =>
+                                    _showOriginalDetailDialog(context, task),
                                 child: const Text(
                                   '详情',
                                   style: TextStyle(
@@ -137,7 +137,8 @@ class TaskCard extends ConsumerWidget {
                   const PopupMenuItem(
                     value: 'remove',
                     child: ListTile(
-                      leading: Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                      leading: Icon(Icons.delete_outline,
+                          size: 20, color: Colors.red),
                       title: Text('清除任务', style: TextStyle(color: Colors.red)),
                       dense: true,
                       contentPadding: EdgeInsets.zero,
@@ -173,8 +174,10 @@ class TaskCard extends ConsumerWidget {
                       const PopupMenuItem(
                         value: 'remove',
                         child: ListTile(
-                          leading: Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                          title: Text('清除任务', style: TextStyle(color: Colors.red)),
+                          leading: Icon(Icons.delete_outline,
+                              size: 20, color: Colors.red),
+                          title:
+                              Text('清除任务', style: TextStyle(color: Colors.red)),
                           dense: true,
                           contentPadding: EdgeInsets.zero,
                         ),
@@ -204,7 +207,9 @@ class TaskCard extends ConsumerWidget {
                     icon: const Icon(Icons.more_vert, size: 20),
                     onSelected: (value) {
                       if (value == 'dismiss_error') {
-                        ref.read(taskListProvider.notifier).dismissError(task.id);
+                        ref
+                            .read(taskListProvider.notifier)
+                            .dismissError(task.id);
                       } else if (value == 'remove') {
                         ref.read(taskListProvider.notifier).removeTask(task.id);
                       }
@@ -214,7 +219,8 @@ class TaskCard extends ConsumerWidget {
                         const PopupMenuItem(
                           value: 'dismiss_error',
                           child: ListTile(
-                            leading: Icon(Icons.close, size: 20, color: Colors.grey),
+                            leading:
+                                Icon(Icons.close, size: 20, color: Colors.grey),
                             title: Text('关闭错误信息'),
                             dense: true,
                             contentPadding: EdgeInsets.zero,
@@ -223,8 +229,10 @@ class TaskCard extends ConsumerWidget {
                       const PopupMenuItem(
                         value: 'remove',
                         child: ListTile(
-                          leading: Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                          title: Text('清除任务', style: TextStyle(color: Colors.red)),
+                          leading: Icon(Icons.delete_outline,
+                              size: 20, color: Colors.red),
+                          title:
+                              Text('清除任务', style: TextStyle(color: Colors.red)),
                           dense: true,
                           contentPadding: EdgeInsets.zero,
                         ),
@@ -245,7 +253,8 @@ class TaskCard extends ConsumerWidget {
                   const PopupMenuItem(
                     value: 'remove',
                     child: ListTile(
-                      leading: Icon(Icons.delete_outline, size: 20, color: Colors.grey),
+                      leading: Icon(Icons.delete_outline,
+                          size: 20, color: Colors.grey),
                       title: Text('从列表移除'),
                       dense: true,
                       contentPadding: EdgeInsets.zero,

@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb, visibleForTesting;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
@@ -33,7 +34,8 @@ class BackupService {
     void Function(double progress)? onProgress,
   }) async {
     if (kIsWeb) {
-      throw UnsupportedError('createBackup is not available on web. Use exportBackup instead.');
+      throw UnsupportedError(
+          'createBackup is not available on web. Use exportBackup instead.');
     }
     final bytes = await _buildBackupBytes(onProgress: onProgress);
     await File(outputPath).writeAsBytes(bytes);
@@ -45,7 +47,8 @@ class BackupService {
     void Function(double progress)? onProgress,
   }) async {
     if (kIsWeb) {
-      throw UnsupportedError('restoreBackup is not available on web. Use importBackup instead.');
+      throw UnsupportedError(
+          'restoreBackup is not available on web. Use importBackup instead.');
     }
     final bytes = await File(zipPath).readAsBytes();
     await _restoreFromBytes(bytes, onProgress: onProgress);
@@ -78,10 +81,14 @@ class BackupService {
     final textRecords = await ManifestDatabase.getAllTextRecords();
     final folders = await ManifestDatabase.getAllFolders();
     // Per-type folder tables
-    final textFolders = await ManifestDatabase.getAllFolders(recordTable: ManifestTables.textRecords);
-    final audioFolders = await ManifestDatabase.getAllFolders(recordTable: ManifestTables.audioRecords);
-    final imageFolders = await ManifestDatabase.getAllFolders(recordTable: ManifestTables.imageRecords);
-    final videoFolders = await ManifestDatabase.getAllFolders(recordTable: ManifestTables.videoRecords);
+    final textFolders = await ManifestDatabase.getAllFolders(
+        recordTable: ManifestTables.textRecords);
+    final audioFolders = await ManifestDatabase.getAllFolders(
+        recordTable: ManifestTables.audioRecords);
+    final imageFolders = await ManifestDatabase.getAllFolders(
+        recordTable: ManifestTables.imageRecords);
+    final videoFolders = await ManifestDatabase.getAllFolders(
+        recordTable: ManifestTables.videoRecords);
     final dbData = {
       'image_records': imageRecords,
       'audio_records': audioRecords,
@@ -93,8 +100,7 @@ class BackupService {
       ManifestTables.imageFolders: imageFolders,
       ManifestTables.videoFolders: videoFolders,
     };
-    addStringToArchive(
-        archive, 'stroom_manifest.json', jsonEncode(dbData));
+    addStringToArchive(archive, 'stroom_manifest.json', jsonEncode(dbData));
     onProgress?.call(0.15);
 
     // 3. SharedPreferences
@@ -128,8 +134,8 @@ class BackupService {
       if (hash == null) continue;
       await addFileToArchive(
           archive, 'pictures/$hash.$format', 'pictures', '$hash.$format');
-      await addFileToArchive(archive, 'pictures/${hash}_thumb.png',
-          'pictures', '${hash}_thumb.png');
+      await addFileToArchive(archive, 'pictures/${hash}_thumb.png', 'pictures',
+          '${hash}_thumb.png');
     }
     onProgress?.call(0.5);
 
@@ -137,8 +143,8 @@ class BackupService {
       final hash = record['hash'] as String?;
       final format = record['format'] as String? ?? 'wav';
       if (hash == null) continue;
-      await addFileToArchive(archive, 'tts_audio/$hash.$format',
-          'tts_audio', '$hash.$format');
+      await addFileToArchive(
+          archive, 'tts_audio/$hash.$format', 'tts_audio', '$hash.$format');
       await addFileToArchive(
           archive, 'tts_audio/$hash.txt', 'tts_audio', '$hash.txt');
     }
@@ -148,16 +154,15 @@ class BackupService {
       final hash = record['hash'] as String?;
       final format = record['format'] as String? ?? 'mp4';
       if (hash == null) continue;
-      await addFileToArchive(archive, 'videos/$hash.$format', 'videos',
-          '$hash.$format');
+      await addFileToArchive(
+          archive, 'videos/$hash.$format', 'videos', '$hash.$format');
     }
     onProgress?.call(0.75);
 
     for (final record in textRecords) {
       final hash = record['hash'] as String?;
       if (hash == null) continue;
-      await addFileToArchive(
-          archive, 'texts/$hash.txt', 'texts', '$hash.txt');
+      await addFileToArchive(archive, 'texts/$hash.txt', 'texts', '$hash.txt');
     }
     onProgress?.call(0.8);
 
@@ -167,8 +172,7 @@ class BackupService {
       if (parts.length < 2) continue;
       final subDir = parts[0];
       final fileName = parts.sublist(1).join('/');
-      await addFileToArchive(
-          archive, storagePath, subDir, fileName);
+      await addFileToArchive(archive, storagePath, subDir, fileName);
     }
     onProgress?.call(0.85);
 
@@ -218,8 +222,8 @@ class BackupService {
     onProgress?.call(0.15);
 
     // 恢复数据库（兼容新旧格式）
-    final dbJson = fileMap['stroom_manifest.json']
-        ?? fileMap['database/manifest_data.json'];
+    final dbJson = fileMap['stroom_manifest.json'] ??
+        fileMap['database/manifest_data.json'];
     if (dbJson != null) {
       await _restoreDatabaseFromJson(utf8.decode(dbJson));
     }
@@ -235,10 +239,21 @@ class BackupService {
     // 恢复二进制文件和任务文件（兼容新旧两种路径格式）
     // 新格式: pictures/, tts_audio/, videos/, texts/, attachments/, synthesis/, catcatch/
     // 旧格式: files/pictures/, files/tts_audio/, ..., tasks/synthesis_tasks.json
-    const knownDirs = ['pictures', 'tts_audio', 'videos', 'texts', 'attachments',
-                       'synthesis', 'catcatch'];
-    final skipFiles = {'manifest.json', 'stroom_manifest.json',
-        'database/manifest_data.json', 'preferences.json'};
+    const knownDirs = [
+      'pictures',
+      'tts_audio',
+      'videos',
+      'texts',
+      'attachments',
+      'synthesis',
+      'catcatch'
+    ];
+    final skipFiles = {
+      'manifest.json',
+      'stroom_manifest.json',
+      'database/manifest_data.json',
+      'preferences.json'
+    };
 
     for (final entry in fileMap.entries) {
       var key = entry.key;
@@ -310,18 +325,18 @@ class BackupService {
     final folders = (data['folders'] as List<dynamic>?)?.cast<String>() ?? [];
 
     // Per-type folders (v2+ backups)
-    final textFolders = (data[ManifestTables.textFolders] as List<dynamic>?)
-            ?.cast<String>() ??
-        <String>[];
-    final audioFolders = (data[ManifestTables.audioFolders] as List<dynamic>?)
-            ?.cast<String>() ??
-        <String>[];
-    final imageFolders = (data[ManifestTables.imageFolders] as List<dynamic>?)
-            ?.cast<String>() ??
-        <String>[];
-    final videoFolders = (data[ManifestTables.videoFolders] as List<dynamic>?)
-            ?.cast<String>() ??
-        <String>[];
+    final textFolders =
+        (data[ManifestTables.textFolders] as List<dynamic>?)?.cast<String>() ??
+            <String>[];
+    final audioFolders =
+        (data[ManifestTables.audioFolders] as List<dynamic>?)?.cast<String>() ??
+            <String>[];
+    final imageFolders =
+        (data[ManifestTables.imageFolders] as List<dynamic>?)?.cast<String>() ??
+            <String>[];
+    final videoFolders =
+        (data[ManifestTables.videoFolders] as List<dynamic>?)?.cast<String>() ??
+            <String>[];
 
     await ManifestDatabase.clearAllData();
 
@@ -344,24 +359,32 @@ class BackupService {
         imageFolders.isNotEmpty ||
         videoFolders.isNotEmpty) {
       for (final folder in textFolders) {
-        await ManifestDatabase.insertFolder(folder, recordTable: ManifestTables.textRecords);
+        await ManifestDatabase.insertFolder(folder,
+            recordTable: ManifestTables.textRecords);
       }
       for (final folder in audioFolders) {
-        await ManifestDatabase.insertFolder(folder, recordTable: ManifestTables.audioRecords);
+        await ManifestDatabase.insertFolder(folder,
+            recordTable: ManifestTables.audioRecords);
       }
       for (final folder in imageFolders) {
-        await ManifestDatabase.insertFolder(folder, recordTable: ManifestTables.imageRecords);
+        await ManifestDatabase.insertFolder(folder,
+            recordTable: ManifestTables.imageRecords);
       }
       for (final folder in videoFolders) {
-        await ManifestDatabase.insertFolder(folder, recordTable: ManifestTables.videoRecords);
+        await ManifestDatabase.insertFolder(folder,
+            recordTable: ManifestTables.videoRecords);
       }
     } else {
       // v1 backup (legacy): distribute shared folders to all 4 per-type tables
       for (final folder in folders) {
-        await ManifestDatabase.insertFolder(folder, recordTable: ManifestTables.textRecords);
-        await ManifestDatabase.insertFolder(folder, recordTable: ManifestTables.audioRecords);
-        await ManifestDatabase.insertFolder(folder, recordTable: ManifestTables.imageRecords);
-        await ManifestDatabase.insertFolder(folder, recordTable: ManifestTables.videoRecords);
+        await ManifestDatabase.insertFolder(folder,
+            recordTable: ManifestTables.textRecords);
+        await ManifestDatabase.insertFolder(folder,
+            recordTable: ManifestTables.audioRecords);
+        await ManifestDatabase.insertFolder(folder,
+            recordTable: ManifestTables.imageRecords);
+        await ManifestDatabase.insertFolder(folder,
+            recordTable: ManifestTables.videoRecords);
       }
     }
   }
@@ -370,10 +393,8 @@ class BackupService {
     final backupPrefs = jsonDecode(json) as Map<String, dynamic>;
     final prefs = await SharedPreferences.getInstance();
 
-    final keysToRemove = prefs
-        .getKeys()
-        .where((k) => !k.startsWith('flutter.'))
-        .toList();
+    final keysToRemove =
+        prefs.getKeys().where((k) => !k.startsWith('flutter.')).toList();
     for (final key in keysToRemove) {
       await prefs.remove(key);
     }
