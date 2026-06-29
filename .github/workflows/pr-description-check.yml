@@ -1,0 +1,95 @@
+name: PR Description Check
+
+permissions:
+  pull-requests: write
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, synchronize, ready_for_review]
+
+jobs:
+  check-description:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    steps:
+      - name: Check PR description
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body || '';
+            const errors = [];
+
+            // Check "What this PR does" section — must have before/after content
+            const beforeMatch = body.match(/Before this PR:\s*\n+([\s\S]*?)(?=\n\s*After this PR:)/);
+            const afterMatch = body.match(/After this PR:\s*\n+([\s\S]*?)(?=\n\s*(?:<!--|Fixes\s*#|###|$))/);
+
+            const beforeContent = beforeMatch ? beforeMatch[1].trim() : '';
+            const afterContent = afterMatch ? afterMatch[1].trim() : '';
+
+            if (!beforeContent) {
+              errors.push('`Before this PR:` is empty — please describe the current behavior.');
+            }
+            if (!afterContent) {
+              errors.push('`After this PR:` is empty — please describe the new behavior.');
+            }
+
+            // Check "Type of change" is set
+            const typeMatch = body.match(/\[x\]\s*(feat|fix|docs|style|refactor|perf|test|ci|build|chore|revert)/i);
+            if (!typeMatch) {
+              errors.push('`Type of change` — please mark the applicable change type with `[x]`.');
+            }
+
+            // Find and manage previous bot comment
+            const marker = '<!-- pr-description-check -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const botComment = comments.find(c =>
+              c.user.type === 'Bot' && c.body && c.body.includes(marker)
+            );
+
+            if (errors.length > 0) {
+              const commentBody = [
+                marker,
+                '## ⚠️ PR Description Check Failed',
+                '',
+                'The following required sections are incomplete:',
+                '',
+                ...errors.map(e => `- ${e}`),
+                '',
+                'Please edit your PR description to fill in the missing information.',
+                'Refer to the PR template for guidance.',
+              ].join('\n');
+
+              if (botComment) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: botComment.id,
+                  body: commentBody,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: commentBody,
+                });
+              }
+
+              core.setFailed('PR description is incomplete. See the comment on the PR for details.');
+            } else {
+              // Clean up old failure comment if it exists
+              if (botComment) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: botComment.id,
+                });
+              }
+
+              core.info('PR description check passed.');
+            }
