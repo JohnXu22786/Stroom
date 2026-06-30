@@ -22,9 +22,7 @@ import 'assistant_provider.dart';
 ///
 /// Returns true if any conversations were modified.
 Future<bool> assignNullAssistantConversations(
-  SharedPreferences prefs,
-  List<Conversation> conversations,
-) async {
+    SharedPreferences prefs, List<Conversation> conversations) async {
   try {
     // Check if any conversation has null assistantId
     final hasNull = conversations.any((c) => c.assistantId == null);
@@ -45,13 +43,10 @@ Future<bool> assignNullAssistantConversations(
 
     // Persist the fix
     if (changed) {
-      await prefs.setString(
-        'conversations',
-        jsonEncode(conversations.map((e) => e.toMap()).toList()),
-      );
+      await prefs.setString('conversations',
+          jsonEncode(conversations.map((e) => e.toMap()).toList()));
       debugPrint(
-        'Auto-assigned null-assistantId conversations to default assistant ($defaultId)',
-      );
+          'Auto-assigned null-assistantId conversations to default assistant ($defaultId)');
     }
 
     return changed;
@@ -71,8 +66,8 @@ Future<String?> _resolveDefaultAssistantId(SharedPreferences prefs) async {
   // Try from SharedPreferences first (safe across provider boundaries)
   final assistantsJson = prefs.getString('assistants');
   if (assistantsJson != null && assistantsJson.isNotEmpty) {
-    final list = (jsonDecode(assistantsJson) as List)
-        .cast<Map<String, dynamic>>();
+    final list =
+        (jsonDecode(assistantsJson) as List).cast<Map<String, dynamic>>();
     if (list.isNotEmpty) {
       return list.first['id'] as String;
     }
@@ -87,8 +82,7 @@ Future<String?> _resolveDefaultAssistantId(SharedPreferences prefs) async {
   );
   await prefs.setString('assistants', jsonEncode([defaultAssistant.toMap()]));
   debugPrint(
-    'Created default assistant during migration (${defaultAssistant.id})',
-  );
+      'Created default assistant during migration (${defaultAssistant.id})');
   return defaultAssistant.id;
 }
 
@@ -122,52 +116,49 @@ class Conversation {
     this.assistantId,
     this.draftText = '',
     Set<String>? enabledMcpToolNames,
-  }) : id = id ?? const Uuid().v4(),
-       createdAt = createdAt ?? DateTime.now(),
-       updatedAt = updatedAt ?? DateTime.now(),
-       messages = messages ?? [],
-       enabledMcpToolNames = enabledMcpToolNames ?? {};
+  })  : id = id ?? const Uuid().v4(),
+        createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now(),
+        messages = messages ?? [],
+        enabledMcpToolNames = enabledMcpToolNames ?? {};
 
   Map<String, dynamic> toMap() => {
-    'id': id,
-    'title': title,
-    'createdAt': createdAt.toIso8601String(),
-    'updatedAt': updatedAt.toIso8601String(),
-    'messages': messages.map((m) => m.toMap()).toList(),
-    'isPinned': isPinned,
-    'sortOrder': sortOrder,
-    if (assistantId != null) 'assistantId': assistantId,
-    'draftText': draftText,
-    if (enabledMcpToolNames.isNotEmpty)
-      'enabledMcpToolNames': enabledMcpToolNames.toList(),
-  };
+        'id': id,
+        'title': title,
+        'createdAt': createdAt.toIso8601String(),
+        'updatedAt': updatedAt.toIso8601String(),
+        'messages': messages.map((m) => m.toMap()).toList(),
+        'isPinned': isPinned,
+        'sortOrder': sortOrder,
+        if (assistantId != null) 'assistantId': assistantId,
+        'draftText': draftText,
+        if (enabledMcpToolNames.isNotEmpty)
+          'enabledMcpToolNames': enabledMcpToolNames.toList(),
+      };
 
   factory Conversation.fromMap(Map<String, dynamic> map) => Conversation(
-    id: map['id'] as String?,
-    title: map['title'] as String? ?? '',
-    createdAt: map['createdAt'] != null
-        ? DateTime.parse(map['createdAt'] as String)
-        : null,
-    updatedAt: map['updatedAt'] != null
-        ? DateTime.parse(map['updatedAt'] as String)
-        : null,
-    messages:
-        (map['messages'] as List?)
-            ?.map(
-              (e) => ChatMessage.fromMap(Map<String, dynamic>.from(e as Map)),
-            )
-            .toList() ??
-        [],
-    isPinned: map['isPinned'] as bool? ?? false,
-    sortOrder: map['sortOrder'] as int? ?? 0,
-    assistantId: map['assistantId'] as String?,
-    draftText: map['draftText'] as String? ?? '',
-    enabledMcpToolNames:
-        (map['enabledMcpToolNames'] as List?)
-            ?.map((e) => e.toString())
-            .toSet() ??
-        {},
-  );
+        id: map['id'] as String?,
+        title: map['title'] as String? ?? '',
+        createdAt: map['createdAt'] != null
+            ? DateTime.parse(map['createdAt'] as String)
+            : null,
+        updatedAt: map['updatedAt'] != null
+            ? DateTime.parse(map['updatedAt'] as String)
+            : null,
+        messages: (map['messages'] as List?)
+                ?.map((e) =>
+                    ChatMessage.fromMap(Map<String, dynamic>.from(e as Map)))
+                .toList() ??
+            [],
+        isPinned: map['isPinned'] as bool? ?? false,
+        sortOrder: map['sortOrder'] as int? ?? 0,
+        assistantId: map['assistantId'] as String?,
+        draftText: map['draftText'] as String? ?? '',
+        enabledMcpToolNames: (map['enabledMcpToolNames'] as List?)
+                ?.map((e) => e.toString())
+                .toSet() ??
+            {},
+      );
 
   @override
   String toString() => 'Conversation(id: $id, title: $title)';
@@ -185,10 +176,10 @@ final conversationSearchQueryProvider = StateProvider<String>((ref) => '');
 /// Persistent list of all conversations.
 final conversationsProvider =
     StateNotifierProvider<ConversationsNotifier, List<Conversation>>((ref) {
-      final notifier = ConversationsNotifier(ref);
-      notifier._load();
-      return notifier;
-    });
+  final notifier = ConversationsNotifier(ref);
+  notifier._load();
+  return notifier;
+});
 
 class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   final Ref _ref;
@@ -239,8 +230,8 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       } else {
         await prefs.remove('active_conversation_id');
       }
-    } catch (e, s) {
-      debugPrint('Failed to persist active conversation ID: $e\n$s');
+    } catch (e) {
+      debugPrint('Failed to persist active conversation ID: $e');
     }
   }
 
@@ -251,8 +242,8 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
         final prefs = await SharedPreferences.getInstance();
         final json = jsonEncode(state.map((e) => e.toMap()).toList());
         await prefs.setString('conversations', json);
-      } catch (e, s) {
-        debugPrint('Failed to persist conversations: $e\n$s');
+      } catch (e) {
+        debugPrint('Failed to persist conversations: $e');
       }
     });
   }
@@ -264,8 +255,8 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       final prefs = await SharedPreferences.getInstance();
       final json = jsonEncode(state.map((e) => e.toMap()).toList());
       await prefs.setString('conversations', json);
-    } catch (e, s) {
-      debugPrint('Failed to persist conversations synchronously: $e\n$s');
+    } catch (e) {
+      debugPrint('Failed to persist conversations synchronously: $e');
     }
   }
 
@@ -368,17 +359,15 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       (m) => m.role == 'user',
       orElse: () => conv.messages.first,
     );
-    final firstAssistant = conv.messages
-        .where((m) => m.role == 'assistant')
-        .firstOrNull;
+    final firstAssistant =
+        conv.messages.where((m) => m.role == 'assistant').firstOrNull;
 
     String combined = firstUser.content;
     if (firstAssistant != null) {
       combined += ' - ${firstAssistant.content}';
     }
-    final title = combined.length > 60
-        ? '${combined.substring(0, 60)}…'
-        : combined;
+    final title =
+        combined.length > 60 ? '${combined.substring(0, 60)}…' : combined;
 
     state = state.map((c) {
       if (c.id != id) return c;
@@ -392,9 +381,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   /// Replaces the message list of a conversation (e.g. after sending or
   /// loading a different conversation).
   Future<void> updateMessages(
-    String conversationId,
-    List<ChatMessage> messages,
-  ) async {
+      String conversationId, List<ChatMessage> messages) async {
     state = state.map((c) {
       if (c.id != conversationId) return c;
       c.messages = messages;
@@ -405,17 +392,15 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
           (m) => m.role == 'user',
           orElse: () => messages.first,
         );
-        final firstAssistant = messages
-            .where((m) => m.role == 'assistant')
-            .firstOrNull;
+        final firstAssistant =
+            messages.where((m) => m.role == 'assistant').firstOrNull;
 
         String combined = firstUser.content;
         if (firstAssistant != null) {
           combined += ' - ${firstAssistant.content}';
         }
-        c.title = combined.length > 60
-            ? '${combined.substring(0, 60)}…'
-            : combined;
+        c.title =
+            combined.length > 60 ? '${combined.substring(0, 60)}…' : combined;
       }
       return c;
     }).toList();
@@ -456,8 +441,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
 ///
 /// Returns the migrated conversation list, or `null` if already done.
 Future<List<Conversation>?> migrateConversationsFromPrefs(
-  SharedPreferences prefs,
-) async {
+    SharedPreferences prefs) async {
   try {
     if (prefs.getBool('migrated_old_conversations') == true) return null;
 
@@ -470,9 +454,7 @@ Future<List<Conversation>?> migrateConversationsFromPrefs(
         description: '通用AI助手',
       );
       await prefs.setString(
-        'assistants',
-        jsonEncode([defaultAssistant.toMap()]),
-      );
+          'assistants', jsonEncode([defaultAssistant.toMap()]));
     }
 
     final refreshedJson = prefs.getString('assistants');
