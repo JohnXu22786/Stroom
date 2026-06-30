@@ -91,14 +91,15 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   final Dio _dio;
 
   UpdateNotifier({Dio? dio})
-      : _dio = dio ??
-            Dio(
-              BaseOptions(
-                connectTimeout: const Duration(seconds: 10),
-                receiveTimeout: const Duration(seconds: 10),
-              ),
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
+              connectTimeout: const Duration(seconds: 10),
+              receiveTimeout: const Duration(seconds: 10),
             ),
-        super(const UpdateState());
+          ),
+      super(const UpdateState());
 
   /// Finds the download URL for the given [platformKey] from the release [assets].
   ///
@@ -106,7 +107,9 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   /// 'windows', 'macos', 'linux'). Returns the [browser_download_url] of the first match,
   /// or `null` if no asset matches.
   static String? findAssetDownloadUrl(
-      List<dynamic> assets, String platformKey) {
+    List<dynamic> assets,
+    String platformKey,
+  ) {
     final key = platformKey.toLowerCase();
     String? installerUrl;
     String? fallbackUrl;
@@ -243,9 +246,13 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   }
 
   Future<void> skipVersion(String version) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kSkippedVersionKey, version);
-    await prefs.remove(_kUpdateAvailableKey);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kSkippedVersionKey, version);
+      await prefs.remove(_kUpdateAvailableKey);
+    } catch (e) {
+      debugPrint('skipVersion failed: $e');
+    }
     state = const UpdateState();
   }
 
@@ -275,10 +282,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   Future<void> downloadUpdate({String? downloadDir}) async {
     final url = state.downloadUrl;
     if (url == null || url.isEmpty) {
-      state = state.copyWith(
-        isDownloading: false,
-        downloadError: '下载地址不可用',
-      );
+      state = state.copyWith(isDownloading: false, downloadError: '下载地址不可用');
       return;
     }
 
@@ -307,15 +311,14 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     try {
       final tempDir = downloadDir ?? await _getDownloadDirectory();
       final uri = Uri.parse(url);
-      final fileName =
-          uri.pathSegments.isNotEmpty ? uri.pathSegments.last : 'update';
+      final fileName = uri.pathSegments.isNotEmpty
+          ? uri.pathSegments.last
+          : 'update';
       final filePath = '$tempDir/$fileName';
 
       final response = await _dio.get(
         url,
-        options: Options(
-          responseType: ResponseType.bytes,
-        ),
+        options: Options(responseType: ResponseType.bytes),
         onReceiveProgress: (received, total) {
           if (total != -1) {
             final progress = received / total;
@@ -342,9 +345,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
           await installDownloadedFile();
         } catch (e) {
           // 捕获 installDownloadedFile 未处理到的异常
-          state = state.copyWith(
-            downloadError: '自动安装失败: $e',
-          );
+          state = state.copyWith(downloadError: '自动安装失败: $e');
         } finally {
           state = state.copyWith(isInstalling: false);
         }
@@ -355,10 +356,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         );
       }
     } catch (e) {
-      state = state.copyWith(
-        isDownloading: false,
-        downloadError: '下载失败: $e',
-      );
+      state = state.copyWith(isDownloading: false, downloadError: '下载失败: $e');
     }
   }
 
@@ -390,9 +388,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       try {
         await _installOnAndroid(filePath);
       } catch (e) {
-        state = state.copyWith(
-          downloadError: '安装失败: $e',
-        );
+        state = state.copyWith(downloadError: '安装失败: $e');
       }
     } else if (defaultTargetPlatform == TargetPlatform.windows ||
         defaultTargetPlatform == TargetPlatform.macOS ||
@@ -400,9 +396,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       try {
         await _installOnDesktop(filePath);
       } catch (e) {
-        state = state.copyWith(
-          downloadError: '更新失败: $e',
-        );
+        state = state.copyWith(downloadError: '更新失败: $e');
       }
     } else {
       // Fallback: use system default handler
@@ -411,14 +405,10 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
         } else {
-          state = state.copyWith(
-            downloadError: '无法打开文件，请手动安装: $filePath',
-          );
+          state = state.copyWith(downloadError: '无法打开文件，请手动安装: $filePath');
         }
       } catch (e) {
-        state = state.copyWith(
-          downloadError: '安装失败: $e',
-        );
+        state = state.copyWith(downloadError: '安装失败: $e');
       }
     }
   }
@@ -497,9 +487,15 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     // 3. 创建更新脚本
     final scriptPath = Platform.isWindows
         ? await _createWindowsUpdateScript(
-            installDir.path, updateDir.path, extractedExe)
+            installDir.path,
+            updateDir.path,
+            extractedExe,
+          )
         : await _createUnixUpdateScript(
-            installDir.path, updateDir.path, extractedExe);
+            installDir.path,
+            updateDir.path,
+            extractedExe,
+          );
 
     // 4. 启动脚本
     if (Platform.isWindows) {
@@ -560,9 +556,13 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
 
   /// Windows 更新脚本 (.bat)
   Future<String> _createWindowsUpdateScript(
-      String installDir, String updateDir, String extractedExe) async {
+    String installDir,
+    String updateDir,
+    String extractedExe,
+  ) async {
     final exeName = _fileName(extractedExe);
-    final scriptContent = '''@echo off
+    final scriptContent =
+        '''@echo off
 timeout /t 3 /nobreak > nul
 taskkill /f /im $exeName 2>nul
 xcopy /E /Y "$updateDir\\*" "$installDir\\"
@@ -576,10 +576,14 @@ del "%~f0"
 
   /// macOS/Linux 更新脚本 (.sh)
   Future<String> _createUnixUpdateScript(
-      String installDir, String updateDir, String extractedExe) async {
+    String installDir,
+    String updateDir,
+    String extractedExe,
+  ) async {
     final exeName = _fileName(extractedExe);
     final exePath = '$installDir/$exeName';
-    final scriptContent = '''#!/bin/bash
+    final scriptContent =
+        '''#!/bin/bash
 sleep 3
 pkill -9 "$exeName" 2>/dev/null
 cp -R "$updateDir/"* "$installDir/"
@@ -619,19 +623,13 @@ rm -- "\$0"
   Future<void> _installOnAndroid(String filePath) async {
     try {
       const channel = MethodChannel('com.johntsui.stroom/install');
-      await channel.invokeMethod<String>('installApk', {
-        'filePath': filePath,
-      });
+      await channel.invokeMethod<String>('installApk', {'filePath': filePath});
       // Success — native side successfully launched the package installer.
       // No error to report.
     } on PlatformException catch (e) {
-      state = state.copyWith(
-        downloadError: e.message ?? '安装失败，请手动打开 APK 安装',
-      );
+      state = state.copyWith(downloadError: e.message ?? '安装失败，请手动打开 APK 安装');
     } catch (e) {
-      state = state.copyWith(
-        downloadError: '安装失败: $e',
-      );
+      state = state.copyWith(downloadError: '安装失败: $e');
     }
   }
 }
