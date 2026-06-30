@@ -7,7 +7,6 @@ import 'package:uuid/uuid.dart';
 
 import '../models/assistant.dart';
 import '../models/chat_message.dart';
-import '../services/data_migration_service.dart';
 import 'assistant_provider.dart';
 
 // ============================================================================
@@ -44,11 +43,8 @@ Future<bool> assignNullAssistantConversations(
 
     // Persist the fix
     if (changed) {
-      // 双格式策略
-      await DataMigrationService.backupConversationsBeforeWrite();
       await prefs.setString('conversations',
           jsonEncode(conversations.map((e) => e.toMap()).toList()));
-      await DataMigrationService.cleanupConversationsBackup();
       debugPrint(
           'Auto-assigned null-assistantId conversations to default assistant ($defaultId)');
     }
@@ -244,12 +240,8 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     _persistTimer = Timer(const Duration(milliseconds: 500), () async {
       try {
         final prefs = await SharedPreferences.getInstance();
-        // 双格式策略：写入前创建备份
-        await DataMigrationService.backupConversationsBeforeWrite();
         final json = jsonEncode(state.map((e) => e.toMap()).toList());
         await prefs.setString('conversations', json);
-        // 写入成功后清理备份
-        await DataMigrationService.cleanupConversationsBackup();
       } catch (e) {
         debugPrint('Failed to persist conversations: $e');
       }
@@ -261,12 +253,8 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     _persistTimer = null;
     try {
       final prefs = await SharedPreferences.getInstance();
-      // 双格式策略：写入前创建备份
-      await DataMigrationService.backupConversationsBeforeWrite();
       final json = jsonEncode(state.map((e) => e.toMap()).toList());
       await prefs.setString('conversations', json);
-      // 写入成功后清理备份
-      await DataMigrationService.cleanupConversationsBackup();
     } catch (e) {
       debugPrint('Failed to persist conversations synchronously: $e');
     }
@@ -488,10 +476,7 @@ Future<List<Conversation>?> migrateConversationsFromPrefs(
   }
 
   if (changed) {
-    // 双格式策略
-    await DataMigrationService.backupConversationsBeforeWrite();
     await prefs.setString('conversations', jsonEncode(conversations));
-    await DataMigrationService.cleanupConversationsBackup();
   }
 
   await prefs.setBool('migrated_old_conversations', true);

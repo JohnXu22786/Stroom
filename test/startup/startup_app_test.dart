@@ -14,12 +14,10 @@ void main() {
     AppStorage.resetCache();
   });
 
-  group('StartupApp - crash recovery integration', () {
-    test('detects and recovers from stale migration_in_progress flag',
-        () async {
-      // Simulate a crash mid-migration
+  group('StartupApp - startup checks integration', () {
+    test('detects stale format version and performs migration', () async {
+      // Simulate an old format version
       SharedPreferences.setMockInitialValues({
-        'migration_in_progress': true,
         'data_format_version': 0,
         'provider_entries': jsonEncode([
           {'id': 'old_provider', 'type': 'llm', 'name': 'Old', 'configs': []},
@@ -41,45 +39,14 @@ void main() {
 
       // After migration:
       final prefs = await SharedPreferences.getInstance();
-      // migration_in_progress should be cleared
-      expect(prefs.containsKey('migration_in_progress'), isFalse);
       // Version should be updated
       expect(prefs.getInt('data_format_version'),
           equals(DataMigrationService.currentFormatVersion));
     });
 
-    test('recovers conversations from bak when main is corrupted', () async {
+    test('no migration needed when format version is current', () async {
       SharedPreferences.setMockInitialValues({
-        'data_format_version': 1,
-        'conversations': 'broken json {{{',
-        'conversations_bak': jsonEncode([
-          {
-            'id': 'conv1',
-            'title': 'Recovered',
-            'messages': [],
-            'createdAt': DateTime.now().toIso8601String(),
-          },
-        ]),
-      });
-
-      // The recovery step should fix conversations
-      final recovered = await StartupCheckService.recoverCrashData();
-      expect(recovered, isTrue);
-
-      final prefs = await SharedPreferences.getInstance();
-      final json = prefs.getString('conversations');
-      expect(json, isNotNull);
-      final list = jsonDecode(json!) as List;
-      expect(list.length, equals(1));
-      expect(list[0]['id'], equals('conv1'));
-
-      // bak should be cleaned up
-      expect(prefs.containsKey('conversations_bak'), isFalse);
-    });
-
-    test('no crash data means clean startup without recovery', () async {
-      SharedPreferences.setMockInitialValues({
-        'data_format_version': 1,
+        'data_format_version': DataMigrationService.currentFormatVersion,
         'conversations': jsonEncode([
           {
             'id': 'conv1',
@@ -90,14 +57,36 @@ void main() {
         ]),
       });
 
-      // Should detect no crash data
-      final logged = <String>[];
+      // Should detect no migration needed
       final issues = await StartupCheckService.validateDataFormats();
       expect(issues.isEmpty, isTrue);
+    });
 
-      // Recovery should be a no-op
-      final recovered = await StartupCheckService.recoverCrashData();
-      expect(recovered, isFalse);
+    test('validates data formats without crash recovery', () async {
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 1,
+        'provider_entries': jsonEncode([
+          {
+            'id': 'test_llm',
+            'type': 'llm',
+            'name': 'Test Provider',
+            'configs': [],
+          },
+        ]),
+        'conversations': jsonEncode([
+          {
+            'id': 'conv1',
+            'title': 'Test',
+            'messages': [],
+            'createdAt': DateTime.now().toIso8601String(),
+          },
+        ]),
+      });
+
+      // Validate data formats (does not involve crash recovery)
+      final issues = await StartupCheckService.validateDataFormats();
+      expect(issues.where((i) => i.severity == StartupIssueSeverity.error),
+          isEmpty);
     });
   });
 }

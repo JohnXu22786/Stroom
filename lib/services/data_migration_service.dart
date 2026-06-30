@@ -6,17 +6,10 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'storage_service.dart';
 import 'manifest_database.dart';
 
 /// The key used in SharedPreferences to store the data format version.
 const String _kDataFormatVersionKey = 'data_format_version';
-
-/// Key used to track if a migration is in progress (for crash recovery).
-const String _kMigrationInProgressKey = 'migration_in_progress';
-
-/// Backup key for conversations (double-write protection).
-const String _kConversationsBakKey = 'conversations_bak';
 
 // ====================================================================
 // MigrationResult — result of checkAndMigrate()
@@ -47,7 +40,6 @@ class MigrationResult {
 //
 // 每次启动时检查数据格式版本。如果版本过低，则执行迁移。
 // 每次迁移前会自动创建旧数据备份（保留 2 天后自动清理）。
-// 支持中途中止恢复（crash recovery）和双格式策略。
 // ====================================================================
 
 class DataMigrationService {
@@ -79,37 +71,20 @@ class DataMigrationService {
   /// 返回 [MigrationResult]，指示是否需要迁移以及是否需要重启。
   ///
   /// 每次启动都会执行此检查，确保数据格式是最新的。
-  /// 支持中途中止恢复：如果上次迁移被中断（crash），
-  /// 会检测到 `migration_in_progress` 标记并从备份恢复。
   ///
   /// 调用此方法后：
   /// - 如果 [MigrationResult.needsMigration] 为 `true`，调用者应展示迁移对话框。
   /// - 如果 [MigrationResult.restartRequired] 为 `true`，迁移完成后需要重启应用。
   static Future<MigrationResult> checkAndMigrate() async {
-    final prefs = await SharedPreferences.getInstance();
     final storedVersion = await getStoredFormatVersion();
 
-    // ---- 步骤 0：每次启动都做的恢复性检查 ----
-
-    // 0a. 清理过期备份（即使版本匹配也执行）
-    await cleanOldBackups();
-
-    // 0b. 恢复中断的迁移（如果上次迁移被 crash 打断）
-    await _recoverInterruptedMigration(prefs);
-
-    // 0c. 恢复损坏的 conversations（双格式恢复）
-    await recoverConversationsFromBackup();
-
-    // ---- 步骤 1：检查版本 ----
-    // 版本相同时不需要迁移（但上面的恢复性检查已执行）
+    // 版本相同时不需要迁移
     if (storedVersion >= currentFormatVersion) {
       return const MigrationResult(needsMigration: false);
     }
 
-    // ---- 步骤 2：执行迁移 ----
-
-    // 设置迁移进行中标记（crash recovery 用）
-    await prefs.setBool(_kMigrationInProgressKey, true);
+    // 需要迁移：清理旧备份
+    await cleanOldBackups();
 
     try {
       // 创建备份到外部位置
@@ -119,20 +94,16 @@ class DataMigrationService {
       await _performMigration(storedVersion, currentFormatVersion);
 
       // 更新存储的版本号
+      final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_kDataFormatVersionKey, currentFormatVersion);
 
       debugPrint(
         '[DataMigrationService] Migrated data format from v$storedVersion to v$currentFormatVersion',
       );
     } catch (e) {
-      // 迁移失败 — 清除标记并重新抛出
-      await prefs.remove(_kMigrationInProgressKey);
       debugPrint('[DataMigrationService] Migration failed: $e');
       rethrow;
     }
-
-    // 清除迁移进行中标记
-    await prefs.remove(_kMigrationInProgressKey);
 
     // 迁移完成后总是需要重启应用，确保所有 provider 和服务
     // 以新的数据格式重新初始化，避免因旧状态导致闪退。
@@ -140,200 +111,6 @@ class DataMigrationService {
       needsMigration: true,
       restartRequired: true,
     );
-  }
-
-  /// 恢复被中断的迁移（crash / force-close recovery）。
-  ///
-  /// 检测到 `migration_in_progress` 标记且版本未更新时，
-  /// 表示上次迁移在过程中被中断。此时尝试从外部备份恢复。
-  ///
-  /// 如果恢复了，重新设置版本为旧版本，由后续代码重新执行迁移。
-  static Future<void> _recoverInterruptedMigration(
-      SharedPreferences prefs) async {
-    final inProgress = prefs.getBool(_kMigrationInProgressKey) ?? false;
-    if (!inProgress) return;
-
-    final storedVersion = prefs.getInt(_kDataFormatVersionKey) ?? 0;
-    debugPrint(
-      '[DataMigrationService] Detected interrupted migration (v$storedVersion -> v$currentFormatVersion). '
-      'Attempting recovery...',
-    );
-
-    try {
-      // 尝试从外部备份恢复
-      final restored = await _restoreFromLatestBackup(prefs);
-      if (restored) {
-        debugPrint(
-          '[DataMigrationService] Recovery successful. Will re-attempt migration.',
-        );
-        // 恢复成功后清除标记，允许重新迁移
-        await prefs.remove(_kMigrationInProgressKey);
-      } else {
-        debugPrint(
-          '[DataMigrationService] No backup found for recovery. '
-          'Clearing flag to allow migration retry from current state.',
-        );
-        // 没有备份可恢复，清除标记让迁移重新执行
-        await prefs.remove(_kMigrationInProgressKey);
-      }
-    } catch (e) {
-      // 恢复失败 — 保留标记，下次启动重试
-      debugPrint(
-          '[DataMigrationService] Recovery failed, keeping flag for retry: $e');
-      // 不删除标记，下次启动重试恢复
-    }
-  }
-
-  /// 从最新的外部备份恢复 SharedPreferences。
-  ///
-  /// 此恢复是尽力而为的（best-effort），写入不是原子操作。
-  /// 如果恢复过程中 crash，migration_in_progress 标记会保留，
-  /// 下次启动时会重新执行完整恢复（从同一个备份），保证最终一致性。
-  static Future<bool> _restoreFromLatestBackup(SharedPreferences prefs) async {
-    if (kIsWeb) return false;
-
-    try {
-      final backupRootPath = await getExternalBackupRootPath();
-      final backupRoot = Directory(backupRootPath);
-      if (!await backupRoot.exists()) return false;
-
-      // 找到最新的备份目录
-      final entries = await backupRoot.list().toList();
-      Directory? latest;
-      DateTime? latestTime;
-
-      for (final entry in entries) {
-        if (entry is! Directory) continue;
-        try {
-          final stat = entry.statSync();
-          if (latestTime == null || stat.modified.isAfter(latestTime)) {
-            latest = entry;
-            latestTime = stat.modified;
-          }
-        } catch (_) {}
-      }
-
-      if (latest == null) return false;
-
-      // 读取备份中的 preferences.json
-      final prefsFile = File(p.join(latest.path, 'preferences.json'));
-      if (!await prefsFile.exists()) return false;
-
-      final content = await prefsFile.readAsString();
-      final decoded = jsonDecode(content);
-      if (decoded is! Map<String, dynamic>) {
-        debugPrint(
-            '[DataMigrationService] Invalid preferences.json format in backup');
-        return false;
-      }
-      final prefData = decoded;
-
-      // 恢复所有非 flutter. 开头的键
-      for (final entry in prefData.entries) {
-        if (entry.key.startsWith('flutter.')) continue;
-        final value = entry.value;
-        if (value is String) {
-          await prefs.setString(entry.key, value);
-        } else if (value is int) {
-          await prefs.setInt(entry.key, value);
-        } else if (value is double) {
-          await prefs.setDouble(entry.key, value);
-        } else if (value is bool) {
-          await prefs.setBool(entry.key, value);
-        } else if (value is List<String>) {
-          await prefs.setStringList(entry.key, value);
-        }
-      }
-
-      debugPrint(
-          '[DataMigrationService] Restored preferences from ${latest.path}');
-      return true;
-    } catch (e) {
-      debugPrint('[DataMigrationService] Failed to restore from backup: $e');
-      return false;
-    }
-  }
-
-  // ================================================================
-  // Conversations 双格式恢复（API 中断保护）
-  // ================================================================
-
-  /// 从 conversations_bak 恢复被损坏的 conversations。
-  ///
-  /// 双格式策略：
-  /// - 写入 conversations 前，先创建 conversations_bak
-  /// - 写入完成后，删除 conversations_bak
-  /// - 启动时检测：如果两者同时存在 → 检查 conversations 是否有效
-  ///   - conversations 无效 → 从 bak 恢复
-  ///   - conversations 有效 → 清理 bak（写操作已成功，只是 bak 残留）
-  /// - 如果只有 conversations_bak 没有 conversations → 从 bak 恢复
-  ///
-  /// 返回 true 如果执行了恢复或清理操作。
-  static Future<bool> recoverConversationsFromBackup() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final conversations = prefs.getString('conversations');
-      final bak = prefs.getString(_kConversationsBakKey);
-
-      // 没有 bak，无需操作
-      if (bak == null || bak.isEmpty) return false;
-
-      // 检查 conversations 是否有效（支持 List 和 Map 格式）
-      bool conversationsValid = false;
-      if (conversations != null && conversations.isNotEmpty) {
-        try {
-          final parsed = jsonDecode(conversations);
-          if (parsed is List || parsed is Map) {
-            conversationsValid = true;
-          }
-        } catch (_) {
-          // conversations 损坏
-        }
-      }
-
-      if (!conversationsValid) {
-        // conversations 损坏或缺失 — 从 bak 恢复
-        debugPrint(
-          '[DataMigrationService] Conversations data is corrupted or missing. '
-          'Recovering from backup...',
-        );
-        await prefs.setString('conversations', bak);
-      }
-
-      // 清理 bak（无论是否恢复，bak 都应被清除）
-      await prefs.remove(_kConversationsBakKey);
-      debugPrint('[DataMigrationService] Cleaned up conversations_bak');
-      return true;
-    } catch (e) {
-      debugPrint('[DataMigrationService] Failed to recover conversations: $e');
-      return false;
-    }
-  }
-
-  /// 在写入 conversations 前创建备份（双格式策略）。
-  ///
-  /// 调用方式：在 _persist / _persistNow 写入 conversations 前调用。
-  static Future<void> backupConversationsBeforeWrite() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final conversations = prefs.getString('conversations');
-      if (conversations != null && conversations.isNotEmpty) {
-        await prefs.setString(_kConversationsBakKey, conversations);
-      }
-    } catch (e) {
-      debugPrint('[DataMigrationService] Failed to backup conversations: $e');
-    }
-  }
-
-  /// 在成功写入 conversations 后清理备份。
-  static Future<void> cleanupConversationsBackup() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_kConversationsBakKey);
-    } catch (e) {
-      debugPrint(
-          '[DataMigrationService] Failed to cleanup conversations backup: $e');
-    }
   }
 
   // ================================================================
@@ -549,10 +326,6 @@ class DataMigrationService {
       await _performMigration(storedVersion, currentFormatVersion);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_kDataFormatVersionKey, currentFormatVersion);
-      // Clear any stale migration_in_progress flag that may have been
-      // restored from a backup (e.g. a backup created mid-migration).
-      // Prevents the next startup from attempting unnecessary recovery.
-      await prefs.remove(_kMigrationInProgressKey);
       debugPrint(
         '[DataMigrationService] Migrated data format from v$storedVersion '
         'to v$currentFormatVersion',
