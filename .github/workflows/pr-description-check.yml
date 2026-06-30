@@ -1,0 +1,106 @@
+name: PR Description Check
+
+permissions:
+  pull-requests: write
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, synchronize, ready_for_review]
+
+jobs:
+  check-description:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    steps:
+      - name: Check PR description
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body || '';
+            const warnings = [];
+
+            // Check "Before this PR:" content — only if the section header exists
+            const hasBefore = /#{0,3}\s*Before this PR:/i.test(body);
+            if (hasBefore) {
+              const beforeMatch = body.match(/Before this PR:\s*\n+([\s\S]*?)(?=\n\s*#{0,3}\s*(?:After this PR:|###|$))/i);
+              const beforeContent = beforeMatch ? beforeMatch[1].trim() : '';
+              if (!beforeContent) {
+                warnings.push('`Before this PR:` section is empty — consider describing the current behavior.');
+              }
+            }
+
+            // Check "After this PR:" content — only if the section header exists
+            const hasAfter = /#{0,3}\s*After this PR:/i.test(body);
+            if (hasAfter) {
+              const afterMatch = body.match(/After this PR:\s*\n+([\s\S]*?)(?=\n\s*(?:<!--|Fixes\s*#|#{1,3}|$))/i);
+              const afterContent = afterMatch ? afterMatch[1].trim() : '';
+              if (!afterContent) {
+                warnings.push('`After this PR:` section is empty — consider describing the new behavior.');
+              }
+            }
+
+            // Check "Type of change" is set (flexible matching)
+            const typeMatch = body.match(/\[\s*[xX]\s*\]\s*(feat|fix|docs|style|refactor|perf|test|ci|build|chore|revert)/i);
+            if (!typeMatch) {
+              warnings.push('`Type of change` — please mark the applicable change type with `[x]`.');
+            }
+
+            // Only fail if body is truly empty or near-empty
+            const bodyTrimmed = body.replace(/\s/g, '').replace(/[#*\-\[\]()>|`]/g, '').trim();
+            if (!bodyTrimmed) {
+              warnings.push('PR description is nearly empty — please add a meaningful description.');
+            }
+
+            // Find and manage previous bot comment
+            const marker = '<!-- pr-description-check -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const botComment = comments.find(c =>
+              c.user.type === 'Bot' && c.body && c.body.includes(marker)
+            );
+
+            if (warnings.length > 0) {
+              const commentBody = [
+                marker,
+                '## 📋 PR Description Suggestions',
+                '',
+                'The following items could be improved:',
+                '',
+                ...warnings.map(e => `- ${e}`),
+                '',
+                'These are suggestions only — the PR will not be blocked.',
+              ].join('\n');
+
+              if (botComment) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: botComment.id,
+                  body: commentBody,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: commentBody,
+                });
+              }
+
+              core.info('PR description has suggestions (non-blocking).');
+            } else {
+              // Clean up old failure comment if it exists
+              if (botComment) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: botComment.id,
+                });
+              }
+
+              core.info('PR description check passed.');
+            }

@@ -100,9 +100,19 @@ class AudioSeparationEngine {
   Uint8List _addAdtsHeadersToFrames(
       List<_AudioFrame> frames, _AudioTrackInfo track) {
     const freqMap = {
-      96000: 0, 88200: 1, 64000: 2, 48000: 3, 44100: 4,
-      32000: 5, 24000: 6, 22050: 7, 16000: 8, 12000: 9,
-      11025: 10, 8000: 11, 7350: 12,
+      96000: 0,
+      88200: 1,
+      64000: 2,
+      48000: 3,
+      44100: 4,
+      32000: 5,
+      24000: 6,
+      22050: 7,
+      16000: 8,
+      12000: 9,
+      11025: 10,
+      8000: 11,
+      7350: 12,
     };
     final sampleRate = track.sampleRate > 0 ? track.sampleRate : 44100;
     final freqIdx = freqMap[sampleRate] ?? 4;
@@ -119,7 +129,8 @@ class AudioSeparationEngine {
 
       // ADTS fixed header (7 bytes)
       result.addByte(0xFF); // Sync word byte 1
-      result.addByte(0xF1); // Sync word byte 2: MPEG-4, layer 0, protection absent
+      result.addByte(
+          0xF1); // Sync word byte 2: MPEG-4, layer 0, protection absent
       // profile (2 bits), sampling_frequency_index (4 bits), channel_configuration (2 bits high)
       result.addByte(((profile - 1) << 6) | (freqIdx << 2) | (chanConfig >> 2));
       // channel_configuration low 2 bits + frame_length high 2 bits
@@ -400,7 +411,9 @@ class _Mp4Demuxer {
         final endChunk = (i + 1 < stscEntries.length)
             ? stscEntries[i + 1].$1 - 1
             : chunkOffsets.length;
-        for (var c = firstChunk - 1; c < endChunk && c < chunkOffsets.length; c++) {
+        for (var c = firstChunk - 1;
+            c < endChunk && c < chunkOffsets.length;
+            c++) {
           sampleToChunk[c] = spc;
         }
       }
@@ -431,7 +444,8 @@ class _Mp4Demuxer {
     int sampleIdx = 0;
 
     for (var chunkIdx = 0;
-        chunkIdx < track.chunkOffsets.length && sampleIdx < track.sampleSizes.length;
+        chunkIdx < track.chunkOffsets.length &&
+            sampleIdx < track.sampleSizes.length;
         chunkIdx++) {
       final chunkMdatOffset = track.chunkOffsets[chunkIdx];
       final spc = chunkIdx < track.sampleToChunkMap.length
@@ -449,7 +463,8 @@ class _Mp4Demuxer {
           }
         }
 
-        final fileOffset = track.mdatDataOffset + chunkMdatOffset + offsetInChunk;
+        final fileOffset =
+            track.mdatDataOffset + chunkMdatOffset + offsetInChunk;
         if (fileOffset + sampleSize <= _data.length) {
           frames.add(_AudioFrame(
             Uint8List.sublistView(_data, fileOffset, fileOffset + sampleSize),

@@ -14,7 +14,10 @@ List<Conversation> _createTestConversations() {
       title: 'Flutter讨论',
       messages: [
         ChatMessage(id: 'msg-1', role: 'user', content: 'Flutter是什么框架？'),
-        ChatMessage(id: 'msg-2', role: 'assistant', content: 'Flutter是Google开发的跨平台UI框架'),
+        ChatMessage(
+            id: 'msg-2',
+            role: 'assistant',
+            content: 'Flutter是Google开发的跨平台UI框架'),
       ],
     ),
     Conversation(

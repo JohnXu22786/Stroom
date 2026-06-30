@@ -753,8 +753,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
                   reasoningBuffer;
               // Update the last section in the sections list for multi-step
               // reasoning chain support.
-              final sections =
-                  [...ref.read(streamingReasoningSectionsProvider)];
+              final sections = [
+                ...ref.read(streamingReasoningSectionsProvider)
+              ];
               if (sections.isNotEmpty) {
                 sections[sections.length - 1] = reasoningBuffer;
               }
@@ -767,8 +768,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
           case ReasoningSectionEndEvent():
             // Finalize current reasoning section and start a new empty one
             // for the next tool call round.
-            final sections =
-                [...ref.read(streamingReasoningSectionsProvider)];
+            final sections = [...ref.read(streamingReasoningSectionsProvider)];
             sections.add('');
             ref.read(streamingReasoningSectionsProvider.notifier).state =
                 sections;

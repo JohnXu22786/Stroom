@@ -62,7 +62,8 @@ class _MockProvider extends BaseChatProvider {
 
 void main() {
   group('reasoning params - user configurable ReasoningParam model', () {
-    test('reasoning params come from model config and selected values', () async {
+    test('reasoning params come from model config and selected values',
+        () async {
       final provider = _MockProvider();
       final modelConfig = ModelConfig(
         name: 'Test',
@@ -70,8 +71,7 @@ void main() {
         typeConfig: {'context': 4096},
         reasoningParams: [
           ReasoningParam(
-              paramName: 'thinking.type',
-              options: ['enabled', 'disabled']),
+              paramName: 'thinking.type', options: ['enabled', 'disabled']),
           ReasoningParam(
               paramName: 'reasoning_effort',
               options: ['low', 'medium', 'high']),
@@ -102,8 +102,7 @@ void main() {
         typeConfig: {'context': 4096},
         reasoningParams: [
           ReasoningParam(
-              paramName: 'thinking.type',
-              options: ['enabled', 'disabled']),
+              paramName: 'thinking.type', options: ['enabled', 'disabled']),
           ReasoningParam(
               paramName: 'thinking.budget_tokens',
               options: ['5000', '10000', '20000']),
@@ -127,8 +126,7 @@ void main() {
       expect(body['thinking']['budget_tokens'], '10000');
     });
 
-    test('disabled reasoning param not sent when reasoning is ON',
-        () async {
+    test('disabled reasoning param not sent when reasoning is ON', () async {
       final provider = _MockProvider();
       final modelConfig = ModelConfig(
         name: 'Test',
@@ -136,9 +134,7 @@ void main() {
         typeConfig: {'context': 4096},
         reasoningParams: [
           ReasoningParam(
-              paramName: 'thinking.type',
-              options: ['enabled'],
-              enabled: false),
+              paramName: 'thinking.type', options: ['enabled'], enabled: false),
         ],
       );
 
@@ -146,8 +142,8 @@ void main() {
 
       // When reasoning is ON but the param is disabled in config, it should
       // NOT be sent.
-      await for (final _ in service.sendStream('Hi',
-          history: [], reasoning: true)) {}
+      await for (final _
+          in service.sendStream('Hi', history: [], reasoning: true)) {}
 
       final body = provider.lastRequestBody;
       expect(body, isNotNull);
@@ -165,8 +161,8 @@ void main() {
 
       final service = ChatService(provider: provider, modelConfig: modelConfig);
 
-      await for (final _ in service.sendStream('Hi',
-          history: [], reasoning: true)) {}
+      await for (final _
+          in service.sendStream('Hi', history: [], reasoning: true)) {}
 
       final body = provider.lastRequestBody;
       expect(body, isNotNull);
@@ -174,7 +170,8 @@ void main() {
       expect(body.containsKey('reasoning_effort'), false);
     });
 
-    test('supports different param types via reasoning selections map', () async {
+    test('supports different param types via reasoning selections map',
+        () async {
       final provider = _MockProvider();
       final modelConfig = ModelConfig(
         name: 'Test',
@@ -182,11 +179,8 @@ void main() {
         typeConfig: {'context': 4096},
         reasoningParams: [
           ReasoningParam(
-              paramName: 'temperature',
-              options: ['0.5', '0.8', '1.0']),
-          ReasoningParam(
-              paramName: 'stream',
-              options: ['true', 'false']),
+              paramName: 'temperature', options: ['0.5', '0.8', '1.0']),
+          ReasoningParam(paramName: 'stream', options: ['true', 'false']),
         ],
       );
 
@@ -213,9 +207,7 @@ void main() {
         modelId: 'claude-sonnet-4-6',
         typeConfig: {'context': 128000},
         reasoningParams: [
-          ReasoningParam(
-              paramName: 'thinking.type',
-              options: ['enabled']),
+          ReasoningParam(paramName: 'thinking.type', options: ['enabled']),
           ReasoningParam(
               paramName: 'thinking.budget_tokens',
               options: ['5000', '10000', '20000', '32000']),

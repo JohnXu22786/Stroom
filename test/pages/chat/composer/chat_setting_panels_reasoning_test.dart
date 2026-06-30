@@ -13,7 +13,8 @@ Future<void> openPanel(WidgetTester tester) async {
 
 void main() {
   group('ReasoningPanel with dynamic options', () {
-    testWidgets('reasoning panel shows dynamic option chips from reasoning params',
+    testWidgets(
+        'reasoning panel shows dynamic option chips from reasoning params',
         (tester) async {
       final reasoningParams = [
         ReasoningParam(
@@ -158,7 +159,8 @@ void main() {
       expect(find.text('high'), findsNothing);
     });
 
-    testWidgets('reasoning panel shows empty state when no reasoning params configured',
+    testWidgets(
+        'reasoning panel shows empty state when no reasoning params configured',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -195,8 +197,7 @@ void main() {
       expect(find.textContaining('推理'), findsWidgets);
     });
 
-    testWidgets('tapping an option chip updates the selection',
-        (tester) async {
+    testWidgets('tapping an option chip updates the selection', (tester) async {
       String? changedParamName;
       String? changedValue;
       final reasoningParams = [
@@ -243,8 +244,7 @@ void main() {
       expect(changedValue, 'high');
     });
 
-    testWidgets('options preserve user-added order',
-        (tester) async {
+    testWidgets('options preserve user-added order', (tester) async {
       final reasoningParams = [
         ReasoningParam(
           paramName: 'config.thinkingConfig.thinkingLevel',
@@ -262,7 +262,9 @@ void main() {
                     showReasoningPanel(
                       context: context,
                       reasoningEnabled: true,
-                      reasoningParamSelections: {'config.thinkingConfig.thinkingLevel': 'max'},
+                      reasoningParamSelections: {
+                        'config.thinkingConfig.thinkingLevel': 'max'
+                      },
                       reasoningParams: reasoningParams,
                       onReasoningToggle: (_) {},
                       onReasoningParamChanged: (name, value) {},
@@ -286,8 +288,7 @@ void main() {
       expect(find.text('min'), findsOneWidget);
     });
 
-    testWidgets('true/false boolean options display correctly',
-        (tester) async {
+    testWidgets('true/false boolean options display correctly', (tester) async {
       final reasoningParams = [
         ReasoningParam(
           paramName: 'thinking.type',

@@ -14,8 +14,7 @@ Widget createChatTestApp({String? initialSearchQuery}) {
       conversationsProvider.overrideWith((ref) {
         return ConversationsNotifier(ref);
       }),
-      activeConversationIdProvider.overrideWith(
-          (ref) => 'test-conv-id'),
+      activeConversationIdProvider.overrideWith((ref) => 'test-conv-id'),
       providerEntriesProvider.overrideWith((ref) {
         return ProviderEntriesNotifier();
       }),
@@ -28,14 +27,17 @@ Widget createChatTestApp({String? initialSearchQuery}) {
 
 void main() {
   group('ChatPage search mode toggle', () {
-    Future<void> pumpChatPage(WidgetTester tester, {String? initialSearchQuery}) async {
-      await tester.pumpWidget(createChatTestApp(initialSearchQuery: initialSearchQuery));
+    Future<void> pumpChatPage(WidgetTester tester,
+        {String? initialSearchQuery}) async {
+      await tester.pumpWidget(
+          createChatTestApp(initialSearchQuery: initialSearchQuery));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
       tester.takeException();
     }
 
-    testWidgets('shows search icon (no separate global search icon)', (tester) async {
+    testWidgets('shows search icon (no separate global search icon)',
+        (tester) async {
       await pumpChatPage(tester);
 
       expect(find.byIcon(Icons.search), findsOneWidget);

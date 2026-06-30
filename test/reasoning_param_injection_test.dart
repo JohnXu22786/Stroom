@@ -80,8 +80,8 @@ void main() {
 
       final service = ChatService(provider: provider, modelConfig: modelConfig);
 
-      await for (final _ in service.sendStream('Hi',
-          history: [], reasoning: true)) {}
+      await for (final _
+          in service.sendStream('Hi', history: [], reasoning: true)) {}
 
       final body = provider.lastRequestBody;
       expect(body, isNotNull);
@@ -106,15 +106,16 @@ void main() {
 
       final service = ChatService(provider: provider, modelConfig: modelConfig);
 
-      await for (final _ in service.sendStream('Hi',
-          history: [], reasoning: false)) {}
+      await for (final _
+          in service.sendStream('Hi', history: [], reasoning: false)) {}
 
       final body = provider.lastRequestBody;
       expect(body, isNotNull);
       expect(body!['thinking']['type'], 'disabled');
     });
 
-    test('additional enabled params sent with selected values when reasoning ON',
+    test(
+        'additional enabled params sent with selected values when reasoning ON',
         () async {
       final provider = _MockProvider();
       final modelConfig = ModelConfig(
@@ -240,8 +241,8 @@ void main() {
 
       final service = ChatService(provider: provider, modelConfig: modelConfig);
 
-      await for (final _ in service.sendStream('Hi',
-          history: [], reasoning: true)) {}
+      await for (final _
+          in service.sendStream('Hi', history: [], reasoning: true)) {}
 
       final body = provider.lastRequestBody;
       expect(body, isNotNull);
@@ -304,14 +305,11 @@ void main() {
       final service = ChatService(provider: provider, modelConfig: modelConfig);
 
       await for (final _ in service.sendStream('Hi',
-          history: [],
-          reasoning: true,
-          reasoningParamValues: {})) {}
+          history: [], reasoning: true, reasoningParamValues: {})) {}
 
       final body = provider.lastRequestBody;
       expect(body, isNotNull);
-      expect(
-          body!['config']['thinkingConfig']['thinkingLevel'], 'HIGH');
+      expect(body!['config']['thinkingConfig']['thinkingLevel'], 'HIGH');
     });
 
     test('single-value options (e.g. only max) work correctly', () async {

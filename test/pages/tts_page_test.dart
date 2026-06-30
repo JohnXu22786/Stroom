@@ -35,8 +35,7 @@ void main() {
   });
 
   group('TtsPage - audio page buttons', () {
-    testWidgets('shows three action buttons: 开始录音, 生成录音, 导入音频',
-        (tester) async {
+    testWidgets('shows three action buttons: 开始录音, 生成录音, 导入音频', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
@@ -84,7 +83,8 @@ void main() {
       // A mic icon should be present in the widget tree (on the first button)
       expect(
         find.byWidgetPredicate(
-          (w) => w is Icon &&
+          (w) =>
+              w is Icon &&
               (w.icon == Icons.mic ||
                   w.icon == Icons.mic_outlined ||
                   w.icon == Icons.mic_none),

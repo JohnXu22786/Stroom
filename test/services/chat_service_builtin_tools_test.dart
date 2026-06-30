@@ -55,8 +55,7 @@ void main() {
       );
 
       final defs = ChatService.getRegisteredToolDefinitions();
-      final calc =
-          defs.where((d) => d.name == 'test_calc').firstOrNull;
+      final calc = defs.where((d) => d.name == 'test_calc').firstOrNull;
       expect(calc, isNotNull);
       expect(calc!.name, equals('test_calc'));
       expect(calc.description, equals('A calculator'));

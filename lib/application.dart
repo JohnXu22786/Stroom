@@ -99,10 +99,10 @@ class _ApplicationState extends ConsumerState<Application> {
         final colorScheme = themeMode == ThemeMode.light
             ? lightColorScheme
             : themeMode == ThemeMode.dark
-            ? darkColorScheme
-            : MediaQuery.platformBrightnessOf(context) == Brightness.light
-            ? lightColorScheme
-            : darkColorScheme;
+                ? darkColorScheme
+                : MediaQuery.platformBrightnessOf(context) == Brightness.light
+                    ? lightColorScheme
+                    : darkColorScheme;
 
         return Directionality(
           textDirection: TextDirection.ltr,

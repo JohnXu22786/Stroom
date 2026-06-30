@@ -34,9 +34,7 @@ class OptionChip extends StatelessWidget {
           style: TextStyle(
             fontSize: 14,
             fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-            color: selected
-                ? cs.onPrimaryContainer
-                : cs.onSurfaceVariant,
+            color: selected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
           ),
         ),
       ),

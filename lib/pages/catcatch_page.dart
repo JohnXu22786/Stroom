@@ -101,9 +101,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
     }
 
     try {
-      ref
-          .read(catcatchTasksProvider.notifier)
-          .addTask(
+      ref.read(catcatchTasksProvider.notifier).addTask(
             url,
             totalSec,
             videoFolder: _videoFolder,

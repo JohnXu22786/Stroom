@@ -88,7 +88,8 @@ String _githubRelease(String tagName, {String body = '', String? htmlUrl}) {
 
 void main() {
   group('UpdateDialog - Shared Dialog', () {
-    testWidgets('shows update dialog with all elements when update available', (tester) async {
+    testWidgets('shows update dialog with all elements when update available',
+        (tester) async {
       SharedPreferences.setMockInitialValues({});
       final dio = _createMockDio(
         _githubRelease('v0.2.14', body: 'Bug fixes'),
@@ -105,7 +106,8 @@ void main() {
         updateAvailable: true,
         latestVersion: '0.2.14',
         releaseNotes: 'Bug fixes',
-        downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+        downloadUrl:
+            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
       );
 
       // Show the dialog programmatically
@@ -143,7 +145,8 @@ void main() {
       expect(find.text('立即更新'), findsOneWidget);
     });
 
-    testWidgets('skip button calls skipVersion and closes dialog', (tester) async {
+    testWidgets('skip button calls skipVersion and closes dialog',
+        (tester) async {
       SharedPreferences.setMockInitialValues({});
       final dio = _createMockDio(
         _githubRelease('v0.2.14'),
@@ -158,7 +161,8 @@ void main() {
       notifier.state = UpdateState(
         updateAvailable: true,
         latestVersion: '0.2.14',
-        downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+        downloadUrl:
+            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
       );
 
       await tester.pumpWidget(
@@ -195,7 +199,8 @@ void main() {
       expect(notifier.state.updateAvailable, false);
     });
 
-    testWidgets('later button closes dialog without side effects', (tester) async {
+    testWidgets('later button closes dialog without side effects',
+        (tester) async {
       SharedPreferences.setMockInitialValues({});
       final dio = _createMockDio(
         _githubRelease('v0.2.14'),
@@ -210,7 +215,8 @@ void main() {
       notifier.state = UpdateState(
         updateAvailable: true,
         latestVersion: '0.2.14',
-        downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+        downloadUrl:
+            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
       );
 
       await tester.pumpWidget(
@@ -262,7 +268,8 @@ void main() {
       notifier.state = UpdateState(
         updateAvailable: true,
         latestVersion: '0.2.14',
-        downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+        downloadUrl:
+            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
         isDownloading: true,
         downloadProgress: 0.45,
       );
@@ -301,7 +308,8 @@ void main() {
       expect(find.text('稍后提醒'), findsNothing);
     });
 
-    testWidgets('shows installing state UI when isInstalling is true', (tester) async {
+    testWidgets('shows installing state UI when isInstalling is true',
+        (tester) async {
       SharedPreferences.setMockInitialValues({});
       final dio = _createMockDio(
         _githubRelease('v0.2.14'),
@@ -316,7 +324,8 @@ void main() {
       notifier.state = UpdateState(
         updateAvailable: true,
         latestVersion: '0.2.14',
-        downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+        downloadUrl:
+            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
         downloadComplete: true,
         isInstalling: true,
         downloadedFilePath: '/tmp/test.apk',
@@ -352,7 +361,8 @@ void main() {
       expect(find.text('手动安装'), findsNothing);
     });
 
-    testWidgets('shows fallback install button when auto-install fails', (tester) async {
+    testWidgets('shows fallback install button when auto-install fails',
+        (tester) async {
       SharedPreferences.setMockInitialValues({});
       final dio = _createMockDio(
         _githubRelease('v0.2.14'),
@@ -367,7 +377,8 @@ void main() {
       notifier.state = UpdateState(
         updateAvailable: true,
         latestVersion: '0.2.14',
-        downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+        downloadUrl:
+            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
         downloadComplete: true,
         isInstalling: false,
         downloadError: '安装失败，请手动打开 APK 安装',
@@ -405,13 +416,15 @@ void main() {
       expect(find.text('安装失败，请手动打开 APK 安装'), findsOneWidget);
     });
 
-    testWidgets('dialog cannot be dismissed by popping while downloading', (tester) async {
+    testWidgets('dialog cannot be dismissed by popping while downloading',
+        (tester) async {
       SharedPreferences.setMockInitialValues({});
       final notifier = _setupNotifier(
         state: UpdateState(
           updateAvailable: true,
           latestVersion: '0.2.14',
-          downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+          downloadUrl:
+              'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
           isDownloading: true,
           downloadProgress: 0.5,
         ),
@@ -432,13 +445,15 @@ void main() {
       expect(find.text('正在下载更新...'), findsOneWidget);
     });
 
-    testWidgets('dialog cannot be dismissed by popping while installing', (tester) async {
+    testWidgets('dialog cannot be dismissed by popping while installing',
+        (tester) async {
       SharedPreferences.setMockInitialValues({});
       final notifier = _setupNotifier(
         state: UpdateState(
           updateAvailable: true,
           latestVersion: '0.2.14',
-          downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+          downloadUrl:
+              'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
           downloadComplete: true,
           isInstalling: true,
           downloadedFilePath: '/tmp/test.exe',
@@ -460,13 +475,16 @@ void main() {
       expect(find.text('正在安装...'), findsOneWidget);
     });
 
-    testWidgets('dialog does NOT auto-close after download complete with no error', (tester) async {
+    testWidgets(
+        'dialog does NOT auto-close after download complete with no error',
+        (tester) async {
       SharedPreferences.setMockInitialValues({});
       final notifier = _setupNotifier(
         state: UpdateState(
           updateAvailable: true,
           latestVersion: '0.2.14',
-          downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+          downloadUrl:
+              'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
           downloadComplete: true,
           isDownloading: false,
           isInstalling: false,
@@ -493,13 +511,15 @@ void main() {
       expect(find.text('发现新版本'), findsNothing);
     });
 
-    testWidgets('dialog shows download-complete state and does not auto-close', (tester) async {
+    testWidgets('dialog shows download-complete state and does not auto-close',
+        (tester) async {
       SharedPreferences.setMockInitialValues({});
       final notifier = _setupNotifier(
         state: UpdateState(
           updateAvailable: true,
           latestVersion: '0.2.14',
-          downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+          downloadUrl:
+              'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
           downloadComplete: true,
           isDownloading: false,
           isInstalling: false,

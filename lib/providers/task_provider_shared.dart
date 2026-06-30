@@ -110,8 +110,8 @@ class SynthesisTask {
             ? DateTime.parse(map['statusChangedAt'] as String)
             : null,
         text: map['text'] as String,
-        providerConfig:
-            ProviderConfigItem.fromMap(map['providerConfig'] as Map<String, dynamic>),
+        providerConfig: ProviderConfigItem.fromMap(
+            map['providerConfig'] as Map<String, dynamic>),
         modelConfig:
             ModelConfig.fromMap(map['modelConfig'] as Map<String, dynamic>),
         customParams: map['customParams'] != null

@@ -73,7 +73,8 @@ void main() {
       provider = _ParamCaptureProvider();
     });
 
-    test('includes temperature, top_p, frequency_penalty, presence_penalty, seed from typeConfig',
+    test(
+        'includes temperature, top_p, frequency_penalty, presence_penalty, seed from typeConfig',
         () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
@@ -98,8 +99,10 @@ void main() {
 
       expect(provider.capturedExtraParams, isNotNull);
       expect(provider.capturedExtraParams!['top_p'], closeTo(0.95, 0.001));
-      expect(provider.capturedExtraParams!['frequency_penalty'], closeTo(0.2, 0.001));
-      expect(provider.capturedExtraParams!['presence_penalty'], closeTo(0.1, 0.001));
+      expect(provider.capturedExtraParams!['frequency_penalty'],
+          closeTo(0.2, 0.001));
+      expect(provider.capturedExtraParams!['presence_penalty'],
+          closeTo(0.1, 0.001));
       expect(provider.capturedExtraParams!['seed'], equals(12345));
     });
 
@@ -122,12 +125,16 @@ void main() {
 
       expect(provider.capturedExtraParams, isNotNull);
       expect(provider.capturedExtraParams!.containsKey('top_p'), isFalse);
-      expect(provider.capturedExtraParams!.containsKey('frequency_penalty'), isFalse);
-      expect(provider.capturedExtraParams!.containsKey('presence_penalty'), isFalse);
+      expect(provider.capturedExtraParams!.containsKey('frequency_penalty'),
+          isFalse);
+      expect(provider.capturedExtraParams!.containsKey('presence_penalty'),
+          isFalse);
       expect(provider.capturedExtraParams!.containsKey('seed'), isFalse);
     });
 
-    test('temperature is read from typeConfig and passed directly when toggle is on', () async {
+    test(
+        'temperature is read from typeConfig and passed directly when toggle is on',
+        () async {
       modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',

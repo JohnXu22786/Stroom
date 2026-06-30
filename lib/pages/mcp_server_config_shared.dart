@@ -53,7 +53,8 @@ class ReadOnlyField extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label,
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                    style:
+                        TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                 const SizedBox(height: 4),
                 Text(
                   value.isNotEmpty ? value : '（未设置）',

@@ -47,7 +47,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     try {
       // 显示不可关闭的进度弹窗（showDialog 在 finally 中通过 Navigator.pop 关闭）
       final progressNotifier = ValueNotifier<String>('正在准备数据...');
-      final progressValue = ValueNotifier<double?>(null); // null = indeterminate
+      final progressValue =
+          ValueNotifier<double?>(null); // null = indeterminate
 
       showDialog<void>(
         context: context,
@@ -141,7 +142,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
             SizedBox(height: 8),
             Row(
               children: [
-                Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 20),
+                Icon(Icons.warning_amber_rounded,
+                    color: Colors.orange, size: 20),
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -281,7 +283,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.folder_open, color: Colors.orange.shade700, size: 20),
+                      Icon(Icons.folder_open,
+                          color: Colors.orange.shade700, size: 20),
                       const SizedBox(width: 8),
                       Text(
                         '自动备份位置',
@@ -310,7 +313,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.folder, size: 16, color: Colors.grey.shade600),
+                        Icon(Icons.folder,
+                            size: 16, color: Colors.grey.shade600),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -382,7 +386,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                   ),
                   const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.orange.shade50,
                       borderRadius: BorderRadius.circular(4),
@@ -391,7 +396,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orange.shade700),
+                        Icon(Icons.warning_amber_rounded,
+                            size: 14, color: Colors.orange.shade700),
                         const SizedBox(width: 4),
                         Text(
                           '将覆盖现有数据',

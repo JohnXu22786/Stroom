@@ -10,7 +10,8 @@ Widget _buildTestApp({ModelConfig? initialModel}) {
 }
 
 /// Helper to enter text and settle
-Future<void> enterTextAndSettle(WidgetTester tester, Finder finder, String text) async {
+Future<void> enterTextAndSettle(
+    WidgetTester tester, Finder finder, String text) async {
   await tester.enterText(finder, text);
   await tester.pumpAndSettle();
 }

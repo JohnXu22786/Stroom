@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'storage_service.dart';
 import 'manifest_database.dart';
+
 /// The key used in SharedPreferences to store the data format version.
 const String _kDataFormatVersionKey = 'data_format_version';
 
@@ -177,7 +178,8 @@ class DataMigrationService {
       }
     } catch (e) {
       // 恢复失败 — 保留标记，下次启动重试
-      debugPrint('[DataMigrationService] Recovery failed, keeping flag for retry: $e');
+      debugPrint(
+          '[DataMigrationService] Recovery failed, keeping flag for retry: $e');
       // 不删除标记，下次启动重试恢复
     }
   }
@@ -187,8 +189,7 @@ class DataMigrationService {
   /// 此恢复是尽力而为的（best-effort），写入不是原子操作。
   /// 如果恢复过程中 crash，migration_in_progress 标记会保留，
   /// 下次启动时会重新执行完整恢复（从同一个备份），保证最终一致性。
-  static Future<bool> _restoreFromLatestBackup(
-      SharedPreferences prefs) async {
+  static Future<bool> _restoreFromLatestBackup(SharedPreferences prefs) async {
     if (kIsWeb) return false;
 
     try {
@@ -221,7 +222,8 @@ class DataMigrationService {
       final content = await prefsFile.readAsString();
       final decoded = jsonDecode(content);
       if (decoded is! Map<String, dynamic>) {
-        debugPrint('[DataMigrationService] Invalid preferences.json format in backup');
+        debugPrint(
+            '[DataMigrationService] Invalid preferences.json format in backup');
         return false;
       }
       final prefData = decoded;
@@ -243,7 +245,8 @@ class DataMigrationService {
         }
       }
 
-      debugPrint('[DataMigrationService] Restored preferences from ${latest.path}');
+      debugPrint(
+          '[DataMigrationService] Restored preferences from ${latest.path}');
       return true;
     } catch (e) {
       debugPrint('[DataMigrationService] Failed to restore from backup: $e');
@@ -328,7 +331,8 @@ class DataMigrationService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_kConversationsBakKey);
     } catch (e) {
-      debugPrint('[DataMigrationService] Failed to cleanup conversations backup: $e');
+      debugPrint(
+          '[DataMigrationService] Failed to cleanup conversations backup: $e');
     }
   }
 
@@ -374,7 +378,8 @@ class DataMigrationService {
         }
       }
     } catch (e) {
-      debugPrint('[DataMigrationService] Error resolving Windows backup path: $e');
+      debugPrint(
+          '[DataMigrationService] Error resolving Windows backup path: $e');
     }
 
     // macOS / Linux
@@ -413,7 +418,8 @@ class DataMigrationService {
   /// 返回备份目录路径，如果备份创建失败返回 `null`。
   static Future<String?> createBackup() async {
     if (kIsWeb) {
-      debugPrint('[DataMigrationService] File system backup not supported on web');
+      debugPrint(
+          '[DataMigrationService] File system backup not supported on web');
       return null;
     }
 
@@ -581,7 +587,8 @@ class DataMigrationService {
     await prefs.remove('migrated_old_conversations');
     await prefs.remove('data_format_version_migrated');
 
-    debugPrint('[DataMigrationService] v0→v1: Migration completed successfully');
+    debugPrint(
+        '[DataMigrationService] v0→v1: Migration completed successfully');
   }
 
   /// 迁移旧版 chat_configs（被重构删除的格式）到 provider_entries。
@@ -590,14 +597,14 @@ class DataMigrationService {
     if (oldJson == null || oldJson.isEmpty) return;
 
     try {
-      final oldList = (jsonDecode(oldJson) as List?)?.cast<Map<String, dynamic>>();
+      final oldList =
+          (jsonDecode(oldJson) as List?)?.cast<Map<String, dynamic>>();
       if (oldList == null || oldList.isEmpty) return;
 
       final migratedConfigs = <Map<String, dynamic>>[];
       for (final oldItem in oldList) {
-        final oldModels = (oldItem['models'] as List?)
-                ?.cast<Map<String, dynamic>>() ??
-            [];
+        final oldModels =
+            (oldItem['models'] as List?)?.cast<Map<String, dynamic>>() ?? [];
 
         final models = oldModels.map((m) {
           final typeConfig = <String, dynamic>{};
@@ -641,8 +648,8 @@ class DataMigrationService {
       }
 
       // 如果已有 llm 类型条目则不覆盖
-      final hasLlmEntry =
-          existingEntries.any((e) => e['type'] == 'llm' && e['id'] != 'builtin_llm');
+      final hasLlmEntry = existingEntries
+          .any((e) => e['type'] == 'llm' && e['id'] != 'builtin_llm');
       if (!hasLlmEntry) {
         existingEntries.add({
           'id': 'migrated_llm',
@@ -660,7 +667,8 @@ class DataMigrationService {
       await prefs.remove('chat_configs');
       await prefs.remove('chat_selected_config_id');
     } catch (e) {
-      debugPrint('[DataMigrationService] Failed to migrate old chat configs: $e');
+      debugPrint(
+          '[DataMigrationService] Failed to migrate old chat configs: $e');
     }
   }
 
@@ -668,7 +676,8 @@ class DataMigrationService {
   ///
   /// 旧版数据中某些条目的 id 可能为 null，导致 ProviderEntry.fromMap()
   /// 在 `map['id'] as String` 处抛出 TypeError，进而引发闪退。
-  static Future<void> _fixNullIdsInProviderEntries(SharedPreferences prefs) async {
+  static Future<void> _fixNullIdsInProviderEntries(
+      SharedPreferences prefs) async {
     final json = prefs.getString('provider_entries');
     if (json == null || json.isEmpty) return;
 
@@ -710,7 +719,8 @@ class DataMigrationService {
         }
 
         // 确保每条记录都有 type 字段（旧版可能缺失）
-        if (entry['type'] == null || (entry['type'] as String?)?.isEmpty == true) {
+        if (entry['type'] == null ||
+            (entry['type'] as String?)?.isEmpty == true) {
           entry['type'] = 'tts';
           changed = true;
           debugPrint(
@@ -720,7 +730,8 @@ class DataMigrationService {
 
       if (changed) {
         await prefs.setString('provider_entries', jsonEncode(list));
-        debugPrint('[DataMigrationService] Fixed null IDs/types in provider_entries');
+        debugPrint(
+            '[DataMigrationService] Fixed null IDs/types in provider_entries');
       }
     } catch (e) {
       debugPrint('[DataMigrationService] Failed to fix provider entries: $e');
@@ -737,12 +748,14 @@ class DataMigrationService {
   /// 此迁移是幂等的：即使重复执行也不会有副作用。
   static Future<void> _migrateV1ToV2() async {
     try {
-      debugPrint('[DataMigrationService] v1→v2: Migrating legacy shared folders '
+      debugPrint(
+          '[DataMigrationService] v1→v2: Migrating legacy shared folders '
           'to per-type folder tables');
 
       await ManifestDatabase.migrateLegacyFoldersToPerType();
 
-      debugPrint('[DataMigrationService] v1→v2: Migration completed successfully');
+      debugPrint(
+          '[DataMigrationService] v1→v2: Migration completed successfully');
     } catch (e) {
       // 迁移失败不阻塞启动，记录日志后继续
       debugPrint('[DataMigrationService] v1→v2 migration failed: $e');

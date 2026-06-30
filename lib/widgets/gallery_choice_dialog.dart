@@ -58,30 +58,30 @@ class _GalleryChoiceSheet extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                   ),
             ),
-              const SizedBox(height: 24),
-              Column(
-                children: [
-                  _ChoiceCard(
-                    icon: Icons.photo_library,
-                    title: '系统相册',
-                    subtitle: '从系统相册选择图片',
-                    color: Colors.blue,
-                    onTap: () => Navigator.of(context).pop(
-                      const GalleryChoiceResult(choice: GalleryChoice.system),
-                    ),
+            const SizedBox(height: 24),
+            Column(
+              children: [
+                _ChoiceCard(
+                  icon: Icons.photo_library,
+                  title: '系统相册',
+                  subtitle: '从系统相册选择图片',
+                  color: Colors.blue,
+                  onTap: () => Navigator.of(context).pop(
+                    const GalleryChoiceResult(choice: GalleryChoice.system),
                   ),
-                  const SizedBox(height: 8),
-                  _ChoiceCard(
-                    icon: Icons.folder_outlined,
-                    title: '应用相册',
-                    subtitle: '从应用内部相册选择',
-                    color: Colors.purple,
-                    onTap: () => Navigator.of(context).pop(
-                      const GalleryChoiceResult(choice: GalleryChoice.app),
-                    ),
+                ),
+                const SizedBox(height: 8),
+                _ChoiceCard(
+                  icon: Icons.folder_outlined,
+                  title: '应用相册',
+                  subtitle: '从应用内部相册选择',
+                  color: Colors.purple,
+                  onTap: () => Navigator.of(context).pop(
+                    const GalleryChoiceResult(choice: GalleryChoice.app),
                   ),
-                ],
-              ),
+                ),
+              ],
+            ),
           ],
         ),
       ),

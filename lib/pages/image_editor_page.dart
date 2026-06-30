@@ -29,8 +29,10 @@ enum SaveAction {
   overwrite,
   saveAs,
   cancel,
+
   /// Save the original photo (camera flow, no edits made).
   save,
+
   /// Discard the original photo (camera flow).
   discard,
 }

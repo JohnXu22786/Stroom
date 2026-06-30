@@ -125,7 +125,7 @@ void main() {
       );
       final copy = param.copy();
       expect(copy.enabled, isFalse);
-      
+
       // Verify independence
       copy.enabled = true;
       expect(param.enabled, isFalse);
@@ -151,8 +151,7 @@ void main() {
 
   group('ReasoningParam validation (toggle required)', () {
     // ========== Toggle: fully empty = valid (optional) ==========
-    test('toggle with all fields empty has no validation error (optional)',
-        () {
+    test('toggle with all fields empty has no validation error (optional)', () {
       final param = ReasoningParam(
         paramName: '',
         isReasoningToggle: true,
@@ -163,7 +162,8 @@ void main() {
       expect(param.validationError, isNull);
     });
 
-    test('toggle with null onValue and offValue has no validation error when name also empty',
+    test(
+        'toggle with null onValue and offValue has no validation error when name also empty',
         () {
       final param = ReasoningParam(
         paramName: '',
@@ -209,7 +209,8 @@ void main() {
       expect(param.validationError, isNotNull);
     });
 
-    test('toggle with name and onValue but missing offValue has validation error',
+    test(
+        'toggle with name and onValue but missing offValue has validation error',
         () {
       final param = ReasoningParam(
         paramName: 'thinking.type',
@@ -221,7 +222,8 @@ void main() {
       expect(param.validationError, isNotNull);
     });
 
-    test('toggle with name and offValue but missing onValue has validation error',
+    test(
+        'toggle with name and offValue but missing onValue has validation error',
         () {
       final param = ReasoningParam(
         paramName: 'thinking.type',
@@ -273,7 +275,8 @@ void main() {
       expect(param.validationError, isNull);
     });
 
-    test('non-toggle param with no options but valid name has no validation error',
+    test(
+        'non-toggle param with no options but valid name has no validation error',
         () {
       final param = ReasoningParam(
         paramName: 'some_param',

@@ -32,8 +32,10 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
 
   /// 检测到的最大列数（多行取最大值）
   int _detectedColumns = 0;
+
   /// 每列的样本数据（从第一个非空行提取），用于多列选择提示
   List<String> _columnSamples = [];
+
   /// 多列模式下用户选择的起始列索引（从此列开始取两个连续字段作为名称和ID）
   int _selectedColumnStart = 0;
 
@@ -81,7 +83,11 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
       }
     }
     if (line.isEmpty) return [];
-    return line.split(sep).map((p) => p.trim()).where((p) => p.isNotEmpty).toList();
+    return line
+        .split(sep)
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty)
+        .toList();
   }
 
   void _parseInput() {
@@ -126,7 +132,10 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
             : LineStatus.newVoice;
         seenIds.add(id);
         parsed.add(ParsedLine(
-          index: i, name: id, id: id, status: status,
+          index: i,
+          name: id,
+          id: id,
+          status: status,
         ));
       } else if (fields.length >= 2) {
         // 两列或更多列：取用户选择的起始列开始的两个字段
@@ -136,7 +145,9 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
 
         if (second.isEmpty || first.isEmpty) {
           parsed.add(ParsedLine(
-            index: i, name: '', id: '',
+            index: i,
+            name: '',
+            id: '',
             status: LineStatus.formatError,
             errorMsg: '所选列数据不足',
           ));
@@ -151,7 +162,10 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
             : LineStatus.newVoice;
         seenIds.add(id);
         parsed.add(ParsedLine(
-          index: i, name: name, id: id, status: status,
+          index: i,
+          name: name,
+          id: id,
+          status: status,
         ));
       }
     }
@@ -294,7 +308,9 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? Theme.of(context).colorScheme.primary : Colors.transparent,
+          color: selected
+              ? Theme.of(context).colorScheme.primary
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
             color: selected
@@ -411,16 +427,24 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.primaryContainer,
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Theme.of(context).colorScheme.outline),
+                  border:
+                      Border.all(color: Theme.of(context).colorScheme.outline),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline, size: 18, color: Theme.of(context).colorScheme.onPrimaryContainer),
+                    Icon(Icons.info_outline,
+                        size: 18,
+                        color:
+                            Theme.of(context).colorScheme.onPrimaryContainer),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         '识别到单列数据，将全部作为ID处理（名称 = ID）',
-                        style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onPrimaryContainer),
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onPrimaryContainer),
                       ),
                     ),
                   ],
@@ -443,7 +467,9 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? Theme.of(context).colorScheme.primary : Colors.transparent,
+          color: selected
+              ? Theme.of(context).colorScheme.primary
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
             color: selected
@@ -502,7 +528,8 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
               )
             : Table(
                 border: TableBorder(
-                  horizontalInside: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+                  horizontalInside: BorderSide(
+                      color: Theme.of(context).colorScheme.outlineVariant),
                 ),
                 columnWidths: const {
                   0: FlexColumnWidth(2),
@@ -513,7 +540,8 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                   // 表头
                   TableRow(
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      color:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                     children: const [
                       VbTableCell('音色名称', isHeader: true),
@@ -572,7 +600,8 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
       child: Row(
         children: [
           Icon(Icons.info_outline,
-              size: 18, color: Theme.of(context).colorScheme.onTertiaryContainer),
+              size: 18,
+              color: Theme.of(context).colorScheme.onTertiaryContainer),
           const SizedBox(width: 8),
           Expanded(
             child: Text(

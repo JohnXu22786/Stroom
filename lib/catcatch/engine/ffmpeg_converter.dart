@@ -131,7 +131,8 @@ class FFmpegConverter {
       return outputPath;
     }
 
-    debugPrint('[FFmpegConverter] Using media_kit for conversion: $inputPath -> $outputPath');
+    debugPrint(
+        '[FFmpegConverter] Using media_kit for conversion: $inputPath -> $outputPath');
 
     final player = Player();
     try {
@@ -154,7 +155,8 @@ class FFmpegConverter {
         await (player.platform as dynamic).setProperty('o', outputPath);
         await (player.platform as dynamic).setProperty('ovc', 'libx264');
         await (player.platform as dynamic).setProperty('oac', 'aac');
-        await (player.platform as dynamic).setProperty('ovcopts', 'preset=fast,crf=23');
+        await (player.platform as dynamic)
+            .setProperty('ovcopts', 'preset=fast,crf=23');
       }
 
       // 打开媒体进行编码
@@ -186,7 +188,10 @@ class FFmpegConverter {
         positionSub = player.stream.position.listen((position) {
           final duration = player.state.duration;
           if (duration.inMilliseconds > 0) {
-            final progress = ((position.inMilliseconds / duration.inMilliseconds) * 100).round().clamp(0, 100);
+            final progress =
+                ((position.inMilliseconds / duration.inMilliseconds) * 100)
+                    .round()
+                    .clamp(0, 100);
             onProgress(progress);
           }
         });
@@ -246,7 +251,8 @@ class FFmpegConverter {
       throw FileSystemException('Input file not found', inputPath);
     }
 
-    debugPrint('[FFmpegConverter] Using media_kit for audio extraction: $inputPath -> $outputPath');
+    debugPrint(
+        '[FFmpegConverter] Using media_kit for audio extraction: $inputPath -> $outputPath');
 
     final player = Player();
     try {
@@ -299,7 +305,10 @@ class FFmpegConverter {
         positionSub = player.stream.position.listen((position) {
           final duration = player.state.duration;
           if (duration.inMilliseconds > 0) {
-            final progress = ((position.inMilliseconds / duration.inMilliseconds) * 100).round().clamp(0, 100);
+            final progress =
+                ((position.inMilliseconds / duration.inMilliseconds) * 100)
+                    .round()
+                    .clamp(0, 100);
             onProgress(progress);
           }
         });

@@ -185,7 +185,11 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
     // Build MCP server config
     final argsStr = _argsController.text.trim();
     final args = argsStr.isNotEmpty
-        ? argsStr.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList()
+        ? argsStr
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList()
         : <String>[];
 
     McpServerConfig serverConfig;
@@ -212,7 +216,9 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
     var configs = entry.configs.map((c) => c.copy()).toList();
     final newConfig = ProviderConfigItem(
       providerName: name,
-      host: _transportType == McpTransportType.sse ? _urlController.text.trim() : '',
+      host: _transportType == McpTransportType.sse
+          ? _urlController.text.trim()
+          : '',
       key: '',
       models: [modelConfig],
     );
@@ -349,7 +355,8 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
                 TextField(
                   controller: _argsController,
                   decoration: const InputDecoration(
-                    hintText: '用逗号分隔，例如: -y, @modelcontextprotocol/server-filesystem, /tmp',
+                    hintText:
+                        '用逗号分隔，例如: -y, @modelcontextprotocol/server-filesystem, /tmp',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.list, color: Colors.purple),
                   ),
@@ -400,7 +407,8 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
                         _transportType == McpTransportType.stdio
                             ? 'stdio 模式：在本地启动一个子进程作为 MCP 服务器，通过标准输入/输出通信。推荐用于本地工具。'
                             : 'SSE 模式：连接到一个远程 MCP 服务器，通过 HTTP SSE 通信。推荐用于远程服务。',
-                        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                        style:
+                            TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                       ),
                     ),
                   ],
@@ -481,7 +489,8 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
     final icon = _transportType == McpTransportType.stdio
         ? Icons.desktop_windows
         : Icons.cloud;
-    final label = _transportType == McpTransportType.stdio ? '本地 (stdio)' : '远程 (SSE)';
+    final label =
+        _transportType == McpTransportType.stdio ? '本地 (stdio)' : '远程 (SSE)';
     return ReadOnlyField(
       icon: icon,
       iconColor: cs.primary,
@@ -520,5 +529,4 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
         ),
     ];
   }
-
 }

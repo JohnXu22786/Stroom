@@ -17,8 +17,8 @@ Widget createChatTestApp({String? activeConversationId}) {
       conversationsProvider.overrideWith((ref) {
         return ConversationsNotifier(ref);
       }),
-      activeConversationIdProvider.overrideWith(
-          (ref) => activeConversationId ?? 'test-conv-id'),
+      activeConversationIdProvider
+          .overrideWith((ref) => activeConversationId ?? 'test-conv-id'),
       providerEntriesProvider.overrideWith((ref) {
         return ProviderEntriesNotifier();
       }),
@@ -73,7 +73,8 @@ void main() {
       expect(find.byIcon(Icons.attach_file_outlined), findsOneWidget);
     });
 
-    testWidgets('controller messages have associated GlobalKeys for scroll targeting',
+    testWidgets(
+        'controller messages have associated GlobalKeys for scroll targeting',
         (tester) async {
       // This tests that the message keys mechanism (used for scrollToBottom)
       // exists. _messageKeys is populated in textMessageBuilder via
@@ -119,8 +120,7 @@ void main() {
       // Simulate 3 read cycles (like page rebuilds)
       for (int i = 0; i < 3; i++) {
         expect(container.read(isStreamingProvider), true,
-            reason:
-                'isStreamingProvider should persist across multiple reads '
+            reason: 'isStreamingProvider should persist across multiple reads '
                 '(simulating page rebuilds after navigation)');
       }
 
@@ -129,8 +129,7 @@ void main() {
       expect(container.read(isStreamingProvider), false);
     });
 
-    test('cancel() during dispose would interrupt stream',
-        () async {
+    test('cancel() during dispose would interrupt stream', () async {
       // Verify that the dispose method should NOT call cancel/adapter.dispose
       // when streaming is active. This allows background generation to continue
       // when the user navigates back during streaming.

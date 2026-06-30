@@ -33,7 +33,9 @@ void main() {
     test('wraps HTTP 400 with JSON error.message', () {
       final e = _makeDioException(
         statusCode: 400,
-        data: {'error': {'message': 'Invalid request'}},
+        data: {
+          'error': {'message': 'Invalid request'}
+        },
       );
 
       expect(
@@ -151,7 +153,9 @@ void main() {
     test('wraps with error Map missing message key', () {
       final e = _makeDioException(
         statusCode: 400,
-        data: {'error': {'code': 12345}},
+        data: {
+          'error': {'code': 12345}
+        },
       );
 
       Object? caught;
@@ -185,10 +189,14 @@ void main() {
       return '错误: $errorStr';
     }
 
-    test('HTTP 400 from throwWrappedDioException is recognized by formatChatErrorMessage', () {
+    test(
+        'HTTP 400 from throwWrappedDioException is recognized by formatChatErrorMessage',
+        () {
       final e = _makeDioException(
         statusCode: 400,
-        data: {'error': {'message': 'Bad request'}},
+        data: {
+          'error': {'message': 'Bad request'}
+        },
       );
 
       Object? caught;
@@ -204,7 +212,8 @@ void main() {
       expect(msg, startsWith('错误:'));
     });
 
-    test('connection error from throwWrappedDioException shows in fallback', () {
+    test('connection error from throwWrappedDioException shows in fallback',
+        () {
       final e = _makeDioException(
         statusCode: 0,
         data: null,

@@ -57,8 +57,8 @@ class ChatService {
   ChatService({
     required BaseChatProvider provider,
     required ModelConfig modelConfig,
-  }) : _provider = provider,
-       _modelConfig = modelConfig;
+  })  : _provider = provider,
+        _modelConfig = modelConfig;
 
   /// Whether there's an active streaming session (instance or static).
   bool get isStreamActive => _controller != null && !_controller!.isClosed;
@@ -87,7 +87,8 @@ class ChatService {
     }
     // Model-level toggle check
     final typeConfig = _modelConfig?.typeConfig;
-    final enableTemperature = typeConfig?['enableTemperature'] as bool? ?? false;
+    final enableTemperature =
+        typeConfig?['enableTemperature'] as bool? ?? false;
     if (enableTemperature && typeConfig?.containsKey('temperature') == true) {
       return (typeConfig!['temperature'] as num).toDouble();
     }
@@ -169,42 +170,42 @@ class ChatService {
         _cancelToken = CancelToken();
         _streamSubscription = _provider!
             .chatStream(
-              apiMessages,
-              model: _modelConfig!.modelId,
-              reasoning: reasoning,
-              reasoningEffort: reasoningEffort,
-              maxTokens: _effectiveMaxTokens, // null when toggle is OFF
-              temperature: _effectiveTemperature, // null when toggle is OFF
-              extraParams: extraParams,
-              cancelToken: _cancelToken,
-            )
+          apiMessages,
+          model: _modelConfig!.modelId,
+          reasoning: reasoning,
+          reasoningEffort: reasoningEffort,
+          maxTokens: _effectiveMaxTokens, // null when toggle is OFF
+          temperature: _effectiveTemperature, // null when toggle is OFF
+          extraParams: extraParams,
+          cancelToken: _cancelToken,
+        )
             .listen(
-              (event) {
-                if (event.isReasoning) {
-                  _reasoningBuffer += event.text;
-                } else if (!_controller!.isClosed) {
-                  _controller!.add(event.text);
-                }
-              },
-              onDone: () {
-                _streamSubscription = null;
-                if (_controller != null && !_controller!.isClosed) {
-                  _controller!.close();
-                }
-                _lastResponseData = _provider?.lastResponseData;
-                _cleanUp();
-              },
-              onError: (Object error) {
-                _streamSubscription = null;
-                debugPrint('ChatService stream error: $error');
-                _lastResponseData = _provider?.lastResponseData;
-                if (_controller != null && !_controller!.isClosed) {
-                  _controller!.addError(error);
-                  _controller!.close();
-                }
-                _cleanUp();
-              },
-            );
+          (event) {
+            if (event.isReasoning) {
+              _reasoningBuffer += event.text;
+            } else if (!_controller!.isClosed) {
+              _controller!.add(event.text);
+            }
+          },
+          onDone: () {
+            _streamSubscription = null;
+            if (_controller != null && !_controller!.isClosed) {
+              _controller!.close();
+            }
+            _lastResponseData = _provider?.lastResponseData;
+            _cleanUp();
+          },
+          onError: (Object error) {
+            _streamSubscription = null;
+            debugPrint('ChatService stream error: $error');
+            _lastResponseData = _provider?.lastResponseData;
+            if (_controller != null && !_controller!.isClosed) {
+              _controller!.addError(error);
+              _controller!.close();
+            }
+            _cleanUp();
+          },
+        );
       } catch (e) {
         _lastResponseData = _provider?.lastResponseData;
         if (!_controller!.isClosed) {
@@ -278,47 +279,47 @@ class ChatService {
 
           _streamSubscription = _provider!
               .chatStream(
-                messages,
-                model: _modelConfig!.modelId,
-                reasoning: reasoning,
-                reasoningEffort: reasoningEffort,
-                maxTokens: _effectiveMaxTokens, // null when toggle is OFF
-                temperature: _effectiveTemperature, // null when toggle is OFF
-                tools: toolDefs.isNotEmpty ? toolDefs : null,
-                extraParams: extraParams,
-                cancelToken: _cancelToken,
-              )
+            messages,
+            model: _modelConfig!.modelId,
+            reasoning: reasoning,
+            reasoningEffort: reasoningEffort,
+            maxTokens: _effectiveMaxTokens, // null when toggle is OFF
+            temperature: _effectiveTemperature, // null when toggle is OFF
+            tools: toolDefs.isNotEmpty ? toolDefs : null,
+            extraParams: extraParams,
+            cancelToken: _cancelToken,
+          )
               .listen(
-                (event) {
-                  if (_isCancelledByUser) return;
-                  if (event.isReasoning) {
-                    _reasoningBuffer += event.text;
-                    // Emit reasoning text as ReasoningEvent so the UI
-                    // can stream it in real-time to the reasoning panel.
-                    controller.add(ReasoningEvent(event.text));
-                  } else if (event.isToolCallEvent) {
-                    toolCallRefs.addAll(event.toolCalls!);
-                  } else if (event.text.isNotEmpty) {
-                    // Accumulate visible content for tool call chain
-                    // preservation per DeepSeek spec.
-                    _contentBuffer += event.text;
-                    controller.add(TextEvent(event.text));
-                  }
-                },
-                onDone: () {
-                  _streamSubscription = null;
-                  if (!completer.isCompleted) completer.complete();
-                },
-                onError: (Object error) {
-                  _streamSubscription = null;
-                  debugPrint('ChatService stream error: $error');
-                  _lastResponseData = _provider?.lastResponseData;
-                  if (!controller.isClosed) {
-                    controller.addError(error);
-                  }
-                  if (!completer.isCompleted) completer.complete();
-                },
-              );
+            (event) {
+              if (_isCancelledByUser) return;
+              if (event.isReasoning) {
+                _reasoningBuffer += event.text;
+                // Emit reasoning text as ReasoningEvent so the UI
+                // can stream it in real-time to the reasoning panel.
+                controller.add(ReasoningEvent(event.text));
+              } else if (event.isToolCallEvent) {
+                toolCallRefs.addAll(event.toolCalls!);
+              } else if (event.text.isNotEmpty) {
+                // Accumulate visible content for tool call chain
+                // preservation per DeepSeek spec.
+                _contentBuffer += event.text;
+                controller.add(TextEvent(event.text));
+              }
+            },
+            onDone: () {
+              _streamSubscription = null;
+              if (!completer.isCompleted) completer.complete();
+            },
+            onError: (Object error) {
+              _streamSubscription = null;
+              debugPrint('ChatService stream error: $error');
+              _lastResponseData = _provider?.lastResponseData;
+              if (!controller.isClosed) {
+                controller.addError(error);
+              }
+              if (!completer.isCompleted) completer.complete();
+            },
+          );
 
           await completer.future;
           if (_isCancelledByUser) break;
@@ -737,14 +738,12 @@ class ChatService {
     if (_assistantCustomParams != null) {
       for (final cp in _assistantCustomParams!) {
         result[cp.name] = switch (cp.type) {
-          'number' =>
-            (cp.value is num)
-                ? (cp.value as num).toDouble()
-                : (double.tryParse(cp.value.toString()) ?? 0.0),
-          'boolean' =>
-            cp.value is bool
-                ? cp.value
-                : (cp.value.toString().toLowerCase() == 'true'),
+          'number' => (cp.value is num)
+              ? (cp.value as num).toDouble()
+              : (double.tryParse(cp.value.toString()) ?? 0.0),
+          'boolean' => cp.value is bool
+              ? cp.value
+              : (cp.value.toString().toLowerCase() == 'true'),
           'json' => parseJsonParam(cp.value),
           'string' || _ => cp.value?.toString() ?? '',
         };

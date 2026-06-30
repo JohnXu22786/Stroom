@@ -34,7 +34,8 @@ void main() {
       );
       final map = conv.toMap();
       final restored = Conversation.fromMap(map);
-      expect(restored.draftText, 'This is a draft message that was not sent yet');
+      expect(
+          restored.draftText, 'This is a draft message that was not sent yet');
     });
 
     test('draftText survives toMap/fromMap round-trip with empty draft', () {
@@ -134,7 +135,8 @@ void main() {
       expect(notifier.state[0].draftText, 'Third version');
     });
 
-    test('sending a message (via updateMessages) does NOT clear draftText', () async {
+    test('sending a message (via updateMessages) does NOT clear draftText',
+        () async {
       final conv = Conversation(
         id: 'test',
         title: 'Test',
