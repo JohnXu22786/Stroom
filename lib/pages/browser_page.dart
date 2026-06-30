@@ -65,9 +65,13 @@ class _BrowserPageState extends State<BrowserPage> {
   }
 
   Future<void> _saveScripts() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-        _scriptsKey, jsonEncode(_scripts.map((s) => s.toMap()).toList()));
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          _scriptsKey, jsonEncode(_scripts.map((s) => s.toMap()).toList()));
+    } catch (e) {
+      debugPrint('_saveScripts failed: $e');
+    }
   }
 
   void _injectScripts() {

@@ -529,24 +529,26 @@ class _ChatPageState extends ConsumerState<ChatPage>
       await ref.read(conversationsProvider.notifier).updateMessages(convId, [
         ..._history,
       ]);
-    } catch (e) {
+    } catch (e, s) {
       // Fallback: save directly to SharedPreferences if the notifier is
       // unavailable (e.g. during background streaming after page disposal).
-      debugPrint('_saveMessages via notifier failed: $e');
+      debugPrint('_saveMessages via notifier failed: $e\n$s');
       try {
         final prefs = await SharedPreferences.getInstance();
         final allJson = prefs.getString('conversations');
         if (allJson == null) return;
         final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
         if (convId == null) return;
-        final list = (jsonDecode(allJson) as List).cast<Map<String, dynamic>>();
+        final decoded = jsonDecode(allJson);
+        if (decoded is! List) return;
+        final list = decoded.cast<Map<String, dynamic>>();
         final conv = list.where((c) => c['id'] == convId).firstOrNull;
         if (conv == null) return;
         conv['messages'] = _history.map((m) => m.toMap()).toList();
         conv['updatedAt'] = DateTime.now().toIso8601String();
         await prefs.setString('conversations', jsonEncode(list));
-      } catch (e2) {
-        debugPrint('_saveMessages fallback also failed: $e2');
+      } catch (e2, s2) {
+        debugPrint('_saveMessages fallback also failed: $e2\n$s2');
       }
     }
   }
@@ -2538,14 +2540,18 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
     // Save current model's settings before switching, using captured name
     SharedPreferences.getInstance().then((prefs) {
-      if (oldModelName.isNotEmpty) {
-        final allSettings = _loadPerModelSettingsMap(prefs);
-        allSettings[oldModelName] = {
-          'reasoningEnabled': ref.read(reasoningEnabledProvider),
-          'reasoningEffort': ref.read(reasoningEffortProvider),
-          'reasoningParamValues': ref.read(reasoningParamValuesProvider),
-        };
-        prefs.setString('per_model_chat_settings', jsonEncode(allSettings));
+      try {
+        if (oldModelName.isNotEmpty) {
+          final allSettings = _loadPerModelSettingsMap(prefs);
+          allSettings[oldModelName] = {
+            'reasoningEnabled': ref.read(reasoningEnabledProvider),
+            'reasoningEffort': ref.read(reasoningEffortProvider),
+            'reasoningParamValues': ref.read(reasoningParamValuesProvider),
+          };
+          prefs.setString('per_model_chat_settings', jsonEncode(allSettings));
+        }
+      } catch (e) {
+        debugPrint('_onModelSelectionChanged save settings failed: $e');
       }
     });
 
@@ -2553,9 +2559,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _adapter.selectModel(entriesState, model.configIndex, model.modelIndex);
     setState(() => _selectedModelIndex = idx);
     SharedPreferences.getInstance().then((prefs) {
-      prefs.setInt('selected_model_index', idx);
-      // Restore the new model's per-model settings
-      _restorePerModelSettings(prefs, idx);
+      try {
+        prefs.setInt('selected_model_index', idx);
+        // Restore the new model's per-model settings
+        _restorePerModelSettings(prefs, idx);
+      } catch (e) {
+        debugPrint('_onModelSelectionChanged save index failed: $e');
+      }
     });
   }
 
@@ -2563,7 +2573,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
   void _onModelsReordered(List<String> reordered) {
     setState(() => _savedModelOrder = reordered);
     SharedPreferences.getInstance().then((prefs) {
-      prefs.setStringList('model_order', reordered);
+      try {
+        prefs.setStringList('model_order', reordered);
+      } catch (e) {
+        debugPrint('_onModelsReordered failed: $e');
+      }
     });
   }
 
@@ -2581,17 +2595,21 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Saves the current reasoning/reasoning-effort/reasoning-param settings
   /// to SharedPreferences, keyed by the current model's display name.
   void _saveCurrentModelSettings(SharedPreferences prefs) {
-    final modelName = _getCurrentModelName();
-    if (modelName.isEmpty) return;
+    try {
+      final modelName = _getCurrentModelName();
+      if (modelName.isEmpty) return;
 
-    // Load existing per-model settings map
-    final allSettings = _loadPerModelSettingsMap(prefs);
-    allSettings[modelName] = {
-      'reasoningEnabled': ref.read(reasoningEnabledProvider),
-      'reasoningEffort': ref.read(reasoningEffortProvider),
-      'reasoningParamValues': ref.read(reasoningParamValuesProvider),
-    };
-    prefs.setString('per_model_chat_settings', jsonEncode(allSettings));
+      // Load existing per-model settings map
+      final allSettings = _loadPerModelSettingsMap(prefs);
+      allSettings[modelName] = {
+        'reasoningEnabled': ref.read(reasoningEnabledProvider),
+        'reasoningEffort': ref.read(reasoningEffortProvider),
+        'reasoningParamValues': ref.read(reasoningParamValuesProvider),
+      };
+      prefs.setString('per_model_chat_settings', jsonEncode(allSettings));
+    } catch (e) {
+      debugPrint('_saveCurrentModelSettings failed: $e');
+    }
   }
 
   /// Restores the saved model selection (index + adapter state + per-model
