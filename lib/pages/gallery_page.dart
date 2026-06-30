@@ -178,102 +178,103 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         if (result == null || !mounted) return;
 
         if (result.isSaveAs) {
-        // Save as new copy — keep the original, create a new record
-        try {
-          final editedBytes = result.editedBytes;
-          final newHash = computeImageHash(editedBytes);
-          final newFileName = '$newHash.${file.format}';
-          await ImageManifest.writeFile(newFileName, editedBytes);
+          // Save as new copy — keep the original, create a new record
+          try {
+            final editedBytes = result.editedBytes;
+            final newHash = computeImageHash(editedBytes);
+            final newFileName = '$newHash.${file.format}';
+            await ImageManifest.writeFile(newFileName, editedBytes);
 
-          // Generate thumbnail
-          final thumbBytes = await generateThumbnail(editedBytes);
-          if (thumbBytes.isNotEmpty) {
-            await ImageManifest.writeFile('${newHash}_thumb.png', thumbBytes);
-          }
+            // Generate thumbnail
+            final thumbBytes = await generateThumbnail(editedBytes);
+            if (thumbBytes.isNotEmpty) {
+              await ImageManifest.writeFile('${newHash}_thumb.png', thumbBytes);
+            }
 
-          // Create new record
-          await ImageManifest.addRecord(
-            ImageRecord(
-              name: '${file.name}_编辑版',
-              hash: newHash,
-              format: file.format,
-              createdAt: DateTime.now(),
-              size: editedBytes.length,
-              folder: file.folder,
-            ),
-          );
-
-          // Refresh
-          await ref.read(imageRecordsProvider.notifier).loadRecords();
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('图片已另存为新副本'),
-                duration: Duration(seconds: 2),
+            // Create new record
+            await ImageManifest.addRecord(
+              ImageRecord(
+                name: '${file.name}_编辑版',
+                hash: newHash,
+                format: file.format,
+                createdAt: DateTime.now(),
+                size: editedBytes.length,
+                folder: file.folder,
               ),
             );
+
+            // Refresh
+            await ref.read(imageRecordsProvider.notifier).loadRecords();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('图片已另存为新副本'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                    content: Text('另存失败: $e'), backgroundColor: Colors.red),
+              );
+            }
           }
-        } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('另存失败: $e'), backgroundColor: Colors.red),
-            );
-          }
-        }
         } else {
-        // Overwrite — replace the original file
-        try {
-          final editedBytes = result.editedBytes;
+          // Overwrite — replace the original file
+          try {
+            final editedBytes = result.editedBytes;
 
-          // Compute new hash first
-          final newHash = computeImageHash(editedBytes);
-          final newFileName = '$newHash.${file.format}';
+            // Compute new hash first
+            final newHash = computeImageHash(editedBytes);
+            final newFileName = '$newHash.${file.format}';
 
-          // Write new file and thumbnail BEFORE deleting the old one
-          await ImageManifest.writeFile(newFileName, editedBytes);
-          final thumbBytes = await generateThumbnail(editedBytes);
-          if (thumbBytes.isNotEmpty) {
-            await ImageManifest.writeFile('${newHash}_thumb.png', thumbBytes);
-          }
+            // Write new file and thumbnail BEFORE deleting the old one
+            await ImageManifest.writeFile(newFileName, editedBytes);
+            final thumbBytes = await generateThumbnail(editedBytes);
+            if (thumbBytes.isNotEmpty) {
+              await ImageManifest.writeFile('${newHash}_thumb.png', thumbBytes);
+            }
 
-          // Now safe to delete old files
-          await ImageManifest.deleteFile(file.storagePath);
-          await ImageManifest.deleteFile('${file.hash}_thumb.png');
+            // Now safe to delete old files
+            await ImageManifest.deleteFile(file.storagePath);
+            await ImageManifest.deleteFile('${file.hash}_thumb.png');
 
-          // Since copyWith doesn't allow changing hash, update via manifest
-          // Delete old record and create new one
-          await ImageManifest.deleteRecord(file.id);
-          await ImageManifest.addRecord(
-            ImageRecord(
-              name: file.name,
-              hash: newHash,
-              format: file.format,
-              createdAt: file.createdAt,
-              size: editedBytes.length,
-              folder: file.folder,
-            ),
-          );
-
-          // Refresh
-          await ref.read(imageRecordsProvider.notifier).loadRecords();
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('图片已更新'),
-                duration: Duration(seconds: 2),
+            // Since copyWith doesn't allow changing hash, update via manifest
+            // Delete old record and create new one
+            await ImageManifest.deleteRecord(file.id);
+            await ImageManifest.addRecord(
+              ImageRecord(
+                name: file.name,
+                hash: newHash,
+                format: file.format,
+                createdAt: file.createdAt,
+                size: editedBytes.length,
+                folder: file.folder,
               ),
             );
+
+            // Refresh
+            await ref.read(imageRecordsProvider.notifier).loadRecords();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('图片已更新'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('保存编辑失败: $e'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
           }
-        } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('保存编辑失败: $e'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-        }
         }
       }
     } finally {
@@ -593,9 +594,8 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         final records = ref.read(imageRecordsProvider);
         var exportedCount = 0;
         for (final folderName in names) {
-          final folderFiles = records
-              .where((r) => r.folder == folderName)
-              .toList();
+          final folderFiles =
+              records.where((r) => r.folder == folderName).toList();
           for (final file in folderFiles) {
             final data = await ImageManifest.readFile(file.storagePath);
             if (data == null || data.isEmpty) continue;
@@ -633,9 +633,8 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       var exportedCount = 0;
 
       for (final folderName in names) {
-        final folderFiles = records
-            .where((r) => r.folder == folderName)
-            .toList();
+        final folderFiles =
+            records.where((r) => r.folder == folderName).toList();
         if (folderFiles.isEmpty) continue;
 
         // Create folder in output directory (recreate folder hierarchy)
