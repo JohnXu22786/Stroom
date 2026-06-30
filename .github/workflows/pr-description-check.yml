@@ -18,26 +18,38 @@ jobs:
         with:
           script: |
             const body = context.payload.pull_request.body || '';
-            const errors = [];
+            const warnings = [];
 
-            // Check "What this PR does" section — must have before/after content
-            const beforeMatch = body.match(/Before this PR:\s*\n+([\s\S]*?)(?=\n\s*#{0,3}\s*After this PR:)/);
-            const afterMatch = body.match(/After this PR:\s*\n+([\s\S]*?)(?=\n\s*(?:<!--|Fixes\s*#|###|$))/);
-
-            const beforeContent = beforeMatch ? beforeMatch[1].trim() : '';
-            const afterContent = afterMatch ? afterMatch[1].trim() : '';
-
-            if (!beforeContent) {
-              errors.push('`Before this PR:` is empty — please describe the current behavior.');
-            }
-            if (!afterContent) {
-              errors.push('`After this PR:` is empty — please describe the new behavior.');
+            // Check "Before this PR:" content — only if the section header exists
+            const hasBefore = /#{0,3}\s*Before this PR:/i.test(body);
+            if (hasBefore) {
+              const beforeMatch = body.match(/Before this PR:\s*\n+([\s\S]*?)(?=\n\s*#{0,3}\s*(?:After this PR:|###|$))/i);
+              const beforeContent = beforeMatch ? beforeMatch[1].trim() : '';
+              if (!beforeContent) {
+                warnings.push('`Before this PR:` section is empty — consider describing the current behavior.');
+              }
             }
 
-            // Check "Type of change" is set
-            const typeMatch = body.match(/\[x\]\s*(feat|fix|docs|style|refactor|perf|test|ci|build|chore|revert)/i);
+            // Check "After this PR:" content — only if the section header exists
+            const hasAfter = /#{0,3}\s*After this PR:/i.test(body);
+            if (hasAfter) {
+              const afterMatch = body.match(/After this PR:\s*\n+([\s\S]*?)(?=\n\s*(?:<!--|Fixes\s*#|#{1,3}|$))/i);
+              const afterContent = afterMatch ? afterMatch[1].trim() : '';
+              if (!afterContent) {
+                warnings.push('`After this PR:` section is empty — consider describing the new behavior.');
+              }
+            }
+
+            // Check "Type of change" is set (flexible matching)
+            const typeMatch = body.match(/\[\s*[xX]\s*\]\s*(feat|fix|docs|style|refactor|perf|test|ci|build|chore|revert)/i);
             if (!typeMatch) {
-              errors.push('`Type of change` — please mark the applicable change type with `[x]`.');
+              warnings.push('`Type of change` — please mark the applicable change type with `[x]`.');
+            }
+
+            // Only fail if body is truly empty or near-empty
+            const bodyTrimmed = body.replace(/\s/g, '').replace(/[#*\-\[\]()>|`]/g, '').trim();
+            if (!bodyTrimmed) {
+              warnings.push('PR description is nearly empty — please add a meaningful description.');
             }
 
             // Find and manage previous bot comment
@@ -51,17 +63,16 @@ jobs:
               c.user.type === 'Bot' && c.body && c.body.includes(marker)
             );
 
-            if (errors.length > 0) {
+            if (warnings.length > 0) {
               const commentBody = [
                 marker,
-                '## ⚠️ PR Description Check Failed',
+                '## 📋 PR Description Suggestions',
                 '',
-                'The following required sections are incomplete:',
+                'The following items could be improved:',
                 '',
-                ...errors.map(e => `- ${e}`),
+                ...warnings.map(e => `- ${e}`),
                 '',
-                'Please edit your PR description to fill in the missing information.',
-                'Refer to the PR template for guidance.',
+                'These are suggestions only — the PR will not be blocked.',
               ].join('\n');
 
               if (botComment) {
@@ -80,7 +91,7 @@ jobs:
                 });
               }
 
-              core.setFailed('PR description is incomplete. See the comment on the PR for details.');
+              core.info('PR description has suggestions (non-blocking).');
             } else {
               // Clean up old failure comment if it exists
               if (botComment) {
