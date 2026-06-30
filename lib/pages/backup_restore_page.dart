@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/backup_service.dart';
 import '../services/data_migration_service.dart';
+import '../startup/app_restart.dart';
 
 class BackupRestorePage extends ConsumerStatefulWidget {
   const BackupRestorePage({super.key});
@@ -15,11 +18,18 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   bool _isExporting = false;
   bool _isImporting = false;
   String? _externalBackupPath;
+  Timer? _restartTimer;
 
   @override
   void initState() {
     super.initState();
     _loadExternalBackupPath();
+  }
+
+  @override
+  void dispose() {
+    _restartTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadExternalBackupPath() async {
@@ -32,56 +42,127 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   }
 
   Future<void> _onExport() async {
+    if (_isExporting) return; // 防止重复点击
     setState(() => _isExporting = true);
     try {
-      await BackupService.exportBackup(context);
+      // 显示不可关闭的进度弹窗（showDialog 在 finally 中通过 Navigator.pop 关闭）
+      final progressNotifier = ValueNotifier<String>('正在准备数据...');
+      final progressValue = ValueNotifier<double?>(null); // null = indeterminate
+
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text('正在导出备份'),
+            content: Row(
+              children: [
+                ValueListenableBuilder<double?>(
+                  valueListenable: progressValue,
+                  builder: (_, value, __) {
+                    if (value != null) {
+                      return SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          value: value,
+                          strokeWidth: 2.5,
+                        ),
+                      );
+                    }
+                    return const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2.5),
+                    );
+                  },
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ValueListenableBuilder<String>(
+                    valueListenable: progressNotifier,
+                    builder: (_, msg, __) => Text(msg),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      // 传递进度回调
+      await BackupService.exportBackup(
+        context,
+        onProgress: (progress) {
+          progressValue.value = progress;
+          if (progress < 0.05) {
+            progressNotifier.value = '正在收集数据库记录...';
+          } else if (progress < 0.15) {
+            progressNotifier.value = '正在处理配置数据...';
+          } else if (progress < 0.35) {
+            progressNotifier.value = '正在添加任务文件...';
+          } else if (progress < 0.5) {
+            progressNotifier.value = '正在添加图片文件...';
+          } else if (progress < 0.65) {
+            progressNotifier.value = '正在添加音频文件...';
+          } else if (progress < 0.75) {
+            progressNotifier.value = '正在添加视频文件...';
+          } else if (progress < 0.8) {
+            progressNotifier.value = '正在添加文本文件...';
+          } else if (progress < 0.85) {
+            progressNotifier.value = '正在添加附件...';
+          } else if (progress < 1.0) {
+            progressNotifier.value = '正在压缩打包...';
+          } else {
+            progressNotifier.value = '已完成';
+          }
+        },
+      );
     } finally {
+      // 关闭进度弹窗
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
       if (mounted) setState(() => _isExporting = false);
     }
   }
 
   Future<void> _onImport() async {
-    bool backupFirst = true;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('确认恢复'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('恢复将覆盖所有现有数据。'),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Checkbox(
-                    value: backupFirst,
-                    onChanged: (v) =>
-                        setDialogState(() => backupFirst = v ?? true),
+      builder: (ctx) => AlertDialog(
+        title: const Text('确认恢复'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('恢复将覆盖所有现有数据。'),
+            SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 20),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '导入完成后应用将自动重启，请确保已保存当前工作。',
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
                   ),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => setDialogState(
-                          () => backupFirst = !backupFirst),
-                      child: const Text('先备份当前数据（推荐）'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('取消'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('确定'),
+                ),
+              ],
             ),
           ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('确定恢复'),
+          ),
+        ],
       ),
     );
 
@@ -89,18 +170,82 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
 
     setState(() => _isImporting = true);
     try {
-      if (backupFirst) {
-        final backupPath = await BackupService.exportBackupAuto();
-        if (backupPath != null && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('已备份当前数据到: $backupPath')),
-          );
-        }
+      final success = await BackupService.importBackup(context);
+      if (success && mounted) {
+        // 显示倒计时重启弹窗
+        await _showRestartCountdown();
       }
-      await BackupService.importBackup(context);
     } finally {
       if (mounted) setState(() => _isImporting = false);
     }
+  }
+
+  Future<void> _showRestartCountdown() async {
+    if (!mounted) return;
+
+    final countdown = ValueNotifier<int>(5);
+
+    // 启动倒计时（与对话框同时运行）
+    _restartTimer?.cancel();
+    _restartTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      countdown.value--;
+      if (countdown.value <= 0) {
+        timer.cancel();
+        _restartTimer = null;
+        // 关闭对话框
+        if (mounted) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+        restartApp();
+      }
+    });
+
+    // 显示对话框（阻塞直到用户关闭或倒计时结束）
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green.shade600, size: 24),
+              const SizedBox(width: 8),
+              const Text('数据恢复成功'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('数据已从备份中恢复。应用将在倒计时后自动重启。'),
+              const SizedBox(height: 16),
+              Center(
+                child: ValueListenableBuilder<int>(
+                  valueListenable: countdown,
+                  builder: (_, value, __) => Text(
+                    '$value',
+                    style: TextStyle(
+                      fontSize: 48,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(ctx).colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Center(
+                child: Text('秒后自动重启'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    // 对话框关闭后取消计时器（如尚未触发重启）
+    _restartTimer?.cancel();
+    _restartTimer = null;
   }
 
   @override
@@ -226,8 +371,39 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('从 .zip 备份文件恢复所有数据'),
+                  const Row(
+                    children: [
+                      Expanded(
+                        child: Text('从 .zip 备份文件恢复所有数据，将覆盖当前所有数据'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.orange.shade200),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orange.shade700),
+                        const SizedBox(width: 4),
+                        Text(
+                          '将覆盖现有数据',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange.shade800,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,

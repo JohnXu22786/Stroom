@@ -403,14 +403,19 @@ class BackupService {
   // ================================================================
 
   /// 导出备份：弹出保存文件对话框，创建 zip。
-  static Future<void> exportBackup(BuildContext context) async {
+  ///
+  /// [onProgress] 可选回调，报告备份构建进度（0.0 ~ 1.0）。
+  static Future<void> exportBackup(
+    BuildContext context, {
+    void Function(double progress)? onProgress,
+  }) async {
     try {
       final dateStr =
           DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
       final defaultName = 'stroom_backup_$dateStr.zip';
 
-      // 在内存中构建归档
-      final bytes = await _buildBackupBytes();
+      // 在内存中构建归档（传递进度回调）
+      final bytes = await _buildBackupBytes(onProgress: onProgress);
 
       final outputPath = await FilePicker.saveFile(
         fileName: defaultName,
@@ -431,33 +436,16 @@ class BackupService {
     }
   }
 
-  /// 导出当前数据的备份，让用户选择保存路径。
-  static Future<String?> exportBackupAuto() async {
-    try {
-      final bytes = await _buildBackupBytes();
-      final dateStr =
-          DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
-      final defaultName = 'stroom_backup_$dateStr.zip';
-
-      final outputPath = await FilePicker.saveFile(
-        fileName: defaultName,
-        bytes: bytes,
-      );
-      return outputPath;
-    } catch (e) {
-      debugPrint('自动备份失败: $e');
-      return null;
-    }
-  }
-
   /// 导入备份：弹出打开文件对话框，从选中的 zip 恢复。
-  static Future<void> importBackup(BuildContext context) async {
+  ///
+  /// 返回 `true` 表示恢复成功，`false` 表示用户取消或失败。
+  static Future<bool> importBackup(BuildContext context) async {
     try {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['zip'],
       );
-      if (result == null || result.files.isEmpty) return;
+      if (result == null || result.files.isEmpty) return false;
 
       final file = result.files.first;
       final bytes = file.bytes;
@@ -468,17 +456,15 @@ class BackupService {
         await restoreBackup(file.path!);
       }
 
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('数据恢复成功，请重启应用')),
-        );
-      }
+      // 恢复成功 — 让调用方处理倒计时和重启
+      return true;
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('恢复失败: $e'), backgroundColor: Colors.red),
         );
       }
+      return false;
     }
   }
 

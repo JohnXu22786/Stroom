@@ -2,8 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'storage_service.dart';
 import 'manifest_database.dart';
@@ -388,11 +389,18 @@ class DataMigrationService {
       debugPrint('[DataMigrationService] Error resolving Unix backup path: $e');
     }
 
-    // Android / iOS / Fallback: system temp directory (not app data)
+    // Android / iOS / Fallback: use documents directory which is user-accessible
+    // via Files app (iOS) or file manager (Android).  Falls back to system
+    // temp only if path_provider is unavailable (e.g. test environment).
     try {
-      return '${Directory.systemTemp.path}/$_backupRootName';
+      final docsDir = await getApplicationDocumentsDirectory();
+      return p.join(docsDir.path, _backupRootName);
     } catch (_) {
-      return '/tmp/$_backupRootName';
+      try {
+        return '${Directory.systemTemp.path}/$_backupRootName';
+      } catch (_) {
+        return '/tmp/$_backupRootName';
+      }
     }
   }
 

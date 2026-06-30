@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart'
     show debugPrint, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/services.dart' show SystemNavigator;
 
+import 'app_restart.dart';
 import 'startup_check_service.dart';
 import 'startup_page.dart';
 import '../application.dart';
@@ -169,7 +170,7 @@ class _StartupAppState extends State<StartupApp> {
           FilledButton(
             onPressed: () {
               Navigator.of(context).pop();
-              _exitApp();
+              restartApp();
             },
             child: const Text('立即重启'),
           ),
