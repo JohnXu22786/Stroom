@@ -19,7 +19,7 @@ import '../application.dart';
 //
 // 流程：
 // 1. 立即显示启动页面（至少 1 秒）
-// 2. 依次执行：崩溃恢复 → 数据格式版本检查 → 格式验证 → 完整性检查
+// 2. 依次执行：数据格式版本检查 → 格式验证 → 完整性检查
 // 3. 检查完成后，如果进行了数据迁移，提示用户重启
 // 4. 否则无缝过渡到主应用
 // ====================================================================
@@ -57,13 +57,6 @@ class _StartupAppState extends State<StartupApp> {
     final stopwatch = Stopwatch()..start();
 
     try {
-      // Step 0: Crash recovery — recover from interrupted writes/migrations
-      await _updateStatus('正在恢复崩溃数据...', '恢复中');
-      final crashRecovered = await StartupCheckService.recoverCrashData();
-      if (crashRecovered) {
-        debugPrint('[StartupApp] Crash data recovered successfully');
-      }
-
       // Update status as we go
       await _updateStatus('正在检查数据格式版本...', '1/4');
       final migrationResult = await StartupCheckService.checkFormatVersion();

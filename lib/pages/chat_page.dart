@@ -14,7 +14,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../widgets/markdown_extensions.dart';
 import '../widgets/message_attachment_preview.dart';
 import '../services/attachment_storage.dart';
-import '../services/data_migration_service.dart';
 
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
@@ -545,11 +544,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
         if (conv == null) return;
         conv['messages'] = _history.map((m) => m.toMap()).toList();
         conv['updatedAt'] = DateTime.now().toIso8601String();
-        // 双格式策略：写入前创建备份
-        await DataMigrationService.backupConversationsBeforeWrite();
         await prefs.setString('conversations', jsonEncode(list));
-        // 写入成功后清理备份
-        await DataMigrationService.cleanupConversationsBackup();
       } catch (e2) {
         debugPrint('_saveMessages fallback also failed: $e2');
       }
