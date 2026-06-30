@@ -10,7 +10,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 
 import '../providers/image_provider.dart';
-import '../services/image_cache.dart';
 import '../utils/image_manifest.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/folder_path_utils.dart';
@@ -127,7 +126,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   // ====================================================================
 
   Future<void> _showImagePreview(ImageRecord file) async {
-    if (_isPreviewing) return; // 防重复点击（异步加载缩略图期间可能导致多次调用）
+    if (_isPreviewing) return;
     _isPreviewing = true;
     try {
       if (!_supportedFormats.contains(file.format)) {
@@ -142,54 +141,24 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         return;
       }
 
-      //
-      // 加载策略说明：
-      // ── 旧逻辑：先 await 完整图加载完成（可能数 MB 磁盘 I/O），再打开对话框。
-      // ── 新逻辑：缩略图优先 + 后台加载完整图。
-      //   1. 尝试从缓存获取缩略图（瞬间）
-      //   2. 未命中则从磁盘读取缩略图（小文件，快速）
-      //   3. 同时在后台启动完整图加载（不阻塞对话框打开）
-      //   4. 对话框立即打开，先显示缩略图；完整图加载完成后无缝替换
-      //
+      if (!mounted) return;
 
-      // Step 1: 快速获取缩略图（缓存或磁盘）
-      final thumbKey = 'thumb:${file.hash}';
-      Uint8List? thumbnailBytes = ImageBytesCache.get(thumbKey);
-      if (thumbnailBytes == null) {
-        // 缓存未命中 → 从磁盘读取缩略图文件（通常 ~256x256 PNG，很小）
-        thumbnailBytes =
-            await ImageManifest.readFile('${file.hash}_thumb.png');
-        if (thumbnailBytes != null && thumbnailBytes.isNotEmpty) {
-          ImageBytesCache.put(thumbKey, thumbnailBytes);
-        }
-      }
-
-      // Step 2: 在后台启动完整图加载（不 await，让后续与对话框并行）
-      // 使用 getOrFetch 自带去重和缓存，后续在 gallery_page 或 dialog 中 await 时
-      // 如果已完成则立即返回，未完成则共享同一个 in-flight future。
-      final fullImageFuture = ImageBytesCache.getOrFetch(
-        'full:${file.hash}',
-        () => ImageManifest.readFile(file.storagePath),
-      );
+      // Load full image from disk, then show dialog.
+      // ExtendedImage handles display; no cache layer needed.
+      final imageData = await ImageManifest.readFile(file.storagePath);
 
       if (!mounted) return;
 
-      // Step 3: 立即打开对话框，传入缩略图 + 完整图 Future
-      // 对话框先显示缩略图（若有），同时后台等待完整图完成
       final shouldEdit = await showDialog<bool>(
         context: context,
         builder: (ctx) => ImagePreviewDialog(
-          thumbnailData: thumbnailBytes,
-          fullImageFuture: fullImageFuture,
+          imageData: imageData,
           fileName: '${file.name}.${file.format}',
         ),
       );
 
-      // Step 4: 如果需要编辑，确保完整图已加载（await 已启动的 future）
       if (shouldEdit == true && mounted) {
-        // 完整图可能在对话框显示期间已加载完成，await 立即返回缓存值
-        final fullData = await fullImageFuture;
-        if (fullData == null || fullData.isEmpty) {
+        if (imageData == null || imageData.isEmpty) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('无法加载图片')),
@@ -202,13 +171,13 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         final result = await Navigator.push<ImageEditorResult>(
           context,
           MaterialPageRoute(
-            builder: (_) => ImageEditorPage(imageBytes: fullData),
+            builder: (_) => ImageEditorPage(imageBytes: imageData),
           ),
         );
 
-      if (result == null || !mounted) return;
+        if (result == null || !mounted) return;
 
-      if (result.isSaveAs) {
+        if (result.isSaveAs) {
         // Save as new copy — keep the original, create a new record
         try {
           final editedBytes = result.editedBytes;
@@ -251,7 +220,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
             );
           }
         }
-      } else {
+        } else {
         // Overwrite — replace the original file
         try {
           final editedBytes = result.editedBytes;
@@ -305,8 +274,8 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
             );
           }
         }
+        }
       }
-    }
     } finally {
       _isPreviewing = false;
     }
@@ -785,25 +754,15 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     Widget fileThumbnailBuilder(ImageRecord file) {
       final canPreview = _supportedFormats.contains(file.format);
       if (canPreview) {
-        final cacheKey = 'thumb:${file.hash}';
         return FutureBuilder<Uint8List?>(
           future: () async {
-            // Check thumbnail cache first
-            final cachedThumb = ImageBytesCache.get(cacheKey);
-            if (cachedThumb != null) return cachedThumb;
-            // Try reading thumbnail file from disk
+            // Try reading thumbnail file from disk first
             final thumb = await ImageManifest.readFile(
               '${file.hash}_thumb.png',
             );
-            if (thumb != null) {
-              ImageBytesCache.put(cacheKey, thumb);
-              return thumb;
-            }
-            // Fall back to full image — cache under separate key
-            return ImageBytesCache.getOrFetch(
-              'full:${file.hash}',
-              () => ImageManifest.readFile(file.storagePath),
-            );
+            if (thumb != null && thumb.isNotEmpty) return thumb;
+            // Fall back to full image
+            return ImageManifest.readFile(file.storagePath);
           }(),
           builder: (context, snapshot) {
             final data = snapshot.data;

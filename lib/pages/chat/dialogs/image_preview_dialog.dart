@@ -1,7 +1,11 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:extended_image/extended_image.dart';
 
 /// Full-screen dark dialog with pinch-to-zoom image preview.
+///
+/// Uses [ExtendedImage.memory] with gesture mode for built-in
+/// pinch-to-zoom, pan, and double-tap zoom — no separate cache needed.
 void showImagePreviewDialog({
   required BuildContext context,
   required String fileName,
@@ -15,25 +19,49 @@ void showImagePreviewDialog({
       child: Stack(
         children: [
           Center(
-            child: InteractiveViewer(
-              minScale: 0.5,
-              maxScale: 4.0,
-              child: Image.memory(
-                data,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.broken_image,
-                          size: 48, color: Colors.white54),
-                      SizedBox(height: 8),
-                      Text('无法加载图片', style: TextStyle(color: Colors.white54)),
-                    ],
+            child: data.isEmpty
+                ? const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.broken_image,
+                            size: 48, color: Colors.white54),
+                        SizedBox(height: 8),
+                        Text('无法加载图片',
+                            style: TextStyle(color: Colors.white54)),
+                      ],
+                    ),
+                  )
+                : ExtendedImage.memory(
+                    data,
+                    fit: BoxFit.contain,
+                    mode: ExtendedImageMode.gesture,
+                    initGestureConfigHandler: (_) => GestureConfig(
+                      minScale: 0.5,
+                      maxScale: 4.0,
+                      animationMinScale: 0.5,
+                      animationMaxScale: 4.0,
+                      initialScale: 1.0,
+                      cacheGesture: false,
+                    ),
+                    loadStateChanged: (state) {
+                      if (state.extendedImageLoadState == LoadState.failed) {
+                        return const Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.broken_image,
+                                  size: 48, color: Colors.white54),
+                              SizedBox(height: 8),
+                              Text('无法加载图片',
+                                  style: TextStyle(color: Colors.white54)),
+                            ],
+                          ),
+                        );
+                      }
+                      return null;
+                    },
                   ),
-                ),
-              ),
-            ),
           ),
           Positioned(
             top: MediaQuery.of(context).padding.top + 8,
