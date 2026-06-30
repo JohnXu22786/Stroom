@@ -50,8 +50,12 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       if (_contextController.text.isNotEmpty) return true;
       if (_customParams.any((p) => p.paramName.isNotEmpty)) return true;
       if (_reasoningParams.any((p) => p.paramName.isNotEmpty)) return true;
-      if (_enableTemperature || _enableTopP || _enableFrequencyPenalty ||
-          _enablePresencePenalty || _enableMaxTokens || _enableSeed) return true;
+      if (_enableTemperature ||
+          _enableTopP ||
+          _enableFrequencyPenalty ||
+          _enablePresencePenalty ||
+          _enableMaxTokens ||
+          _enableSeed) return true;
       if (_maxTokensController.text.isNotEmpty) return true;
       if (_seedController.text.isNotEmpty) return true;
       if (_temperature != 0.7) return true;
@@ -63,28 +67,42 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     // Editing: compare against original model
     if (_nameController.text != m.name) return true;
     if (_modelIdController.text != m.modelId) return true;
-    if (_contextController.text != 
-        ((m.typeConfig['context'] as num?)?.toInt()?.toString() ?? '')) return true;
+    if (_contextController.text !=
+        ((m.typeConfig['context'] as num?)?.toInt()?.toString() ?? ''))
+      return true;
     // LLM params
-    if (((m.typeConfig['temperature'] as num?)?.toDouble() ?? 0.7) != _temperature) return true;
-    if (((m.typeConfig['topP'] as num?)?.toDouble() ?? 1.0) != _topP) return true;
-    if (((m.typeConfig['frequencyPenalty'] as num?)?.toDouble() ?? 0.0) != _frequencyPenalty) return true;
-    if (((m.typeConfig['presencePenalty'] as num?)?.toDouble() ?? 0.0) != _presencePenalty) return true;
-    if ((m.typeConfig['enableTemperature'] as bool? ?? false) != _enableTemperature) return true;
-    if ((m.typeConfig['enableTopP'] as bool? ?? false) != _enableTopP) return true;
-    if ((m.typeConfig['enableFrequencyPenalty'] as bool? ?? false) != _enableFrequencyPenalty) return true;
-    if ((m.typeConfig['enablePresencePenalty'] as bool? ?? false) != _enablePresencePenalty) return true;
-    if ((m.typeConfig['enableMaxTokens'] as bool? ?? false) != _enableMaxTokens) return true;
-    if ((m.typeConfig['enableSeed'] as bool? ?? false) != _enableSeed) return true;
-    if ((m.typeConfig['maxTokens']?.toString() ?? '') != _maxTokensController.text) return true;
-    if ((m.typeConfig['seed']?.toString() ?? '') != _seedController.text) return true;
+    if (((m.typeConfig['temperature'] as num?)?.toDouble() ?? 0.7) !=
+        _temperature) return true;
+    if (((m.typeConfig['topP'] as num?)?.toDouble() ?? 1.0) != _topP)
+      return true;
+    if (((m.typeConfig['frequencyPenalty'] as num?)?.toDouble() ?? 0.0) !=
+        _frequencyPenalty) return true;
+    if (((m.typeConfig['presencePenalty'] as num?)?.toDouble() ?? 0.0) !=
+        _presencePenalty) return true;
+    if ((m.typeConfig['enableTemperature'] as bool? ?? false) !=
+        _enableTemperature) return true;
+    if ((m.typeConfig['enableTopP'] as bool? ?? false) != _enableTopP)
+      return true;
+    if ((m.typeConfig['enableFrequencyPenalty'] as bool? ?? false) !=
+        _enableFrequencyPenalty) return true;
+    if ((m.typeConfig['enablePresencePenalty'] as bool? ?? false) !=
+        _enablePresencePenalty) return true;
+    if ((m.typeConfig['enableMaxTokens'] as bool? ?? false) != _enableMaxTokens)
+      return true;
+    if ((m.typeConfig['enableSeed'] as bool? ?? false) != _enableSeed)
+      return true;
+    if ((m.typeConfig['maxTokens']?.toString() ?? '') !=
+        _maxTokensController.text) return true;
+    if ((m.typeConfig['seed']?.toString() ?? '') != _seedController.text)
+      return true;
     // Custom params and reasoning params (simple check via serialization)
     final originalCustom = m.customParams.map((p) => p.toMap()).toList();
     final currentCustom = _customParams.map((p) => p.toMap()).toList();
     if (originalCustom.toString() != currentCustom.toString()) return true;
     final originalReasoning = m.reasoningParams.map((p) => p.toMap()).toList();
     final currentReasoning = _reasoningParams.map((p) => p.toMap()).toList();
-    if (originalReasoning.toString() != currentReasoning.toString()) return true;
+    if (originalReasoning.toString() != currentReasoning.toString())
+      return true;
     return false;
   }
 
@@ -94,10 +112,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     final m = widget.model;
     _nameController = TextEditingController(text: m?.name ?? '');
     _modelIdController = TextEditingController(text: m?.modelId ?? '');
-    final context = (m?.typeConfig['context'] as num?)?.toInt()
-        ?? (m?.typeConfig['maxTokens'] as num?)?.toInt();
-    _contextController = TextEditingController(
-        text: context != null ? context.toString() : '');
+    final context = (m?.typeConfig['context'] as num?)?.toInt() ??
+        (m?.typeConfig['maxTokens'] as num?)?.toInt();
+    _contextController =
+        TextEditingController(text: context != null ? context.toString() : '');
 
     // Initialize LLM-specific params from typeConfig with toggle support
     _temperature = (m?.typeConfig['temperature'] as num?)?.toDouble() ?? 0.7;
@@ -111,8 +129,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     // (existing configs with saved flags use their saved values)
     _enableTemperature = m?.typeConfig['enableTemperature'] as bool? ?? false;
     _enableTopP = m?.typeConfig['enableTopP'] as bool? ?? false;
-    _enableFrequencyPenalty = m?.typeConfig['enableFrequencyPenalty'] as bool? ?? false;
-    _enablePresencePenalty = m?.typeConfig['enablePresencePenalty'] as bool? ?? false;
+    _enableFrequencyPenalty =
+        m?.typeConfig['enableFrequencyPenalty'] as bool? ?? false;
+    _enablePresencePenalty =
+        m?.typeConfig['enablePresencePenalty'] as bool? ?? false;
     _enableMaxTokens = m?.typeConfig['enableMaxTokens'] as bool? ?? false;
     _enableSeed = m?.typeConfig['enableSeed'] as bool? ?? false;
 
@@ -121,13 +141,11 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         text: maxTokens != null ? maxTokens.toString() : '');
 
     final seed = m?.typeConfig['seed'];
-    _seedController = TextEditingController(
-        text: seed != null ? seed.toString() : '');
+    _seedController =
+        TextEditingController(text: seed != null ? seed.toString() : '');
 
     _customParams = (m?.customParams ?? []).map((p) => p.copy()).toList();
-    _reasoningParams = (m?.reasoningParams ?? [])
-        .map((p) => p.copy())
-        .toList();
+    _reasoningParams = (m?.reasoningParams ?? []).map((p) => p.copy()).toList();
   }
 
   @override
@@ -162,7 +180,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
 
   void _addReasoningParam() {
     setState(() {
-      _reasoningParams.add(ReasoningParam(paramName: '', enabled: false, options: []));
+      _reasoningParams
+          .add(ReasoningParam(paramName: '', enabled: false, options: []));
     });
   }
 
@@ -195,9 +214,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   /// Returns the reasoning toggle param, or null if none exists.
   ReasoningParam? get _toggleReasoningParam =>
       _reasoningParams.cast<ReasoningParam?>().firstWhere(
-        (p) => p?.isReasoningToggle ?? false,
-        orElse: () => null,
-      );
+            (p) => p?.isReasoningToggle ?? false,
+            orElse: () => null,
+          );
 
   /// Builds the reasoning toggle card section.
   Widget _buildReasoningToggleSection(ColorScheme cs) {
@@ -215,17 +234,18 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
             Center(
               child: TextButton.icon(
                 icon: const Icon(Icons.add, size: 16),
-                label: const Text('添加推理开关',
-                    style: TextStyle(fontSize: 13)),
+                label: const Text('添加推理开关', style: TextStyle(fontSize: 13)),
                 onPressed: () {
                   setState(() {
-                    _reasoningParams.insert(0, ReasoningParam(
-                      paramName: '',
-                      isReasoningToggle: true,
-                      onValue: '',
-                      offValue: '',
-                      options: [],
-                    ));
+                    _reasoningParams.insert(
+                        0,
+                        ReasoningParam(
+                          paramName: '',
+                          isReasoningToggle: true,
+                          onValue: '',
+                          offValue: '',
+                          options: [],
+                        ));
                   });
                 },
               ),
@@ -244,8 +264,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           children: [
             Row(
               children: [
-                Icon(Icons.toggle_on_outlined,
-                    size: 18, color: cs.primary),
+                Icon(Icons.toggle_on_outlined, size: 18, color: cs.primary),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text('推理开关',
@@ -259,10 +278,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                 _buildTypeDropdown(toggle, cs),
                 const SizedBox(width: 4),
                 IconButton(
-                  icon: const Icon(Icons.delete,
-                      color: Colors.red, size: 20),
-                  onPressed: () => _removeReasoningParam(
-                      _reasoningParams.indexOf(toggle)),
+                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                  onPressed: () =>
+                      _removeReasoningParam(_reasoningParams.indexOf(toggle)),
                   tooltip: '删除推理开关',
                 ),
               ],
@@ -350,8 +368,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           items: ParamType.values
               .map((t) => DropdownMenuItem(
                     value: t.value,
-                    child: Text(t.label,
-                        style: const TextStyle(fontSize: 12)),
+                    child: Text(t.label, style: const TextStyle(fontSize: 12)),
                   ))
               .toList(),
           onChanged: (v) {
@@ -383,8 +400,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                       labelText: '参数名（支持点号嵌套）',
                       border: const OutlineInputBorder(),
                       isDense: true,
-                      hintText:
-                          '如 thinking.type 或 reasoning_effort',
+                      hintText: '如 thinking.type 或 reasoning_effort',
                     ),
                     onChanged: (v) {
                       param.paramName = v;
@@ -403,8 +419,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                   },
                 ),
                 IconButton(
-                  icon: const Icon(Icons.delete,
-                      color: Colors.red, size: 20),
+                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                   onPressed: () => _removeReasoningParam(actualIndex),
                   tooltip: '删除参数',
                 ),
@@ -451,8 +466,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                       IconButton(
                         icon: const Icon(Icons.remove_circle,
                             color: Colors.red, size: 18),
-                        onPressed: () =>
-                            _removeOptionFromParam(actualIndex, j),
+                        onPressed: () => _removeOptionFromParam(actualIndex, j),
                         tooltip: '删除选项',
                       ),
                   ],
@@ -462,8 +476,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
             const SizedBox(height: 4),
             TextButton.icon(
               icon: const Icon(Icons.add, size: 16),
-              label: const Text('添加选项',
-                  style: TextStyle(fontSize: 13)),
+              label: const Text('添加选项', style: TextStyle(fontSize: 13)),
               onPressed: () => _addOptionToParam(actualIndex),
             ),
           ],
@@ -685,307 +698,306 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         }
       },
       child: Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-        actions: [
-          TextButton(
-            onPressed: _isSaving ? null : _save,
-            child: const Text('保存'),
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // ==========================================================
-          // 基本设置
-          // ==========================================================
-          Text('基本设置',
-              style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                  color: cs.primary)),
-          const SizedBox(height: 12),
-
-          // 模型名称
-          LabeledTextField(
-            label: '模型名称',
-            controller: _nameController,
-            hintText: '输入显示名称（可选）',
-          ),
-          const SizedBox(height: 16),
-
-          // 模型 ID
-          LabeledTextField(
-            label: '模型 ID',
-            controller: _modelIdController,
-            hintText: '如 gpt-4o',
-            required: true,
-          ),
-          const SizedBox(height: 16),
-
-          // 上下文长度
-          LabeledTextField(
-            label: '上下文长度',
-            controller: _contextController,
-            hintText: '输入上下文长度',
-            required: true,
-            keyboardType: TextInputType.number,
-            description: '模型的最大上下文窗口大小（token 数）',
-          ),
-          const SizedBox(height: 24),
-
-          // ==========================================================
-          // 推理参数（可开关，每个参数独立控制）
-          // ==========================================================
-          Text('推理参数',
-              style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                  color: cs.primary)),
-          const SizedBox(height: 4),
-          Text(
-            '推理开关控制聊天页面中推理功能的开启和关闭，由您定义参数名和对应的开/关值。'
-            '附加推理参数可添加多个，每个含参数名和可选项，显示在推理面板中供选择。'
-            '参数名支持点号嵌套（如 thinking.type 会展开为 {"thinking": {"type": "..."}}）。',
-            style: TextStyle(
-              fontSize: 12,
-              color: cs.onSurfaceVariant,
+        appBar: AppBar(
+          title: Text(title),
+          actions: [
+            TextButton(
+              onPressed: _isSaving ? null : _save,
+              child: const Text('保存'),
             ),
-          ),
-          const SizedBox(height: 12),
+          ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // ==========================================================
+            // 基本设置
+            // ==========================================================
+            Text('基本设置',
+                style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    color: cs.primary)),
+            const SizedBox(height: 12),
 
-          // 推理开关 — 单独渲染，始终在第一个位置
-          _buildReasoningToggleSection(cs),
-
-          // 附加推理参数
-          if (_additionalReasoningParams.isNotEmpty)
-            ...List.generate(_additionalReasoningParams.length, (i) {
-              final param = _additionalReasoningParams[i];
-              final actualIndex = _reasoningParams.indexOf(param);
-              return _buildAdditionalReasoningParamCard(param, actualIndex, i, cs);
-            }),
-          const SizedBox(height: 12),
-          Center(
-            child: TextButton.icon(
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('添加推理参数'),
-              onPressed: _addReasoningParam,
+            // 模型名称
+            LabeledTextField(
+              label: '模型名称',
+              controller: _nameController,
+              hintText: '输入显示名称（可选）',
             ),
-          ),
-          const SizedBox(height: 24),
+            const SizedBox(height: 16),
 
-          // ==========================================================
-          // LLM 参数设置（带开关）
-          // ==========================================================
-          Text('LLM 参数',
+            // 模型 ID
+            LabeledTextField(
+              label: '模型 ID',
+              controller: _modelIdController,
+              hintText: '如 gpt-4o',
+              required: true,
+            ),
+            const SizedBox(height: 16),
+
+            // 上下文长度
+            LabeledTextField(
+              label: '上下文长度',
+              controller: _contextController,
+              hintText: '输入上下文长度',
+              required: true,
+              keyboardType: TextInputType.number,
+              description: '模型的最大上下文窗口大小（token 数）',
+            ),
+            const SizedBox(height: 24),
+
+            // ==========================================================
+            // 推理参数（可开关，每个参数独立控制）
+            // ==========================================================
+            Text('推理参数',
+                style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    color: cs.primary)),
+            const SizedBox(height: 4),
+            Text(
+              '推理开关控制聊天页面中推理功能的开启和关闭，由您定义参数名和对应的开/关值。'
+              '附加推理参数可添加多个，每个含参数名和可选项，显示在推理面板中供选择。'
+              '参数名支持点号嵌套（如 thinking.type 会展开为 {"thinking": {"type": "..."}}）。',
               style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                  color: cs.primary)),
-          const SizedBox(height: 4),
-          Text(
-            '开启的参数将作为默认值发送到 API 请求中',
-            style: TextStyle(
-              fontSize: 12,
-              color: cs.onSurfaceVariant,
+                fontSize: 12,
+                color: cs.onSurfaceVariant,
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
 
-          // Temperature
-          LlmToggleSlider(
-            label: '温度 (Temperature)',
-            value: _temperature,
-            min: 0.0,
-            max: 2.0,
-            divisions: 40,
-            enabled: _enableTemperature,
-            onChanged: (v) => setState(() => _temperature = v),
-            onToggle: (v) => setState(() => _enableTemperature = v),
-            description: '控制输出的随机性，值越高越有创造性',
-          ),
+            // 推理开关 — 单独渲染，始终在第一个位置
+            _buildReasoningToggleSection(cs),
 
-          // Top P
-          LlmToggleSlider(
-            label: 'Top P',
-            value: _topP,
-            min: 0.0,
-            max: 1.0,
-            divisions: 20,
-            enabled: _enableTopP,
-            onChanged: (v) => setState(() => _topP = v),
-            onToggle: (v) => setState(() => _enableTopP = v),
-            description: '核采样参数，控制词汇选择的累积概率',
-          ),
-
-          // Frequency Penalty
-          LlmToggleSlider(
-            label: '频率惩罚 (Frequency Penalty)',
-            value: _frequencyPenalty,
-            min: -2.0,
-            max: 2.0,
-            divisions: 40,
-            enabled: _enableFrequencyPenalty,
-            onChanged: (v) => setState(() => _frequencyPenalty = v),
-            onToggle: (v) => setState(() => _enableFrequencyPenalty = v),
-            description: '减少重复词的频率，负值增加重复',
-          ),
-
-          // Presence Penalty
-          LlmToggleSlider(
-            label: '存在惩罚 (Presence Penalty)',
-            value: _presencePenalty,
-            min: -2.0,
-            max: 2.0,
-            divisions: 40,
-            enabled: _enablePresencePenalty,
-            onChanged: (v) => setState(() => _presencePenalty = v),
-            onToggle: (v) => setState(() => _enablePresencePenalty = v),
-            description: '鼓励讨论新话题，负值鼓励重复话题',
-          ),
-
-          // Max Tokens
-          LlmToggleTextField(
-            label: '最大输出 Token 数',
-            controller: _maxTokensController,
-            enabled: _enableMaxTokens,
-            onToggle: (v) => setState(() => _enableMaxTokens = v),
-            hintText: '可选，如 4096',
-            keyboardType: TextInputType.number,
-            description: '每次响应最多生成的 token 数',
-          ),
-
-          // Seed
-          LlmToggleTextField(
-            label: '随机种子 (Seed)',
-            controller: _seedController,
-            enabled: _enableSeed,
-            onToggle: (v) => setState(() => _enableSeed = v),
-            hintText: '可选，如 42',
-            keyboardType: TextInputType.number,
-            description: '设置后可使输出结果可复现',
-          ),
-
-          const SizedBox(height: 24),
-
-          // ==========================================================
-          // 自定义参数（总是发送）
-          // ==========================================================
-          Row(
-            children: [
-              const Text('自定义参数',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
-              const Spacer(),
-              TextButton.icon(
+            // 附加推理参数
+            if (_additionalReasoningParams.isNotEmpty)
+              ...List.generate(_additionalReasoningParams.length, (i) {
+                final param = _additionalReasoningParams[i];
+                final actualIndex = _reasoningParams.indexOf(param);
+                return _buildAdditionalReasoningParamCard(
+                    param, actualIndex, i, cs);
+              }),
+            const SizedBox(height: 12),
+            Center(
+              child: TextButton.icon(
                 icon: const Icon(Icons.add, size: 18),
-                label: const Text('添加参数'),
-                onPressed: _addCustomParam,
+                label: const Text('添加推理参数'),
+                onPressed: _addReasoningParam,
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
+            ),
+            const SizedBox(height: 24),
 
-          if (_customParams.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(
-                child: Text('暂无自定义参数',
-                    style: TextStyle(color: Colors.grey)),
+            // ==========================================================
+            // LLM 参数设置（带开关）
+            // ==========================================================
+            Text('LLM 参数',
+                style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    color: cs.primary)),
+            const SizedBox(height: 4),
+            Text(
+              '开启的参数将作为默认值发送到 API 请求中',
+              style: TextStyle(
+                fontSize: 12,
+                color: cs.onSurfaceVariant,
               ),
-            )
-          else
-            ...List.generate(_customParams.length, (i) {
-              final param = _customParams[i];
-              final name = param.paramName.trim();
-              final isDuplicate = name.isNotEmpty &&
-                  _customParams
-                          .indexWhere((p) => p.paramName.trim() == name) !=
-                      i;
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextFormField(
-                              initialValue: param.paramName,
-                              decoration: InputDecoration(
-                                labelText: '参数名',
-                                border: const OutlineInputBorder(),
-                                isDense: true,
-                                errorText: isDuplicate ? '已存在该参数' : null,
-                                errorStyle: const TextStyle(fontSize: 11),
-                              ),
-                              onChanged: (v) {
-                                param.paramName = v;
-                                setState(() {});
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          // 类型选择
-                          Container(
-                            width: 110,
-                            decoration: BoxDecoration(
-                              border:
-                                  Border.all(color: Colors.grey.shade400),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 8),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: param.type,
-                                isDense: true,
-                                items: ParamType.values
-                                    .map((t) => DropdownMenuItem(
-                                          value: t.value,
-                                          child: Text(t.label,
-                                              style: const TextStyle(
-                                                  fontSize: 13)),
-                                        ))
-                                    .toList(),
+            ),
+            const SizedBox(height: 12),
+
+            // Temperature
+            LlmToggleSlider(
+              label: '温度 (Temperature)',
+              value: _temperature,
+              min: 0.0,
+              max: 2.0,
+              divisions: 40,
+              enabled: _enableTemperature,
+              onChanged: (v) => setState(() => _temperature = v),
+              onToggle: (v) => setState(() => _enableTemperature = v),
+              description: '控制输出的随机性，值越高越有创造性',
+            ),
+
+            // Top P
+            LlmToggleSlider(
+              label: 'Top P',
+              value: _topP,
+              min: 0.0,
+              max: 1.0,
+              divisions: 20,
+              enabled: _enableTopP,
+              onChanged: (v) => setState(() => _topP = v),
+              onToggle: (v) => setState(() => _enableTopP = v),
+              description: '核采样参数，控制词汇选择的累积概率',
+            ),
+
+            // Frequency Penalty
+            LlmToggleSlider(
+              label: '频率惩罚 (Frequency Penalty)',
+              value: _frequencyPenalty,
+              min: -2.0,
+              max: 2.0,
+              divisions: 40,
+              enabled: _enableFrequencyPenalty,
+              onChanged: (v) => setState(() => _frequencyPenalty = v),
+              onToggle: (v) => setState(() => _enableFrequencyPenalty = v),
+              description: '减少重复词的频率，负值增加重复',
+            ),
+
+            // Presence Penalty
+            LlmToggleSlider(
+              label: '存在惩罚 (Presence Penalty)',
+              value: _presencePenalty,
+              min: -2.0,
+              max: 2.0,
+              divisions: 40,
+              enabled: _enablePresencePenalty,
+              onChanged: (v) => setState(() => _presencePenalty = v),
+              onToggle: (v) => setState(() => _enablePresencePenalty = v),
+              description: '鼓励讨论新话题，负值鼓励重复话题',
+            ),
+
+            // Max Tokens
+            LlmToggleTextField(
+              label: '最大输出 Token 数',
+              controller: _maxTokensController,
+              enabled: _enableMaxTokens,
+              onToggle: (v) => setState(() => _enableMaxTokens = v),
+              hintText: '可选，如 4096',
+              keyboardType: TextInputType.number,
+              description: '每次响应最多生成的 token 数',
+            ),
+
+            // Seed
+            LlmToggleTextField(
+              label: '随机种子 (Seed)',
+              controller: _seedController,
+              enabled: _enableSeed,
+              onToggle: (v) => setState(() => _enableSeed = v),
+              hintText: '可选，如 42',
+              keyboardType: TextInputType.number,
+              description: '设置后可使输出结果可复现',
+            ),
+
+            const SizedBox(height: 24),
+
+            // ==========================================================
+            // 自定义参数（总是发送）
+            // ==========================================================
+            Row(
+              children: [
+                const Text('自定义参数',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                const Spacer(),
+                TextButton.icon(
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('添加参数'),
+                  onPressed: _addCustomParam,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            if (_customParams.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: Text('暂无自定义参数', style: TextStyle(color: Colors.grey)),
+                ),
+              )
+            else
+              ...List.generate(_customParams.length, (i) {
+                final param = _customParams[i];
+                final name = param.paramName.trim();
+                final isDuplicate = name.isNotEmpty &&
+                    _customParams
+                            .indexWhere((p) => p.paramName.trim() == name) !=
+                        i;
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                initialValue: param.paramName,
+                                decoration: InputDecoration(
+                                  labelText: '参数名',
+                                  border: const OutlineInputBorder(),
+                                  isDense: true,
+                                  errorText: isDuplicate ? '已存在该参数' : null,
+                                  errorStyle: const TextStyle(fontSize: 11),
+                                ),
                                 onChanged: (v) {
-                                  if (v != null) {
-                                    setState(() => param.type = v);
-                                  }
+                                  param.paramName = v;
+                                  setState(() {});
                                 },
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 4),
-                          IconButton(
-                            icon: const Icon(Icons.delete,
-                                color: Colors.red, size: 20),
-                            onPressed: () => _removeCustomParam(i),
-                            tooltip: '删除参数',
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        initialValue: param.defaultValue,
-                        decoration: InputDecoration(
-                          labelText: '默认参数值',
-                          hintText: param.paramType.defaultValueHint,
-                          border: const OutlineInputBorder(),
-                          isDense: true,
+                            const SizedBox(width: 8),
+                            // 类型选择
+                            Container(
+                              width: 110,
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey.shade400),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 8),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  value: param.type,
+                                  isDense: true,
+                                  items: ParamType.values
+                                      .map((t) => DropdownMenuItem(
+                                            value: t.value,
+                                            child: Text(t.label,
+                                                style: const TextStyle(
+                                                    fontSize: 13)),
+                                          ))
+                                      .toList(),
+                                  onChanged: (v) {
+                                    if (v != null) {
+                                      setState(() => param.type = v);
+                                    }
+                                  },
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              icon: const Icon(Icons.delete,
+                                  color: Colors.red, size: 20),
+                              onPressed: () => _removeCustomParam(i),
+                              tooltip: '删除参数',
+                            ),
+                          ],
                         ),
-                        onChanged: (v) => param.defaultValue = v,
-                      ),
-                    ],
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          initialValue: param.defaultValue,
+                          decoration: InputDecoration(
+                            labelText: '默认参数值',
+                            hintText: param.paramType.defaultValueHint,
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          onChanged: (v) => param.defaultValue = v,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              );
-            }),
-          const SizedBox(height: 32),
-        ],
+                );
+              }),
+            const SizedBox(height: 32),
+          ],
+        ),
       ),
-    ),
     );
   }
 }

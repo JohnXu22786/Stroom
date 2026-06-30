@@ -14,8 +14,8 @@ Widget createChatTestApp({String? activeConversationId}) {
       conversationsProvider.overrideWith((ref) {
         return ConversationsNotifier(ref);
       }),
-      activeConversationIdProvider.overrideWith(
-          (ref) => activeConversationId ?? 'test-conv-id'),
+      activeConversationIdProvider
+          .overrideWith((ref) => activeConversationId ?? 'test-conv-id'),
       providerEntriesProvider.overrideWith((ref) {
         return ProviderEntriesNotifier();
       }),
@@ -42,7 +42,8 @@ void main() {
       expect(find.byIcon(Icons.history), findsNothing);
     });
 
-    testWidgets('NO new conversation button (Icons.add) in top bar', (tester) async {
+    testWidgets('NO new conversation button (Icons.add) in top bar',
+        (tester) async {
       await pumpChatPage(tester);
 
       // The add button should NOT exist in ChatPage
@@ -58,8 +59,7 @@ void main() {
       expect(find.byIcon(Icons.stop_circle_outlined), findsNothing);
     });
 
-    testWidgets('NO back button (Icons.arrow_back) in top bar',
-        (tester) async {
+    testWidgets('NO back button (Icons.arrow_back) in top bar', (tester) async {
       await pumpChatPage(tester);
 
       // The arrow_back icon should NOT exist in the top bar
@@ -81,14 +81,16 @@ void main() {
       expect(find.text('新对话'), findsOneWidget);
     });
 
-    testWidgets('NO reasoning toggle (Icons.psychology) in top bar', (tester) async {
+    testWidgets('NO reasoning toggle (Icons.psychology) in top bar',
+        (tester) async {
       await pumpChatPage(tester);
 
       // The reasoning toggle button has been removed entirely from the top bar
       expect(find.byIcon(Icons.psychology), findsNothing);
     });
 
-    testWidgets('only search button in top bar action area, no other icons', (tester) async {
+    testWidgets('only search button in top bar action area, no other icons',
+        (tester) async {
       await pumpChatPage(tester);
 
       // Search is the only icon button in the top bar actions

@@ -24,7 +24,8 @@ class TaskListPage extends ConsumerWidget {
                 children: [
                   Icon(Icons.task_alt, size: 48, color: Colors.grey),
                   SizedBox(height: 16),
-                  Text('暂无任务', style: TextStyle(fontSize: 16, color: Colors.grey)),
+                  Text('暂无任务',
+                      style: TextStyle(fontSize: 16, color: Colors.grey)),
                 ],
               ),
             )
@@ -39,7 +40,4 @@ class TaskListPage extends ConsumerWidget {
             ),
     );
   }
-
 }
-
-

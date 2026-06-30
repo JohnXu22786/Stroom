@@ -37,8 +37,7 @@ void main() {
   });
 
   group('TTSCreatePage - renamed titles', () {
-    testWidgets('AppBar title shows 生成录音 instead of 制作录音',
-        (tester) async {
+    testWidgets('AppBar title shows 生成录音 instead of 制作录音', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       // The widget may have animations that never settle in test environment,
       // so use manual pump steps

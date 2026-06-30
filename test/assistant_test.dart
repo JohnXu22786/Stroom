@@ -101,7 +101,8 @@ void main() {
       );
       final map = settings.toMap();
       expect(map.containsKey('reasoningEffort'), isFalse,
-          reason: 'reasoningEffort should be removed from AssistantSettings toMap');
+          reason:
+              'reasoningEffort should be removed from AssistantSettings toMap');
     });
 
     test('assistant toMap/fromMap round-trip', () {
@@ -649,7 +650,9 @@ void main() {
       expect(map.containsKey('assistantId'), false);
     });
 
-    test('legacy conversation (no assistantId) fromMap returns null assistantId', () {
+    test(
+        'legacy conversation (no assistantId) fromMap returns null assistantId',
+        () {
       final map = <String, dynamic>{
         'id': 'conv-1',
         'title': '旧话题',
@@ -672,9 +675,12 @@ void main() {
         Conversation(title: 'T4'), // no assistant
       ];
 
-      final a1Topics = conversations.where((c) => c.assistantId == 'a1').toList();
-      final a2Topics = conversations.where((c) => c.assistantId == 'a2').toList();
-      final nullTopics = conversations.where((c) => c.assistantId == null).toList();
+      final a1Topics =
+          conversations.where((c) => c.assistantId == 'a1').toList();
+      final a2Topics =
+          conversations.where((c) => c.assistantId == 'a2').toList();
+      final nullTopics =
+          conversations.where((c) => c.assistantId == null).toList();
 
       expect(a1Topics.length, 2);
       expect(a2Topics.length, 1);
@@ -709,8 +715,7 @@ void main() {
       );
 
       // Run migration
-      final migrated =
-          await migrateConversationsFromPrefs(prefs);
+      final migrated = await migrateConversationsFromPrefs(prefs);
 
       // After migration, conversations should have assistantId
       expect(migrated, isNotNull);
@@ -722,8 +727,8 @@ void main() {
 
       // Also verify persisted data
       final conversationsJson = prefs.getString('conversations');
-      final conversations = (jsonDecode(conversationsJson!) as List)
-          .cast<Map<String, dynamic>>();
+      final conversations =
+          (jsonDecode(conversationsJson!) as List).cast<Map<String, dynamic>>();
       expect(conversations[0]['assistantId'], defaultAssistant.id);
       expect(conversations[1]['assistantId'], defaultAssistant.id);
     });
@@ -757,8 +762,8 @@ void main() {
 
       // Verify assistant IDs preserved
       final conversationsJson = prefs.getString('conversations');
-      final conversations = (jsonDecode(conversationsJson!) as List)
-          .cast<Map<String, dynamic>>();
+      final conversations =
+          (jsonDecode(conversationsJson!) as List).cast<Map<String, dynamic>>();
       expect(conversations[0]['assistantId'], 'existing-a1');
       expect(conversations[1]['assistantId'], 'existing-a2');
     });
@@ -791,19 +796,19 @@ void main() {
       expect(migrated1!.first.assistantId, defaultAssistant.id);
 
       // Second run — should return null (already migrated)
-      final migrated2 =
-          await migrateConversationsFromPrefs(prefs);
+      final migrated2 = await migrateConversationsFromPrefs(prefs);
       expect(migrated2, isNull);
 
       // Verify data is still correct in prefs
       final conversationsJson = prefs.getString('conversations');
-      final conversations = (jsonDecode(conversationsJson!) as List)
-          .cast<Map<String, dynamic>>();
+      final conversations =
+          (jsonDecode(conversationsJson!) as List).cast<Map<String, dynamic>>();
       expect(conversations.length, 1);
       expect(conversations[0]['assistantId'], defaultAssistant.id);
     });
 
-    test('migration creates default assistant when none exists and migrates conversations',
+    test(
+        'migration creates default assistant when none exists and migrates conversations',
         () async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
@@ -829,15 +834,15 @@ void main() {
       // Verify the default assistant was created in prefs
       final assistantsJson = prefs.getString('assistants');
       expect(assistantsJson, isNotNull);
-      final assistants = (jsonDecode(assistantsJson!) as List)
-          .cast<Map<String, dynamic>>();
+      final assistants =
+          (jsonDecode(assistantsJson!) as List).cast<Map<String, dynamic>>();
       expect(assistants.length, 1);
       expect(assistants[0]['name'], '默认助手');
 
       // Verify conversations have the new assistant's ID
       final conversationsJson = prefs.getString('conversations');
-      final conversations = (jsonDecode(conversationsJson!) as List)
-          .cast<Map<String, dynamic>>();
+      final conversations =
+          (jsonDecode(conversationsJson!) as List).cast<Map<String, dynamic>>();
       expect(conversations[0]['assistantId'], assistants[0]['id']);
       expect(conversations[1]['assistantId'], assistants[0]['id']);
 
@@ -860,8 +865,8 @@ void main() {
       await migrateConversationsFromPrefs(prefs);
 
       final assistantsJson = prefs.getString('assistants');
-      final assistants = (jsonDecode(assistantsJson!) as List)
-          .cast<Map<String, dynamic>>();
+      final assistants =
+          (jsonDecode(assistantsJson!) as List).cast<Map<String, dynamic>>();
       expect(assistants.length, 1);
       expect(assistants[0]['name'], '默认助手');
       expect(assistants[0]['emoji'], '🤖');
@@ -869,7 +874,8 @@ void main() {
       expect(assistants[0]['prompt'], '你是一个有帮助的AI助手。请用中文回答用户的问题。');
     });
 
-    test('migration does not duplicate default assistant when one already exists',
+    test(
+        'migration does not duplicate default assistant when one already exists',
         () async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
@@ -900,15 +906,15 @@ void main() {
 
       // Verify only ONE assistant exists (no duplicate)
       final assistantsJson = prefs.getString('assistants');
-      final assistants = (jsonDecode(assistantsJson!) as List)
-          .cast<Map<String, dynamic>>();
+      final assistants =
+          (jsonDecode(assistantsJson!) as List).cast<Map<String, dynamic>>();
       expect(assistants.length, 1);
       expect(assistants[0]['id'], existingAssistantId);
 
       // Verify conversation was migrated to the existing assistant
       final conversationsJson = prefs.getString('conversations');
-      final conversations = (jsonDecode(conversationsJson!) as List)
-          .cast<Map<String, dynamic>>();
+      final conversations =
+          (jsonDecode(conversationsJson!) as List).cast<Map<String, dynamic>>();
       expect(conversations[0]['assistantId'], existingAssistantId);
     });
 

@@ -28,7 +28,8 @@ void main() {
               reason: 'Emoji should not be empty in category "${cat.label}"');
           // Emojis can have ZWJ sequences (e.g. 🐻‍❄️) or tag sequences (e.g. flags)
           expect(emoji.length >= 1 && emoji.length <= 16, isTrue,
-              reason: 'Emoji "$emoji" (len=${emoji.length}) seems too long in category "${cat.label}"');
+              reason:
+                  'Emoji "$emoji" (len=${emoji.length}) seems too long in category "${cat.label}"');
         }
       }
     });
@@ -58,7 +59,8 @@ void main() {
       for (final cat in EmojiCategories.categories) {
         for (final emoji in cat.emojis) {
           expect(allEmojis.contains(emoji), isFalse,
-              reason: 'Duplicate emoji "$emoji" found in category "${cat.label}"');
+              reason:
+                  'Duplicate emoji "$emoji" found in category "${cat.label}"');
           allEmojis.add(emoji);
         }
       }

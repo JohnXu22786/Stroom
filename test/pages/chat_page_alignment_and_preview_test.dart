@@ -20,8 +20,8 @@ Widget createChatTestApp({String? activeConversationId}) {
       conversationsProvider.overrideWith((ref) {
         return ConversationsNotifier(ref);
       }),
-      activeConversationIdProvider.overrideWith(
-          (ref) => activeConversationId ?? 'test-conv-id'),
+      activeConversationIdProvider
+          .overrideWith((ref) => activeConversationId ?? 'test-conv-id'),
       providerEntriesProvider.overrideWith((ref) {
         return ProviderEntriesNotifier();
       }),
@@ -51,7 +51,8 @@ void main() {
       expect(find.byIcon(Icons.send_rounded), findsWidgets);
     });
 
-    testWidgets('isStreamingProvider state is preserved across widget lifecycle',
+    testWidgets(
+        'isStreamingProvider state is preserved across widget lifecycle',
         (tester) async {
       // Verify isStreamingProvider is a Riverpod StateProvider that exists
       // independently of the ChatPage widget lifecycle. This is important
@@ -94,7 +95,8 @@ void main() {
       expect(find.text('新对话'), findsOneWidget);
     });
 
-    test('AttachmentStorage.readFile returns null for non-existent files', () async {
+    test('AttachmentStorage.readFile returns null for non-existent files',
+        () async {
       // Test the file read logic directly by checking that reading a
       // non-existent file from a known location returns null.
       final tmpDir = Directory.systemTemp.createTempSync('stroom_test_');
@@ -167,8 +169,7 @@ void main() {
       container.read(streamingFullReplyProvider.notifier).state = 'Hello';
       expect(container.read(streamingFullReplyProvider), 'Hello');
 
-      container.read(streamingFullReplyProvider.notifier).state =
-          'Hello world';
+      container.read(streamingFullReplyProvider.notifier).state = 'Hello world';
       expect(container.read(streamingFullReplyProvider), 'Hello world');
 
       container.read(streamingFullReplyProvider.notifier).state = '';

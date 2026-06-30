@@ -319,8 +319,7 @@ void main() {
       expect(
         topLeft.dy,
         greaterThanOrEqualTo(24.0),
-        reason:
-            'Welcome text top position ($topLeft) should be '
+        reason: 'Welcome text top position ($topLeft) should be '
             'below the status bar area (>= 24px)',
       );
     });

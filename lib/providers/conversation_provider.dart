@@ -46,8 +46,8 @@ Future<bool> assignNullAssistantConversations(
     if (changed) {
       // 双格式策略
       await DataMigrationService.backupConversationsBeforeWrite();
-      await prefs.setString(
-          'conversations', jsonEncode(conversations.map((e) => e.toMap()).toList()));
+      await prefs.setString('conversations',
+          jsonEncode(conversations.map((e) => e.toMap()).toList()));
       await DataMigrationService.cleanupConversationsBackup();
       debugPrint(
           'Auto-assigned null-assistantId conversations to default assistant ($defaultId)');
@@ -70,8 +70,8 @@ Future<String?> _resolveDefaultAssistantId(SharedPreferences prefs) async {
   // Try from SharedPreferences first (safe across provider boundaries)
   final assistantsJson = prefs.getString('assistants');
   if (assistantsJson != null && assistantsJson.isNotEmpty) {
-    final list = (jsonDecode(assistantsJson) as List)
-        .cast<Map<String, dynamic>>();
+    final list =
+        (jsonDecode(assistantsJson) as List).cast<Map<String, dynamic>>();
     if (list.isNotEmpty) {
       return list.first['id'] as String;
     }
@@ -84,8 +84,7 @@ Future<String?> _resolveDefaultAssistantId(SharedPreferences prefs) async {
     emoji: '🤖',
     description: '通用AI助手',
   );
-  await prefs.setString('assistants',
-      jsonEncode([defaultAssistant.toMap()]));
+  await prefs.setString('assistants', jsonEncode([defaultAssistant.toMap()]));
   debugPrint(
       'Created default assistant during migration (${defaultAssistant.id})');
   return defaultAssistant.id;
@@ -465,21 +464,20 @@ Future<List<Conversation>?> migrateConversationsFromPrefs(
       emoji: '🤖',
       description: '通用AI助手',
     );
-    await prefs.setString(
-        'assistants', jsonEncode([defaultAssistant.toMap()]));
+    await prefs.setString('assistants', jsonEncode([defaultAssistant.toMap()]));
   }
 
   final refreshedJson = prefs.getString('assistants');
   if (refreshedJson == null || refreshedJson.isEmpty) return null;
-  final assistants = (jsonDecode(refreshedJson) as List)
-      .cast<Map<String, dynamic>>();
+  final assistants =
+      (jsonDecode(refreshedJson) as List).cast<Map<String, dynamic>>();
   final defaultId = assistants.first['id'] as String;
 
   final conversationsJson = prefs.getString('conversations');
   if (conversationsJson == null || conversationsJson.isEmpty) return null;
 
-  final conversations = (jsonDecode(conversationsJson) as List)
-      .cast<Map<String, dynamic>>();
+  final conversations =
+      (jsonDecode(conversationsJson) as List).cast<Map<String, dynamic>>();
 
   bool changed = false;
   for (final conv in conversations) {
@@ -498,7 +496,5 @@ Future<List<Conversation>?> migrateConversationsFromPrefs(
 
   await prefs.setBool('migrated_old_conversations', true);
 
-  return conversations
-      .map((e) => Conversation.fromMap(e))
-      .toList();
+  return conversations.map((e) => Conversation.fromMap(e)).toList();
 }

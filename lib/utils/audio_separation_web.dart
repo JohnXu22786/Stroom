@@ -175,7 +175,8 @@ class _Mp4Demuxer {
           final mcSize = _readUint32();
           final mcType = _readString(4);
           if (mcType == 'hdlr') {
-            _offset += 4; _offset += 4;
+            _offset += 4;
+            _offset += 4;
             handlerType = _readString(4);
           } else if (mcType == 'minf') {
             final minfEnd = mcStart + mcSize;
@@ -196,7 +197,8 @@ class _Mp4Demuxer {
                       final es = _offset;
                       _readUint32();
                       codec = _readString(4);
-                      _offset += 6; _offset += 2;
+                      _offset += 6;
+                      _offset += 2;
                       if (codec == 'mp4a' || codec == 'raw ') {
                         _offset += 8;
                         channels = _readUint16();
@@ -260,7 +262,9 @@ class _Mp4Demuxer {
         final endChunk = (i + 1 < stscEntries.length)
             ? stscEntries[i + 1].$1 - 1
             : chunkOffsets.length;
-        for (var c = firstChunk - 1; c < endChunk && c < chunkOffsets.length; c++) {
+        for (var c = firstChunk - 1;
+            c < endChunk && c < chunkOffsets.length;
+            c++) {
           sampleToChunk[c] = spc;
         }
       }
@@ -283,8 +287,11 @@ class _Mp4Demuxer {
     final frames = <_AudioFrame>[];
     int sampleIdx = 0;
 
-    for (var ci = 0; ci < track.chunkOffsets.length && sampleIdx < track.sampleSizes.length; ci++) {
-      final spc = ci < track.sampleToChunkMap.length ? track.sampleToChunkMap[ci] : 1;
+    for (var ci = 0;
+        ci < track.chunkOffsets.length && sampleIdx < track.sampleSizes.length;
+        ci++) {
+      final spc =
+          ci < track.sampleToChunkMap.length ? track.sampleToChunkMap[ci] : 1;
       for (var s = 0; s < spc && sampleIdx < track.sampleSizes.length; s++) {
         final size = track.sampleSizes[sampleIdx];
         int offsetInChunk = 0;
@@ -293,7 +300,8 @@ class _Mp4Demuxer {
             offsetInChunk += track.sampleSizes[ps];
           }
         }
-        final fileOffset = track.mdatDataOffset + track.chunkOffsets[ci] + offsetInChunk;
+        final fileOffset =
+            track.mdatDataOffset + track.chunkOffsets[ci] + offsetInChunk;
         if (fileOffset + size <= _data.length) {
           frames.add(_AudioFrame(
             Uint8List.sublistView(_data, fileOffset, fileOffset + size),
@@ -307,8 +315,10 @@ class _Mp4Demuxer {
 
   int _readUint32() {
     if (_offset + 4 > _data.length) return 0;
-    final v = (_data[_offset] << 24) | (_data[_offset + 1] << 16) |
-        (_data[_offset + 2] << 8) | _data[_offset + 3];
+    final v = (_data[_offset] << 24) |
+        (_data[_offset + 1] << 16) |
+        (_data[_offset + 2] << 8) |
+        _data[_offset + 3];
     _offset += 4;
     return v;
   }
@@ -327,8 +337,10 @@ class _Mp4Demuxer {
 
   int _boxSize(int offset) {
     if (offset + 4 > _data.length) return 0;
-    return (_data[offset] << 24) | (_data[offset + 1] << 16) |
-        (_data[offset + 2] << 8) | _data[offset + 3];
+    return (_data[offset] << 24) |
+        (_data[offset + 1] << 16) |
+        (_data[offset + 2] << 8) |
+        _data[offset + 3];
   }
 }
 

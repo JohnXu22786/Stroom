@@ -27,7 +27,8 @@ class DataSanitizer {
   static String sanitizeBase64String(String value) {
     // Data URI pattern: data:image/<type>;base64,<data>
     // Supports types like png, jpeg, svg+xml, webp, etc.
-    final dataUriPattern = RegExp(r'^data:image/[a-zA-Z][a-zA-Z0-9+\-.]*;base64,');
+    final dataUriPattern =
+        RegExp(r'^data:image/[a-zA-Z][a-zA-Z0-9+\-.]*;base64,');
     if (dataUriPattern.hasMatch(value)) {
       final commaIndex = value.indexOf(',');
       final prefix = value.substring(0, commaIndex + 1);
@@ -38,7 +39,8 @@ class DataSanitizer {
     // Only check first 100 chars to avoid scanning huge strings on the main thread.
     if (value.length >= 300) {
       // Some base64 encoders insert newlines every 76 chars — strip them for the check.
-      final sample = value.substring(0, 100).replaceAll(RegExp(r'[\s\r\n]'), '');
+      final sample =
+          value.substring(0, 100).replaceAll(RegExp(r'[\s\r\n]'), '');
       final base64Chars = RegExp(r'^[A-Za-z0-9+/=]+$');
       if (base64Chars.hasMatch(sample)) {
         return '[base64 data: ${value.length} bytes hidden]';

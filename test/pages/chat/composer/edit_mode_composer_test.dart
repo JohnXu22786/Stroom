@@ -145,7 +145,13 @@ void main() {
       }
 
       final testAtts = [
-        Attachment(fileName: 'doc.pdf', mimeType: 'application/pdf', fileType: 'document', hash: 'abc', storagePath: '/path', fileSize: 100),
+        Attachment(
+            fileName: 'doc.pdf',
+            mimeType: 'application/pdf',
+            fileType: 'document',
+            hash: 'abc',
+            storagePath: '/path',
+            fileSize: 100),
       ];
 
       handleEditSend('msg-abc-123', 'edited message content', testAtts);

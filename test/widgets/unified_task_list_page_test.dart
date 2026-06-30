@@ -62,7 +62,8 @@ catcatch.CatCatchTask _createPausedTask({required String id}) {
 }
 
 /// Pump the UnifiedTaskListPage with given catcatch tasks and no synthesis tasks.
-Future<void> pumpPage(WidgetTester tester, List<catcatch.CatCatchTask> tasks) async {
+Future<void> pumpPage(
+    WidgetTester tester, List<catcatch.CatCatchTask> tasks) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
@@ -117,16 +118,14 @@ void main() {
       await expandCompletedCard(tester);
 
       // 查找"打开文件"文本
-      expect(find.text('打开文件'), findsOneWidget,
-          reason: '展开已完成卡片后应显示"打开文件"按钮');
+      expect(find.text('打开文件'), findsOneWidget, reason: '展开已完成卡片后应显示"打开文件"按钮');
 
       // 查找 TextButton
       final textButton = find.ancestor(
         of: find.text('打开文件'),
         matching: find.byType(TextButton),
       );
-      expect(textButton, findsOneWidget,
-          reason: '"打开文件"文本应该在 TextButton 内');
+      expect(textButton, findsOneWidget, reason: '"打开文件"文本应该在 TextButton 内');
 
       // 验证按钮尺寸 > 0（修复前可能为 0）
       final size = tester.getSize(textButton);
@@ -172,15 +171,13 @@ void main() {
       ]);
 
       // 运行中任务默认展开，直接检查
-      expect(find.text('打开文件'), findsNothing,
-          reason: '运行中的任务不应显示"打开文件"按钮');
+      expect(find.text('打开文件'), findsNothing, reason: '运行中的任务不应显示"打开文件"按钮');
     });
 
     // -------------------------------------------------------------------------
     // Test 4: 失败任务（需展开）不显示"打开文件"按钮
     // -------------------------------------------------------------------------
-    testWidgets('failed task should not show Open File button',
-        (tester) async {
+    testWidgets('failed task should not show Open File button', (tester) async {
       await pumpPage(tester, [
         _createFailedTask(id: 'test-4'),
       ]);
@@ -190,15 +187,13 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('打开文件'), findsNothing,
-          reason: '失败的任务不应显示"打开文件"按钮');
+      expect(find.text('打开文件'), findsNothing, reason: '失败的任务不应显示"打开文件"按钮');
     });
 
     // -------------------------------------------------------------------------
     // Test 5: 暂停任务（需展开）不显示"打开文件"按钮
     // -------------------------------------------------------------------------
-    testWidgets('paused task should not show Open File button',
-        (tester) async {
+    testWidgets('paused task should not show Open File button', (tester) async {
       await pumpPage(tester, [
         _createPausedTask(id: 'test-5'),
       ]);
@@ -208,8 +203,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('打开文件'), findsNothing,
-          reason: '暂停的任务不应显示"打开文件"按钮');
+      expect(find.text('打开文件'), findsNothing, reason: '暂停的任务不应显示"打开文件"按钮');
     });
 
     // -------------------------------------------------------------------------
@@ -218,8 +212,7 @@ void main() {
     testWidgets('empty task list shows placeholder', (tester) async {
       await pumpPage(tester, []);
 
-      expect(find.text('暂无任务'), findsOneWidget,
-          reason: '空任务列表应显示"暂无任务"占位符');
+      expect(find.text('暂无任务'), findsOneWidget, reason: '空任务列表应显示"暂无任务"占位符');
     });
 
     // -------------------------------------------------------------------------
@@ -285,8 +278,7 @@ void main() {
 
       final size = tester.getSize(textButton.first);
       // Material 默认最小触摸目标为 48x48 逻辑像素
-      expect(size.width, greaterThan(0),
-          reason: '按钮宽度必须 > 0（修复前可能为 0）');
+      expect(size.width, greaterThan(0), reason: '按钮宽度必须 > 0（修复前可能为 0）');
       expect(size.height, greaterThanOrEqualTo(48),
           reason: '按钮高度应 >= 48（Material 最小触摸目标，修复前因 shrinkWrap 仅为 ~20）');
     });
@@ -308,14 +300,13 @@ void main() {
       // 切换到"下载"tab
       await tester.tap(find.text('下载'));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));  // 等 TabBarView 切换动画
+      await tester.pump(const Duration(milliseconds: 500)); // 等 TabBarView 切换动画
 
       // 切换到"下载"tab 后卡片是新的 Widget 实例，需要重新展开
       await expandCompletedCard(tester);
 
       // "打开文件"按钮应可见
-      expect(find.text('打开文件'), findsOneWidget,
-          reason: '"下载"tab中应能看到"打开文件"按钮');
+      expect(find.text('打开文件'), findsOneWidget, reason: '"下载"tab中应能看到"打开文件"按钮');
 
       final downloadTabButton = find.ancestor(
         of: find.text('打开文件'),
@@ -323,8 +314,7 @@ void main() {
       );
 
       // 验证按钮存在并点击
-      expect(downloadTabButton, findsOneWidget,
-          reason: '"下载"tab中应能看到"打开文件"按钮');
+      expect(downloadTabButton, findsOneWidget, reason: '"下载"tab中应能看到"打开文件"按钮');
       await tester.tap(downloadTabButton);
       await tester.pump();
     });

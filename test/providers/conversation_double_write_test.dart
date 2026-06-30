@@ -23,7 +23,8 @@ ProviderContainer _createContainer({List<Conversation>? initialState}) {
 
 void main() {
   group('Conversation double-write strategy', () {
-    test('_persist creates conversations_bak before writing conversations', () async {
+    test('_persist creates conversations_bak before writing conversations',
+        () async {
       SharedPreferences.setMockInitialValues({
         'conversations': jsonEncode([
           {
@@ -102,13 +103,15 @@ void main() {
       final notifier = container.read(conversationsProvider.notifier);
 
       // Set bak manually to simulate a prior interrupted write
-      await prefs.setString('conversations_bak', jsonEncode([
-        {
-          'id': 'conv1',
-          'title': 'Old',
-          'messages': [],
-        }
-      ]));
+      await prefs.setString(
+          'conversations_bak',
+          jsonEncode([
+            {
+              'id': 'conv1',
+              'title': 'Old',
+              'messages': [],
+            }
+          ]));
 
       // Trigger a _persistNow via update with the batch flag
       await notifier.updateMessages('conv1', [
@@ -130,7 +133,8 @@ void main() {
       container.dispose();
     });
 
-    test('conversations_bak is cleaned up after successful conversations write', () async {
+    test('conversations_bak is cleaned up after successful conversations write',
+        () async {
       SharedPreferences.setMockInitialValues({
         'conversations': jsonEncode([
           {
@@ -181,7 +185,8 @@ void main() {
       container.dispose();
     });
 
-    test('double-write preserves data integrity on successful persist', () async {
+    test('double-write preserves data integrity on successful persist',
+        () async {
       SharedPreferences.setMockInitialValues({});
 
       final container = _createContainer(initialState: [

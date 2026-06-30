@@ -69,7 +69,8 @@ class StepStatus {
       StepStatus(type: type, failed: true, error: error, detail: detail);
 
   /// 运行中 + 进度
-  factory StepStatus.progressing(StepType type, int progress, {String? detail}) =>
+  factory StepStatus.progressing(StepType type, int progress,
+          {String? detail}) =>
       StepStatus(type: type, running: true, progress: progress, detail: detail);
 
   // ---------------------------------------------------------------------------
@@ -214,26 +215,25 @@ class CatCatchTask {
             : this.statusChangedAt);
 
     return CatCatchTask(
-        id: id ?? this.id,
-        url: url ?? this.url,
-        expectedDurationSec: expectedDurationSec ?? this.expectedDurationSec,
-        title: title ?? this.title,
-        status: newStatus,
-        steps: steps ?? this.steps,
-        error: clearError ? null : (error ?? this.error),
-        createdAt: createdAt ?? this.createdAt,
-        completedAt:
-            clearCompletedAt ? null : (completedAt ?? this.completedAt),
-        statusChangedAt: newStatusChangedAt,
-        detectedMedia: detectedMedia ?? this.detectedMedia,
-        selectedMedia:
-            clearSelectedMedia ? null : (selectedMedia ?? this.selectedMedia),
-        progress: progress ?? this.progress,
-        downloadedFilePath: clearDownloadedFilePath
-            ? null
-            : (downloadedFilePath ?? this.downloadedFilePath),
-        metadata: metadata ?? this.metadata,
-      );
+      id: id ?? this.id,
+      url: url ?? this.url,
+      expectedDurationSec: expectedDurationSec ?? this.expectedDurationSec,
+      title: title ?? this.title,
+      status: newStatus,
+      steps: steps ?? this.steps,
+      error: clearError ? null : (error ?? this.error),
+      createdAt: createdAt ?? this.createdAt,
+      completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
+      statusChangedAt: newStatusChangedAt,
+      detectedMedia: detectedMedia ?? this.detectedMedia,
+      selectedMedia:
+          clearSelectedMedia ? null : (selectedMedia ?? this.selectedMedia),
+      progress: progress ?? this.progress,
+      downloadedFilePath: clearDownloadedFilePath
+          ? null
+          : (downloadedFilePath ?? this.downloadedFilePath),
+      metadata: metadata ?? this.metadata,
+    );
   }
 
   // ---------------------------------------------------------------------------

@@ -47,7 +47,9 @@ class TopicItem extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: isActive ? cs.primary.withOpacity(0.3) : cs.outlineVariant.withOpacity(0.5),
+          color: isActive
+              ? cs.primary.withOpacity(0.3)
+              : cs.outlineVariant.withOpacity(0.5),
           width: isActive ? 1.0 : 0.5,
         ),
       ),
@@ -76,9 +78,7 @@ class TopicItem extends StatelessWidget {
                         ? Icons.push_pin
                         : Icons.chat_bubble_outline_rounded,
                     size: 20,
-                    color: topic.isPinned
-                        ? cs.primary
-                        : cs.onSurfaceVariant,
+                    color: topic.isPinned ? cs.primary : cs.onSurfaceVariant,
                   ),
                 ),
               const SizedBox(width: 12),
@@ -101,7 +101,8 @@ class TopicItem extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 15,
-                              fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                              fontWeight:
+                                  isActive ? FontWeight.w600 : FontWeight.w500,
                               color: cs.onSurface,
                             ),
                           ),
@@ -188,8 +189,7 @@ class TopicItem extends StatelessWidget {
                         ),
                         PopupMenuItem(
                           value: 'delete',
-                          child: Text('删除',
-                              style: TextStyle(color: cs.error)),
+                          child: Text('删除', style: TextStyle(color: cs.error)),
                         ),
                       ],
                     ),

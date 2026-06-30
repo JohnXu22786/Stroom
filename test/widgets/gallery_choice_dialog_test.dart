@@ -24,7 +24,8 @@ void main() {
   });
 
   group('showGalleryChoiceDialog', () {
-    testWidgets('renders both gallery options with same UI style as camera dialog',
+    testWidgets(
+        'renders both gallery options with same UI style as camera dialog',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(

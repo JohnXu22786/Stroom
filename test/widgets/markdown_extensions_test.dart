@@ -97,8 +97,7 @@ void main() {
       final input = r'$$\sum_{i=1}^{n} i = \frac{n(n+1)}{2}$$';
       final matches = regex.allMatches(input).toList();
       expect(matches.length, 1);
-      expect(matches[0].group(0),
-          r'$$\sum_{i=1}^{n} i = \frac{n(n+1)}{2}$$');
+      expect(matches[0].group(0), r'$$\sum_{i=1}^{n} i = \frac{n(n+1)}{2}$$');
     });
 
     test('parses multiple block math expressions', () {
@@ -140,8 +139,7 @@ void main() {
     });
 
     test('multiple math expressions in a single paragraph', () {
-      final nodes = _parseWithLatex(
-          r'$a^2$ plus $b^2$ equals $c^2$');
+      final nodes = _parseWithLatex(r'$a^2$ plus $b^2$ equals $c^2$');
       // Find all latex elements
       final latexElements = <m.Element>[];
       void findLatex(List<m.Node> nodes) {
@@ -154,6 +152,7 @@ void main() {
           }
         }
       }
+
       findLatex(nodes);
       expect(latexElements.length, 3);
       expect(latexElements[0].attributes['content'], 'a^2');
@@ -179,7 +178,8 @@ void main() {
       expect(widgetSpan.alignment, PlaceholderAlignment.middle);
     });
 
-    testWidgets('empty content falls back to text', (WidgetTester tester) async {
+    testWidgets('empty content falls back to text',
+        (WidgetTester tester) async {
       final config = MarkdownConfig.defaultConfig;
       final node = LatexNode(
         {'content': '', 'isInline': 'true'},
@@ -236,24 +236,21 @@ void main() {
       final config = buildMarkdownConfig(isDark: false);
       final h1 = config.h1;
       expect(h1, isA<HeadingConfig>());
-      expect(h1.divider, isNull,
-          reason: 'h1 should have no divider line');
+      expect(h1.divider, isNull, reason: 'h1 should have no divider line');
     });
 
     test('buildMarkdownConfig overrides h2 config with no divider', () {
       final config = buildMarkdownConfig(isDark: false);
       final h2 = config.h2;
       expect(h2, isA<HeadingConfig>());
-      expect(h2.divider, isNull,
-          reason: 'h2 should have no divider line');
+      expect(h2.divider, isNull, reason: 'h2 should have no divider line');
     });
 
     test('buildMarkdownConfig overrides h3 config with no divider', () {
       final config = buildMarkdownConfig(isDark: false);
       final h3 = config.h3;
       expect(h3, isA<HeadingConfig>());
-      expect(h3.divider, isNull,
-          reason: 'h3 should have no divider line');
+      expect(h3.divider, isNull, reason: 'h3 should have no divider line');
     });
 
     test('buildMarkdownConfig keeps h4,h5,h6 without divider (same as before)',

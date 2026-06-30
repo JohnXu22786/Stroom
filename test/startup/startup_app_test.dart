@@ -15,7 +15,8 @@ void main() {
   });
 
   group('StartupApp - crash recovery integration', () {
-    test('detects and recovers from stale migration_in_progress flag', () async {
+    test('detects and recovers from stale migration_in_progress flag',
+        () async {
       // Simulate a crash mid-migration
       SharedPreferences.setMockInitialValues({
         'migration_in_progress': true,
@@ -24,7 +25,12 @@ void main() {
           {'id': 'old_provider', 'type': 'llm', 'name': 'Old', 'configs': []},
         ]),
         'conversations': jsonEncode([
-          {'id': 'conv1', 'title': 'Test', 'messages': [], 'createdAt': DateTime.now().toIso8601String()},
+          {
+            'id': 'conv1',
+            'title': 'Test',
+            'messages': [],
+            'createdAt': DateTime.now().toIso8601String()
+          },
         ]),
       });
       AppStorage.resetCache();
@@ -38,7 +44,8 @@ void main() {
       // migration_in_progress should be cleared
       expect(prefs.containsKey('migration_in_progress'), isFalse);
       // Version should be updated
-      expect(prefs.getInt('data_format_version'), equals(DataMigrationService.currentFormatVersion));
+      expect(prefs.getInt('data_format_version'),
+          equals(DataMigrationService.currentFormatVersion));
     });
 
     test('recovers conversations from bak when main is corrupted', () async {

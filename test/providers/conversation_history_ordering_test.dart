@@ -38,7 +38,8 @@ void main() {
       expect(notifier.state[1].id, firstId);
     });
 
-    testWidgets('conversations maintain reverse-chronological order from prepend',
+    testWidgets(
+        'conversations maintain reverse-chronological order from prepend',
         (tester) async {
       final container = _createContainer(initialState: []);
       final notifier = container.read(conversationsProvider.notifier);
@@ -58,7 +59,8 @@ void main() {
     });
   });
 
-  group('ConversationsNotifier - selectConversation does not update updatedAt', () {
+  group('ConversationsNotifier - selectConversation does not update updatedAt',
+      () {
     testWidgets('calling selectConversation keeps updatedAt unchanged',
         (tester) async {
       final conv = Conversation(

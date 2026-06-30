@@ -182,7 +182,8 @@ class NoDividerH3Config extends H3Config {
 /// (`---` in markdown) remains unaffected. Dark-mode text colour is
 /// preserved by passing the dark config's style when applicable.
 MarkdownConfig buildMarkdownConfig({required bool isDark}) {
-  final base = isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig;
+  final base =
+      isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig;
   return base.copy(configs: [
     codeBlockPreConfig(isDark: isDark),
     if (isDark) ...[

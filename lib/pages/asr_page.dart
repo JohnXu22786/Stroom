@@ -419,9 +419,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     ),
                     IconButton(
                       icon: Icon(Icons.close, size: 16, color: cs.error),
-                      onPressed: _isProcessing
-                          ? null
-                          : () => _removeAudio(index),
+                      onPressed:
+                          _isProcessing ? null : () => _removeAudio(index),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
@@ -959,8 +958,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     await TextManifest.writeText(storageFileName, text);
     await TextManifest.addRecord(
       TextRecord(
-        name:
-            title ??
+        name: title ??
             'ASR_${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}',
         hash: hash,
         format: 'txt',

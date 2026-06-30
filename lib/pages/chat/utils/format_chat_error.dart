@@ -10,8 +10,7 @@ String formatChatErrorMessage(Object error) {
     return '错误: API Key 未配置，请检查设置';
   }
 
-  if (errorStr.contains('无法连接到服务器') ||
-      errorStr.contains('连接错误')) {
+  if (errorStr.contains('无法连接到服务器') || errorStr.contains('连接错误')) {
     return '错误: 无法连接到服务器，请检查网络连接和 API 地址\n$errorStr';
   }
 

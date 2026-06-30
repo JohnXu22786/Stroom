@@ -22,7 +22,8 @@ void main() {
       final map = conv.toMap();
       final restored = Conversation.fromMap(map);
 
-      expect(restored.enabledMcpToolNames, equals({'calculator', 'web_search'}));
+      expect(
+          restored.enabledMcpToolNames, equals({'calculator', 'web_search'}));
       expect(restored.id, equals('test-id'));
     });
 
@@ -40,7 +41,8 @@ void main() {
       expect(restored.enabledMcpToolNames, isEmpty);
     });
 
-    test('fromMap handles missing enabledMcpToolNames gracefully (old data)', () {
+    test('fromMap handles missing enabledMcpToolNames gracefully (old data)',
+        () {
       // Simulate old conversation data without enabledMcpToolNames
       final oldMap = {
         'id': 'old-id',
@@ -57,7 +59,8 @@ void main() {
 
       final conv = Conversation.fromMap(oldMap);
       expect(conv.enabledMcpToolNames, isEmpty,
-          reason: 'Old data without enabledMcpToolNames should default to empty set');
+          reason:
+              'Old data without enabledMcpToolNames should default to empty set');
       expect(conv.id, equals('old-id'));
     });
 
@@ -112,7 +115,8 @@ void main() {
   });
 
   group('ConversationsNotifier - tool state management', () {
-    test('createConversation creates conversation with empty enabledMcpToolNames',
+    test(
+        'createConversation creates conversation with empty enabledMcpToolNames',
         () {
       // Integration verification: new conversations should have no tools enabled
       // This tests the conversation through the standard creation path
@@ -146,7 +150,8 @@ void main() {
           allTools.where((t) => conv.enabledMcpToolNames.contains(t)).toList();
 
       expect(filteredTools, isEmpty,
-          reason: 'When enabledMcpToolNames is empty, no tools should pass filter');
+          reason:
+              'When enabledMcpToolNames is empty, no tools should pass filter');
     });
 
     test('tool filtering includes only tools in enabledMcpToolNames', () {

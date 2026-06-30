@@ -64,8 +64,7 @@ void main() {
       test('all builtin types have a hostHint set', () {
         for (final type in ['llm', 'tts', 'ocr', 'asr', 'mcp']) {
           final def = ProviderTypeRegistry.get(type);
-          expect(def, isNotNull,
-              reason: 'Type $type should be registered');
+          expect(def, isNotNull, reason: 'Type $type should be registered');
           expect(def!.hostHint, isNotNull,
               reason: 'Type $type should have a hostHint');
           expect(def.hostHint!.isNotEmpty, isTrue,

@@ -81,13 +81,12 @@ Future<Set<String>> collectAttachmentPaths() async {
 
     final conversations = jsonDecode(json) as List<dynamic>;
     for (final conv in conversations) {
-      final messages = (conv as Map<String, dynamic>)['messages']
-              as List<dynamic>? ??
-          [];
+      final messages =
+          (conv as Map<String, dynamic>)['messages'] as List<dynamic>? ?? [];
       for (final msg in messages) {
-        final attachments = (msg as Map<String, dynamic>)['attachments']
-                as List<dynamic>? ??
-            [];
+        final attachments =
+            (msg as Map<String, dynamic>)['attachments'] as List<dynamic>? ??
+                [];
         for (final att in attachments) {
           final attMap = att as Map<String, dynamic>;
           final storagePath = attMap['storagePath'] as String?;

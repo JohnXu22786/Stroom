@@ -28,7 +28,8 @@ Dio _createMockDio(String jsonResponse, {int statusCode = 200}) {
 }
 
 /// Build a GitHub releases API response for the given tag.
-String _githubRelease(String tagName, {String body = '', String? htmlUrl, List<Map<String, String>>? assets}) {
+String _githubRelease(String tagName,
+    {String body = '', String? htmlUrl, List<Map<String, String>>? assets}) {
   htmlUrl ??= 'https://github.com/JohnXu22786/Stroom/releases/tag/$tagName';
   final assetsJson = assets != null
       ? ',\n  "assets": [${assets.map((a) => '{\n      "name": "${a['name']}",\n      "browser_download_url": "${a['browser_download_url']}"\n    }').join(',\n    ')}]'
@@ -46,11 +47,31 @@ String _githubRelease(String tagName, {String body = '', String? htmlUrl, List<M
 List<Map<String, String>> _allPlatformAssets(String tagName) {
   final version = tagName.replaceAll(RegExp(r'^v'), '');
   return [
-    {'name': 'stroom-android-release-v$version.apk', 'browser_download_url': 'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-android-release-v$version.apk'},
-    {'name': 'stroom-windows-x64-release-v$version.zip', 'browser_download_url': 'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-windows-x64-release-v$version.zip'},
-    {'name': 'stroom-macos-arm64-release-v$version.zip', 'browser_download_url': 'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-macos-arm64-release-v$version.zip'},
-    {'name': 'stroom-linux-x64-release-v$version.zip', 'browser_download_url': 'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-linux-x64-release-v$version.zip'},
-    {'name': 'stroom-web-release-v$version.zip', 'browser_download_url': 'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-web-release-v$version.zip'},
+    {
+      'name': 'stroom-android-release-v$version.apk',
+      'browser_download_url':
+          'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-android-release-v$version.apk'
+    },
+    {
+      'name': 'stroom-windows-x64-release-v$version.zip',
+      'browser_download_url':
+          'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-windows-x64-release-v$version.zip'
+    },
+    {
+      'name': 'stroom-macos-arm64-release-v$version.zip',
+      'browser_download_url':
+          'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-macos-arm64-release-v$version.zip'
+    },
+    {
+      'name': 'stroom-linux-x64-release-v$version.zip',
+      'browser_download_url':
+          'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-linux-x64-release-v$version.zip'
+    },
+    {
+      'name': 'stroom-web-release-v$version.zip',
+      'browser_download_url':
+          'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-web-release-v$version.zip'
+    },
   ];
 }
 
@@ -78,7 +99,10 @@ Widget _buildTestApp({Dio? dio}) {
 /// so migration is skipped, allowing the test to focus on update check behavior.
 ///
 /// [extraPrefs] allows setting additional SharedPreferences keys.
-Future<void> _pumpThroughStartup(WidgetTester tester, {required Dio dio, int dataFormatVersion = 2, Map<String, Object>? extraPrefs}) async {
+Future<void> _pumpThroughStartup(WidgetTester tester,
+    {required Dio dio,
+    int dataFormatVersion = 2,
+    Map<String, Object>? extraPrefs}) async {
   final prefs = <String, Object>{'data_format_version': dataFormatVersion};
   if (extraPrefs != null) {
     prefs.addAll(extraPrefs);
@@ -96,9 +120,11 @@ Future<void> _pumpThroughStartup(WidgetTester tester, {required Dio dio, int dat
 
 void main() {
   group('Application - Startup Update Check', () {
-    testWidgets('shows update dialog on startup when new version available', (tester) async {
+    testWidgets('shows update dialog on startup when new version available',
+        (tester) async {
       final dio = _createMockDio(
-        _githubRelease('v0.2.14', body: 'New features', assets: _allPlatformAssets('v0.2.14')),
+        _githubRelease('v0.2.14',
+            body: 'New features', assets: _allPlatformAssets('v0.2.14')),
       );
 
       await _pumpThroughStartup(tester, dio: dio);
@@ -111,7 +137,9 @@ void main() {
       expect(find.text('稍后提醒'), findsOneWidget);
     });
 
-    testWidgets('shows no dialog on startup when current version matches latest', (tester) async {
+    testWidgets(
+        'shows no dialog on startup when current version matches latest',
+        (tester) async {
       final dio = _createMockDio(
         _githubRelease('v0.2.13'), // Same as appVersion
       );
@@ -122,7 +150,8 @@ void main() {
       expect(find.text('发现新版本'), findsNothing);
     });
 
-    testWidgets('shows no dialog on startup when version was skipped', (tester) async {
+    testWidgets('shows no dialog on startup when version was skipped',
+        (tester) async {
       final dio = _createMockDio(
         _githubRelease('v0.2.14'),
       );
@@ -135,7 +164,8 @@ void main() {
       expect(find.text('发现新版本'), findsNothing);
     });
 
-    testWidgets('shows no dialog on startup when API call fails', (tester) async {
+    testWidgets('shows no dialog on startup when API call fails',
+        (tester) async {
       final dio = _createMockDio(
         _githubRelease('v0.2.14'),
         statusCode: 500,
@@ -147,9 +177,12 @@ void main() {
       expect(find.text('发现新版本'), findsNothing);
     });
 
-    testWidgets('dialog has same UI elements as manual check dialog', (tester) async {
+    testWidgets('dialog has same UI elements as manual check dialog',
+        (tester) async {
       final dio = _createMockDio(
-        _githubRelease('v0.2.14', body: 'Bug fixes and improvements', assets: _allPlatformAssets('v0.2.14')),
+        _githubRelease('v0.2.14',
+            body: 'Bug fixes and improvements',
+            assets: _allPlatformAssets('v0.2.14')),
       );
 
       await _pumpThroughStartup(tester, dio: dio);

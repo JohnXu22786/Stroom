@@ -68,8 +68,7 @@ class AssistantCard extends StatelessWidget {
               const Spacer(),
               Container(
                 width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: cs.surfaceContainerHighest.withOpacity(0.5),
                   borderRadius: BorderRadius.circular(8),
@@ -156,9 +155,7 @@ class CategorizedEmojiPicker extends StatelessWidget {
                             onTap: () => onEmojiSelected(e),
                             child: Container(
                               decoration: BoxDecoration(
-                                color: isSelected
-                                    ? cs.primaryContainer
-                                    : null,
+                                color: isSelected ? cs.primaryContainer : null,
                                 borderRadius: BorderRadius.circular(6),
                                 border: isSelected
                                     ? Border.all(color: cs.primary)

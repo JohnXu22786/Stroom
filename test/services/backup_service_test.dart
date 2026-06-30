@@ -203,7 +203,8 @@ void main() {
         'appVersion': 'test',
       };
       archive.addFile(ArchiveFile(
-          'manifest.json', utf8.encode(jsonEncode(manifest)).length,
+          'manifest.json',
+          utf8.encode(jsonEncode(manifest)).length,
           utf8.encode(jsonEncode(manifest))));
 
       // Add stroom_manifest.json with a text record
@@ -226,14 +227,14 @@ void main() {
         'folders': <String>[],
       };
       archive.addFile(ArchiveFile(
-          'stroom_manifest.json', utf8.encode(jsonEncode(dbData)).length,
+          'stroom_manifest.json',
+          utf8.encode(jsonEncode(dbData)).length,
           utf8.encode(jsonEncode(dbData))));
 
       // Add the text file in texts/ directory
       final textFileContent = utf8.encode(testContent);
-      archive.addFile(ArchiveFile(
-          'texts/restored_hash_file.txt', textFileContent.length,
-          textFileContent));
+      archive.addFile(ArchiveFile('texts/restored_hash_file.txt',
+          textFileContent.length, textFileContent));
 
       // Encode to bytes
       final encoded = ZipEncoder().encode(archive);

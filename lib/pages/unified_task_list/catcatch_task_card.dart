@@ -135,7 +135,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                               : truncateUrl(task.url),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyMedium
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
                               ?.copyWith(fontWeight: FontWeight.w500),
                         ),
                         const SizedBox(height: 2),
@@ -264,8 +266,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                             color: step.skipped
                                 ? Colors.orange.shade300
                                 : step.completed
-                                ? Colors.green.shade300
-                                : colorScheme.outlineVariant,
+                                    ? Colors.green.shade300
+                                    : colorScheme.outlineVariant,
                           ),
                         ),
                     ],
@@ -283,18 +285,20 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                             Expanded(
                               child: Text(
                                 step.type.label,
-                                style: Theme.of(context).textTheme.bodyMedium
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
                                     ?.copyWith(
                                       fontWeight: FontWeight.w500,
                                       color: step.completed
                                           ? Colors.green.shade700
                                           : step.skipped
-                                          ? Colors.orange.shade700
-                                          : step.running
-                                          ? colorScheme.primary
-                                          : step.failed
-                                          ? Colors.red.shade700
-                                          : colorScheme.onSurface,
+                                              ? Colors.orange.shade700
+                                              : step.running
+                                                  ? colorScheme.primary
+                                                  : step.failed
+                                                      ? Colors.red.shade700
+                                                      : colorScheme.onSurface,
                                     ),
                               ),
                             ),
@@ -696,9 +700,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 13,
-                    fontWeight: isSelected
-                        ? FontWeight.w600
-                        : FontWeight.normal,
+                    fontWeight:
+                        isSelected ? FontWeight.w600 : FontWeight.normal,
                   ),
                 ),
               ),
@@ -721,12 +724,12 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 tooltip: isAudio ? '预览音频' : '预览视频',
                 onPressed: media.isPlayable
                     ? () => showMediaPreview(
-                        context,
-                        media,
-                        task.title.isNotEmpty
-                            ? task.title
-                            : truncateUrl(task.url),
-                      )
+                          context,
+                          media,
+                          task.title.isNotEmpty
+                              ? task.title
+                              : truncateUrl(task.url),
+                        )
                     : null,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -751,9 +754,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         splitIds.add(m.url);
       }
     }
-    final remaining = mediaList
-        .where((m) => !splitIds.contains(m.url))
-        .toList();
+    final remaining =
+        mediaList.where((m) => !splitIds.contains(m.url)).toList();
     if (remaining.isEmpty) return [];
 
     final withDuration = <MediaResource>[];
@@ -782,8 +784,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
       final currSec = media.duration != null
           ? parseDurationToSeconds(media.duration!)
           : null;
-      final showLabel =
-          currSec != null &&
+      final showLabel = currSec != null &&
           (lastDurationSec == null || (currSec - lastDurationSec).abs() > 5);
       if (showLabel) {
         lastDurationSec = currSec;
@@ -885,15 +886,17 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
+                            fontWeight: FontWeight.w500,
+                          ),
                     ),
                     const SizedBox(height: 2),
                     Row(
                       children: [
                         Text(
                           '${formatSize(media.size)} · ${media.mimeType ?? media.ext.toUpperCase()}',
-                          style: Theme.of(context).textTheme.bodySmall
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
                               ?.copyWith(color: colorScheme.onSurfaceVariant),
                         ),
                         if (media.isLikelySplitTrack) ...[

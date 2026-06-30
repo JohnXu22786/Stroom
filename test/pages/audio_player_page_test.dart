@@ -143,7 +143,8 @@ void main() {
       expect(result, isNull);
     });
 
-    test('multiple source text saves update companion file correctly', () async {
+    test('multiple source text saves update companion file correctly',
+        () async {
       const hash = 'test_multi_005';
       const text1 = '第一次保存的源文本';
       const text2 = '第二次修改后的源文本';

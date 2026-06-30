@@ -154,10 +154,10 @@ String detectAudioFormat(Uint8List data) {
   // M4A/MP4: "ftyp" at offset 4 (ISO Base Media File Format)
   // Bytes 0-3 are the box size (variable), bytes 4-7 are "ftyp"
   if (data.length >= 8 &&
-      data[4] == 0x66 && // 'f'
-      data[5] == 0x74 && // 't'
-      data[6] == 0x79 && // 'y'
-      data[7] == 0x70   // 'p'
+          data[4] == 0x66 && // 'f'
+          data[5] == 0x74 && // 't'
+          data[6] == 0x79 && // 'y'
+          data[7] == 0x70 // 'p'
       ) {
     return 'm4a';
   }

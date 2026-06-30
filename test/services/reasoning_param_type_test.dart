@@ -13,7 +13,9 @@ void main() {
       expect(jsonType.label, equals('JSON'));
     });
 
-    test('json type needsQuotes is false (sent as raw object, not quoted string)', () {
+    test(
+        'json type needsQuotes is false (sent as raw object, not quoted string)',
+        () {
       final jsonType = ParamType.fromValue('json');
       // JSON is serialized as a raw object, not a quoted string
       // For model API calls, json values are sent as objects, not strings

@@ -217,10 +217,8 @@ class ReasoningParam {
       isReasoningToggle: map['isReasoningToggle'] as bool? ?? false,
       onValue: map['onValue'] as String?,
       offValue: map['offValue'] as String?,
-      options: (map['options'] as List?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          [],
+      options:
+          (map['options'] as List?)?.map((e) => e.toString()).toList() ?? [],
       type: map['type'] as String? ?? 'string',
     );
   }

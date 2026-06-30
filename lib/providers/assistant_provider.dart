@@ -76,8 +76,7 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
   }
 
   /// Serializes current state to JSON string.
-  String toJson() =>
-      jsonEncode(state.map((a) => a.toMap()).toList());
+  String toJson() => jsonEncode(state.map((a) => a.toMap()).toList());
 
   /// Restores state from a JSON string (used for testing).
   void loadFromJson(String json) {

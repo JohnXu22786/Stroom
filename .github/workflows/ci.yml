@@ -10,149 +10,93 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ── Format Check ──────────────────────────────────────────────────────────
+  format:
+    name: Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Check Dart formatting
+        run: dart format --set-exit-if-changed .
+
+  # ── Static Analysis ───────────────────────────────────────────────────────
   analyze:
     name: Static Analysis
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
       - run: flutter pub get
       - name: Run Dart analyzer
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
+      - name: Check changed files have tests
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$BASE_SHA" ]; then
+            echo "Not a PR — skipping diff coverage check."
+            exit 0
+          fi
+          echo "### Changed lib/ files vs test/ coverage ###"
+          echo ""
+          UNCOVERED=0
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            test_f="test/${file#lib/}"
+            test_f="${test_f%.dart}_test.dart"
+            if [ -f "$test_f" ]; then
+              echo "  ✅ $file"
+            else
+              echo "  ⚠️  $file → missing $test_f"
+              UNCOVERED=1
+            fi
+          done < <(git diff --name-only "$BASE_SHA" -- 'lib/**/*.dart')
+          echo ""
+          if [ "$UNCOVERED" -eq 0 ]; then
+            echo "All changed files have matching tests. (But check that existing tests cover new logic.)"
+          else
+            echo "Some changed files lack dedicated test files. Add them or verify coverage via existing tests."
+          fi
 
+  # ── Test Suite (parallel groups) ──────────────────────────────────────────
   test:
-    name: Test Suite
+    name: Tests (${{ matrix.label }})
     runs-on: ubuntu-latest
     needs: [analyze]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Core
+            pattern: test/*_test.dart
+          - label: Widgets
+            pattern: test/widgets
+          - label: Pages
+            pattern: test/pages
+          - label: Providers
+            pattern: test/providers
+          - label: Services
+            pattern: test/services
+          - label: Utils
+            pattern: test/utils
+          - label: Models
+            pattern: test/models
+          - label: Startup
+            pattern: test/startup
+          - label: CatCatch
+            pattern: test/catcatch
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
       - run: flutter pub get
-      - name: Run full test suite
-        run: flutter test
-
-  build-ios:
-    name: Build iOS IPA
-    runs-on: macos-15
-    needs: [analyze]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-      - run: flutter create --platforms=ios .
-      - run: flutter pub get
-      - name: Clean SwiftPM cache
-        run: |
-          rm -rf ~/Library/Caches/org.swift.swiftpm
-          rm -rf ~/Library/Developer/Xcode/DerivedData
-      - name: Configure CocoaPods
-        run: |
-          pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
-      - name: Build unsigned iOS app
-        run: flutter build ios --release --no-codesign
-      - name: Create unsigned IPA (Payload/Runner.app → zip)
-        run: |
-          mkdir -p artifacts
-          TAG="${{ github.ref_name }}"
-          TAG="${TAG//\//-}"
-          mkdir -p build/ios/ipa/Payload
-          cp -r build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
-          cd build/ios/ipa
-          zip -r "$OLDPWD/artifacts/stroom-ios-unsigned-$TAG.ipa" Payload/
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ios-ipa
-          path: artifacts/*.ipa
-
-  build-linux:
-    name: Build Linux
-    runs-on: ubuntu-latest
-    needs: [analyze]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-      - name: Install Linux dependencies
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev
-      - run: flutter create --platforms=linux .
-      - run: flutter pub get
-      - run: flutter build linux --release
-
-  build-web:
-    name: Build Web
-    runs-on: ubuntu-latest
-    needs: [analyze]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-      - run: flutter pub get
-      - run: flutter build web --release
-
-  build-android:
-    name: Build Android
-    runs-on: ubuntu-latest
-    needs: [analyze]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-      - uses: actions/cache@v4
-        with:
-          path: ~/.gradle
-          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*') }}
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.14"
-      - run: flutter pub get
-      # JitPack repository is configured directly in android/settings.gradle.kts
-      # under pluginManagement.repositories — no init script needed.
-      - name: Create dummy keystore for CI
-        run: keytool -genkey -v -keystore android/upload-keystore.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=CI, OU=Build, O=Stroom, L=Unknown, ST=Unknown, C=XX"
-      - run: flutter build apk --release
-
-  build-windows:
-    name: Build Windows
-    runs-on: windows-latest
-    needs: [analyze]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-      - run: flutter pub get
-      - run: flutter build windows --release
-
-  build-macos:
-    name: Build macOS
-    runs-on: macos-15
-    needs: [analyze]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-      - run: flutter create --platforms=macos .
-      - run: flutter pub get
-      - name: Clean SwiftPM cache
-        run: |
-          rm -rf ~/Library/Caches/org.swift.swiftpm
-          rm -rf ~/Library/Developer/Xcode/DerivedData
-      - name: Configure CocoaPods
-        run: |
-          pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
-      - run: flutter build macos --release
+      - name: Run ${{ matrix.label }} tests
+        run: flutter test ${{ matrix.pattern }}

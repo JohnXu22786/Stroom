@@ -34,7 +34,8 @@ void main() {
       expect(find.text('音频'), findsOneWidget);
     });
 
-    testWidgets('dialog has close icon button and confirm button', (tester) async {
+    testWidgets('dialog has close icon button and confirm button',
+        (tester) async {
       await tester.pumpWidget(MaterialApp(
         home: Builder(
           builder: (context) => ElevatedButton(
@@ -81,7 +82,8 @@ void main() {
       expect(find.text('选择文件'), findsNothing);
     });
 
-    testWidgets('confirm button with no selection closes dialog', (tester) async {
+    testWidgets('confirm button with no selection closes dialog',
+        (tester) async {
       await tester.pumpWidget(MaterialApp(
         home: Builder(
           builder: (context) => ElevatedButton(

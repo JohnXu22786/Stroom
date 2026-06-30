@@ -18,9 +18,8 @@ Never throwWrappedDioException(DioException e) {
   String detail;
   final body = e.response?.data;
   if (body is Map) {
-    detail = body['error'] is Map
-        ? '${body['error']['message'] ?? body}'
-        : '$body';
+    detail =
+        body['error'] is Map ? '${body['error']['message'] ?? body}' : '$body';
   } else if (body is String) {
     detail = body;
   } else {

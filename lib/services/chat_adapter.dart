@@ -72,17 +72,15 @@ class ChatAdapter {
 
   /// 初始化 MCP 客户端并发现工具
   Future<void> initializeMcpServers(ProviderEntriesState entriesState) async {
-    final mcpEntry = entriesState.entries
-        .where((e) => e.type == 'mcp')
-        .firstOrNull;
+    final mcpEntry =
+        entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
     if (mcpEntry == null || mcpEntry.configs.isEmpty) return;
 
     // Build MCP server configs from provider configs
     final mcpConfigs = <McpServerConfig>[];
     for (final config in mcpEntry.configs) {
-      final typeConfig = config.models.isNotEmpty
-          ? config.models[0].typeConfig
-          : null;
+      final typeConfig =
+          config.models.isNotEmpty ? config.models[0].typeConfig : null;
       final serverConfig = McpServerConfig.fromProviderConfig(
         providerName: config.providerName,
         typeConfig: typeConfig,
@@ -125,9 +123,8 @@ class ChatAdapter {
 
   /// 从 ProviderEntriesState 解析出所有可选的模型列表
   List<AvailableModel> availableModels(ProviderEntriesState entriesState) {
-    final llmEntry = entriesState.entries
-        .where((e) => e.type == 'llm')
-        .firstOrNull;
+    final llmEntry =
+        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
     if (llmEntry == null || llmEntry.configs.isEmpty) return const [];
 
     final result = <AvailableModel>[];
@@ -151,9 +148,8 @@ class ChatAdapter {
 
   /// 从 ProviderEntriesState 读取 LLM 配置并初始化 ChatService
   void configure(ProviderEntriesState entriesState) {
-    final llmEntry = entriesState.entries
-        .where((e) => e.type == 'llm')
-        .firstOrNull;
+    final llmEntry =
+        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
     if (llmEntry == null || llmEntry.configs.isEmpty) {
       debugPrint('ChatAdapter.configure: no LLM entry or configs');
       _chatService = null;
@@ -196,9 +192,8 @@ class ChatAdapter {
     int configIndex,
     int modelIndex,
   ) {
-    final llmEntry = entriesState.entries
-        .where((e) => e.type == 'llm')
-        .firstOrNull;
+    final llmEntry =
+        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
     if (llmEntry == null ||
         configIndex < 0 ||
         configIndex >= llmEntry.configs.length) {

@@ -85,7 +85,8 @@ void main() {
       );
     });
 
-    test('sendStream passes reasoning=true and default reasoningEffort', () async {
+    test('sendStream passes reasoning=true and default reasoningEffort',
+        () async {
       final service = ChatService(provider: provider, modelConfig: modelConfig);
 
       final events = <dynamic>[];
@@ -137,7 +138,8 @@ void main() {
       expect(provider.capturedBody!['reasoningEffort'], 'high');
     });
 
-    test('ChatService.sendStreamWithTools chains reasoning and effort correctly',
+    test(
+        'ChatService.sendStreamWithTools chains reasoning and effort correctly',
         () async {
       final service = ChatService(provider: provider, modelConfig: modelConfig);
 

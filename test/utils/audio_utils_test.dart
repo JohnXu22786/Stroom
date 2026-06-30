@@ -33,15 +33,15 @@ void main() {
 
     test('detects M4A from ftyp magic bytes (ISO base media)', () {
       // M4A/MP4: box size (4 bytes) + "ftyp" at offset 4
-      final data = Uint8List.fromList(
-          [0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]);
+      final data =
+          Uint8List.fromList([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]);
       expect(detectAudioFormat(data), equals('m4a'));
     });
 
     test('detects M4A with different box size prefix', () {
       // Larger box size
-      final data = Uint8List.fromList(
-          [0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70]);
+      final data =
+          Uint8List.fromList([0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70]);
       expect(detectAudioFormat(data), equals('m4a'));
     });
 

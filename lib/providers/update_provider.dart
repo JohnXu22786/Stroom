@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'dart:io' show Directory, File, Platform, Process;
 import 'package:archive/archive.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
@@ -81,7 +82,8 @@ class UpdateState {
   }
 }
 
-const String _kUpdateCheckUrl = 'https://api.github.com/repos/JohnXu22786/Stroom/releases/latest';
+const String _kUpdateCheckUrl =
+    'https://api.github.com/repos/JohnXu22786/Stroom/releases/latest';
 const String _kSkippedVersionKey = 'update_skipped_version';
 const String _kUpdateAvailableKey = 'update_available_data';
 
@@ -103,7 +105,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   /// Matches by checking if the asset name contains the platform key (e.g., 'android',
   /// 'windows', 'macos', 'linux'). Returns the [browser_download_url] of the first match,
   /// or `null` if no asset matches.
-  static String? findAssetDownloadUrl(List<dynamic> assets, String platformKey) {
+  static String? findAssetDownloadUrl(
+      List<dynamic> assets, String platformKey) {
     final key = platformKey.toLowerCase();
     String? installerUrl;
     String? fallbackUrl;
@@ -116,7 +119,9 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       if (url == null) continue;
 
       // 优先选择安装包 (.exe/.msi/.dmg)，其次才是压缩包
-      if (name.endsWith('.exe') || name.endsWith('.msi') || name.endsWith('.dmg')) {
+      if (name.endsWith('.exe') ||
+          name.endsWith('.msi') ||
+          name.endsWith('.dmg')) {
         installerUrl = url;
       } else {
         fallbackUrl ??= url;
@@ -302,7 +307,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     try {
       final tempDir = downloadDir ?? await _getDownloadDirectory();
       final uri = Uri.parse(url);
-      final fileName = uri.pathSegments.isNotEmpty ? uri.pathSegments.last : 'update';
+      final fileName =
+          uri.pathSegments.isNotEmpty ? uri.pathSegments.last : 'update';
       final filePath = '$tempDir/$fileName';
 
       final response = await _dio.get(
@@ -389,8 +395,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         );
       }
     } else if (defaultTargetPlatform == TargetPlatform.windows ||
-               defaultTargetPlatform == TargetPlatform.macOS ||
-               defaultTargetPlatform == TargetPlatform.linux) {
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux) {
       try {
         await _installOnDesktop(filePath);
       } catch (e) {
@@ -490,8 +496,10 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
 
     // 3. 创建更新脚本
     final scriptPath = Platform.isWindows
-        ? await _createWindowsUpdateScript(installDir.path, updateDir.path, extractedExe)
-        : await _createUnixUpdateScript(installDir.path, updateDir.path, extractedExe);
+        ? await _createWindowsUpdateScript(
+            installDir.path, updateDir.path, extractedExe)
+        : await _createUnixUpdateScript(
+            installDir.path, updateDir.path, extractedExe);
 
     // 4. 启动脚本
     if (Platform.isWindows) {
@@ -521,8 +529,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     }
   }
 
-  String _fileName(String path) =>
-      path.split(Platform.pathSeparator).last;
+  String _fileName(String path) => path.split(Platform.pathSeparator).last;
 
   /// 在提取目录中查找主可执行文件
   String _findExecutable(String dirPath) {
