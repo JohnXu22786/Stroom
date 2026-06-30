@@ -13,9 +13,15 @@ jobs:
   check-repository:
     runs-on: ubuntu-latest
     outputs:
-      should_run: ${{ github.repository == 'JohnXu22786/Stroom' }}
+      should_run: ${{ steps.check_repo.outputs.should_run }}
     steps:
-      - run: echo "Repository: ${{ github.repository }}"
+      - id: check_repo
+        run: |
+          if [ "${{ github.repository }}" = "JohnXu22786/Stroom" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          fi
 
   # ── Full Test Suite + Coverage ───────────────────────────────────────────
   coverage:
