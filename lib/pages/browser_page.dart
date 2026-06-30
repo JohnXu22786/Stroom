@@ -13,16 +13,16 @@ class UserScript {
   UserScript({required this.name, required this.code, required this.matches});
 
   Map<String, dynamic> toMap() => {
-        'name': name,
-        'code': code,
-        'matches': matches,
-      };
+    'name': name,
+    'code': code,
+    'matches': matches,
+  };
 
   factory UserScript.fromMap(Map<String, dynamic> map) => UserScript(
-        name: map['name'] as String? ?? '',
-        code: map['code'] as String? ?? '',
-        matches: (map['matches'] as List?)?.cast<String>() ?? [],
-      );
+    name: map['name'] as String? ?? '',
+    code: map['code'] as String? ?? '',
+    matches: (map['matches'] as List?)?.cast<String>() ?? [],
+  );
 }
 
 class BrowserPage extends StatefulWidget {
@@ -65,9 +65,15 @@ class _BrowserPageState extends State<BrowserPage> {
   }
 
   Future<void> _saveScripts() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-        _scriptsKey, jsonEncode(_scripts.map((s) => s.toMap()).toList()));
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _scriptsKey,
+        jsonEncode(_scripts.map((s) => s.toMap()).toList()),
+      );
+    } catch (e) {
+      debugPrint('_saveScripts failed: $e');
+    }
   }
 
   void _injectScripts() {
@@ -103,12 +109,13 @@ class _BrowserPageState extends State<BrowserPage> {
               borderSide: BorderSide.none,
             ),
             filled: true,
-            fillColor: Theme.of(context)
-                .colorScheme
-                .surfaceContainerHighest
-                .withOpacity(0.5),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            fillColor: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest.withOpacity(0.5),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 8,
+            ),
             suffixIcon: IconButton(
               icon: const Icon(Icons.arrow_forward, size: 18),
               onPressed: () => _goToUrl(_urlController.text),
@@ -241,9 +248,7 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
             ),
             Expanded(
               child: _scripts.isEmpty
-                  ? const Center(
-                      child: Text('暂无脚本，点击"添加"创建'),
-                    )
+                  ? const Center(child: Text('暂无脚本，点击"添加"创建'))
                   : ListView.builder(
                       itemCount: _scripts.length,
                       itemBuilder: (ctx, i) {
@@ -252,8 +257,10 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
                           title: Text(s.name.isNotEmpty ? s.name : '未命名脚本'),
                           subtitle: Text('${s.matches.length} 个匹配规则'),
                           trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline,
-                                color: Colors.red),
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: Colors.red,
+                            ),
                             onPressed: () {
                               setState(() => _scripts.removeAt(i));
                               _notifyChanged();
@@ -313,8 +320,9 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.script.name);
     _codeCtrl = TextEditingController(text: widget.script.code);
-    _matchesCtrl =
-        TextEditingController(text: widget.script.matches.join('\n'));
+    _matchesCtrl = TextEditingController(
+      text: widget.script.matches.join('\n'),
+    );
   }
 
   @override
@@ -378,15 +386,17 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
         ),
         FilledButton(
           onPressed: () {
-            widget.onSaved(UserScript(
-              name: _nameCtrl.text,
-              code: _codeCtrl.text,
-              matches: _matchesCtrl.text
-                  .split('\n')
-                  .map((l) => l.trim())
-                  .where((l) => l.isNotEmpty)
-                  .toList(),
-            ));
+            widget.onSaved(
+              UserScript(
+                name: _nameCtrl.text,
+                code: _codeCtrl.text,
+                matches: _matchesCtrl.text
+                    .split('\n')
+                    .map((l) => l.trim())
+                    .where((l) => l.isNotEmpty)
+                    .toList(),
+              ),
+            );
             Navigator.pop(context);
           },
           child: const Text('保存'),
