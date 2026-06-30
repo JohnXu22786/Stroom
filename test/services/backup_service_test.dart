@@ -18,6 +18,42 @@ void main() {
   });
 
   // ==================================================================
+  // Backup creation: onProgress callback
+  // ==================================================================
+
+  group('Backup creation with onProgress callback', () {
+    testWidgets('buildBackupBytesForTest calls onProgress with 0.0 and 1.0',
+        (WidgetTester t) async {
+      final progressValues = <double>[];
+      await BackupService.buildBackupBytesForTest(
+        onProgress: (p) => progressValues.add(p),
+      );
+
+      // First call should be 0.0
+      expect(progressValues.first, equals(0.0));
+      // Last call should be 1.0
+      expect(progressValues.last, equals(1.0));
+      // Should have multiple progress updates
+      expect(progressValues.length, greaterThanOrEqualTo(2));
+    });
+
+    testWidgets('buildBackupBytesForTest reports intermediate progress values',
+        (WidgetTester t) async {
+      final progressValues = <double>[];
+      await BackupService.buildBackupBytesForTest(
+        onProgress: (p) => progressValues.add(p),
+      );
+
+      // Should have reported progress at multiple stages
+      expect(progressValues, contains(0.0));
+      expect(progressValues, contains(1.0));
+      // Check for intermediate values
+      expect(progressValues.any((p) => p > 0.0 && p < 1.0), isTrue,
+          reason: 'Should report intermediate progress values between 0 and 1');
+    });
+  });
+
+  // ==================================================================
   // Backup creation: verify text records and text files are included
   // ==================================================================
 
@@ -336,17 +372,17 @@ void main() {
   });
 
   // ==================================================================
-  // Error handling: backup/restore with no text records
+  // Error handling: backup/restore with no data
   // ==================================================================
 
-  group('Backup/restore handles empty text records gracefully', () {
-    testWidgets('backup with no text records does not crash',
+  group('Backup/restore handles empty data gracefully', () {
+    testWidgets('backup with no records does not crash',
         (WidgetTester t) async {
-      // No text records inserted - just image/audio/video records
+      // No records inserted - just empty data
       final bytes = await BackupService.buildBackupBytesForTest();
       final archive = ZipDecoder().decodeBytes(bytes);
 
-      // Verify stroom_manifest.json has text_records (even if empty)
+      // Verify stroom_manifest.json has all keys (even if empty)
       Uint8List? manifestData;
       for (final f in archive) {
         if (f.isFile && f.name == 'stroom_manifest.json') {
