@@ -15,7 +15,8 @@ void main() {
   });
 
   group('DataMigrationService - accessible backup path', () {
-    test('getExternalBackupRootPath returns non-null on all platforms', () async {
+    test('getExternalBackupRootPath returns non-null on all platforms',
+        () async {
       final path = await DataMigrationService.getExternalBackupRootPath();
       expect(path, isNotNull);
       expect(path.isNotEmpty, isTrue);
@@ -35,7 +36,8 @@ void main() {
       final backupRoot = await DataMigrationService.getExternalBackupRootPath();
       // Should contain either StroomBackups (production) or stroom_backup_test (test env)
       expect(
-        backupRoot.contains('StroomBackups') || backupRoot.contains('stroom_backup_test'),
+        backupRoot.contains('StroomBackups') ||
+            backupRoot.contains('stroom_backup_test'),
         isTrue,
         reason: 'Backup root should reference backup directory name',
       );
@@ -59,9 +61,8 @@ void main() {
     });
 
     test('returns stored version when previously set', () async {
-      await SharedPreferences.getInstance().then((prefs) =>
-        prefs.setInt('data_format_version', 1)
-      );
+      await SharedPreferences.getInstance()
+          .then((prefs) => prefs.setInt('data_format_version', 1));
 
       final version = await DataMigrationService.getStoredFormatVersion();
       expect(version, equals(1));
@@ -140,7 +141,8 @@ void main() {
       AppStorage.resetCache();
     });
 
-    test('createBackup creates a backup directory with manifest in external location',
+    test(
+        'createBackup creates a backup directory with manifest in external location',
         () async {
       final backupPath = await DataMigrationService.createBackup();
       expect(backupPath, isNotNull);
@@ -171,7 +173,8 @@ void main() {
       await backupDir.delete(recursive: true);
     });
 
-    test('getExternalBackupRootPath returns non-null on all platforms', () async {
+    test('getExternalBackupRootPath returns non-null on all platforms',
+        () async {
       // Should never return null or empty
       final path = await DataMigrationService.getExternalBackupRootPath();
       expect(path, isNotNull);
@@ -233,7 +236,8 @@ void main() {
   });
 
   group('DataMigrationService - crash recovery', () {
-    test('sets and clears migration_in_progress flag during migration', () async {
+    test('sets and clears migration_in_progress flag during migration',
+        () async {
       // Run migration
       final result = await DataMigrationService.checkAndMigrate();
       expect(result.needsMigration, isTrue);
@@ -256,7 +260,8 @@ void main() {
       // After successful migration, flag should be cleared
       final prefsAfter = await SharedPreferences.getInstance();
       expect(prefsAfter.getBool('migration_in_progress'), isNot(isTrue));
-      expect(prefsAfter.getInt('data_format_version'), equals(DataMigrationService.currentFormatVersion));
+      expect(prefsAfter.getInt('data_format_version'),
+          equals(DataMigrationService.currentFormatVersion));
     });
 
     test('migration_in_progress flag is set before backup creation', () async {
@@ -289,17 +294,21 @@ void main() {
   });
 
   group('DataMigrationService - dual-format conversation recovery', () {
-    test('recovers from conversations_bak when conversations is corrupted', () async {
+    test('recovers from conversations_bak when conversations is corrupted',
+        () async {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('data_format_version', 1);
 
       // Set up: corrupted conversations + valid bak
       await prefs.setString('conversations', 'corrupted data not json');
-      await prefs.setString('conversations_bak', jsonEncode([
-        {'id': 'conv1', 'messages': [], 'title': 'Recovered'},
-      ]));
+      await prefs.setString(
+          'conversations_bak',
+          jsonEncode([
+            {'id': 'conv1', 'messages': [], 'title': 'Recovered'},
+          ]));
 
-      final recovered = await DataMigrationService.recoverConversationsFromBackup();
+      final recovered =
+          await DataMigrationService.recoverConversationsFromBackup();
       expect(recovered, isTrue);
 
       // After recovery, conversations should have valid data
@@ -316,11 +325,14 @@ void main() {
     test('does nothing when no conversations_bak exists', () async {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('data_format_version', 1);
-      await prefs.setString('conversations', jsonEncode([
-        {'id': 'conv1', 'messages': []},
-      ]));
+      await prefs.setString(
+          'conversations',
+          jsonEncode([
+            {'id': 'conv1', 'messages': []},
+          ]));
 
-      final recovered = await DataMigrationService.recoverConversationsFromBackup();
+      final recovered =
+          await DataMigrationService.recoverConversationsFromBackup();
       expect(recovered, isFalse);
 
       // Original data unchanged
@@ -335,14 +347,19 @@ void main() {
       await prefs.setInt('data_format_version', 1);
 
       // Both exist and conversations is valid
-      await prefs.setString('conversations', jsonEncode([
-        {'id': 'conv1', 'messages': []},
-      ]));
-      await prefs.setString('conversations_bak', jsonEncode([
-        {'id': 'conv2', 'messages': []},
-      ]));
+      await prefs.setString(
+          'conversations',
+          jsonEncode([
+            {'id': 'conv1', 'messages': []},
+          ]));
+      await prefs.setString(
+          'conversations_bak',
+          jsonEncode([
+            {'id': 'conv2', 'messages': []},
+          ]));
 
-      final recovered = await DataMigrationService.recoverConversationsFromBackup();
+      final recovered =
+          await DataMigrationService.recoverConversationsFromBackup();
       // When conversations is valid, we clean up the bak silently
       expect(recovered, isTrue);
       expect(prefs.containsKey('conversations_bak'), isFalse);
@@ -353,11 +370,14 @@ void main() {
       await prefs.setInt('data_format_version', 1);
 
       // No conversations at all, but bak exists
-      await prefs.setString('conversations_bak', jsonEncode([
-        {'id': 'conv1', 'messages': []},
-      ]));
+      await prefs.setString(
+          'conversations_bak',
+          jsonEncode([
+            {'id': 'conv1', 'messages': []},
+          ]));
 
-      final recovered = await DataMigrationService.recoverConversationsFromBackup();
+      final recovered =
+          await DataMigrationService.recoverConversationsFromBackup();
       expect(recovered, isTrue);
 
       final json = prefs.getString('conversations');
@@ -369,7 +389,8 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('data_format_version', 1);
 
-      final recovered = await DataMigrationService.recoverConversationsFromBackup();
+      final recovered =
+          await DataMigrationService.recoverConversationsFromBackup();
       expect(recovered, isFalse);
     });
   });

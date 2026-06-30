@@ -37,7 +37,8 @@ void main() {
       expect(find.text('导入恢复'), findsOneWidget);
     });
 
-    testWidgets('import card shows overwrite label when scrolled to', (tester) async {
+    testWidgets('import card shows overwrite label when scrolled to',
+        (tester) async {
       await tester.pumpWidget(createTestApp());
       await tester.pump();
 
