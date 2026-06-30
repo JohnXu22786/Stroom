@@ -34,7 +34,7 @@ void main() {
 
     test('backup root contains backup directory name', () async {
       final backupRoot = await DataMigrationService.getExternalBackupRootPath();
-      // Should contain either StroomBackups (production) or stroom_backup_test (test env)
+      // Should contain either StroomBackups or stroom_backup_test
       expect(
         backupRoot.contains('StroomBackups') ||
             backupRoot.contains('stroom_backup_test'),
@@ -204,8 +204,7 @@ void main() {
   });
 
   group('DataMigrationService - migrateDataFormatIfNeeded', () {
-    test('returns needsMigration=false when version matches current',
-        () async {
+    test('returns needsMigration=false when version matches current', () async {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('data_format_version', 2);
 
