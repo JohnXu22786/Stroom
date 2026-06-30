@@ -442,44 +442,54 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
 /// Returns the migrated conversation list, or `null` if already done.
 Future<List<Conversation>?> migrateConversationsFromPrefs(
     SharedPreferences prefs) async {
-  if (prefs.getBool('migrated_old_conversations') == true) return null;
+  try {
+    if (prefs.getBool('migrated_old_conversations') == true) return null;
 
-  final assistantsJson = prefs.getString('assistants');
-  if (assistantsJson == null || assistantsJson.isEmpty) {
-    final defaultAssistant = Assistant(
-      name: '默认助手',
-      prompt: '你是一个有帮助的AI助手。请用中文回答用户的问题。',
-      emoji: '🤖',
-      description: '通用AI助手',
-    );
-    await prefs.setString('assistants', jsonEncode([defaultAssistant.toMap()]));
-  }
-
-  final refreshedJson = prefs.getString('assistants');
-  if (refreshedJson == null || refreshedJson.isEmpty) return null;
-  final assistants =
-      (jsonDecode(refreshedJson) as List).cast<Map<String, dynamic>>();
-  final defaultId = assistants.first['id'] as String;
-
-  final conversationsJson = prefs.getString('conversations');
-  if (conversationsJson == null || conversationsJson.isEmpty) return null;
-
-  final conversations =
-      (jsonDecode(conversationsJson) as List).cast<Map<String, dynamic>>();
-
-  bool changed = false;
-  for (final conv in conversations) {
-    if (conv['assistantId'] == null) {
-      conv['assistantId'] = defaultId;
-      changed = true;
+    final assistantsJson = prefs.getString('assistants');
+    if (assistantsJson == null || assistantsJson.isEmpty) {
+      final defaultAssistant = Assistant(
+        name: '默认助手',
+        prompt: '你是一个有帮助的AI助手。请用中文回答用户的问题。',
+        emoji: '🤖',
+        description: '通用AI助手',
+      );
+      await prefs.setString(
+          'assistants', jsonEncode([defaultAssistant.toMap()]));
     }
+
+    final refreshedJson = prefs.getString('assistants');
+    if (refreshedJson == null || refreshedJson.isEmpty) return null;
+    final tempList = jsonDecode(refreshedJson);
+    if (tempList is! List) return null;
+    final assistants = tempList.cast<Map<String, dynamic>>();
+    if (assistants.isEmpty) return null;
+    final defaultId = assistants.first['id'];
+    if (defaultId is! String) return null;
+
+    final conversationsJson = prefs.getString('conversations');
+    if (conversationsJson == null || conversationsJson.isEmpty) return null;
+
+    final tempConv = jsonDecode(conversationsJson);
+    if (tempConv is! List) return null;
+    final conversations = tempConv.cast<Map<String, dynamic>>();
+
+    bool changed = false;
+    for (final conv in conversations) {
+      if (conv['assistantId'] == null) {
+        conv['assistantId'] = defaultId;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      await prefs.setString('conversations', jsonEncode(conversations));
+    }
+
+    await prefs.setBool('migrated_old_conversations', true);
+
+    return conversations.map((e) => Conversation.fromMap(e)).toList();
+  } catch (e) {
+    debugPrint('migrateConversationsFromPrefs failed: $e');
+    return null;
   }
-
-  if (changed) {
-    await prefs.setString('conversations', jsonEncode(conversations));
-  }
-
-  await prefs.setBool('migrated_old_conversations', true);
-
-  return conversations.map((e) => Conversation.fromMap(e)).toList();
 }

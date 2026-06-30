@@ -3,7 +3,7 @@ import 'dart:io' show Directory, File, Platform, Process;
 import 'package:archive/archive.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+    show defaultTargetPlatform, kIsWeb, TargetPlatform, debugPrint;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
@@ -243,9 +243,13 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   }
 
   Future<void> skipVersion(String version) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kSkippedVersionKey, version);
-    await prefs.remove(_kUpdateAvailableKey);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kSkippedVersionKey, version);
+      await prefs.remove(_kUpdateAvailableKey);
+    } catch (e) {
+      debugPrint('skipVersion failed: $e');
+    }
     state = const UpdateState();
   }
 
