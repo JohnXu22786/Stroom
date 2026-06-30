@@ -21,7 +21,7 @@ jobs:
             const errors = [];
 
             // Check "What this PR does" section — must have before/after content
-            const beforeMatch = body.match(/Before this PR:\s*\n+([\s\S]*?)(?=\n\s*After this PR:)/);
+            const beforeMatch = body.match(/Before this PR:\s*\n+([\s\S]*?)(?=\n\s*#{0,3}\s*After this PR:)/);
             const afterMatch = body.match(/After this PR:\s*\n+([\s\S]*?)(?=\n\s*(?:<!--|Fixes\s*#|###|$))/);
 
             const beforeContent = beforeMatch ? beforeMatch[1].trim() : '';
