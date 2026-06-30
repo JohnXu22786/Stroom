@@ -680,9 +680,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     final shouldEdit = await showDialog<bool>(
       context: context,
       builder: (ctx) => ImagePreviewDialog(
-        // 聊天场景：图片字节已在内存中，直接作为缩略图显示，同时完整图也立即可用
-        thumbnailData: imageBytes,
-        fullImageFuture: Future.value(imageBytes),
+        imageData: imageBytes,
         fileName: att.fileName,
       ),
     );

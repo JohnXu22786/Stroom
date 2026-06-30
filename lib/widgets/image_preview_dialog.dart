@@ -1,80 +1,27 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:extended_image/extended_image.dart';
 
 /// Full-screen image preview dialog with close and edit buttons.
 ///
-/// 加载策略说明 (Loading strategy):
-/// ── 旧逻辑 (old): 调用方先 await 完整图加载完成，然后将完整图数据传入 dialog 显示。
-///    即：需等待完整图（可能数 MB）从磁盘读取完毕后，对话框才出现。
-/// ── 新逻辑 (new): 对话框立即打开，显示缩略图（从缓存或磁盘快速获取）作为占位，
-///    同时在后台异步加载完整图；完整图加载完成后无缝替换。
-///    如果缩略图不可用，则显示加载指示器；如果完整图加载失败，保留缩略图或显示错误。
+/// Uses [ExtendedImage] (from the `extended_image` package) for built-in
+/// pinch-to-zoom, pan, and double-tap zoom gestures — no need for
+/// [InteractiveViewer] or a separate image cache.
 ///
 /// Parameters:
-///   [thumbnailData]   — 缩略图字节（可能为 null，表示无可用的缩略图）
-///   [fullImageFuture] — 完整图加载 Future（在后台执行，不阻塞对话框打开）
-///   [fileName]        — 文件显示名
-class ImagePreviewDialog extends StatefulWidget {
-  final Uint8List? thumbnailData;
-  final Future<Uint8List?> fullImageFuture;
+///   [imageData]   — The image bytes to display. If null or empty,
+///                   a "broken image" error state is shown.
+///   [fileName]    — Display name shown at the bottom of the screen.
+class ImagePreviewDialog extends StatelessWidget {
+  final Uint8List? imageData;
   final String fileName;
 
   const ImagePreviewDialog({
     super.key,
-    required this.thumbnailData,
-    required this.fullImageFuture,
+    required this.imageData,
     required this.fileName,
   });
-
-  @override
-  State<ImagePreviewDialog> createState() => _ImagePreviewDialogState();
-}
-
-class _ImagePreviewDialogState extends State<ImagePreviewDialog> {
-  /// 当前显示的数据：初始为缩略图，完整图加载完成后替换为完整图
-  Uint8List? _displayData;
-
-  /// 完整图加载是否失败（无有效数据可显示时的最终错误态）
-  bool _hasError = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // 初始显示缩略图（可能为 null，此时会显示加载指示器）
-    _displayData = widget.thumbnailData;
-    // 在后台启动完整图加载
-    _loadFullImage();
-  }
-
-  Future<void> _loadFullImage() async {
-    try {
-      final fullData = await widget.fullImageFuture;
-      if (!mounted) return;
-
-      if (fullData != null && fullData.isNotEmpty) {
-        // 完整图加载成功 → 替换显示
-        setState(() {
-          _displayData = fullData;
-        });
-      } else if (_displayData == null) {
-        // 没有缩略图且完整图返回空/null → 显示错误
-        setState(() {
-          _hasError = true;
-        });
-      }
-      // 有缩略图且完整图返回空/null → 保留缩略图，不显示错误
-    } catch (_) {
-      if (!mounted) return;
-      if (_displayData == null) {
-        // 没有缩略图且完整图加载异常 → 显示错误
-        setState(() {
-          _hasError = true;
-        });
-      }
-      // 有缩略图且完整图加载异常 → 保留缩略图
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -83,9 +30,7 @@ class _ImagePreviewDialogState extends State<ImagePreviewDialog> {
       insetPadding: EdgeInsets.zero,
       child: Stack(
         children: [
-          Center(
-            child: _buildContent(),
-          ),
+          Center(child: _buildContent(context)),
           // Close button (top left)
           Positioned(
             top: MediaQuery.of(context).padding.top + 8,
@@ -95,16 +40,12 @@ class _ImagePreviewDialogState extends State<ImagePreviewDialog> {
               onPressed: () => Navigator.pop(context, false),
             ),
           ),
-          // Edit button (top right) — 始终可用，由编辑组件加载图片
+          // Edit button (top right)
           Positioned(
             top: MediaQuery.of(context).padding.top + 8,
             right: 8,
             child: IconButton(
-              icon: const Icon(
-                Icons.edit,
-                color: Colors.white,
-                size: 28,
-              ),
+              icon: const Icon(Icons.edit, color: Colors.white, size: 28),
               tooltip: '编辑图片',
               onPressed: () => Navigator.pop(context, true),
             ),
@@ -115,7 +56,7 @@ class _ImagePreviewDialogState extends State<ImagePreviewDialog> {
             left: 16,
             right: 16,
             child: Text(
-              widget.fileName,
+              fileName,
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white70, fontSize: 14),
               maxLines: 2,
@@ -127,9 +68,9 @@ class _ImagePreviewDialogState extends State<ImagePreviewDialog> {
     );
   }
 
-  Widget _buildContent() {
-    // 错误态（无缩略图且完整图加载失败）
-    if (_hasError && _displayData == null) {
+  Widget _buildContent(BuildContext context) {
+    final data = imageData;
+    if (data == null || data.isEmpty) {
       return const Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -142,33 +83,35 @@ class _ImagePreviewDialogState extends State<ImagePreviewDialog> {
       );
     }
 
-    // 加载中（无缩略图，完整图还在加载）
-    if (_displayData == null) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.white),
-      );
-    }
-
-    // 有数据可显示（缩略图或完整图）
-    return InteractiveViewer(
-      minScale: 0.5,
-      maxScale: 4.0,
-      // 旧逻辑：直接显示完整图
-      // 新逻辑：先显示缩略图，完整图加载完成后无缝替换
-      child: Image.memory(
-        _displayData!,
-        fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) => const Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.broken_image, size: 48, color: Colors.white54),
-              SizedBox(height: 8),
-              Text('无法加载图片', style: TextStyle(color: Colors.white54)),
-            ],
-          ),
-        ),
+    // Use ExtendedImage.memory with gesture mode for built-in
+    // pinch-to-zoom, pan, and double-tap zoom.
+    return ExtendedImage.memory(
+      data,
+      fit: BoxFit.contain,
+      mode: ExtendedImageMode.gesture,
+      initGestureConfigHandler: (_) => GestureConfig(
+        minScale: 0.5,
+        maxScale: 4.0,
+        animationMinScale: 0.5,
+        animationMaxScale: 4.0,
+        initialScale: 1.0,
+        cacheGesture: false,
       ),
+      loadStateChanged: (state) {
+        if (state.extendedImageLoadState == LoadState.failed) {
+          return const Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.broken_image, size: 48, color: Colors.white54),
+                SizedBox(height: 8),
+                Text('无法加载图片', style: TextStyle(color: Colors.white54)),
+              ],
+            ),
+          );
+        }
+        return null; // Use default rendering
+      },
     );
   }
 }
