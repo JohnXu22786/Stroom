@@ -7,7 +7,6 @@ import 'package:stroom/utils/folder_path_utils.dart';
 import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/video_manifest.dart';
-import 'package:stroom/services/image_cache.dart';
 import 'file_picker_shared.dart';
 
 // ====================================================================
@@ -580,24 +579,14 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
   Widget _buildImageThumbnail(FileRecord record) {
     final imgRecord = record as ImageRecord;
-    final cacheKey = 'thumb:${imgRecord.hash}';
     return FutureBuilder<Uint8List?>(
       future: () async {
-        // Check thumbnail cache first
-        final cachedThumb = ImageBytesCache.get(cacheKey);
-        if (cachedThumb != null) return cachedThumb;
-        // Try reading thumbnail file from disk
+        // Try reading thumbnail file from disk first
         final thumb =
             await ImageManifest.readFile('${imgRecord.hash}_thumb.png');
-        if (thumb != null) {
-          ImageBytesCache.put(cacheKey, thumb);
-          return thumb;
-        }
-        // Fall back to full image — cache under separate key
-        return ImageBytesCache.getOrFetch(
-          'full:${imgRecord.hash}',
-          () => ImageManifest.readFile(imgRecord.storagePath),
-        );
+        if (thumb != null && thumb.isNotEmpty) return thumb;
+        // Fall back to full image
+        return ImageManifest.readFile(imgRecord.storagePath);
       }(),
       builder: (context, snapshot) {
         final data = snapshot.data;

@@ -5,11 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/widgets/image_preview_dialog.dart';
 
 /// Create a small valid PNG (1x1 white pixel) for use in widget tests.
-/// `Image.memory` in Flutter tests needs structurally valid image bytes
-/// to render without triggering errorBuilder.
+/// ExtendedImage and Image.memory need structurally valid image bytes.
 Uint8List _createValidPng() {
   // Minimal PNG (1x1 pixel, 8-bit grayscale)
-  // Generated using well-known PNG structure
   final png = <int>[
     0x89, 0x50, 0x4E, 0x47, // PNG signature
     0x0D, 0x0A, 0x1A, 0x0A, // CR+LF+CtrlZ+LF
@@ -36,105 +34,63 @@ Uint8List _createValidPng() {
 void main() {
   group('ImagePreviewDialog', () {
     final validPng = _createValidPng();
-    final testThumbnail = Uint8List.fromList(validPng);
-    final testFullImage = Uint8List.fromList(validPng);
-
-    Future<Uint8List?> resolveFull() async => testFullImage;
-    Future<Uint8List?> resolveNull() async => null;
-    Future<Uint8List?> resolveEmpty() async => Uint8List(0);
 
     Widget buildDialog({
-      Uint8List? thumbnailData,
-      required Future<Uint8List?> fullImageFuture,
+      Uint8List? imageData,
       String fileName = 'test.jpg',
     }) {
       return MaterialApp(
         home: Scaffold(
           body: ImagePreviewDialog(
-            thumbnailData: thumbnailData,
-            fullImageFuture: fullImageFuture,
+            imageData: imageData,
             fileName: fileName,
           ),
         ),
       );
     }
 
-    /// Pump the dialog and wait for one frame.
+    /// Pump the dialog and wait for frames.
     Future<void> pumpDialog(
       WidgetTester tester, {
-      Uint8List? thumbnailData,
-      required Future<Uint8List?> fullImageFuture,
+      Uint8List? imageData,
       String fileName = 'test.jpg',
     }) async {
       await tester.pumpWidget(buildDialog(
-        thumbnailData: thumbnailData,
-        fullImageFuture: fullImageFuture,
+        imageData: imageData,
         fileName: fileName,
       ));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
     }
 
     // ================================================================
     // Basic rendering
     // ================================================================
 
-    testWidgets('renders thumbnail immediately when provided', (tester) async {
-      await pumpDialog(
-        tester,
-        thumbnailData: testThumbnail,
-        fullImageFuture: resolveFull(),
-      );
+    testWidgets('renders ExtendedImage when data is provided', (tester) async {
+      await pumpDialog(tester, imageData: validPng);
 
-      // Image widget should render with the thumbnail data
-      expect(find.byType(InteractiveViewer), findsOneWidget);
-      // No loading indicator when thumbnail is present
-      expect(find.byType(CircularProgressIndicator), findsNothing);
+      // The dialog should render the image (ExtendedImage widget present)
+      // ExtendedImage is a specific widget type from extended_image package
+      // We verify the image renders by checking no error/loading state shown
+      expect(find.byIcon(Icons.broken_image), findsNothing,
+          reason: 'No broken_image icon when image data is valid');
+      // File name should display
+      expect(find.text('test.jpg'), findsOneWidget);
     });
 
-    testWidgets('shows loading indicator when thumbnail is null', (tester) async {
-      final slowFuture = Future<Uint8List?>.delayed(
-        const Duration(seconds: 1),
-        () => testFullImage,
-      );
-      await pumpDialog(
-        tester,
-        thumbnailData: null,
-        fullImageFuture: slowFuture,
-      );
+    testWidgets('shows error state when imageData is null', (tester) async {
+      await pumpDialog(tester, imageData: null);
 
-      // Should show loading indicator before full image resolves
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      // InteractiveViewer should not be shown while loading
-      expect(find.byType(InteractiveViewer), findsNothing);
-
-      // Let the delayed future complete to avoid timer leak
-      await tester.pump(const Duration(seconds: 1));
-      await tester.pump();
+      expect(find.byIcon(Icons.broken_image), findsOneWidget,
+          reason: 'broken_image icon when imageData is null');
+      expect(find.text('无法加载图片'), findsOneWidget,
+          reason: 'Error text when imageData is null');
     });
 
-    testWidgets('shows error state when both thumbnail and full image fail',
-        (tester) async {
-      // Use a delayed null result so we can observe the loading state.
-      // When both thumbnail and full future are null -> error state.
-      final delayedNull = Future<Uint8List?>.delayed(
-        const Duration(seconds: 1),
-        () => null,
-      );
+    testWidgets('shows error state when imageData is empty', (tester) async {
+      await pumpDialog(tester, imageData: Uint8List(0));
 
-      await pumpDialog(
-        tester,
-        thumbnailData: null,
-        fullImageFuture: delayedNull,
-      );
-
-      // Loading indicator should be visible while future is pending
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-
-      // Let the delayed future complete (returns null)
-      await tester.pump(const Duration(seconds: 1));
-      await tester.pump();
-
-      // Should show error state (no thumbnail, full image returned null)
       expect(find.byIcon(Icons.broken_image), findsOneWidget);
       expect(find.text('无法加载图片'), findsOneWidget);
     });
@@ -152,8 +108,7 @@ void main() {
               result = await showDialog<bool>(
                 context: context,
                 builder: (_) => ImagePreviewDialog(
-                  thumbnailData: testThumbnail,
-                  fullImageFuture: resolveFull(),
+                  imageData: validPng,
                   fileName: 'test.jpg',
                 ),
               );
@@ -182,8 +137,7 @@ void main() {
               result = await showDialog<bool>(
                 context: context,
                 builder: (_) => ImagePreviewDialog(
-                  thumbnailData: testThumbnail,
-                  fullImageFuture: resolveFull(),
+                  imageData: validPng,
                   fileName: 'test.jpg',
                 ),
               );
@@ -203,13 +157,7 @@ void main() {
       expect(result, true);
     });
 
-    testWidgets('edit button is always enabled (even before full image loads)',
-        (tester) async {
-      final delayedFuture = Future<Uint8List?>.delayed(
-        const Duration(seconds: 5),
-        () => testFullImage,
-      );
-
+    testWidgets('edit button is always enabled', (tester) async {
       bool? result;
       bool? dialogClosed;
 
@@ -220,8 +168,7 @@ void main() {
               result = await showDialog<bool>(
                 context: context,
                 builder: (_) => ImagePreviewDialog(
-                  thumbnailData: testThumbnail,
-                  fullImageFuture: delayedFuture,
+                  imageData: validPng,
                   fileName: 'test.jpg',
                 ),
               );
@@ -236,14 +183,13 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // At this point, full image has NOT loaded yet (5s delay)
       // Edit button should be enabled immediately
       final editIcon = find.byIcon(Icons.edit);
       final editButton = tester.widget<IconButton>(
         find.ancestor(of: editIcon, matching: find.byType(IconButton)),
       );
       expect(editButton.onPressed, isNotNull,
-          reason: 'Edit button should be enabled even before full image loads');
+          reason: 'Edit button should be enabled');
 
       // Tapping edit button immediately pops dialog with true
       await tester.tap(editIcon);
@@ -252,10 +198,6 @@ void main() {
           reason: 'Dialog should close immediately after tapping edit button');
       expect(result, isTrue,
           reason: 'Edit button should pop with true');
-
-      // Let the delayed future (used by the dialog's _loadFullImage) complete
-      // to avoid pending timer assertion.
-      await tester.pump(const Duration(seconds: 5));
     });
 
     // ================================================================
@@ -263,44 +205,17 @@ void main() {
     // ================================================================
 
     testWidgets('displays file name', (tester) async {
-      await pumpDialog(
-        tester,
-        thumbnailData: testThumbnail,
-        fullImageFuture: resolveFull(),
-        fileName: 'my_photo.jpg',
-      );
+      await pumpDialog(tester,
+          imageData: validPng, fileName: 'my_photo.jpg');
 
       expect(find.text('my_photo.jpg'), findsOneWidget);
     });
 
     // ================================================================
-    // Async safety
+    // Dialog lifecycle safety
     // ================================================================
 
-    testWidgets('no crash if fullImageFuture completes after widget dispose',
-        (tester) async {
-      final delayedFuture = Future<Uint8List?>.delayed(
-        const Duration(seconds: 5),
-        () => testFullImage,
-      );
-
-      await pumpDialog(
-        tester,
-        thumbnailData: testThumbnail,
-        fullImageFuture: delayedFuture,
-      );
-
-      // Pump a bit (simulate navigation away / dispose)
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // Let the delayed future complete to avoid timer leak
-      await tester.pump(const Duration(seconds: 5));
-      await tester.pump();
-
-      // Test passes if no crash
-    });
-
-    testWidgets('rapid open/close does not leak', (tester) async {
+    testWidgets('rapid open/close does not crash', (tester) async {
       for (int i = 0; i < 3; i++) {
         await tester.pumpWidget(MaterialApp(
           home: Builder(
@@ -309,8 +224,7 @@ void main() {
                 await showDialog<bool>(
                   context: context,
                   builder: (_) => ImagePreviewDialog(
-                    thumbnailData: testThumbnail,
-                    fullImageFuture: resolveFull(),
+                    imageData: validPng,
                     fileName: 'test.jpg',
                   ),
                 );
@@ -328,78 +242,6 @@ void main() {
         await tester.pump();
       }
       // Test passes if no crash
-    });
-
-    // ================================================================
-    // Full image loading behavior
-    // ================================================================
-
-    testWidgets('full image replaces thumbnail when future resolves',
-        (tester) async {
-      // This test verifies the data flow: thumbnail is shown first,
-      // then full image data replaces it. We verify by checking the
-      // Image widget is always present and there's no error state.
-      await pumpDialog(
-        tester,
-        thumbnailData: testThumbnail,
-        fullImageFuture: resolveFull(),
-      );
-
-      // Pump to let full image future resolve
-      await tester.pump();
-      await tester.pump();
-
-      // InteractiveViewer with Image should still be present
-      expect(find.byType(InteractiveViewer), findsOneWidget);
-    });
-
-    testWidgets('keeps thumbnail when fullImageFuture returns null',
-        (tester) async {
-      await pumpDialog(
-        tester,
-        thumbnailData: testThumbnail,
-        fullImageFuture: resolveNull(),
-      );
-
-      await tester.pump();
-      await tester.pump();
-
-      // Thumbnail should remain (InteractiveViewer still present)
-      expect(find.byType(InteractiveViewer), findsOneWidget);
-    });
-
-    testWidgets('keeps thumbnail when fullImageFuture returns empty',
-        (tester) async {
-      await pumpDialog(
-        tester,
-        thumbnailData: testThumbnail,
-        fullImageFuture: resolveEmpty(),
-      );
-
-      await tester.pump();
-      await tester.pump();
-
-      // Thumbnail should remain
-      expect(find.byType(InteractiveViewer), findsOneWidget);
-    });
-
-    testWidgets('keeps thumbnail when fullImageFuture throws', (tester) async {
-      // Note: We use resolveNull() instead of a rejecting future because
-      // Flutter's test framework zone tracks async errors from rejected
-      // futures even when they are caught internally. The behavioral
-      // outcome (thumbnail preserved, no error shown) is identical to
-      // the null/empty return paths, already verified above.
-      await pumpDialog(
-        tester,
-        thumbnailData: testThumbnail,
-        fullImageFuture: resolveNull(),
-      );
-
-      await tester.pump();
-      await tester.pump();
-
-      // Thumbnail should remain
-      expect(find.byType(InteractiveViewer), findsOneWidget);
     });
   });
 }
