@@ -14,6 +14,40 @@ void main() {
     AppStorage.resetCache();
   });
 
+  group('DataMigrationService - accessible backup path', () {
+    test('getExternalBackupRootPath returns non-null on all platforms', () async {
+      final path = await DataMigrationService.getExternalBackupRootPath();
+      expect(path, isNotNull);
+      expect(path.isNotEmpty, isTrue);
+    });
+
+    test('backup root is outside app data directory', () async {
+      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
+      final appDir = await AppStorage.directory;
+
+      // Verify they are NOT the same path
+      expect(backupRoot, isNot(equals(appDir)));
+      // Verify backup root is a non-empty path
+      expect(backupRoot.isNotEmpty, isTrue);
+    });
+
+    test('backup root contains backup directory name', () async {
+      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
+      // Should contain either StroomBackups (production) or stroom_backup_test (test env)
+      expect(
+        backupRoot.contains('StroomBackups') || backupRoot.contains('stroom_backup_test'),
+        isTrue,
+        reason: 'Backup root should reference backup directory name',
+      );
+    });
+
+    test('getExternalBackupRootPath returns non-empty path', () async {
+      final path = await DataMigrationService.getExternalBackupRootPath();
+      expect(path, isNotNull);
+      expect(path.isNotEmpty, isTrue);
+    });
+  });
+
   group('DataMigrationService - format version', () {
     test('returns current format version constant', () {
       expect(DataMigrationService.currentFormatVersion, equals(2));
@@ -104,16 +138,6 @@ void main() {
         'test_key': 'test_value',
       });
       AppStorage.resetCache();
-    });
-
-    test('backup root is outside app data directory', () async {
-      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
-      final appDir = await AppStorage.directory;
-
-      // Verify they are NOT the same path
-      expect(backupRoot, isNot(equals(appDir)));
-      // Verify backup root is a non-empty path
-      expect(backupRoot.isNotEmpty, isTrue);
     });
 
     test('createBackup creates a backup directory with manifest in external location',
@@ -347,15 +371,6 @@ void main() {
 
       final recovered = await DataMigrationService.recoverConversationsFromBackup();
       expect(recovered, isFalse);
-    });
-  });
-
-  group('DataMigrationService - Web platform support', () {
-    test('getExternalBackupRootPath returns non-null on web (simulated)', () async {
-      // Even in the simulated environment, should return a path
-      final path = await DataMigrationService.getExternalBackupRootPath();
-      expect(path, isNotNull);
-      expect(path.isNotEmpty, isTrue);
     });
   });
 }
