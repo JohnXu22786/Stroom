@@ -48,7 +48,6 @@ class StartupCheckReport {
   final bool dataFormatsValidated;
   final bool dataIntegrityChecked;
   final bool migrationPerformed;
-  final bool crashDataRecovered;
   final List<StartupIssue> issues;
 
   const StartupCheckReport({
@@ -56,7 +55,6 @@ class StartupCheckReport {
     required this.dataFormatsValidated,
     required this.dataIntegrityChecked,
     required this.migrationPerformed,
-    this.crashDataRecovered = false,
     this.issues = const [],
   });
 
@@ -74,7 +72,6 @@ class StartupCheckReport {
 // ====================================================================
 //
 // 在应用启动时执行以下检查（按顺序）：
-// 0. 崩溃恢复 — 检查并修复因中断导致的数据损坏
 // 1. 数据格式版本检查 — 检查存储数据版本，必要时迁移备份
 // 2. 数据格式验证 — 验证关键数据的 JSON 结构是否完整
 // 3. 数据完整性检查 — 检查数据一致性（例如引用完整性）
@@ -84,37 +81,6 @@ class StartupCheckReport {
 
 class StartupCheckService {
   StartupCheckService._();
-
-  // ================================================================
-  // 0. 崩溃恢复
-  // ================================================================
-
-  /// 恢复因中断（force-close、crash）导致的数据损坏。
-  ///
-  /// 执行以下检查：
-  /// - conversations_bak 恢复（API 中断保护）
-  ///
-  /// 注意：migration_in_progress 标记由 DataMigrationService.checkAndMigrate()
-  /// 内部处理（恢复备份 + 重新迁移），此处不操作该标记以避免竞争。
-  ///
-  /// 返回 true 如果执行了恢复操作。
-  static Future<bool> recoverCrashData() async {
-    bool recovered = false;
-
-    try {
-      // 双格式恢复：检查 conversations 损坏
-      final convRecovered =
-          await DataMigrationService.recoverConversationsFromBackup();
-      if (convRecovered) {
-        debugPrint('[StartupCheckService] Recovered conversations from backup');
-        recovered = true;
-      }
-    } catch (e) {
-      debugPrint('[StartupCheckService] Failed to recover conversations: $e');
-    }
-
-    return recovered;
-  }
 
   // ================================================================
   // 1. 数据格式版本检查与迁移

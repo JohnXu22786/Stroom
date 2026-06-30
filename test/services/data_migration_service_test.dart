@@ -34,7 +34,7 @@ void main() {
 
     test('backup root contains backup directory name', () async {
       final backupRoot = await DataMigrationService.getExternalBackupRootPath();
-      // Should contain either StroomBackups (production) or stroom_backup_test (test env)
+      // Should contain either StroomBackups or stroom_backup_test
       expect(
         backupRoot.contains('StroomBackups') ||
             backupRoot.contains('stroom_backup_test'),
@@ -105,6 +105,27 @@ void main() {
       // Second call - should not need migration
       final result2 = await DataMigrationService.checkAndMigrate();
       expect(result2.needsMigration, isFalse);
+    });
+
+    test('does NOT run conversation recovery on every startup', () async {
+      // Set up: version matches, no migration needed
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('data_format_version', 2);
+
+      // Even if conversations_bak exists from old sessions,
+      // checkAndMigrate should NOT touch it (no recovery on startup)
+      await prefs.setString(
+          'conversations_bak',
+          jsonEncode([
+            {'id': 'old', 'messages': []},
+          ]));
+
+      // This should only check version and return false
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isFalse);
+
+      // conversations_bak should still exist (not touched by migration code)
+      expect(prefs.getString('conversations_bak'), isNotNull);
     });
 
     test('backup directory is created in external location during migration',
@@ -182,6 +203,49 @@ void main() {
     });
   });
 
+  group('DataMigrationService - migrateDataFormatIfNeeded', () {
+    test('returns needsMigration=false when version matches current', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('data_format_version', 2);
+
+      final result = await DataMigrationService.migrateDataFormatIfNeeded();
+      expect(result.needsMigration, isFalse);
+    });
+
+    test('returns needsMigration=false when version is newer', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('data_format_version', 999);
+
+      final result = await DataMigrationService.migrateDataFormatIfNeeded();
+      expect(result.needsMigration, isFalse);
+    });
+
+    test('performs migration when version is stale', () async {
+      // No version set (defaults to 0)
+      final result = await DataMigrationService.migrateDataFormatIfNeeded();
+      expect(result.needsMigration, isTrue);
+
+      // Version should be updated
+      final storedVersion = await DataMigrationService.getStoredFormatVersion();
+      expect(storedVersion, equals(2));
+    });
+
+    test('does NOT create external backup during migration', () async {
+      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
+      final rootDir = Directory(backupRoot);
+
+      // Clean any existing backup root
+      if (await rootDir.exists()) {
+        await rootDir.delete(recursive: true);
+      }
+
+      await DataMigrationService.migrateDataFormatIfNeeded();
+
+      // No backup directory should be created (unlike checkAndMigrate)
+      expect(await rootDir.exists(), isFalse);
+    });
+  });
+
   group('DataMigrationService - cleanup', () {
     test('cleanOldBackups handles empty backup directory', () async {
       final backupRoot = await DataMigrationService.getExternalBackupRootPath();
@@ -232,166 +296,6 @@ void main() {
           await rootDir.delete(recursive: true);
         }
       }
-    });
-  });
-
-  group('DataMigrationService - crash recovery', () {
-    test('sets and clears migration_in_progress flag during migration',
-        () async {
-      // Run migration
-      final result = await DataMigrationService.checkAndMigrate();
-      expect(result.needsMigration, isTrue);
-
-      // After migration, flag should be cleared
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getBool('migration_in_progress'), isNot(isTrue));
-    });
-
-    test('detects stale migration_in_progress flag on startup', () async {
-      // Simulate a crash mid-migration by setting the flag manually
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('migration_in_progress', true);
-      await prefs.setInt('data_format_version', 0);
-
-      // Run migration - should detect stale flag and recover
-      final result = await DataMigrationService.checkAndMigrate();
-      expect(result.needsMigration, isTrue);
-
-      // After successful migration, flag should be cleared
-      final prefsAfter = await SharedPreferences.getInstance();
-      expect(prefsAfter.getBool('migration_in_progress'), isNot(isTrue));
-      expect(prefsAfter.getInt('data_format_version'),
-          equals(DataMigrationService.currentFormatVersion));
-    });
-
-    test('migration_in_progress flag is set before backup creation', () async {
-      // Clear any existing state
-      SharedPreferences.setMockInitialValues({});
-
-      // Directly test the backup creation with flag
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('data_format_version', 0);
-
-      // Check that backup creation works
-      final backupPath = await DataMigrationService.createBackup();
-      expect(backupPath, isNotNull);
-
-      // Cleanup
-      if (backupPath != null) {
-        await Directory(backupPath).delete(recursive: true);
-      }
-    });
-
-    test('migration is idempotent after crash recovery', () async {
-      // Run migration once
-      final result1 = await DataMigrationService.checkAndMigrate();
-      expect(result1.needsMigration, isTrue);
-
-      // Second call should not need migration
-      final result2 = await DataMigrationService.checkAndMigrate();
-      expect(result2.needsMigration, isFalse);
-    });
-  });
-
-  group('DataMigrationService - dual-format conversation recovery', () {
-    test('recovers from conversations_bak when conversations is corrupted',
-        () async {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('data_format_version', 1);
-
-      // Set up: corrupted conversations + valid bak
-      await prefs.setString('conversations', 'corrupted data not json');
-      await prefs.setString(
-          'conversations_bak',
-          jsonEncode([
-            {'id': 'conv1', 'messages': [], 'title': 'Recovered'},
-          ]));
-
-      final recovered =
-          await DataMigrationService.recoverConversationsFromBackup();
-      expect(recovered, isTrue);
-
-      // After recovery, conversations should have valid data
-      final json = prefs.getString('conversations');
-      expect(json, isNotNull);
-      final list = jsonDecode(json!) as List;
-      expect(list.length, equals(1));
-      expect(list[0]['id'], equals('conv1'));
-
-      // conversations_bak should be cleaned up
-      expect(prefs.containsKey('conversations_bak'), isFalse);
-    });
-
-    test('does nothing when no conversations_bak exists', () async {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('data_format_version', 1);
-      await prefs.setString(
-          'conversations',
-          jsonEncode([
-            {'id': 'conv1', 'messages': []},
-          ]));
-
-      final recovered =
-          await DataMigrationService.recoverConversationsFromBackup();
-      expect(recovered, isFalse);
-
-      // Original data unchanged
-      final json = prefs.getString('conversations');
-      expect(json, isNotNull);
-      final list = jsonDecode(json!) as List;
-      expect(list.length, equals(1));
-    });
-
-    test('removes conversations_bak when conversations is valid', () async {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('data_format_version', 1);
-
-      // Both exist and conversations is valid
-      await prefs.setString(
-          'conversations',
-          jsonEncode([
-            {'id': 'conv1', 'messages': []},
-          ]));
-      await prefs.setString(
-          'conversations_bak',
-          jsonEncode([
-            {'id': 'conv2', 'messages': []},
-          ]));
-
-      final recovered =
-          await DataMigrationService.recoverConversationsFromBackup();
-      // When conversations is valid, we clean up the bak silently
-      expect(recovered, isTrue);
-      expect(prefs.containsKey('conversations_bak'), isFalse);
-    });
-
-    test('handles missing conversations gracefully', () async {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('data_format_version', 1);
-
-      // No conversations at all, but bak exists
-      await prefs.setString(
-          'conversations_bak',
-          jsonEncode([
-            {'id': 'conv1', 'messages': []},
-          ]));
-
-      final recovered =
-          await DataMigrationService.recoverConversationsFromBackup();
-      expect(recovered, isTrue);
-
-      final json = prefs.getString('conversations');
-      expect(json, isNotNull);
-      expect(prefs.containsKey('conversations_bak'), isFalse);
-    });
-
-    test('handles both missing gracefully', () async {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('data_format_version', 1);
-
-      final recovered =
-          await DataMigrationService.recoverConversationsFromBackup();
-      expect(recovered, isFalse);
     });
   });
 }
