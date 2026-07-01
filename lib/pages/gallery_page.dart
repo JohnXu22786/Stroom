@@ -20,6 +20,7 @@ import '../widgets/image_preview_dialog.dart';
 import 'files_page_shared.dart';
 import 'gallery_shared.dart';
 import 'image_editor_page.dart';
+import 'extended_image_editor_page.dart';
 
 class GalleryPage extends ConsumerStatefulWidget {
   const GalleryPage({super.key});
@@ -168,117 +169,182 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         }
 
         if (!mounted) return;
-        final result = await Navigator.push<ImageEditorResult>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ImageEditorPage(imageBytes: imageData),
+
+        // Show edit method choice dialog
+        final editMethod = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: Colors.grey[900],
+            title: const Text(
+              '选择编辑方式',
+              style: TextStyle(color: Colors.white),
+            ),
+            content: const Text(
+              '请选择编辑图片的方式：',
+              style: TextStyle(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, 'quick'),
+                child: const Text(
+                  '快速编辑',
+                  style: TextStyle(color: Colors.blue),
+                ),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, 'full'),
+                child: const Text('图片编辑器'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text(
+                  '取消',
+                  style: TextStyle(color: Colors.white54),
+                ),
+              ),
+            ],
           ),
         );
 
-        if (result == null || !mounted) return;
+        if (!mounted || editMethod == null) return;
 
-        if (result.isSaveAs) {
-          // Save as new copy — keep the original, create a new record
-          try {
-            final editedBytes = result.editedBytes;
-            final newHash = computeImageHash(editedBytes);
-            final newFileName = '$newHash.${file.format}';
-            await ImageManifest.writeFile(newFileName, editedBytes);
-
-            // Generate thumbnail
-            final thumbBytes = await generateThumbnail(editedBytes);
-            if (thumbBytes.isNotEmpty) {
-              await ImageManifest.writeFile('${newHash}_thumb.png', thumbBytes);
-            }
-
-            // Create new record
-            await ImageManifest.addRecord(
-              ImageRecord(
-                name: '${file.name}_编辑版',
-                hash: newHash,
-                format: file.format,
-                createdAt: DateTime.now(),
-                size: editedBytes.length,
-                folder: file.folder,
+        if (editMethod == 'quick') {
+          // Quick Edit — use ExtendedImage editor (crop/rotate/flip)
+          final editedBytes = await Navigator.push<Uint8List>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ExtendedImageEditorPage(
+                imageBytes: imageData,
+                fileName: '${file.name}.${file.format}',
               ),
-            );
+            ),
+          );
 
-            // Refresh
-            await ref.read(imageRecordsProvider.notifier).loadRecords();
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('图片已另存为新副本'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            }
-          } catch (e) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                    content: Text('另存失败: $e'), backgroundColor: Colors.red),
-              );
-            }
-          }
+          if (editedBytes == null || !mounted) return;
+          await _saveEditedImage(file, editedBytes, isSaveAs: false);
         } else {
-          // Overwrite — replace the original file
-          try {
-            final editedBytes = result.editedBytes;
+          // Full Editor — use ProImageEditor
+          final result = await Navigator.push<ImageEditorResult>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ImageEditorPage(imageBytes: imageData),
+            ),
+          );
 
-            // Compute new hash first
-            final newHash = computeImageHash(editedBytes);
-            final newFileName = '$newHash.${file.format}';
-
-            // Write new file and thumbnail BEFORE deleting the old one
-            await ImageManifest.writeFile(newFileName, editedBytes);
-            final thumbBytes = await generateThumbnail(editedBytes);
-            if (thumbBytes.isNotEmpty) {
-              await ImageManifest.writeFile('${newHash}_thumb.png', thumbBytes);
-            }
-
-            // Now safe to delete old files
-            await ImageManifest.deleteFile(file.storagePath);
-            await ImageManifest.deleteFile('${file.hash}_thumb.png');
-
-            // Since copyWith doesn't allow changing hash, update via manifest
-            // Delete old record and create new one
-            await ImageManifest.deleteRecord(file.id);
-            await ImageManifest.addRecord(
-              ImageRecord(
-                name: file.name,
-                hash: newHash,
-                format: file.format,
-                createdAt: file.createdAt,
-                size: editedBytes.length,
-                folder: file.folder,
-              ),
-            );
-
-            // Refresh
-            await ref.read(imageRecordsProvider.notifier).loadRecords();
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('图片已更新'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            }
-          } catch (e) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('保存编辑失败: $e'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            }
-          }
+          if (result == null || !mounted) return;
+          await _saveEditedImage(file, result.editedBytes,
+              isSaveAs: result.isSaveAs);
         }
       }
     } finally {
       _isPreviewing = false;
+    }
+  }
+
+  /// Save edited image bytes back to the manifest.
+  ///
+  /// When [isSaveAs] is `true`, the original is kept and a new record is
+  /// created with "_编辑版" suffix. When `false`, the original is replaced.
+  Future<void> _saveEditedImage(
+    ImageRecord file,
+    Uint8List editedBytes, {
+    required bool isSaveAs,
+  }) async {
+    if (isSaveAs) {
+      // Save as new copy — keep the original, create a new record
+      try {
+        final newHash = computeImageHash(editedBytes);
+        final newFileName = '$newHash.${file.format}';
+        await ImageManifest.writeFile(newFileName, editedBytes);
+
+        // Generate thumbnail
+        final thumbBytes = await generateThumbnail(editedBytes);
+        if (thumbBytes.isNotEmpty) {
+          await ImageManifest.writeFile('${newHash}_thumb.png', thumbBytes);
+        }
+
+        // Create new record
+        await ImageManifest.addRecord(
+          ImageRecord(
+            name: '${file.name}_编辑版',
+            hash: newHash,
+            format: file.format,
+            createdAt: DateTime.now(),
+            size: editedBytes.length,
+            folder: file.folder,
+          ),
+        );
+
+        // Refresh
+        await ref.read(imageRecordsProvider.notifier).loadRecords();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('图片已另存为新副本'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('另存失败: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    } else {
+      // Overwrite — replace the original file
+      try {
+        // Compute new hash first
+        final newHash = computeImageHash(editedBytes);
+        final newFileName = '$newHash.${file.format}';
+
+        // Write new file and thumbnail BEFORE deleting the old one
+        await ImageManifest.writeFile(newFileName, editedBytes);
+        final thumbBytes = await generateThumbnail(editedBytes);
+        if (thumbBytes.isNotEmpty) {
+          await ImageManifest.writeFile('${newHash}_thumb.png', thumbBytes);
+        }
+
+        // Now safe to delete old files
+        await ImageManifest.deleteFile(file.storagePath);
+        await ImageManifest.deleteFile('${file.hash}_thumb.png');
+
+        // Since copyWith doesn't allow changing hash, update via manifest
+        // Delete old record and create new one
+        await ImageManifest.deleteRecord(file.id);
+        await ImageManifest.addRecord(
+          ImageRecord(
+            name: file.name,
+            hash: newHash,
+            format: file.format,
+            createdAt: file.createdAt,
+            size: editedBytes.length,
+            folder: file.folder,
+          ),
+        );
+
+        // Refresh
+        await ref.read(imageRecordsProvider.notifier).loadRecords();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('图片已更新'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('保存编辑失败: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
     }
   }
   // ====================================================================
