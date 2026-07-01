@@ -37,19 +37,46 @@ class StartupApp extends StatefulWidget {
   State<StartupApp> createState() => _StartupAppState();
 }
 
-class _StartupAppState extends State<StartupApp> {
+class _StartupAppState extends State<StartupApp>
+    with SingleTickerProviderStateMixin {
   bool _checkingComplete = false;
   bool _isWorking = true;
   String _statusMessage = '';
   String? _progressDetail;
   bool _migrationPerformed = false;
 
+  /// Fade-out animation controller and opacity for smooth transition.
+  late final AnimationController _fadeController;
+  late final Animation<double> _fadeAnimation;
+  bool _isFadingOut = false;
+
   static const int _minimumDisplayMs = 1000;
 
   @override
   void initState() {
     super.initState();
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _fadeAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
+      CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
+    );
+    _fadeController.addStatusListener((status) {
+      if (status == AnimationStatus.completed && mounted) {
+        setState(() {
+          _checkingComplete = true;
+          _isFadingOut = false;
+        });
+      }
+    });
     _runStartupSequence();
+  }
+
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    super.dispose();
   }
 
   /// Runs all startup checks, ensuring a minimum 1-second display.
@@ -104,9 +131,11 @@ class _StartupAppState extends State<StartupApp> {
       if (didMigration) {
         await _showRestartDialog();
       } else {
+        // Start fade-out animation before transitioning to main app
         setState(() {
-          _checkingComplete = true;
+          _isFadingOut = true;
         });
+        _fadeController.forward();
       }
     } catch (e) {
       debugPrint('[StartupApp] Startup sequence failed: $e');
@@ -117,9 +146,11 @@ class _StartupAppState extends State<StartupApp> {
       });
       await Future.delayed(const Duration(milliseconds: 1500));
       if (!mounted) return;
+      // Fade out before showing main app even on error
       setState(() {
-        _checkingComplete = true;
+        _isFadingOut = true;
       });
+      _fadeController.forward();
     }
   }
 
@@ -189,26 +220,35 @@ class _StartupAppState extends State<StartupApp> {
 
   @override
   Widget build(BuildContext context) {
-    // When startup checks are complete and no migration was needed,
+    // When startup checks are complete and fade-out is done,
     // show the main application
     if (_checkingComplete) {
       // Use a key to force rebuild the Application widget fresh
       return const Application(key: ValueKey('app_ready'));
     }
 
-    // Show the startup page
-    return MaterialApp(
-      title: 'Stroom',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-      ),
-      home: StartupPage(
-        isWorking: _isWorking,
-        statusMessage: _statusMessage,
-        progressDetail: _progressDetail,
-        migrationPerformed: _migrationPerformed,
+    // Wrap the startup page with fade-out animation
+    return AnimatedBuilder(
+      animation: _fadeAnimation,
+      builder: (context, child) {
+        return Opacity(
+          opacity: _isFadingOut ? _fadeAnimation.value : 1.0,
+          child: child,
+        );
+      },
+      child: MaterialApp(
+        title: 'Stroom',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          useMaterial3: true,
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        ),
+        home: StartupPage(
+          isWorking: _isWorking,
+          statusMessage: _statusMessage,
+          progressDetail: _progressDetail,
+          migrationPerformed: _migrationPerformed,
+        ),
       ),
     );
   }

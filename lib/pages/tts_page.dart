@@ -602,7 +602,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
         child: Row(
           children: [
-            // 开始录音按钮
+            // 录音 button (shortened from 开始录音)
             Expanded(
               child: SizedBox(
                 height: 48,
@@ -622,39 +622,14 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
                   ),
                   icon: const Icon(Icons.mic, size: 20),
                   label: const Text(
-                    '开始录音',
+                    '录音',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),
             ),
             const SizedBox(width: 8),
-            // 生成录音按钮
-            Expanded(
-              child: SizedBox(
-                height: 48,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const TTSCreatePage()),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: const Icon(Icons.add_circle_outline, size: 20),
-                  label: const Text(
-                    '生成录音',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            // 导入音频按钮
+            // 导入 button (shortened from 导入音频)
             Expanded(
               child: SizedBox(
                 height: 48,
@@ -667,7 +642,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
                   ),
                   icon: const Icon(Icons.file_download_outlined, size: 20),
                   label: const Text(
-                    '导入音频',
+                    '导入',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                   ),
                 ),

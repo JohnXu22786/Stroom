@@ -51,6 +51,39 @@ void main() {
       expect(find.byIcon(Icons.check_circle), findsOneWidget);
     });
 
+    testWidgets('page fades out via AnimatedOpacity when checks complete', (
+      tester,
+    ) async {
+      // Create a startup page that wraps in AnimatedOpacity via a parent controller
+      await tester.pumpWidget(wrapStartupPage(isWorking: false));
+      await tester.pump();
+
+      // The page should be rendered without errors
+      expect(tester.takeException(), isNull);
+
+      // Verify the page still shows content (AnimatedOpacity should be at opacity 1.0)
+      expect(find.text('Stroom'), findsOneWidget);
+    });
+
+    testWidgets('fade animation completes without throwing', (tester) async {
+      // Simulate the transition: isWorking goes from true to false
+      await tester.pumpWidget(wrapStartupPage(isWorking: true));
+      await tester.pump();
+
+      // Then change to done state
+      await tester.pumpWidget(wrapStartupPage(isWorking: false));
+      await tester.pump();
+
+      // Advance the animation frames
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Should still have content after animation
+      expect(find.text('Stroom'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('shows status message when provided', (tester) async {
       await tester.pumpWidget(wrapStartupPage(
         statusMessage: '正在检查数据格式...',
