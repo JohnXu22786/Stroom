@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:extended_image/extended_image.dart';
 
 import '../providers/provider_config.dart';
 import '../providers/background_task_provider.dart';
@@ -440,16 +441,24 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                                 child: Stack(
                                   fit: StackFit.expand,
                                   children: [
-                                    Image(
-                                      image: image.provider,
+                                    ExtendedImage.memory(
+                                      image.bytes,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => Container(
-                                        color: cs.surfaceContainerHigh,
-                                        child: const Icon(
-                                          Icons.broken_image,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
+                                      width: double.infinity,
+                                      height: double.infinity,
+                                      loadStateChanged: (state) {
+                                        if (state.extendedImageLoadState ==
+                                            LoadState.failed) {
+                                          return Container(
+                                            color: cs.surfaceContainerHigh,
+                                            child: const Icon(
+                                              Icons.broken_image,
+                                              color: Colors.grey,
+                                            ),
+                                          );
+                                        }
+                                        return null;
+                                      },
                                     ),
                                     if (_selectedImages.length > 1)
                                       Positioned(
@@ -525,13 +534,20 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: Image(
-            image: image.provider,
+          child: ExtendedImage.memory(
+            image.bytes,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
-              color: cs.surfaceContainerHigh,
-              child: const Icon(Icons.broken_image, color: Colors.grey),
-            ),
+            width: double.infinity,
+            height: double.infinity,
+            loadStateChanged: (state) {
+              if (state.extendedImageLoadState == LoadState.failed) {
+                return Container(
+                  color: cs.surfaceContainerHigh,
+                  child: const Icon(Icons.broken_image, color: Colors.grey),
+                );
+              }
+              return null;
+            },
           ),
         ),
       ),
@@ -607,17 +623,25 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     child: SizedBox(
                       width: 48,
                       height: 48,
-                      child: Image(
-                        image: image.provider,
+                      child: ExtendedImage.memory(
+                        image.bytes,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          color: cs.surfaceContainerHigh,
-                          child: const Icon(
-                            Icons.broken_image,
-                            color: Colors.grey,
-                            size: 20,
-                          ),
-                        ),
+                        width: double.infinity,
+                        height: double.infinity,
+                        loadStateChanged: (state) {
+                          if (state.extendedImageLoadState ==
+                              LoadState.failed) {
+                            return Container(
+                              color: cs.surfaceContainerHigh,
+                              child: const Icon(
+                                Icons.broken_image,
+                                color: Colors.grey,
+                                size: 20,
+                              ),
+                            );
+                          }
+                          return null;
+                        },
                       ),
                     ),
                   ),
@@ -907,7 +931,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         _selectedImages.add(
           SelectedImage(
             bytes: bytes,
-            provider: _createProvider(bytes),
             format: _detectFormat(file.path),
           ),
         );
@@ -938,7 +961,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         newImages.add(
           SelectedImage(
             bytes: bytes,
-            provider: _createProvider(bytes),
             format: _detectFormat(file.path),
           ),
         );
@@ -991,7 +1013,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         _selectedImages.add(
           SelectedImage(
             bytes: data,
-            provider: MemoryImage(data),
             format: format,
           ),
         );
@@ -1022,7 +1043,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         _selectedImages.add(
           SelectedImage(
             bytes: bytes,
-            provider: MemoryImage(bytes),
             format: record.format,
           ),
         );
@@ -1060,33 +1080,38 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         child: Stack(
           children: [
             Center(
-              child: InteractiveViewer(
-                minScale: 0.5,
-                maxScale: 4.0,
-                child: GestureDetector(
-                  onTap: () => Navigator.pop(ctx),
-                  child: Image(
-                    key: const Key('preview_tap_to_close'),
-                    image: image.provider,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.broken_image,
-                            size: 48,
-                            color: Colors.white54,
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            '无法加载图片',
-                            style: TextStyle(color: Colors.white54),
-                          ),
-                        ],
-                      ),
-                    ),
+              child: GestureDetector(
+                key: const Key('preview_tap_to_close'),
+                onTap: () => Navigator.pop(ctx),
+                child: ExtendedImage.memory(
+                  image.bytes,
+                  fit: BoxFit.contain,
+                  mode: ExtendedImageMode.gesture,
+                  initGestureConfigHandler: (_) => GestureConfig(
+                    minScale: 0.5,
+                    maxScale: 4.0,
+                    animationMinScale: 0.5,
+                    animationMaxScale: 4.0,
+                    initialScale: 1.0,
+                    cacheGesture: false,
                   ),
+                  loadStateChanged: (state) {
+                    if (state.extendedImageLoadState == LoadState.failed) {
+                      return const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.broken_image,
+                                size: 48, color: Colors.white54),
+                            SizedBox(height: 8),
+                            Text('无法加载图片',
+                                style: TextStyle(color: Colors.white54)),
+                          ],
+                        ),
+                      );
+                    }
+                    return null;
+                  },
                 ),
               ),
             ),
@@ -1393,10 +1418,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (lower.endsWith('.gif')) return 'gif';
     if (lower.endsWith('.webp')) return 'webp';
     return 'jpeg';
-  }
-
-  ImageProvider _createProvider(Uint8List bytes) {
-    return MemoryImage(bytes);
   }
 
   String _formatFileSize(int bytes) {

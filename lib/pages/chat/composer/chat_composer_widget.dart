@@ -16,7 +16,7 @@ import 'package:stroom/widgets/file_preview.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/widgets/chat_attachment_panel.dart';
 import 'package:stroom/widgets/image_preview_dialog.dart';
-import 'package:stroom/pages/image_editor_page.dart';
+import 'package:stroom/pages/extended_image_editor_page.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'chat_setting_panels.dart';
@@ -659,7 +659,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
 
   /// Called when a pending attachment chip is tapped.
   /// For image attachments: shows [ImagePreviewDialog] with edit button.
-  ///   If user taps edit, opens [ImageEditorPage]; on save, updates the
+  ///   If user taps edit, opens [ExtendedImageEditorPage]; on save, updates the
   ///   pending attachment with edited bytes.
   /// For non-image attachments: delegates to [widget.onPreviewAttachment].
   Future<void> _onTapPendingAttachment(int index) async {
@@ -687,22 +687,25 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
 
     if (shouldEdit != true || !mounted) return;
 
-    // User tapped edit — open the image editor
-    final result = await Navigator.push<ImageEditorResult>(
+    // User tapped edit — open the ExtendedImage quick editor
+    // (no save dialog needed for chat page attachments)
+    final editedBytes = await Navigator.push<Uint8List>(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            ImageEditorPage(imageBytes: imageBytes, fromCamera: false),
+        builder: (_) => ExtendedImageEditorPage(
+          imageBytes: imageBytes,
+          fileName: att.fileName,
+        ),
       ),
     );
 
-    if (result == null || !mounted) return;
+    if (editedBytes == null || !mounted) return;
     if (index >= _pendingAttachments.length) return;
     // Verify the attachment at this index is still the same one we tapped
     if (_pendingAttachments[index].id != att.id) return;
 
     // Editor returned edited bytes — update the pending attachment
-    await _updatePendingAttachmentAfterEdit(index, result.editedBytes);
+    await _updatePendingAttachmentAfterEdit(index, editedBytes);
   }
 
   /// Updates the pending attachment at [index] with [editedBytes].

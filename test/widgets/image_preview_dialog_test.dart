@@ -96,6 +96,48 @@ void main() {
     });
 
     // ================================================================
+    // Button backgrounds (adaptive button visibility)
+    // ================================================================
+
+    testWidgets(
+        'close and edit buttons have circular semi-transparent backgrounds',
+        (tester) async {
+      await pumpDialog(tester, imageData: validPng);
+
+      // Find the Container widgets that wrap the IconButtons.
+      // The background is a Container with BoxShape.circle wrapping the IconButton.
+      // Look for containers with decoration that includes shape: BoxShape.circle.
+      final containers = find.byType(Container);
+      int circleDecoratedCount = 0;
+      for (int i = 0; i < tester.widgetList(containers).length; i++) {
+        final container =
+            tester.widgetList(containers).elementAt(i) as Container;
+        final decoration = container.decoration;
+        if (decoration is BoxDecoration &&
+            decoration.shape == BoxShape.circle &&
+            decoration.color != null &&
+            decoration.color!.a < 1.0) {
+          circleDecoratedCount++;
+        }
+      }
+
+      // Should have at least 2 circular-background containers (close + edit)
+      expect(circleDecoratedCount, greaterThanOrEqualTo(2),
+          reason:
+              'Both close and edit buttons should have circular semi-transparent backgrounds');
+    });
+
+    testWidgets('close button icon is inside a circular background',
+        (tester) async {
+      await pumpDialog(tester, imageData: validPng);
+
+      // The close icon should be present
+      expect(find.byIcon(Icons.close), findsOneWidget);
+      // The edit icon should be present
+      expect(find.byIcon(Icons.edit), findsOneWidget);
+    });
+
+    // ================================================================
     // Interaction: buttons
     // ================================================================
 

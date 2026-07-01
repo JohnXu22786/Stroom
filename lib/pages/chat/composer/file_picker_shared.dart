@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:extended_image/extended_image.dart';
 import 'package:stroom/utils/file_record.dart';
 
 // ====================================================================
@@ -75,12 +76,17 @@ class PreviewChip extends StatelessWidget {
             ),
             clipBehavior: Clip.antiAlias,
             child: isImage
-                ? Image.memory(
+                ? ExtendedImage.memory(
                     bytes,
                     fit: BoxFit.cover,
                     width: double.infinity,
                     height: double.infinity,
-                    errorBuilder: (_, __, ___) => _buildFallback(cs),
+                    loadStateChanged: (state) {
+                      if (state.extendedImageLoadState == LoadState.failed) {
+                        return _buildFallback(cs);
+                      }
+                      return null;
+                    },
                   )
                 : _buildFileChipContent(cs),
           ),

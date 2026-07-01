@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:extended_image/extended_image.dart';
 import '../models/chat_message.dart';
 
 class FilePreviewChip extends StatelessWidget {
@@ -68,13 +69,22 @@ class FilePreviewChip extends StatelessWidget {
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: isImage
-                      ? Image.memory(
+                      ? ExtendedImage.memory(
                           imageBytes!,
                           fit: BoxFit.cover,
                           width: 48,
                           height: 48,
-                          errorBuilder: (_, __, ___) =>
-                              Icon(_fileIcon(), size: 24),
+                          loadStateChanged: (state) {
+                            if (state.extendedImageLoadState ==
+                                LoadState.failed) {
+                              return const SizedBox(
+                                width: 48,
+                                height: 48,
+                                child: Icon(Icons.image_outlined, size: 24),
+                              );
+                            }
+                            return null;
+                          },
                         )
                       : Icon(_fileIcon(), size: 24, color: cs.onSurfaceVariant),
                 ),

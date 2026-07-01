@@ -62,12 +62,20 @@ void showImagePreviewDialog({
                     },
                   ),
           ),
+          // Close button (top right) — with semi-transparent circular
+          // background so it's visible regardless of image color.
           Positioned(
             top: MediaQuery.of(context).padding.top + 8,
             right: 8,
-            child: IconButton(
-              icon: const Icon(Icons.close, color: Colors.white, size: 28),
-              onPressed: () => Navigator.pop(ctx),
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Color(0x66000000),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.pop(ctx),
+              ),
             ),
           ),
           Positioned(

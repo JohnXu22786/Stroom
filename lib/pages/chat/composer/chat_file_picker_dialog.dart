@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:extended_image/extended_image.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/file_record.dart';
 import 'package:stroom/utils/folder_path_utils.dart';
@@ -589,12 +590,17 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
       builder: (context, snapshot) {
         final data = snapshot.data;
         if (data != null && data.isNotEmpty) {
-          return Image.memory(
+          return ExtendedImage.memory(
             data,
             fit: BoxFit.cover,
             width: double.infinity,
             height: double.infinity,
-            errorBuilder: (_, __, ___) => _defaultIcon(),
+            loadStateChanged: (state) {
+              if (state.extendedImageLoadState == LoadState.failed) {
+                return _defaultIcon();
+              }
+              return null;
+            },
           );
         }
         return _defaultIcon();

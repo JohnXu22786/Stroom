@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:extended_image/extended_image.dart';
 import 'package:stroom/utils/image_manifest.dart';
 
 // ====================================================================
@@ -56,17 +57,22 @@ class AlbumImageThumbnailState extends State<AlbumImageThumbnail> {
             ),
           );
         }
-        return Image.memory(
+        return ExtendedImage.memory(
           data,
           fit: BoxFit.cover,
           width: double.infinity,
           height: double.infinity,
-          errorBuilder: (_, __, ___) => Container(
-            color: Colors.grey[200],
-            child: const Center(
-              child: Icon(Icons.broken_image, color: Colors.grey, size: 24),
-            ),
-          ),
+          loadStateChanged: (state) {
+            if (state.extendedImageLoadState == LoadState.failed) {
+              return Container(
+                color: Colors.grey[200],
+                child: const Center(
+                  child: Icon(Icons.broken_image, color: Colors.grey, size: 24),
+                ),
+              );
+            }
+            return null;
+          },
         );
       },
     );
@@ -106,16 +112,21 @@ class AlbumPreviewChip extends StatelessWidget {
               border: Border.all(color: cs.outlineVariant, width: 0.5),
             ),
             clipBehavior: Clip.antiAlias,
-            child: Image.memory(
+            child: ExtendedImage.memory(
               bytes,
               fit: BoxFit.cover,
               width: double.infinity,
               height: double.infinity,
-              errorBuilder: (_, __, ___) => Icon(
-                Icons.image,
-                size: 24,
-                color: cs.onSurfaceVariant,
-              ),
+              loadStateChanged: (state) {
+                if (state.extendedImageLoadState == LoadState.failed) {
+                  return Icon(
+                    Icons.image,
+                    size: 24,
+                    color: cs.onSurfaceVariant,
+                  );
+                }
+                return null;
+              },
             ),
           ),
           // Remove button
