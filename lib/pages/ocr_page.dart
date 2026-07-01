@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -7,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../providers/provider_config.dart';
 import '../providers/background_task_provider.dart';
+import '../providers/text_provider.dart';
 import '../services/ocr_service.dart';
 import '../utils/data_sanitizer.dart';
 import '../utils/image_manifest.dart';
@@ -1144,12 +1146,29 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       return;
     }
 
+    // Capture notifier references BEFORE Navigator.pop — after the widget is
+    // disposed, ConsumerState.ref becomes null and ref.read() would throw.
+    final bgNotifier = ref.read(backgroundTasksProvider.notifier);
+    final textNotifier = ref.read(textRecordsProvider.notifier);
+
+    // Resolve model BEFORE pop — ref is still valid here
+    bool useCustomModel;
+    OcrConfig effectiveConfig;
+    final models = _getOcrModels(ref);
+    if (_selectedModelIndex < models.length) {
+      final selectedModel = models[_selectedModelIndex];
+      effectiveConfig = ocrConfig.copyWith(model: selectedModel.modelId);
+      useCustomModel = true;
+    } else {
+      effectiveConfig = ocrConfig;
+      useCustomModel = false;
+    }
+
     // Create a background task for tracking
     final timestamp = _currentTimestamp();
     final title = 'OCR_$timestamp';
-    final taskId = ref
-        .read(backgroundTasksProvider.notifier)
-        .addTask(type: BackgroundTaskType.ocr, title: title);
+    final taskId =
+        bgNotifier.addTask(type: BackgroundTaskType.ocr, title: title);
 
     // Pop back to home page immediately so user can see task progress
     if (mounted) {
@@ -1157,27 +1176,20 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     }
 
     try {
-      // Use the selected model from dropdown
-      final models = _getOcrModels(ref);
-      if (_selectedModelIndex < models.length) {
-        final selectedModel = models[_selectedModelIndex];
-        final updatedConfig = ocrConfig.copyWith(model: selectedModel.modelId);
-        await _performOcr(updatedConfig, taskId, title: title);
-      } else {
-        await _performOcr(ocrConfig, taskId, title: title);
-      }
+      await _performOcr(effectiveConfig, taskId, bgNotifier, textNotifier,
+          title: title);
     } catch (e) {
       // If an unexpected error occurs before _performOcr's own catch,
       // mark the task as failed so it doesn't stay in limbo.
-      ref
-          .read(backgroundTasksProvider.notifier)
-          .failTask(taskId, error: 'OCR启动失败: $e');
+      bgNotifier.failTask(taskId, error: 'OCR启动失败: $e');
     }
   }
 
   Future<void> _performOcr(
     OcrConfig ocrConfig,
-    String taskId, {
+    String taskId,
+    BackgroundTaskNotifier bgNotifier,
+    TextRecordsNotifier textNotifier, {
     String? title,
   }) async {
     OcrService? service;
@@ -1193,7 +1205,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       OcrResult result;
 
       // Set initial result to show task is processing
-      ref.read(backgroundTasksProvider.notifier).setResult(taskId, '正在识别...');
+      bgNotifier.setResult(taskId, '正在识别...');
 
       if (_selectedImages.length == 1) {
         final img = _selectedImages.first;
@@ -1208,16 +1220,17 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       }
 
       // Store the OCR result and save to file
-      ref.read(backgroundTasksProvider.notifier).setResult(taskId, result.text);
+      bgNotifier.setResult(taskId, result.text);
       await _saveOcrResult(result.text, title: title);
 
       // Mark task as completed (widget may be gone, but notifier is independent)
-      ref.read(backgroundTasksProvider.notifier).completeTask(taskId);
+      bgNotifier.completeTask(taskId);
+
+      // Refresh text records so the files page shows the new OCR result
+      unawaited(textNotifier.loadRecords());
     } catch (e) {
       // Mark task as failed (widget may be gone, but notifier is independent)
-      ref
-          .read(backgroundTasksProvider.notifier)
-          .failTask(taskId, error: 'OCR识别失败: $e');
+      bgNotifier.failTask(taskId, error: 'OCR识别失败: $e');
     }
   }
 

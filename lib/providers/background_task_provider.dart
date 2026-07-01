@@ -156,7 +156,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   void setResult(String taskId, String result) {
     state = state.map((t) {
       if (t.id != taskId) return t;
-      return t.copyWith(result: result);
+      // Preserve existing error — setResult should not clear it
+      return t.copyWith(result: result, error: t.error);
     }).toList();
     _persistTasks();
   }
