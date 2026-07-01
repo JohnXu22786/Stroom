@@ -101,6 +101,12 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   /// saves when the text hasn't actually changed.
   String _lastSavedDraft = '';
 
+  /// Tracks the previous send-button enabled state to avoid calling
+  /// setState on every keystroke. Only triggers a rebuild when the
+  /// send-button state actually transitions (empty ↔ non-empty).
+  /// `null` means uninitialized (first call), which always triggers a rebuild.
+  bool? _lastHadText;
+
   /// Whether the current platform is mobile (Android/iOS) where the soft
   /// keyboard should show a "newline" button. On desktop/web, the keyboard
   /// shows a "send" action and Enter is intercepted via [onKeyEvent].
@@ -130,12 +136,14 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
       _textController.text = widget.initialDraftText;
       _lastSavedDraft = widget.initialDraftText;
     }
+    _lastHadText = _textController.text.trim().isNotEmpty;
 
     // If entering edit mode, pre-fill with the message text
     // and pre-populate pending attachments with the original attachments.
     if (widget.editingMessageId != null && widget.editingMessageText != null) {
       _textController.text = widget.editingMessageText!;
       _lastSavedDraft = widget.editingMessageText!;
+      _lastHadText = widget.editingMessageText!.trim().isNotEmpty;
       _loadEditingAttachments(widget.editingMessageAttachments);
     }
 
@@ -174,6 +182,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         // Entering edit mode (or switching to a different message)
         _textController.text = widget.editingMessageText!;
         _lastSavedDraft = widget.editingMessageText!;
+        _lastHadText = widget.editingMessageText!.trim().isNotEmpty;
         // Auto-focus the text field so keyboard appears on mobile
         _focusNode.requestFocus();
         // Pre-populate pending attachments with the original message's
@@ -184,6 +193,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         // Edit mode cancelled - clear everything
         _textController.clear();
         _lastSavedDraft = '';
+        _lastHadText = false;
         _pendingAttachments.clear();
         _pendingImageBytes.clear();
       }
@@ -203,9 +213,11 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
       if (widget.initialDraftText.isNotEmpty) {
         _textController.text = widget.initialDraftText;
         _lastSavedDraft = widget.initialDraftText;
+        _lastHadText = widget.initialDraftText.trim().isNotEmpty;
       } else {
         _textController.clear();
         _lastSavedDraft = '';
+        _lastHadText = false;
       }
     }
   }
@@ -214,7 +226,16 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _draftTimer?.cancel();
-    _saveDraftImmediately(widget);
+    // Save draft before disposing. Use try-catch because ref may
+    // already be disposed during teardown, especially in tests.
+    try {
+      _saveDraftImmediately(widget);
+    } catch (e) {
+      // Non-critical: draft is best-effort during disposal.
+      // Log unexpected errors so they are visible during development
+      // without crashing the app.
+      debugPrint('[ChatComposer] failed to save draft on dispose: $e');
+    }
     _focusNode.onKeyEvent = null;
     _textController.dispose();
     _focusNode.dispose();
@@ -271,8 +292,16 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   }
 
   /// Debounced draft save triggered by text changes.
+  /// Only calls setState when send-button enabled state transitions
+  /// (empty ↔ non-empty) to avoid rebuilding the entire composer
+  /// widget tree on every keystroke.
   void _onTextChanged(String text) {
-    setState(() {});
+    // Only rebuild when send-button enabled state changes
+    final hasTextNow = text.trim().isNotEmpty;
+    if (_lastHadText == null || _lastHadText != hasTextNow) {
+      _lastHadText = hasTextNow;
+      setState(() {});
+    }
     // Skip draft saving in edit mode — the text is for editing a sent
     // message, not composing a new one.
     if (widget.editingMessageId != null) return;
