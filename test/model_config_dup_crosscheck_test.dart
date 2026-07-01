@@ -3,7 +3,9 @@ import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/models/tts_models.dart';
 
 void main() {
-  group('Cross-check duplicate names between reasoning params and custom params', () {
+  group(
+      'Cross-check duplicate names between reasoning params and custom params',
+      () {
     /// Simulates the save validation logic from llm_model_config_page.dart.
     /// Returns null if valid, or an error message string if invalid.
     String? validateNoDuplicateAcrossParams({
@@ -44,7 +46,8 @@ void main() {
       return null;
     }
 
-    test('reasoning param and custom param with same name should be rejected', () {
+    test('reasoning param and custom param with same name should be rejected',
+        () {
       final reasoningParams = [
         ReasoningParam(paramName: 'thinking.type', options: ['enabled']),
       ];
@@ -60,7 +63,9 @@ void main() {
       expect(result, contains('重名'));
     });
 
-    test('reasoning param and custom param with different names should be valid', () {
+    test(
+        'reasoning param and custom param with different names should be valid',
+        () {
       final reasoningParams = [
         ReasoningParam(paramName: 'reasoning_effort', options: ['low', 'high']),
       ];
@@ -75,7 +80,9 @@ void main() {
       expect(result, isNull);
     });
 
-    test('multiple reasoning params and custom params with unique names should be valid', () {
+    test(
+        'multiple reasoning params and custom params with unique names should be valid',
+        () {
       final reasoningParams = [
         ReasoningParam(paramName: 'reasoning_effort', options: ['low', 'high']),
         ReasoningParam(paramName: 'thinking.type', options: ['a', 'b']),
@@ -92,7 +99,9 @@ void main() {
       expect(result, isNull);
     });
 
-    test('duplicate within reasoning params still caught (existing behavior preserved)', () {
+    test(
+        'duplicate within reasoning params still caught (existing behavior preserved)',
+        () {
       final reasoningParams = [
         ReasoningParam(paramName: 'reasoning_effort', options: ['low', 'high']),
         ReasoningParam(paramName: 'reasoning_effort', options: ['1', '2']),
@@ -109,7 +118,9 @@ void main() {
       expect(result, contains('推理参数存在重名'));
     });
 
-    test('duplicate within custom params still caught (existing behavior preserved)', () {
+    test(
+        'duplicate within custom params still caught (existing behavior preserved)',
+        () {
       final reasoningParams = [
         ReasoningParam(paramName: 'reasoning_effort', options: ['low', 'high']),
       ];
