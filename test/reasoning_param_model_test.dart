@@ -301,7 +301,8 @@ void main() {
           expect(name, 'reasoning_effort');
         }
       }
-      expect(seen.length, 1); // Only 1 unique name because duplicate was rejected
+      expect(
+          seen.length, 1); // Only 1 unique name because duplicate was rejected
     });
 
     test('params with all different names should be valid', () {
@@ -312,12 +313,15 @@ void main() {
       final seen = <String>{};
       for (final param in params) {
         final name = param.paramName.trim();
-        expect(seen.add(name), isTrue, reason: '$name should not be a duplicate');
+        expect(seen.add(name), isTrue,
+            reason: '$name should not be a duplicate');
       }
       expect(seen.length, 2);
     });
 
-    test('toggle param and non-toggle param sharing same name should be rejected', () {
+    test(
+        'toggle param and non-toggle param sharing same name should be rejected',
+        () {
       final params = [
         ReasoningParam(
           paramName: 'thinking.type',

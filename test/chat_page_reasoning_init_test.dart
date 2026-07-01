@@ -10,9 +10,7 @@ void main() {
       addTearDown(container.dispose);
 
       final sections = container.read(streamingReasoningSectionsProvider);
-      expect(sections, isEmpty,
-          reason:
-              '推理章节应在无推理内容时初始化为空列表，而非[\"\"]');
+      expect(sections, isEmpty, reason: '推理章节应在无推理内容时初始化为空列表，而非[\"\"]');
     });
 
     test('streamingReasoningProvider starts as empty string', () {
@@ -74,8 +72,7 @@ void main() {
       );
     });
 
-    test(
-        'sectioned reasoning works with empty sections (no reasoning content)',
+    test('sectioned reasoning works with empty sections (no reasoning content)',
         () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
@@ -102,7 +99,8 @@ void main() {
           reason: '无推理内容时章节列表应为空，避免显示空按钮');
     });
 
-    test('streamingReasoningSectionsProvider can be updated with new content', () {
+    test('streamingReasoningSectionsProvider can be updated with new content',
+        () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 

@@ -885,7 +885,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // Also update when user cancelled (stopped) with no content, to
       // replace the streaming placeholder with a regular message so the
       // CircularProgressIndicator in textStreamMessageBuilder is removed.
-      if (fullReply.isNotEmpty || (_cancelledByUser && _streamingMsgId != null)) {
+      if (fullReply.isNotEmpty ||
+          (_cancelledByUser && _streamingMsgId != null)) {
         updateMessage(fullReply);
       }
       // After streaming completes, clear segments for messages without

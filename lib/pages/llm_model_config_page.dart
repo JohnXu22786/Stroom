@@ -553,10 +553,11 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           (p) => p?.isReasoningToggle ?? false,
           orElse: () => null,
         );
-    final hasNonToggleParams =
-        _reasoningParams.any((p) => !p.isReasoningToggle && p.paramName.trim().isNotEmpty);
+    final hasNonToggleParams = _reasoningParams
+        .any((p) => !p.isReasoningToggle && p.paramName.trim().isNotEmpty);
 
-    if (hasNonToggleParams && (toggleParam == null || !toggleParam.isFilledToggle)) {
+    if (hasNonToggleParams &&
+        (toggleParam == null || !toggleParam.isFilledToggle)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('推理开关必须先填写完整，其他推理参数才能生效'),
@@ -585,7 +586,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     final reasoningSeenNames = <String>{};
     for (int i = 0; i < _reasoningParams.length; i++) {
       final name = _reasoningParams[i].paramName.trim();
-      if (name.isEmpty) continue; // Empty names are caught by validationError above
+      if (name.isEmpty)
+        continue; // Empty names are caught by validationError above
       if (!reasoningSeenNames.add(name)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
