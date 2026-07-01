@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -8,6 +9,7 @@ import 'package:file_picker/file_picker.dart';
 import '../providers/provider_config.dart';
 import '../providers/tts_state_provider.dart';
 import '../providers/background_task_provider.dart';
+import '../providers/text_provider.dart';
 import '../services/asr_service.dart';
 import '../utils/data_sanitizer.dart';
 import '../utils/file_manifest.dart';
@@ -883,6 +885,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       return;
     }
 
+    // Capture notifier references BEFORE Navigator.pop — after the widget is
+    // disposed, ConsumerState.ref becomes null and ref.read() would throw.
+    final bgNotifier = ref.read(backgroundTasksProvider.notifier);
+    final textNotifier = ref.read(textRecordsProvider.notifier);
+
     // Use the selected model from dropdown
     final models = _getAsrModels(ref);
     AsrConfig effectiveConfig;
@@ -896,9 +903,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     // Create a single background task for all audios
     final timestamp = _currentTimestamp();
     final title = 'ASR_${_selectedAudios.length}files_$timestamp';
-    final taskId = ref
-        .read(backgroundTasksProvider.notifier)
-        .addTask(type: BackgroundTaskType.asr, title: title);
+    final taskId =
+        bgNotifier.addTask(type: BackgroundTaskType.asr, title: title);
 
     // Pop back to home page immediately so user can see task progress
     if (mounted) {
@@ -915,9 +921,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         final fileTitle = 'ASR_${audio.name}_$timestamp';
 
         // Set current status
-        ref
-            .read(backgroundTasksProvider.notifier)
-            .setResult(taskId, '正在转写: ${audio.name} (${i + 1}/$total)');
+        bgNotifier.setResult(taskId, '正在转写: ${audio.name} (${i + 1}/$total)');
 
         // Transcribe this audio file
         final result = await service.transcribe(
@@ -926,19 +930,18 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         );
 
         // Save the transcription result
-        ref
-            .read(backgroundTasksProvider.notifier)
-            .setResult(taskId, result.text);
+        bgNotifier.setResult(taskId, result.text);
         await _saveTranscriptionResult(result.text, title: fileTitle);
       }
 
       // Mark task as completed
-      ref.read(backgroundTasksProvider.notifier).completeTask(taskId);
+      bgNotifier.completeTask(taskId);
+
+      // Refresh text records so the files page shows the new ASR result
+      unawaited(textNotifier.loadRecords());
     } catch (e) {
       // Mark task as failed (widget may be gone, but notifier is independent)
-      ref
-          .read(backgroundTasksProvider.notifier)
-          .failTask(taskId, error: '音频转写失败: $e');
+      bgNotifier.failTask(taskId, error: '音频转写失败: $e');
     }
   }
 

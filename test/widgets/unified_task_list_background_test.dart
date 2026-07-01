@@ -453,5 +453,166 @@ void main() {
       expect(find.textContaining('进度'), findsNothing, reason: '展开后不应显示进度文本');
       expect(find.textContaining('%'), findsNothing, reason: '展开后不应显示百分比');
     });
+
+    // =========================================================================
+    // Status transition tests: simulate widget rebuild with new task status
+    // =========================================================================
+
+    testWidgets(
+        'task card shows "已完成" when running task transitions to completed',
+        (tester) async {
+      // Create a notifier and add a running task
+      final bgNotifier = BackgroundTaskNotifier();
+      final taskId = bgNotifier.addTask(
+        type: BackgroundTaskType.ocr,
+        title: '转换中的任务',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            catcatchTasksProvider.overrideWith((ref) {
+              final notifier = CatCatchNotifier(ref);
+              notifier.state = [];
+              return notifier;
+            }),
+            taskListProvider.overrideWith((ref) {
+              final notifier = TaskListNotifier(ref);
+              notifier.state = [];
+              return notifier;
+            }),
+            backgroundTasksProvider.overrideWith((ref) => bgNotifier),
+            taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
+          ],
+          child: const MaterialApp(
+            home: UnifiedTaskListPage(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Switch to "其他" tab
+      await tester.tap(find.text('其他'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Should show "进行中"
+      expect(find.text('转换中的任务'), findsOneWidget, reason: '运行中的任务应显示标题');
+      expect(find.text('进行中'), findsOneWidget, reason: '运行中的任务应显示"进行中"状态');
+
+      // Now complete the task (simulating background completion)
+      bgNotifier.completeTask(taskId);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Should now show "已完成"
+      expect(find.text('转换中的任务'), findsOneWidget, reason: '已完成的任务应显示标题');
+      expect(find.text('已完成'), findsOneWidget, reason: '已完成的任务应显示"已完成"状态');
+      expect(find.byIcon(Icons.check_circle), findsAtLeast(1),
+          reason: '已完成的任务应显示勾选图标');
+    });
+
+    testWidgets('task card shows "失败" when running task transitions to failed',
+        (tester) async {
+      final bgNotifier = BackgroundTaskNotifier();
+      final taskId = bgNotifier.addTask(
+        type: BackgroundTaskType.asr,
+        title: '转写任务',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            catcatchTasksProvider.overrideWith((ref) {
+              final notifier = CatCatchNotifier(ref);
+              notifier.state = [];
+              return notifier;
+            }),
+            taskListProvider.overrideWith((ref) {
+              final notifier = TaskListNotifier(ref);
+              notifier.state = [];
+              return notifier;
+            }),
+            backgroundTasksProvider.overrideWith((ref) => bgNotifier),
+            taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
+          ],
+          child: const MaterialApp(
+            home: UnifiedTaskListPage(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Switch to "其他" tab
+      await tester.tap(find.text('其他'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Should show "进行中"
+      expect(find.text('转写任务'), findsOneWidget);
+      expect(find.text('进行中'), findsOneWidget);
+
+      // Now fail the task
+      bgNotifier.failTask(taskId, error: '转写失败: API错误');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Should now show "失败"
+      expect(find.text('转写任务'), findsOneWidget);
+      expect(find.text('失败'), findsOneWidget);
+      expect(find.byIcon(Icons.error), findsAtLeast(1), reason: '失败的任务应显示错误图标');
+    });
+
+    testWidgets(
+        'completed task expanded view shows result text and completed time',
+        (tester) async {
+      await pumpPageWithBackground(tester, [
+        _createCompletedOcrTask(
+          id: 'done-result',
+          title: '有结果的任务',
+          result: '这是OCR识别出来的文字',
+        ),
+      ]);
+
+      // Switch to "其他" tab
+      await tester.tap(find.text('其他'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Tap to expand
+      await tester.tap(find.text('有结果的任务'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Result text should be visible
+      expect(find.text('这是OCR识别出来的文字'), findsOneWidget, reason: '展开后应显示识别结果文字');
+      // "识别结果" label should be visible
+      expect(find.text('识别结果'), findsOneWidget, reason: '展开后应显示"识别结果"标签');
+      // "完成时间" label should be visible for completed tasks
+      expect(find.textContaining('完成时间'), findsOneWidget,
+          reason: '展开后应显示"完成时间"信息');
+    });
+
+    testWidgets('running task expanded view shows processing status text',
+        (tester) async {
+      await pumpPageWithBackground(tester, [
+        _createRunningOcrTaskWithResult(
+          id: 'running-progress',
+          title: '处理中任务',
+          result: '正在识别...',
+        ),
+      ]);
+
+      // Switch to "其他" tab
+      await tester.tap(find.text('其他'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Running tasks start expanded; processing text should be visible
+      expect(find.text('正在识别...'), findsOneWidget, reason: '处理中的任务应显示中间状态文字');
+      expect(find.text('进行中'), findsOneWidget, reason: '处理中的任务应显示"进行中"状态');
+    });
   });
 }
