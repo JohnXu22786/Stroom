@@ -85,7 +85,8 @@ class _AudioTrackInfo {
   final int channels;
   final int bitsPerSample;
   final List<int> sampleSizes;
-  final List<int> chunkOffsets; // absolute file offset of each chunk (from stco/co64)
+  final List<int>
+      chunkOffsets; // absolute file offset of each chunk (from stco/co64)
   final List<int> sampleToChunkMap;
 
   _AudioTrackInfo({

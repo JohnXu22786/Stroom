@@ -223,7 +223,6 @@ void main() {
       // Data size
       expect(_readUint32LE(wav, 40), equals(pcmData.length));
     });
-
   });
 
   group('audio_utils - detectAudioFormat', () {
@@ -298,8 +297,10 @@ void main() {
       if (wavData.length < 44) return wavData;
       // RIFF/WAVE header is 44 bytes for standard PCM
       // Verify it has RIFF and WAVE markers
-      if (wavData[0] != 0x52 || wavData[1] != 0x49 ||
-          wavData[2] != 0x46 || wavData[3] != 0x46) {
+      if (wavData[0] != 0x52 ||
+          wavData[1] != 0x49 ||
+          wavData[2] != 0x46 ||
+          wavData[3] != 0x46) {
         return wavData; // not a WAV file
       }
       // data chunk starts at offset 36 (4-byte 'data' tag + 4-byte size)
@@ -366,7 +367,8 @@ void main() {
 
       // tkhd
       bytes.add(_buildBoxHeader(92, 'tkhd'));
-      bytes.add(_u32be(0x00000007)); // version=0, flags=0x000007 (track enabled)
+      bytes
+          .add(_u32be(0x00000007)); // version=0, flags=0x000007 (track enabled)
       bytes.add(_u32be(0)); // creation_time
       bytes.add(_u32be(0)); // modification_time
       bytes.add(_u32be(1)); // track_id = 1
@@ -378,9 +380,15 @@ void main() {
       bytes.add(_u16be(0x0100)); // volume (full)
       bytes.add(_u16be(0)); // reserved
       // matrix (identity)
-      bytes.add(_i32be(0x00010000)); bytes.add(_i32be(0)); bytes.add(_i32be(0)); // u,v,w
-      bytes.add(_i32be(0)); bytes.add(_i32be(0x00010000)); bytes.add(_i32be(0));
-      bytes.add(_i32be(0)); bytes.add(_i32be(0)); bytes.add(_i32be(0x40000000));
+      bytes.add(_i32be(0x00010000));
+      bytes.add(_i32be(0));
+      bytes.add(_i32be(0)); // u,v,w
+      bytes.add(_i32be(0));
+      bytes.add(_i32be(0x00010000));
+      bytes.add(_i32be(0));
+      bytes.add(_i32be(0));
+      bytes.add(_i32be(0));
+      bytes.add(_i32be(0x40000000));
       bytes.add(_i32be(0)); // width
       bytes.add(_i32be(0)); // height
 
@@ -444,7 +452,8 @@ void main() {
       bytes.add(_buildBoxHeader(20, 'stco'));
       bytes.add(_u32be(0)); // version=0, flags=0
       bytes.add(_u32be(1)); // entry_count = 1
-      bytes.add(_u32be(audioDataOffset)); // chunk_offset (absolute file position!)
+      bytes.add(
+          _u32be(audioDataOffset)); // chunk_offset (absolute file position!)
 
       // ----- mdat box -----
       bytes.add(_buildBoxHeader(8 + audioData.length, 'mdat'));
@@ -453,7 +462,8 @@ void main() {
       return bytes.toBytes();
     }
 
-    test('extractAudio from valid MP4 produces non-silent WAV output', () async {
+    test('extractAudio from valid MP4 produces non-silent WAV output',
+        () async {
       final mp4Bytes = _buildMinimalMp4WithPcmAudio(pcmFrames: 160);
 
       final result = await engine.extractAudio(
@@ -527,7 +537,8 @@ void main() {
               'data is corrupted or silent!');
     });
 
-    test('extractAudio with different frame counts produces proportional output',
+    test(
+        'extractAudio with different frame counts produces proportional output',
         () async {
       // Test with a small number of frames
       final mp4Small = _buildMinimalMp4WithPcmAudio(pcmFrames: 16);
@@ -545,7 +556,8 @@ void main() {
         videoFormat: 'mp4',
       );
       final pcmLarge = _extractPcmFromWav(resultLarge);
-      expect(pcmLarge.length, greaterThanOrEqualTo(640)); // 320 frames * 2 bytes
+      expect(
+          pcmLarge.length, greaterThanOrEqualTo(640)); // 320 frames * 2 bytes
 
       // Larger input should produce larger output
       expect(pcmLarge.length, greaterThan(pcmSmall.length));
