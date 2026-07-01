@@ -768,6 +768,16 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     final hasText = _textController.text.trim().isNotEmpty;
     final hasAttachments = _pendingAttachments.isNotEmpty;
     final cs = Theme.of(context).colorScheme;
+    final reasoningEnabled = ref.watch(reasoningEnabledProvider);
+    final reasoningEffort = ref.watch(reasoningEffortProvider);
+
+    // Determine reasoning chip label and color based on reasoning state.
+    // When reasoning is enabled: show the current effort/reasoning level.
+    // When reasoning is disabled: show gray "推理".
+    final reasoningLabel = (reasoningEnabled && reasoningEffort.isNotEmpty)
+        ? '推理 $reasoningEffort'
+        : '推理';
+    final reasoningColor = reasoningEnabled ? Colors.purple : Colors.grey;
 
     return Material(
       type: MaterialType.transparency,
@@ -832,8 +842,8 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                   const SizedBox(width: 8),
                   _SettingsChip(
                     icon: Icons.psychology_outlined,
-                    label: '推理',
-                    color: Colors.purple,
+                    label: reasoningLabel,
+                    color: reasoningColor,
                     onTap:
                         widget.hasReasoningParams ? _showReasoningPanel : null,
                     enabled: widget.hasReasoningParams,

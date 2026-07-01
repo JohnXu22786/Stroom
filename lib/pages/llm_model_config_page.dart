@@ -548,6 +548,25 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     }
 
     // 验证推理参数
+    // Check 1: If there are any reasoning params, the toggle must exist and be filled
+    final toggleParam = _reasoningParams.cast<ReasoningParam?>().firstWhere(
+          (p) => p?.isReasoningToggle ?? false,
+          orElse: () => null,
+        );
+    final hasNonToggleParams =
+        _reasoningParams.any((p) => !p.isReasoningToggle && p.paramName.trim().isNotEmpty);
+
+    if (hasNonToggleParams && (toggleParam == null || !toggleParam.isFilledToggle)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('推理开关必须先填写完整，其他推理参数才能生效'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    // Check 2: Validate each param individually
     for (int i = 0; i < _reasoningParams.length; i++) {
       final param = _reasoningParams[i];
       final error = param.validationError;
@@ -555,6 +574,22 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('推理参数错误：$error'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+    }
+
+    // Check 3: Duplicate name check across all reasoning params
+    final reasoningSeenNames = <String>{};
+    for (int i = 0; i < _reasoningParams.length; i++) {
+      final name = _reasoningParams[i].paramName.trim();
+      if (name.isEmpty) continue; // Empty names are caught by validationError above
+      if (!reasoningSeenNames.add(name)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('推理参数存在重名: $name'),
             behavior: SnackBarBehavior.floating,
           ),
         );
