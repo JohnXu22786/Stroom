@@ -350,5 +350,82 @@ void main() {
       // Should show error about empty option
       expect(find.text('推理参数错误：选项值不能为空'), findsOneWidget);
     });
+
+    testWidgets('save with duplicate reasoning param names shows error',
+        (tester) async {
+      // Create a model with duplicate param names
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+            options: [],
+          ),
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: false,
+            enabled: true,
+            options: ['a', 'b'],
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmModelConfigPage(model: model),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Click save - should fail due to duplicate param name
+      await tester.tap(find.text('保存'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Should show error about duplicate name
+      expect(find.textContaining('重名'), findsWidgets);
+    });
+
+    testWidgets('save with no toggle when additional params exist shows error',
+        (tester) async {
+      // Create a model with non-toggle params but no toggle
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isReasoningToggle: false,
+            enabled: true,
+            options: ['low', 'medium', 'high'],
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmModelConfigPage(model: model),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Click save - should fail because toggle is required when other params exist
+      await tester.tap(find.text('保存'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Should show error about missing or incomplete toggle
+      expect(find.textContaining('开关必须先填写完整'), findsWidgets);
+    });
   });
 }
