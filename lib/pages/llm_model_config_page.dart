@@ -257,8 +257,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
 
     final toggleName = toggle.paramName.trim();
     final isToggleDuplicate = toggleName.isNotEmpty &&
-        (_reasoningParams.indexWhere(
-                    (p) => p.paramName.trim() == toggleName) !=
+        (_reasoningParams.indexWhere((p) => p.paramName.trim() == toggleName) !=
                 _reasoningParams.indexOf(toggle) ||
             _customParams.any((p) => p.paramName.trim() == toggleName));
     return Card(
@@ -979,9 +978,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                 final param = _customParams[i];
                 final name = param.paramName.trim();
                 final isDuplicate = name.isNotEmpty &&
-                    (_customParams
-                            .indexWhere((p) => p.paramName.trim() == name) !=
-                        i ||
+                    (_customParams.indexWhere(
+                                (p) => p.paramName.trim() == name) !=
+                            i ||
                         _reasoningParams
                             .any((p) => p.paramName.trim() == name));
                 return Card(

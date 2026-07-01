@@ -68,8 +68,7 @@ void main() {
       expect(find.text('推理'), findsOneWidget);
     });
 
-    testWidgets('shows 推理 when reasoning disabled',
-        (tester) async {
+    testWidgets('shows 推理 when reasoning disabled', (tester) async {
       await setupSurface(tester);
       await tester.pumpWidget(createReasoningTestApp(
         reasoningEnabled: false,
@@ -83,7 +82,8 @@ void main() {
       expect(find.text('推理'), findsOneWidget);
     });
 
-    testWidgets('chip passes purple color when reasoning enabled', (tester) async {
+    testWidgets('chip passes purple color when reasoning enabled',
+        (tester) async {
       await setupSurface(tester);
       await tester.pumpWidget(createReasoningTestApp(
         reasoningEnabled: true,
@@ -104,7 +104,8 @@ void main() {
       expect(settingsChip.color, Colors.purple);
     });
 
-    testWidgets('chip passes grey color when reasoning disabled', (tester) async {
+    testWidgets('chip passes grey color when reasoning disabled',
+        (tester) async {
       await setupSurface(tester);
       await tester.pumpWidget(createReasoningTestApp(
         reasoningEnabled: false,
