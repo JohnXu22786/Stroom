@@ -54,8 +54,7 @@ void main() {
       expect(find.text('生成录音'), findsNothing);
     });
 
-    testWidgets('buttons are in correct order: 录音 → 导入',
-        (tester) async {
+    testWidgets('buttons are in correct order: 录音 → 导入', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
@@ -91,7 +90,8 @@ void main() {
       );
     });
 
-    testWidgets('buttons fit without overflow on narrow screen', (tester) async {
+    testWidgets('buttons fit without overflow on narrow screen',
+        (tester) async {
       // Set a narrow screen (small phone width)
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);

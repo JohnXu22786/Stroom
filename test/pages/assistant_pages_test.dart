@@ -225,7 +225,8 @@ void main() {
       expect(find.text('😊'), findsOneWidget);
     });
 
-    testWidgets('uses responsive grid with MaxCrossAxisExtent (like homepage)', (
+    testWidgets('uses responsive grid with MaxCrossAxisExtent (like homepage)',
+        (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -293,7 +294,8 @@ void main() {
 
       // Find the GridView
       final gridView = tester.widget<GridView>(find.byType(GridView));
-      final delegate = gridView.gridDelegate as SliverGridDelegateWithMaxCrossAxisExtent;
+      final delegate =
+          gridView.gridDelegate as SliverGridDelegateWithMaxCrossAxisExtent;
 
       // Aspect ratio should be 0.85 (taller than wide)
       expect(delegate.childAspectRatio, closeTo(0.85, 0.01));
