@@ -217,7 +217,8 @@ void main() {
 
     // ---------- Pre-release compareTo logic ----------
 
-    test('release > same base version with pre-release (1.1.0 > 1.1.0-alpha)', () {
+    test('release > same base version with pre-release (1.1.0 > 1.1.0-alpha)',
+        () {
       final release = Version.parse('1.1.0');
       final preRel = Version.parse('1.1.0-alpha');
       expect(release > preRel, true);
@@ -234,7 +235,9 @@ void main() {
       expect(release > preRel, true);
     });
 
-    test('different major.minor.patch overrides pre-release (1.2.0-alpha > 1.1.0)', () {
+    test(
+        'different major.minor.patch overrides pre-release (1.2.0-alpha > 1.1.0)',
+        () {
       final preRel = Version.parse('1.2.0-alpha');
       final release = Version.parse('1.1.0');
       expect(preRel > release, true);
@@ -248,7 +251,8 @@ void main() {
       expect(alpha < beta, true);
     });
 
-    test('same pre-release versions are equal (1.1.0-alpha == 1.1.0-alpha)', () {
+    test('same pre-release versions are equal (1.1.0-alpha == 1.1.0-alpha)',
+        () {
       final a = Version.parse('1.1.0-alpha');
       final b = Version.parse('1.1.0-alpha');
       expect(a == b, false); // different instances
@@ -639,8 +643,7 @@ void main() {
       expect(notifier.state.acceptPreRelease, true);
     });
 
-    test('loadAcceptPreRelease defaults to false when not persisted',
-        () async {
+    test('loadAcceptPreRelease defaults to false when not persisted', () async {
       SharedPreferences.setMockInitialValues({});
       final dio = _createMockDio(_githubRelease('v0.2.14'));
       final notifier = UpdateNotifier(dio: dio);
@@ -660,8 +663,7 @@ void main() {
       ]);
       final dio = _createMockDioForList(releases);
       final notifier = UpdateNotifier(dio: dio);
-      notifier.state =
-          notifier.state.copyWith(acceptPreRelease: true);
+      notifier.state = notifier.state.copyWith(acceptPreRelease: true);
 
       await notifier.checkForUpdate();
 
@@ -678,8 +680,7 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       final dio = _createMockDio(_githubRelease('v0.2.14'));
       final notifier = UpdateNotifier(dio: dio);
-      notifier.state =
-          notifier.state.copyWith(acceptPreRelease: false);
+      notifier.state = notifier.state.copyWith(acceptPreRelease: false);
 
       await notifier.checkForUpdate();
 
@@ -697,8 +698,7 @@ void main() {
       ]);
       final dio = _createMockDioForList(releases);
       final notifier = UpdateNotifier(dio: dio);
-      notifier.state =
-          notifier.state.copyWith(acceptPreRelease: true);
+      notifier.state = notifier.state.copyWith(acceptPreRelease: true);
 
       await notifier.checkForUpdate();
 
@@ -719,8 +719,7 @@ void main() {
       ]);
       final dio = _createMockDioForList(releases);
       final notifier = UpdateNotifier(dio: dio);
-      notifier.state =
-          notifier.state.copyWith(acceptPreRelease: true);
+      notifier.state = notifier.state.copyWith(acceptPreRelease: true);
 
       await notifier.checkForUpdate();
 
@@ -729,14 +728,11 @@ void main() {
       expect(notifier.state.latestVersion, '0.2.15-beta');
     });
 
-    test(
-        'acceptPreRelease survives error during pre-release check',
-        () async {
+    test('acceptPreRelease survives error during pre-release check', () async {
       SharedPreferences.setMockInitialValues({});
       final dio = _createFailingDio();
       final notifier = UpdateNotifier(dio: dio);
-      notifier.state =
-          notifier.state.copyWith(acceptPreRelease: true);
+      notifier.state = notifier.state.copyWith(acceptPreRelease: true);
 
       await notifier.checkForUpdate(silent: false);
 
@@ -745,14 +741,12 @@ void main() {
       expect(notifier.state.acceptPreRelease, true);
     });
 
-    test(
-        'acceptPreRelease survives silent error during pre-release check',
+    test('acceptPreRelease survives silent error during pre-release check',
         () async {
       SharedPreferences.setMockInitialValues({});
       final dio = _createFailingDio();
       final notifier = UpdateNotifier(dio: dio);
-      notifier.state =
-          notifier.state.copyWith(acceptPreRelease: true);
+      notifier.state = notifier.state.copyWith(acceptPreRelease: true);
 
       await notifier.checkForUpdate(silent: true);
 
