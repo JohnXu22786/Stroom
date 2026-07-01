@@ -774,8 +774,10 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     // Determine reasoning chip label and color based on reasoning state.
     // When reasoning is enabled: show the current effort/reasoning level.
     // When reasoning is disabled: show gray "推理".
+    // When reasoning is enabled, show just the effort value (e.g. "medium").
+    // If no effort param (empty string), show "推理".
     final reasoningLabel = (reasoningEnabled && reasoningEffort.isNotEmpty)
-        ? '推理 $reasoningEffort'
+        ? reasoningEffort
         : '推理';
     final reasoningColor = reasoningEnabled ? Colors.purple : Colors.grey;
 
