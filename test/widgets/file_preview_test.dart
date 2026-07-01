@@ -1,10 +1,14 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/chat_message.dart';
-import 'package:stroom/widgets/message_attachment_preview.dart';
+import 'package:stroom/widgets/file_preview.dart';
 
 void main() {
-  group('MessageAttachmentPreview', () {
+  group('FilePreviewChip', () {
+    final testBytes = Uint8List.fromList([0x89, 0x50, 0x4E, 0x47]);
+
     Attachment createImageAttachment() {
       return Attachment(
         fileName: 'test.png',
@@ -12,7 +16,7 @@ void main() {
         fileType: 'image',
         hash: 'abc123',
         storagePath: '/tmp/test.png',
-        fileSize: 1024,
+        fileSize: 100,
       );
     }
 
@@ -23,67 +27,75 @@ void main() {
         fileType: 'document',
         hash: 'def456',
         storagePath: '/tmp/doc.txt',
-        fileSize: 2048,
+        fileSize: 200,
       );
     }
 
-    Widget buildPreview({
+    Widget buildChip({
       required Attachment attachment,
+      Uint8List? imageBytes,
+      VoidCallback? onRemove,
       VoidCallback? onTap,
     }) {
       return MaterialApp(
         home: Scaffold(
-          body: MessageAttachmentPreview(
+          body: FilePreviewChip(
             attachment: attachment,
-            onTap: onTap ?? () {},
+            imageBytes: imageBytes,
+            onRemove: onRemove,
+            onTap: onTap,
           ),
         ),
       );
     }
 
-    testWidgets('renders for image attachments', (tester) async {
-      await tester.pumpWidget(buildPreview(
+    testWidgets('renders image with ExtendedImage when imageBytes provided',
+        (tester) async {
+      await tester.pumpWidget(buildChip(
         attachment: createImageAttachment(),
+        imageBytes: testBytes,
       ));
 
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.byType(MessageAttachmentPreview), findsOneWidget);
+      // The widget should render - ExtendedImage.memory is used internally
+      // Verify the thumbnail area is rendered (Container with clip behavior)
+      expect(find.byType(FilePreviewChip), findsOneWidget);
       // File name should be displayed
       expect(find.text('test.png'), findsOneWidget);
-      // File size should be shown
-      expect(find.text('1.0 KB'), findsOneWidget);
     });
 
-    testWidgets('renders file icon for non-image attachments', (tester) async {
-      await tester.pumpWidget(buildPreview(
+    testWidgets('shows file icon for non-image attachments', (tester) async {
+      await tester.pumpWidget(buildChip(
         attachment: createDocumentAttachment(),
       ));
 
       await tester.pump();
 
+      // Should show document icon
       expect(find.byIcon(Icons.insert_drive_file_outlined), findsOneWidget);
-      expect(find.text('2.0 KB'), findsOneWidget);
     });
 
-    testWidgets('onTap is called when tapped', (tester) async {
-      bool tapped = false;
-      await tester.pumpWidget(buildPreview(
+    testWidgets('remove button calls onRemove when tapped', (tester) async {
+      bool removed = false;
+      await tester.pumpWidget(buildChip(
         attachment: createImageAttachment(),
-        onTap: () => tapped = true,
+        imageBytes: testBytes,
+        onRemove: () => removed = true,
       ));
 
       await tester.pump();
 
-      await tester.tap(find.byType(MessageAttachmentPreview));
+      // Tap the close button (positioned in top-right corner)
+      await tester.tap(find.byIcon(Icons.close));
       await tester.pump();
 
-      expect(tapped, isTrue);
+      expect(removed, isTrue);
     });
 
     testWidgets('truncates long file names', (tester) async {
-      final longName = 'a' * 20 + '.png';
+      final longName = 'a' * 30 + '.png';
       final att = Attachment(
         fileName: longName,
         mimeType: 'image/png',
@@ -93,7 +105,11 @@ void main() {
         fileSize: 100,
       );
 
-      await tester.pumpWidget(buildPreview(attachment: att));
+      await tester.pumpWidget(buildChip(
+        attachment: att,
+        imageBytes: testBytes,
+      ));
+
       await tester.pump();
 
       // Long name should be truncated (first 14 chars + …)

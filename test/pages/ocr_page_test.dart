@@ -93,7 +93,6 @@ Uint8List _createTestPngBytes() {
 SelectedImage _createTestImage({int seed = 1}) {
   return SelectedImage(
     bytes: _createTestPngBytes(),
-    provider: MemoryImage(_createTestPngBytes()),
     format: 'png',
   );
 }

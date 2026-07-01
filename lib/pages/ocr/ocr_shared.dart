@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:extended_image/extended_image.dart';
 
 // ============================================================================
 // SelectedImage Model
@@ -9,12 +10,10 @@ import 'package:flutter/material.dart';
 /// Represents a single selected image for OCR processing.
 class SelectedImage {
   final Uint8List bytes;
-  final ImageProvider provider;
   final String format;
 
   SelectedImage({
     required this.bytes,
-    required this.provider,
     this.format = 'jpeg',
   });
 }
@@ -145,13 +144,21 @@ class ImageGridItem extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                Image(
-                  image: image.provider,
+                ExtendedImage.memory(
+                  image.bytes,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: cs.surfaceContainerHigh,
-                    child: const Icon(Icons.broken_image, color: Colors.grey),
-                  ),
+                  width: double.infinity,
+                  height: double.infinity,
+                  loadStateChanged: (state) {
+                    if (state.extendedImageLoadState == LoadState.failed) {
+                      return Container(
+                        color: cs.surfaceContainerHigh,
+                        child:
+                            const Icon(Icons.broken_image, color: Colors.grey),
+                      );
+                    }
+                    return null;
+                  },
                 ),
                 Positioned(
                   top: 2,
