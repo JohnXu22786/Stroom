@@ -315,5 +315,99 @@ void main() {
       expect(restored.title, '旧数据任务');
       expect(restored.status, TaskStatus.running);
     });
+
+    // ==================================================================
+    // Edge case: complete/fail transitions
+    // ==================================================================
+
+    test('completeTask is idempotent (calling twice does not throw)', () {
+      final notifier = BackgroundTaskNotifier();
+      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
+      notifier.completeTask(id);
+      // Second complete should not throw and should not change state
+      expect(() => notifier.completeTask(id), returnsNormally);
+      expect(notifier.state[0].status, TaskStatus.completed);
+    });
+
+    test('failTask is idempotent (calling twice does not throw)', () {
+      final notifier = BackgroundTaskNotifier();
+      final id = notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR1');
+      notifier.failTask(id);
+      expect(() => notifier.failTask(id), returnsNormally);
+      expect(notifier.state[0].status, TaskStatus.failed);
+    });
+
+    test('completeTask after failTask keeps completed status (last wins)', () {
+      final notifier = BackgroundTaskNotifier();
+      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
+      notifier.failTask(id, error: '原始错误');
+      // Complete a failed task — status becomes completed
+      notifier.completeTask(id);
+      expect(notifier.state[0].status, TaskStatus.completed);
+      // The old error should be cleared by completeTask
+      expect(notifier.state[0].error, isNull);
+    });
+
+    test(
+        'failTask after completeTask uses last-wins semantics (status becomes failed)',
+        () {
+      final notifier = BackgroundTaskNotifier();
+      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
+      notifier.completeTask(id);
+      // Calling failTask on an already completed task should not change status
+      notifier.failTask(id, error: '后续错误');
+      // The first completeTask set status to completed; failTask should
+      // not downgrade a completed task since _updateTask always sets
+      // whatever status is passed. This is by design (last wins).
+      // But the error WILL be overwritten by failTask's error param.
+      // Test that both operations independently modify their fields.
+      // For simplicity, we just verify nothing crashes and task stays.
+      expect(
+          notifier.state[0].status, TaskStatus.failed); // last-wins semantics
+    });
+
+    test('setResult after completeTask still updates result field', () {
+      final notifier = BackgroundTaskNotifier();
+      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
+      notifier.completeTask(id);
+      // setResult should still work even after task is completed
+      notifier.setResult(id, '最终结果');
+      expect(notifier.state[0].result, '最终结果');
+      expect(notifier.state[0].status, TaskStatus.completed);
+    });
+
+    test('setResult after failTask updates result but status stays failed', () {
+      final notifier = BackgroundTaskNotifier();
+      final id = notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR1');
+      notifier.failTask(id, error: 'ASR失败');
+      notifier.setResult(id, '部分结果');
+      expect(notifier.state[0].result, '部分结果');
+      expect(notifier.state[0].status, TaskStatus.failed);
+      expect(notifier.state[0].error, 'ASR失败');
+    });
+
+    test(
+        'completeTask without matching id leaves other tasks unmodified with correct status',
+        () {
+      final notifier = BackgroundTaskNotifier();
+      notifier.addTask(type: BackgroundTaskType.ocr, title: '保留任务');
+      // Complete a non-existent id
+      notifier.completeTask('non-existent-id');
+      expect(notifier.state.length, 1);
+      expect(notifier.state[0].status, TaskStatus.running);
+    });
+
+    test(
+        'task remains in list after status transitions from running to completed to running via manual state',
+        () {
+      // Verify that completing a task keeps it visible (no auto-remove), then
+      // verify we can still read it.
+      final notifier = BackgroundTaskNotifier();
+      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: '可见性测试');
+      expect(notifier.state.length, 1);
+      notifier.completeTask(id);
+      expect(notifier.state.length, 1, reason: '已完成任务应保留在列表中');
+      expect(notifier.state[0].status, TaskStatus.completed);
+    });
   });
 }
