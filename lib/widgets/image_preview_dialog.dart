@@ -31,23 +31,37 @@ class ImagePreviewDialog extends StatelessWidget {
       child: Stack(
         children: [
           Center(child: _buildContent(context)),
-          // Close button (top left)
+          // Close button (top left) — with semi-transparent circular
+          // background so it's visible regardless of image color.
           Positioned(
             top: MediaQuery.of(context).padding.top + 8,
             left: 8,
-            child: IconButton(
-              icon: const Icon(Icons.close, color: Colors.white, size: 28),
-              onPressed: () => Navigator.pop(context, false),
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Color(0x66000000),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.pop(context, false),
+              ),
             ),
           ),
-          // Edit button (top right)
+          // Edit button (top right) — with semi-transparent circular
+          // background so it's visible regardless of image color.
           Positioned(
             top: MediaQuery.of(context).padding.top + 8,
             right: 8,
-            child: IconButton(
-              icon: const Icon(Icons.edit, color: Colors.white, size: 28),
-              tooltip: '编辑图片',
-              onPressed: () => Navigator.pop(context, true),
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Color(0x66000000),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.edit, color: Colors.white, size: 28),
+                tooltip: '编辑图片',
+                onPressed: () => Navigator.pop(context, true),
+              ),
             ),
           ),
           // Bottom file-name

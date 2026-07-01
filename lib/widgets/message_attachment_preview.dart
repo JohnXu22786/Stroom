@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:extended_image/extended_image.dart';
 import '../models/chat_message.dart';
 import '../services/attachment_storage.dart';
 import '../utils/format_file_size.dart';
@@ -144,16 +145,21 @@ class _ImageThumbnailState extends State<_ImageThumbnail> {
         if (snap.connectionState == ConnectionState.done &&
             snap.hasData &&
             snap.data != null) {
-          return Image.memory(
+          return ExtendedImage.memory(
             snap.data!,
             fit: BoxFit.cover,
             width: 80,
             height: 80,
-            errorBuilder: (_, __, ___) => Icon(
-              widget.fileIcon,
-              size: 36,
-              color: cs.onSurfaceVariant,
-            ),
+            loadStateChanged: (state) {
+              if (state.extendedImageLoadState == LoadState.failed) {
+                return Icon(
+                  widget.fileIcon,
+                  size: 36,
+                  color: cs.onSurfaceVariant,
+                );
+              }
+              return null;
+            },
           );
         }
         return Icon(
