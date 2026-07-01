@@ -105,12 +105,15 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
 
     // When the canvas is rotated (90/270 degrees), the effective drawing
     // width/height are swapped relative to the output dimensions.
-    final drawW = needsRotation ? outputHeight.toDouble() : outputWidth.toDouble();
-    final drawH = needsRotation ? outputWidth.toDouble() : outputHeight.toDouble();
+    final drawW =
+        needsRotation ? outputHeight.toDouble() : outputWidth.toDouble();
+    final drawH =
+        needsRotation ? outputWidth.toDouble() : outputHeight.toDouble();
 
     // Scale so the source image (or crop region) fills the drawing area
     // while preserving aspect ratio.
-    final scale = (drawW / srcW) < (drawH / srcH) ? (drawW / srcW) : (drawH / srcH);
+    final scale =
+        (drawW / srcW) < (drawH / srcH) ? (drawW / srcW) : (drawH / srcH);
     final destW = srcW * scale;
     final destH = srcH * scale;
 
@@ -127,7 +130,8 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
     canvas.rotate(rotateAngle * 3.141592653589793 / 180.0);
 
     final src = cropRect != null
-        ? Rect.fromLTWH(cropRect.left, cropRect.top, cropRect.width, cropRect.height)
+        ? Rect.fromLTWH(
+            cropRect.left, cropRect.top, cropRect.width, cropRect.height)
         : Offset.zero & Size(image.width.toDouble(), image.height.toDouble());
     final dst = Rect.fromLTWH(-destW / 2.0, -destH / 2.0, destW, destH);
 

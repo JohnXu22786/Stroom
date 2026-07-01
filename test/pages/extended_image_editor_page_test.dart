@@ -100,8 +100,7 @@ void main() {
       expect(result, isNull);
     });
 
-    testWidgets('save button shows loading state then saves',
-        (tester) async {
+    testWidgets('save button shows loading state then saves', (tester) async {
       // This test just verifies the save button is present and triggers
       // the save flow. The actual image processing is async and uses
       // dart:ui which requires a real Flutter environment.

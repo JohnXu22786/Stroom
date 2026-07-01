@@ -288,8 +288,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text('另存失败: $e'), backgroundColor: Colors.red),
+            SnackBar(content: Text('另存失败: $e'), backgroundColor: Colors.red),
           );
         }
       }
