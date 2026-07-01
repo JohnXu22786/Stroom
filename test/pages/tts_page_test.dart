@@ -39,7 +39,7 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // Find buttons specifically (not the title which is also "录音")
+      // Find buttons specifically (title is "音频", not "录音")
       expect(find.widgetWithText(ElevatedButton, '录音'), findsOneWidget);
       expect(find.widgetWithText(ElevatedButton, '导入'), findsOneWidget);
     });

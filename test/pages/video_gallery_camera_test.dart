@@ -13,19 +13,19 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
   group('VideoGalleryPage - Record button', () {
-    testWidgets('renders 录制视频 button', (tester) async {
+    testWidgets('renders 录制 button (shortened from 录制视频)', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
-      // The "录制视频" button should be rendered
-      expect(find.text('录制视频'), findsOneWidget);
+      // The "录制" button should be rendered
+      expect(find.text('录制'), findsOneWidget);
     });
 
-    testWidgets('renders 从相册导入 button', (tester) async {
+    testWidgets('renders 导入 button (shortened from 从相册导入)', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
-      expect(find.text('从相册导入'), findsOneWidget);
+      expect(find.text('导入'), findsOneWidget);
     });
   });
 }

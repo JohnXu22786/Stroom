@@ -551,7 +551,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
                 ),
                 icon: const Icon(Icons.add_circle_outline, size: 20),
                 label: const Text(
-                  '新建文本',
+                  '新建',
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -570,7 +570,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
                 ),
                 icon: const Icon(Icons.file_download_outlined, size: 20),
                 label: const Text(
-                  '导入文本',
+                  '导入',
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ),

@@ -40,9 +40,9 @@ void main() {
       // Should show the app bar title '文本'
       expect(find.text('文本'), findsOneWidget);
 
-      // Should show the action buttons
-      expect(find.text('新建文本'), findsOneWidget);
-      expect(find.text('导入文本'), findsOneWidget);
+      // Should show the action buttons (shortened)
+      expect(find.text('新建'), findsOneWidget);
+      expect(find.text('导入'), findsOneWidget);
 
       // Should show the file manager scaffold
       expect(find.byKey(const Key('fm_scaffold')), findsOneWidget);
