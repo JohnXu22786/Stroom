@@ -633,7 +633,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
                 ),
                 icon: const Icon(Icons.videocam, size: 20),
                 label: const Text(
-                  '录制视频',
+                  '录制',
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -652,7 +652,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
                 ),
                 icon: const Icon(Icons.photo_library_outlined, size: 20),
                 label: const Text(
-                  '从相册导入',
+                  '导入',
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ),

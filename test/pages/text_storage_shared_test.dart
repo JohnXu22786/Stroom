@@ -32,7 +32,7 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
-      expect(find.text('新建文本'), findsOneWidget);
+      expect(find.text('新建'), findsOneWidget);
       expect(find.text('保存'), findsOneWidget);
       expect(find.byType(TextField), findsWidgets);
     });

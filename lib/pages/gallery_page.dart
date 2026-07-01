@@ -805,7 +805,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
                 ),
                 icon: const Icon(Icons.photo_library_outlined, size: 20),
                 label: const Text(
-                  '从相册导入',
+                  '导入',
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ),

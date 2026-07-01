@@ -57,12 +57,10 @@ class AssistantSelectionPage extends ConsumerWidget {
             )
           : LayoutBuilder(
               builder: (context, constraints) {
-                // Responsive grid: 2 columns on narrow, 3 on wide
-                final crossAxisCount = constraints.maxWidth > 600 ? 3 : 2;
                 return GridView.builder(
                   padding: const EdgeInsets.all(16),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: crossAxisCount,
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 220,
                     mainAxisSpacing: 12,
                     crossAxisSpacing: 12,
                     childAspectRatio: 0.85,

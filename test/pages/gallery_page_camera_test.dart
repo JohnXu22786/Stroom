@@ -15,7 +15,7 @@ void main() {
   });
 
   group('GalleryPage - Camera and import buttons', () {
-    testWidgets('renders 拍照 button with camera icon and 从相册导入 button',
+    testWidgets('renders 拍照 button with camera icon and 导入 button',
         (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
@@ -24,8 +24,8 @@ void main() {
       expect(find.byIcon(Icons.camera_alt_outlined), findsOneWidget);
       expect(find.text('拍照'), findsOneWidget);
 
-      // Import from gallery button should also be present
-      expect(find.text('从相册导入'), findsOneWidget);
+      // Import button should also be present (shortened from 从相册导入)
+      expect(find.text('导入'), findsOneWidget);
     });
   });
 }
