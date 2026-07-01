@@ -54,6 +54,9 @@ class _ApplicationState extends ConsumerState<Application> {
   Future<void> _checkForUpdatesOnStartup() async {
     final notifier = ref.read(updateProvider.notifier);
 
+    // Load persisted pre-release preference before checking
+    await notifier.loadAcceptPreRelease();
+
     // 在 HTTP 请求之前捕获 Navigator context，
     // 确保异步等待后 context 仍然有效。
     final navigatorContext = _navigatorKey.currentContext;
