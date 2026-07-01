@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
+import 'package:extended_image/extended_image.dart';
 
 import '../providers/image_provider.dart';
 import '../utils/image_manifest.dart';
@@ -833,12 +834,17 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
             if (data == null || data.isEmpty) {
               return buildFormatIcon(file.format);
             }
-            return Image.memory(
+            return ExtendedImage.memory(
               data,
               fit: BoxFit.cover,
               width: double.infinity,
               height: double.infinity,
-              errorBuilder: (_, __, ___) => buildFormatIcon(file.format),
+              loadStateChanged: (state) {
+                if (state.extendedImageLoadState == LoadState.failed) {
+                  return buildFormatIcon(file.format);
+                }
+                return null;
+              },
             );
           },
         );
