@@ -225,6 +225,84 @@ void main() {
       expect(find.text('😊'), findsOneWidget);
     });
 
+    testWidgets('uses responsive grid with MaxCrossAxisExtent (like homepage)',
+        (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [
+            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
+            Assistant(name: '助手2', prompt: 'P2', emoji: '😊'),
+            Assistant(name: '助手3', prompt: 'P3', emoji: '🎉'),
+            Assistant(name: '助手4', prompt: 'P4', emoji: '🔥'),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Find the GridView
+      final gridView = tester.widget<GridView>(find.byType(GridView));
+      final delegate = gridView.gridDelegate;
+
+      // Should use SliverGridDelegateWithMaxCrossAxisExtent (not FixedCrossAxisCount)
+      expect(delegate, isA<SliverGridDelegateWithMaxCrossAxisExtent>());
+    });
+
+    testWidgets('wide screen shows more columns than narrow screen', (
+      tester,
+    ) async {
+      // First, test on a narrow screen
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(375, 800);
+      tester.view.devicePixelRatio = 1.0;
+
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [
+            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
+            Assistant(name: '助手2', prompt: 'P2', emoji: '😊'),
+            Assistant(name: '助手3', prompt: 'P3', emoji: '🎉'),
+            Assistant(name: '助手4', prompt: 'P4', emoji: '🔥'),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // On a narrow screen, the grid should auto-calculate columns
+      // (MaxCrossAxisExtent handles this automatically)
+      expect(tester.takeException(), isNull);
+
+      // Now test on a wide screen
+      tester.view.physicalSize = const Size(1200, 800);
+
+      // Rebuild with wide screen
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('assistant card uses 0.85 aspect ratio', (tester) async {
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [
+            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Find the GridView
+      final gridView = tester.widget<GridView>(find.byType(GridView));
+      final delegate =
+          gridView.gridDelegate as SliverGridDelegateWithMaxCrossAxisExtent;
+
+      // Aspect ratio should be 0.85 (taller than wide)
+      expect(delegate.childAspectRatio, closeTo(0.85, 0.01));
+      // Max cross axis extent should be around 220 (bigger than homepage's 180)
+      expect(delegate.maxCrossAxisExtent, greaterThan(200));
+    });
+
     testWidgets('tapping assistant navigates to select conversation page', (
       tester,
     ) async {

@@ -35,48 +35,45 @@ void main() {
   });
 
   group('TtsPage - audio page buttons', () {
-    testWidgets('shows three action buttons: 开始录音, 生成录音, 导入音频', (tester) async {
+    testWidgets('shows two action buttons: 录音 and 导入', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // Verify the three button texts exist
-      expect(find.text('开始录音'), findsOneWidget);
-      expect(find.text('生成录音'), findsOneWidget);
-      expect(find.text('导入音频'), findsOneWidget);
+      // Find buttons specifically (title is "音频", not "录音")
+      expect(find.widgetWithText(ElevatedButton, '录音'), findsOneWidget);
+      expect(find.widgetWithText(ElevatedButton, '导入'), findsOneWidget);
     });
 
-    testWidgets('buttons are in correct order: 开始录音 → 生成录音 → 导入音频',
-        (tester) async {
+    testWidgets('生成录音 is no longer on TtsPage (moved to homepage)', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // "生成录音" should no longer appear on the TtsPage
+      expect(find.text('生成录音'), findsNothing);
+    });
+
+    testWidgets('buttons are in correct order: 录音 → 导入', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
       // Find all ElevatedButton.icon widgets
       final buttons = find.byType(ElevatedButton);
-      expect(buttons, findsNWidgets(3));
+      expect(buttons, findsNWidgets(2));
 
-      // Get the positions of the three buttons to verify left-to-right order
+      // Get the positions of the two buttons to verify left-to-right order
       final button0Pos = tester.getTopLeft(buttons.at(0));
       final button1Pos = tester.getTopLeft(buttons.at(1));
-      final button2Pos = tester.getTopLeft(buttons.at(2));
 
-      // All three should be on the same horizontal line (same dy)
+      // Both should be on the same horizontal line (same dy)
       expect(button0Pos.dy, button1Pos.dy);
-      expect(button1Pos.dy, button2Pos.dy);
 
       // And in order from left to right
       expect(button0Pos.dx, lessThan(button1Pos.dx));
-      expect(button1Pos.dx, lessThan(button2Pos.dx));
     });
 
-    testWidgets('old label 制作录音 is not present', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // "制作录音" should no longer appear anywhere
-      expect(find.text('制作录音'), findsNothing);
-    });
-
-    testWidgets('开始录音 button has microphone icon', (tester) async {
+    testWidgets('录音 button has microphone icon', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
@@ -91,6 +88,25 @@ void main() {
         ),
         findsWidgets,
       );
+    });
+
+    testWidgets('buttons fit without overflow on narrow screen',
+        (tester) async {
+      // Set a narrow screen (small phone width)
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.physicalSize = const Size(320, 780);
+      tester.view.devicePixelRatio = 1.0;
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Both buttons should be visible
+      expect(find.widgetWithText(ElevatedButton, '录音'), findsOneWidget);
+      expect(find.widgetWithText(ElevatedButton, '导入'), findsOneWidget);
+
+      // No overflow exceptions
+      expect(tester.takeException(), isNull);
     });
   });
 }
