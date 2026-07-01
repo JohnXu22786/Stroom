@@ -85,9 +85,8 @@ class _AudioTrackInfo {
   final int channels;
   final int bitsPerSample;
   final List<int> sampleSizes;
-  final List<int> chunkOffsets;
+  final List<int> chunkOffsets; // absolute file offset of each chunk (from stco/co64)
   final List<int> sampleToChunkMap;
-  int mdatDataOffset;
 
   _AudioTrackInfo({
     required this.codec,
@@ -97,7 +96,6 @@ class _AudioTrackInfo {
     required this.sampleSizes,
     required this.chunkOffsets,
     required this.sampleToChunkMap,
-    required this.mdatDataOffset,
   });
 }
 
@@ -136,7 +134,6 @@ class _Mp4Demuxer {
         if (childType == 'trak') {
           final track = _parseTrack();
           if (track != null) {
-            track.mdatDataOffset = mdatOffset + 8;
             if (track.codec == 'mp4a' || track.codec == 'raw ') return track;
           }
         }
@@ -278,7 +275,6 @@ class _Mp4Demuxer {
       sampleSizes: sampleSizes,
       chunkOffsets: chunkOffsets,
       sampleToChunkMap: sampleToChunk,
-      mdatDataOffset: 0,
     );
   }
 
@@ -300,8 +296,7 @@ class _Mp4Demuxer {
             offsetInChunk += track.sampleSizes[ps];
           }
         }
-        final fileOffset =
-            track.mdatDataOffset + track.chunkOffsets[ci] + offsetInChunk;
+        final fileOffset = track.chunkOffsets[ci] + offsetInChunk;
         if (fileOffset + size <= _data.length) {
           frames.add(_AudioFrame(
             Uint8List.sublistView(_data, fileOffset, fileOffset + size),
