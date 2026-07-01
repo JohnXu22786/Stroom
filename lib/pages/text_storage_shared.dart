@@ -77,7 +77,7 @@ class TextCreatePageState extends State<TextCreatePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('新建文本'),
+        title: const Text('新建'),
         actions: [
           TextButton(
             onPressed: _isSaving ? null : _save,

@@ -597,7 +597,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
     });
 
     final config = FileManagerConfig<AudioRecord>(
-      title: '录音',
+      title: '音频',
       topActionBar: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
         child: Row(
