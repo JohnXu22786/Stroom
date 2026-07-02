@@ -36,6 +36,10 @@ class UpdateState {
   // the downloaded update immediately after download completes.
   final bool isInstalling;
 
+  /// Whether the user accepts pre-release versions in update checks.
+  /// When true, checks include pre-releases; when false, only stable releases.
+  final bool acceptPreRelease;
+
   const UpdateState({
     this.isChecking = false,
     this.latestVersion,
@@ -49,6 +53,7 @@ class UpdateState {
     this.downloadError,
     this.downloadedFilePath,
     this.isInstalling = false,
+    this.acceptPreRelease = false,
   });
 
   UpdateState copyWith({
@@ -64,6 +69,7 @@ class UpdateState {
     String? downloadError,
     String? downloadedFilePath,
     bool? isInstalling,
+    bool? acceptPreRelease,
   }) {
     return UpdateState(
       isChecking: isChecking ?? this.isChecking,
@@ -78,14 +84,18 @@ class UpdateState {
       downloadError: downloadError ?? this.downloadError,
       downloadedFilePath: downloadedFilePath ?? this.downloadedFilePath,
       isInstalling: isInstalling ?? this.isInstalling,
+      acceptPreRelease: acceptPreRelease ?? this.acceptPreRelease,
     );
   }
 }
 
 const String _kUpdateCheckUrl =
     'https://api.github.com/repos/JohnXu22786/Stroom/releases/latest';
+const String _kAllReleasesUrl =
+    'https://api.github.com/repos/JohnXu22786/Stroom/releases?per_page=100';
 const String _kSkippedVersionKey = 'update_skipped_version';
 const String _kUpdateAvailableKey = 'update_available_data';
+const String _kAcceptPreReleaseKey = 'update_accept_pre_release';
 
 class UpdateNotifier extends StateNotifier<UpdateState> {
   final Dio _dio;
@@ -156,71 +166,53 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     return findAssetDownloadUrl(assets, platformKey);
   }
 
+  /// Attempts to load the persisted [acceptPreRelease] preference
+  /// from SharedPreferences and applies it to the current state.
+  Future<void> loadAcceptPreRelease() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final value = prefs.getBool(_kAcceptPreReleaseKey) ?? false;
+      state = state.copyWith(acceptPreRelease: value);
+    } catch (_) {
+      // Default to false on error
+      state = state.copyWith(acceptPreRelease: false);
+    }
+  }
+
+  /// Sets whether the user accepts pre-release versions in update checks.
+  /// Persists the value to SharedPreferences.
+  Future<void> setAcceptPreRelease(bool value) async {
+    state = state.copyWith(acceptPreRelease: value);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_kAcceptPreReleaseKey, value);
+    } catch (e) {
+      debugPrint('setAcceptPreRelease failed: $e');
+    }
+  }
+
+  /// Resets transient update state while preserving user preferences
+  /// (e.g., [acceptPreRelease]).
+  UpdateState _resetState() {
+    return UpdateState(acceptPreRelease: state.acceptPreRelease);
+  }
+
   Future<void> checkForUpdate({bool silent = false}) async {
     if (state.isChecking) return;
 
     // Web platform does not support direct download updates
     if (kIsWeb) {
-      state = const UpdateState();
+      state = _resetState();
       return;
     }
 
     state = state.copyWith(isChecking: true, error: null);
 
     try {
-      final response = await _dio.get(_kUpdateCheckUrl);
-      if (response.statusCode == 200) {
-        final data = response.data as Map<String, dynamic>;
-        final tagName = data['tag_name'] as String? ?? '';
-        final latestVersion = tagName.replaceAll(RegExp(r'^v'), '');
-        final releaseNotes = data['body'] as String? ?? '';
-        final htmlUrl = data['html_url'] as String? ?? '';
-        final assets = data['assets'] as List<dynamic>? ?? [];
-
-        // Find direct download URL for current platform, fall back to html_url
-        final directDownloadUrl = getPlatformDownloadUrl(assets);
-        final downloadUrl = directDownloadUrl ?? htmlUrl;
-
-        final current = Version.parse(appVersion);
-        final latest = Version.parse(latestVersion);
-
-        final updateAvailable = latest > current;
-
-        if (updateAvailable) {
-          final prefs = await SharedPreferences.getInstance();
-          final skippedVersion = prefs.getString(_kSkippedVersionKey);
-
-          if (skippedVersion == latestVersion) {
-            state = const UpdateState();
-            return;
-          }
-
-          final updateData = jsonEncode({
-            'latest_version': latestVersion,
-            'release_notes': releaseNotes,
-            'download_url': downloadUrl,
-          });
-          await prefs.setString(_kUpdateAvailableKey, updateData);
-
-          state = UpdateState(
-            updateAvailable: true,
-            latestVersion: latestVersion,
-            releaseNotes: releaseNotes,
-            downloadUrl: downloadUrl,
-          );
-        } else {
-          state = const UpdateState();
-        }
+      if (state.acceptPreRelease) {
+        await _checkForUpdateWithPreRelease(silent: silent);
       } else {
-        if (!silent) {
-          state = state.copyWith(
-            isChecking: false,
-            updateAvailable: false,
-            error: '检查更新失败: HTTP ${response.statusCode}',
-          );
-        } else {
-          state = const UpdateState();
-        }
+        await _checkForUpdateStable(silent: silent);
       }
     } catch (e) {
       if (!silent) {
@@ -230,8 +222,145 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
           error: '网络错误: $e',
         );
       } else {
-        state = const UpdateState();
+        state = _resetState();
       }
+    }
+  }
+
+  /// Checks for updates using the stable releases API (/releases/latest).
+  /// This is the original behavior — only non-prerelease releases are considered.
+  Future<void> _checkForUpdateStable({required bool silent}) async {
+    final response = await _dio.get(_kUpdateCheckUrl);
+    if (response.statusCode == 200) {
+      await _processSingleRelease(response.data as Map<String, dynamic>);
+    } else {
+      if (!silent) {
+        state = state.copyWith(
+          isChecking: false,
+          updateAvailable: false,
+          error: '检查更新失败: HTTP ${response.statusCode}',
+        );
+      } else {
+        state = _resetState();
+      }
+    }
+  }
+
+  /// Checks for updates using the full releases API (/releases).
+  /// Iterates through all returned releases (including pre-releases) to find
+  /// the latest version newer than the current installed version.
+  Future<void> _checkForUpdateWithPreRelease({required bool silent}) async {
+    final response = await _dio.get(_kAllReleasesUrl);
+    if (response.statusCode == 200) {
+      final releases = response.data as List<dynamic>;
+      final current = Version.parse(appVersion);
+
+      Version? bestVersion;
+      String? bestTagName;
+      String? bestBody;
+      String? bestHtmlUrl;
+      List<dynamic> bestAssets = [];
+
+      for (final release in releases) {
+        final tagName = release['tag_name'] as String? ?? '';
+        final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
+        final parsed = Version.parse(versionStr);
+
+        if (parsed > current) {
+          if (bestVersion == null || parsed > bestVersion) {
+            bestVersion = parsed;
+            bestTagName = versionStr;
+            bestBody = release['body'] as String? ?? '';
+            bestHtmlUrl = release['html_url'] as String? ?? '';
+            bestAssets = release['assets'] as List<dynamic>? ?? [];
+          }
+        }
+      }
+
+      if (bestVersion != null) {
+        final prefs = await SharedPreferences.getInstance();
+        final skippedVersion = prefs.getString(_kSkippedVersionKey);
+
+        if (skippedVersion == bestTagName) {
+          state = _resetState();
+          return;
+        }
+
+        // Find direct download URL for current platform, fall back to html_url
+        final directDownloadUrl = getPlatformDownloadUrl(bestAssets);
+        final downloadUrl = directDownloadUrl ?? bestHtmlUrl;
+
+        final updateData = jsonEncode({
+          'latest_version': bestTagName,
+          'release_notes': bestBody,
+          'download_url': downloadUrl,
+        });
+        await prefs.setString(_kUpdateAvailableKey, updateData);
+
+        state = UpdateState(
+          acceptPreRelease: state.acceptPreRelease,
+          updateAvailable: true,
+          latestVersion: bestTagName,
+          releaseNotes: bestBody,
+          downloadUrl: downloadUrl,
+        );
+      } else {
+        state = _resetState();
+      }
+    } else {
+      if (!silent) {
+        state = state.copyWith(
+          isChecking: false,
+          updateAvailable: false,
+          error: '检查更新失败: HTTP ${response.statusCode}',
+        );
+      } else {
+        state = _resetState();
+      }
+    }
+  }
+
+  /// Processes a single release from the GitHub API (/releases/latest) response.
+  Future<void> _processSingleRelease(Map<String, dynamic> data) async {
+    final tagName = data['tag_name'] as String? ?? '';
+    final latestVersion = tagName.replaceAll(RegExp(r'^v'), '');
+    final releaseNotes = data['body'] as String? ?? '';
+    final htmlUrl = data['html_url'] as String? ?? '';
+    final assets = data['assets'] as List<dynamic>? ?? [];
+
+    // Find direct download URL for current platform, fall back to html_url
+    final directDownloadUrl = getPlatformDownloadUrl(assets);
+    final downloadUrl = directDownloadUrl ?? htmlUrl;
+
+    final current = Version.parse(appVersion);
+    final latest = Version.parse(latestVersion);
+
+    final updateAvailable = latest > current;
+
+    if (updateAvailable) {
+      final prefs = await SharedPreferences.getInstance();
+      final skippedVersion = prefs.getString(_kSkippedVersionKey);
+
+      if (skippedVersion == latestVersion) {
+        state = _resetState();
+        return;
+      }
+
+      final updateData = jsonEncode({
+        'latest_version': latestVersion,
+        'release_notes': releaseNotes,
+        'download_url': downloadUrl,
+      });
+      await prefs.setString(_kUpdateAvailableKey, updateData);
+
+      state = UpdateState(
+        updateAvailable: true,
+        latestVersion: latestVersion,
+        releaseNotes: releaseNotes,
+        downloadUrl: downloadUrl,
+      );
+    } else {
+      state = _resetState();
     }
   }
 
@@ -250,13 +379,13 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     } catch (e) {
       debugPrint('skipVersion failed: $e');
     }
-    state = const UpdateState();
+    state = _resetState();
   }
 
   Future<void> clearPendingUpdate() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_kUpdateAvailableKey);
-    state = const UpdateState();
+    state = _resetState();
   }
 
   /// Downloads the update file to a local temp directory, then

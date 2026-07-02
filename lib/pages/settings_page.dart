@@ -357,6 +357,28 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           children: [
             // Web端不提供更新功能
             if (!kIsWeb) ...[
+              // Pre-release toggle switch - above the check update button
+              _buildListTile(
+                leading: Icon(
+                  Icons.science,
+                  color: updateState.acceptPreRelease
+                      ? Colors.orange
+                      : Colors.grey,
+                ),
+                title: '接收预览版',
+                subtitle: '开启后可检查预览版更新',
+                trailing: Switch(
+                  value: updateState.acceptPreRelease,
+                  onChanged: (value) {
+                    ref
+                        .read(updateProvider.notifier)
+                        .setAcceptPreRelease(value);
+                  },
+                  activeColor: Colors.orange,
+                ),
+                onTap: () {},
+              ),
+              const Divider(height: 1),
               _buildListTile(
                 leading: updateState.isChecking
                     ? const SizedBox(
