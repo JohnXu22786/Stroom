@@ -48,7 +48,7 @@ jobs:
           path: artifacts/*.apk
 
   build-windows:
-    name: Build Windows (安装包 + ZIP)
+    name: Build Windows (安装包)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -69,11 +69,6 @@ jobs:
           # 编译安装包
           mkdir artifacts -Force
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "windows\installer.iss"
-      - name: Package ZIP (fallback)
-        shell: pwsh
-        run: |
-          $TAG = "$env:GITHUB_REF_NAME"
-          Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "artifacts\stroom-windows-x64-release-$TAG.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: windows-build
