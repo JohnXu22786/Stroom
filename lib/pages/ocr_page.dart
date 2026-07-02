@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import '../providers/provider_config.dart';
 import '../providers/background_task_provider.dart';
 import '../providers/text_provider.dart';
 import '../services/ocr_service.dart';
+import '../services/storage_service.dart';
 import '../utils/data_sanitizer.dart';
 import '../utils/image_manifest.dart';
 import '../utils/text_manifest.dart';
@@ -1226,11 +1228,16 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         });
       }
 
-      service = OcrService(config: ocrConfig);
-      OcrResult result;
+      // Step 1: Connecting (default: pending → running)
+      bgNotifier.updateStep(taskId, 0, running: true);
 
-      // Set initial result to show task is processing
-      bgNotifier.setResult(taskId, '正在识别...');
+      service = OcrService(config: ocrConfig);
+
+      // Step 2: Uploading (step index 1)
+      bgNotifier.updateStep(taskId, 0, completed: true);
+      bgNotifier.updateStep(taskId, 1, running: true);
+
+      OcrResult result;
 
       if (_selectedImages.length == 1) {
         final img = _selectedImages.first;
@@ -1244,17 +1251,42 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         result = await service.recognizeBatch(imageBytesList: batchInput);
       }
 
-      // Store the OCR result and save to file
-      bgNotifier.setResult(taskId, result.text);
-      await _saveOcrResult(result.text, title: title);
+      // Step 3: Processing complete → Step 4: Receiving result
+      bgNotifier.updateStep(taskId, 1, completed: true);
+      bgNotifier.updateStep(taskId, 2, completed: true);
+      bgNotifier.updateStep(taskId, 3, running: true);
 
-      // Mark task as completed (widget may be gone, but notifier is independent)
-      bgNotifier.completeTask(taskId);
+      // Store the OCR result internally
+      bgNotifier.setResult(taskId, result.text);
+
+      // Step 5: Saving file — save to file and get the path
+      bgNotifier.updateStep(taskId, 3, completed: true);
+      bgNotifier.updateStep(taskId, 4, running: true);
+
+      // Capture the actual file path from _saveOcrResult
+      final filePath = await _saveOcrResult(result.text, title: title);
+      bgNotifier.updateStep(taskId, 4, completed: true);
+      bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
 
       // Refresh text records so the files page shows the new OCR result
       unawaited(textNotifier.loadRecords());
     } catch (e) {
-      // Mark task as failed (widget may be gone, but notifier is independent)
+      // Mark the failed step
+      final task = bgNotifier.state.where((t) => t.id == taskId).firstOrNull;
+      if (task != null) {
+        final runningIndex =
+            task.steps.indexWhere((s) => s.running);
+        if (runningIndex >= 0) {
+          bgNotifier.updateStep(taskId, runningIndex,
+              failed: true, error: 'OCR识别失败: $e');
+        }
+        // Mark remaining pending steps as skipped
+        for (var i = 0; i < task.steps.length; i++) {
+          if (task.steps[i].status == BgStepStatus.pending) {
+            bgNotifier.updateStep(taskId, i, skipped: true);
+          }
+        }
+      }
       bgNotifier.failTask(taskId, error: 'OCR识别失败: $e');
     }
   }
@@ -1265,14 +1297,16 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   /// Save the OCR result as a text record, named by the task title.
-  Future<void> _saveOcrResult(String text, {String? title}) async {
+  /// Returns the file path of the saved text file, or null on failure.
+  Future<String?> _saveOcrResult(String text, {String? title}) async {
     final now = DateTime.now();
 
     final bytes = Uint8List.fromList(utf8.encode(text));
     final hash = computeTextHash(bytes);
     final storageFileName = '$hash.txt';
 
-    await TextManifest.writeText(storageFileName, text);
+    // Capture the file path returned by writeText
+    final filePath = await TextManifest.writeText(storageFileName, text);
     await TextManifest.addRecord(
       TextRecord(
         name: title ??
@@ -1285,6 +1319,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         textLength: text.length,
       ),
     );
+    return filePath;
   }
 
   // ==================================================================
