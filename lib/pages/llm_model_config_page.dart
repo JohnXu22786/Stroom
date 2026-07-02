@@ -255,6 +255,11 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       );
     }
 
+    final toggleName = toggle.paramName.trim();
+    final isToggleDuplicate = toggleName.isNotEmpty &&
+        (_reasoningParams.indexWhere((p) => p.paramName.trim() == toggleName) !=
+                _reasoningParams.indexOf(toggle) ||
+            _customParams.any((p) => p.paramName.trim() == toggleName));
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
@@ -293,6 +298,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                 hintText: '如 thinking.type、reasoning',
                 border: const OutlineInputBorder(),
                 isDense: true,
+                errorText: isToggleDuplicate ? '已存在该参数' : null,
+                errorStyle: const TextStyle(fontSize: 11),
               ),
               onChanged: (v) {
                 toggle.paramName = v;
@@ -384,6 +391,11 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   /// Builds a card for an additional (non-toggle) reasoning parameter.
   Widget _buildAdditionalReasoningParamCard(
       ReasoningParam param, int actualIndex, int displayIndex, ColorScheme cs) {
+    final name = param.paramName.trim();
+    final isDuplicate = name.isNotEmpty &&
+        (_reasoningParams.indexWhere((p) => p.paramName.trim() == name) !=
+                actualIndex ||
+            _customParams.any((p) => p.paramName.trim() == name));
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
@@ -401,6 +413,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                       border: const OutlineInputBorder(),
                       isDense: true,
                       hintText: '如 thinking.type 或 reasoning_effort',
+                      errorText: isDuplicate ? '已存在该参数' : null,
+                      errorStyle: const TextStyle(fontSize: 11),
                     ),
                     onChanged: (v) {
                       param.paramName = v;
@@ -548,6 +562,26 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     }
 
     // 验证推理参数
+    // Check 1: If there are any reasoning params, the toggle must exist and be filled
+    final toggleParam = _reasoningParams.cast<ReasoningParam?>().firstWhere(
+          (p) => p?.isReasoningToggle ?? false,
+          orElse: () => null,
+        );
+    final hasNonToggleParams = _reasoningParams
+        .any((p) => !p.isReasoningToggle && p.paramName.trim().isNotEmpty);
+
+    if (hasNonToggleParams &&
+        (toggleParam == null || !toggleParam.isFilledToggle)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('推理开关必须先填写完整，其他推理参数才能生效'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    // Check 2: Validate each param individually
     for (int i = 0; i < _reasoningParams.length; i++) {
       final param = _reasoningParams[i];
       final error = param.validationError;
@@ -555,6 +589,38 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('推理参数错误：$error'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+    }
+
+    // Check 3: Duplicate name check across all reasoning params
+    final reasoningSeenNames = <String>{};
+    for (int i = 0; i < _reasoningParams.length; i++) {
+      final name = _reasoningParams[i].paramName.trim();
+      if (name.isEmpty)
+        continue; // Empty names are caught by validationError above
+      if (!reasoningSeenNames.add(name)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('推理参数存在重名: $name'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+    }
+
+    // Check 4: Cross-check duplicate names between reasoning params and custom params
+    for (final param in _reasoningParams) {
+      final name = param.paramName.trim();
+      if (name.isEmpty) continue;
+      if (!seenNames.add(name)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('推理参数与自定义参数存在重名: $name'),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -912,9 +978,11 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                 final param = _customParams[i];
                 final name = param.paramName.trim();
                 final isDuplicate = name.isNotEmpty &&
-                    _customParams
-                            .indexWhere((p) => p.paramName.trim() == name) !=
-                        i;
+                    (_customParams.indexWhere(
+                                (p) => p.paramName.trim() == name) !=
+                            i ||
+                        _reasoningParams
+                            .any((p) => p.paramName.trim() == name));
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   child: Padding(
