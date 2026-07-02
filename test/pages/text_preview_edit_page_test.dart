@@ -521,5 +521,53 @@ void main() {
       // Should show empty content area (no crash)
       expect(find.byType(SelectableText), findsOneWidget);
     });
+
+    // ==================== MMD Format Support ====================
+
+    group('mmd format support', () {
+      const mmdContent = 'graph TD\n  A[Start] --> B[End]';
+
+      late TextRecord mmdFile;
+
+      setUp(() async {
+        final bytes = Uint8List.fromList(utf8.encode(mmdContent));
+        final hash = computeTextHash(bytes);
+        final storageFileName = '$hash.txt';
+        await TextManifest.writeText(storageFileName, mmdContent);
+
+        mmdFile = TextRecord(
+          name: 'my_chart',
+          hash: hash,
+          format: 'mmd',
+          createdAt: DateTime.now(),
+          size: bytes.length,
+          textLength: mmdContent.length,
+        );
+        await TextManifest.addRecord(mmdFile);
+      });
+
+      testWidgets('renders mmd file content as selectable text in view mode',
+          (tester) async {
+        await tester.pumpWidget(_buildTestApp(mmdFile, mmdContent));
+        await navigateToEditor(tester);
+
+        // Title should show filename.mmd
+        expect(find.text('my_chart.mmd'), findsOneWidget);
+
+        // Content should be shown as selectable text
+        expect(find.text(mmdContent), findsOneWidget);
+        expect(find.byType(SelectableText), findsOneWidget);
+      });
+
+      testWidgets(
+          'mmd view mode shows chart editor button to open MermaidChartPage',
+          (tester) async {
+        await tester.pumpWidget(_buildTestApp(mmdFile, mmdContent));
+        await navigateToEditor(tester);
+
+        // Should show the chart editor button in view mode
+        expect(find.byIcon(Icons.account_tree), findsOneWidget);
+      });
+    });
   });
 }

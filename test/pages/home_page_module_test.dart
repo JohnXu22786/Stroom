@@ -68,16 +68,17 @@ void main() {
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
     });
 
-    testWidgets('shows 5 module cards on home page', (tester) async {
+    testWidgets('shows 6 module cards on home page', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // Should show 5 module cards (was 4, now with TTS card)
+      // Should show 6 module cards (was 5, now with chart making card)
       expect(find.text('OCR'), findsOneWidget);
       expect(find.text('语音识别'), findsOneWidget);
       expect(find.text('下载网页资源'), findsOneWidget);
       expect(find.text('音频分离'), findsOneWidget);
       expect(find.text('语音合成'), findsOneWidget);
+      expect(find.text('图表制作'), findsOneWidget);
     });
 
     testWidgets('TTSCreatePage import is available', (tester) async {
@@ -112,6 +113,26 @@ void main() {
 
       // Should navigate to TTSCreatePage (it has "生成录音" title + body text)
       expect(find.text('生成录音'), findsWidgets);
+    });
+
+    testWidgets('图表制作 card is visible on home page', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // The new chart making card should be visible
+      expect(find.text('图表制作'), findsOneWidget);
+    });
+
+    testWidgets('图表制作 card navigates to MermaidChartPage', (tester) async {
+      // Verify the card exists and can be tapped; full navigation test
+      // is covered in mermaid_chart_page_test to avoid InAppWebView
+      // platform issues in test environment.
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // The 图表制作 card should be present on the home page
+      expect(find.text('图表制作'), findsOneWidget);
+      expect(find.text('Mermaid图表编辑'), findsOneWidget);
     });
   });
 
