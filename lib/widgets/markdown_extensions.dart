@@ -181,11 +181,27 @@ class NoDividerH3Config extends H3Config {
 /// line (light gray `---` under each heading), while the thematic break
 /// (`---` in markdown) remains unaffected. Dark-mode text colour is
 /// preserved by passing the dark config's style when applicable.
+
+/// Wraps a [Table] widget in a horizontally scrollable container so that
+/// wide tables can be dragged/scrolled left-right without affecting the
+/// layout of other markdown content. The container clips to prevent
+/// overflow beyond the chat bubble boundary.
+Widget _wrapTableWithHorizontalScroll(Widget child) {
+  return SingleChildScrollView(
+    scrollDirection: Axis.horizontal,
+    clipBehavior: Clip.hardEdge,
+    child: child,
+  );
+}
+
 MarkdownConfig buildMarkdownConfig({required bool isDark}) {
   final base =
       isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig;
   return base.copy(configs: [
     codeBlockPreConfig(isDark: isDark),
+    TableConfig(
+      wrapper: _wrapTableWithHorizontalScroll,
+    ),
     if (isDark) ...[
       NoDividerH1Config(style: H1Config.darkConfig.style),
       NoDividerH2Config(style: H2Config.darkConfig.style),
