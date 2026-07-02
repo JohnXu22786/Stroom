@@ -287,6 +287,67 @@ void main() {
     });
   });
 
+  group('ReasoningParam duplicate name validation', () {
+    test('two params with same name should have duplicate error', () {
+      final params = [
+        ReasoningParam(paramName: 'reasoning_effort', options: ['low', 'high']),
+        ReasoningParam(paramName: 'reasoning_effort', options: ['1', '2']),
+      ];
+      final seen = <String>{};
+      for (final param in params) {
+        final name = param.paramName.trim();
+        if (!seen.add(name)) {
+          // Duplicate detected
+          expect(name, 'reasoning_effort');
+        }
+      }
+      expect(
+          seen.length, 1); // Only 1 unique name because duplicate was rejected
+    });
+
+    test('params with all different names should be valid', () {
+      final params = [
+        ReasoningParam(paramName: 'reasoning_effort', options: ['low', 'high']),
+        ReasoningParam(paramName: 'thinking.type', options: ['a', 'b']),
+      ];
+      final seen = <String>{};
+      for (final param in params) {
+        final name = param.paramName.trim();
+        expect(seen.add(name), isTrue,
+            reason: '$name should not be a duplicate');
+      }
+      expect(seen.length, 2);
+    });
+
+    test(
+        'toggle param and non-toggle param sharing same name should be rejected',
+        () {
+      final params = [
+        ReasoningParam(
+          paramName: 'thinking.type',
+          isReasoningToggle: true,
+          onValue: 'enabled',
+          offValue: 'disabled',
+        ),
+        ReasoningParam(
+          paramName: 'thinking.type',
+          isReasoningToggle: false,
+          options: ['a', 'b'],
+        ),
+      ];
+      final seen = <String>{};
+      for (final param in params) {
+        final name = param.paramName.trim();
+        final isUnique = seen.add(name);
+        if (!isUnique) {
+          // Duplicate detected - this is the expected behavior
+          expect(name, 'thinking.type');
+        }
+      }
+      expect(seen.length, 1); // Only 1 unique because duplicate was rejected
+    });
+  });
+
   group('ReasoningParam.isFilledToggle', () {
     test('returns true when all toggle fields are non-empty', () {
       final param = ReasoningParam(

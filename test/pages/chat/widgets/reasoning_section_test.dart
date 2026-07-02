@@ -170,5 +170,76 @@ void main() {
         await tester.pump(const Duration(milliseconds: 100));
       }
     });
+
+    testWidgets('dialog shows reasoning content for completed messages', (
+      tester,
+    ) async {
+      const reasoningText = '这是完整的推理过程内容';
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            streamingReasoningSectionsProvider.overrideWith(
+              (ref) => [reasoningText],
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: ReasoningSection(
+                sections: ReasoningSectionData(
+                  texts: [reasoningText],
+                  streaming: false,
+                ),
+                messageId: 'test-msg-id',
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Tap the reasoning button
+      await tester.tap(find.text('推理过程'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Dialog should be shown with reasoning content
+      expect(find.byType(Dialog), findsOneWidget);
+      // Both the button AND the dialog header show "推理过程", so at least one
+      expect(find.text('推理过程'), findsWidgets);
+      expect(find.text(reasoningText), findsOneWidget);
+
+      // Dismiss the dialog
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      for (int i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    });
+
+    testWidgets('empty sections list should render nothing', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: ReasoningSection(
+                sections: ReasoningSectionData(
+                  texts: [],
+                  streaming: false,
+                ),
+                messageId: 'empty-msg-id',
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      // Empty sections should render nothing
+      expect(find.byIcon(Icons.psychology_outlined), findsNothing);
+      expect(find.text('推理过程'), findsNothing);
+    });
   });
 }

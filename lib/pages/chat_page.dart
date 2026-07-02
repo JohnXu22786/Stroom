@@ -617,8 +617,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _streamingMsgId = aiMsgId;
     _chatSegments[aiMsgId] = [];
     _streamingRenderedLengths[aiMsgId] = 0;
-    // Initialize reasoning sections for multi-step reasoning chain support
-    _reasoningContents[aiMsgId] = [''];
+    // Initialize reasoning sections as empty list, only populated when
+    // actual reasoning events arrive. This prevents showing an empty
+    // "推理过程" button when no reasoning content exists.
+    _reasoningContents[aiMsgId] = [];
     // Persist streaming message ID in provider so it survives page disposal
     ref.read(streamingMsgIdProvider.notifier).state = aiMsgId;
 
@@ -638,9 +640,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
     DateTime lastReasoningUpdate = DateTime.now();
     const minInterval = Duration(milliseconds: 50);
     const reasoningMinInterval = Duration(milliseconds: 100);
-    // Reset reasoning providers at start of new streaming session
+    // Reset reasoning providers at start of new streaming session.
+    // Initialize sections as empty list — they are populated on first
+    // ReasoningEvent (not with a placeholder empty string).
     ref.read(streamingReasoningProvider.notifier).state = '';
-    ref.read(streamingReasoningSectionsProvider.notifier).state = [''];
+    ref.read(streamingReasoningSectionsProvider.notifier).state = [];
     bool hasReceivedFirstToken = false;
     Map<String, dynamic>? rawRequestCapture;
     Map<String, dynamic>? rawResponseCapture;
@@ -749,12 +753,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
               ref.read(streamingReasoningProvider.notifier).state =
                   reasoningBuffer;
               // Update the last section in the sections list for multi-step
-              // reasoning chain support.
+              // reasoning chain support. If sections is empty (first
+              // reasoning event), start a new section.
               final sections = [
                 ...ref.read(streamingReasoningSectionsProvider)
               ];
               if (sections.isNotEmpty) {
                 sections[sections.length - 1] = reasoningBuffer;
+              } else {
+                sections.add(reasoningBuffer);
               }
               ref.read(streamingReasoningSectionsProvider.notifier).state =
                   sections;
@@ -874,8 +881,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
           );
         }
       }
-      // Final update — ensure last chunk is shown
-      if (fullReply.isNotEmpty) {
+      // Final update — ensure last chunk is shown.
+      // Also update when user cancelled (stopped) with no content, to
+      // replace the streaming placeholder with a regular message so the
+      // CircularProgressIndicator in textStreamMessageBuilder is removed.
+      if (fullReply.isNotEmpty ||
+          (_cancelledByUser && _streamingMsgId != null)) {
         updateMessage(fullReply);
       }
       // After streaming completes, clear segments for messages without
@@ -894,11 +905,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // the reasoning toggle only controls whether the params are SENT.
       reasoningBuffer = _adapter.reasoningContent;
       ref.read(streamingReasoningProvider.notifier).state = reasoningBuffer;
-      // Update the last reasoning section with final content
+      // Update the last reasoning section with final content.
+      // Only add a new section if reasoning content exists, to avoid
+      // creating an empty [''] placeholder that shows a blank button.
       final finalSections = [...ref.read(streamingReasoningSectionsProvider)];
       if (finalSections.isNotEmpty) {
         finalSections[finalSections.length - 1] = reasoningBuffer;
-      } else {
+      } else if (reasoningBuffer.isNotEmpty) {
         finalSections.add(reasoningBuffer);
       }
       ref.read(streamingReasoningSectionsProvider.notifier).state =
