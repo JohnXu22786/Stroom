@@ -32,6 +32,24 @@ Dio _createMockDio(String jsonResponse) {
   return dio;
 }
 
+/// Creates a mock [Dio] that returns a JSON array response.
+/// Used for the /releases endpoint which returns a list of releases.
+Dio _createMockDioForList(String jsonResponse) {
+  final dio = Dio(BaseOptions());
+  dio.interceptors.add(InterceptorsWrapper(
+    onRequest: (options, handler) {
+      handler.resolve(
+        Response(
+          requestOptions: options,
+          statusCode: 200,
+          data: jsonDecode(jsonResponse) as List<dynamic>,
+        ),
+      );
+    },
+  ));
+  return dio;
+}
+
 /// Creates a mock [Dio] that always fails with an exception.
 Dio _createFailingDio() {
   final dio = Dio(BaseOptions());
@@ -112,6 +130,21 @@ List<Map<String, String>> _allPlatformAssets(String tagName) {
   ];
 }
 
+/// Build a list of GitHub releases API response (for /releases endpoint).
+/// Each entry is a (tagName, isPrerelease, body) tuple.
+String _githubReleases(List<(String, bool, String)> releases) {
+  final items = releases.map((r) {
+    final (tagName, isPrerelease, body) = r;
+    return '''{
+    "tag_name": "$tagName",
+    "prerelease": $isPrerelease,
+    "body": "$body",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/$tagName"
+  }''';
+  }).join(',\n  ');
+  return '[\n  $items\n]';
+}
+
 void main() {
   group('Version', () {
     test('parse standard semver "0.2.12"', () {
@@ -119,6 +152,8 @@ void main() {
       expect(v.major, 0);
       expect(v.minor, 2);
       expect(v.patch, 12);
+      expect(v.isPreRelease, false);
+      expect(v.preRelease, isNull);
     });
 
     test('parse with v prefix "v0.2.12"', () {
@@ -126,6 +161,7 @@ void main() {
       expect(v.major, 0);
       expect(v.minor, 2);
       expect(v.patch, 12);
+      expect(v.isPreRelease, false);
     });
 
     test('parse with build metadata "0.2.12+1"', () {
@@ -133,13 +169,34 @@ void main() {
       expect(v.major, 0);
       expect(v.minor, 2);
       expect(v.patch, 12);
+      expect(v.isPreRelease, false);
     });
 
-    test('parse with pre-release "0.2.12-alpha"', () {
+    test('parse with pre-release "0.2.12-alpha" preserves pre-release', () {
       final v = Version.parse('0.2.12-alpha');
       expect(v.major, 0);
       expect(v.minor, 2);
       expect(v.patch, 12);
+      expect(v.isPreRelease, true);
+      expect(v.preRelease, 'alpha');
+    });
+
+    test('parse with pre-release builds "0.2.12-beta.1"', () {
+      final v = Version.parse('0.2.12-beta.1');
+      expect(v.major, 0);
+      expect(v.minor, 2);
+      expect(v.patch, 12);
+      expect(v.isPreRelease, true);
+      expect(v.preRelease, 'beta.1');
+    });
+
+    test('parse with pre-release plus build metadata "0.2.12-alpha+001"', () {
+      final v = Version.parse('0.2.12-alpha+001');
+      expect(v.major, 0);
+      expect(v.minor, 2);
+      expect(v.patch, 12);
+      expect(v.isPreRelease, true);
+      expect(v.preRelease, 'alpha');
     });
 
     test('parse empty string defaults to 0.0.0', () {
@@ -147,6 +204,7 @@ void main() {
       expect(v.major, 0);
       expect(v.minor, 0);
       expect(v.patch, 0);
+      expect(v.isPreRelease, false);
     });
 
     test('parse non-numeric parts defaults to 0', () {
@@ -154,7 +212,70 @@ void main() {
       expect(v.major, 0);
       expect(v.minor, 0);
       expect(v.patch, 0);
+      expect(v.isPreRelease, false);
     });
+
+    // ---------- Pre-release compareTo logic ----------
+
+    test('release > same base version with pre-release (1.1.0 > 1.1.0-alpha)',
+        () {
+      final release = Version.parse('1.1.0');
+      final preRel = Version.parse('1.1.0-alpha');
+      expect(release > preRel, true);
+      expect(preRel < release, true);
+      expect(release == preRel, false);
+      expect(release >= preRel, true);
+      expect(preRel <= release, true);
+    });
+
+    test('pre-release < same base version release (1.1.0-alpha < 1.1.0)', () {
+      final preRel = Version.parse('1.1.0-alpha');
+      final release = Version.parse('1.1.0');
+      expect(preRel < release, true);
+      expect(release > preRel, true);
+    });
+
+    test(
+        'different major.minor.patch overrides pre-release (1.2.0-alpha > 1.1.0)',
+        () {
+      final preRel = Version.parse('1.2.0-alpha');
+      final release = Version.parse('1.1.0');
+      expect(preRel > release, true);
+      expect(release < preRel, true);
+    });
+
+    test('pre-release order by identifier (1.1.0-beta > 1.1.0-alpha)', () {
+      final beta = Version.parse('1.1.0-beta');
+      final alpha = Version.parse('1.1.0-alpha');
+      expect(beta > alpha, true);
+      expect(alpha < beta, true);
+    });
+
+    test('same pre-release versions are equal (1.1.0-alpha == 1.1.0-alpha)',
+        () {
+      final a = Version.parse('1.1.0-alpha');
+      final b = Version.parse('1.1.0-alpha');
+      expect(a == b, false); // different instances
+      expect(a > b, false);
+      expect(a < b, false);
+      expect(a >= b, true);
+      expect(a <= b, true);
+    });
+
+    test('beta.2 > beta.1 in pre-release', () {
+      final b2 = Version.parse('1.0.0-beta.2');
+      final b1 = Version.parse('1.0.0-beta.1');
+      expect(b2 > b1, true);
+    });
+
+    test('rc.1 > beta.5 in pre-release ordering (lexicographic)', () {
+      // 'beta.5' vs 'rc.1': 'b' < 'r' → beta < rc
+      final rc = Version.parse('1.0.0-rc.1');
+      final beta = Version.parse('1.0.0-beta.5');
+      expect(rc > beta, true);
+    });
+
+    // ---------- Legacy compareTo tests ----------
 
     test('0.2.14 > 0.2.13', () {
       final a = Version.parse('0.2.14');
@@ -162,7 +283,7 @@ void main() {
       expect(a > b, true);
     });
 
-    test('0.2.13 == 0.2.13', () {
+    test('0.2.13 == 0.2.13 (value equality via compareTo)', () {
       final a = Version.parse('0.2.13');
       final b = Version.parse('0.2.13');
       expect(a > b, false);
@@ -471,6 +592,167 @@ void main() {
     test('returns null when assets list is empty', () async {
       final url = UpdateNotifier.findAssetDownloadUrl([], 'windows');
       expect(url, isNull);
+    });
+  });
+
+  group('UpdateNotifier - Pre-release toggle', () {
+    test('initial acceptPreRelease is false', () async {
+      SharedPreferences.setMockInitialValues({});
+      final dio = _createMockDio(_githubRelease('v0.2.14'));
+      final notifier = UpdateNotifier(dio: dio);
+
+      expect(notifier.state.acceptPreRelease, false);
+    });
+
+    test('setAcceptPreRelease(true) updates state and persists', () async {
+      SharedPreferences.setMockInitialValues({});
+      final dio = _createMockDio(_githubRelease('v0.2.14'));
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.setAcceptPreRelease(true);
+
+      expect(notifier.state.acceptPreRelease, true);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('update_accept_pre_release'), true);
+    });
+
+    test('setAcceptPreRelease(false) persists false', () async {
+      SharedPreferences.setMockInitialValues({});
+      final dio = _createMockDio(_githubRelease('v0.2.14'));
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.setAcceptPreRelease(false);
+
+      expect(notifier.state.acceptPreRelease, false);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('update_accept_pre_release'), false);
+    });
+
+    test('loadAcceptPreRelease loads persisted true from SharedPreferences',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'update_accept_pre_release': true,
+      });
+      final dio = _createMockDio(_githubRelease('v0.2.14'));
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.loadAcceptPreRelease();
+
+      expect(notifier.state.acceptPreRelease, true);
+    });
+
+    test('loadAcceptPreRelease defaults to false when not persisted', () async {
+      SharedPreferences.setMockInitialValues({});
+      final dio = _createMockDio(_githubRelease('v0.2.14'));
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.loadAcceptPreRelease();
+
+      expect(notifier.state.acceptPreRelease, false);
+    });
+
+    test(
+        'checkForUpdate with acceptPreRelease=true fetches all releases and finds latest prerelease',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final releases = _githubReleases([
+        ('v0.2.15-alpha', true, 'Alpha test'),
+        ('v0.2.14', false, 'Stable release'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = notifier.state.copyWith(acceptPreRelease: true);
+
+      await notifier.checkForUpdate();
+
+      // Should find 0.2.15-alpha (newer than installed 0.2.13)
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.latestVersion, '0.2.15-alpha');
+      // acceptPreRelease should be preserved after check
+      expect(notifier.state.acceptPreRelease, true);
+    });
+
+    test(
+        'checkForUpdate with acceptPreRelease=false uses /releases/latest for non-prerelease',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final dio = _createMockDio(_githubRelease('v0.2.14'));
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = notifier.state.copyWith(acceptPreRelease: false);
+
+      await notifier.checkForUpdate();
+
+      // 0.2.14 > installed 0.2.13
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.latestVersion, '0.2.14');
+    });
+
+    test(
+        'checkForUpdate with acceptPreRelease=true, only older prereleases → no update',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final releases = _githubReleases([
+        ('v0.2.12-alpha', true, 'Older alpha'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = notifier.state.copyWith(acceptPreRelease: true);
+
+      await notifier.checkForUpdate();
+
+      // 0.2.12-alpha < installed 0.2.13 → no update
+      expect(notifier.state.updateAvailable, false);
+      // acceptPreRelease should survive "no update" path
+      expect(notifier.state.acceptPreRelease, true);
+    });
+
+    test(
+        'checkForUpdate with acceptPreRelease=true picks latest regardless of prerelease status',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final releases = _githubReleases([
+        ('v0.2.15-beta', true, 'Beta'),
+        ('v0.2.15-alpha', true, 'Alpha'),
+        ('v0.2.14', false, 'Stable'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = notifier.state.copyWith(acceptPreRelease: true);
+
+      await notifier.checkForUpdate();
+
+      // 0.2.15-beta > other versions → should be selected
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.latestVersion, '0.2.15-beta');
+    });
+
+    test('acceptPreRelease survives error during pre-release check', () async {
+      SharedPreferences.setMockInitialValues({});
+      final dio = _createFailingDio();
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = notifier.state.copyWith(acceptPreRelease: true);
+
+      await notifier.checkForUpdate(silent: false);
+
+      // Even on error, acceptPreRelease should be preserved
+      expect(notifier.state.error, isNotNull);
+      expect(notifier.state.acceptPreRelease, true);
+    });
+
+    test('acceptPreRelease survives silent error during pre-release check',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final dio = _createFailingDio();
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = notifier.state.copyWith(acceptPreRelease: true);
+
+      await notifier.checkForUpdate(silent: true);
+
+      // Even on silent error, acceptPreRelease should be preserved
+      expect(notifier.state.isChecking, false);
+      expect(notifier.state.acceptPreRelease, true);
     });
   });
 
