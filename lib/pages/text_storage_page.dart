@@ -43,6 +43,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
   static const _supportedFormats = {
     'txt',
     'md',
+    'mmd',
     'json',
     'xml',
     'csv',

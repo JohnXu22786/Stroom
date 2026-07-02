@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:markdown_widget/markdown_widget.dart';
+import 'package:stroom/pages/mermaid_chart_page.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import '../widgets/markdown_extensions.dart';
 
@@ -279,8 +280,23 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
         ),
       ];
     }
-    // 查看模式：编辑按钮（仅图标）
+    // 查看模式：编辑按钮（仅图标）+ mmd格式额外显示图表编辑按钮
     return [
+      if (widget.file.format == 'mmd')
+        IconButton(
+          icon: const Icon(Icons.account_tree, size: 20),
+          tooltip: '图表编辑',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => MermaidChartPage(
+                  initialCode: _contentController.text,
+                ),
+              ),
+            );
+          },
+        ),
       IconButton(
         icon: const Icon(Icons.edit, size: 20),
         tooltip: '编辑',
