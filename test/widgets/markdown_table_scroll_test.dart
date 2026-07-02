@@ -28,7 +28,8 @@ void main() {
               'Dark mode config should also have table wrapper for consistency');
     });
 
-    test('wrapper wraps child in a SingleChildScrollView with horizontal scroll',
+    test(
+        'wrapper wraps child in a SingleChildScrollView with horizontal scroll',
         () {
       final config = buildMarkdownConfig(isDark: false);
       final wrapper = config.table.wrapper!;
@@ -36,8 +37,7 @@ void main() {
       const testChild = SizedBox(width: 800, height: 100);
       final wrapped = wrapper(testChild);
 
-      expect(
-          wrapped, isA<SingleChildScrollView>(), reason: 'outermost widget');
+      expect(wrapped, isA<SingleChildScrollView>(), reason: 'outermost widget');
 
       final scrollView = wrapped as SingleChildScrollView;
       expect(scrollView.scrollDirection, Axis.horizontal,
