@@ -6,6 +6,7 @@ class MermaidDiagramType {
   final String label;
   final IconData icon;
   final String description;
+
   /// 用于从代码首行检测图表类型的关键字
   final String keyword;
 

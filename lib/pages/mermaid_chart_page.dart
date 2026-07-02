@@ -234,10 +234,9 @@ MERMAID_CODE_PLACEHOLDER
 
     try {
       // Find a unique chart name
-      final typeLabel =
-          MermaidTemplates.getAllTypes()
-              .firstWhere((t) => t.id == _selectedTypeId)
-              .label;
+      final typeLabel = MermaidTemplates.getAllTypes()
+          .firstWhere((t) => t.id == _selectedTypeId)
+          .label;
 
       final bytes = Uint8List.fromList(utf8.encode(content));
       final hash = computeTextHash(bytes);
@@ -394,9 +393,7 @@ MERMAID_CODE_PLACEHOLDER
 
           // ----- Main content: code editor + preview -----
           Expanded(
-            child: _showPreview
-                ? _buildSplitView(cs)
-                : _buildCodeEditor(cs),
+            child: _showPreview ? _buildSplitView(cs) : _buildCodeEditor(cs),
           ),
         ],
       ),
