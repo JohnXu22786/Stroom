@@ -20,7 +20,10 @@ Response _mockResponse({
     requestOptions: RequestOptions(path: 'http://example.com'),
     statusCode: statusCode,
     data: data,
-    headers: Headers.fromMap(headers ?? {'content-type': ['text/html']}),
+    headers: Headers.fromMap(headers ??
+        {
+          'content-type': ['text/html']
+        }),
   );
 }
 
@@ -43,7 +46,9 @@ class MockHttpClientAdapter implements HttpClientAdapter {
       return ResponseBody.fromString(
         'Not found',
         404,
-        headers: {'content-type': ['text/plain']},
+        headers: {
+          'content-type': ['text/plain']
+        },
       );
     }
     final response = handler();
@@ -82,11 +87,14 @@ void main() {
 
     test('sniff() returns MediaResource for direct mp4 URL', () async {
       mockAdapter.onGet(
-          'http://example.com/video.mp4', () => _mockResponse(
-            statusCode: 200,
-            data: 'not a real video',
-            headers: {'content-type': ['video/mp4']},
-          ));
+          'http://example.com/video.mp4',
+          () => _mockResponse(
+                statusCode: 200,
+                data: 'not a real video',
+                headers: {
+                  'content-type': ['video/mp4']
+                },
+              ));
 
       final result = await sniffer.sniff(
         'http://example.com/video.mp4',
@@ -113,13 +121,14 @@ segment3.ts
 ''';
 
       mockAdapter.onGet(
-          'http://example.com/playlist.m3u8', () => _mockResponse(
-            statusCode: 200,
-            data: m3u8Content,
-            headers: {
-              'content-type': ['application/vnd.apple.mpegurl'],
-            },
-          ));
+          'http://example.com/playlist.m3u8',
+          () => _mockResponse(
+                statusCode: 200,
+                data: m3u8Content,
+                headers: {
+                  'content-type': ['application/vnd.apple.mpegurl'],
+                },
+              ));
 
       final result = await sniffer.sniff(
         'http://example.com/playlist.m3u8',
@@ -134,11 +143,14 @@ segment3.ts
 
     test('sniff() injects custom headers', () async {
       mockAdapter.onGet(
-          'http://example.com/video.mp4', () => _mockResponse(
-            statusCode: 200,
-            data: 'mock video',
-            headers: {'content-type': ['video/mp4']},
-          ));
+          'http://example.com/video.mp4',
+          () => _mockResponse(
+                statusCode: 200,
+                data: 'mock video',
+                headers: {
+                  'content-type': ['video/mp4']
+                },
+              ));
 
       final customHeaders = {
         'User-Agent': 'custom-agent/1.0',
@@ -157,11 +169,14 @@ segment3.ts
 
     test('sniff() returns empty list for non-media non-HTML URL', () async {
       mockAdapter.onGet(
-          'http://example.com/data.json', () => _mockResponse(
-            statusCode: 200,
-            data: '{"status": "ok"}',
-            headers: {'content-type': ['application/json']},
-          ));
+          'http://example.com/data.json',
+          () => _mockResponse(
+                statusCode: 200,
+                data: '{"status": "ok"}',
+                headers: {
+                  'content-type': ['application/json']
+                },
+              ));
 
       final result = await sniffer.sniff('http://example.com/data.json');
 
@@ -178,11 +193,14 @@ segment3.ts
 
     test('sniff() returns SniffResult with correct structure', () async {
       mockAdapter.onGet(
-          'http://example.com/audio.mp3', () => _mockResponse(
-            statusCode: 200,
-            data: 'mock audio',
-            headers: {'content-type': ['audio/mpeg']},
-          ));
+          'http://example.com/audio.mp3',
+          () => _mockResponse(
+                statusCode: 200,
+                data: 'mock audio',
+                headers: {
+                  'content-type': ['audio/mpeg']
+                },
+              ));
 
       final result = await sniffer.sniff('http://example.com/audio.mp3');
 
@@ -204,11 +222,14 @@ segment3.ts
 ''';
 
       mockAdapter.onGet(
-          'http://example.com/page.html', () => _mockResponse(
-            statusCode: 200,
-            data: htmlContent,
-            headers: {'content-type': ['text/html']},
-          ));
+          'http://example.com/page.html',
+          () => _mockResponse(
+                statusCode: 200,
+                data: htmlContent,
+                headers: {
+                  'content-type': ['text/html']
+                },
+              ));
 
       final result = await sniffer.sniff('http://example.com/page.html');
 
@@ -221,11 +242,14 @@ segment3.ts
     test('sniff() uses stream-based sniffing for unknown content type',
         () async {
       mockAdapter.onGet(
-          'http://example.com/unknown.xyz', () => _mockResponse(
-            statusCode: 200,
-            data: 'some binary content here',
-            headers: {'content-type': ['application/octet-stream']},
-          ));
+          'http://example.com/unknown.xyz',
+          () => _mockResponse(
+                statusCode: 200,
+                data: 'some binary content here',
+                headers: {
+                  'content-type': ['application/octet-stream']
+                },
+              ));
 
       final result = await sniffer.sniff('http://example.com/unknown.xyz');
 
@@ -235,10 +259,11 @@ segment3.ts
 
     test('sniff() handles HTTP errors gracefully', () async {
       mockAdapter.onGet(
-          'http://example.com/video.mp4', () => _mockResponse(
-            statusCode: 404,
-            data: 'Not Found',
-          ));
+          'http://example.com/video.mp4',
+          () => _mockResponse(
+                statusCode: 404,
+                data: 'Not Found',
+              ));
 
       // Even with a 404, the sniffer should return something (URL has media ext)
       final result = await sniffer.sniff('http://example.com/video.mp4');

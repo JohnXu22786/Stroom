@@ -60,7 +60,8 @@ void main() {
       );
     });
 
-    testWidgets('DraggableFloatingPanel with many URLs shows scrollable content',
+    testWidgets(
+        'DraggableFloatingPanel with many URLs shows scrollable content',
         (tester) async {
       final manyUrls = List.generate(
         20,

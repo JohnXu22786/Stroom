@@ -218,8 +218,7 @@ class _BrowserPageState extends State<BrowserPage> {
                 LinearProgressIndicator(value: _progress),
               Expanded(
                 child: InAppWebView(
-                  initialUrlRequest:
-                      URLRequest(url: WebUri(widget.initialUrl)),
+                  initialUrlRequest: URLRequest(url: WebUri(widget.initialUrl)),
                   initialSettings: InAppWebViewSettings(
                     javaScriptEnabled: true,
                     domStorageEnabled: true,
@@ -396,10 +395,8 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
                       itemBuilder: (ctx, i) {
                         final s = _scripts[i];
                         return ListTile(
-                          title:
-                              Text(s.name.isNotEmpty ? s.name : '未命名脚本'),
-                          subtitle:
-                              Text('${s.matches.length} 个匹配规则'),
+                          title: Text(s.name.isNotEmpty ? s.name : '未命名脚本'),
+                          subtitle: Text('${s.matches.length} 个匹配规则'),
                           trailing: IconButton(
                             icon: const Icon(Icons.delete_outline,
                                 color: Colors.red),

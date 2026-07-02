@@ -212,8 +212,7 @@ class DartCatCatchSniffer {
       );
       mimeType = headResponse.headers.value('content-type');
       final lengthStr = headResponse.headers.value('content-length');
-      contentLength =
-          lengthStr != null ? int.tryParse(lengthStr) : null;
+      contentLength = lengthStr != null ? int.tryParse(lengthStr) : null;
     } catch (e) {
       debugPrint('[DartCatCatchSniffer] HEAD failed for direct URL: $e');
     }
@@ -256,7 +255,8 @@ class DartCatCatchSniffer {
     if (ext == 'm3u8' || ext == 'm3u') {
       segments = await M3U8Parser.parsePlaylist(content, targetUrl);
       final segDurations = await M3U8Parser.parseSegments(content, targetUrl);
-      totalDuration = segDurations.fold<double>(0, (sum, s) => sum + s.duration);
+      totalDuration =
+          segDurations.fold<double>(0, (sum, s) => sum + s.duration);
     } else if (ext == 'mpd') {
       segments = await MPDParser.parseManifest(content, targetUrl);
       final mpdSegments = await MPDParser.parseSegments(content, targetUrl);

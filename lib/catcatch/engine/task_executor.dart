@@ -348,8 +348,7 @@ class TaskExecutor {
       );
 
       markExecutorStep(steps, 0,
-          running: true,
-          progress: dartResult.resources.isNotEmpty ? 80 : 40);
+          running: true, progress: dartResult.resources.isNotEmpty ? 80 : 40);
       onUpdate(task.copyWith(steps: steps, progress: 20));
 
       if (dartResult.resources.isNotEmpty) {
