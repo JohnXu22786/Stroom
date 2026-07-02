@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,11 +8,10 @@ import 'package:stroom/pages/chat/composer/composer_shared.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
-import 'package:stroom/pages/chat_page.dart';
 
-/// Helper that creates a MaterialApp wrapped in ProviderScope with
-/// all providers needed to render ChatPage, with overrides for reasoning state.
-Widget createReasoningTestApp({
+/// Helper that creates a widget with all providers needed to test
+/// the composer widget in isolation, with reasoning state overrides.
+Widget createComposerTestApp({
   required bool reasoningEnabled,
   required String reasoningEffort,
 }) {
@@ -28,20 +28,32 @@ Widget createReasoningTestApp({
         return ProviderEntriesNotifier();
       }),
     ],
-    child: const MaterialApp(home: ChatPage()),
+    child: MaterialApp(
+      home: Scaffold(
+        body: ChatComposerWidget(
+          onSend: (text, attachments) {},
+          onStop: () {},
+          modelNames: ['test-model'],
+          selectedModelIndex: 0,
+          onModelSelected: (idx) {},
+          onEnabledToolsChanged: (tools) {},
+          reasoningParams: [
+            ReasoningParam(
+                paramName: 'reasoning_effort',
+                options: ['low', 'medium', 'high']),
+          ],
+          hasReasoningParams: true,
+        ),
+      ),
+    ),
   );
 }
 
 void main() {
-  group('Reasoning chip display label', () {
-    Future<void> setupSurface(WidgetTester tester) async {
+  group('Composer reasoning chip label', () {
+    testWidgets('shows effort value when reasoning enabled', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
-    }
-
-    testWidgets('shows effort value when reasoning enabled with effort param',
-        (tester) async {
-      await setupSurface(tester);
-      await tester.pumpWidget(createReasoningTestApp(
+      await tester.pumpWidget(createComposerTestApp(
         reasoningEnabled: true,
         reasoningEffort: 'medium',
       ));
@@ -49,14 +61,16 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       tester.takeException();
 
-      // Should show just "medium" (not "推理 medium")
+      // Should show the effort level when reasoning is enabled
+      // The label shows the actual effort value ('medium')
       expect(find.text('medium'), findsOneWidget);
+      expect(find.text('推理'), findsNothing);
     });
 
-    testWidgets('shows 推理 when reasoning enabled without effort param',
+    testWidgets('shows 推理 when reasoning enabled but effort is empty',
         (tester) async {
-      await setupSurface(tester);
-      await tester.pumpWidget(createReasoningTestApp(
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      await tester.pumpWidget(createComposerTestApp(
         reasoningEnabled: true,
         reasoningEffort: '',
       ));
@@ -64,13 +78,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       tester.takeException();
 
-      // Should show "推理" when no effort param
       expect(find.text('推理'), findsOneWidget);
     });
 
-    testWidgets('shows 推理 when reasoning disabled', (tester) async {
-      await setupSurface(tester);
-      await tester.pumpWidget(createReasoningTestApp(
+    testWidgets('shows 推理 in gray when reasoning disabled', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      await tester.pumpWidget(createComposerTestApp(
         reasoningEnabled: false,
         reasoningEffort: 'medium',
       ));
@@ -78,14 +91,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       tester.takeException();
 
-      // Should show "推理" when reasoning is disabled
       expect(find.text('推理'), findsOneWidget);
     });
 
-    testWidgets('chip passes purple color when reasoning enabled',
-        (tester) async {
-      await setupSurface(tester);
-      await tester.pumpWidget(createReasoningTestApp(
+    testWidgets('chip color is purple when reasoning enabled', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      await tester.pumpWidget(createComposerTestApp(
         reasoningEnabled: true,
         reasoningEffort: 'medium',
       ));
@@ -93,21 +104,18 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       tester.takeException();
 
-      // Find the SettingsChip with label "medium"
+      // Find the chip by its label "medium"
       final chip = find.byWidgetPredicate(
         (w) => w is SettingsChip && w.label == 'medium',
       );
       expect(chip, findsOneWidget);
-
-      // Verify the chip uses purple color
       final settingsChip = tester.widget<SettingsChip>(chip);
       expect(settingsChip.color, Colors.purple);
     });
 
-    testWidgets('chip passes grey color when reasoning disabled',
-        (tester) async {
-      await setupSurface(tester);
-      await tester.pumpWidget(createReasoningTestApp(
+    testWidgets('chip color is grey when reasoning disabled', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      await tester.pumpWidget(createComposerTestApp(
         reasoningEnabled: false,
         reasoningEffort: 'medium',
       ));
@@ -115,13 +123,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       tester.takeException();
 
-      // Find the SettingsChip with label "推理"
       final chip = find.byWidgetPredicate(
         (w) => w is SettingsChip && w.label == '推理',
       );
       expect(chip, findsOneWidget);
-
-      // Verify the chip uses grey color
       final settingsChip = tester.widget<SettingsChip>(chip);
       expect(settingsChip.color, Colors.grey);
     });

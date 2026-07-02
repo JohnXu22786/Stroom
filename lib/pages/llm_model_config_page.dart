@@ -145,7 +145,22 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         TextEditingController(text: seed != null ? seed.toString() : '');
 
     _customParams = (m?.customParams ?? []).map((p) => p.copy()).toList();
-    _reasoningParams = (m?.reasoningParams ?? []).map((p) => p.copy()).toList();
+    if (m != null) {
+      _reasoningParams = m.reasoningParams.map((p) => p.copy()).toList();
+    } else {
+      // New model: pre-populate with a default reasoning toggle that the user
+      // can customize. This ensures the reasoning panel is available out of
+      // the box, and the toggle-first validation guides correct configuration.
+      _reasoningParams = [
+        ReasoningParam(
+          paramName: '',
+          isReasoningToggle: true,
+          onValue: '',
+          offValue: '',
+          options: [],
+        ),
+      ];
+    }
   }
 
   @override

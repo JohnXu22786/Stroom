@@ -111,8 +111,7 @@ void main() {
   });
 
   group('Reasoning params editing with options', () {
-    testWidgets(
-        'reasoning params section shows no toggle by default (must add manually)',
+    testWidgets('reasoning toggle section has a default toggle for new models',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -123,16 +122,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // No default toggle - should show "暂无推理开关" instead
-      expect(find.text('暂无推理开关'), findsOneWidget);
-      expect(find.text('添加推理开关'), findsOneWidget);
-
-      // Add a reasoning toggle
-      await tester.tap(find.text('添加推理开关'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // Now the toggle card should be visible
+      // New models now have a default reasoning toggle pre-populated
       expect(find.text('推理开关'), findsOneWidget);
       expect(find.text('参数名'), findsOneWidget);
       expect(find.text('开启时值'), findsOneWidget);
@@ -211,18 +201,14 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Add a toggle first
-      await tester.tap(find.text('添加推理开关'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
       // Fill required fields
       final textFields = find.byType(TextField);
       await tester.enterText(textFields.at(1), 'test-model');
       await tester.enterText(textFields.at(2), '4096');
       await tester.pump();
 
-      // Fill only toggle name, leave onValue/offValue empty
+      // The default toggle is already present. Fill only toggle name,
+      // leave onValue/offValue empty.
       final toggleNameField = find.byType(TextFormField).first;
       await tester.enterText(toggleNameField, 'thinking.type');
       await tester.pump();
@@ -273,18 +259,13 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Add a toggle first
-      await tester.tap(find.text('添加推理开关'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-
       // Fill required fields
       var textFields = find.byType(TextField);
       await tester.enterText(textFields.at(1), 'test-model');
       await tester.enterText(textFields.at(2), '4096');
       await tester.pump();
 
-      // Fill toggle fields
+      // The default toggle is already present. Fill all toggle fields.
       final toggleNameField = find.byType(TextFormField).first;
       await tester.enterText(toggleNameField, 'thinking.type');
       final toggleFields = find.byType(TextFormField);
