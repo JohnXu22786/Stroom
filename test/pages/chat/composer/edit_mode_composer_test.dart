@@ -299,7 +299,7 @@ void main() {
       tester.takeException();
 
       // Settings chips should still be visible
-      expect(find.text('模型'), findsOneWidget);
+      expect(find.textContaining('model-a'), findsOneWidget);
       expect(find.text('工具'), findsOneWidget);
       expect(find.text('推理'), findsOneWidget);
     });
