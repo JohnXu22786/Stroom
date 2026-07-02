@@ -6,7 +6,7 @@
 #define MyAppPublisher "JohnTsui"
 #define MyAppURL "https://github.com/JohnXu22786/Stroom"
 #define SourceDir "..\build\windows\x64\runner\Release"
-#define OutputDir "artifacts"
+#define OutputDir "..\artifacts"
 
 [Setup]
 AppName={#MyAppName}
