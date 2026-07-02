@@ -11,6 +11,7 @@ import 'sniffing_engine.dart';
 import 'm3u8_parser.dart';
 import 'webview_sniffer.dart';
 import 'mpd_parser.dart';
+import 'dart_cat_catch_sniffer.dart';
 import 'download_manager.dart';
 import 'ffmpeg_converter.dart';
 import 'executor_utils.dart';
@@ -329,83 +330,178 @@ class TaskExecutor {
     CancelToken? cancelToken,
   }) async {
     var capturedPageTitle = task.title;
-    // Step 1: Direct HTTP sniffing
-    var resources = await SniffingEngine.analyzeUrl(task.url,
-        cancelToken: cancelToken, onProgress: (step, progress) {
-      markExecutorStep(steps, 0, running: true, progress: progress);
-      onUpdate(task.copyWith(steps: steps, progress: (progress * 20 ~/ 100)));
-    });
 
-    // Step 2: Launch WebView if direct sniffing found nothing useful.
-    // Cases: 0 resources, or 1 resource whose ext is not a known media extension
-    // (e.g. Bilibili page URL → ext="" → isMediaExtension("")=false → WebView launches).
-    final needsWebView = resources.isEmpty ||
-        (resources.length == 1 &&
-            !SniffingEngine.isMediaExtension(resources.first.ext));
-    if (needsWebView && !(cancelToken?.isCancelled ?? false)) {
-      markExecutorStep(steps, 0, running: true, progress: 50);
+    // -----------------------------------------------------------------------
+    // Tier 1: Use DartCatCatchSniffer (pure Dart, stream-based, HTML regex)
+    // This handles direct media URLs, playlists, and HTML page parsing.
+    // -----------------------------------------------------------------------
+    final dartSniffer = DartCatCatchSniffer();
+    try {
+      final headers = DefaultRules.buildBrowserHeaders(
+        referer: task.url,
+      );
+
+      final dartResult = await dartSniffer.sniff(
+        task.url,
+        headers: headers,
+        cancelToken: cancelToken,
+      );
+
+      markExecutorStep(steps, 0,
+          running: true,
+          progress: dartResult.resources.isNotEmpty ? 80 : 40);
       onUpdate(task.copyWith(steps: steps, progress: 20));
 
-      debugPrint(
-          '[TaskExecutor] Direct sniffing found only ${resources.length} resource(s), '
-          'launching WebView background sniffer');
+      if (dartResult.resources.isNotEmpty) {
+        // Dart sniffer found resources — use them directly
+        var resources = dartResult.resources;
 
-      try {
-        final (webViewResources, pageTitle) = await WebViewSniffer.sniff(
-          url: task.url,
-          timeout: const Duration(seconds: 30),
+        // 主动探针：对可播放但缺少时长/分辨率信息的视频预先探测
+        if (!(cancelToken?.isCancelled ?? false)) {
+          resources = await probeMediaResources(resources);
+        }
+
+        markExecutorStep(steps, 0,
+            done: true, detail: '获取到${resources.length}个媒体资源');
+        markExecutorStep(steps, 1, done: true);
+        onUpdate(task.copyWith(
+            steps: steps,
+            detectedMedia: resources,
+            progress: calcExecutorProgress(steps)));
+        return (resources, capturedPageTitle);
+      }
+
+      // If Dart sniffer says needsWebViewFallback, skip Tier 2 and go directly
+      // to WebView sniffing
+      if (dartResult.needsWebViewFallback) {
+        debugPrint(
+            '[TaskExecutor] DartCatCatchSniffer recommends WebView fallback');
+        return await _fallbackToWebView(
+          task: task,
+          steps: steps,
+          onUpdate: onUpdate,
           cancelToken: cancelToken,
-          onProgress: (step, progress) {
-            markExecutorStep(steps, 0,
-                running: true, progress: 50 + (progress ~/ 2));
-            onUpdate(task.copyWith(
-                steps: steps, progress: 20 + (progress * 30 ~/ 100)));
-          },
+          capturedPageTitle: capturedPageTitle,
+          existingResources: const [],
+        );
+      }
+    } catch (e) {
+      debugPrint('[TaskExecutor] DartCatCatchSniffer failed: $e');
+      // Non-fatal — fall through to Tier 2
+    } finally {
+      dartSniffer.dispose();
+    }
+
+    // -----------------------------------------------------------------------
+    // Tier 2: Traditional SniffingEngine (existing behavior)
+    // -----------------------------------------------------------------------
+    markExecutorStep(steps, 0, running: true, progress: 10);
+    onUpdate(task.copyWith(steps: steps, progress: 5));
+
+    try {
+      var resources = await SniffingEngine.analyzeUrl(task.url,
+          cancelToken: cancelToken, onProgress: (step, progress) {
+        markExecutorStep(steps, 0, running: true, progress: progress);
+        onUpdate(task.copyWith(steps: steps, progress: (progress * 20 ~/ 100)));
+      });
+
+      // -------------------------------------------------------------------
+      // Tier 3: WebView sniffing if direct sniffing found nothing useful
+      // -------------------------------------------------------------------
+      final needsWebView = resources.isEmpty ||
+          (resources.length == 1 &&
+              !SniffingEngine.isMediaExtension(resources.first.ext));
+      if (needsWebView && !(cancelToken?.isCancelled ?? false)) {
+        var (webViewResources, pageTitle) = await _fallbackToWebView(
+          task: task,
+          steps: steps,
+          onUpdate: onUpdate,
+          cancelToken: cancelToken,
+          capturedPageTitle: capturedPageTitle,
+          existingResources: resources,
         );
 
-        // Store page title in task metadata for auto-naming
         if (pageTitle != null && pageTitle.isNotEmpty) {
           capturedPageTitle = pageTitle;
-          onUpdate(task.copyWith(
-            steps: steps,
-            metadata: {
-              ...task.metadata,
-              'pageTitle': pageTitle,
-            },
-          ));
         }
-
-        // Merge: keep direct sniff results first (usually higher quality), then add new ones
-        final existingUrls = resources.map((r) => r.url).toSet();
-        for (final r in webViewResources) {
-          if (!existingUrls.contains(r.url)) {
-            resources = [...resources, r];
-          }
-        }
-
-        debugPrint(
-            '[TaskExecutor] WebView sniffer found ${webViewResources.length} resource(s), '
-            'total after merge: ${resources.length}');
-      } catch (e) {
-        debugPrint(
-            '[TaskExecutor] WebView sniffing failed, continuing with direct results: $e');
-        // Non-fatal - continue with whatever direct sniffing found
+        resources = webViewResources;
       }
+
+      // 主动探针：对可播放但缺少时长/分辨率信息的视频预先探测
+      if (!(cancelToken?.isCancelled ?? false)) {
+        resources = await probeMediaResources(resources);
+      }
+
+      markExecutorStep(steps, 0,
+          done: true, detail: '获取到${resources.length}个媒体资源');
+      markExecutorStep(steps, 1, done: true);
+      onUpdate(task.copyWith(
+          steps: steps,
+          detectedMedia: resources,
+          progress: calcExecutorProgress(steps)));
+      return (resources, capturedPageTitle);
+    } catch (e) {
+      debugPrint('[TaskExecutor] All sniffing tiers failed: $e');
+      rethrow;
+    }
+  }
+
+  /// Fallback to WebView-based sniffing (Tier 3).
+  ///
+  /// Launches a headless WebView to discover media resources that require
+  /// JavaScript rendering.
+  static Future<(List<MediaResource>, String?)> _fallbackToWebView({
+    required CatCatchTask task,
+    required List<StepStatus> steps,
+    required void Function(CatCatchTask) onUpdate,
+    CancelToken? cancelToken,
+    required String capturedPageTitle,
+    required List<MediaResource> existingResources,
+  }) async {
+    markExecutorStep(steps, 0, running: true, progress: 50);
+    onUpdate(task.copyWith(steps: steps, progress: 20));
+
+    debugPrint(
+        '[TaskExecutor] Direct sniffing found only ${existingResources.length} resource(s), '
+        'launching WebView background sniffer');
+
+    var resources = List<MediaResource>.from(existingResources);
+    var pageTitle = capturedPageTitle;
+
+    try {
+      final (webViewResources, pTitle) = await WebViewSniffer.sniff(
+        url: task.url,
+        timeout: const Duration(seconds: 30),
+        cancelToken: cancelToken,
+        onProgress: (step, progress) {
+          markExecutorStep(steps, 0,
+              running: true, progress: 50 + (progress ~/ 2));
+          onUpdate(task.copyWith(
+              steps: steps, progress: 20 + (progress * 30 ~/ 100)));
+        },
+      );
+
+      if (pTitle != null && pTitle.isNotEmpty) {
+        pageTitle = pTitle;
+      }
+
+      // Merge results (dedup by URL)
+      final existingUrls = resources.map((r) => r.url).toSet();
+      for (final r in webViewResources) {
+        if (!existingUrls.contains(r.url)) {
+          resources = [...resources, r];
+        }
+      }
+
+      debugPrint(
+          '[TaskExecutor] WebView sniffer found ${webViewResources.length} resource(s), '
+          'total after merge: ${resources.length}');
+    } catch (e) {
+      debugPrint(
+          '[TaskExecutor] WebView sniffing failed, continuing with direct results: $e');
     }
 
-    // 主动探针：对可播放但缺少时长/分辨率信息的视频预先探测
-    if (!(cancelToken?.isCancelled ?? false)) {
-      resources = await probeMediaResources(resources);
-    }
-
-    markExecutorStep(steps, 0,
-        done: true, detail: '获取到${resources.length}个媒体资源');
-    markExecutorStep(steps, 1, done: true);
-    onUpdate(task.copyWith(
-        steps: steps,
-        detectedMedia: resources,
-        progress: calcExecutorProgress(steps)));
-    return (resources, capturedPageTitle);
+    return (resources, pageTitle);
   }
 
   /// Step 2: 解析播放列表
