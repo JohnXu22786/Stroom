@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 import '../services/data_migration_service.dart';
 
@@ -286,5 +287,118 @@ class StartupCheckService {
   /// 检查类型是否在已知的供应商类型列表中。
   static bool _isKnownProviderType(String type) {
     return ['llm', 'tts', 'ocr', 'asr', 'mcp', 'builtin'].contains(type);
+  }
+
+  // ================================================================
+  // 4. 数据格式修复
+  // ================================================================
+
+  /// 修复常见的数据格式问题，确保数据在当前版本下可被安全读取。
+  ///
+  /// 在启动检查的最后阶段调用，修复后直接持久化。
+  /// 当前修复项：
+  /// - provider_entries 中 null/空字符串 的 id 字段（会生成 UUID）
+  /// - provider_entries 中 null 的 type 字段
+  /// - provider_entries 中 null 的条目
+  ///
+  /// 返回修复过程中发现的错误日志数量（非修复数量）。
+  static Future<int> repairDataFormats() async {
+    final prefs = await SharedPreferences.getInstance();
+    int errorCount = 0;
+
+    errorCount += await _repairProviderEntries(prefs);
+
+    if (errorCount > 0) {
+      debugPrint(
+          '[StartupCheckService] Data repair completed with $errorCount error(s)');
+    } else {
+      debugPrint('[StartupCheckService] Data repair completed, no errors');
+    }
+
+    return errorCount;
+  }
+
+  /// 修复 provider_entries 中的常见格式问题。
+  ///
+  /// 返回遇到的解析错误数（非修复数）。
+  static Future<int> _repairProviderEntries(SharedPreferences prefs) async {
+    final json = prefs.getString('provider_entries');
+    if (json == null || json.isEmpty) return 0;
+
+    List<dynamic> list;
+    try {
+      list = jsonDecode(json) as List<dynamic>;
+    } catch (e) {
+      debugPrint('[StartupCheckService] provider_entries is malformed JSON, '
+          'cannot repair: $e');
+      return 1;
+    }
+
+    bool changed = false;
+    int parseErrors = 0;
+
+    for (int i = 0; i < list.length; i++) {
+      final entry = list[i];
+      if (entry is! Map<String, dynamic>) {
+        debugPrint(
+            '[StartupCheckService] provider_entries[$i] is null/non-map, '
+            'removing');
+        list[i] = <String, dynamic>{
+          'id': 'provider_${const Uuid().v4()}',
+          'type': 'tts',
+          'name': '已修复条目',
+          'configs': <Map<String, dynamic>>[],
+        };
+        changed = true;
+        continue;
+      }
+
+      // Fix null/empty id — also handles non-String types (e.g. int from corrupted data)
+      final rawId = entry['id'];
+      if (rawId == null || rawId is! String || rawId.isEmpty) {
+        final rawType = entry['type'];
+        final type = rawType is String ? rawType : 'unknown';
+        entry['id'] = 'repaired_${type}_${const Uuid().v4()}';
+        changed = true;
+        debugPrint(
+            '[StartupCheckService] Fixed null/empty id at index $i (type: $type)');
+      }
+
+      // Fix null/empty type — also handles non-String types
+      if (entry['type'] == null || entry['type'] is! String ||
+          (entry['type'] as String).isEmpty) {
+        entry['type'] = 'tts';
+        changed = true;
+        debugPrint(
+            '[StartupCheckService] Fixed null/empty type at index $i');
+      }
+
+      // Fix null/empty name — also handles non-String types
+      if (entry['name'] == null || entry['name'] is! String ||
+          (entry['name'] as String).isEmpty) {
+        entry['name'] = '供应商 ${i + 1}';
+        changed = true;
+        debugPrint(
+            '[StartupCheckService] Fixed null/empty name at index $i');
+      }
+
+      // Fix null configs
+      if (entry['configs'] == null || (entry['configs'] is! List)) {
+        entry['configs'] = <Map<String, dynamic>>[];
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      try {
+        await prefs.setString('provider_entries', jsonEncode(list));
+        debugPrint('[StartupCheckService] provider_entries repaired and saved');
+      } catch (e) {
+        debugPrint('[StartupCheckService] Failed to save repaired data: $e');
+        parseErrors++;
+      }
+    }
+
+    return parseErrors;
   }
 }
