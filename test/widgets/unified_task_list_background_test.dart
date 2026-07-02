@@ -219,8 +219,7 @@ void main() {
 
       expect(find.byType(CircularProgressIndicator), findsNothing,
           reason: '进行中的OCR/ASR任务不应显示进度指示器');
-      expect(find.textContaining('%'), findsNothing,
-          reason: '进行中的任务不应显示进度百分比');
+      expect(find.textContaining('%'), findsNothing, reason: '进行中的任务不应显示进度百分比');
     });
 
     testWidgets('completed background task shows check icon', (tester) async {
@@ -275,17 +274,16 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       // "识别结果" label should NOT be visible (removed by requirements)
-      expect(find.text('识别结果'), findsNothing,
-          reason: '"识别结果"标签不应再显示');
+      expect(find.text('识别结果'), findsNothing, reason: '"识别结果"标签不应再显示');
       // The result text itself should NOT be visible
-      expect(find.text('这是OCR识别出来的文字'), findsNothing,
-          reason: '识别结果文字不应在卡片内显示');
+      expect(find.text('这是OCR识别出来的文字'), findsNothing, reason: '识别结果文字不应在卡片内显示');
     });
 
     // =========================================================================
     // Open file button for background tasks (requirement: like download tasks)
     // =========================================================================
-    testWidgets('completed background task with file path shows Open File button',
+    testWidgets(
+        'completed background task with file path shows Open File button',
         (tester) async {
       await pumpPageWithBackground(tester, [
         _createCompletedOcrTask(
@@ -304,7 +302,8 @@ void main() {
           reason: '有下载文件路径的背景任务应显示"打开文件"按钮');
     });
 
-    testWidgets('completed background task without file path hides Open File button',
+    testWidgets(
+        'completed background task without file path hides Open File button',
         (tester) async {
       await pumpPageWithBackground(tester, [
         _createCompletedOcrTask(

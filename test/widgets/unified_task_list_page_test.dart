@@ -117,7 +117,8 @@ void main() {
     // -------------------------------------------------------------------------
     testWidgets('all tasks shown in one unified list', (tester) async {
       await pumpPage(tester, [
-        _createCompletedTask(id: 'downloaded-1', downloadedFilePath: 'C:\\a.mp4'),
+        _createCompletedTask(
+            id: 'downloaded-1', downloadedFilePath: 'C:\\a.mp4'),
         _createRunningTask(id: 'running-1'),
       ]);
 
@@ -133,7 +134,8 @@ void main() {
     testWidgets('empty task list shows placeholder', (tester) async {
       await pumpPage(tester, []);
 
-      expect(find.text('暂无任务'), findsOneWidget, reason: 'Empty task list should show "暂无任务"');
+      expect(find.text('暂无任务'), findsOneWidget,
+          reason: 'Empty task list should show "暂无任务"');
     });
   });
 

@@ -217,7 +217,9 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage> {
           ),
         ],
       ),
-      body: allTasks.isEmpty ? _buildEmptyState(context) : _buildTaskList(allTasks),
+      body: allTasks.isEmpty
+          ? _buildEmptyState(context)
+          : _buildTaskList(allTasks),
     );
   }
 
