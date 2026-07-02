@@ -31,26 +31,91 @@ enum BackgroundTaskType {
         return '音频分离';
     }
   }
+
+  /// Steps appropriate for each task type (used for step chain display).
+  List<String> get stepLabels {
+    switch (this) {
+      case BackgroundTaskType.ocr:
+        return ['连接服务器', '上传图片', '识别中', '接收结果', '保存文件'];
+      case BackgroundTaskType.asr:
+        return ['连接服务器', '上传音频', '转写中', '接收结果', '保存文件'];
+      case BackgroundTaskType.audioSeparation:
+        return ['连接服务器', '上传音频', '分离中', '接收结果', '保存文件'];
+    }
+  }
+}
+
+// ============================================================================
+// Step Status for Background Tasks
+// ============================================================================
+
+/// Simplified step status enum (without progress quantification).
+enum BgStepStatus { pending, running, completed, failed, skipped }
+
+/// A single step in a background task's step chain.
+/// No progress bar — just shows status: pending, running, completed, failed, or skipped.
+class BgTaskStep {
+  final String label;
+  final BgStepStatus status;
+  final String? error;
+
+  const BgTaskStep({
+    required this.label,
+    this.status = BgStepStatus.pending,
+    this.error,
+  });
+
+  bool get completed => status == BgStepStatus.completed;
+  bool get running => status == BgStepStatus.running;
+  bool get failed => status == BgStepStatus.failed;
+  bool get skipped => status == BgStepStatus.skipped;
+
+  BgTaskStep copyWith({
+    BgStepStatus? status,
+    String? error,
+    bool clearError = false,
+  }) =>
+      BgTaskStep(
+        label: label,
+        status: status ?? this.status,
+        error: clearError ? null : (error ?? this.error),
+      );
+
+  Map<String, dynamic> toMap() => {
+        'label': label,
+        'status': status.name,
+        if (error != null) 'error': error,
+      };
+
+  factory BgTaskStep.fromMap(Map<String, dynamic> map) => BgTaskStep(
+        label: map['label'] as String,
+        status: BgStepStatus.values.byName(
+            map['status'] as String? ?? 'pending'),
+        error: map['error'] as String?,
+      );
 }
 
 // ============================================================================
 // Background Task Model
 // ============================================================================
 
-/// A lightweight task model for OCR, ASR, and Audio Separation operations.
-/// These are simple start → complete/fail tasks without complex step tracking.
-/// Progress bars have been removed; expanded view shows result text instead.
+/// A task model for OCR, ASR, and Audio Separation operations.
+/// Uses a step chain (like CatCatch downloads) to show execution progress
+/// without quantifying with percentages. Steps are task-type-specific.
 class BackgroundTask {
   final String id;
   final BackgroundTaskType type;
   final String title;
   final TaskStatus status;
   final String?
-      result; // The text result (OCR extracted text, ASR transcription)
+      result; // The text result (OCR extracted text, ASR transcription) — kept internally for saving
   final String? error;
   final DateTime createdAt;
   final DateTime? completedAt;
   final DateTime? statusChangedAt;
+  final List<BgTaskStep> steps; // Step chain for UI display
+  final String?
+      downloadedFilePath; // File path for "open file" button (like CatCatch)
 
   BackgroundTask({
     required this.id,
@@ -62,6 +127,8 @@ class BackgroundTask {
     DateTime? createdAt,
     this.completedAt,
     this.statusChangedAt,
+    this.steps = const [],
+    this.downloadedFilePath,
   }) : createdAt = createdAt ?? DateTime.now();
 
   BackgroundTask copyWith({
@@ -70,6 +137,10 @@ class BackgroundTask {
     String? error,
     DateTime? completedAt,
     DateTime? statusChangedAt,
+    List<BgTaskStep>? steps,
+    String? downloadedFilePath,
+    bool clearError = false,
+    bool clearDownloadedFilePath = false,
   }) {
     final newStatus = status ?? this.status;
     final newStatusChangedAt = statusChangedAt ??
@@ -82,10 +153,14 @@ class BackgroundTask {
       title: title,
       status: newStatus,
       result: result ?? this.result,
-      error: error,
+      error: clearError ? null : (error ?? this.error),
       createdAt: createdAt,
       completedAt: completedAt ?? this.completedAt,
       statusChangedAt: newStatusChangedAt,
+      steps: steps ?? this.steps,
+      downloadedFilePath: clearDownloadedFilePath
+          ? null
+          : (downloadedFilePath ?? this.downloadedFilePath),
     );
   }
 
@@ -99,6 +174,9 @@ class BackgroundTask {
         'createdAt': createdAt.toIso8601String(),
         'completedAt': completedAt?.toIso8601String(),
         'statusChangedAt': statusChangedAt?.toIso8601String(),
+        'steps': steps.map((s) => s.toMap()).toList(),
+        if (downloadedFilePath != null)
+          'downloadedFilePath': downloadedFilePath,
       };
 
   factory BackgroundTask.fromMap(Map<String, dynamic> map) => BackgroundTask(
@@ -115,6 +193,12 @@ class BackgroundTask {
         statusChangedAt: map['statusChangedAt'] != null
             ? DateTime.parse(map['statusChangedAt'] as String)
             : null,
+        steps: (map['steps'] as List?)
+                ?.map((s) =>
+                    BgTaskStep.fromMap(Map<String, dynamic>.from(s as Map)))
+                .toList() ??
+            [],
+        downloadedFilePath: map['downloadedFilePath'] as String?,
       );
 }
 
@@ -133,17 +217,26 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   BackgroundTaskNotifier() : super([]);
 
   /// Add a new background task (running) and return its ID.
+  /// Initializes default step chain based on task type.
   String addTask({required BackgroundTaskType type, required String title}) {
     final id = _uuid.v4();
-    final task = BackgroundTask(id: id, type: type, title: title);
+    final steps = type.stepLabels
+        .map((label) => BgTaskStep(label: label, status: BgStepStatus.pending))
+        .toList();
+    final task = BackgroundTask(id: id, type: type, title: title, steps: steps);
     state = [task, ...state];
     _persistTasks();
     return id;
   }
 
   /// Mark a task as completed and keep it in the list (visible to user).
-  void completeTask(String taskId) {
-    _updateTask(taskId, TaskStatus.completed);
+  /// Optionally provide [downloadedFilePath] for the "open file" button.
+  void completeTask(String taskId, {String? downloadedFilePath}) {
+    _updateTask(
+      taskId,
+      TaskStatus.completed,
+      downloadedFilePath: downloadedFilePath,
+    );
   }
 
   /// Mark a task as failed with an optional error message.
@@ -153,11 +246,52 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   /// Set the result text for a task (OCR extracted text, ASR transcription, etc.).
   /// Can be called multiple times to update partial/intermediate results.
+  /// The result is kept internally for file saving but NOT displayed in the card UI.
   void setResult(String taskId, String result) {
     state = state.map((t) {
       if (t.id != taskId) return t;
-      // Preserve existing error — setResult should not clear it
       return t.copyWith(result: result, error: t.error);
+    }).toList();
+    _persistTasks();
+  }
+
+  /// Set the full step chain for a task.
+  void setSteps(String taskId, List<BgTaskStep> steps) {
+    state = state.map((t) {
+      if (t.id != taskId) return t;
+      return t.copyWith(steps: steps);
+    }).toList();
+    _persistTasks();
+  }
+
+  /// Update a single step by index (e.g. mark as completed/running/failed).
+  void updateStep(
+    String taskId,
+    int index, {
+    bool? completed,
+    bool? running,
+    bool? failed,
+    bool? skipped,
+    String? error,
+  }) {
+    state = state.map((t) {
+      if (t.id != taskId) return t;
+      final steps = [...t.steps];
+      if (index < 0 || index >= steps.length) return t;
+      BgStepStatus newStatus;
+      if (completed == true) {
+        newStatus = BgStepStatus.completed;
+      } else if (running == true) {
+        newStatus = BgStepStatus.running;
+      } else if (failed == true) {
+        newStatus = BgStepStatus.failed;
+      } else if (skipped == true) {
+        newStatus = BgStepStatus.skipped;
+      } else {
+        return t; // no change
+      }
+      steps[index] = steps[index].copyWith(status: newStatus, error: error);
+      return t.copyWith(steps: steps);
     }).toList();
     _persistTasks();
   }
@@ -172,14 +306,18 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     String taskId,
     TaskStatus status, {
     String? error,
+    String? downloadedFilePath,
   }) {
     BackgroundTask? oldTask;
     state = state.map((t) {
       if (t.id != taskId) return t;
       oldTask = t;
+      final shouldClearError = error == null && status == TaskStatus.completed;
       return t.copyWith(
         status: status,
         error: error,
+        clearError: shouldClearError,
+        downloadedFilePath: downloadedFilePath,
         completedAt:
             status == TaskStatus.completed || status == TaskStatus.failed
                 ? DateTime.now()
