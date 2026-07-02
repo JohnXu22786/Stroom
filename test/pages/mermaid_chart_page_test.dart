@@ -116,7 +116,8 @@ void main() {
       expect(textField.controller?.text, contains('Custom'));
     });
 
-    testWidgets('initialCode auto-detects sequenceDiagram type', (tester) async {
+    testWidgets('initialCode auto-detects sequenceDiagram type',
+        (tester) async {
       const initialCode = 'sequenceDiagram\n  A->>B: Hello';
       await tester.pumpWidget(
         const ProviderScope(
