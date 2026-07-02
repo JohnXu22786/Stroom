@@ -851,6 +851,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
               ),
 
             // ── Settings row (model, tools, reasoning) ──
+            // Each tag occupies its own line (SizedBox with full width forces
+            // Wrap to stack chips vertically). Chips use Flexible + LayoutBuilder
+            // internally so text truncation correctly accounts for chip internals.
             Padding(
               padding: EdgeInsets.only(
                 left: 12,
@@ -858,31 +861,52 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                 top: hasAttachments ? 0 : 6,
                 bottom: 0,
               ),
-              child: Row(
-                children: [
-                  _SettingsChip(
-                    icon: Icons.smart_toy_outlined,
-                    label: '模型',
-                    color: Colors.teal,
-                    onTap: _showModelPanel,
-                  ),
-                  const SizedBox(width: 8),
-                  _SettingsChip(
-                    icon: Icons.build_outlined,
-                    label: '工具',
-                    color: cs.tertiary,
-                    onTap: _showToolsPanel,
-                  ),
-                  const SizedBox(width: 8),
-                  _SettingsChip(
-                    icon: Icons.psychology_outlined,
-                    label: reasoningLabel,
-                    color: reasoningColor,
-                    onTap:
-                        widget.hasReasoningParams ? _showReasoningPanel : null,
-                    enabled: widget.hasReasoningParams,
-                  ),
-                ],
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // Leave 4px horizontal margin for "留边" within the settings area.
+                  final maxTagWidth = constraints.maxWidth - 4;
+                  return Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      SizedBox(
+                        width: maxTagWidth,
+                        child: ModelNameChip(
+                          displayName: (widget.modelNames.isNotEmpty &&
+                                  widget.selectedModelIndex >= 0 &&
+                                  widget.selectedModelIndex <
+                                      widget.modelNames.length)
+                              ? widget.modelNames[widget.selectedModelIndex]
+                              : '',
+                          color: Colors.teal,
+                          onTap: _showModelPanel,
+                        ),
+                      ),
+                      SizedBox(
+                        width: maxTagWidth,
+                        child: _SettingsChip(
+                          icon: Icons.build_outlined,
+                          label: '工具',
+                          color: cs.tertiary,
+                          onTap: _showToolsPanel,
+                          badgeCount: widget.enabledTools.length,
+                        ),
+                      ),
+                      SizedBox(
+                        width: maxTagWidth,
+                        child: _SettingsChip(
+                          icon: Icons.psychology_outlined,
+                          label: reasoningLabel,
+                          color: reasoningColor,
+                          onTap: widget.hasReasoningParams
+                              ? _showReasoningPanel
+                              : null,
+                          enabled: widget.hasReasoningParams,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
 
