@@ -452,8 +452,7 @@ class ProviderEntry {
     String resolveId(dynamic rawId) {
       if (rawId is String && rawId.isNotEmpty) return rawId;
       final generated = 'provider_${const Uuid().v4()}';
-      debugPrint(
-          '[ProviderEntry] Generated fallback id for entry: $generated');
+      debugPrint('[ProviderEntry] Generated fallback id for entry: $generated');
       return generated;
     }
 

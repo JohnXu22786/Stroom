@@ -365,21 +365,21 @@ class StartupCheckService {
       }
 
       // Fix null/empty type — also handles non-String types
-      if (entry['type'] == null || entry['type'] is! String ||
+      if (entry['type'] == null ||
+          entry['type'] is! String ||
           (entry['type'] as String).isEmpty) {
         entry['type'] = 'tts';
         changed = true;
-        debugPrint(
-            '[StartupCheckService] Fixed null/empty type at index $i');
+        debugPrint('[StartupCheckService] Fixed null/empty type at index $i');
       }
 
       // Fix null/empty name — also handles non-String types
-      if (entry['name'] == null || entry['name'] is! String ||
+      if (entry['name'] == null ||
+          entry['name'] is! String ||
           (entry['name'] as String).isEmpty) {
         entry['name'] = '供应商 ${i + 1}';
         changed = true;
-        debugPrint(
-            '[StartupCheckService] Fixed null/empty name at index $i');
+        debugPrint('[StartupCheckService] Fixed null/empty name at index $i');
       }
 
       // Fix null configs

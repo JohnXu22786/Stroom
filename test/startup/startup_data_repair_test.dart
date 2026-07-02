@@ -110,7 +110,8 @@ void main() {
   });
 
   group('DataMigrationService - null id repair', () {
-    test('_performMigration fixes null ids in provider_entries (v0→v1)', () async {
+    test('_performMigration fixes null ids in provider_entries (v0→v1)',
+        () async {
       SharedPreferences.setMockInitialValues({
         'data_format_version': 0,
         'provider_entries': jsonEncode([
@@ -128,7 +129,8 @@ void main() {
       final list = jsonDecode(json!) as List;
       for (final entry in list) {
         final map = entry as Map<String, dynamic>;
-        expect(map['id'], isNotNull, reason: 'id should not be null after migration');
+        expect(map['id'], isNotNull,
+            reason: 'id should not be null after migration');
         expect((map['id'] as String).isNotEmpty, isTrue);
       }
     });
