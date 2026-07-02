@@ -19,6 +19,7 @@ import 'ocr_page.dart';
 import 'asr_page.dart';
 import 'audio_separation_page.dart';
 import 'tts_create_page.dart';
+import 'mermaid_chart_page.dart';
 
 /// 页面枚举，定义应用中的主要页面（不含加号按钮）
 enum AppPage { home, chat, files, settings }
@@ -604,6 +605,20 @@ class _HomePageState extends ConsumerState<HomePage> {
                         context,
                         MaterialPageRoute(
                           builder: (_) => const TTSCreatePage(),
+                        ),
+                      );
+                    },
+                  ),
+                  _buildModuleCard(
+                    icon: Icons.account_tree,
+                    label: '图表制作',
+                    subtitle: 'Mermaid图表编辑',
+                    color: Colors.orange,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const MermaidChartPage(),
                         ),
                       );
                     },
