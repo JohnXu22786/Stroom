@@ -38,8 +38,7 @@ class StartupApp extends StatefulWidget {
   State<StartupApp> createState() => _StartupAppState();
 }
 
-class _StartupAppState extends State<StartupApp>
-    with TickerProviderStateMixin {
+class _StartupAppState extends State<StartupApp> with TickerProviderStateMixin {
   bool _checkingComplete = false;
   bool _isWorking = true;
   String _statusMessage = '';
