@@ -89,8 +89,8 @@ class BgTaskStep {
 
   factory BgTaskStep.fromMap(Map<String, dynamic> map) => BgTaskStep(
         label: map['label'] as String,
-        status: BgStepStatus.values.byName(
-            map['status'] as String? ?? 'pending'),
+        status:
+            BgStepStatus.values.byName(map['status'] as String? ?? 'pending'),
         error: map['error'] as String?,
       );
 }

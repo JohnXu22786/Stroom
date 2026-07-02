@@ -1274,8 +1274,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       // Mark the failed step
       final task = bgNotifier.state.where((t) => t.id == taskId).firstOrNull;
       if (task != null) {
-        final runningIndex =
-            task.steps.indexWhere((s) => s.running);
+        final runningIndex = task.steps.indexWhere((s) => s.running);
         if (runningIndex >= 0) {
           bgNotifier.updateStep(taskId, runningIndex,
               failed: true, error: 'OCR识别失败: $e');

@@ -160,11 +160,13 @@ void main() {
       expect(notifier.state[2].title, 'First');
     });
 
-    test('toMap/fromMap round-trip preserves all fields (including steps and downloadedFilePath)',
+    test(
+        'toMap/fromMap round-trip preserves all fields (including steps and downloadedFilePath)',
         () {
       final notifier = BackgroundTaskNotifier();
 
-      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR任务');
+      final id =
+          notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR任务');
 
       // Set initial steps
       notifier.setSteps(id, [
@@ -329,9 +331,11 @@ void main() {
       ]);
 
       // The task we called setSteps on (id1, index 1 since newest first) has 1 custom step
-      expect(notifier.state[1].steps.length, 1, reason: 'OCR task should have 1 custom step');
+      expect(notifier.state[1].steps.length, 1,
+          reason: 'OCR task should have 1 custom step');
       // The other task (id2, index 0) still has its default 5 steps
-      expect(notifier.state[0].steps.length, 5, reason: 'ASR task should still have default steps');
+      expect(notifier.state[0].steps.length, 5,
+          reason: 'ASR task should still have default steps');
     });
 
     // ==================================================================
