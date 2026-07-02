@@ -35,13 +35,69 @@ jobs:
           channel: stable
       - run: flutter pub get
       - run: flutter build windows --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
-      - name: Create Windows archive
+      - name: Build InstallShield installer
         shell: pwsh
-        run: Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "stroom-windows-x64-release-$env:TAG.zip"
+        run: |
+          $TAG = "${{ env.TAG }}"
+          $version = $TAG -replace '^v', ''
+
+          # 查找 InstallShield
+          $IS_PATHS = @(
+            "C:\Program Files (x86)\InstallShield\2023\System\IsCmdBld.exe",
+            "C:\Program Files (x86)\InstallShield\2024\System\IsCmdBld.exe",
+            "C:\Program Files (x86)\InstallShield\2025\System\IsCmdBld.exe",
+            "C:\Program Files (x86)\InstallShield\2026\System\IsCmdBld.exe"
+          )
+          $isCmdBld = $null
+          foreach ($path in $IS_PATHS) {
+            if (Test-Path $path) {
+              $isCmdBld = $path
+              break
+            }
+          }
+          if (-not $isCmdBld) {
+            $alt = Get-ChildItem "C:\Program Files (x86)\InstallShield" -Filter "IsCmdBld.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($alt) { $isCmdBld = $alt.FullName }
+          }
+
+          if (-not $isCmdBld) {
+            Write-Host "::warning::InstallShield not found on this runner. Windows installer cannot be built."
+            exit 1
+          }
+
+          # 替换版本号（写入临时文件）
+          mkdir artifacts -Force
+          $ismContent = (Get-Content "windows\installer.ism" -Raw)
+          $oldVersion = '<property name="ProductVersion" value="1.0.0"'
+          $newVersion = '<property name="ProductVersion" value="' + $version + '"'
+          $ismContent = $ismContent.Replace($oldVersion, $newVersion)
+          $ismContent | Set-Content "windows\installer.tmp.ism" -Encoding utf8
+
+          Write-Host "Building InstallShield installer for version $version…"
+          & "$isCmdBld" -p "windows\installer.tmp.ism" -a "Stroom" -b "Release"
+          $exitCode = $LASTEXITCODE
+
+          # 清理临时文件
+          Remove-Item "windows\installer.tmp.ism" -ErrorAction SilentlyContinue
+
+          if ($exitCode -ne 0) {
+            Write-Host "::error::InstallShield build failed with exit code $exitCode"
+            exit $exitCode
+          }
+
+          # 查找生成的安装包
+          $installer = Get-ChildItem -Path "artifacts" -Filter "*.exe" -Recurse | Select-Object -First 1
+          if ($installer) {
+            Copy-Item $installer.FullName -Destination "$env:GITHUB_WORKSPACE/stroom-windows-x64-installer-$TAG.exe"
+            Write-Host "Installer ready: stroom-windows-x64-installer-$TAG.exe"
+          } else {
+            Write-Host "::error::InstallShield did not produce an installer .exe"
+            exit 1
+          }
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
-          files: stroom-windows-x64-release-*.zip
+          files: stroom-windows-x64-installer-*.exe
 
 
 

@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ISProject SYSTEM "ism.dtd">
+<!--
+  Stroom Windows Installer - InstallShield Project
+  To build manually:
+    "C:\Program Files (x86)\InstallShield\2023\System\IsCmdBld.exe" -p "windows\installer.ism" -a "Stroom" -b "Release"
+-->
+<ISProject Version="7.0" Image="0">
+  <project>
+    <!-- Product Identification -->
+    <property name="ProductName" value="Stroom" />
+    <property name="ProductVersion" value="1.0.0" />
+    <property name="ProductCode" value="{B5E0F3A1-2C4D-4E8F-9A6B-7C8D9E0F1A2B}" />
+    <property name="UpgradeCode" value="{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}" />
+    <property name="CompanyName" value="JohnTsui" />
+    <property name="ProductURL" value="https://github.com/JohnXu22786/Stroom" />
+    <property name="SupportURL" value="https://github.com/JohnXu22786/Stroom/issues" />
+    <property name="ProductLanguage" value="1033" />
+    
+    <!-- Output Configuration -->
+    <property name="OutputLocation" value="..\artifacts" />
+    <property name="OutputFileName" value="stroom-windows-x64-installer" />
+    <property name="SetupLanguages" value="1033" />
+    <property name="Compression" value="LZMA" />
+    
+    <!-- Installer Type -->
+    <property name="InstallType" value="InstallScript" />
+
+    <!-- Components -->
+    <component id="MainProgram">
+      <component name="Main Program Files" guid="{C5D6E7F8-A9B0-1234-5678-9ABCDEF01234}">
+        <description>Stroom application files</description>
+        <destination>[INSTALLDIR]</destination>
+        <include_recursive dir="..\build\windows\x64\runner\Release" />
+      </component>
+    </component>
+
+    <!-- Shortcuts -->
+    <shortcut id="StartMenuShortcut">
+      <name>Stroom</name>
+      <target>[INSTALLDIR]\stroom.exe</target>
+      <folder>ProgramMenuFolder</folder>
+      <workingdir>INSTALLDIR</workingdir>
+      <description>Launch Stroom</description>
+    </shortcut>
+    <shortcut id="DesktopShortcut">
+      <name>Stroom</name>
+      <target>[INSTALLDIR]\stroom.exe</target>
+      <folder>DesktopFolder</folder>
+      <workingdir>INSTALLDIR</workingdir>
+      <optional>1</optional>
+    </shortcut>
+    <shortcut id="UninstallShortcut">
+      <name>Uninstall Stroom</name>
+      <target>[INSTALLDIR]\uninst.exe</target>
+      <folder>ProgramMenuFolder</folder>
+    </shortcut>
+
+    <!-- Features -->
+    <feature id="CoreFeature">
+      <name>Stroom</name>
+      <description>Core Stroom application</description>
+      <component_ref refid="MainProgram" />
+      <shortcut_ref refid="StartMenuShortcut" />
+      <shortcut_ref refid="DesktopShortcut" />
+      <shortcut_ref refid="UninstallShortcut" />
+    </feature>
+
+    <!-- Installation Behavior -->
+    <property name="InstallDir" value="[ProgramFiles64Folder]Stroom" />
+    <property name="AllowChangeDir" value="Yes" />
+    <property name="ShowDialogs" value="Yes" />
+    <property name="LicenseFile" value="" />
+    <property name="InfoAfter" value="" />
+    <property name="InfoBefore" value="" />
+
+    <!-- Uninstall -->
+    <property name="GenerateUninstall" value="Yes" />
+    <property name="UninstallIcon" value="stroom.exe" />
+  </project>
+</ISProject>
