@@ -1,7 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../catcatch/engine/js_hook_script.dart';
+import '../catcatch/widgets/draggable_floating_panel.dart';
 
 const _scriptsKey = 'browser_user_scripts';
 
@@ -39,6 +43,16 @@ class _BrowserPageState extends State<BrowserPage> {
   bool _isLoading = false;
   double _progress = 0;
   List<UserScript> _scripts = [];
+
+  // ===========================================================================
+  // CatCatch sniffing state
+  // ===========================================================================
+
+  /// URLs detected by the JS hook in the WebView.
+  final List<String> _detectedUrls = [];
+
+  /// Whether the cat-catch hook has been injected for the current page.
+  bool _catCatchHookInjected = false;
 
   @override
   void initState() {
@@ -82,6 +96,73 @@ class _BrowserPageState extends State<BrowserPage> {
     }
   }
 
+  // ===========================================================================
+  // CatCatch sniffing integration
+  // ===========================================================================
+
+  /// Inject the cat-catch JS hook script into the WebView.
+  /// Called at page start time (onLoadStart) so it runs before any page scripts.
+  Future<void> _injectCatCatchHook() async {
+    if (_webViewController == null) return;
+    try {
+      await _webViewController!.evaluateJavascript(
+        source: JsHookScript.script,
+      );
+      _catCatchHookInjected = true;
+      debugPrint('[BrowserPage] CatCatch hook injected');
+    } catch (e) {
+      _catCatchHookInjected = false;
+      debugPrint('[BrowserPage] Failed to inject CatCatch hook: $e');
+    }
+  }
+
+  /// Handle a message received from the JS hook's CatCatchChannel.
+  void _onCatCatchMessage(String message) {
+    try {
+      final data = jsonDecode(message) as Map<String, dynamic>;
+      final url = data['url'] as String?;
+      if (url == null || url.isEmpty) return;
+
+      debugPrint('[BrowserPage] CatCatch sniffed: $url');
+      setState(() {
+        // Dedup: only add if not already in list
+        if (!_detectedUrls.contains(url)) {
+          _detectedUrls.add(url);
+        }
+      });
+    } catch (e) {
+      debugPrint('[BrowserPage] CatCatch message parse error: $e');
+    }
+  }
+
+  /// User tapped "Confirm Capture" on the floating panel.
+  void _onConfirmCapture(String selectedUrl) {
+    debugPrint('[BrowserPage] User confirmed capture: $selectedUrl');
+
+    // Show a snackbar with options
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('已捕获: ${selectedUrl.split('/').last}'),
+        duration: const Duration(seconds: 3),
+        action: SnackBarAction(
+          label: '下载',
+          onPressed: () {
+            // Navigate back to the cat-catch page with the URL pre-filled
+            Navigator.of(context).pop(selectedUrl);
+          },
+        ),
+      ),
+    );
+  }
+
+  /// Reset detected URLs for a new page load.
+  void _resetDetection() {
+    setState(() {
+      _detectedUrls.clear();
+      _catCatchHookInjected = false;
+    });
+  }
+
   void _goToUrl(String url) {
     var uri = url.trim();
     if (uri.isEmpty) return;
@@ -94,6 +175,8 @@ class _BrowserPageState extends State<BrowserPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 4,
@@ -107,10 +190,7 @@ class _BrowserPageState extends State<BrowserPage> {
               borderSide: BorderSide.none,
             ),
             filled: true,
-            fillColor: Theme.of(context)
-                .colorScheme
-                .surfaceContainerHighest
-                .withOpacity(0.5),
+            fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.5),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             suffixIcon: IconButton(
@@ -129,37 +209,95 @@ class _BrowserPageState extends State<BrowserPage> {
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          if (_isLoading && _progress < 1.0)
-            LinearProgressIndicator(value: _progress),
-          Expanded(
-            child: InAppWebView(
-              initialUrlRequest: URLRequest(url: WebUri(widget.initialUrl)),
-              initialSettings: InAppWebViewSettings(
-                javaScriptEnabled: true,
-                domStorageEnabled: true,
-                mixedContentMode:
-                    MixedContentMode.MIXED_CONTENT_COMPATIBILITY_MODE,
-                useWideViewPort: true,
-                supportZoom: true,
+          // --- WebView + Loading ---
+          Column(
+            children: [
+              if (_isLoading && _progress < 1.0)
+                LinearProgressIndicator(value: _progress),
+              Expanded(
+                child: InAppWebView(
+                  initialUrlRequest: URLRequest(url: WebUri(widget.initialUrl)),
+                  initialSettings: InAppWebViewSettings(
+                    javaScriptEnabled: true,
+                    domStorageEnabled: true,
+                    mixedContentMode:
+                        MixedContentMode.MIXED_CONTENT_COMPATIBILITY_MODE,
+                    useWideViewPort: true,
+                    supportZoom: true,
+                  ),
+                  onWebViewCreated: (controller) {
+                    _webViewController = controller;
+
+                    // Register JavaScript handler for CatCatchChannel
+                    controller.addJavaScriptHandler(
+                      handlerName: 'CatCatchChannel',
+                      callback: (args) {
+                        if (args.isNotEmpty && args.first is String) {
+                          _onCatCatchMessage(args.first as String);
+                        }
+                      },
+                    );
+                  },
+                  onLoadStart: (controller, url) {
+                    setState(() => _isLoading = true);
+                    _urlController.text = url.toString();
+                    // Reset detection for new page
+                    _resetDetection();
+                    // Inject cat-catch hook as early as possible
+                    _injectCatCatchHook();
+                  },
+                  onLoadStop: (controller, url) {
+                    setState(() => _isLoading = false);
+                    _injectScripts();
+                    // Re-inject cat-catch hook if somehow missed
+                    if (!_catCatchHookInjected) {
+                      _injectCatCatchHook();
+                    }
+                    // Also run a DOM scan after page load
+                    controller.evaluateJavascript(
+                      source: '''
+(function() {
+  document.querySelectorAll('video, audio').forEach(function(el) {
+    var src = el.currentSrc || el.src || '';
+    if (src && src.startsWith('http')) {
+      window.flutter_inappwebview.callHandler('CatCatchChannel', JSON.stringify({
+        url: src,
+        method: 'GET',
+        initiator: window.location.href,
+        mimeType: el.tagName === 'VIDEO' ? 'video/*' : 'audio/*'
+      }));
+    }
+  });
+})();
+''',
+                    );
+                  },
+                  onProgressChanged: (controller, progress) {
+                    setState(() => _progress = progress / 100.0);
+                  },
+                ),
               ),
-              onWebViewCreated: (controller) {
-                _webViewController = controller;
-              },
-              onLoadStart: (controller, url) {
-                setState(() => _isLoading = true);
-                _urlController.text = url.toString();
-              },
-              onLoadStop: (controller, url) {
-                setState(() => _isLoading = false);
-                _injectScripts();
-              },
-              onProgressChanged: (controller, progress) {
-                setState(() => _progress = progress / 100.0);
-              },
-            ),
+            ],
           ),
+
+          // --- Draggable Floating Panel ---
+          if (_isLoading || _detectedUrls.isNotEmpty || !_catCatchHookInjected)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: DraggableFloatingPanel(
+                detectedUrls: _detectedUrls,
+                onConfirmCapture: _onConfirmCapture,
+                onClose: () {
+                  setState(() {
+                    _detectedUrls.clear();
+                  });
+                },
+                initialPosition: const Offset(8, 8),
+              ),
+            ),
         ],
       ),
       bottomNavigationBar: BottomAppBar(
@@ -199,6 +337,10 @@ class _BrowserPageState extends State<BrowserPage> {
     );
   }
 }
+
+// =============================================================================
+// Script Manager (unchanged from original)
+// =============================================================================
 
 class _ScriptManagerSheet extends StatefulWidget {
   final List<UserScript> scripts;
