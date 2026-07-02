@@ -111,8 +111,7 @@ void main() {
   });
 
   group('Reasoning params editing with options', () {
-    testWidgets(
-        'reasoning toggle section has a default toggle for new models',
+    testWidgets('reasoning toggle section has a default toggle for new models',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(

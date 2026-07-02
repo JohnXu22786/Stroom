@@ -38,7 +38,9 @@ Widget createComposerTestApp({
           onModelSelected: (idx) {},
           onEnabledToolsChanged: (tools) {},
           reasoningParams: [
-            ReasoningParam(paramName: 'reasoning_effort', options: ['low', 'medium', 'high']),
+            ReasoningParam(
+                paramName: 'reasoning_effort',
+                options: ['low', 'medium', 'high']),
           ],
           hasReasoningParams: true,
         ),
