@@ -111,7 +111,7 @@ class TextCreatePageState extends State<TextCreatePage> {
                 SizedBox(
                   width: 120,
                   child: DropdownButtonFormField<String>(
-                    value: _selectedFormat,
+                    initialValue: _selectedFormat,
                     decoration: const InputDecoration(
                       labelText: '格式',
                       border: OutlineInputBorder(),
@@ -121,6 +121,7 @@ class TextCreatePageState extends State<TextCreatePage> {
                     items: const [
                       DropdownMenuItem(value: 'txt', child: Text('txt')),
                       DropdownMenuItem(value: 'md', child: Text('md')),
+                      DropdownMenuItem(value: 'mmd', child: Text('mmd')),
                     ],
                     onChanged: (value) {
                       if (value != null) {

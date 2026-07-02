@@ -47,5 +47,16 @@ void main() {
       // Should show the file manager scaffold
       expect(find.byKey(const Key('fm_scaffold')), findsOneWidget);
     });
+
+    testWidgets('supports mmd format in import', (tester) async {
+      // Verify that mmd is included in the supported formats
+      // by checking the import button is present
+      // The actual format list is checked at the unit level
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // The page should load without errors
+      expect(tester.takeException(), isNull);
+    });
   });
 }

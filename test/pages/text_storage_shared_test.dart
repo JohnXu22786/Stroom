@@ -49,9 +49,10 @@ void main() {
       await tester.tap(find.byType(DropdownButtonFormField<String>));
       await tester.pump();
 
-      // Should show both txt and md options
+      // Should show txt, md, and mmd options
       expect(find.text('txt'), findsWidgets);
       expect(find.text('md'), findsOneWidget);
+      expect(find.text('mmd'), findsOneWidget);
     });
 
     testWidgets('can switch to md format', (tester) async {
@@ -68,6 +69,58 @@ void main() {
 
       // Should now show md as selected
       expect(find.text('md'), findsOneWidget);
+    });
+
+    testWidgets('can switch to mmd format', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      // Open dropdown
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.pump();
+
+      // Select mmd
+      await tester.tap(find.text('mmd').last);
+      await tester.pump();
+
+      // Should now show mmd as selected
+      expect(find.text('mmd'), findsOneWidget);
+    });
+
+    testWidgets('saves with mmd format when selected', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      // Enter title
+      await tester.enterText(
+        find.widgetWithText(TextField, '标题').first,
+        'test_mmd_file',
+      );
+      await tester.pump();
+
+      // Enter content
+      await tester.enterText(
+        find.byType(TextField).last,
+        'graph TD\n  A[Start] --> B[End]',
+      );
+      await tester.pump();
+
+      // Switch to mmd format
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.pump();
+      await tester.tap(find.text('mmd').last);
+      await tester.pump();
+
+      // Save
+      await tester.tap(find.text('保存'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      // Verify the record was saved with mmd format
+      final records = await TextManifest.loadRecords();
+      expect(records.length, equals(1));
+      expect(records[0].name, equals('test_mmd_file'));
+      expect(records[0].format, equals('mmd'));
     });
 
     testWidgets('saves with md format when selected', (tester) async {
