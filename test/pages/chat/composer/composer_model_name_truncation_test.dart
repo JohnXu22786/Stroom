@@ -102,12 +102,14 @@ void main() {
 
           expect(result, isNotEmpty);
           expect(result, contains(' | '),
-              reason: 'FAIL: "$full" @${(factor*100).round()}% → "$result" (no separator)');
+              reason:
+                  'FAIL: "$full" @${(factor * 100).round()}% → "$result" (no separator)');
         }
       }
     });
 
-    test('minimum part lengths (A | B) does not crash and returns valid result', () {
+    test('minimum part lengths (A | B) does not crash and returns valid result',
+        () {
       const full = 'A | B';
       final tp = _makePainter(full);
 
@@ -216,7 +218,8 @@ void main() {
       expect(badgeFinder, findsOneWidget);
     });
 
-    testWidgets('shows badge for count 99 (last 2-digit value)', (tester) async {
+    testWidgets('shows badge for count 99 (last 2-digit value)',
+        (tester) async {
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: SettingsChip(
@@ -293,7 +296,8 @@ void main() {
       expect(find.textContaining('...'), findsWidgets);
     });
 
-    testWidgets('shows fallback "模型" when displayName is empty', (tester) async {
+    testWidgets('shows fallback "模型" when displayName is empty',
+        (tester) async {
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: SizedBox(
@@ -337,7 +341,8 @@ void main() {
           body: SizedBox(
             width: 120,
             child: ModelNameChip(
-              displayName: 'Some-Long-Model-Name-That-Needs-Truncation | SomeVendor',
+              displayName:
+                  'Some-Long-Model-Name-That-Needs-Truncation | SomeVendor',
               color: Colors.teal,
               onTap: () {},
             ),

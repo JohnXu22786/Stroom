@@ -21,7 +21,8 @@ String truncateDisplayName(
 ) {
   // Preserve the text style for reuse.
   final TextStyle? textStyle = painter.text?.style;
-  final style = textStyle ?? const TextStyle(fontSize: 12, fontWeight: FontWeight.w500);
+  final style =
+      textStyle ?? const TextStyle(fontSize: 12, fontWeight: FontWeight.w500);
   final direction = painter.textDirection ?? TextDirection.ltr;
 
   // Quick check: if it already fits, return as-is.
@@ -41,15 +42,14 @@ String truncateDisplayName(
 
   // Iterate from a generous budget downward until it fits.
   for (int totalBudget = modelPart.length + vendorPart.length + 6;
-       totalBudget >= minChars * 2 + 6;
-       totalBudget--) {
-    final modelBudget =
-        _proportionalAlloc(totalBudget, modelPart.length, vendorPart.length, minChars + 3);
+      totalBudget >= minChars * 2 + 6;
+      totalBudget--) {
+    final modelBudget = _proportionalAlloc(
+        totalBudget, modelPart.length, vendorPart.length, minChars + 3);
     final vendorBudget = totalBudget - modelBudget;
 
-    final modelTextLen = modelBudget >= modelPart.length
-        ? modelPart.length
-        : modelBudget - 3;
+    final modelTextLen =
+        modelBudget >= modelPart.length ? modelPart.length : modelBudget - 3;
     final vendorTextLen = vendorBudget >= vendorPart.length
         ? vendorPart.length
         : vendorBudget - 3;
@@ -294,8 +294,9 @@ class ModelNameChip extends StatelessWidget {
                   final style = TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color:
-                        isDisabled ? Colors.grey.withOpacity(0.4) : cs.onSurface,
+                    color: isDisabled
+                        ? Colors.grey.withOpacity(0.4)
+                        : cs.onSurface,
                   );
                   final painter = TextPainter(
                     text: TextSpan(text: label, style: style),
