@@ -4,7 +4,7 @@ import 'package:stroom/pages/llm_model_config_page.dart';
 
 void main() {
   group('LlmModelConfigPage - inference section', () {
-    testWidgets('reasoning toggle section shows no toggle by default',
+    testWidgets('reasoning toggle section has a default toggle for new models',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -14,17 +14,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // No default toggle - shows "暂无推理开关"
-      expect(find.text('暂无推理开关'), findsOneWidget);
-      expect(find.text('添加推理开关'), findsOneWidget);
-
-      // Add a toggle
-      await tester.tap(find.text('添加推理开关'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // Now "推理开关" should be visible
+      // New models now have a default reasoning toggle pre-populated
       expect(find.text('推理开关'), findsOneWidget);
+      expect(find.text('参数名'), findsOneWidget);
+      expect(find.text('开启时值'), findsOneWidget);
+      expect(find.text('关闭时值'), findsOneWidget);
     });
 
     testWidgets('can add reasoning param via button', (tester) async {

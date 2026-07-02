@@ -447,6 +447,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
       _history.clear();
       _chatSegments.clear();
+      _reasoningContents.clear();
       _streamingRenderedLengths.clear();
       _streamingMsgId = null;
       _controller?.dispose();
@@ -984,6 +985,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // session instead (see _startStreaming), preserving the final reasoning
       // content from the completed stream.
       _cancelledByUser = false;
+      // Clean up streaming-only maps for this message to prevent memory leaks.
+      // _chatSegments with tool calls are preserved (still needed for rendering).
+      // _reasoningContents are preserved (needed for reasoning section buttons).
+      // _streamingRenderedLengths is only needed during streaming, safe to remove.
+      _streamingRenderedLengths.remove(aiMsgId);
       if (mounted) setState(() {});
     }
 
@@ -1085,6 +1091,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
           if (ctrlMsg != null) {
             await _controller?.removeMessage(ctrlMsg);
           }
+          // Clean up cached maps for removed messages to prevent memory leaks.
+          _chatSegments.remove(r.id);
+          _reasoningContents.remove(r.id);
+          _streamingRenderedLengths.remove(r.id);
+          _messageKeys.remove(r.id);
         }
         // Safety: keep pagination index within bounds
         _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
@@ -1112,6 +1123,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
           if (ctrlMsg != null) {
             await _controller?.removeMessage(ctrlMsg);
           }
+          // Clean up cached maps for removed messages to prevent memory leaks.
+          _chatSegments.remove(r.id);
+          _reasoningContents.remove(r.id);
+          _streamingRenderedLengths.remove(r.id);
+          _messageKeys.remove(r.id);
         }
         // Safety: keep pagination index within bounds
         _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
@@ -1126,6 +1142,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   Future<void> _deleteMessage(String messageId) async {
+    // Prevent deleting the currently streaming message — the streaming loop
+    // relies on _chatSegments and _streamingRenderedLengths entries for this
+    // message, and removing them mid-stream would cause null-assert crashes.
+    if (messageId == _streamingMsgId) return;
+    if (ref.read(isStreamingProvider)) return;
     final index = _history.indexWhere((m) => m.id == messageId);
     if (index == -1) return;
     final msg = _history[index];
@@ -1145,6 +1166,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
     setState(() {
       _history.removeAt(index);
+      // Clean up cached maps for the deleted message to prevent memory leaks.
+      _chatSegments.remove(messageId);
+      _reasoningContents.remove(messageId);
+      _streamingRenderedLengths.remove(messageId);
+      _messageKeys.remove(messageId);
       // Adjust pagination state: if the deleted message was before the loaded
       // region, shift _loadedUpToIndex to keep it pointing at the same messages.
       if (index < _loadedUpToIndex && _loadedUpToIndex > 0) {
@@ -2156,7 +2182,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                           sections: ReasoningSectionData(
                                             texts: reasoningSections,
                                             streaming:
-                                                message.id == _streamingMsgId,
+                                                isStreaming && message.id == _streamingMsgId,
                                           ),
                                           messageId: message.id,
                                         ),
