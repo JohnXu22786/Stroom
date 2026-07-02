@@ -874,7 +874,8 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                         child: ModelNameChip(
                           displayName: (widget.modelNames.isNotEmpty &&
                                   widget.selectedModelIndex >= 0 &&
-                                  widget.selectedModelIndex < widget.modelNames.length)
+                                  widget.selectedModelIndex <
+                                      widget.modelNames.length)
                               ? widget.modelNames[widget.selectedModelIndex]
                               : '',
                           color: Colors.teal,
@@ -897,8 +898,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                           icon: Icons.psychology_outlined,
                           label: reasoningLabel,
                           color: reasoningColor,
-                          onTap:
-                              widget.hasReasoningParams ? _showReasoningPanel : null,
+                          onTap: widget.hasReasoningParams
+                              ? _showReasoningPanel
+                              : null,
                           enabled: widget.hasReasoningParams,
                         ),
                       ),
