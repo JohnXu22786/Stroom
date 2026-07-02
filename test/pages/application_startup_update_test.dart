@@ -53,9 +53,9 @@ List<Map<String, String>> _allPlatformAssets(String tagName) {
           'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-android-release-v$version.apk'
     },
     {
-      'name': 'stroom-windows-x64-release-v$version.zip',
+      'name': 'stroom-windows-x64-installer-v$version.exe',
       'browser_download_url':
-          'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-windows-x64-release-v$version.zip'
+          'https://github.com/JohnXu22786/Stroom/releases/download/$tagName/stroom-windows-x64-installer-v$version.exe'
     },
     {
       'name': 'stroom-macos-arm64-release-v$version.zip',
