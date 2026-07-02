@@ -2181,8 +2181,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                         ReasoningSection(
                                           sections: ReasoningSectionData(
                                             texts: reasoningSections,
-                                            streaming:
-                                                isStreaming && message.id == _streamingMsgId,
+                                            streaming: isStreaming &&
+                                                message.id == _streamingMsgId,
                                           ),
                                           messageId: message.id,
                                         ),
