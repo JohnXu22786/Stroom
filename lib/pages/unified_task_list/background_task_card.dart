@@ -7,7 +7,8 @@ import 'task_utils.dart';
 
 // =============================================================================
 // 后台任务卡片（OCR / ASR / 音频分离）
-// 展开后显示任务结果文字（而非进度条）
+// 使用步骤链（连接 → 上传 → 处理 → 接收 → 保存）替代结果文字显示
+// 完成后显示"打开文件"按钮（类似下载任务）
 // =============================================================================
 
 class BackgroundTaskCard extends ConsumerStatefulWidget {
@@ -117,7 +118,6 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Status icon (no progress bar — OCR/ASR use result display)
                   Icon(statusIcon, color: statusColor, size: 28),
                   const SizedBox(width: 4),
                   AnimatedRotation(
@@ -167,49 +167,9 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
           ),
         ],
 
-        // Result text (OCR extracted text, ASR transcription, etc.)
-        if (task.result != null && task.result!.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest.withAlpha(80),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.text_snippet_outlined,
-                      size: 14,
-                      color: cs.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '识别结果',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                SelectableText(
-                  task.result!,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    height: 1.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+        // Step chain timeline (replaces old result text display)
+        const SizedBox(height: 10),
+        _buildStepTimeline(task, cs),
 
         // Error message for failed tasks
         if (task.status == TaskStatus.failed && task.error != null) ...[
@@ -264,6 +224,120 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
     );
   }
 
+  Widget _buildStepTimeline(BackgroundTask task, ColorScheme colorScheme) {
+    final steps = task.steps;
+
+    if (steps.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(
+          '等待开始...',
+          style: TextStyle(color: colorScheme.onSurfaceVariant),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '执行步骤',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...List.generate(steps.length, (i) {
+          final step = steps[i];
+          final isLast = i == steps.length - 1;
+
+          return IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 20,
+                  child: Column(
+                    children: [
+                      _stepIconWidget(step, colorScheme),
+                      if (!isLast)
+                        Expanded(
+                          child: Container(
+                            width: 2,
+                            color: _stepLineColor(step, colorScheme),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: isLast ? 0 : 12),
+                    child: Text(
+                      step.label,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: step.completed
+                            ? Colors.green.shade700
+                            : step.skipped
+                                ? Colors.orange.shade700
+                                : step.running
+                                    ? colorScheme.primary
+                                    : step.failed
+                                        ? Colors.red.shade700
+                                        : colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
+                ),
+                if (step.failed && step.error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: Icon(Icons.error_outline,
+                        size: 14, color: Colors.red.shade400),
+                  ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _stepIconWidget(BgTaskStep step, ColorScheme colorScheme) {
+    if (step.skipped) {
+      return const Icon(Icons.skip_next, color: Colors.orange, size: 16);
+    }
+    if (step.completed) {
+      return const Icon(Icons.check_circle, color: Colors.green, size: 16);
+    }
+    if (step.running) {
+      return SizedBox(
+        width: 16,
+        height: 16,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: colorScheme.primary,
+        ),
+      );
+    }
+    if (step.failed) {
+      return const Icon(Icons.cancel, color: Colors.red, size: 16);
+    }
+    return Icon(Icons.circle_outlined, color: Colors.grey.shade400, size: 16);
+  }
+
+  Color _stepLineColor(BgTaskStep step, ColorScheme colorScheme) {
+    if (step.completed) return Colors.green.shade300;
+    if (step.skipped) return Colors.orange.shade300;
+    if (step.running || step.failed) return colorScheme.primary;
+    return colorScheme.outlineVariant;
+  }
+
   Widget _buildInfoRow(
     ColorScheme cs,
     IconData icon,
@@ -297,6 +371,16 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
+        // Open file button for completed tasks (like CatCatch downloads)
+        if (task.status == TaskStatus.completed &&
+            task.downloadedFilePath != null)
+          _actionButton(
+            icon: Icons.folder_open,
+            label: '打开文件',
+            color: Colors.green,
+            onPressed: () => openFile(task.downloadedFilePath!),
+          ),
+        // Delete button
         TextButton.icon(
           onPressed: () {
             ref.read(backgroundTasksProvider.notifier).removeTask(task.id);
@@ -305,11 +389,33 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
           label: Text('删除', style: TextStyle(fontSize: 13, color: cs.error)),
           style: TextButton.styleFrom(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            minimumSize: Size.zero,
+            minimumSize: const Size(48, 48),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
         ),
       ],
+    );
+  }
+
+  Widget _actionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: TextButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 18),
+        label: Text(label, style: const TextStyle(fontSize: 13)),
+        style: TextButton.styleFrom(
+          foregroundColor: color,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          minimumSize: const Size(48, 48),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+      ),
     );
   }
 
@@ -368,8 +474,6 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
     }
   }
 
-  /// Returns a spinning animation widget for running tasks,
-  /// or a static icon for other states.
   Widget _buildStatusIcon(TaskStatus status, ColorScheme colorScheme) {
     if (status == TaskStatus.running) {
       return _SpinningIcon(

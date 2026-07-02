@@ -33,14 +33,10 @@ class UnifiedTaskListPage extends ConsumerStatefulWidget {
       _UnifiedTaskListPageState();
 }
 
-class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
-
+class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage> {
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final now = DateTime.now();
@@ -48,12 +44,6 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
         persistTaskListLastRead(now);
       }
     });
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   @override
@@ -226,75 +216,43 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
             ],
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: '全部'),
-            Tab(text: '下载'),
-            Tab(text: '合成'),
-            Tab(text: '其他'),
-          ],
-        ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: allTasks.isEmpty
+          ? _buildEmptyState(context)
+          : _buildTaskList(allTasks),
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          _buildTabContent(allTasks, '全部'),
-          _buildTabContent(
-            allTasks.where((t) => t.isCatCatch).toList(),
-            '下载',
+          Icon(
+            Icons.pending_actions,
+            size: 64,
+            color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
           ),
-          _buildTabContent(
-            allTasks.where((t) => !t.isCatCatch && !t.isBackground).toList(),
-            '合成',
-          ),
-          _buildTabContent(
-            allTasks.where((t) => t.isBackground).toList(),
-            '其他',
+          const SizedBox(height: 16),
+          Text(
+            '暂无任务',
+            style: TextStyle(
+              fontSize: 18,
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTabContent(List<UnifiedTaskItem> tasks, String tabLabel) {
-    if (tasks.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              tabLabel == '下载'
-                  ? Icons.cloud_download_outlined
-                  : tabLabel == '合成'
-                      ? Icons.graphic_eq
-                      : tabLabel == '其他'
-                          ? Icons.miscellaneous_services
-                          : Icons.pending_actions,
-              size: 64,
-              color: Theme.of(context)
-                  .colorScheme
-                  .onSurfaceVariant
-                  .withValues(alpha: 0.4),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '暂无任务',
-              style: TextStyle(
-                fontSize: 18,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
+  Widget _buildTaskList(List<UnifiedTaskItem> allTasks) {
     return ListView.builder(
       padding: const EdgeInsets.only(top: 8, bottom: 24),
-      itemCount: tasks.length,
+      itemCount: allTasks.length,
       itemBuilder: (_, i) {
-        final item = tasks[i];
+        final item = allTasks[i];
         final lastRead = ref.watch(taskListLastReadProvider);
         if (item.isCatCatch) {
           final t = item.catCatchTask!;
