@@ -48,7 +48,7 @@ jobs:
           path: artifacts/*.apk
 
   build-windows:
-    name: Build Windows (安装包 + ZIP)
+    name: Build Windows (InstallShield 安装包)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -57,27 +57,94 @@ jobs:
           flutter-version: '3.x'
       - run: flutter pub get
       - run: flutter build windows --release
-      - name: Create installer
+      - name: Install InstallShield
+        shell: pwsh
+        run: |
+          # InstallShield 安装说明：
+          # 1. 需要在 runner 上预装 InstallShield（或使用自托管 runner）
+          # 2. 或者通过以下方式下载安装：
+          #    Invoke-WebRequest -Uri "$env:INSTALLSHIELD_URL" -OutFile "$env:TEMP\InstallShield.exe"
+          #    Start-Process "$env:TEMP\InstallShield.exe" -ArgumentList '/S /v/qn' -Wait
+          # 默认路径检查
+          $IS_PATHS = @(
+            "C:\Program Files (x86)\InstallShield\2023\System\IsCmdBld.exe",
+            "C:\Program Files (x86)\InstallShield\2024\System\IsCmdBld.exe",
+            "C:\Program Files (x86)\InstallShield\2025\System\IsCmdBld.exe",
+            "C:\Program Files (x86)\InstallShield\2026\System\IsCmdBld.exe"
+          )
+          $found = $false
+          foreach ($path in $IS_PATHS) {
+            if (Test-Path $path) {
+              echo "FOUND_IS=$path" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+              echo "Found InstallShield at: $path"
+              $found = $true
+              break
+            }
+          }
+          if (-not $found) {
+            echo "InstallShield not found — checking for alternative paths…"
+            # 尝试自动发现
+            $alt = Get-ChildItem "C:\Program Files (x86)\InstallShield" -Filter "IsCmdBld.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($alt) {
+              echo "FOUND_IS=$($alt.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+              echo "Found InstallShield at: $($alt.FullName)"
+              $found = $true
+            }
+          }
+          if (-not $found) {
+            echo "WARNING: InstallShield not found on this runner."
+            echo "The Windows installer will NOT be built."
+            echo "To fix: pre-install InstallShield on the runner or use a self-hosted runner."
+            echo "SKIP_INSTALLER=true" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
+      - name: Build InstallShield installer
         shell: pwsh
         run: |
           $TAG = "$env:GITHUB_REF_NAME"
           $version = $TAG -replace '^v', ''
-          # 把 tag 版本写入 installer.iss
-          (Get-Content "windows\installer.iss") -replace '0\.2\.14', $version | Set-Content "windows\installer.iss"
-          # 安装 Inno Setup
-          choco install innosetup --no-progress -y
-          # 编译安装包
           mkdir artifacts -Force
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "windows\installer.iss"
-      - name: Package ZIP (fallback)
-        shell: pwsh
-        run: |
-          $TAG = "$env:GITHUB_REF_NAME"
-          Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "artifacts\stroom-windows-x64-release-$TAG.zip"
+
+          if ($env:SKIP_INSTALLER -eq "true") {
+            echo "Skipping InstallShield build (InstallShield not installed)."
+            exit 0
+          }
+
+          $isCmdBld = $env:FOUND_IS
+          if (-not $isCmdBld) {
+            echo "ERROR: InstallShield path not found."
+            exit 1
+          }
+
+          # 用 tag 版本替换 installer.ism 中的版本号（写入临时文件，不修改源文件）
+          $ismContent = (Get-Content "windows\installer.ism" -Raw)
+          $oldVersion = '<property name="ProductVersion" value="1.0.0"'
+          $newVersion = '<property name="ProductVersion" value="' + $version + '"'
+          $ismContent = $ismContent.Replace($oldVersion, $newVersion)
+          $ismContent | Set-Content "windows\installer.tmp.ism" -Encoding utf8
+
+          echo "Building InstallShield installer for version $version…"
+          & "$isCmdBld" -p "windows\installer.tmp.ism" -a "Stroom" -b "Release"
+          $exitCode = $LASTEXITCODE
+
+          # 清理临时文件
+          Remove-Item "windows\installer.tmp.ism" -ErrorAction SilentlyContinue
+
+          if ($exitCode -ne 0) {
+            echo "::error::InstallShield build failed with exit code $exitCode"
+            exit $exitCode
+          }
+
+          # 验证安装包已生成
+          $installer = Get-ChildItem -Path "artifacts" -Filter "*.exe" -Recurse | Select-Object -First 1
+          if (-not $installer) {
+            echo "::error::InstallShield did not produce an installer .exe"
+            exit 1
+          }
+          echo "InstallShield installer ready: $($installer.Name)"
       - uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: artifacts/*
+          path: artifacts/**
 
   build-macos:
     name: Build macOS (DMG + ZIP)
