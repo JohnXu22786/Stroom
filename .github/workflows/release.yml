@@ -35,13 +35,18 @@ jobs:
           channel: stable
       - run: flutter pub get
       - run: flutter build windows --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
-      - name: Create Windows archive
+      - name: Create Windows installer
         shell: pwsh
-        run: Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "stroom-windows-x64-release-$env:TAG.zip"
+        run: |
+          $version = "${{ needs.prepare-version.outputs.app_version }}"
+          (Get-Content "windows\installer.iss") -replace '0\.2\.14', $version | Set-Content "windows\installer.iss"
+          choco install innosetup --no-progress -y
+          mkdir artifacts -Force
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "windows\installer.iss"
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
-          files: stroom-windows-x64-release-*.zip
+          files: artifacts/stroom-windows-x64-installer-*.exe
 
 
 
