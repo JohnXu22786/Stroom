@@ -57,6 +57,12 @@ dependencies:
   # Extended Image Viewer (replaces InteractiveViewer + custom Image.memory)
   extended_image: ^8.0.2
 
+  # SVG support
+  flutter_svg: ^2.0.0
+
+  # Photo View for SVG gesture handling
+  photo_view: ^0.15.0
+
   # UI and Utilities
   cupertino_icons: ^1.0.6
   material_color_utilities: ^0.13.0
