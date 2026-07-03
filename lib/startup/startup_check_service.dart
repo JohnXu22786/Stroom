@@ -137,15 +137,16 @@ class StartupCheckService {
       }
 
       for (int i = 0; i < list.length; i++) {
-        final entry = list[i] as Map<String, dynamic>?;
-        if (entry == null) {
+        // 兜底：跳过非 Map 条目，避免 `as Map` 类型转换闪退
+        if (list[i] is! Map<String, dynamic>) {
           issues.add(StartupIssue(
-            message: 'provider_entries[$i]: 条目为 null',
+            message: 'provider_entries[$i]: 条目为 null 或类型无效',
             severity: StartupIssueSeverity.error,
             dataKey: 'provider_entries',
           ));
           continue;
         }
+        final entry = list[i] as Map<String, dynamic>;
 
         if (entry['id'] == null || (entry['id'] as String?)?.isEmpty == true) {
           issues.add(StartupIssue(
@@ -172,6 +173,31 @@ class StartupCheckService {
             dataKey: 'provider_entries',
           ));
         }
+
+        // ================================================================
+        // 验证嵌套列表内容 — 检查 configs/models/customParams/voices/
+        // reasoningParams 中是否包含非 Map 条目（这些会导致 ProviderEntry
+        // 解析时 `as Map` 闪退）。
+        // ================================================================
+        _validateNestedList(entry, 'configs', i, issues);
+        final configs = entry['configs'] as List?;
+        if (configs != null) {
+          for (int ci = 0; ci < configs.length; ci++) {
+            if (configs[ci] is! Map<String, dynamic>) continue;
+            final config = configs[ci] as Map<String, dynamic>;
+            _validateNestedList(config, 'models', i, issues);
+            final models = config['models'] as List?;
+            if (models != null) {
+              for (int mi = 0; mi < models.length; mi++) {
+                if (models[mi] is! Map<String, dynamic>) continue;
+                final model = models[mi] as Map<String, dynamic>;
+                _validateNestedList(model, 'customParams', i, issues);
+                _validateNestedList(model, 'voices', i, issues);
+                _validateNestedList(model, 'reasoningParams', i, issues);
+              }
+            }
+          }
+        }
       }
     } catch (e) {
       issues.add(StartupIssue(
@@ -179,6 +205,30 @@ class StartupCheckService {
         severity: StartupIssueSeverity.error,
         dataKey: 'provider_entries',
       ));
+    }
+  }
+
+  /// 验证嵌套列表中是否包含非 Map 条目。
+  ///
+  /// 如果 [fieldName] 对应的值是列表但包含非 Map 条目，则报告错误。
+  /// 这些非 Map 条目会在 ProviderEntry/ModelConfig 解析时导致 `as Map` 闪退。
+  static void _validateNestedList(
+    Map<String, dynamic> parent,
+    String fieldName,
+    int entryIndex,
+    List<StartupIssue> issues,
+  ) {
+    final list = parent[fieldName];
+    if (list is! List) return;
+    for (int j = 0; j < list.length; j++) {
+      if (list[j] is! Map<String, dynamic>) {
+        issues.add(StartupIssue(
+          message: 'provider_entries[$entryIndex].$fieldName[$j]: '
+              '条目不是合法对象，可能会导致解析闪退',
+          severity: StartupIssueSeverity.error,
+          dataKey: 'provider_entries',
+        ));
+      }
     }
   }
 
@@ -204,15 +254,16 @@ class StartupCheckService {
       }
 
       for (int i = 0; i < list.length; i++) {
-        final conv = list[i] as Map<String, dynamic>?;
-        if (conv == null) {
+        // 兜底：跳过非 Map 条目，避免 `as Map` 类型转换闪退
+        if (list[i] is! Map<String, dynamic>) {
           issues.add(StartupIssue(
-            message: 'conversations[$i]: 会话为 null',
+            message: 'conversations[$i]: 会话为 null 或类型无效',
             severity: StartupIssueSeverity.error,
             dataKey: 'conversations',
           ));
           continue;
         }
+        final conv = list[i] as Map<String, dynamic>;
 
         if (conv['id'] == null || (conv['id'] as String?)?.isEmpty == true) {
           issues.add(StartupIssue(
@@ -267,6 +318,12 @@ class StartupCheckService {
 
       final list = jsonDecode(json) as List<dynamic>;
       for (int i = 0; i < list.length; i++) {
+        // 兜底：跳过非 Map 条目，避免 `as Map<String, dynamic>` 闪退
+        if (list[i] is! Map<String, dynamic>) {
+          debugPrint(
+              '[StartupCheckService] Skipping non-Map entry at index $i in type registration check');
+          continue;
+        }
         final entry = list[i] as Map<String, dynamic>;
         final type = entry['type'] as String?;
         if (type != null && type.isNotEmpty && !_isKnownProviderType(type)) {
@@ -287,4 +344,5 @@ class StartupCheckService {
   static bool _isKnownProviderType(String type) {
     return ['llm', 'tts', 'ocr', 'asr', 'mcp', 'builtin'].contains(type);
   }
+
 }

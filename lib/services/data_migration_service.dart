@@ -370,14 +370,16 @@ class DataMigrationService {
     if (oldJson == null || oldJson.isEmpty) return;
 
     try {
+      // 兜底：使用 whereType 安全过滤非 Map 条目
       final oldList =
-          (jsonDecode(oldJson) as List?)?.cast<Map<String, dynamic>>();
-      if (oldList == null || oldList.isEmpty) return;
+          (jsonDecode(oldJson) as List?)?.whereType<Map<String, dynamic>>().toList() ?? [];
+      if (oldList.isEmpty) return;
 
       final migratedConfigs = <Map<String, dynamic>>[];
       for (final oldItem in oldList) {
+        // 兜底：安全过滤 models 中的非 Map 条目
         final oldModels =
-            (oldItem['models'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+            (oldItem['models'] as List?)?.whereType<Map<String, dynamic>>().toList() ?? [];
 
         final models = oldModels.map((m) {
           final typeConfig = <String, dynamic>{};
@@ -413,8 +415,10 @@ class DataMigrationService {
       List<Map<String, dynamic>> existingEntries = [];
       if (existingJson != null && existingJson.isNotEmpty) {
         try {
-          existingEntries =
-              (jsonDecode(existingJson) as List).cast<Map<String, dynamic>>();
+          // 兜底：使用 whereType 安全过滤非 Map 条目
+          existingEntries = (jsonDecode(existingJson) as List)
+              .whereType<Map<String, dynamic>>()
+              .toList();
         } catch (_) {
           // 现有数据损坏，忽略并用空列表重新开始
         }
@@ -455,7 +459,10 @@ class DataMigrationService {
     if (json == null || json.isEmpty) return;
 
     try {
-      final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
+      // 兜底：使用 whereType 安全过滤非 Map 条目
+      final list = (jsonDecode(json) as List)
+          .whereType<Map<String, dynamic>>()
+          .toList();
       bool changed = false;
 
       for (int i = 0; i < list.length; i++) {
@@ -473,15 +480,21 @@ class DataMigrationService {
         final configs = entry['configs'] as List?;
         if (configs != null) {
           for (final config in configs) {
-            final configMap = config as Map<String, dynamic>;
+            // 兜底：跳过非 Map 的 config 条目
+            if (config is! Map<String, dynamic>) continue;
+            final configMap = config;
             final models = configMap['models'] as List?;
             if (models == null) continue;
             for (final model in models) {
-              final modelMap = model as Map<String, dynamic>;
+              // 兜底：跳过非 Map 的 model 条目
+              if (model is! Map<String, dynamic>) continue;
+              final modelMap = model;
               final customParams = modelMap['customParams'] as List?;
               if (customParams == null) continue;
               for (final param in customParams) {
-                final paramMap = param as Map<String, dynamic>;
+                // 兜底：跳过非 Map 的 param 条目
+                if (param is! Map<String, dynamic>) continue;
+                final paramMap = param;
                 if (paramMap['type'] == null) {
                   paramMap['type'] = 'string';
                   changed = true;

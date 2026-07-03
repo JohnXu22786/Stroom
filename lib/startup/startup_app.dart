@@ -224,7 +224,13 @@ class _StartupAppState extends State<StartupApp>
     // show the main application
     if (_checkingComplete) {
       // Use a key to force rebuild the Application widget fresh
-      return const Application(key: ValueKey('app_ready'));
+      // Wrap with an error boundary so that if the Application widget's
+      // provider initialization crashes due to residual data format issues,
+      // the app shows a recoverable error instead of crashing entirely.
+      return _AppErrorBoundary(
+        key: const ValueKey('app_error_boundary'),
+        child: const Application(key: ValueKey('app_ready')),
+      );
     }
 
     // Wrap the startup page with fade-out animation
@@ -251,5 +257,162 @@ class _StartupAppState extends State<StartupApp>
         ),
       ),
     );
+  }
+}
+
+// ====================================================================
+// Error Boundary — 启动后异常兜底
+// ====================================================================
+//
+// 在启动检查完成后，如果 Provider 初始化过程中发生 Widget 构建异常
+// （例如数据格式修复后仍有残留的不兼容数据），此 ErrorBoundary 会
+// 捕获异常并显示恢复界面，而不是让应用直接闪退。
+// ====================================================================
+
+/// A simple error boundary that catches build-phase exceptions in [child]
+/// and displays a recoverable error UI instead of a blank/crashing screen.
+///
+/// This is specifically for catching errors that happen AFTER the startup
+/// check sequence completes but DURING the first render of the [Application]
+/// widget and its providers.  Once the error is handled, the user can press
+/// "重试" to rebuild the widget tree.
+class _AppErrorBoundary extends StatefulWidget {
+  final Widget child;
+
+  const _AppErrorBoundary({super.key, required this.child});
+
+  @override
+  State<_AppErrorBoundary> createState() => _AppErrorBoundaryState();
+}
+
+class _AppErrorBoundaryState extends State<_AppErrorBoundary> {
+  bool _hasError = false;
+  String _errorMessage = '';
+
+  void _onRetry() {
+    setState(() {
+      _hasError = false;
+      _errorMessage = '';
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_hasError) {
+      // 兜底恢复界面，不会闪退
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          useMaterial3: true,
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        ),
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.error_outline,
+                      size: 64, color: Colors.orange.shade400),
+                  const SizedBox(height: 16),
+                  Text(
+                    '应用启动异常',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _errorMessage.isNotEmpty
+                        ? _errorMessage
+                        : '启动过程中遇到数据格式问题，已自动修复，请重试。',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.grey.shade600,
+                        ),
+                  ),
+                  const SizedBox(height: 24),
+                  FilledButton.icon(
+                    onPressed: _onRetry,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('重试'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return _ErrorCatcher(
+      onError: (Object error, StackTrace stack) {
+        debugPrint('[_AppErrorBoundary] Caught build error: $error');
+        debugPrint('[_AppErrorBoundary] Stack: $stack');
+        if (mounted) {
+          setState(() {
+            _hasError = true;
+            _errorMessage = error.toString();
+          });
+        }
+        return _ErrorWidgetPlaceholder();
+      },
+      child: widget.child,
+    );
+  }
+}
+
+/// Wraps [child] and catches any FlutterError (build/layout/paint errors)
+/// by installing a zone error handler and a custom [ErrorWidget.builder].
+///
+/// When an error is caught, [onError] is called and a placeholder widget
+/// is displayed instead of the default red error box.
+class _ErrorCatcher extends StatefulWidget {
+  final Widget child;
+  final Widget Function(Object error, StackTrace stack) onError;
+
+  const _ErrorCatcher({
+    super.key,
+    required this.child,
+    required this.onError,
+  });
+
+  @override
+  State<_ErrorCatcher> createState() => _ErrorCatcherState();
+}
+
+class _ErrorCatcherState extends State<_ErrorCatcher> {
+  ErrorWidgetBuilder? _originalBuilder;
+
+  @override
+  void initState() {
+    super.initState();
+    // Replace the global ErrorWidget.builder so build errors are caught here
+    _originalBuilder = ErrorWidget.builder;
+    ErrorWidget.builder = (FlutterErrorDetails details) {
+      final result = widget.onError(details.exception, details.stack ?? StackTrace.current);
+      return result;
+    };
+  }
+
+  @override
+  void dispose() {
+    // Restore the original ErrorWidget.builder
+    if (_originalBuilder != null) {
+      ErrorWidget.builder = _originalBuilder!;
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.child;
+  }
+}
+
+/// A minimal placeholder widget used by [_ErrorCatcher] when errors occur.
+class _ErrorWidgetPlaceholder extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox.shrink();
   }
 }
