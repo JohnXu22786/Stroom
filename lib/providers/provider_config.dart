@@ -123,7 +123,9 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       // 第3步：正常加载 provider_entries
       final json = prefs.getString('provider_entries');
       if (json != null) {
-        final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
+        // 兜底：安全过滤非 Map 条目，避免 `.cast<Map>()` 的类型转换闪退
+        final rawList = jsonDecode(json) as List;
+        final list = rawList.whereType<Map<String, dynamic>>().toList();
         final entries = list.map((m) => ProviderEntry.fromMap(m)).toList();
 
         // 第4步：确保 OCR 条目存在（已有用户升级时自动迁移）
@@ -187,14 +189,20 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     if (oldJson == null || oldJson.isEmpty) return;
 
     try {
-      final oldList =
-          (jsonDecode(oldJson) as List).cast<Map<String, dynamic>>();
+      // 兜底：使用 whereType 安全过滤，避免非 Map 条目导致的闪退
+      final oldList = (jsonDecode(oldJson) as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .toList() ??
+          [];
       if (oldList.isEmpty) return;
 
       final migratedConfigs = <ProviderConfigItem>[];
       for (final oldItem in oldList) {
-        final oldModels =
-            (oldItem['models'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        // 兜底：安全过滤 oldItem['models']
+        final oldModels = (oldItem['models'] as List?)
+                ?.whereType<Map<String, dynamic>>()
+                .toList() ??
+            [];
 
         final models = oldModels.map((m) {
           final typeConfig = <String, dynamic>{};
@@ -231,8 +239,14 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
 
       List<Map<String, dynamic>> existingEntries = [];
       if (existingJson != null && existingJson.isNotEmpty) {
-        existingEntries =
-            (jsonDecode(existingJson) as List).cast<Map<String, dynamic>>();
+        try {
+          // 兜底：使用 whereType 安全过滤非 Map 条目
+          existingEntries = (jsonDecode(existingJson) as List)
+              .whereType<Map<String, dynamic>>()
+              .toList();
+        } catch (_) {
+          // 现有数据损坏，忽略并用空列表重新开始
+        }
       }
 
       // 如果已有 llm 类型条目则不覆盖
@@ -266,21 +280,29 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       final json = prefs.getString('provider_entries');
       if (json == null || json.isEmpty) return;
 
-      final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
+      // 兜底：使用 whereType 安全过滤非 Map 条目，避免 `.cast<>()` 或 `as Map` 闪退
+      final list =
+          (jsonDecode(json) as List).whereType<Map<String, dynamic>>().toList();
       bool changed = false;
 
       for (final entry in list) {
         final configs = entry['configs'] as List?;
         if (configs == null) continue;
         for (final config in configs) {
-          final configMap = config as Map<String, dynamic>;
+          // 兜底：跳过非 Map 的 config 条目
+          if (config is! Map<String, dynamic>) continue;
+          final configMap = config;
           final models = configMap['models'] as List?;
           if (models == null) continue;
           for (final model in models) {
-            final modelMap = model as Map<String, dynamic>;
+            // 兜底：跳过非 Map 的 model 条目
+            if (model is! Map<String, dynamic>) continue;
+            final modelMap = model;
             final customParams = modelMap['customParams'] as List?;
             if (customParams == null) continue;
             for (int i = 0; i < customParams.length; i++) {
+              // 兜底：跳过非 Map 的 customParam 条目
+              if (customParams[i] is! Map<String, dynamic>) continue;
               final param = customParams[i] as Map<String, dynamic>;
               if (param['type'] == null) {
                 param['type'] = 'string';
