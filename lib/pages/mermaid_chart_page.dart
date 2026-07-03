@@ -92,9 +92,8 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   @override
   void initState() {
     super.initState();
-    _editorMode = widget.initialShowPreview
-        ? EditorMode.split
-        : EditorMode.edit;
+    _editorMode =
+        widget.initialShowPreview ? EditorMode.split : EditorMode.edit;
     if (widget.initialCode != null) {
       _codeController.text = widget.initialCode!;
       _selectedTypeId = _detectTypeFromCode(widget.initialCode!);
@@ -166,8 +165,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   // ---------------------------------------------------------------------------
 
   void _showEditorModeMenu() {
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
 
     showMenu<EditorMode>(
       context: context,
