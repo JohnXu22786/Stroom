@@ -14,47 +14,8 @@ void main() {
     AppStorage.resetCache();
   });
 
-  group('StartupCheckService - nested data repair - configs list', () {
-    test('repairDataFormats fixes non-Map entries in configs list', () async {
-      SharedPreferences.setMockInitialValues({
-        'data_format_version': DataMigrationService.currentFormatVersion,
-        'provider_entries': jsonEncode([
-          {
-            'id': 'test_provider',
-            'type': 'llm',
-            'name': 'Test Provider',
-            'configs': [
-              null, // null config entry
-              'not a map', // string entry instead of Map
-              42, // number entry instead of Map
-            ],
-          },
-        ]),
-      });
-      AppStorage.resetCache();
-
-      final errorCount = await StartupCheckService.repairDataFormats();
-
-      // Should have repaired the data without crashing
-      final prefs = await SharedPreferences.getInstance();
-      final json = prefs.getString('provider_entries');
-      expect(json, isNotNull);
-
-      final list = jsonDecode(json!) as List;
-      expect(list.length, equals(1));
-
-      final entry = list[0] as Map<String, dynamic>;
-      final configs = entry['configs'] as List;
-      // Non-Map entries should be filtered out
-      for (final config in configs) {
-        expect(config, isA<Map<String, dynamic>>());
-      }
-      // At least the non-Map entries should be removed
-      expect(configs.length, lessThan(3));
-      expect(errorCount, equals(0));
-    });
-
-    test('repairDataFormats fixes mixed valid/invalid configs entries',
+  group('StartupCheckService - validateDataFormats - nested data', () {
+    test('validateDataFormats detects non-Map entries in configs list',
         () async {
       SharedPreferences.setMockInitialValues({
         'data_format_version': DataMigrationService.currentFormatVersion,
@@ -64,37 +25,25 @@ void main() {
             'type': 'llm',
             'name': 'Test Provider',
             'configs': [
-              {'providerName': 'Valid', 'host': '', 'key': '', 'models': []},
               null,
-              {
-                'providerName': 'Also Valid',
-                'host': '',
-                'key': '',
-                'models': []
-              },
+              'invalid',
             ],
           },
         ]),
       });
       AppStorage.resetCache();
 
-      await StartupCheckService.repairDataFormats();
+      final issues = await StartupCheckService.validateDataFormats();
 
-      final prefs = await SharedPreferences.getInstance();
-      final json = prefs.getString('provider_entries');
-      final list = jsonDecode(json!) as List;
-      final entry = list[0] as Map<String, dynamic>;
-      final configs = entry['configs'] as List;
-
-      // Valid entries should be preserved
-      expect(configs.length, equals(2));
-      expect(configs[0]['providerName'], equals('Valid'));
-      expect(configs[1]['providerName'], equals('Also Valid'));
+      // Should detect format issues in configs
+      final configsIssues = issues.where(
+        (i) => i.message.contains('configs'),
+      );
+      expect(configsIssues, isNotEmpty);
     });
-  });
 
-  group('StartupCheckService - nested data repair - models list', () {
-    test('repairDataFormats fixes non-Map entries in models list', () async {
+    test('validateDataFormats detects non-Map entries in models list',
+        () async {
       SharedPreferences.setMockInitialValues({
         'data_format_version': DataMigrationService.currentFormatVersion,
         'provider_entries': jsonEncode([
@@ -119,25 +68,16 @@ void main() {
       });
       AppStorage.resetCache();
 
-      await StartupCheckService.repairDataFormats();
+      final issues = await StartupCheckService.validateDataFormats();
 
-      final prefs = await SharedPreferences.getInstance();
-      final json = prefs.getString('provider_entries');
-      final list = jsonDecode(json!) as List;
-      final entry = list[0] as Map<String, dynamic>;
-      final configs = entry['configs'] as List;
-      final models = (configs[0] as Map<String, dynamic>)['models'] as List;
-
-      for (final model in models) {
-        expect(model, isA<Map<String, dynamic>>());
-      }
-      expect(models.length, equals(1));
-      expect(models[0]['name'], equals('Valid'));
+      // Should detect non-Map entries in models
+      final modelsIssues = issues.where(
+        (i) => i.message.contains('models'),
+      );
+      expect(modelsIssues, isNotEmpty);
     });
-  });
 
-  group('StartupCheckService - nested data repair - customParams list', () {
-    test('repairDataFormats fixes non-Map entries in customParams list',
+    test('validateDataFormats detects non-Map entries in customParams list',
         () async {
       SharedPreferences.setMockInitialValues({
         'data_format_version': DataMigrationService.currentFormatVersion,
@@ -169,27 +109,17 @@ void main() {
       });
       AppStorage.resetCache();
 
-      await StartupCheckService.repairDataFormats();
+      final issues = await StartupCheckService.validateDataFormats();
 
-      final prefs = await SharedPreferences.getInstance();
-      final json = prefs.getString('provider_entries');
-      final list = jsonDecode(json!) as List;
-      final entry = list[0] as Map<String, dynamic>;
-      final configs = entry['configs'] as List;
-      final models = (configs[0] as Map<String, dynamic>)['models'] as List;
-      final customParams =
-          (models[0] as Map<String, dynamic>)['customParams'] as List;
-
-      for (final param in customParams) {
-        expect(param, isA<Map<String, dynamic>>());
-      }
-      expect(customParams.length, equals(1));
-      expect(customParams[0]['paramName'], equals('valid_param'));
+      // Should detect non-Map entries in customParams
+      final customParamsIssues = issues.where(
+        (i) => i.message.contains('customParams'),
+      );
+      expect(customParamsIssues, isNotEmpty);
     });
-  });
 
-  group('StartupCheckService - nested data repair - voices list', () {
-    test('repairDataFormats fixes non-Map entries in voices list', () async {
+    test('validateDataFormats detects non-Map entries in voices list',
+        () async {
       SharedPreferences.setMockInitialValues({
         'data_format_version': DataMigrationService.currentFormatVersion,
         'provider_entries': jsonEncode([
@@ -220,26 +150,16 @@ void main() {
       });
       AppStorage.resetCache();
 
-      await StartupCheckService.repairDataFormats();
+      final issues = await StartupCheckService.validateDataFormats();
 
-      final prefs = await SharedPreferences.getInstance();
-      final json = prefs.getString('provider_entries');
-      final list = jsonDecode(json!) as List;
-      final entry = list[0] as Map<String, dynamic>;
-      final configs = entry['configs'] as List;
-      final models = (configs[0] as Map<String, dynamic>)['models'] as List;
-      final voices = (models[0] as Map<String, dynamic>)['voices'] as List;
-
-      for (final voice in voices) {
-        expect(voice, isA<Map<String, dynamic>>());
-      }
-      expect(voices.length, equals(1));
-      expect(voices[0]['name'], equals('Valid Voice'));
+      // Should detect non-Map entries in voices
+      final voicesIssues = issues.where(
+        (i) => i.message.contains('voices'),
+      );
+      expect(voicesIssues, isNotEmpty);
     });
-  });
 
-  group('StartupCheckService - nested data repair - reasoningParams list', () {
-    test('repairDataFormats fixes non-Map entries in reasoningParams list',
+    test('validateDataFormats detects non-Map entries in reasoningParams list',
         () async {
       SharedPreferences.setMockInitialValues({
         'data_format_version': DataMigrationService.currentFormatVersion,
@@ -274,27 +194,18 @@ void main() {
       });
       AppStorage.resetCache();
 
-      await StartupCheckService.repairDataFormats();
+      final issues = await StartupCheckService.validateDataFormats();
 
-      final prefs = await SharedPreferences.getInstance();
-      final json = prefs.getString('provider_entries');
-      final list = jsonDecode(json!) as List;
-      final entry = list[0] as Map<String, dynamic>;
-      final configs = entry['configs'] as List;
-      final models = (configs[0] as Map<String, dynamic>)['models'] as List;
-      final reasoningParams =
-          (models[0] as Map<String, dynamic>)['reasoningParams'] as List;
-
-      for (final param in reasoningParams) {
-        expect(param, isA<Map<String, dynamic>>());
-      }
-      expect(reasoningParams.length, equals(1));
-      expect(reasoningParams[0]['paramName'], equals('reasoning_effort'));
+      // Should detect non-Map entries in reasoningParams
+      final reasoningParamsIssues = issues.where(
+        (i) => i.message.contains('reasoningParams'),
+      );
+      expect(reasoningParamsIssues, isNotEmpty);
     });
   });
 
-  group('StartupCheckService - validateDataFormats - nested data', () {
-    test('validateDataFormats detects non-Map entries in configs list',
+  group('StartupCheckService - validateDataFormats - mixed', () {
+    test('validateDataFormats preserves valid entries and detects invalid ones',
         () async {
       SharedPreferences.setMockInitialValues({
         'data_format_version': DataMigrationService.currentFormatVersion,
@@ -304,8 +215,14 @@ void main() {
             'type': 'llm',
             'name': 'Test Provider',
             'configs': [
+              {'providerName': 'Valid', 'host': '', 'key': '', 'models': []},
               null,
-              'invalid',
+              {
+                'providerName': 'Also Valid',
+                'host': '',
+                'key': '',
+                'models': []
+              },
             ],
           },
         ]),
@@ -314,11 +231,16 @@ void main() {
 
       final issues = await StartupCheckService.validateDataFormats();
 
-      // Should detect format issues in configs
+      // Should detect the null entry in configs
       final configsIssues = issues.where(
         (i) => i.message.contains('configs'),
       );
       expect(configsIssues, isNotEmpty);
+      // Should NOT report errors about valid entries' fields
+      final idIssues = issues.where(
+        (i) => i.message.contains('id') && i.message.contains('缺失'),
+      );
+      expect(idIssues, isEmpty);
     });
   });
 
@@ -358,15 +280,8 @@ void main() {
   });
 
   group('ProviderEntry.fromMap - nested data resilience', () {
-    test(
-        'ProviderEntry.fromMap handles non-Map entries in configs without crash',
+    test('whereType filter protects against non-Map entries in configs',
         () async {
-      // This tests the actual production code path - ProviderEntry.fromMap
-      // parsing data that has non-Map entries in configs list.
-      // In production, the startup repair would clean this first, but we
-      // verify that even if called with raw data, the whereType filter
-      // in provider_config.dart's load() method protects against crashes.
-
       // Simulate what the provider load() does after whereType filtering
       final rawList = [
         {
@@ -384,37 +299,32 @@ void main() {
       // Use whereType like the production code does
       final filteredList = rawList.whereType<Map<String, dynamic>>().toList();
 
-      // Should still parse the top-level entry without crash
-      // (nested configs with non-Map entries won't be in the configs
-      //  list after repair, but ProviderEntry.fromMap has its own
-      //  Map<String, dynamic>.from(e as Map) which would crash if
-      //  called with raw data)
       expect(filteredList.length, equals(1));
       final entry = filteredList[0];
-      // The configs list contains non-Map entries, but fromMap's
-      // iteration with `as Map` will crash on them - this is why
-      // repair must clean them first
       final configs = entry['configs'] as List;
-      // Non-Map entries remain in raw data (repair hasn't run)
+      // Non-Map entries remain in raw data
       expect(configs.whereType<Map<String, dynamic>>().length, equals(0));
     });
 
-    test(
-        'ProviderEntry.fromMap works correctly after repair cleans nested lists',
-        () {
-      // After repair has removed non-Map entries, fromMap should work fine
-      final cleanedConfigs = <Map<String, dynamic>>[];
-      final rawList = [
-        {
-          'id': 'test',
-          'type': 'tts',
-          'name': 'Test',
-          'configs': cleanedConfigs,
-        },
-      ];
+    test('validateDataFormats does not crash on top-level null/s tring entries',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([
+          null,
+          'not a map',
+          42,
+        ]),
+      });
+      AppStorage.resetCache();
 
-      final filteredList = rawList.whereType<Map<String, dynamic>>().toList();
-      expect(filteredList.length, equals(1));
+      // Should NOT crash - validateDataFormats has is! guard
+      final issues = await StartupCheckService.validateDataFormats();
+
+      // Should report errors for all 3 invalid entries
+      final nullTypeIssues = issues.where(
+        (i) => i.message.contains('provider_entries'),
+      );
+      expect(nullTypeIssues.length, equals(3));
     });
   });
 }

@@ -344,5 +344,4 @@ class StartupCheckService {
   static bool _isKnownProviderType(String type) {
     return ['llm', 'tts', 'ocr', 'asr', 'mcp', 'builtin'].contains(type);
   }
-
 }
