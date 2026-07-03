@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:uuid/uuid.dart';
 
 // ============================================================================
@@ -448,17 +447,9 @@ class ProviderEntry {
       };
 
   factory ProviderEntry.fromMap(Map<String, dynamic> map) {
-    // Helper: get a non-null id, generating a UUID if null/missing/empty
-    String resolveId(dynamic rawId) {
-      if (rawId is String && rawId.isNotEmpty) return rawId;
-      final generated = 'provider_${const Uuid().v4()}';
-      debugPrint('[ProviderEntry] Generated fallback id for entry: $generated');
-      return generated;
-    }
-
     if (map.containsKey('configs')) {
       return ProviderEntry(
-        id: resolveId(map['id']),
+        id: map['id'] as String,
         type: map['type'] as String? ?? 'tts',
         name: map['name'] as String? ?? '',
         configs: (map['configs'] as List?)
@@ -479,7 +470,7 @@ class ProviderEntry {
           [],
     );
     return ProviderEntry(
-      id: resolveId(map['id']),
+      id: map['id'] as String,
       type: map['type'] as String? ?? 'tts',
       name: map['name'] as String? ?? '',
       configs: config.providerName.isEmpty &&
