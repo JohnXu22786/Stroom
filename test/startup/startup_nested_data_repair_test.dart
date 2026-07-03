@@ -54,7 +54,8 @@ void main() {
       expect(errorCount, equals(0));
     });
 
-    test('repairDataFormats fixes mixed valid/invalid configs entries', () async {
+    test('repairDataFormats fixes mixed valid/invalid configs entries',
+        () async {
       SharedPreferences.setMockInitialValues({
         'data_format_version': DataMigrationService.currentFormatVersion,
         'provider_entries': jsonEncode([
@@ -65,7 +66,12 @@ void main() {
             'configs': [
               {'providerName': 'Valid', 'host': '', 'key': '', 'models': []},
               null,
-              {'providerName': 'Also Valid', 'host': '', 'key': '', 'models': []},
+              {
+                'providerName': 'Also Valid',
+                'host': '',
+                'key': '',
+                'models': []
+              },
             ],
           },
         ]),
@@ -222,8 +228,7 @@ void main() {
       final entry = list[0] as Map<String, dynamic>;
       final configs = entry['configs'] as List;
       final models = (configs[0] as Map<String, dynamic>)['models'] as List;
-      final voices =
-          (models[0] as Map<String, dynamic>)['voices'] as List;
+      final voices = (models[0] as Map<String, dynamic>)['voices'] as List;
 
       for (final voice in voices) {
         expect(voice, isA<Map<String, dynamic>>());
@@ -318,13 +323,20 @@ void main() {
   });
 
   group('StartupCheckService - checkDataIntegrity - non-Map entries', () {
-    test('checkDataIntegrity handles non-Map entry without crash and continues checking valid entries', () async {
+    test(
+        'checkDataIntegrity handles non-Map entry without crash and continues checking valid entries',
+        () async {
       SharedPreferences.setMockInitialValues({
         'data_format_version': DataMigrationService.currentFormatVersion,
         'provider_entries': jsonEncode([
           null, // null entry at top level - should be skipped
           'not a map', // string entry at top level - should be skipped
-          {'id': 'valid', 'type': 'unknown_type', 'name': 'Valid', 'configs': []},
+          {
+            'id': 'valid',
+            'type': 'unknown_type',
+            'name': 'Valid',
+            'configs': []
+          },
         ]),
       });
       AppStorage.resetCache();
@@ -339,13 +351,16 @@ void main() {
       expect(
         issues.any((i) => i.message.contains('unknown_type')),
         isTrue,
-        reason: 'Valid entries should still be checked after skipping non-Map items',
+        reason:
+            'Valid entries should still be checked after skipping non-Map items',
       );
     });
   });
 
   group('ProviderEntry.fromMap - nested data resilience', () {
-    test('ProviderEntry.fromMap handles non-Map entries in configs without crash', () async {
+    test(
+        'ProviderEntry.fromMap handles non-Map entries in configs without crash',
+        () async {
       // This tests the actual production code path - ProviderEntry.fromMap
       // parsing data that has non-Map entries in configs list.
       // In production, the startup repair would clean this first, but we
@@ -367,9 +382,7 @@ void main() {
       ];
 
       // Use whereType like the production code does
-      final filteredList = rawList
-          .whereType<Map<String, dynamic>>()
-          .toList();
+      final filteredList = rawList.whereType<Map<String, dynamic>>().toList();
 
       // Should still parse the top-level entry without crash
       // (nested configs with non-Map entries won't be in the configs
@@ -386,7 +399,9 @@ void main() {
       expect(configs.whereType<Map<String, dynamic>>().length, equals(0));
     });
 
-    test('ProviderEntry.fromMap works correctly after repair cleans nested lists', () {
+    test(
+        'ProviderEntry.fromMap works correctly after repair cleans nested lists',
+        () {
       // After repair has removed non-Map entries, fromMap should work fine
       final cleanedConfigs = <Map<String, dynamic>>[];
       final rawList = [
@@ -398,9 +413,7 @@ void main() {
         },
       ];
 
-      final filteredList = rawList
-          .whereType<Map<String, dynamic>>()
-          .toList();
+      final filteredList = rawList.whereType<Map<String, dynamic>>().toList();
       expect(filteredList.length, equals(1));
     });
   });

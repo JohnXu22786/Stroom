@@ -125,9 +125,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       if (json != null) {
         // 兜底：安全过滤非 Map 条目，避免 `.cast<Map>()` 的类型转换闪退
         final rawList = jsonDecode(json) as List;
-        final list = rawList
-            .whereType<Map<String, dynamic>>()
-            .toList();
+        final list = rawList.whereType<Map<String, dynamic>>().toList();
         final entries = list.map((m) => ProviderEntry.fromMap(m)).toList();
 
         // 第4步：确保 OCR 条目存在（已有用户升级时自动迁移）
@@ -192,15 +190,19 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
 
     try {
       // 兜底：使用 whereType 安全过滤，避免非 Map 条目导致的闪退
-      final oldList =
-          (jsonDecode(oldJson) as List?)?.whereType<Map<String, dynamic>>().toList() ?? [];
+      final oldList = (jsonDecode(oldJson) as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .toList() ??
+          [];
       if (oldList.isEmpty) return;
 
       final migratedConfigs = <ProviderConfigItem>[];
       for (final oldItem in oldList) {
         // 兜底：安全过滤 oldItem['models']
-        final oldModels =
-            (oldItem['models'] as List?)?.whereType<Map<String, dynamic>>().toList() ?? [];
+        final oldModels = (oldItem['models'] as List?)
+                ?.whereType<Map<String, dynamic>>()
+                .toList() ??
+            [];
 
         final models = oldModels.map((m) {
           final typeConfig = <String, dynamic>{};
@@ -279,9 +281,8 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       if (json == null || json.isEmpty) return;
 
       // 兜底：使用 whereType 安全过滤非 Map 条目，避免 `.cast<>()` 或 `as Map` 闪退
-      final list = (jsonDecode(json) as List)
-          .whereType<Map<String, dynamic>>()
-          .toList();
+      final list =
+          (jsonDecode(json) as List).whereType<Map<String, dynamic>>().toList();
       bool changed = false;
 
       for (final entry in list) {

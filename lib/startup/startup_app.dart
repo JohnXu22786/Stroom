@@ -389,7 +389,8 @@ class _ErrorCatcherState extends State<_ErrorCatcher> {
     // Replace the global ErrorWidget.builder so build errors are caught here
     _originalBuilder = ErrorWidget.builder;
     ErrorWidget.builder = (FlutterErrorDetails details) {
-      final result = widget.onError(details.exception, details.stack ?? StackTrace.current);
+      final result = widget.onError(
+          details.exception, details.stack ?? StackTrace.current);
       return result;
     };
   }

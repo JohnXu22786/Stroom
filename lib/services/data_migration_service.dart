@@ -371,15 +371,19 @@ class DataMigrationService {
 
     try {
       // 兜底：使用 whereType 安全过滤非 Map 条目
-      final oldList =
-          (jsonDecode(oldJson) as List?)?.whereType<Map<String, dynamic>>().toList() ?? [];
+      final oldList = (jsonDecode(oldJson) as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .toList() ??
+          [];
       if (oldList.isEmpty) return;
 
       final migratedConfigs = <Map<String, dynamic>>[];
       for (final oldItem in oldList) {
         // 兜底：安全过滤 models 中的非 Map 条目
-        final oldModels =
-            (oldItem['models'] as List?)?.whereType<Map<String, dynamic>>().toList() ?? [];
+        final oldModels = (oldItem['models'] as List?)
+                ?.whereType<Map<String, dynamic>>()
+                .toList() ??
+            [];
 
         final models = oldModels.map((m) {
           final typeConfig = <String, dynamic>{};
@@ -460,9 +464,8 @@ class DataMigrationService {
 
     try {
       // 兜底：使用 whereType 安全过滤非 Map 条目
-      final list = (jsonDecode(json) as List)
-          .whereType<Map<String, dynamic>>()
-          .toList();
+      final list =
+          (jsonDecode(json) as List).whereType<Map<String, dynamic>>().toList();
       bool changed = false;
 
       for (int i = 0; i < list.length; i++) {
