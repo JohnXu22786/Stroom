@@ -109,7 +109,8 @@ class BackgroundTaskCard extends ConsumerWidget {
     );
   }
 
-  Widget _buildDetailContent(BackgroundTask task, ColorScheme cs, WidgetRef ref) {
+  Widget _buildDetailContent(
+      BackgroundTask task, ColorScheme cs, WidgetRef ref) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -347,7 +348,8 @@ class BackgroundTaskCard extends ConsumerWidget {
     );
   }
 
-  Widget _buildActionButtons(BackgroundTask task, ColorScheme cs, WidgetRef ref) {
+  Widget _buildActionButtons(
+      BackgroundTask task, ColorScheme cs, WidgetRef ref) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
