@@ -851,9 +851,11 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
               ),
 
             // ── Settings row (model, tools, reasoning) ──
-            // Each tag occupies its own line (SizedBox with full width forces
-            // Wrap to stack chips vertically). Chips use Flexible + LayoutBuilder
-            // internally so text truncation correctly accounts for chip internals.
+            // Uses Wrap so tags use their natural width and flow to the next
+            // line when they don't fit side-by-side. ModelNameChip is constrained
+            // to at most the full row width so its internal Flexible can
+            // truncate text properly. Tools and reasoning chips use natural
+            // width since their labels are short and fixed.
             Padding(
               padding: EdgeInsets.only(
                 left: 12,
@@ -869,8 +871,8 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                     spacing: 8,
                     runSpacing: 6,
                     children: [
-                      SizedBox(
-                        width: maxTagWidth,
+                      ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: maxTagWidth),
                         child: ModelNameChip(
                           displayName: (widget.modelNames.isNotEmpty &&
                                   widget.selectedModelIndex >= 0 &&
@@ -882,27 +884,21 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                           onTap: _showModelPanel,
                         ),
                       ),
-                      SizedBox(
-                        width: maxTagWidth,
-                        child: _SettingsChip(
-                          icon: Icons.build_outlined,
-                          label: '工具',
-                          color: cs.tertiary,
-                          onTap: _showToolsPanel,
-                          badgeCount: widget.enabledTools.length,
-                        ),
+                      _SettingsChip(
+                        icon: Icons.build_outlined,
+                        label: '工具',
+                        color: cs.tertiary,
+                        onTap: _showToolsPanel,
+                        badgeCount: widget.enabledTools.length,
                       ),
-                      SizedBox(
-                        width: maxTagWidth,
-                        child: _SettingsChip(
-                          icon: Icons.psychology_outlined,
-                          label: reasoningLabel,
-                          color: reasoningColor,
-                          onTap: widget.hasReasoningParams
-                              ? _showReasoningPanel
-                              : null,
-                          enabled: widget.hasReasoningParams,
-                        ),
+                      _SettingsChip(
+                        icon: Icons.psychology_outlined,
+                        label: reasoningLabel,
+                        color: reasoningColor,
+                        onTap: widget.hasReasoningParams
+                            ? _showReasoningPanel
+                            : null,
+                        enabled: widget.hasReasoningParams,
                       ),
                     ],
                   );

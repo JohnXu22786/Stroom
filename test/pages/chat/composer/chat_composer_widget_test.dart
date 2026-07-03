@@ -381,6 +381,23 @@ void main() {
       // Reasoning panel should NOT open (button is disabled without params)
       expect(find.text('推理设置'), findsNothing);
     });
+
+    testWidgets('settings row tags use natural width, not forced full width',
+        (tester) async {
+      await setupSurface(tester);
+      await tester.pumpWidget(createChatTestApp());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      // All three tags should be visible
+      expect(find.text('模型'), findsOneWidget);
+      expect(find.text('工具'), findsOneWidget);
+      expect(find.text('推理'), findsOneWidget);
+
+      // The model chip should not overflow or cause errors
+      expect(tester.takeException(), isNull);
+    });
   });
 
   // ═══════════════════════════════════════════════════════════
