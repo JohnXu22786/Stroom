@@ -93,7 +93,6 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
       name: '默认助手',
       prompt: '你是一个有帮助的AI助手。请用中文回答用户的问题。',
       emoji: '🤖',
-      description: '通用AI助手',
     );
   }
 
