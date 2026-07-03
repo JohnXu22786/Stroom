@@ -890,17 +890,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
           (_cancelledByUser && _streamingMsgId != null)) {
         updateMessage(fullReply);
       }
-      // After streaming completes, clear segments for messages without
-      // tool calls. This allows the normal MarkdownWidget path to render
-      // the full text correctly, avoiding visual artifacts from markdown
-      // constructs (paragraphs, inline code, etc.) that were split across
-      // arbitrary throttle-boundary segments. Segments containing tool
-      // calls are retained since they are naturally delimited at tool
-      // call boundaries and the ToolCallCards must still be displayed.
-      if (_chatSegments[aiMsgId] != null &&
-          _chatSegments[aiMsgId]!.every((s) => s is TextSegment)) {
-        _chatSegments[aiMsgId]!.clear();
-      }
+      // NOTE: We intentionally do NOT clear _chatSegments here.
+      // mergeConsecutiveTextSegments (used in textMessageBuilder) already
+      // merges consecutive TextSegments during rendering, so there are no
+      // visual artifacts from split-throttle-boundary segments. Clearing
+      // would cause MarkdownWidget to re-parse the ENTIRE long message at
+      // once, risking OOM/flash-crash with long responses.
+      // _chatSegments is eventually cleaned up when the message is deleted,
+      // edited, or retried (see _deleteMessage, _editUserMessageWithText,
+      // _retryAssistantMessage).
       // Always capture reasoning content from the response.
       // The SSE parser now yields reasoning_content unconditionally;
       // the reasoning toggle only controls whether the params are SENT.
@@ -985,11 +983,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // session instead (see _startStreaming), preserving the final reasoning
       // content from the completed stream.
       _cancelledByUser = false;
-      // Clean up streaming-only maps for this message to prevent memory leaks.
-      // _chatSegments with tool calls are preserved (still needed for rendering).
-      // _reasoningContents are preserved (needed for reasoning section buttons).
-      // _streamingRenderedLengths is only needed during streaming, safe to remove.
-      _streamingRenderedLengths.remove(aiMsgId);
+      // NOTE: _streamingRenderedLengths.remove(aiMsgId) is intentionally
+      // deferred to after _saveMessages() (below). Removing it here would
+      // trigger a null-assert crash on the `!` operator at lines 727/865
+      // if any code path accesses it during the save/rebuild window.
+      // Eventual cleanup happens after _saveMessages() returns.
       if (mounted) setState(() {});
     }
 
@@ -1001,6 +999,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // conversation if the user switched conversations during background
     // streaming (e.g. navigated back and selected a different topic).
     await _saveMessages(capturedConvId: capturedConvId);
+
+    // Eventual cleanup: remove streaming-only map entries now that the
+    // save is complete. Deferred from the inner finally block to prevent
+    // null-assert crashes (lines 727/865 use `!` on map lookups) and to
+    // ensure segments are still available for any mid-save UI rebuilds.
+    _streamingRenderedLengths.remove(aiMsgId);
 
     // Clean up the adapter after background streaming completes. If the page
     // was disposed while streaming, dispose() skipped adapter cleanup, so we
