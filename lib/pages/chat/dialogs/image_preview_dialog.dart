@@ -64,8 +64,7 @@ void showImagePreviewDialog({
                                       size: 48, color: Colors.white54),
                                   SizedBox(height: 8),
                                   Text('无法加载图片',
-                                      style:
-                                          TextStyle(color: Colors.white54)),
+                                      style: TextStyle(color: Colors.white54)),
                                 ],
                               ),
                             );
