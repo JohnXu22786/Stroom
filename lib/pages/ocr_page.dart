@@ -1253,11 +1253,15 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
       // Step 3: Processing complete → Step 4: Receiving result
       bgNotifier.updateStep(taskId, 1, completed: true);
-      bgNotifier.updateStep(taskId, 2, completed: true);
-      bgNotifier.updateStep(taskId, 3, running: true);
+      // Mark "处理中" as running now that server has responded
+      bgNotifier.updateStep(taskId, 2, running: true);
 
       // Store the OCR result internally
       bgNotifier.setResult(taskId, result.text);
+
+      // Processing done, now receiving result
+      bgNotifier.updateStep(taskId, 2, completed: true);
+      bgNotifier.updateStep(taskId, 3, running: true);
 
       // Step 5: Saving file — save to file and get the path
       bgNotifier.updateStep(taskId, 3, completed: true);

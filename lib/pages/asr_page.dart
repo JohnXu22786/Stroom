@@ -916,23 +916,41 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       final service = AsrService(config: effectiveConfig);
       final total = _selectedAudios.length;
 
+      // Step 0: 连接服务器
+      bgNotifier.updateStep(taskId, 0, running: true);
+      // No actual connection step needed for direct API call
+      bgNotifier.updateStep(taskId, 0, completed: true);
+
       for (int i = 0; i < total; i++) {
         final audio = _selectedAudios[i];
         final fileTitle = 'ASR_${audio.name}_$timestamp';
 
-        // Set current status
-        bgNotifier.setResult(taskId, '正在转写: ${audio.name} (${i + 1}/$total)');
+        // Step 1: 上传音频
+        bgNotifier.updateStep(taskId, 1, running: true);
 
-        // Transcribe this audio file
+        // Transcribe this audio file (upload + server processing)
         final result = await service.transcribe(
           audioBytes: audio.bytes,
           audioFormat: audio.format,
         );
 
-        // Save the transcription result
+        // Upload complete (server responded 200), now processing
+        bgNotifier.updateStep(taskId, 1, completed: true);
+        bgNotifier.updateStep(taskId, 2, running: true);
+
+        // Step 2 → 3: 接收结果
         bgNotifier.setResult(taskId, result.text);
+        bgNotifier.updateStep(taskId, 2, completed: true);
+        bgNotifier.updateStep(taskId, 3, running: true);
+
+        // Save the transcription result
         await _saveTranscriptionResult(result.text, title: fileTitle);
+        bgNotifier.updateStep(taskId, 3, completed: true);
       }
+
+      // Step 4: 保存文件
+      bgNotifier.updateStep(taskId, 4, running: true);
+      bgNotifier.updateStep(taskId, 4, completed: true);
 
       // Mark task as completed
       bgNotifier.completeTask(taskId);
