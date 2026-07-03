@@ -227,9 +227,9 @@ class _StartupAppState extends State<StartupApp>
       // Wrap with an error boundary so that if the Application widget's
       // provider initialization crashes due to residual data format issues,
       // the app shows a recoverable error instead of crashing entirely.
-      return _AppErrorBoundary(
-        key: const ValueKey('app_error_boundary'),
-        child: const Application(key: ValueKey('app_ready')),
+      return const _AppErrorBoundary(
+        key: ValueKey('app_error_boundary'),
+        child: Application(key: ValueKey('app_ready')),
       );
     }
 
@@ -371,7 +371,6 @@ class _ErrorCatcher extends StatefulWidget {
   final Widget Function(Object error, StackTrace stack) onError;
 
   const _ErrorCatcher({
-    super.key,
     required this.child,
     required this.onError,
   });
