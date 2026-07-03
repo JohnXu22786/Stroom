@@ -870,7 +870,7 @@ void main() {
       expect(assistants.length, 1);
       expect(assistants[0]['name'], '默认助手');
       expect(assistants[0]['emoji'], '🤖');
-      expect(assistants[0]['description'], '通用AI助手');
+      expect(assistants[0]['description'], '');
       expect(assistants[0]['prompt'], '你是一个有帮助的AI助手。请用中文回答用户的问题。');
     });
 

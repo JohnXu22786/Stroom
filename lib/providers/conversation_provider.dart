@@ -78,7 +78,6 @@ Future<String?> _resolveDefaultAssistantId(SharedPreferences prefs) async {
     name: '默认助手',
     prompt: '你是一个有帮助的AI助手。请用中文回答用户的问题。',
     emoji: '🤖',
-    description: '通用AI助手',
   );
   await prefs.setString('assistants', jsonEncode([defaultAssistant.toMap()]));
   debugPrint(
@@ -451,7 +450,6 @@ Future<List<Conversation>?> migrateConversationsFromPrefs(
         name: '默认助手',
         prompt: '你是一个有帮助的AI助手。请用中文回答用户的问题。',
         emoji: '🤖',
-        description: '通用AI助手',
       );
       await prefs.setString(
           'assistants', jsonEncode([defaultAssistant.toMap()]));
