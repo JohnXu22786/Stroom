@@ -125,9 +125,7 @@ class AsrService {
                     'Authorization': 'Bearer ${config.apiKey}',
                   ...openRouterAppHeaders,
                 },
-                connectTimeout: const Duration(seconds: 30),
-                receiveTimeout: const Duration(seconds: 120),
-                sendTimeout: const Duration(seconds: 60),
+                // No timeouts — ASR transcription may take a long time
               ),
             );
 
