@@ -21,6 +21,9 @@ class FolderPickerDialog extends StatefulWidget {
   /// 对话框标题
   final String title;
 
+  /// 自定义提示文字（显示在标题下方）。若为空则使用默认提示。
+  final String? hintText;
+
   const FolderPickerDialog({
     super.key,
     this.currentFolder = '',
@@ -28,6 +31,7 @@ class FolderPickerDialog extends StatefulWidget {
     this.onCreateFolder,
     this.onRefreshFolders,
     this.title = '选择文件夹',
+    this.hintText,
   });
 
   /// 便捷方法：展示文件夹选择对话框
@@ -38,6 +42,7 @@ class FolderPickerDialog extends StatefulWidget {
     Future<String?> Function(String name)? onCreateFolder,
     Future<Set<String>> Function()? onRefreshFolders,
     String title = '选择文件夹',
+    String? hintText,
   }) {
     return showDialog<String>(
       context: context,
@@ -47,6 +52,7 @@ class FolderPickerDialog extends StatefulWidget {
         onCreateFolder: onCreateFolder,
         onRefreshFolders: onRefreshFolders,
         title: title,
+        hintText: hintText,
       ),
     );
   }
@@ -182,7 +188,7 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
           Text(widget.title),
           const SizedBox(height: 4),
           Text(
-            '单击选中，双击进入查看子文件夹',
+            widget.hintText ?? '单击选中，双击进入查看子文件夹',
             style: TextStyle(
               fontSize: 12,
               color: cs.onSurfaceVariant.withValues(alpha: 0.7),

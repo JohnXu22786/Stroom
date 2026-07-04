@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/mermaid_templates.dart';
+import 'package:stroom/widgets/folder_picker_dialog.dart';
 
 // ============================================================================
 // Editor Mode
@@ -308,6 +309,24 @@ MERMAID_CODE_PLACEHOLDER
       return;
     }
 
+    // Show folder picker dialog first (same style as catcatch/get-web-resource)
+    final folders = await TextManifest.getAllFolders();
+    if (!mounted) return;
+
+    final selectedFolder = await FolderPickerDialog.show(
+      context,
+      availableFolders: folders,
+      title: '选择保存文件夹',
+      hintText: '选择或创建文件夹保存 .mmd 图表文件',
+      onCreateFolder: (name) async {
+        await TextManifest.addFolder(name);
+        return null;
+      },
+      onRefreshFolders: () async => TextManifest.getAllFolders(),
+    );
+
+    if (selectedFolder == null || !mounted) return;
+
     setState(() => _isSaving = true);
 
     try {
@@ -335,7 +354,7 @@ MERMAID_CODE_PLACEHOLDER
         format: 'mmd',
         createdAt: DateTime.now(),
         size: bytes.length,
-        folder: '',
+        folder: selectedFolder,
         textLength: content.length,
       ));
 
@@ -343,7 +362,8 @@ MERMAID_CODE_PLACEHOLDER
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已保存到文本储存区: $name.mmd'),
+            content: Text(
+                '已保存到文本储存区: ${selectedFolder.isEmpty ? "根目录" : selectedFolder}/$name.mmd'),
             duration: const Duration(seconds: 2),
           ),
         );
