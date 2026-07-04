@@ -170,17 +170,14 @@ class ModelNameChip extends StatelessWidget {
     final style = TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w500,
-      color: isDisabled
-          ? Colors.grey.withOpacity(0.4)
-          : cs.onSurface,
+      color: isDisabled ? Colors.grey.withOpacity(0.4) : cs.onSurface,
     );
 
     return InkWell(
       onTap: isDisabled ? null : onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: const EdgeInsets.symmetric(
-            horizontal: 10, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: isDisabled
               ? Colors.grey.withOpacity(0.08)
@@ -198,9 +195,7 @@ class ModelNameChip extends StatelessWidget {
           children: [
             Icon(Icons.smart_toy_outlined,
                 size: 16,
-                color: isDisabled
-                    ? Colors.grey.withOpacity(0.4)
-                    : color),
+                color: isDisabled ? Colors.grey.withOpacity(0.4) : color),
             const SizedBox(width: 4),
             Text(
               displayText,

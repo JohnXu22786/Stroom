@@ -2110,14 +2110,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
                             },
                             chatController: controller,
                             onMessageSend: (text) => _onMessageSend(text, []),
-                            theme: isDark
-                                ? ChatTheme.dark()
-                                : ChatTheme.light(),
+                            theme:
+                                isDark ? ChatTheme.dark() : ChatTheme.light(),
                             timeFormat: DateFormat('yyyy-MM-dd HH:mm'),
                             builders: Builders(
-                              chatAnimatedListBuilder:
-                                  (context, itemBuilder) =>
-                                      ChatAnimatedList(
+                              chatAnimatedListBuilder: (context, itemBuilder) =>
+                                  ChatAnimatedList(
                                 itemBuilder: itemBuilder,
                                 onEndReached: _loadMoreMessages,
                                 scrollController: _chatScrollController,
@@ -2130,231 +2128,562 @@ class _ChatPageState extends ConsumerState<ChatPage>
                               ),
                               // Suppress the built-in scroll-to-bottom
                               // button — we provide our own overlay below.
-                              scrollToBottomBuilder: (context, animation,
-                                      onPressed) =>
-                                  const SizedBox.shrink(),
-                          // Empty composer builder — the actual composer is
-                          // rendered below the Chat widget so it participates
-                          // in the Column layout flow instead of overlaying
-                          // the message list via the internal Stack. This
-                          // ensures the scroll area auto-adjusts as the
-                          // composer height changes (e.g. multi-line input).
-                          composerBuilder: (_) => const SizedBox.shrink(),
-                          textMessageBuilder: (
-                            context,
-                            message,
-                            index, {
-                            required bool isSentByMe,
-                            MessageGroupStatus? groupStatus,
-                          }) {
-                            final isAi = message.authorId == _aiUser.id;
+                              scrollToBottomBuilder:
+                                  (context, animation, onPressed) =>
+                                      const SizedBox.shrink(),
+                              // Empty composer builder — the actual composer is
+                              // rendered below the Chat widget so it participates
+                              // in the Column layout flow instead of overlaying
+                              // the message list via the internal Stack. This
+                              // ensures the scroll area auto-adjusts as the
+                              // composer height changes (e.g. multi-line input).
+                              composerBuilder: (_) => const SizedBox.shrink(),
+                              textMessageBuilder: (
+                                context,
+                                message,
+                                index, {
+                                required bool isSentByMe,
+                                MessageGroupStatus? groupStatus,
+                              }) {
+                                final isAi = message.authorId == _aiUser.id;
 
-                            Widget messageBubble;
-                            if (isAi) {
-                              final chatMsg = _history
-                                  .where((m) => m.id == message.id)
-                                  .firstOrNull;
-                              if ((chatMsg?.isError == true) ||
-                                  message.text.startsWith('错误:')) {
-                                // Extract error details from rawResponse
-                                final resp = chatMsg?.rawResponse ?? {};
-                                final statusCode = resp['statusCode'];
-                                final responseBodyData = resp['data'];
-                                final responseError = resp['error'];
-                                final originalErrorText =
-                                    message.text.replaceAll('错误: ', '');
+                                Widget messageBubble;
+                                if (isAi) {
+                                  final chatMsg = _history
+                                      .where((m) => m.id == message.id)
+                                      .firstOrNull;
+                                  if ((chatMsg?.isError == true) ||
+                                      message.text.startsWith('错误:')) {
+                                    // Extract error details from rawResponse
+                                    final resp = chatMsg?.rawResponse ?? {};
+                                    final statusCode = resp['statusCode'];
+                                    final responseBodyData = resp['data'];
+                                    final responseError = resp['error'];
+                                    final originalErrorText =
+                                        message.text.replaceAll('错误: ', '');
 
-                                // Build the list of error info widgets
-                                final errorWidgets = <Widget>[];
+                                    // Build the list of error info widgets
+                                    final errorWidgets = <Widget>[];
 
-                                // Status Code (new — shown first)
-                                if (statusCode != null) {
-                                  errorWidgets.add(
-                                    SelectableText(
-                                      'Status Code: $statusCode',
-                                      style: TextStyle(
-                                        color: isDark
-                                            ? Colors.grey[300]
-                                            : Colors.grey[800],
-                                        fontSize: 13,
+                                    // Status Code (new — shown first)
+                                    if (statusCode != null) {
+                                      errorWidgets.add(
+                                        SelectableText(
+                                          'Status Code: $statusCode',
+                                          style: TextStyle(
+                                            color: isDark
+                                                ? Colors.grey[300]
+                                                : Colors.grey[800],
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      );
+                                    }
+
+                                    // Response Body error (new — shown second)
+                                    if (responseBodyData != null ||
+                                        responseError != null) {
+                                      final bodyText = responseBodyData != null
+                                          ? _formatErrorValue(responseBodyData)
+                                          : _formatErrorValue(responseError);
+                                      errorWidgets.add(
+                                        SelectableText(
+                                          bodyText,
+                                          style: TextStyle(
+                                            color: isDark
+                                                ? Colors.grey[300]
+                                                : Colors.grey[800],
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      );
+                                    }
+
+                                    // Blank line before original error
+                                    if (errorWidgets.isNotEmpty &&
+                                        originalErrorText.isNotEmpty) {
+                                      errorWidgets.add(
+                                        const SizedBox(height: 8),
+                                      );
+                                    }
+
+                                    // Original error (DIO Exception etc.)
+                                    if (originalErrorText.isNotEmpty) {
+                                      errorWidgets.add(
+                                        SelectableText(
+                                          originalErrorText,
+                                          style: TextStyle(
+                                            color: isDark
+                                                ? Colors.grey[300]
+                                                : Colors.grey[800],
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      );
+                                    }
+
+                                    messageBubble = Container(
+                                      margin: const EdgeInsets.symmetric(
+                                        vertical: 2,
                                       ),
-                                    ),
-                                  );
-                                }
-
-                                // Response Body error (new — shown second)
-                                if (responseBodyData != null ||
-                                    responseError != null) {
-                                  final bodyText = responseBodyData != null
-                                      ? _formatErrorValue(responseBodyData)
-                                      : _formatErrorValue(responseError);
-                                  errorWidgets.add(
-                                    SelectableText(
-                                      bodyText,
-                                      style: TextStyle(
-                                        color: isDark
-                                            ? Colors.grey[300]
-                                            : Colors.grey[800],
-                                        fontSize: 13,
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: (isDark
+                                                ? Colors.grey[850]
+                                                : Colors.grey[100])!
+                                            .withOpacity(0.7),
+                                        borderRadius: BorderRadius.circular(12),
                                       ),
-                                    ),
-                                  );
-                                }
-
-                                // Blank line before original error
-                                if (errorWidgets.isNotEmpty &&
-                                    originalErrorText.isNotEmpty) {
-                                  errorWidgets.add(
-                                    const SizedBox(height: 8),
-                                  );
-                                }
-
-                                // Original error (DIO Exception etc.)
-                                if (originalErrorText.isNotEmpty) {
-                                  errorWidgets.add(
-                                    SelectableText(
-                                      originalErrorText,
-                                      style: TextStyle(
-                                        color: isDark
-                                            ? Colors.grey[300]
-                                            : Colors.grey[800],
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  );
-                                }
-
-                                messageBubble = Container(
-                                  margin: const EdgeInsets.symmetric(
-                                    vertical: 2,
-                                  ),
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: (isDark
-                                            ? Colors.grey[850]
-                                            : Colors.grey[100])!
-                                        .withOpacity(0.7),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Row(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Icon(
-                                            Icons.info_outline,
-                                            size: 14,
-                                            color: isDark
-                                                ? Colors.grey[400]
-                                                : Colors.grey[600],
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            '发送失败',
-                                            style: TextStyle(
-                                              color: isDark
-                                                  ? Colors.grey[400]
-                                                  : Colors.grey[600],
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 6),
-                                      ...errorWidgets,
-                                      if (chatMsg != null &&
-                                          (chatMsg.rawRequest != null ||
-                                              chatMsg.rawResponse != null))
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            top: 8,
-                                          ),
-                                          child: TextButton.icon(
-                                            icon: Icon(
-                                              Icons.preview,
-                                              size: 14,
-                                              color: isDark
-                                                  ? Colors.grey[400]
-                                                  : Colors.grey[600],
-                                            ),
-                                            label: Text(
-                                              '查看详细错误',
-                                              style: TextStyle(
-                                                fontSize: 12,
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.info_outline,
+                                                size: 14,
                                                 color: isDark
                                                     ? Colors.grey[400]
                                                     : Colors.grey[600],
                                               ),
-                                            ),
-                                            onPressed: () =>
-                                                _showErrorDetailDialog(
-                                              context,
-                                              message.id,
-                                            ),
-                                            style: TextButton.styleFrom(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                horizontal: 8,
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                '发送失败',
+                                                style: TextStyle(
+                                                  color: isDark
+                                                      ? Colors.grey[400]
+                                                      : Colors.grey[600],
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
                                               ),
-                                              minimumSize: Size.zero,
-                                              tapTargetSize:
-                                                  MaterialTapTargetSize
-                                                      .shrinkWrap,
+                                            ],
+                                          ),
+                                          const SizedBox(height: 6),
+                                          ...errorWidgets,
+                                          if (chatMsg != null &&
+                                              (chatMsg.rawRequest != null ||
+                                                  chatMsg.rawResponse != null))
+                                            Padding(
+                                              padding: const EdgeInsets.only(
+                                                top: 8,
+                                              ),
+                                              child: TextButton.icon(
+                                                icon: Icon(
+                                                  Icons.preview,
+                                                  size: 14,
+                                                  color: isDark
+                                                      ? Colors.grey[400]
+                                                      : Colors.grey[600],
+                                                ),
+                                                label: Text(
+                                                  '查看详细错误',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: isDark
+                                                        ? Colors.grey[400]
+                                                        : Colors.grey[600],
+                                                  ),
+                                                ),
+                                                onPressed: () =>
+                                                    _showErrorDetailDialog(
+                                                  context,
+                                                  message.id,
+                                                ),
+                                                style: TextButton.styleFrom(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                    horizontal: 8,
+                                                  ),
+                                                  minimumSize: Size.zero,
+                                                  tapTargetSize:
+                                                      MaterialTapTargetSize
+                                                          .shrinkWrap,
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    );
+                                  } else {
+                                    final reasoningSections =
+                                        _reasoningContents[message.id];
+                                    final segments = _chatSegments[message.id];
+                                    final isWaitingForFirstToken =
+                                        message.id == _streamingMsgId &&
+                                            message.text.isEmpty &&
+                                            isStreaming &&
+                                            !ref.read(
+                                              streamingHasFirstTokenProvider,
+                                            );
+                                    final hasSearchMatch = _isSearching &&
+                                        _searchQuery.isNotEmpty &&
+                                        _searchMatches.any(
+                                          (m) => m.messageId == message.id,
+                                        );
+
+                                    messageBubble = Container(
+                                      margin: const EdgeInsets.symmetric(
+                                        vertical: 2,
+                                      ),
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: isDark
+                                            ? Colors.grey[850]
+                                            : Colors.grey[100],
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (reasoningSections != null &&
+                                              reasoningSections.isNotEmpty)
+                                            ReasoningSection(
+                                              sections: ReasoningSectionData(
+                                                texts: reasoningSections,
+                                                // Streaming is true only while
+                                                // reasoning events are still
+                                                // being received. Once text
+                                                // content starts (reasoning
+                                                // complete), streaming becomes
+                                                // false so the button shows
+                                                // "推理过程" instead of "推理中".
+                                                streaming: isStreaming &&
+                                                    message.id ==
+                                                        _streamingMsgId &&
+                                                    _isReasoningCompletedForMsg[
+                                                            message.id] !=
+                                                        true,
+                                              ),
+                                              messageId: message.id,
+                                            ),
+                                          // During streaming, when first token hasn't arrived
+                                          // and we don't have reasoning content, show JumpingDots.
+                                          // Reasoning content already shows "推理中" button.
+                                          if (isWaitingForFirstToken &&
+                                              (reasoningSections == null ||
+                                                  reasoningSections.isEmpty))
+                                            const Padding(
+                                              padding: EdgeInsets.symmetric(
+                                                vertical: 8,
+                                              ),
+                                              child:
+                                                  JumpingDotsProgressIndicator(
+                                                color: Colors.grey,
+                                                fontSize: 14,
+                                              ),
+                                            )
+                                          else if (segments != null &&
+                                              segments.isNotEmpty)
+                                            // Merge consecutive TextSegments to avoid visual breaks
+                                            // between arbitrary streaming chunk boundaries (e.g.
+                                            // throttle intervals). Each text block renders in a
+                                            // single MarkdownWidget for continuity.
+                                            ...mergeConsecutiveTextSegments(
+                                              segments,
+                                            ).map(
+                                              (seg) => switch (seg) {
+                                                TextSegment s => Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                      bottom: 4,
+                                                    ),
+                                                    child: hasSearchMatch
+                                                        ? _buildHighlightedText(
+                                                            s.text,
+                                                            message.id,
+                                                          )
+                                                        : MarkdownWidget(
+                                                            data: s.text,
+                                                            selectable: true,
+                                                            shrinkWrap: true,
+                                                            physics:
+                                                                const NeverScrollableScrollPhysics(),
+                                                            config:
+                                                                markdownConfig,
+                                                            markdownGenerator:
+                                                                markdownGenerator,
+                                                          ),
+                                                  ),
+                                                ToolCallSegment s =>
+                                                  ToolCallCard(data: s.data),
+                                              },
+                                            )
+                                          else if (hasSearchMatch)
+                                            _buildHighlightedText(
+                                              message.text,
+                                              message.id,
+                                            )
+                                          else
+                                            MarkdownWidget(
+                                              data: message.text,
+                                              selectable: true,
+                                              shrinkWrap: true,
+                                              physics:
+                                                  const NeverScrollableScrollPhysics(),
+                                              config: markdownConfig,
+                                              markdownGenerator:
+                                                  markdownGenerator,
+                                            ),
+                                        ],
+                                      ),
+                                    );
+                                  }
+                                } else {
+                                  final chatMsg = _history
+                                      .where((m) => m.id == message.id)
+                                      .firstOrNull;
+                                  final hasAttachments =
+                                      chatMsg?.attachments.isNotEmpty == true;
+                                  final hasSearchMatch = _isSearching &&
+                                      _searchQuery.isNotEmpty &&
+                                      _searchMatches.any(
+                                        (m) => m.messageId == message.id,
+                                      );
+                                  messageBubble = Column(
+                                    crossAxisAlignment:
+                                        hasAttachments && isSentByMe
+                                            ? CrossAxisAlignment.end
+                                            : CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (hasSearchMatch)
+                                        _buildHighlightedText(
+                                          message.text,
+                                          message.id,
+                                        )
+                                      else
+                                        SimpleTextMessage(
+                                          message: message,
+                                          index: index,
+                                          showTime: false,
+                                        ),
+                                      if (hasAttachments)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            left: 4,
+                                            right: 4,
+                                            bottom: 4,
+                                          ),
+                                          child: SizedBox(
+                                            height: 120,
+                                            child: ListView.builder(
+                                              scrollDirection: Axis.horizontal,
+                                              reverse: isSentByMe,
+                                              itemCount:
+                                                  chatMsg!.attachments.length,
+                                              itemBuilder: (ctx, i) {
+                                                final att =
+                                                    chatMsg.attachments[i];
+                                                return _buildMessageAttachmentPreview(
+                                                  att,
+                                                );
+                                              },
                                             ),
                                           ),
                                         ),
                                     ],
-                                  ),
+                                  );
+                                }
+
+                                return Column(
+                                  crossAxisAlignment: isSentByMe
+                                      ? CrossAxisAlignment.end
+                                      : CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      key: _messageKeys.putIfAbsent(
+                                        message.id,
+                                        () => GlobalKey(),
+                                      ),
+                                      child: messageBubble,
+                                    ),
+                                    // Timestamp below bubble (user messages only),
+                                    // above action buttons, with theme-adaptive color.
+                                    if (!isAi)
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          left: 4,
+                                          top: 2,
+                                          bottom: 2,
+                                        ),
+                                        child: Text(
+                                          DateFormat('yyyy-MM-dd HH:mm').format(
+                                            (message.createdAt ??
+                                                    message.resolvedTime ??
+                                                    DateTime.now())
+                                                .toLocal(),
+                                          ),
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: isDark
+                                                ? Colors.grey[400]
+                                                : Colors.grey[600],
+                                          ),
+                                        ),
+                                      ),
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                        left: 4,
+                                        top: 2,
+                                        bottom: 4,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          ActionButton(
+                                            icon: Icons.copy,
+                                            tooltip: '复制',
+                                            onPressed: () {
+                                              Clipboard.setData(
+                                                ClipboardData(
+                                                  text: message.text,
+                                                ),
+                                              );
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text('已复制'),
+                                                  duration: Duration(
+                                                    seconds: 1,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                          const SizedBox(width: 2),
+                                          if (isAi)
+                                            ActionButton(
+                                              icon: Icons.refresh,
+                                              tooltip: '重试',
+                                              onPressed: () =>
+                                                  _confirmRetryOrEdit(
+                                                message.id,
+                                              ),
+                                            )
+                                          else
+                                            ActionButton(
+                                              icon: Icons.edit_outlined,
+                                              tooltip: '编辑',
+                                              onPressed: () =>
+                                                  _startEditMessage(
+                                                message.id,
+                                              ),
+                                            ),
+                                          // Raw data view button: only shown for AI messages when data exists.
+                                          if (isAi &&
+                                              _history.any(
+                                                (m) =>
+                                                    m.id == message.id &&
+                                                    (m.rawRequest != null ||
+                                                        m.rawResponse != null),
+                                              )) ...[
+                                            const SizedBox(width: 2),
+                                            ActionButton(
+                                              icon: Icons.data_exploration,
+                                              tooltip: '查看数据详情',
+                                              onPressed: () =>
+                                                  _showRawDataDialog(
+                                                context,
+                                                message.id,
+                                              ),
+                                            ),
+                                          ],
+                                          if (_developerMode &&
+                                              isAi &&
+                                              _history.any(
+                                                (m) =>
+                                                    m.id == message.id &&
+                                                    (m.rawRequest != null ||
+                                                        m.rawResponse != null),
+                                              )) ...[
+                                            const SizedBox(width: 2),
+                                            ActionButton(
+                                              icon: Icons.code,
+                                              tooltip: 'JSON 审查',
+                                              onPressed: () =>
+                                                  _showJsonInspection(
+                                                message.id,
+                                              ),
+                                            ),
+                                          ],
+                                          const SizedBox(width: 2),
+                                          ActionButton(
+                                            icon: Icons.delete_outline,
+                                            tooltip: '删除',
+                                            onPressed: () =>
+                                                _confirmDeleteMessage(
+                                              message.id,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                 );
-                              } else {
+                              },
+                              textStreamMessageBuilder: (
+                                context,
+                                message,
+                                index, {
+                                required bool isSentByMe,
+                                MessageGroupStatus? groupStatus,
+                              }) {
+                                // If the message has accumulated content (e.g.,
+                                // after page restoration from background streaming),
+                                // render it as regular text instead of a spinner.
+                                final accumulated = ref.read(
+                                  streamingFullReplyProvider,
+                                );
+                                if (accumulated.isNotEmpty &&
+                                    message.id ==
+                                        ref.read(streamingMsgIdProvider)) {
+                                  return Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: MarkdownWidget(
+                                      data: accumulated,
+                                      selectable: true,
+                                      shrinkWrap: true,
+                                      physics:
+                                          const NeverScrollableScrollPhysics(),
+                                      config: markdownConfig,
+                                      markdownGenerator: markdownGenerator,
+                                    ),
+                                  );
+                                }
+                                // Check if reasoning content exists for this
+                                // message. If so, render the reasoning button
+                                // immediately instead of a spinner, even before
+                                // the first TextEvent converts the message from
+                                // textStream to text type.
                                 final reasoningSections =
                                     _reasoningContents[message.id];
-                                final segments = _chatSegments[message.id];
-                                final isWaitingForFirstToken =
-                                    message.id == _streamingMsgId &&
-                                        message.text.isEmpty &&
-                                        isStreaming &&
-                                        !ref.read(
-                                          streamingHasFirstTokenProvider,
-                                        );
-                                final hasSearchMatch = _isSearching &&
-                                    _searchQuery.isNotEmpty &&
-                                    _searchMatches.any(
-                                      (m) => m.messageId == message.id,
-                                    );
-
-                                messageBubble = Container(
-                                  margin: const EdgeInsets.symmetric(
-                                    vertical: 2,
-                                  ),
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: isDark
-                                        ? Colors.grey[850]
-                                        : Colors.grey[100],
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (reasoningSections != null &&
-                                          reasoningSections.isNotEmpty)
+                                if (reasoningSections != null &&
+                                    reasoningSections.isNotEmpty) {
+                                  return Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
                                         ReasoningSection(
                                           sections: ReasoningSectionData(
                                             texts: reasoningSections,
-                                            // Streaming is true only while
-                                            // reasoning events are still
-                                            // being received. Once text
-                                            // content starts (reasoning
-                                            // complete), streaming becomes
-                                            // false so the button shows
-                                            // "推理过程" instead of "推理中".
+                                            // During textStream phase, reasoning
+                                            // events are still being received (no
+                                            // TextEvent yet), so streaming is
+                                            // always true. Once TextEvent arrives,
+                                            // updateMessage() converts the message
+                                            // to text type and textMessageBuilder
+                                            // takes over with the correct flag.
                                             streaming: isStreaming &&
                                                 message.id == _streamingMsgId &&
                                                 _isReasoningCompletedForMsg[
@@ -2363,367 +2692,50 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                           ),
                                           messageId: message.id,
                                         ),
-                                      // During streaming, when first token hasn't arrived
-                                      // and we don't have reasoning content, show JumpingDots.
-                                      // Reasoning content already shows "推理中" button.
-                                      if (isWaitingForFirstToken &&
-                                          (reasoningSections == null ||
-                                              reasoningSections.isEmpty))
-                                        const Padding(
-                                          padding: EdgeInsets.symmetric(
-                                            vertical: 8,
-                                          ),
-                                          child: JumpingDotsProgressIndicator(
-                                            color: Colors.grey,
-                                            fontSize: 14,
-                                          ),
-                                        )
-                                      else if (segments != null &&
-                                          segments.isNotEmpty)
-                                        // Merge consecutive TextSegments to avoid visual breaks
-                                        // between arbitrary streaming chunk boundaries (e.g.
-                                        // throttle intervals). Each text block renders in a
-                                        // single MarkdownWidget for continuity.
-                                        ...mergeConsecutiveTextSegments(
-                                          segments,
-                                        ).map(
-                                          (seg) => switch (seg) {
-                                            TextSegment s => Padding(
-                                                padding: const EdgeInsets.only(
-                                                  bottom: 4,
-                                                ),
-                                                child: hasSearchMatch
-                                                    ? _buildHighlightedText(
-                                                        s.text,
-                                                        message.id,
-                                                      )
-                                                    : MarkdownWidget(
-                                                        data: s.text,
-                                                        selectable: true,
-                                                        shrinkWrap: true,
-                                                        physics:
-                                                            const NeverScrollableScrollPhysics(),
-                                                        config: markdownConfig,
-                                                        markdownGenerator:
-                                                            markdownGenerator,
-                                                      ),
-                                              ),
-                                            ToolCallSegment s =>
-                                              ToolCallCard(data: s.data),
-                                          },
-                                        )
-                                      else if (hasSearchMatch)
-                                        _buildHighlightedText(
-                                          message.text,
-                                          message.id,
-                                        )
-                                      else
-                                        MarkdownWidget(
-                                          data: message.text,
-                                          selectable: true,
-                                          shrinkWrap: true,
-                                          physics:
-                                              const NeverScrollableScrollPhysics(),
-                                          config: markdownConfig,
-                                          markdownGenerator: markdownGenerator,
-                                        ),
-                                    ],
+                                      ],
+                                    ),
+                                  );
+                                }
+                                return const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
                                   ),
                                 );
-                              }
-                            } else {
-                              final chatMsg = _history
-                                  .where((m) => m.id == message.id)
-                                  .firstOrNull;
-                              final hasAttachments =
-                                  chatMsg?.attachments.isNotEmpty == true;
-                              final hasSearchMatch = _isSearching &&
-                                  _searchQuery.isNotEmpty &&
-                                  _searchMatches.any(
-                                    (m) => m.messageId == message.id,
-                                  );
-                              messageBubble = Column(
-                                crossAxisAlignment: hasAttachments && isSentByMe
-                                    ? CrossAxisAlignment.end
-                                    : CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (hasSearchMatch)
-                                    _buildHighlightedText(
-                                      message.text,
-                                      message.id,
-                                    )
-                                  else
-                                    SimpleTextMessage(
-                                      message: message,
-                                      index: index,
-                                      showTime: false,
-                                    ),
-                                  if (hasAttachments)
-                                    Padding(
-                                      padding: const EdgeInsets.only(
-                                        left: 4,
-                                        right: 4,
-                                        bottom: 4,
-                                      ),
-                                      child: SizedBox(
-                                        height: 120,
-                                        child: ListView.builder(
-                                          scrollDirection: Axis.horizontal,
-                                          reverse: isSentByMe,
-                                          itemCount:
-                                              chatMsg!.attachments.length,
-                                          itemBuilder: (ctx, i) {
-                                            final att = chatMsg.attachments[i];
-                                            return _buildMessageAttachmentPreview(
-                                              att,
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              );
-                            }
-
-                            return Column(
-                              crossAxisAlignment: isSentByMe
-                                  ? CrossAxisAlignment.end
-                                  : CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  key: _messageKeys.putIfAbsent(
-                                    message.id,
-                                    () => GlobalKey(),
-                                  ),
-                                  child: messageBubble,
-                                ),
-                                // Timestamp below bubble (user messages only),
-                                // above action buttons, with theme-adaptive color.
-                                if (!isAi)
-                                  Padding(
-                                    padding: const EdgeInsets.only(
-                                      left: 4,
-                                      top: 2,
-                                      bottom: 2,
-                                    ),
-                                    child: Text(
-                                      DateFormat('yyyy-MM-dd HH:mm')
-                                          .format(
-                                            (message.createdAt ?? message.resolvedTime ?? DateTime.now())
-                                                .toLocal(),
-                                          ),
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: isDark
-                                            ? Colors.grey[400]
-                                            : Colors.grey[600],
-                                      ),
-                                    ),
-                                  ),
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                    left: 4,
-                                    top: 2,
-                                    bottom: 4,
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      ActionButton(
-                                        icon: Icons.copy,
-                                        tooltip: '复制',
-                                        onPressed: () {
-                                          Clipboard.setData(
-                                            ClipboardData(
-                                              text: message.text,
-                                            ),
-                                          );
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            const SnackBar(
-                                              content: Text('已复制'),
-                                              duration: Duration(
-                                                seconds: 1,
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                      const SizedBox(width: 2),
-                                      if (isAi)
-                                        ActionButton(
-                                          icon: Icons.refresh,
-                                          tooltip: '重试',
-                                          onPressed: () => _confirmRetryOrEdit(
-                                            message.id,
-                                          ),
-                                        )
-                                      else
-                                        ActionButton(
-                                          icon: Icons.edit_outlined,
-                                          tooltip: '编辑',
-                                          onPressed: () => _startEditMessage(
-                                            message.id,
-                                          ),
-                                        ),
-                                      // Raw data view button: only shown for AI messages when data exists.
-                                      if (isAi &&
-                                          _history.any(
-                                            (m) =>
-                                                m.id == message.id &&
-                                                (m.rawRequest != null ||
-                                                    m.rawResponse != null),
-                                          )) ...[
-                                        const SizedBox(width: 2),
-                                        ActionButton(
-                                          icon: Icons.data_exploration,
-                                          tooltip: '查看数据详情',
-                                          onPressed: () => _showRawDataDialog(
-                                            context,
-                                            message.id,
-                                          ),
-                                        ),
-                                      ],
-                                      if (_developerMode &&
-                                          isAi &&
-                                          _history.any(
-                                            (m) =>
-                                                m.id == message.id &&
-                                                (m.rawRequest != null ||
-                                                    m.rawResponse != null),
-                                          )) ...[
-                                        const SizedBox(width: 2),
-                                        ActionButton(
-                                          icon: Icons.code,
-                                          tooltip: 'JSON 审查',
-                                          onPressed: () => _showJsonInspection(
-                                            message.id,
-                                          ),
-                                        ),
-                                      ],
-                                      const SizedBox(width: 2),
-                                      ActionButton(
-                                        icon: Icons.delete_outline,
-                                        tooltip: '删除',
-                                        onPressed: () => _confirmDeleteMessage(
-                                          message.id,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                          textStreamMessageBuilder: (
-                            context,
-                            message,
-                            index, {
-                            required bool isSentByMe,
-                            MessageGroupStatus? groupStatus,
-                          }) {
-                            // If the message has accumulated content (e.g.,
-                            // after page restoration from background streaming),
-                            // render it as regular text instead of a spinner.
-                            final accumulated = ref.read(
-                              streamingFullReplyProvider,
-                            );
-                            if (accumulated.isNotEmpty &&
-                                message.id ==
-                                    ref.read(streamingMsgIdProvider)) {
-                              return Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: MarkdownWidget(
-                                  data: accumulated,
-                                  selectable: true,
-                                  shrinkWrap: true,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  config: markdownConfig,
-                                  markdownGenerator: markdownGenerator,
-                                ),
-                              );
-                            }
-                            // Check if reasoning content exists for this
-                            // message. If so, render the reasoning button
-                            // immediately instead of a spinner, even before
-                            // the first TextEvent converts the message from
-                            // textStream to text type.
-                            final reasoningSections =
-                                _reasoningContents[message.id];
-                            if (reasoningSections != null &&
-                                reasoningSections.isNotEmpty) {
-                              return Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    ReasoningSection(
-                                      sections: ReasoningSectionData(
-                                        texts: reasoningSections,
-                                        // During textStream phase, reasoning
-                                        // events are still being received (no
-                                        // TextEvent yet), so streaming is
-                                        // always true. Once TextEvent arrives,
-                                        // updateMessage() converts the message
-                                        // to text type and textMessageBuilder
-                                        // takes over with the correct flag.
-                                        streaming: isStreaming &&
-                                            message.id == _streamingMsgId &&
-                                            _isReasoningCompletedForMsg[
-                                                    message.id] !=
-                                                true,
-                                      ),
-                                      messageId: message.id,
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }
-                            return const Padding(
-                              padding: EdgeInsets.all(12),
-                              child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                            );
-                          },
+                              },
+                            ),
                           ),
-                        ),
-                        // ── Scroll-to-bottom overlay button ──
-                        if (_showScrollToBottomButton)
-                          Positioned(
-                            right: 16,
-                            bottom: 16,
-                            child: Material(
-                              elevation: 4,
-                              shape: const CircleBorder(),
-                              color: Colors.orange[700],
-                              child: InkWell(
-                                customBorder: const CircleBorder(),
-                                onTap: _onScrollToBottomTap,
-                                child: Container(
-                                  width: 36,
-                                  height: 36,
-                                  alignment: Alignment.center,
-                                  child: const Icon(
-                                    Icons.arrow_downward,
-                                    size: 20,
-                                    color: Colors.white,
+                          // ── Scroll-to-bottom overlay button ──
+                          if (_showScrollToBottomButton)
+                            Positioned(
+                              right: 16,
+                              bottom: 16,
+                              child: Material(
+                                elevation: 4,
+                                shape: const CircleBorder(),
+                                color: Colors.orange[700],
+                                child: InkWell(
+                                  customBorder: const CircleBorder(),
+                                  onTap: _onScrollToBottomTap,
+                                  child: Container(
+                                    width: 36,
+                                    height: 36,
+                                    alignment: Alignment.center,
+                                    child: const Icon(
+                                      Icons.arrow_downward,
+                                      size: 20,
+                                      color: Colors.white,
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                      ],
-                    ),
+                        ],
+                      ),
               ),
               // ── Chat composer (below chat, in Column flow) ──
               // Rendered as a direct Column child so it participates in the

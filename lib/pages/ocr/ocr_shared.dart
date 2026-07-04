@@ -12,9 +12,13 @@ class SelectedImage {
   final Uint8List bytes;
   final String format;
 
+  /// Original source name if imported from system/album, null if temp (camera).
+  final String? sourceName;
+
   SelectedImage({
     required this.bytes,
     this.format = 'jpeg',
+    this.sourceName,
   });
 }
 
