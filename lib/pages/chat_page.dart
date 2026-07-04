@@ -2510,7 +2510,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                     ),
                                     child: Text(
                                       DateFormat('yyyy-MM-dd HH:mm')
-                                          .format(message.createdAt.toLocal()),
+                                          .format(
+                                            (message.createdAt ?? message.resolvedTime ?? DateTime.now())
+                                                .toLocal(),
+                                          ),
                                       style: TextStyle(
                                         fontSize: 11,
                                         color: isDark
