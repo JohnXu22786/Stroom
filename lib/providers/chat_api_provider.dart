@@ -366,6 +366,9 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         },
         jsonEncode(body),
         cancelToken: cancelToken,
+        onResponseHeaders: (headers) {
+          _lastResponseHeaders = headers;
+        },
       )) {
         // Guard: both sse implementations yield lines starting with "data: ",
         // but be defensive in case a future implementation forgets the prefix.

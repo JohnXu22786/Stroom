@@ -5,8 +5,14 @@ import 'package:dio/dio.dart';
 
 /// 原生平台的 SSE 流式客户端
 /// 使用 Dio ResponseType.stream（在原生平台有效）
-Stream<String> sseStream(String url, Map<String, String> headers, String body,
-    {CancelToken? cancelToken}) async* {
+Stream<String> sseStream(
+  String url,
+  Map<String, String> headers,
+  String body, {
+  CancelToken? cancelToken,
+  /// Callback invoked with the initial HTTP response headers, if available.
+  void Function(Map<String, List<String>> headers)? onResponseHeaders,
+}) async* {
   final dio = Dio(BaseOptions(
     headers: headers,
     connectTimeout: const Duration(seconds: 10),
@@ -20,6 +26,8 @@ Stream<String> sseStream(String url, Map<String, String> headers, String body,
       data: body,
       cancelToken: cancelToken,
     );
+
+    onResponseHeaders?.call(response.headers.map);
 
     final rawStream = response.data.stream as Stream<Uint8List>;
     final lineStream = rawStream
