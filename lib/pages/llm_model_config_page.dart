@@ -419,12 +419,11 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           }),
         const SizedBox(height: 4),
         TextButton.icon(
-          icon: Icon(Icons.add, size: 16,
-              color: isToggleComplete ? null : Colors.grey),
+          icon: Icon(Icons.add,
+              size: 16, color: isToggleComplete ? null : Colors.grey),
           label: Text('添加推理力度参数',
               style: TextStyle(
-                  fontSize: 13,
-                  color: isToggleComplete ? null : Colors.grey)),
+                  fontSize: 13, color: isToggleComplete ? null : Colors.grey)),
           onPressed: isToggleComplete
               ? () {
                   final newParam = ReasoningParam(
@@ -511,8 +510,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                       IconButton(
                         icon: const Icon(Icons.remove_circle,
                             color: Colors.red, size: 18),
-                        onPressed: () =>
-                            _removeOptionFromParam(actualIndex, j),
+                        onPressed: () => _removeOptionFromParam(actualIndex, j),
                         tooltip: '删除选项',
                       ),
                   ],

@@ -145,7 +145,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 
   Future<void> _openSettingsPanel(int configIndex) async {
     final entry = _entry;
-    if (entry == null || configIndex < 0 || configIndex >= entry.configs.length) return;
+    if (entry == null || configIndex < 0 || configIndex >= entry.configs.length)
+      return;
 
     final result = await showProviderSettingsPanel(
       context: context,
@@ -162,7 +163,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         name: entry.name,
         configs: configs,
       );
-      await ref.read(providerEntriesProvider.notifier).update(entry.id, updated);
+      await ref
+          .read(providerEntriesProvider.notifier)
+          .update(entry.id, updated);
       if (!mounted) return;
       setState(() {});
     }
@@ -296,7 +299,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.settings, color: Colors.grey),
+                            icon:
+                                const Icon(Icons.settings, color: Colors.grey),
                             onPressed: () => _openSettingsPanel(i),
                             tooltip: '设置',
                           ),

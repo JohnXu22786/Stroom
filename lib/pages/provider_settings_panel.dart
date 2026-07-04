@@ -455,7 +455,6 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
             const SizedBox(height: 12),
-
             LlmToggleSlider(
               label: '温度 (Temperature)',
               value: _temperature,
@@ -542,8 +541,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
               child: Center(
-                child: Text('暂无自定义参数',
-                    style: TextStyle(color: Colors.grey)),
+                child: Text('暂无自定义参数', style: TextStyle(color: Colors.grey)),
               ),
             )
           else
@@ -569,8 +567,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                                 labelText: '参数名',
                                 border: const OutlineInputBorder(),
                                 isDense: true,
-                                errorText:
-                                    isDuplicate ? '已存在该参数' : null,
+                                errorText: isDuplicate ? '已存在该参数' : null,
                                 errorStyle: const TextStyle(fontSize: 11),
                               ),
                               onChanged: (v) {
@@ -583,12 +580,10 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                           Container(
                             width: 110,
                             decoration: BoxDecoration(
-                              border:
-                                  Border.all(color: Colors.grey.shade400),
+                              border: Border.all(color: Colors.grey.shade400),
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
                             child: DropdownButtonHideUnderline(
                               child: DropdownButton<String>(
                                 value: param.type,
@@ -658,8 +653,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
             Center(
               child: TextButton.icon(
                 icon: const Icon(Icons.add, size: 16),
-                label: const Text('添加推理开关',
-                    style: TextStyle(fontSize: 13)),
+                label: const Text('添加推理开关', style: TextStyle(fontSize: 13)),
                 onPressed: () => _addReasoningParam(isToggle: true),
               ),
             ),
@@ -799,35 +793,35 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
           ...List.generate(intensityParams.length, (i) {
             final param = intensityParams[i];
             final actualIndex = _reasoningParams.indexOf(param);
-            return _buildIntensityParamCard(
-                param, actualIndex, i, cs);
+            return _buildIntensityParamCard(param, actualIndex, i, cs);
           }),
         const SizedBox(height: 4),
         TextButton.icon(
-          icon: Icon(Icons.add, size: 16,
-              color: isToggleComplete ? null : Colors.grey),
+          icon: Icon(Icons.add,
+              size: 16, color: isToggleComplete ? null : Colors.grey),
           label: Text('添加推理力度参数',
               style: TextStyle(
-                  fontSize: 13,
-                  color: isToggleComplete ? null : Colors.grey)),
-          onPressed: isToggleComplete ? () {
-            final newParam = ReasoningParam(
-              paramName: '',
-              isReasoningToggle: false,
-              enabled: true,
-              options: [],
-            );
-            setState(() {
-              _reasoningParams.add(newParam);
-            });
-          } : null,
+                  fontSize: 13, color: isToggleComplete ? null : Colors.grey)),
+          onPressed: isToggleComplete
+              ? () {
+                  final newParam = ReasoningParam(
+                    paramName: '',
+                    isReasoningToggle: false,
+                    enabled: true,
+                    options: [],
+                  );
+                  setState(() {
+                    _reasoningParams.add(newParam);
+                  });
+                }
+              : null,
         ),
       ],
     );
   }
 
-  Widget _buildIntensityParamCard(ReasoningParam param, int actualIndex,
-      int displayIndex, ColorScheme cs) {
+  Widget _buildIntensityParamCard(
+      ReasoningParam param, int actualIndex, int displayIndex, ColorScheme cs) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
@@ -894,8 +888,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                       IconButton(
                         icon: const Icon(Icons.remove_circle,
                             color: Colors.red, size: 18),
-                        onPressed: () =>
-                            _removeOptionFromParam(actualIndex, j),
+                        onPressed: () => _removeOptionFromParam(actualIndex, j),
                         tooltip: '删除选项',
                       ),
                   ],

@@ -476,120 +476,120 @@ class _ProviderConfigDetailPageState
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-        appBar: AppBar(
-          title: Text(title),
-        ),
-        body: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // ==========================================================
-            // 供应商卡片（参照选择对话页面的顶部card样式）
-            // ==========================================================
-            Container(
-              margin: const EdgeInsets.only(bottom: 16),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: cs.primaryContainer.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: cs.primaryContainer,
-                  width: 0.5,
-                ),
+      appBar: AppBar(
+        title: Text(title),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // ==========================================================
+          // 供应商卡片（参照选择对话页面的顶部card样式）
+          // ==========================================================
+          Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: cs.primaryContainer.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: cs.primaryContainer,
+                width: 0.5,
               ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: cs.primaryContainer.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(Icons.dns, color: Colors.teal, size: 24),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: cs.primaryContainer.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                  child: Icon(Icons.dns, color: Colors.teal, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _providerNameController.text.isNotEmpty
+                            ? _providerNameController.text
+                            : '（未命名）',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                      if (_hostController.text.isNotEmpty)
                         Text(
-                          _providerNameController.text.isNotEmpty
-                              ? _providerNameController.text
-                              : '（未命名）',
+                          _hostController.text,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: cs.onSurface,
+                            fontSize: 12,
+                            color: cs.onSurfaceVariant,
                           ),
                         ),
-                        if (_hostController.text.isNotEmpty)
-                          Text(
-                            _hostController.text,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: cs.onSurfaceVariant,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.tune, size: 20),
-                    tooltip: '编辑供应商设置',
-                    onPressed: () => _openSettingsPanel(),
-                  ),
-                ],
-              ),
-            ),
-
-            // ==========================================================
-            // 模型列表
-            // ==========================================================
-            _buildSectionHeader('模型列表'),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: TextButton.icon(
-                icon: const Icon(Icons.add),
-                label: const Text('添加'),
-                onPressed: _addModel,
-              ),
-            ),
-            const SizedBox(height: 8),
-            if (models.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Center(
-                  child: Text('暂无模型', style: TextStyle(color: Colors.grey)),
-                ),
-              )
-            else
-              ...List.generate(models.length, (i) {
-                final model = models[i];
-                return ListTile(
-                  leading: const Icon(Icons.smart_toy),
-                  title: Text(model.name.isNotEmpty ? model.name : '（未命名）'),
-                  subtitle: Text('ID: ${model.modelId}'),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => _deleteModel(i),
-                        tooltip: '删除模型',
-                      ),
-                      const Icon(Icons.chevron_right),
                     ],
                   ),
-                  contentPadding: EdgeInsets.zero,
-                  onTap: () => _editModel(i),
-                );
-              }),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.tune, size: 20),
+                  tooltip: '编辑供应商设置',
+                  onPressed: () => _openSettingsPanel(),
+                ),
+              ],
+            ),
+          ),
 
-            const SizedBox(height: 16),
-          ],
-        ),
+          // ==========================================================
+          // 模型列表
+          // ==========================================================
+          _buildSectionHeader('模型列表'),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: TextButton.icon(
+              icon: const Icon(Icons.add),
+              label: const Text('添加'),
+              onPressed: _addModel,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (models.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: Text('暂无模型', style: TextStyle(color: Colors.grey)),
+              ),
+            )
+          else
+            ...List.generate(models.length, (i) {
+              final model = models[i];
+              return ListTile(
+                leading: const Icon(Icons.smart_toy),
+                title: Text(model.name.isNotEmpty ? model.name : '（未命名）'),
+                subtitle: Text('ID: ${model.modelId}'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      onPressed: () => _deleteModel(i),
+                      tooltip: '删除模型',
+                    ),
+                    const Icon(Icons.chevron_right),
+                  ],
+                ),
+                contentPadding: EdgeInsets.zero,
+                onTap: () => _editModel(i),
+              );
+            }),
+
+          const SizedBox(height: 16),
+        ],
+      ),
     );
   }
 
