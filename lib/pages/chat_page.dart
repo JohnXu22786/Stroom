@@ -73,7 +73,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// calling ref.read() (which throws after the widget is marked disposed).
   bool _isStreamingActive = false;
   final Map<String, List<String>> _reasoningContents = {};
-  
+
   /// Tracks whether reasoning has completed for a given message.
   /// Set to true when the first [TextEvent] arrives after at least one
   /// [ReasoningEvent] has been received for the same message.
@@ -649,6 +649,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     DateTime lastReasoningUpdate = DateTime.now();
     const minInterval = Duration(milliseconds: 50);
     const reasoningMinInterval = Duration(milliseconds: 100);
+
     /// Whether the first reasoning update has been applied to the UI.
     /// Used to ensure the reasoning button appears on the very first
     /// ReasoningEvent even when throttled by [reasoningMinInterval].
@@ -773,9 +774,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             // the throttle interval. Previously the throttle could block
             // the first event, causing the reasoning button to not appear
             // during streaming (Issue 2 fix).
-            final sections = [
-              ...ref.read(streamingReasoningSectionsProvider)
-            ];
+            final sections = [...ref.read(streamingReasoningSectionsProvider)];
             if (sections.isNotEmpty) {
               sections[sections.length - 1] = reasoningBuffer;
             } else {
