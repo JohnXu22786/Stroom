@@ -55,7 +55,8 @@ void main() {
       expect(find.text('传文件'), findsOneWidget);
     });
 
-    testWidgets('panel shows camera, device album, device file, and app file buttons',
+    testWidgets(
+        'panel shows camera, device album, device file, and app file buttons',
         (tester) async {
       await showPanelForTest(tester);
 

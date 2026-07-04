@@ -285,7 +285,8 @@ MERMAID_CODE_PLACEHOLDER
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已保存到文本储存区: ${selectedFolder.isEmpty ? "根目录" : selectedFolder}/$name.mmd'),
+            content: Text(
+                '已保存到文本储存区: ${selectedFolder.isEmpty ? "根目录" : selectedFolder}/$name.mmd'),
             duration: const Duration(seconds: 2),
           ),
         );
