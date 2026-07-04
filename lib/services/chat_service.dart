@@ -727,8 +727,7 @@ class ChatService {
       }
       // Presence penalty
       if (pc.containsKey('presencePenalty')) {
-        result['presence_penalty'] =
-            (pc['presencePenalty'] as num).toDouble();
+        result['presence_penalty'] = (pc['presencePenalty'] as num).toDouble();
       }
       // Seed
       if (pc.containsKey('seed')) {

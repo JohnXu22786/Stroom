@@ -422,8 +422,7 @@ class ProviderConfigItem {
                     ModelConfig.fromMap(Map<String, dynamic>.from(e as Map)))
                 .toList() ??
             [],
-        typeConfig: Map<String, dynamic>.from(
-            map['typeConfig'] as Map? ?? {}),
+        typeConfig: Map<String, dynamic>.from(map['typeConfig'] as Map? ?? {}),
         customParams: (map['customParams'] as List?)
                 ?.map((e) =>
                     CustomParam.fromMap(Map<String, dynamic>.from(e as Map)))
