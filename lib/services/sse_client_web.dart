@@ -5,8 +5,14 @@ import 'package:dio/dio.dart';
 
 /// Web 平台的 SSE 流式客户端
 /// 使用 dart:html HttpRequest.onProgress 实现真正的逐 token 流式
-Stream<String> sseStream(String url, Map<String, String> headers, String body,
-    {CancelToken? cancelToken}) async* {
+Stream<String> sseStream(
+  String url,
+  Map<String, String> headers,
+  String body, {
+  CancelToken? cancelToken,
+  /// Callback invoked with the initial HTTP response headers, if available.
+  void Function(Map<String, List<String>> headers)? onResponseHeaders,
+}) async* {
   final controller = StreamController<String>();
   int processedLines = 0;
 
@@ -52,6 +58,22 @@ Stream<String> sseStream(String url, Map<String, String> headers, String body,
   });
 
   final loadEndSub = xhr.onLoadEnd.listen((_) {
+    // Capture response headers from the first response
+    if (onResponseHeaders != null && xhr.status != 0) {
+      final headerMap = <String, List<String>>{};
+      final allHeaders = xhr.getAllResponseHeaders();
+      if (allHeaders != null && allHeaders.isNotEmpty) {
+        for (final line in allHeaders.split('\n')) {
+          final colonPos = line.indexOf(':');
+          if (colonPos > 0) {
+            final key = line.substring(0, colonPos).trim().toLowerCase();
+            final value = line.substring(colonPos + 1).trim();
+            headerMap.putIfAbsent(key, () => []).add(value);
+          }
+        }
+      }
+      onResponseHeaders(headerMap);
+    }
     // Process all remaining lines (don't drop the last complete line)
     final remainingText = xhr.responseText ?? '';
     if (remainingText.isNotEmpty) {

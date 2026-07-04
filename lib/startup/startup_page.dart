@@ -132,7 +132,7 @@ class _StartupPageState extends State<StartupPage>
                   const SizedBox(height: 8),
                   // Tagline
                   Text(
-                    '智能生活助理',
+                    '你的学习助理',
                     style: TextStyle(
                       fontSize: 16,
                       color: Colors.white.withValues(alpha: 0.8),
