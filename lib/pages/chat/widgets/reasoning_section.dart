@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/widgets/markdown_extensions.dart';
+import '../chat_types.dart';
 
 /// Data model for the reasoning sections to display.
 /// [texts] is a list of reasoning chain texts, one per reasoning round.
@@ -20,14 +21,14 @@ class ReasoningSectionData {
   bool get hasMultiple => texts.length > 1;
 }
 
-/// Reasoning section that shows clickable orange button(s).
+/// Reasoning section that shows clickable text line(s).
 ///
-/// Each reasoning chain gets its own button. When tapped, opens a panel dialog
-/// that renders the specific reasoning section's content using MarkdownWidget
-/// (same rendering as assistant replies).
+/// Each reasoning chain gets its own line like "思考中 ›" or "思考完成 ›".
+/// When tapped, opens a panel dialog that renders the specific reasoning
+/// section's content using MarkdownWidget (same rendering as assistant replies).
 ///
-/// During streaming, the last section shows "推理中" (reasoning in progress).
-/// Completed sections show "推理过程" (reasoning process).
+/// During streaming, the last section shows "思考中" (thinking in progress).
+/// Completed sections show "思考完成" (thinking complete).
 class ReasoningSection extends ConsumerWidget {
   final ReasoningSectionData sections;
   final String messageId;
@@ -65,7 +66,7 @@ class ReasoningSection extends ConsumerWidget {
   }
 }
 
-/// A single clickable reasoning button (orange pill).
+/// A single clickable reasoning text line like "思考中 ›" or "思考完成 ›".
 class _ReasoningButton extends ConsumerWidget {
   final String reasoningText;
   final bool isStreaming;
@@ -83,49 +84,35 @@ class _ReasoningButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final label = isStreaming ? '推理中' : '推理过程';
-    final bgColor =
-        isDark ? Colors.orange[900]!.withOpacity(0.2) : Colors.orange[50]!;
-    final textColor = Colors.orange[700]!;
+    final label = isStreaming ? '思考中' : '思考完成';
+    final prefix = isMulti ? '思考 ${index + 1} ' : '';
+    final accentColor = Colors.orange[700]!;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(6),
-        onTap: () => _openReasoningPanel(context, ref),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: Colors.orange.withOpacity(0.3)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.psychology_outlined, size: 16, color: textColor),
-              const SizedBox(width: 4),
-              if (isMulti)
-                Text(
-                  '推理 ${index + 1}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: textColor,
-                  ),
-                ),
-              if (isMulti) const SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: textColor,
-                ),
+    return GestureDetector(
+      onTap: () => _openReasoningPanel(context, ref),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$prefix$label',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: accentColor,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 2),
+            Text(
+              '›',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: accentColor,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -148,6 +135,9 @@ class _ReasoningButton extends ConsumerWidget {
 ///
 /// Watches [streamingReasoningSectionsProvider] for live updates — during
 /// streaming it shows incremental content for the active section.
+/// Also watches [streamingHasFirstTokenProvider] and [isStreamingProvider]
+/// to reactively update the header from "思考中" to "思考完成" when
+/// reasoning completes (text content starts arriving or stream ends).
 class _ReasoningPanelDialog extends ConsumerStatefulWidget {
   final String messageId;
   final int sectionIndex;
@@ -191,7 +181,18 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog> {
       }
     }
 
-    final showEmpty = _displayText.isEmpty && widget.isStreaming;
+    // Determine reasoning completion state reactively.
+    // Reasoning is "complete" when either:
+    // 1. A TextEvent has arrived (first token received) while reasoning
+    //    content exists, or
+    // 2. The stream has ended.
+    final hasFirstToken = ref.watch(streamingHasFirstTokenProvider);
+    final isStreamActive = ref.watch(isStreamingProvider);
+    final hasReasoningContent = _displayText.isNotEmpty;
+    final isReasoningComplete =
+        hasReasoningContent && (hasFirstToken || !isStreamActive);
+
+    final showEmpty = _displayText.isEmpty && !isReasoningComplete;
 
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -217,7 +218,7 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  widget.isStreaming ? '推理中' : '推理过程',
+                  isReasoningComplete ? '思考完成' : '思考中',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -236,7 +237,7 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog> {
                   ),
                 ],
                 const Spacer(),
-                if (widget.isStreaming)
+                if (!isReasoningComplete)
                   SizedBox(
                     width: 14,
                     height: 14,
@@ -245,7 +246,7 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog> {
                       color: Colors.orange[700],
                     ),
                   ),
-                if (widget.isStreaming) const SizedBox(width: 8),
+                if (!isReasoningComplete) const SizedBox(width: 8),
                 IconButton(
                   icon: const Icon(Icons.close, size: 20),
                   onPressed: () => Navigator.pop(context),

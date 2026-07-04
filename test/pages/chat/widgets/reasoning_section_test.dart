@@ -30,10 +30,9 @@ void main() {
         ),
       );
 
-      // Should show the button with icon and "推理过程" label
-      expect(find.text('推理过程'), findsOneWidget);
-      // Should show the psychology icon
-      expect(find.byIcon(Icons.psychology_outlined), findsOneWidget);
+      // Should show the text line with "思考完成 ›" label
+      expect(find.text('思考完成'), findsOneWidget);
+      expect(find.text('›'), findsOneWidget);
       // The content should NOT be visible inline (it's a panel now)
       expect(find.text('Test reasoning content'), findsNothing);
     });
@@ -61,8 +60,8 @@ void main() {
         ),
       );
 
-      // Should show "推理中" label when streaming
-      expect(find.text('推理中'), findsOneWidget);
+      // Should show "思考中" label when streaming
+      expect(find.text('思考中'), findsOneWidget);
     });
 
     testWidgets('button appears when reasoning content exists during streaming',
@@ -92,9 +91,8 @@ void main() {
         ),
       );
 
-      // The button must be visible during streaming
-      expect(find.text('推理中'), findsOneWidget);
-      expect(find.byIcon(Icons.psychology_outlined), findsOneWidget);
+      // The label must be visible during streaming
+      expect(find.text('思考中'), findsOneWidget);
     });
   });
 
@@ -124,9 +122,12 @@ void main() {
         ),
       );
 
-      // Should show one "推理过程" for the first section and one "推理中" for the last
-      expect(find.text('推理过程'), findsOneWidget, reason: '第一个已完成的推理应显示"推理过程"');
-      expect(find.text('推理中'), findsOneWidget, reason: '第二个正在进行的推理应显示"推理中"');
+      // Should show "思考 1 思考完成" for the first section (completed)
+      // and "思考 2 思考中" for the second section (still streaming)
+      expect(find.text('思考 1 思考完成'), findsOneWidget,
+          reason: '第一个已完成的推理应显示"思考 1 思考完成"');
+      expect(find.text('思考 2 思考中'), findsOneWidget,
+          reason: '第二个正在进行的推理应显示"思考 2 思考中"');
     });
 
     testWidgets('multiple reasoning buttons with index labels', (
@@ -153,9 +154,9 @@ void main() {
         ),
       );
 
-      // Should show "推理 1 推理过程" and "推理 2 推理过程"
-      expect(find.text('推理 1'), findsOneWidget, reason: '多推理时应显示序号');
-      expect(find.text('推理 2'), findsOneWidget, reason: '多推理时应显示序号');
+      // Should show "思考 1 思考完成" and "思考 2 思考完成"
+      expect(find.text('思考 1 思考完成'), findsOneWidget, reason: '多推理时应显示序号');
+      expect(find.text('思考 2 思考完成'), findsOneWidget, reason: '多推理时应显示序号');
     });
 
     testWidgets('tapping reasoning button opens a dialog', (
@@ -182,8 +183,8 @@ void main() {
         ),
       );
 
-      // Tap the reasoning button
-      await tester.tap(find.text('推理过程'));
+      // Tap the reasoning text line
+      await tester.tap(find.text('思考完成'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
@@ -227,15 +228,15 @@ void main() {
         ),
       );
 
-      // Tap the reasoning button
-      await tester.tap(find.text('推理过程'));
+      // Tap the reasoning text line
+      await tester.tap(find.text('思考完成'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
       // Dialog should be shown with reasoning content
       expect(find.byType(Dialog), findsOneWidget);
-      // Both the button AND the dialog header show "推理过程", so at least one
-      expect(find.text('推理过程'), findsWidgets);
+      // Both the button AND the dialog header show "思考完成", so at least one
+      expect(find.text('思考完成'), findsWidgets);
       expect(find.text(reasoningText), findsOneWidget);
 
       // Dismiss the dialog via the close button
@@ -271,8 +272,7 @@ void main() {
       await tester.pump();
 
       // Empty sections should render nothing
-      expect(find.byIcon(Icons.psychology_outlined), findsNothing);
-      expect(find.text('推理过程'), findsNothing);
+      expect(find.text('思考完成'), findsNothing);
     });
   });
 }
