@@ -23,8 +23,7 @@ class BackgroundTaskCard extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<BackgroundTaskCard> createState() =>
-      _BackgroundTaskCardState();
+  ConsumerState<BackgroundTaskCard> createState() => _BackgroundTaskCardState();
 }
 
 class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
@@ -35,8 +34,8 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
     final colorScheme = Theme.of(context).colorScheme;
     final statusColor = _statusColor(widget.task.status);
     final statusIcon = _statusIcon(widget.task.status);
-    final hasRawData = widget.task.rawRequest != null ||
-        widget.task.rawResponse != null;
+    final hasRawData =
+        widget.task.rawRequest != null || widget.task.rawResponse != null;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),

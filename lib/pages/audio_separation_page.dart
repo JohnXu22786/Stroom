@@ -678,8 +678,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     // Process each video as a separate background task
     for (int i = 0; i < videosToProcess.length; i++) {
       final video = videosToProcess[i];
-      final title =
-          '音频分离_${p.basenameWithoutExtension(video.name)}';
+      final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
       final taskId = ref
           .read(backgroundTasksProvider.notifier)
           .addTask(type: BackgroundTaskType.audioSeparation, title: title);
@@ -724,8 +723,8 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
 
     final timestamp = DateTime.now();
     final effectiveVideoName = videoName ?? '视频音频';
-    final name = displayName ??
-        '音频分离_${p.basenameWithoutExtension(effectiveVideoName)}';
+    final name =
+        displayName ?? '音频分离_${p.basenameWithoutExtension(effectiveVideoName)}';
 
     final hash = computeAudioHash(audioBytes);
     final format = 'mp3';

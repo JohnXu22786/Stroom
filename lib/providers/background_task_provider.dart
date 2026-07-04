@@ -174,12 +174,8 @@ class BackgroundTask {
       downloadedFilePath: clearDownloadedFilePath
           ? null
           : (downloadedFilePath ?? this.downloadedFilePath),
-      rawRequest: clearRawRequest
-          ? null
-          : (rawRequest ?? this.rawRequest),
-      rawResponse: clearRawResponse
-          ? null
-          : (rawResponse ?? this.rawResponse),
+      rawRequest: clearRawRequest ? null : (rawRequest ?? this.rawRequest),
+      rawResponse: clearRawResponse ? null : (rawResponse ?? this.rawResponse),
     );
   }
 
@@ -268,9 +264,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       Map<String, dynamic>? rawRequest,
       Map<String, dynamic>? rawResponse}) {
     _updateTask(taskId, TaskStatus.failed,
-        error: error,
-        rawRequest: rawRequest,
-        rawResponse: rawResponse);
+        error: error, rawRequest: rawRequest, rawResponse: rawResponse);
   }
 
   /// Set the result text for a task (OCR extracted text, ASR transcription, etc.).

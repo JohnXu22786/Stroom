@@ -445,10 +445,10 @@ void main() {
       expect(notifier.state[0].steps[0].label, '处理音频文件中...');
     });
 
-    test('AudioSeparation task has 1 default step (single processing step)', () {
+    test('AudioSeparation task has 1 default step (single processing step)',
+        () {
       final notifier = BackgroundTaskNotifier();
-      notifier.addTask(
-          type: BackgroundTaskType.audioSeparation, title: '音频分离');
+      notifier.addTask(type: BackgroundTaskType.audioSeparation, title: '音频分离');
       expect(notifier.state[0].steps.length, 1,
           reason: 'AudioSeparation should have 1 step (正在分离音频...)');
       expect(notifier.state[0].steps[0].label, '正在分离音频...');
@@ -493,9 +493,7 @@ void main() {
       };
 
       notifier.failTask(id,
-          error: 'OCR失败',
-          rawRequest: rawRequest,
-          rawResponse: rawResponse);
+          error: 'OCR失败', rawRequest: rawRequest, rawResponse: rawResponse);
 
       expect(notifier.state[0].status, TaskStatus.failed);
       expect(notifier.state[0].error, 'OCR失败');
