@@ -157,12 +157,46 @@ class _ReasoningPanelDialog extends ConsumerStatefulWidget {
 }
 
 class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog> {
+  late ScrollController _scrollController;
+  bool _userScrolledUp = false;
   String _displayText = '';
+  int _previousTextLength = 0;
 
   @override
   void initState() {
     super.initState();
     _displayText = widget.initialReasoningText;
+    _previousTextLength = _displayText.length;
+    _scrollController = ScrollController();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+    final isAtBottom = (maxScroll - currentScroll) <= 50;
+    if (isAtBottom == _userScrolledUp) {
+      setState(() => _userScrolledUp = !isAtBottom);
+    }
+  }
+
+  void _scrollToBottom() {
+    _userScrolledUp = false;
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   @override
@@ -179,6 +213,19 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog> {
       if (providerText.length >= _displayText.length) {
         _displayText = providerText;
       }
+    }
+
+    // Auto-scroll to bottom when new content arrives, unless the user
+    // has manually scrolled up (interrupted auto-scroll).
+    if (_displayText.length > _previousTextLength) {
+      _previousTextLength = _displayText.length;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_userScrolledUp && _scrollController.hasClients) {
+          _scrollController.jumpTo(
+            _scrollController.position.maxScrollExtent,
+          );
+        }
+      });
     }
 
     // Determine reasoning completion state reactively.
@@ -259,7 +306,7 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog> {
               ],
             ),
           ),
-          // ── Content ──
+          // ── Content (with auto-scroll) ──
           Flexible(
             child: showEmpty
                 ? const Padding(
@@ -272,16 +319,47 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog> {
                       ),
                     ),
                   )
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: MarkdownWidget(
-                      data: _displayText,
-                      selectable: true,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      config: markdownConfig,
-                      markdownGenerator: markdownGenerator,
-                    ),
+                : Stack(
+                    children: [
+                      SingleChildScrollView(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.all(16),
+                        child: MarkdownWidget(
+                          data: _displayText,
+                          selectable: true,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          config: markdownConfig,
+                          markdownGenerator: markdownGenerator,
+                        ),
+                      ),
+                      // "Jump to bottom" button — only visible when user
+                      // has manually scrolled up (interrupted auto-scroll).
+                      if (_userScrolledUp)
+                        Positioned(
+                          right: 16,
+                          bottom: 16,
+                          child: Material(
+                            elevation: 4,
+                            shape: const CircleBorder(),
+                            color: Colors.orange[700],
+                            child: InkWell(
+                              customBorder: const CircleBorder(),
+                              onTap: _scrollToBottom,
+                              child: Container(
+                                width: 36,
+                                height: 36,
+                                alignment: Alignment.center,
+                                child: const Icon(
+                                  Icons.arrow_downward,
+                                  size: 20,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
           ),
         ],
