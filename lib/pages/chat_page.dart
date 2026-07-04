@@ -73,6 +73,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// calling ref.read() (which throws after the widget is marked disposed).
   bool _isStreamingActive = false;
   final Map<String, List<String>> _reasoningContents = {};
+  
+  /// Tracks whether reasoning has completed for a given message.
+  /// Set to true when the first [TextEvent] arrives after at least one
+  /// [ReasoningEvent] has been received for the same message.
+  /// Used to determine the reasoning button label during streaming:
+  /// - false + streaming = "推理中" (reasoning still in progress)
+  /// - true + streaming = "推理过程" (reasoning done, text being streamed)
+  final Map<String, bool> _isReasoningCompletedForMsg = {};
   final Map<String, List<MessageSegment>> _chatSegments = {};
 
   /// Tracks how many characters of [_history] text have been rendered as
@@ -641,6 +649,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
     DateTime lastReasoningUpdate = DateTime.now();
     const minInterval = Duration(milliseconds: 50);
     const reasoningMinInterval = Duration(milliseconds: 100);
+    /// Whether the first reasoning update has been applied to the UI.
+    /// Used to ensure the reasoning button appears on the very first
+    /// ReasoningEvent even when throttled by [reasoningMinInterval].
+    bool hasShownFirstReasoning = false;
     // Reset reasoning providers at start of new streaming session.
     // Initialize sections as empty list — they are populated on first
     // ReasoningEvent (not with a placeholder empty string).
@@ -708,6 +720,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
               ref.read(streamingHasFirstTokenProvider.notifier).state = true;
               if (mounted) setState(() {});
             }
+            // Mark reasoning as completed when text content starts arriving
+            // after reasoning content has been received. This changes the
+            // reasoning button label from "推理中" to "推理过程" during
+            // streaming (Issue 1 fix).
+            if (reasoningBuffer.isNotEmpty &&
+                _isReasoningCompletedForMsg[aiMsgId] != true) {
+              _isReasoningCompletedForMsg[aiMsgId] = true;
+            }
             fullReply += e.text;
             final now = DateTime.now();
             if (now.difference(lastUpdate) >= minInterval) {
@@ -748,32 +768,50 @@ class _ChatPageState extends ConsumerState<ChatPage>
             // Accumulate reasoning text incrementally and update providers
             // so the reasoning panel can display streaming content in real time.
             reasoningBuffer += e.text;
+            // Always update _reasoningContents immediately so the button
+            // appears on the very first reasoning event, regardless of
+            // the throttle interval. Previously the throttle could block
+            // the first event, causing the reasoning button to not appear
+            // during streaming (Issue 2 fix).
+            final sections = [
+              ...ref.read(streamingReasoningSectionsProvider)
+            ];
+            if (sections.isNotEmpty) {
+              sections[sections.length - 1] = reasoningBuffer;
+            } else {
+              sections.add(reasoningBuffer);
+            }
+            _reasoningContents[aiMsgId] = sections;
             final now = DateTime.now();
             if (now.difference(lastReasoningUpdate) >= reasoningMinInterval) {
               lastReasoningUpdate = now;
+              hasShownFirstReasoning = true;
               ref.read(streamingReasoningProvider.notifier).state =
                   reasoningBuffer;
-              // Update the last section in the sections list for multi-step
-              // reasoning chain support. If sections is empty (first
-              // reasoning event), start a new section.
-              final sections = [
-                ...ref.read(streamingReasoningSectionsProvider)
-              ];
-              if (sections.isNotEmpty) {
-                sections[sections.length - 1] = reasoningBuffer;
-              } else {
-                sections.add(reasoningBuffer);
-              }
               ref.read(streamingReasoningSectionsProvider.notifier).state =
                   sections;
-              _reasoningContents[aiMsgId] = sections;
+              if (mounted) setState(() {});
+            } else if (!hasShownFirstReasoning && mounted) {
+              // First reasoning event(s): ensure the button appears
+              // even if throttled, so the reasoning button is visible
+              // immediately when streaming reasoning content.
+              hasShownFirstReasoning = true;
+              ref.read(streamingReasoningSectionsProvider.notifier).state =
+                  sections;
+              ref.read(streamingReasoningProvider.notifier).state =
+                  reasoningBuffer;
               if (mounted) setState(() {});
             }
 
           case ReasoningSectionEndEvent():
             // Finalize current reasoning section and start a new empty one
             // for the next tool call round.
-            final sections = [...ref.read(streamingReasoningSectionsProvider)];
+            // Read from _reasoningContents (not the provider) to get the
+            // latest accumulated content, since the provider is throttled
+            // and may hold stale data between throttle intervals.
+            final sections = List<String>.from(
+              _reasoningContents[aiMsgId] ?? [],
+            );
             sections.add('');
             ref.read(streamingReasoningSectionsProvider.notifier).state =
                 sections;
@@ -916,6 +954,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
       ref.read(streamingReasoningSectionsProvider.notifier).state =
           finalSections;
       _reasoningContents[aiMsgId] = finalSections;
+      // Mark reasoning as completed at stream end in case it wasn't
+      // already marked (e.g., if only reasoning was received with no
+      // text content, or the stream was cancelled mid-reasoning).
+      if (reasoningBuffer.isNotEmpty) {
+        _isReasoningCompletedForMsg[aiMsgId] = true;
+      }
     }
 
     // Wrap post-stream processing in try-catch so that isStreamingProvider
@@ -1098,6 +1142,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
           // Clean up cached maps for removed messages to prevent memory leaks.
           _chatSegments.remove(r.id);
           _reasoningContents.remove(r.id);
+          _isReasoningCompletedForMsg.remove(r.id);
           _streamingRenderedLengths.remove(r.id);
           _messageKeys.remove(r.id);
         }
@@ -1130,6 +1175,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
           // Clean up cached maps for removed messages to prevent memory leaks.
           _chatSegments.remove(r.id);
           _reasoningContents.remove(r.id);
+          _isReasoningCompletedForMsg.remove(r.id);
           _streamingRenderedLengths.remove(r.id);
           _messageKeys.remove(r.id);
         }
@@ -1173,6 +1219,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // Clean up cached maps for the deleted message to prevent memory leaks.
       _chatSegments.remove(messageId);
       _reasoningContents.remove(messageId);
+      _isReasoningCompletedForMsg.remove(messageId);
       _streamingRenderedLengths.remove(messageId);
       _messageKeys.remove(messageId);
       // Adjust pagination state: if the deleted message was before the loaded
@@ -2185,8 +2232,18 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                         ReasoningSection(
                                           sections: ReasoningSectionData(
                                             texts: reasoningSections,
+                                            // Streaming is true only while
+                                            // reasoning events are still
+                                            // being received. Once text
+                                            // content starts (reasoning
+                                            // complete), streaming becomes
+                                            // false so the button shows
+                                            // "推理过程" instead of "推理中".
                                             streaming: isStreaming &&
-                                                message.id == _streamingMsgId,
+                                                message.id == _streamingMsgId &&
+                                                _isReasoningCompletedForMsg[
+                                                        message.id] !=
+                                                    true,
                                           ),
                                           messageId: message.id,
                                         ),
