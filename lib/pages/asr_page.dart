@@ -900,66 +900,77 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       effectiveConfig = asrConfig;
     }
 
-    // Create a single background task for all audios
-    final timestamp = _currentTimestamp();
-    final title = 'ASR_${_selectedAudios.length}files_$timestamp';
-    final taskId =
-        bgNotifier.addTask(type: BackgroundTaskType.asr, title: title);
+    // Capture the list before pop
+    final audiosToProcess = List<SelectedAudio>.from(_selectedAudios);
 
     // Pop back to home page immediately so user can see task progress
     if (mounted) {
       Navigator.pop(context);
     }
 
-    // Continue processing sequentially in the background
-    try {
+    // Create one task per audio file, each with its own 5-step chain
+    for (final audio in audiosToProcess) {
+      final title = 'ASR_${audio.name}';
+      final taskId =
+          bgNotifier.addTask(type: BackgroundTaskType.asr, title: title);
+
       final service = AsrService(config: effectiveConfig);
-      final total = _selectedAudios.length;
 
-      // Step 0: 连接服务器
-      bgNotifier.updateStep(taskId, 0, running: true);
-      // No actual connection step needed for direct API call
-      bgNotifier.updateStep(taskId, 0, completed: true);
-
-      for (int i = 0; i < total; i++) {
-        final audio = _selectedAudios[i];
-        final fileTitle = 'ASR_${audio.name}_$timestamp';
+      try {
+        // Step 0: 连接服务器
+        bgNotifier.updateStep(taskId, 0, running: true);
+        bgNotifier.updateStep(taskId, 0, completed: true);
 
         // Step 1: 上传音频
         bgNotifier.updateStep(taskId, 1, running: true);
 
-        // Transcribe this audio file (upload + server processing)
         final result = await service.transcribe(
           audioBytes: audio.bytes,
           audioFormat: audio.format,
         );
 
-        // Upload complete (server responded 200), now processing
+        // Step 1 complete
         bgNotifier.updateStep(taskId, 1, completed: true);
-        bgNotifier.updateStep(taskId, 2, running: true);
 
-        // Step 2 → 3: 接收结果
+        // Step 2: 转写中 (server processing response received)
         bgNotifier.setResult(taskId, result.text);
         bgNotifier.updateStep(taskId, 2, completed: true);
+
+        // Step 3: 接收结果
         bgNotifier.updateStep(taskId, 3, running: true);
 
-        // Save the transcription result
-        await _saveTranscriptionResult(result.text, title: fileTitle);
+        // Step 4: 保存文件
         bgNotifier.updateStep(taskId, 3, completed: true);
+        bgNotifier.updateStep(taskId, 4, running: true);
+
+        await _saveTranscriptionResult(result.text, title: title);
+
+        bgNotifier.updateStep(taskId, 4, completed: true);
+        bgNotifier.completeTask(taskId);
+
+        // Refresh text records
+        unawaited(textNotifier.loadRecords());
+      } catch (e) {
+        // Capture raw request/response diagnostics from AsrService
+        final rawRequest = <String, dynamic>{
+          if (service.lastRequestUrl != null) 'url': service.lastRequestUrl,
+          if (service.lastRequestHeaders != null)
+            'headers': service.lastRequestHeaders,
+          if (service.lastRequestBody != null) 'body': service.lastRequestBody,
+        };
+        final rawResponse = <String, dynamic>{
+          if (service.lastResponseStatusCode != null)
+            'statusCode': service.lastResponseStatusCode,
+          if (service.lastResponseHeaders != null)
+            'headers': service.lastResponseHeaders,
+          if (service.lastResponseData != null)
+            'data': service.lastResponseData,
+        };
+        bgNotifier.failTask(taskId,
+            error: '音频转写失败: $e',
+            rawRequest: rawRequest,
+            rawResponse: rawResponse);
       }
-
-      // Step 4: 保存文件
-      bgNotifier.updateStep(taskId, 4, running: true);
-      bgNotifier.updateStep(taskId, 4, completed: true);
-
-      // Mark task as completed
-      bgNotifier.completeTask(taskId);
-
-      // Refresh text records so the files page shows the new ASR result
-      unawaited(textNotifier.loadRecords());
-    } catch (e) {
-      // Mark task as failed (widget may be gone, but notifier is independent)
-      bgNotifier.failTask(taskId, error: '音频转写失败: $e');
     }
   }
 

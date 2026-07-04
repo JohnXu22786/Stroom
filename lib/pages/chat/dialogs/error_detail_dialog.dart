@@ -122,7 +122,8 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
         children: [
           if (_selectedSectionId != null)
             IconButton(
-              icon: Icon(Icons.arrow_back, size: 18, color: Theme.of(context).colorScheme.primary),
+              icon: Icon(Icons.arrow_back,
+                  size: 18, color: Theme.of(context).colorScheme.primary),
               onPressed: () {
                 setState(() {
                   _selectedSectionId = null;
@@ -151,7 +152,9 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
           ),
           const Spacer(),
           IconButton(
-            icon: Icon(Icons.close, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+            icon: Icon(Icons.close,
+                size: 18,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
             onPressed: () => Navigator.pop(context),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -279,7 +282,8 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
               section.label,
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
             ),
-            trailing: Icon(Icons.chevron_right, size: 18, color: cs.onSurfaceVariant),
+            trailing:
+                Icon(Icons.chevron_right, size: 18, color: cs.onSurfaceVariant),
             contentPadding: const EdgeInsets.symmetric(horizontal: 4),
             onTap: () {
               setState(() {
