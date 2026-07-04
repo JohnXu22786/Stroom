@@ -340,7 +340,8 @@ class ModelNameChip extends StatelessWidget {
         );
         // Icon (16) + spacing (4) + padding (10 × 2) + small rendering buffer.
         const nonTextWidth = 44;
-        final textAvailableWidth = availableWidth - nonTextWidth;
+        final textAvailableWidth =
+            (availableWidth - nonTextWidth).clamp(0.0, double.infinity).toDouble();
         final painter = TextPainter(
           text: TextSpan(text: label, style: style),
           textDirection: Directionality.of(context),
