@@ -129,57 +129,48 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Column(
           children: [
-            SwitchListTile(
-              secondary: Icon(
+            _buildListTile(
+              leading: Icon(
                 Icons.notifications_active,
                 color: notificationsEnabled ? Colors.blue : Colors.grey,
               ),
-              title: const Text('任务完成通知'),
-              subtitle: const Text('任务完成或失败时发送通知'),
-              value: notificationsEnabled,
-              onChanged: (value) async {
-                if (value) {
-                  // Request permission when enabling
-                  final service = NotificationService();
-                  final hasPermission = await service.requestPermission(
-                    usageReason: '用于在任务完成时发送通知',
-                  );
-                  if (!hasPermission && context.mounted) {
-                    final status = await service.systemPermissionStatus;
-                    if (status.isPermanentlyDenied) {
-                      _showNotificationBlockedDialog();
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('需要通知权限才能发送任务完成通知'),
-                          duration: Duration(seconds: 3),
-                        ),
-                      );
+              title: '任务完成通知',
+              subtitle: '任务完成或失败时发送通知',
+              trailing: Switch(
+                value: notificationsEnabled,
+                activeColor: Colors.blue,
+                onChanged: (value) async {
+                  if (value) {
+                    final service = NotificationService();
+                    final hasPermission = await service.requestPermission(
+                      usageReason: '用于在任务完成时发送通知',
+                    );
+                    if (!hasPermission && context.mounted) {
+                      final status = await service.systemPermissionStatus;
+                      if (status.isPermanentlyDenied) {
+                        _showNotificationBlockedDialog();
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('需要通知权限才能发送任务完成通知'),
+                            duration: Duration(seconds: 3),
+                          ),
+                        );
+                      }
                     }
-                    // Still toggle ON so user can try again later.
-                    // The notification service will silently fail if
-                    // permission is denied, but the toggle reflects
-                    // user intent rather than system state.
                   }
-                }
-                if (context.mounted) {
-                  ref
-                      .read(notificationSettingsProvider.notifier)
-                      .setEnabled(value);
-                }
-              },
-            ),
-            if (!notificationsEnabled)
-              Padding(
-                padding: const EdgeInsets.only(left: 56, bottom: 8),
-                child: Text(
-                  '通知已关闭，任务完成后将不会收到通知',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                ),
+                  if (context.mounted) {
+                    ref
+                        .read(notificationSettingsProvider.notifier)
+                        .setEnabled(value);
+                  }
+                },
               ),
+              onTap: () {},
+            ),
           ],
         ),
       ),
