@@ -940,8 +940,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                     children: [
                       ConstrainedBox(
                         constraints: BoxConstraints(maxWidth: maxTagWidth),
-                        child: IntrinsicWidth(
-                          child: ModelNameChip(
+                        child: ModelNameChip(
                             displayName: (widget.modelNames.isNotEmpty &&
                                     widget.selectedModelIndex >= 0 &&
                                     widget.selectedModelIndex <
@@ -952,7 +951,6 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                             onTap: _showModelPanel,
                           ),
                         ),
-                      ),
                       _SettingsChip(
                         icon: Icons.build_outlined,
                         label: '工具',
