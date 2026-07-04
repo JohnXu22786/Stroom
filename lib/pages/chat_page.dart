@@ -2457,6 +2457,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                     SimpleTextMessage(
                                       message: message,
                                       index: index,
+                                      showTime: false,
                                     ),
                                   if (hasAttachments)
                                     Padding(
@@ -2498,6 +2499,26 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                   ),
                                   child: messageBubble,
                                 ),
+                                // Timestamp below bubble (user messages only),
+                                // above action buttons, with theme-adaptive color.
+                                if (!isAi)
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                      left: 4,
+                                      top: 2,
+                                      bottom: 2,
+                                    ),
+                                    child: Text(
+                                      DateFormat('yyyy-MM-dd HH:mm')
+                                          .format(message.createdAt.toLocal()),
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: isDark
+                                            ? Colors.grey[400]
+                                            : Colors.grey[600],
+                                      ),
+                                    ),
+                                  ),
                                 Padding(
                                   padding: const EdgeInsets.only(
                                     left: 4,
@@ -2545,7 +2566,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                             message.id,
                                           ),
                                         ),
-                                      const SizedBox(width: 2),
                                       // Raw data view button: only shown for AI messages when data exists.
                                       if (isAi &&
                                           _history.any(
@@ -2553,7 +2573,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                                 m.id == message.id &&
                                                 (m.rawRequest != null ||
                                                     m.rawResponse != null),
-                                          ))
+                                          )) ...[
+                                        const SizedBox(width: 2),
                                         ActionButton(
                                           icon: Icons.data_exploration,
                                           tooltip: '查看数据详情',
@@ -2562,7 +2583,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                             message.id,
                                           ),
                                         ),
-                                      const SizedBox(width: 2),
+                                      ],
                                       if (_developerMode &&
                                           isAi &&
                                           _history.any(
@@ -2570,7 +2591,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                                 m.id == message.id &&
                                                 (m.rawRequest != null ||
                                                     m.rawResponse != null),
-                                          ))
+                                          )) ...[
+                                        const SizedBox(width: 2),
                                         ActionButton(
                                           icon: Icons.code,
                                           tooltip: 'JSON 审查',
@@ -2578,6 +2600,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                             message.id,
                                           ),
                                         ),
+                                      ],
                                       const SizedBox(width: 2),
                                       ActionButton(
                                         icon: Icons.delete_outline,
