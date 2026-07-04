@@ -85,7 +85,7 @@ void showChatAttachmentPanel({
                   ),
                   _FileActionButton(
                     icon: Icons.photo_library_outlined,
-                    label: '相册',
+                    label: '设备相册',
                     color: Colors.blue,
                     onTap: () {
                       Navigator.pop(context);
@@ -94,7 +94,7 @@ void showChatAttachmentPanel({
                   ),
                   _FileActionButton(
                     icon: Icons.insert_drive_file_outlined,
-                    label: '文件',
+                    label: '设备文件',
                     color: Colors.green,
                     onTap: () {
                       Navigator.pop(context);

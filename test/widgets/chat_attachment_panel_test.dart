@@ -55,15 +55,18 @@ void main() {
       expect(find.text('传文件'), findsOneWidget);
     });
 
-    testWidgets('panel shows camera, gallery, file, and app file buttons',
+    testWidgets('panel shows camera, device album, device file, and app file buttons',
         (tester) async {
       await showPanelForTest(tester);
 
-      // File action buttons should be visible
+      // File action buttons should be visible with updated labels
       expect(find.text('拍照'), findsOneWidget);
-      expect(find.text('相册'), findsOneWidget);
-      expect(find.text('文件'), findsOneWidget);
+      expect(find.text('设备相册'), findsOneWidget);
+      expect(find.text('设备文件'), findsOneWidget);
       expect(find.text('应用内文件'), findsOneWidget);
+      // Old labels should not exist
+      expect(find.text('相册'), findsNothing);
+      expect(find.text('文件'), findsNothing);
     });
 
     testWidgets('camera callback fires when camera button is tapped',
@@ -79,7 +82,7 @@ void main() {
       expect(cameraCalled, true);
     });
 
-    testWidgets('gallery callback fires when gallery button is tapped',
+    testWidgets('设备相册 callback fires when device album button is tapped',
         (tester) async {
       bool galleryCalled = false;
       await showPanelForTest(
@@ -87,12 +90,12 @@ void main() {
         onPickFromGallery: () => galleryCalled = true,
       );
 
-      await tester.tap(find.text('相册'));
+      await tester.tap(find.text('设备相册'));
       await tester.pump();
       expect(galleryCalled, true);
     });
 
-    testWidgets('file picker callback fires when file button is tapped',
+    testWidgets('设备文件 callback fires when device file button is tapped',
         (tester) async {
       bool filePickerCalled = false;
       await showPanelForTest(
@@ -100,7 +103,7 @@ void main() {
         onPickFromFilePicker: () => filePickerCalled = true,
       );
 
-      await tester.tap(find.text('文件'));
+      await tester.tap(find.text('设备文件'));
       await tester.pump();
       expect(filePickerCalled, true);
     });
