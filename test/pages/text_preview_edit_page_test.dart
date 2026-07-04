@@ -526,8 +526,7 @@ void main() {
 
     testWidgets(
         'font size button is visible in view mode (non-edit state) '
-        'and pops up font size dialog with reset button',
-        (tester) async {
+        'and pops up font size dialog with reset button', (tester) async {
       await tester.pumpWidget(_buildTestApp(testFile, testContent));
       await navigateToEditor(tester);
 
@@ -549,8 +548,7 @@ void main() {
       expect(find.text('14'), findsOneWidget);
     });
 
-    testWidgets(
-        'font size reset button restores font size to 14 after change',
+    testWidgets('font size reset button restores font size to 14 after change',
         (tester) async {
       await enterEditMode(tester);
 
@@ -576,8 +574,7 @@ void main() {
       expect(find.text('14'), findsWidgets);
     });
 
-    testWidgets(
-        'font size slider has step of 1 (divisions = max - min)',
+    testWidgets('font size slider has step of 1 (divisions = max - min)',
         (tester) async {
       await enterEditMode(tester);
 
