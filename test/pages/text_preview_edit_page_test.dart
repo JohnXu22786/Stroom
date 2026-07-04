@@ -522,6 +522,75 @@ void main() {
       expect(find.byType(SelectableText), findsOneWidget);
     });
 
+    // ==================== Font Size Button in View Mode ====================
+
+    testWidgets(
+        'font size button is visible in view mode (non-edit state) '
+        'and pops up font size dialog with reset button',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp(testFile, testContent));
+      await navigateToEditor(tester);
+
+      // In view mode, font size button should be visible
+      expect(find.byIcon(Icons.format_size), findsOneWidget);
+
+      // Tap font size button
+      await tester.tap(find.byIcon(Icons.format_size));
+      await tester.pumpAndSettle();
+
+      // Popup should show
+      expect(find.text('字号调整'), findsOneWidget);
+      expect(find.byType(Slider), findsOneWidget);
+
+      // Should have a '恢复默认' (reset to default) button
+      expect(find.text('恢复默认'), findsOneWidget);
+
+      // Default value 14 should be visible in the popup
+      expect(find.text('14'), findsOneWidget);
+    });
+
+    testWidgets(
+        'font size reset button restores font size to 14 after change',
+        (tester) async {
+      await enterEditMode(tester);
+
+      // Tap font size button
+      await tester.tap(find.byIcon(Icons.format_size));
+      await tester.pumpAndSettle();
+
+      // Drag slider to change font size
+      final slider = find.byType(Slider);
+      await tester.drag(slider, const Offset(100, 0));
+      await tester.pumpAndSettle();
+
+      // The displayed value should have changed
+      final fontSizeText = find.textContaining(RegExp(r'[0-9]+'));
+      expect(fontSizeText, findsWidgets);
+
+      // Tap reset button
+      await tester.tap(find.text('恢复默认'));
+      await tester.pumpAndSettle();
+
+      // After reset, should show '14' again
+      // (the popup re-renders with fontSize back to 14)
+      expect(find.text('14'), findsWidgets);
+    });
+
+    testWidgets(
+        'font size slider has step of 1 (divisions = max - min)',
+        (tester) async {
+      await enterEditMode(tester);
+
+      // Tap font size button
+      await tester.tap(find.byIcon(Icons.format_size));
+      await tester.pumpAndSettle();
+
+      // Get the slider and check its divisions
+      final sliderWidget = tester.widget<Slider>(find.byType(Slider));
+      // divisions = max - min = 28 - 10 = 18 for step of 1
+      expect(sliderWidget.divisions, equals(18));
+    });
+
     // ==================== MMD Format Support ====================
 
     group('mmd format support', () {
