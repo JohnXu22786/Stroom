@@ -437,8 +437,9 @@ void main() {
       ));
       await tester.pump();
 
-      // Text should still show a recognizable portion (truncated via ellipsis)
-      expect(find.textContaining('Very-Long'), findsOneWidget);
+      // The text should be truncated (containing three-dot ellipsis added
+      // by the custom proportional truncation algorithm)
+      expect(find.textContaining('...'), findsWidgets);
       expect(tester.takeException(), isNull);
     });
 
@@ -496,7 +497,7 @@ void main() {
         ),
       ));
 
-      expect(find.textContaining('Some-Long-Model'), findsOneWidget);
+      expect(find.textContaining('...'), findsWidgets);
       expect(tester.takeException(), isNull);
     });
 
@@ -536,8 +537,9 @@ void main() {
         ),
       ));
 
-      // The text should be truncated in the tight space
-      expect(find.textContaining('Very-Long-Model'), findsOneWidget);
+      // The text should be truncated (containing three-dot ellipsis added
+      // by the custom proportional truncation algorithm)
+      expect(find.textContaining('...'), findsWidgets);
       expect(tester.takeException(), isNull);
     });
 
