@@ -114,7 +114,8 @@ void main() {
       expect(copy.reasoningParams.length, equals(1));
     });
 
-    test('ProviderConfigItem toMap/fromMap preserves provider-level params', () {
+    test('ProviderConfigItem toMap/fromMap preserves provider-level params',
+        () {
       final item = ProviderConfigItem(
         providerName: 'Test',
         host: 'host',
