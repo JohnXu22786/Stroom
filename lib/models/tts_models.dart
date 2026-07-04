@@ -386,19 +386,30 @@ class ProviderConfigItem {
   String host;
   String key;
   List<ModelConfig> models;
+  Map<String, dynamic> typeConfig;
+  List<CustomParam> customParams;
+  List<ReasoningParam> reasoningParams;
 
   ProviderConfigItem({
     this.providerName = '',
     this.host = '',
     this.key = '',
     List<ModelConfig>? models,
-  }) : models = models ?? [];
+    this.typeConfig = const {},
+    List<CustomParam>? customParams,
+    List<ReasoningParam>? reasoningParams,
+  })  : models = models ?? [],
+        customParams = customParams ?? [],
+        reasoningParams = reasoningParams ?? [];
 
   Map<String, dynamic> toMap() => {
         'providerName': providerName,
         'host': host,
         'key': key,
         'models': models.map((m) => m.toMap()).toList(),
+        'typeConfig': typeConfig,
+        'customParams': customParams.map((p) => p.toMap()).toList(),
+        'reasoningParams': reasoningParams.map((p) => p.toMap()).toList(),
       };
 
   factory ProviderConfigItem.fromMap(Map<String, dynamic> map) =>
@@ -411,6 +422,17 @@ class ProviderConfigItem {
                     ModelConfig.fromMap(Map<String, dynamic>.from(e as Map)))
                 .toList() ??
             [],
+        typeConfig: Map<String, dynamic>.from(map['typeConfig'] as Map? ?? {}),
+        customParams: (map['customParams'] as List?)
+                ?.map((e) =>
+                    CustomParam.fromMap(Map<String, dynamic>.from(e as Map)))
+                .toList() ??
+            [],
+        reasoningParams: (map['reasoningParams'] as List?)
+                ?.map((e) =>
+                    ReasoningParam.fromMap(Map<String, dynamic>.from(e as Map)))
+                .toList() ??
+            [],
       );
 
   ProviderConfigItem copy() => ProviderConfigItem(
@@ -418,6 +440,9 @@ class ProviderConfigItem {
         host: host,
         key: key,
         models: models.map((m) => m.copy()).toList(),
+        typeConfig: Map<String, dynamic>.from(typeConfig),
+        customParams: customParams.map((p) => p.copy()).toList(),
+        reasoningParams: reasoningParams.map((p) => p.copy()).toList(),
       );
 }
 
