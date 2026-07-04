@@ -39,8 +39,8 @@ enum BackgroundTaskType {
         // OCR: single request with all images
         return ['连接服务器', '上传图片', '识别中', '接收结果', '保存文件'];
       case BackgroundTaskType.asr:
-        // ASR: one request per file
-        return ['处理音频文件中...'];
+        // ASR: one request per file, each file is a separate task
+        return ['连接服务器', '上传音频', '转写中', '接收结果', '保存文件'];
       case BackgroundTaskType.audioSeparation:
         // Audio Separation: local processing only, no API
         return ['正在分离音频...'];
