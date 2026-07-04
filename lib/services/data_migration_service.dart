@@ -124,11 +124,14 @@ class DataMigrationService {
   ///
   /// 备份位置不在应用数据目录内，以防止应用数据被删除时备份也丢失。
   ///
-  /// 位置策略：
+  /// 位置策略（所有位置均对用户可见/可访问）：
   /// - Windows: %USERPROFILE%\Documents\StroomBackups\
   /// - macOS:   ~/Documents/StroomBackups/
   /// - Linux:   ~/Documents/StroomBackups/
-  /// - Android/iOS: 回退到系统临时目录（移动平台无可靠的"外部"可写目录）
+  /// - Android: /storage/emulated/0/Android/data/<package>/files/StroomBackups/
+  ///   （应用内完全可读写；Android 10 及以下可通过 Files 应用直接访问；
+  ///    Android 11+ 部分文件管理器受限，但相比旧路径 /data/data/... 完全不可访问已是重大改进）
+  /// - iOS:     <app_group>/Documents/StroomBackups/（通过 Files 应用可访问）
   /// - 测试环境: Directory.systemTemp/stroom_backup_test/
   static Future<String> getExternalBackupRootPath() async {
     if (kIsWeb) {
@@ -171,9 +174,24 @@ class DataMigrationService {
       debugPrint('[DataMigrationService] Error resolving Unix backup path: $e');
     }
 
-    // Android / iOS / Fallback: use documents directory which is user-accessible
-    // via Files app (iOS) or file manager (Android).  Falls back to system
-    // temp only if path_provider is unavailable (e.g. test environment).
+    // Android: 使用外部存储目录。
+    // 旧路径 /data/data/... 在 Android 11+ 上完全不可访问。
+    // 新路径 Android/data/<package>/files/... 无需额外权限，
+    // 应用内完全可读写，Android 10 及以下可通过 Files 应用直接访问。
+    try {
+      if (Platform.isAndroid) {
+        final extDir = await getExternalStorageDirectory();
+        if (extDir != null) {
+          return p.join(extDir.path, _backupRootName);
+        }
+      }
+    } catch (e) {
+      debugPrint(
+          '[DataMigrationService] Error resolving Android backup path: $e');
+    }
+
+    // iOS / Fallback: 使用 documents 目录。
+    // iOS 上可通过 Files 应用直接访问，无需额外处理。
     try {
       final docsDir = await getApplicationDocumentsDirectory();
       return p.join(docsDir.path, _backupRootName);
