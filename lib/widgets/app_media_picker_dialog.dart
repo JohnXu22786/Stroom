@@ -536,7 +536,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
 
     return Container(
       key: const Key('media_picker_preview_bar'),
-      height: 100,
+      height: 106,
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
         border: Border(top: BorderSide(color: cs.outlineVariant, width: 0.5)),

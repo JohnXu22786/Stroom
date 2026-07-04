@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:mime/mime.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/providers/provider_config.dart' show ReasoningParam;
@@ -194,8 +196,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         _textController.clear();
         _lastSavedDraft = '';
         _lastHadText = false;
-        _pendingAttachments.clear();
-        _pendingImageBytes.clear();
+        _clearPendingAttachments();
       }
       return;
     }
@@ -329,8 +330,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         text.trim(),
         attachments,
       );
-      _pendingAttachments.clear();
-      _pendingImageBytes.clear();
+      _clearPendingAttachments();
       _textController.clear();
       // Cancel any pending draft timer in edit mode
       _draftTimer?.cancel();
@@ -339,8 +339,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     }
 
     widget.onSend(text.trim(), [..._pendingAttachments]);
-    _pendingAttachments.clear();
-    _pendingImageBytes.clear();
+    _clearPendingAttachments();
     _textController.clear();
 
     // Clear the draft for this conversation after sending
@@ -350,6 +349,17 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
       ref.read(conversationsProvider.notifier).saveDraft(convId, '');
       _lastSavedDraft = '';
     }
+  }
+
+  /// Clear all pending attachments and clean up temp files.
+  void _clearPendingAttachments() {
+    for (final att in _pendingAttachments) {
+      if (att.storagePath.startsWith('temp_edited/')) {
+        _deleteTempFile(att.storagePath);
+      }
+    }
+    _pendingAttachments.clear();
+    _pendingImageBytes.clear();
   }
 
   void _showComposerFullscreenEditor() {
@@ -669,9 +679,27 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   void _removePendingAttachment(int index) {
     final att = _pendingAttachments[index];
     _pendingImageBytes.remove(att.id);
+    // Clean up temp file if it exists
+    if (att.storagePath.startsWith('temp_edited/')) {
+      _deleteTempFile(att.storagePath);
+    }
     setState(() {
       _pendingAttachments.removeAt(index);
     });
+  }
+
+  /// Delete a temp file from the cache directory.
+  Future<void> _deleteTempFile(String tempStoragePath) async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final name = tempStoragePath.replaceFirst('temp_edited/', '');
+      final file = File('${tempDir.path}/$name');
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {
+      // Non-critical cleanup
+    }
   }
 
   /// Reorder handler for [ReorderableListView].
@@ -738,11 +766,8 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   }
 
   /// Updates the pending attachment at [index] with [editedBytes].
-  /// Re-saves the file via [AttachmentStorage] and updates both
-  /// [_pendingAttachments] and [_pendingImageBytes].
-  ///
-  /// If saving the edited file fails, the old attachment is preserved
-  /// and an error snackbar is shown.
+  /// Saves the edited file to temp cache (does NOT overwrite the original).
+  /// Updates both [_pendingAttachments] and [_pendingImageBytes].
   Future<void> _updatePendingAttachmentAfterEdit(
     int index,
     Uint8List editedBytes,
@@ -750,29 +775,34 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     final oldAtt = _pendingAttachments[index];
 
     try {
-      // Save the edited file
-      final newStoragePath = await AttachmentStorage.saveFile(
-        oldAtt.fileName,
-        editedBytes,
-      );
-      final newHash = AttachmentStorage.computeHash(editedBytes);
+      // Save edited file to temp cache directory instead of permanent storage
+      final tempDir = await getTemporaryDirectory();
+      final tempFileName =
+          'edited_${DateTime.now().millisecondsSinceEpoch}_${oldAtt.fileName}';
+      final tempFile = File('${tempDir.path}/$tempFileName');
+      await tempFile.writeAsBytes(editedBytes);
 
-      // Compute base64 for the new bytes
+      // Track as a temp-edited file
+      final tempStoragePath = 'temp_edited/$tempFileName';
+      final newHash = AttachmentStorage.computeHash(editedBytes);
       final newBase64 = base64Encode(editedBytes);
 
-      // Delete the old file from storage (no longer needed).
-      // If this fails, the new file is already saved so it's safe
-      // to proceed — the old file will be cleaned up later.
-      try {
-        await AttachmentStorage.deleteFile(oldAtt.storagePath);
-      } catch (_) {
-        // Old file cleanup failure is non-fatal
+      // Clean up old temp file if it was also a temp edit
+      if (oldAtt.storagePath.startsWith('temp_edited/')) {
+        _deleteTempFile(oldAtt.storagePath);
+      } else {
+        // Delete the old non-temp storage file (original attachment copy)
+        try {
+          await AttachmentStorage.deleteFile(oldAtt.storagePath);
+        } catch (_) {
+          // Non-fatal cleanup
+        }
       }
 
-      // Update attachment with new properties
+      // Update attachment with new temp-stored properties
       final updatedAtt = oldAtt.copyWith(
         hash: newHash,
-        storagePath: newStoragePath,
+        storagePath: tempStoragePath,
         fileSize: editedBytes.length,
         base64Data: newBase64,
       );
