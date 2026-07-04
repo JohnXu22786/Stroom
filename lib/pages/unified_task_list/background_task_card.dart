@@ -3,16 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/background_task_provider.dart';
 import '../../providers/task_provider.dart';
+import '../chat/dialogs/error_detail_dialog.dart';
 import 'task_utils.dart';
 
 // =============================================================================
 // 后台任务卡片（OCR / ASR / 音频分离）
-// 使用步骤链（连接 → 上传 → 处理 → 接收 → 保存）替代结果文字显示
-// 完成后显示"打开文件"按钮（类似下载任务）
-// 详细信息始终展开显示，不再折叠
+// 默认折叠，只显示标题栏和类型等基本信息。
+// 点击卡片可展开查看步骤详情、错误信息、操作按钮。
 // =============================================================================
 
-class BackgroundTaskCard extends ConsumerWidget {
+class BackgroundTaskCard extends ConsumerStatefulWidget {
   final BackgroundTask task;
   final bool isUnread;
 
@@ -23,10 +23,20 @@ class BackgroundTaskCard extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<BackgroundTaskCard> createState() =>
+      _BackgroundTaskCardState();
+}
+
+class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final statusColor = _statusColor(task.status);
-    final statusIcon = _statusIcon(task.status);
+    final statusColor = _statusColor(widget.task.status);
+    final statusIcon = _statusIcon(widget.task.status);
+    final hasRawData = widget.task.rawRequest != null ||
+        widget.task.rawResponse != null;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -38,71 +48,103 @@ class BackgroundTaskCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                if (isUnread)
-                  Container(
-                    width: 6,
-                    height: 6,
-                    margin: const EdgeInsets.only(right: 4),
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary,
-                      shape: BoxShape.circle,
+          // ── Header (always visible) ──
+          InkWell(
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(12),
+              bottom: Radius.circular(0),
+            ),
+            onTap: () {
+              setState(() {
+                _expanded = !_expanded;
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  if (widget.isUnread)
+                    Container(
+                      width: 6,
+                      height: 6,
+                      margin: const EdgeInsets.only(right: 4),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  _buildStatusIcon(widget.task.status, colorScheme),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            _taskTypeBadge(widget.task.type, colorScheme),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                widget.task.title,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            _buildStatusChip(widget.task.status),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${formatRelativeTime(widget.task.createdAt)}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                _buildStatusIcon(task.status, colorScheme),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          _taskTypeBadge(task.type, colorScheme),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              task.title,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          _buildStatusChip(task.status),
-                          const SizedBox(width: 8),
-                          Text(
-                            '${formatRelativeTime(task.createdAt)}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                  const SizedBox(width: 8),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(
+                      Icons.expand_more,
+                      color: colorScheme.onSurfaceVariant,
+                      size: 24,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Icon(statusIcon, color: statusColor, size: 28),
-              ],
+                ],
+              ),
             ),
           ),
 
-          // ── Always-expanded detail section ──
-          const Divider(height: 1, indent: 12, endIndent: 12),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: _buildDetailContent(task, colorScheme, ref),
+          // ── Expanded detail section ──
+          AnimatedCrossFade(
+            firstChild: const SizedBox.shrink(),
+            secondChild: Column(
+              children: [
+                const Divider(height: 1, indent: 12, endIndent: 12),
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: _buildDetailContent(
+                      widget.task, colorScheme, ref, hasRawData),
+                ),
+              ],
+            ),
+            crossFadeState: _expanded
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 200),
           ),
         ],
       ),
@@ -110,11 +152,15 @@ class BackgroundTaskCard extends ConsumerWidget {
   }
 
   Widget _buildDetailContent(
-      BackgroundTask task, ColorScheme cs, WidgetRef ref) {
+    BackgroundTask task,
+    ColorScheme cs,
+    WidgetRef ref,
+    bool hasRawData,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Type and time info (always shown as grey text, no ellipsis)
+        // Type and time info
         _buildInfoRow(cs, Icons.category_outlined, '任务类型', task.type.label),
         const SizedBox(height: 4),
         _buildInfoRow(
@@ -133,7 +179,7 @@ class BackgroundTaskCard extends ConsumerWidget {
           ),
         ],
 
-        // Step chain timeline — always visible
+        // Step chain timeline — always visible in expanded mode
         const SizedBox(height: 10),
         _buildStepTimeline(task, cs),
 
@@ -167,6 +213,22 @@ class BackgroundTaskCard extends ConsumerWidget {
                         color: Colors.red[700],
                       ),
                     ),
+                    const Spacer(),
+                    if (hasRawData)
+                      TextButton.icon(
+                        onPressed: () => _showErrorDetailDialog(context, task),
+                        icon: const Icon(Icons.preview, size: 14),
+                        label: const Text(
+                          '查看错误详情',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -187,6 +249,14 @@ class BackgroundTaskCard extends ConsumerWidget {
         const SizedBox(height: 12),
         _buildActionButtons(task, cs, ref),
       ],
+    );
+  }
+
+  void _showErrorDetailDialog(BuildContext context, BackgroundTask task) {
+    showDataDetailDialog(
+      context: context,
+      rawRequest: task.rawRequest,
+      rawResponse: task.rawResponse,
     );
   }
 
@@ -341,7 +411,6 @@ class BackgroundTaskCard extends ConsumerWidget {
           child: Text(
             value,
             style: TextStyle(fontSize: 12, color: cs.onSurface),
-            // No overflow/ellipsis — show full text
           ),
         ),
       ],
