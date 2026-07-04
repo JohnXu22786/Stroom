@@ -3,13 +3,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/pages/chat/dialogs/error_detail_dialog.dart';
 
 void main() {
-  group('DataDetailDialog (renamed from ErrorDetailDialog)', () {
-    testWidgets('shows message when no request/response data', (tester) async {
+  group('DataDetailDialog (unified 6-section dialog)', () {
+    testWidgets('shows empty state when no request/response data',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Builder(
             builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
+              onPressed: () => showDataDetailDialog(
                 context: context,
                 rawRequest: null,
                 rawResponse: null,
@@ -27,12 +28,13 @@ void main() {
       expect(find.text('No detail data available'), findsOneWidget);
     });
 
-    testWidgets('shows item list when data is provided', (tester) async {
+    testWidgets('shows all 6 sections when full data is provided',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Builder(
             builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
+              onPressed: () => showDataDetailDialog(
                 context: context,
                 rawRequest: {
                   'url': 'https://api.example.com/chat',
@@ -59,9 +61,7 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      // Title should be visible
       expect(find.text('数据详情'), findsOneWidget);
-      // All item labels should be visible
       expect(find.text('Request URL'), findsOneWidget);
       expect(find.text('Request Headers'), findsOneWidget);
       expect(find.text('Request Body'), findsOneWidget);
@@ -77,7 +77,7 @@ void main() {
         MaterialApp(
           home: Builder(
             builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
+              onPressed: () => showDataDetailDialog(
                 context: context,
                 rawRequest: {'url': 'https://api.example.com/chat'},
                 rawResponse: {
@@ -94,23 +94,17 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      // Tap Request URL
       await tester.tap(find.text('Request URL'));
       await tester.pumpAndSettle();
 
-      // Should show the URL value and back button
       expect(find.text('https://api.example.com/chat'), findsOneWidget);
-      // Section label appears in both header title and detail body label
       expect(find.text('Request URL'), findsAtLeastNWidgets(1));
 
-      // Back button should be visible
       expect(find.byIcon(Icons.arrow_back), findsOneWidget);
 
-      // Tap back
       await tester.tap(find.byIcon(Icons.arrow_back));
       await tester.pumpAndSettle();
 
-      // Should be back to list
       expect(find.text('Request URL'), findsOneWidget);
       expect(find.text('Status Code'), findsOneWidget);
     });
@@ -122,7 +116,7 @@ void main() {
         MaterialApp(
           home: Builder(
             builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
+              onPressed: () => showDataDetailDialog(
                 context: context,
                 rawRequest: {'url': 'https://api.example.com/chat'},
                 rawResponse: {
@@ -143,12 +137,9 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      // Tap Response Headers
       await tester.tap(find.text('Response Headers'));
       await tester.pumpAndSettle();
 
-      // Should show the headers JSON
-      // Label appears in both header title and detail body label
       expect(find.text('Response Headers'), findsAtLeastNWidgets(1));
       expect(find.textContaining('content-type'), findsOneWidget);
       expect(find.textContaining('x-request-id'), findsOneWidget);
@@ -159,7 +150,7 @@ void main() {
         MaterialApp(
           home: Builder(
             builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
+              onPressed: () => showDataDetailDialog(
                 context: context,
                 rawRequest: {'url': 'https://api.example.com/chat'},
                 rawResponse: {
@@ -183,11 +174,9 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      // Tap Response Body
       await tester.tap(find.text('Response Body'));
       await tester.pumpAndSettle();
 
-      // Should show the data JSON
       expect(find.text('Response Body'), findsAtLeastNWidgets(1));
       expect(find.textContaining('choices'), findsOneWidget);
       expect(find.textContaining('Hello'), findsOneWidget);
@@ -200,7 +189,7 @@ void main() {
         MaterialApp(
           home: Builder(
             builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
+              onPressed: () => showDataDetailDialog(
                 context: context,
                 rawRequest: {
                   'url': 'https://api.example.com',
@@ -220,11 +209,9 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      // Tap Request Headers
       await tester.tap(find.text('Request Headers'));
       await tester.pumpAndSettle();
 
-      // Should show the headers JSON
       expect(find.textContaining('Authorization'), findsOneWidget);
       expect(find.textContaining('Content-Type'), findsOneWidget);
     });
@@ -234,7 +221,7 @@ void main() {
         MaterialApp(
           home: Builder(
             builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
+              onPressed: () => showDataDetailDialog(
                 context: context,
                 rawRequest: {'url': 'https://api.example.com/chat'},
                 rawResponse: {
@@ -258,7 +245,6 @@ void main() {
 
       expect(find.text('Response Body'), findsOneWidget);
 
-      // Tap Response Body to see detail
       await tester.tap(find.text('Response Body'));
       await tester.pumpAndSettle();
 
@@ -272,7 +258,7 @@ void main() {
         MaterialApp(
           home: Builder(
             builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
+              onPressed: () => showDataDetailDialog(
                 context: context,
                 rawRequest: {'url': 'https://api.example.com/chat'},
                 rawResponse: {
@@ -294,7 +280,6 @@ void main() {
 
       expect(find.text('Response Body'), findsOneWidget);
 
-      // Tap Response Body to see detail
       await tester.tap(find.text('Response Body'));
       await tester.pumpAndSettle();
 
@@ -306,7 +291,7 @@ void main() {
         MaterialApp(
           home: Builder(
             builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
+              onPressed: () => showDataDetailDialog(
                 context: context,
                 rawRequest: {'url': 'https://api.example.com/chat'},
                 rawResponse: {
@@ -314,7 +299,6 @@ void main() {
                   'headers': {
                     'content-type': ['application/json'],
                   },
-                  // no 'data' key
                 },
               ),
               child: const Text('Show'),
@@ -331,53 +315,14 @@ void main() {
       expect(find.text('Status Code'), findsOneWidget);
     });
 
-    testWidgets('Response Headers shows all header keys as-is', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
-                context: context,
-                rawRequest: {'url': 'https://api.example.com/chat'},
-                rawResponse: {
-                  'statusCode': 200,
-                  'headers': {
-                    'content-type': ['application/json'],
-                    'x-request-id': ['req-001'],
-                    'x-ratelimit-remaining': ['99'],
-                  },
-                  'data': {'ok': true},
-                },
-              ),
-              child: const Text('Show'),
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('Show'));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('Response Headers'));
-      await tester.pumpAndSettle();
-
-      // All header keys should be visible
-      expect(find.textContaining('content-type'), findsOneWidget);
-      expect(find.textContaining('x-request-id'), findsOneWidget);
-      expect(find.textContaining('x-ratelimit-remaining'), findsOneWidget);
-      // Header values should be visible
-      expect(find.textContaining('application/json'), findsOneWidget);
-      expect(find.textContaining('req-001'), findsOneWidget);
-    });
-
-    testWidgets('network error shows Error item instead of response sections', (
+    testWidgets('network error shows Response Body from error field', (
       tester,
     ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Builder(
             builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
+              onPressed: () => showDataDetailDialog(
                 context: context,
                 rawRequest: {'url': 'https://api.example.com/chat'},
                 rawResponse: {
@@ -393,20 +338,21 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      // Network error should show Error item
-      expect(find.text('Error'), findsOneWidget);
-      // Response sections should NOT be visible
+      // Network error should show as Response Body (not as Error section)
+      expect(find.text('Response Body'), findsOneWidget);
+      // Status Code, Response Headers should NOT be visible (no HTTP response data)
       expect(find.text('Status Code'), findsNothing);
       expect(find.text('Response Headers'), findsNothing);
-      expect(find.text('Response Body'), findsNothing);
     });
 
-    testWidgets('network error detail view shows error string', (tester) async {
+    testWidgets('network error detail shows error string via Response Body', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Builder(
             builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
+              onPressed: () => showDataDetailDialog(
                 context: context,
                 rawRequest: {'url': 'https://api.example.com/chat'},
                 rawResponse: {
@@ -422,28 +368,24 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      // Tap the Error section
-      await tester.tap(find.text('Error'));
+      await tester.tap(find.text('Response Body'));
       await tester.pumpAndSettle();
 
-      // Should show the error message in detail
       expect(find.textContaining('DioException'), findsOneWidget);
       expect(find.textContaining('Failed to connect'), findsOneWidget);
     });
 
     testWidgets(
-      'request/response items hidden when data not present in section',
+      'items hidden when data not present in section',
       (tester) async {
         await tester.pumpWidget(
           MaterialApp(
             home: Builder(
               builder: (context) => ElevatedButton(
-                onPressed: () => showErrorDetailDialog(
+                onPressed: () => showDataDetailDialog(
                   context: context,
                   rawRequest: {'url': 'https://api.example.com'},
-                  // no headers or body
                   rawResponse: {'statusCode': 200},
-                  // no headers or data
                 ),
                 child: const Text('Show'),
               ),
@@ -454,11 +396,8 @@ void main() {
         await tester.tap(find.text('Show'));
         await tester.pumpAndSettle();
 
-        // URL and Status Code should be visible
         expect(find.text('Request URL'), findsOneWidget);
         expect(find.text('Status Code'), findsOneWidget);
-
-        // Items without data should NOT be shown
         expect(find.text('Request Headers'), findsNothing);
         expect(find.text('Request Body'), findsNothing);
         expect(find.text('Response Headers'), findsNothing);
@@ -471,7 +410,7 @@ void main() {
         MaterialApp(
           home: Builder(
             builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
+              onPressed: () => showDataDetailDialog(
                 context: context,
                 rawRequest: null,
                 rawResponse: null,
@@ -493,7 +432,7 @@ void main() {
         MaterialApp(
           home: Builder(
             builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
+              onPressed: () => showDataDetailDialog(
                 context: context,
                 rawRequest: {'url': 'https://api.example.com'},
                 rawResponse: {'statusCode': 200},
@@ -520,7 +459,7 @@ void main() {
         MaterialApp(
           home: Builder(
             builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
+              onPressed: () => showDataDetailDialog(
                 context: context,
                 rawRequest: {'url': 'https://api.example.com'},
                 rawResponse: {'statusCode': 429},
@@ -545,7 +484,7 @@ void main() {
         MaterialApp(
           home: Builder(
             builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
+              onPressed: () => showDataDetailDialog(
                 context: context,
                 rawRequest: {
                   'url': 'https://api.example.com',
@@ -574,7 +513,7 @@ void main() {
         MaterialApp(
           home: Builder(
             builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
+              onPressed: () => showDataDetailDialog(
                 context: context,
                 rawRequest: {
                   'url': 'https://api.example.com',
@@ -594,168 +533,33 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      // Go to Request URL
       await tester.tap(find.text('Request URL'));
       await tester.pumpAndSettle();
       expect(find.text('https://api.example.com'), findsOneWidget);
 
-      // Back
       await tester.tap(find.byIcon(Icons.arrow_back));
       await tester.pumpAndSettle();
       expect(find.text('Request Headers'), findsOneWidget);
 
-      // Go to Status Code
       await tester.tap(find.text('Status Code'));
       await tester.pumpAndSettle();
       expect(find.text('401'), findsOneWidget);
 
-      // Back
       await tester.tap(find.byIcon(Icons.arrow_back));
       await tester.pumpAndSettle();
       expect(find.text('Request URL'), findsOneWidget);
     });
 
-    // ── NEW TESTS for the renamed/updated dialog ──
+    // ── UNIFIED PANEL TESTS ──
 
-    testWidgets(
-      'shows message content section when messageContent is provided',
-      (tester) async {
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () => showErrorDetailDialog(
-                  context: context,
-                  rawRequest: {'url': 'https://api.example.com/chat'},
-                  rawResponse: {'statusCode': 200},
-                  messageContent: '这是助手回复的内容',
-                ),
-                child: const Text('Show'),
-              ),
-            ),
-          ),
-        );
-
-        await tester.tap(find.text('Show'));
-        await tester.pumpAndSettle();
-
-        // Message content section should be visible
-        expect(find.text('消息内容'), findsOneWidget);
-      },
-    );
-
-    testWidgets(
-      'message content section shows the actual message text when tapped',
-      (tester) async {
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () => showErrorDetailDialog(
-                  context: context,
-                  rawRequest: {'url': 'https://api.example.com/chat'},
-                  rawResponse: {'statusCode': 200},
-                  messageContent: '这是助手回复的内容',
-                ),
-                child: const Text('Show'),
-              ),
-            ),
-          ),
-        );
-
-        await tester.tap(find.text('Show'));
-        await tester.pumpAndSettle();
-
-        // Tap 消息内容 section
-        await tester.tap(find.text('消息内容'));
-        await tester.pumpAndSettle();
-
-        // Should show the message text in detail
-        expect(find.text('这是助手回复的内容'), findsOneWidget);
-      },
-    );
-
-    testWidgets('message content section is hidden when not provided', (
+    testWidgets('header uses info_outline icon (no error styling)', (
       tester,
     ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Builder(
             builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
-                context: context,
-                rawRequest: {'url': 'https://api.example.com/chat'},
-                rawResponse: {'statusCode': 200},
-                // no messageContent
-              ),
-              child: const Text('Show'),
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('Show'));
-      await tester.pumpAndSettle();
-
-      // Message content section should NOT be visible
-      expect(find.text('消息内容'), findsNothing);
-    });
-    testWidgets('dialog title defaults to 数据详情', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
-                context: context,
-                rawRequest: null,
-                rawResponse: null,
-              ),
-              child: const Text('Show'),
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('Show'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('数据详情'), findsOneWidget);
-      // Old title should NOT be present
-      expect(find.text('Error Details'), findsNothing);
-    });
-
-    testWidgets('empty messageContent string hides the section like null',
-        (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
-                context: context,
-                rawRequest: {'url': 'https://api.example.com/chat'},
-                rawResponse: {'statusCode': 200},
-                messageContent: '',
-              ),
-              child: const Text('Show'),
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('Show'));
-      await tester.pumpAndSettle();
-
-      // Empty string should NOT show the message content section
-      expect(find.text('消息内容'), findsNothing);
-    });
-
-    testWidgets('header shows info_outline and grey styling when no error',
-        (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
+              onPressed: () => showDataDetailDialog(
                 context: context,
                 rawRequest: {'url': 'https://api.example.com/chat'},
                 rawResponse: {'statusCode': 200},
@@ -769,19 +573,18 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      // Should use info_outline for non-error data (header + Status Code section icon)
       expect(find.byIcon(Icons.info_outline), findsAtLeastNWidgets(1));
-      // Should NOT use error_outline
       expect(find.byIcon(Icons.error_outline), findsNothing);
     });
 
-    testWidgets('header shows error_outline and red styling when network error',
-        (tester) async {
+    testWidgets('header uses info_outline even for network errors', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Builder(
             builder: (context) => ElevatedButton(
-              onPressed: () => showErrorDetailDialog(
+              onPressed: () => showDataDetailDialog(
                 context: context,
                 rawRequest: {'url': 'https://api.example.com/chat'},
                 rawResponse: {
@@ -797,8 +600,118 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      // Should show error_outline (header + Error section list tile)
-      expect(find.byIcon(Icons.error_outline), findsWidgets);
+      // Unified: always shows info_outline, never error_outline
+      expect(find.byIcon(Icons.info_outline), findsAtLeastNWidgets(1));
+      expect(find.byIcon(Icons.error_outline), findsNothing);
     });
+
+    testWidgets('no 消息内容 section anywhere', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {'url': 'https://api.example.com/chat'},
+                rawResponse: {'statusCode': 200},
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('消息内容'), findsNothing);
+    });
+
+    testWidgets('dialog has uniform rounded corners', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {'url': 'https://api.example.com'},
+                rawResponse: {'statusCode': 200},
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      // Verify the dialog exists by checking its content
+      expect(find.text('数据详情'), findsOneWidget);
+      expect(find.text('关闭'), findsOneWidget);
+    });
+
+    testWidgets('response body sections only for data and error keys', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {'url': 'https://api.example.com/chat'},
+                rawResponse: {
+                  'statusCode': 500,
+                  // Has both 'data' and 'error' — 'data' takes precedence
+                  'data': 'Internal Server Error',
+                  'error': 'DioException',
+                },
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      // Should show Response Body from 'data' key, not 'error' key
+      expect(find.text('Response Body'), findsOneWidget);
+      expect(find.text('Status Code'), findsOneWidget);
+    });
+
+    testWidgets(
+      'response body shows error field data when data key absent',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => showDataDetailDialog(
+                  context: context,
+                  rawRequest: {'url': 'https://api.example.com/chat'},
+                  rawResponse: {
+                    'error': 'DioException: Connection refused',
+                  },
+                ),
+                child: const Text('Show'),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Show'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Response Body'), findsOneWidget);
+
+        await tester.tap(find.text('Response Body'));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('DioException'), findsOneWidget);
+      },
+    );
   });
 }

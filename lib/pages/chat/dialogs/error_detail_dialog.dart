@@ -2,14 +2,14 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:stroom/utils/data_sanitizer.dart';
 
-/// Represents a selectable section within the error detail dialog.
-class _ErrorSection {
+/// Represents a selectable data section within the detail dialog.
+class _DataSection {
   final String id;
   final String label;
   final IconData icon;
   final dynamic value;
 
-  const _ErrorSection({
+  const _DataSection({
     required this.id,
     required this.label,
     required this.icon,
@@ -17,62 +17,46 @@ class _ErrorSection {
   });
 }
 
-/// Shows a dialog with detailed request/response data information.
+/// Shows a unified dialog with 6 common data sections:
+/// Request URL, Request Headers, Request Body,
+/// Status Code, Response Headers, Response Body.
 ///
-/// Displays a list of available sections (Message Content, Request URL,
-/// Request Headers, Request Body, Status Code, Response Headers,
-/// Response Body, Error). Tap any section to view its detail.
-/// Use the back button to return to the section list.
-void showErrorDetailDialog({
+/// Tap any section to view its detail. Use the back button to return
+/// to the section list. The panel is visually uniform regardless of
+/// whether the data is from an error or normal request.
+void showDataDetailDialog({
   required BuildContext context,
   required Map<String, dynamic>? rawRequest,
   required Map<String, dynamic>? rawResponse,
-  String? messageContent,
 }) {
   showDialog(
     context: context,
-    builder: (ctx) => _ErrorDetailDialogContent(
+    builder: (ctx) => _DataDetailDialogContent(
       rawRequest: rawRequest,
       rawResponse: rawResponse,
-      messageContent: messageContent,
     ),
   );
 }
 
-class _ErrorDetailDialogContent extends StatefulWidget {
+class _DataDetailDialogContent extends StatefulWidget {
   final Map<String, dynamic>? rawRequest;
   final Map<String, dynamic>? rawResponse;
-  final String? messageContent;
 
-  const _ErrorDetailDialogContent({
+  const _DataDetailDialogContent({
     required this.rawRequest,
     required this.rawResponse,
-    this.messageContent,
   });
 
   @override
-  State<_ErrorDetailDialogContent> createState() =>
-      _ErrorDetailDialogContentState();
+  State<_DataDetailDialogContent> createState() =>
+      _DataDetailDialogContentState();
 }
 
-class _ErrorDetailDialogContentState extends State<_ErrorDetailDialogContent> {
+class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
   /// Currently selected section id, or null to show the section list.
   String? _selectedSectionId;
 
-  /// Cached sections list, rebuilt when widget data changes.
-  List<_ErrorSection>? _cachedSections;
-
-  List<_ErrorSection> get _sections => _cachedSections ??= _buildSections();
-
-  @override
-  void didUpdateWidget(covariant _ErrorDetailDialogContent oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.rawRequest != widget.rawRequest ||
-        oldWidget.rawResponse != widget.rawResponse ||
-        oldWidget.messageContent != widget.messageContent) {
-      _cachedSections = null;
-    }
-  }
+  List<_DataSection> get _sections => _buildSections();
 
   @override
   Widget build(BuildContext context) {
@@ -81,55 +65,57 @@ class _ErrorDetailDialogContentState extends State<_ErrorDetailDialogContent> {
 
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: 600,
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header with back button when in detail view
-            _buildHeader(context, isDark),
-            // Body
-            Flexible(
-              child: sections.isEmpty
-                  ? _buildEmptyState(isDark)
-                  : _selectedSectionId != null
-                      ? _buildDetailView(sections, isDark)
-                      : _buildListView(sections, isDark),
-            ),
-            // Close button
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('关闭'),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: 600,
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
+          color: isDark ? Colors.grey[850] : Colors.white,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              _buildHeader(context, isDark),
+              // Body
+              Flexible(
+                child: sections.isEmpty
+                    ? _buildEmptyState()
+                    : _selectedSectionId != null
+                        ? _buildDetailView(sections, isDark)
+                        : _buildListView(sections, isDark),
+              ),
+              // Close button
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('关闭'),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  /// Builds the dialog header, optionally with a back button.
+  /// Builds the dialog header.
   Widget _buildHeader(BuildContext context, bool isDark) {
-    final hasError = _sections.any((s) => s.id == 'error');
-    final headerColor = hasError ? Colors.red[700] : Colors.grey[700];
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: hasError
-            ? Colors.red.withOpacity(0.1)
-            : (isDark ? Colors.grey[800] : Colors.grey[200]),
+        color: isDark ? Colors.grey[800] : Colors.grey[100],
         borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(4),
-          topRight: Radius.circular(4),
+          topLeft: Radius.circular(16),
+          topRight: Radius.circular(16),
         ),
       ),
       child: Row(
@@ -147,10 +133,9 @@ class _ErrorDetailDialogContentState extends State<_ErrorDetailDialogContent> {
               tooltip: '返回',
             ),
           if (_selectedSectionId != null) const SizedBox(width: 8),
-          Icon(
-            hasError ? Icons.error_outline : Icons.info_outline,
+          const Icon(
+            Icons.info_outline,
             size: 18,
-            color: headerColor,
           ),
           const SizedBox(width: 8),
           Text(
@@ -160,7 +145,7 @@ class _ErrorDetailDialogContentState extends State<_ErrorDetailDialogContent> {
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: headerColor,
+              color: isDark ? Colors.grey[300] : Colors.grey[800],
             ),
           ),
           const Spacer(),
@@ -183,44 +168,35 @@ class _ErrorDetailDialogContentState extends State<_ErrorDetailDialogContent> {
     return id;
   }
 
-  /// Builds the list of available sections based on available data.
-  List<_ErrorSection> _buildSections() {
-    final sections = <_ErrorSection>[];
+  /// Builds the list of 6 common sections based on available data.
+  List<_DataSection> _buildSections() {
+    final sections = <_DataSection>[];
     final req = widget.rawRequest ?? {};
     final resp = widget.rawResponse ?? {};
 
-    // Message content section (shows the actual message text)
-    if (widget.messageContent != null && widget.messageContent!.isNotEmpty) {
-      sections.add(_ErrorSection(
-        id: 'message_content',
-        label: '消息内容',
-        icon: Icons.subject,
-        value: widget.messageContent,
-      ));
-    }
-
-    // Check if this is a network error (no HTTP response)
-    final isNetworkError = resp.containsKey('error');
-
-    // Request sections
+    // 1. Request URL
     if (req.containsKey('url') && req['url'] != null) {
-      sections.add(_ErrorSection(
+      sections.add(_DataSection(
         id: 'request_url',
         label: 'Request URL',
         icon: Icons.link,
         value: req['url'],
       ));
     }
+
+    // 2. Request Headers
     if (req.containsKey('headers') && req['headers'] != null) {
-      sections.add(_ErrorSection(
+      sections.add(_DataSection(
         id: 'request_headers',
         label: 'Request Headers',
         icon: Icons.code,
         value: req['headers'],
       ));
     }
+
+    // 3. Request Body
     if (req.containsKey('body') && req['body'] != null) {
-      sections.add(_ErrorSection(
+      sections.add(_DataSection(
         id: 'request_body',
         label: 'Request Body',
         icon: Icons.code,
@@ -228,49 +204,48 @@ class _ErrorDetailDialogContentState extends State<_ErrorDetailDialogContent> {
       ));
     }
 
-    if (isNetworkError) {
-      // Network error — show a single Error section
-      if (resp['error'] != null) {
-        sections.add(_ErrorSection(
-          id: 'error',
-          label: 'Error',
-          icon: Icons.error_outline,
-          value: resp['error'],
-        ));
-      }
-    } else {
-      // Normal HTTP response sections
-      if (resp.containsKey('statusCode') && resp['statusCode'] != null) {
-        sections.add(_ErrorSection(
-          id: 'status_code',
-          label: 'Status Code',
-          icon: Icons.info_outline,
-          value: resp['statusCode'],
-        ));
-      }
-      if (resp.containsKey('headers') && resp['headers'] != null) {
-        sections.add(_ErrorSection(
-          id: 'response_headers',
-          label: 'Response Headers',
-          icon: Icons.code,
-          value: resp['headers'],
-        ));
-      }
-      if (resp.containsKey('data') && resp['data'] != null) {
-        sections.add(_ErrorSection(
-          id: 'response_body',
-          label: 'Response Body',
-          icon: Icons.code,
-          value: resp['data'],
-        ));
-      }
+    // 4. Status Code
+    if (resp.containsKey('statusCode') && resp['statusCode'] != null) {
+      sections.add(_DataSection(
+        id: 'status_code',
+        label: 'Status Code',
+        icon: Icons.info_outline,
+        value: resp['statusCode'],
+      ));
+    }
+
+    // 5. Response Headers
+    if (resp.containsKey('headers') && resp['headers'] != null) {
+      sections.add(_DataSection(
+        id: 'response_headers',
+        label: 'Response Headers',
+        icon: Icons.code,
+        value: resp['headers'],
+      ));
+    }
+
+    // 6. Response Body — check both 'data' (HTTP success) and 'error' (network error)
+    if (resp.containsKey('data') && resp['data'] != null) {
+      sections.add(_DataSection(
+        id: 'response_body',
+        label: 'Response Body',
+        icon: Icons.code,
+        value: resp['data'],
+      ));
+    } else if (resp.containsKey('error') && resp['error'] != null) {
+      sections.add(_DataSection(
+        id: 'response_body',
+        label: 'Response Body',
+        icon: Icons.code,
+        value: resp['error'],
+      ));
     }
 
     return sections;
   }
 
   /// Builds the empty state shown when no data is available.
-  Widget _buildEmptyState(bool isDark) {
+  Widget _buildEmptyState() {
     return const Padding(
       padding: EdgeInsets.all(24),
       child: Center(
@@ -286,7 +261,7 @@ class _ErrorDetailDialogContentState extends State<_ErrorDetailDialogContent> {
   }
 
   /// Builds the list view showing all available sections.
-  Widget _buildListView(List<_ErrorSection> sections, bool isDark) {
+  Widget _buildListView(List<_DataSection> sections, bool isDark) {
     return ListView.separated(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       shrinkWrap: true,
@@ -294,26 +269,29 @@ class _ErrorDetailDialogContentState extends State<_ErrorDetailDialogContent> {
       separatorBuilder: (_, __) => const Divider(height: 1),
       itemBuilder: (context, index) {
         final section = sections[index];
-        return ListTile(
-          leading: Icon(section.icon, size: 20, color: Colors.red[700]),
-          title: Text(
-            section.label,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+        return Material(
+          type: MaterialType.transparency,
+          child: ListTile(
+            leading: Icon(section.icon, size: 20),
+            title: Text(
+              section.label,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+            trailing: const Icon(Icons.chevron_right, size: 18),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+            onTap: () {
+              setState(() {
+                _selectedSectionId = section.id;
+              });
+            },
           ),
-          trailing: const Icon(Icons.chevron_right, size: 18),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-          onTap: () {
-            setState(() {
-              _selectedSectionId = section.id;
-            });
-          },
         );
       },
     );
   }
 
   /// Builds the detail view for the selected section.
-  Widget _buildDetailView(List<_ErrorSection> sections, bool isDark) {
+  Widget _buildDetailView(List<_DataSection> sections, bool isDark) {
     final section = sections.firstWhere(
       (s) => s.id == _selectedSectionId,
       orElse: () => sections.first,
@@ -342,8 +320,8 @@ class _ErrorDetailDialogContentState extends State<_ErrorDetailDialogContent> {
             width: double.infinity,
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: isDark ? Colors.black : Colors.grey[300],
-              borderRadius: BorderRadius.circular(4),
+              color: isDark ? Colors.black : Colors.grey[200],
+              borderRadius: BorderRadius.circular(8),
             ),
             child: _buildValueDisplay(section.value, encoder, isDark),
           ),

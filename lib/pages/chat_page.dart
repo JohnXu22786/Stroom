@@ -35,7 +35,7 @@ import 'chat/utils/format_chat_error.dart';
 export 'chat/utils/format_chat_error.dart' show formatChatErrorMessage;
 import 'chat/widgets/action_button.dart';
 import 'chat/widgets/reasoning_section.dart';
-import 'chat/dialogs/error_detail_dialog.dart';
+import 'chat/dialogs/error_detail_dialog.dart' show showDataDetailDialog;
 import 'chat/dialogs/confirm_dialog.dart';
 import 'chat/dialogs/image_preview_dialog.dart';
 import 'chat/dialogs/file_info_dialog.dart';
@@ -934,38 +934,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
           rawResponse: rawResponseCapture,
         );
         _history.add(msg);
-        // Also attach the raw request data to the triggering user message so
-        // the "查看请求数据" (info_outline) button is visible for user messages.
-        // Without this, user messages never show the raw data button because
-        // rawRequest is only set on the AI response message.
-        if (rawRequestCapture != null) {
-          final userIdx = _history.lastIndexWhere(
-            (m) => m.role == 'user' && m.rawRequest == null,
-          );
-          if (userIdx >= 0) {
-            final userMsg = _history[userIdx];
-            _history[userIdx] = ChatMessage(
-              role: userMsg.role,
-              content: userMsg.content,
-              id: userMsg.id,
-              createdAt: userMsg.createdAt,
-              attachments: userMsg.attachments,
-              isStreaming: userMsg.isStreaming,
-              isError: userMsg.isError,
-              reasoningContent: userMsg.reasoningContent,
-              rawRequest: rawRequestCapture,
-              rawResponse: userMsg.rawResponse,
-            );
-          }
-        }
-        if (reasoningBuffer.isNotEmpty) {
-          // Reasoning sections already updated above via provider.
-          // Ensure _reasoningContents has the latest sections.
-          final sections = List<String>.from(
-            ref.read(streamingReasoningSectionsProvider),
-          );
-          _reasoningContents[aiMsgId] = sections;
-        }
+      }
+      if (reasoningBuffer.isNotEmpty) {
+        // Reasoning sections already updated above via provider.
+        // Ensure _reasoningContents has the latest sections.
+        final sections = List<String>.from(
+          ref.read(streamingReasoningSectionsProvider),
+        );
+        _reasoningContents[aiMsgId] = sections;
       }
     } catch (e, s) {
       debugPrint('[ChatPage] post-stream error: $e\n$s');
@@ -2061,6 +2037,74 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                   .firstOrNull;
                               if ((chatMsg?.isError == true) ||
                                   message.text.startsWith('错误:')) {
+                                // Extract error details from rawResponse
+                                final resp = chatMsg?.rawResponse ?? {};
+                                final statusCode = resp['statusCode'];
+                                final responseBodyData = resp['data'];
+                                final responseError = resp['error'];
+                                final originalErrorText =
+                                    message.text.replaceAll('错误: ', '');
+
+                                // Build the list of error info widgets
+                                final errorWidgets = <Widget>[];
+
+                                // Status Code (new — shown first)
+                                if (statusCode != null) {
+                                  errorWidgets.add(
+                                    SelectableText(
+                                      'Status Code: $statusCode',
+                                      style: TextStyle(
+                                        color: isDark
+                                            ? Colors.grey[300]
+                                            : Colors.grey[800],
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  );
+                                }
+
+                                // Response Body error (new — shown second)
+                                if (responseBodyData != null ||
+                                    responseError != null) {
+                                  final bodyText = responseBodyData != null
+                                      ? _formatErrorValue(responseBodyData)
+                                      : _formatErrorValue(responseError);
+                                  errorWidgets.add(
+                                    SelectableText(
+                                      bodyText,
+                                      style: TextStyle(
+                                        color: isDark
+                                            ? Colors.grey[300]
+                                            : Colors.grey[800],
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  );
+                                }
+
+                                // Blank line before original error
+                                if (errorWidgets.isNotEmpty &&
+                                    originalErrorText.isNotEmpty) {
+                                  errorWidgets.add(
+                                    const SizedBox(height: 8),
+                                  );
+                                }
+
+                                // Original error (DIO Exception etc.)
+                                if (originalErrorText.isNotEmpty) {
+                                  errorWidgets.add(
+                                    SelectableText(
+                                      originalErrorText,
+                                      style: TextStyle(
+                                        color: isDark
+                                            ? Colors.grey[300]
+                                            : Colors.grey[800],
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  );
+                                }
+
                                 messageBubble = Container(
                                   margin: const EdgeInsets.symmetric(
                                     vertical: 2,
@@ -2072,10 +2116,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                             : Colors.grey[100])!
                                         .withOpacity(0.7),
                                     borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: Colors.red.withOpacity(0.3),
-                                      width: 1,
-                                    ),
                                   ),
                                   child: Column(
                                     crossAxisAlignment:
@@ -2086,15 +2126,19 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Icon(
-                                            Icons.error_outline,
+                                            Icons.info_outline,
                                             size: 14,
-                                            color: Colors.red[700],
+                                            color: isDark
+                                                ? Colors.grey[400]
+                                                : Colors.grey[600],
                                           ),
                                           const SizedBox(width: 4),
                                           Text(
                                             '发送失败',
                                             style: TextStyle(
-                                              color: Colors.red[700],
+                                              color: isDark
+                                                  ? Colors.grey[400]
+                                                  : Colors.grey[600],
                                               fontSize: 12,
                                               fontWeight: FontWeight.w600,
                                             ),
@@ -2102,13 +2146,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                         ],
                                       ),
                                       const SizedBox(height: 6),
-                                      SelectableText(
-                                        message.text.replaceAll('错误: ', ''),
-                                        style: TextStyle(
-                                          color: Colors.red[700],
-                                          fontSize: 13,
-                                        ),
-                                      ),
+                                      ...errorWidgets,
                                       if (chatMsg != null &&
                                           (chatMsg.rawRequest != null ||
                                               chatMsg.rawResponse != null))
@@ -2117,14 +2155,20 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                             top: 8,
                                           ),
                                           child: TextButton.icon(
-                                            icon: const Icon(
+                                            icon: Icon(
                                               Icons.preview,
                                               size: 14,
+                                              color: isDark
+                                                  ? Colors.grey[400]
+                                                  : Colors.grey[600],
                                             ),
-                                            label: const Text(
+                                            label: Text(
                                               '查看详细错误',
                                               style: TextStyle(
                                                 fontSize: 12,
+                                                color: isDark
+                                                    ? Colors.grey[400]
+                                                    : Colors.grey[600],
                                               ),
                                             ),
                                             onPressed: () =>
@@ -2373,21 +2417,20 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                           ),
                                         ),
                                       const SizedBox(width: 2),
-                                      // Raw data view button: shows response data for AI messages,
-                                      // request data for user messages. Always visible when data exists.
-                                      if (_history.any(
-                                        (m) =>
-                                            m.id == message.id &&
-                                            ((isAi && m.rawResponse != null) ||
-                                                (!isAi &&
-                                                    m.rawRequest != null)),
-                                      ))
+                                      // Raw data view button: only shown for AI messages when data exists.
+                                      if (isAi &&
+                                          _history.any(
+                                            (m) =>
+                                                m.id == message.id &&
+                                                (m.rawRequest != null ||
+                                                    m.rawResponse != null),
+                                          ))
                                         ActionButton(
                                           icon: Icons.data_exploration,
-                                          tooltip: isAi ? '查看响应数据' : '查看请求数据',
+                                          tooltip: '查看数据详情',
                                           onPressed: () => _showRawDataDialog(
+                                            context,
                                             message.id,
-                                            isAi: isAi,
                                           ),
                                         ),
                                       const SizedBox(width: 2),
@@ -2502,7 +2545,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final chatMsg = _history.where((m) => m.id == messageId).firstOrNull;
     if (chatMsg == null) return;
 
-    showErrorDetailDialog(
+    showDataDetailDialog(
       context: context,
       rawRequest: chatMsg.rawRequest,
       rawResponse: chatMsg.rawResponse,
@@ -2510,31 +2553,26 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   /// Shows a dialog with raw HTTP request/response data for the given message.
-  /// For AI messages, shows response headers + body.
-  /// For user messages, shows request headers + body.
-  void _showRawDataDialog(String messageId, {required bool isAi}) {
-    final chatMsg = _history.where((m) => m.id == messageId).firstOrNull;
-    if (chatMsg == null) return;
+  void _showRawDataDialog(BuildContext context, String messageId) {
+    _showErrorDetailDialog(context, messageId);
+  }
 
-    if (isAi) {
-      // Show response data
-      if (chatMsg.rawResponse != null) {
-        showErrorDetailDialog(
-          context: context,
-          rawRequest: null,
-          rawResponse: chatMsg.rawResponse,
-        );
-      }
-    } else {
-      // Show request data
-      if (chatMsg.rawRequest != null) {
-        showErrorDetailDialog(
-          context: context,
-          rawRequest: chatMsg.rawRequest,
-          rawResponse: null,
-        );
+  /// Formats an error value for display in the error bubble.
+  /// If the value is a Map/List, converts to JSON string.
+  /// If the value is already a String, returns it as-is (up to 200 chars).
+  String _formatErrorValue(dynamic value) {
+    if (value is String) {
+      return value.length > 200 ? '${value.substring(0, 200)}...' : value;
+    }
+    if (value is Map || value is List) {
+      try {
+        final json = const JsonEncoder.withIndent('  ').convert(value);
+        return json.length > 200 ? '${json.substring(0, 200)}...' : json;
+      } catch (_) {
+        return value.toString();
       }
     }
+    return value?.toString() ?? '';
   }
 
   /// Returns the list of model display names for the attachment panel,
