@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart'
@@ -58,11 +59,93 @@ class BackupService {
   // 核心：在内存中构建备份归档
   // ================================================================
 
+  /// 短暂的延迟以让出事件循环，确保 UI 可以处理帧渲染。
+  /// 这是防止导出备份时页面冻结的关键机制。
+  ///
+  /// 生产环境中使用 1ms 定时器，确保事件循环有机会处理帧渲染请求；
+  /// 测试环境中使用 Future.microtask，因为 Flutter 测试的 FakeAsync Zone
+  /// 会将所有 Future.delayed 创建为 FakeTimer，无法被简单的 await 推进，
+  /// 必须通过 pump() 才能完成。
+  static Future<void> _yieldToEventLoop() {
+    // 测试环境：使用微任务（FakeAsync 中不会创建 FakeTimer）
+    if (WebFileStore.isTestMode) {
+      return Future<void>.microtask(() {});
+    }
+    // 生产环境：1ms 定时器，通过事件循环让出给帧渲染
+    return Future<void>.delayed(const Duration(milliseconds: 1));
+  }
+
+  /// 将 Archive 中的文件列表提取为可跨隔离传输的格式。
+  static List<Map<String, Object?>> _extractArchiveFiles(Archive archive) {
+    final files = <Map<String, Object?>>[];
+    for (final file in archive.files) {
+      if (file.isFile) {
+        files.add({
+          'name': file.name,
+          'size': file.size,
+          'content': Uint8List.fromList(file.content as List<int>),
+        });
+      }
+    }
+    return files;
+  }
+
+  /// 在后台隔离（Isolate）中执行 zip 编码，避免阻塞主 UI 线程。
+  ///
+  /// [files] 是 [_extractArchiveFiles] 提取的可传输文件列表。
+  /// 在测试模式下（Isolate 无法在 Flutter 测试环境的 FakeAsync Zone 中正常
+  /// 工作），回退到同步编码。在其他不支持 Isolate 的环境也回退到同步编码。
+  static Future<Uint8List> _encodeArchiveInBackground(
+      List<Map<String, Object?>> files) async {
+    // 测试模式下无法使用 Isolate.run（FakeAsync Zone 不支持真正的 Isolate），
+    // 回退到同步编码
+    if (WebFileStore.isTestMode) {
+      return _encodeArchiveSync(files);
+    }
+
+    try {
+      return await Isolate.run(() {
+        final archive = Archive();
+        for (final f in files) {
+          final name = f['name'] as String;
+          final content = f['content'] as Uint8List;
+          archive.addFile(ArchiveFile(name, content.length, content));
+        }
+        final encoded = ZipEncoder().encode(archive);
+        if (encoded == null) {
+          throw Exception('zip 编码失败');
+        }
+        return Uint8List.fromList(encoded);
+      });
+    } on UnsupportedError catch (e) {
+      // Isolate 不可用（如部分 Web 环境），回退到同步编码
+      // 同步编码会短暂阻塞主线程，但至少功能可用
+      debugPrint('Isolate 编码不可用，回退到同步编码: $e');
+      return _encodeArchiveSync(files);
+    }
+  }
+
+  /// 同步编码（回退路径）— 直接在当前线程执行 zip 编码。
+  static Uint8List _encodeArchiveSync(List<Map<String, Object?>> files) {
+    final archive = Archive();
+    for (final f in files) {
+      final name = f['name'] as String;
+      final content = f['content'] as Uint8List;
+      archive.addFile(ArchiveFile(name, content.length, content));
+    }
+    final encoded = ZipEncoder().encode(archive);
+    if (encoded == null) {
+      throw Exception('zip 编码失败');
+    }
+    return Uint8List.fromList(encoded);
+  }
+
   /// 构建备份归档的字节数据（双平台通用）。
   static Future<Uint8List> _buildBackupBytes({
     void Function(double progress)? onProgress,
   }) async {
     onProgress?.call(0.0);
+    await _yieldToEventLoop();
     final archive = Archive();
 
     // 1. manifest.json
@@ -73,6 +156,7 @@ class BackupService {
     };
     addStringToArchive(archive, 'manifest.json', jsonEncode(manifest));
     onProgress?.call(0.05);
+    await _yieldToEventLoop();
 
     // 2. 数据库（按存储格式：根目录 stroom_manifest.json）
     final imageRecords = await ManifestDatabase.getAllImageRecords();
@@ -102,6 +186,7 @@ class BackupService {
     };
     addStringToArchive(archive, 'stroom_manifest.json', jsonEncode(dbData));
     onProgress?.call(0.15);
+    await _yieldToEventLoop();
 
     // 3. SharedPreferences
     final prefs = await SharedPreferences.getInstance();
@@ -112,6 +197,7 @@ class BackupService {
     }
     addStringToArchive(archive, 'preferences.json', jsonEncode(prefData));
     onProgress?.call(0.25);
+    await _yieldToEventLoop();
 
     // 4. 任务文件（按存储格式：synthesis/tasks.json, catcatch/tasks.json）
     // 在测试模式下跳过文件系统操作以避免平台通道挂起
@@ -126,9 +212,11 @@ class BackupService {
       addStringToArchive(archive, 'catcatch/tasks.json', '[]');
     }
     onProgress?.call(0.35);
+    await _yieldToEventLoop();
 
     // 5. 二进制文件（按存储格式：pictures/, tts_audio/, videos/, texts/, attachments/）
-    for (final record in imageRecords) {
+    for (var i = 0; i < imageRecords.length; i++) {
+      final record = imageRecords[i];
       final hash = record['hash'] as String?;
       final format = record['format'] as String? ?? 'jpg';
       if (hash == null) continue;
@@ -136,10 +224,14 @@ class BackupService {
           archive, 'pictures/$hash.$format', 'pictures', '$hash.$format');
       await addFileToArchive(archive, 'pictures/${hash}_thumb.png', 'pictures',
           '${hash}_thumb.png');
+      // 每处理 10 条记录让出一次事件循环，防止大量文件操作阻塞 UI
+      if (i % 10 == 0) await _yieldToEventLoop();
     }
     onProgress?.call(0.5);
+    await _yieldToEventLoop();
 
-    for (final record in audioRecords) {
+    for (var i = 0; i < audioRecords.length; i++) {
+      final record = audioRecords[i];
       final hash = record['hash'] as String?;
       final format = record['format'] as String? ?? 'wav';
       if (hash == null) continue;
@@ -147,42 +239,55 @@ class BackupService {
           archive, 'tts_audio/$hash.$format', 'tts_audio', '$hash.$format');
       await addFileToArchive(
           archive, 'tts_audio/$hash.txt', 'tts_audio', '$hash.txt');
+      if (i % 10 == 0) await _yieldToEventLoop();
     }
     onProgress?.call(0.65);
+    await _yieldToEventLoop();
 
-    for (final record in videoRecords) {
+    for (var i = 0; i < videoRecords.length; i++) {
+      final record = videoRecords[i];
       final hash = record['hash'] as String?;
       final format = record['format'] as String? ?? 'mp4';
       if (hash == null) continue;
       await addFileToArchive(
           archive, 'videos/$hash.$format', 'videos', '$hash.$format');
+      if (i % 10 == 0) await _yieldToEventLoop();
     }
     onProgress?.call(0.75);
+    await _yieldToEventLoop();
 
-    for (final record in textRecords) {
+    for (var i = 0; i < textRecords.length; i++) {
+      final record = textRecords[i];
       final hash = record['hash'] as String?;
       if (hash == null) continue;
       await addFileToArchive(archive, 'texts/$hash.txt', 'texts', '$hash.txt');
+      if (i % 10 == 0) await _yieldToEventLoop();
     }
     onProgress?.call(0.8);
+    await _yieldToEventLoop();
 
     final attachmentPaths = await collectAttachmentPaths();
-    for (final storagePath in attachmentPaths) {
+    final pathList = attachmentPaths.toList();
+    for (var i = 0; i < pathList.length; i++) {
+      final storagePath = pathList[i];
       final parts = storagePath.split('/');
       if (parts.length < 2) continue;
       final subDir = parts[0];
       final fileName = parts.sublist(1).join('/');
       await addFileToArchive(archive, storagePath, subDir, fileName);
+      if (i % 10 == 0) await _yieldToEventLoop();
     }
     onProgress?.call(0.85);
+    await _yieldToEventLoop();
 
-    // 6. 编码
-    final encoded = ZipEncoder().encode(archive);
-    if (encoded == null) {
-      throw Exception('zip 编码失败');
-    }
+    // 6. 编码 — 在后台隔离中执行，不阻塞主 UI 线程
+    final files = _extractArchiveFiles(archive);
+    onProgress?.call(0.9);
+    await _yieldToEventLoop();
+
+    final encoded = await _encodeArchiveInBackground(files);
     onProgress?.call(1.0);
-    return Uint8List.fromList(encoded);
+    return encoded;
   }
 
   /// 从字节数据恢复备份（双平台通用）。
@@ -191,6 +296,7 @@ class BackupService {
     void Function(double progress)? onProgress,
   }) async {
     onProgress?.call(0.0);
+    await _yieldToEventLoop();
 
     Archive? archive;
     try {
@@ -199,13 +305,17 @@ class BackupService {
       throw Exception('无效的备份文件：无法解压 ($e)');
     }
     onProgress?.call(0.1);
+    await _yieldToEventLoop();
 
     // 读取所有文件内容到内存 Map
     final fileMap = <String, Uint8List>{};
+    var fileIndex = 0;
     for (final f in archive) {
       if (f.isFile) {
         fileMap[f.name] = Uint8List.fromList(f.content as List<int>);
       }
+      fileIndex++;
+      if (fileIndex % 50 == 0) await _yieldToEventLoop();
     }
 
     // 验证 manifest
@@ -220,6 +330,7 @@ class BackupService {
       throw Exception('不支持的备份版本: $version');
     }
     onProgress?.call(0.15);
+    await _yieldToEventLoop();
 
     // 恢复数据库（兼容新旧格式）
     final dbJson = fileMap['stroom_manifest.json'] ??
@@ -228,6 +339,7 @@ class BackupService {
       await _restoreDatabaseFromJson(utf8.decode(dbJson));
     }
     onProgress?.call(0.4);
+    await _yieldToEventLoop();
 
     // 恢复 SharedPreferences
     final prefJson = fileMap['preferences.json'];
@@ -235,6 +347,7 @@ class BackupService {
       await _restorePreferencesFromJson(utf8.decode(prefJson));
     }
     onProgress?.call(0.55);
+    await _yieldToEventLoop();
 
     // 恢复二进制文件和任务文件（兼容新旧两种路径格式）
     // 新格式: pictures/, tts_audio/, videos/, texts/, attachments/, synthesis/, catcatch/
@@ -255,11 +368,12 @@ class BackupService {
       'preferences.json'
     };
 
+    var restoreIndex = 0;
     for (final entry in fileMap.entries) {
       var key = entry.key;
 
       // 跳过元数据文件
-      if (skipFiles.contains(key)) continue;
+      if (skipFiles.contains(key)) {restoreIndex++; continue;}
 
       // 旧格式 binary: 去掉 files/ 前缀
       if (key.startsWith('files/')) {
@@ -282,7 +396,7 @@ class BackupService {
           break;
         }
       }
-      if (matchedDir == null) continue;
+      if (matchedDir == null) {restoreIndex++; continue;}
 
       final relativePath = key.substring(matchedDir.length + 1);
 
@@ -290,11 +404,15 @@ class BackupService {
         if (relativePath == 'tasks.json') {
           await writeBackupFile(matchedDir, 'tasks.json', entry.value);
         }
+        restoreIndex++;
         continue;
       }
 
       // 普通二进制文件
       await writeBackupFile(matchedDir, relativePath, entry.value);
+      restoreIndex++;
+      // 每处理 20 个文件让出事件循环
+      if (restoreIndex % 20 == 0) await _yieldToEventLoop();
     }
 
     // 数据迁移：确保恢复后的数据格式是最新的
