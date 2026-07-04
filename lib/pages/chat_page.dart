@@ -2547,6 +2547,44 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                 ),
                               );
                             }
+                            // Check if reasoning content exists for this
+                            // message. If so, render the reasoning button
+                            // immediately instead of a spinner, even before
+                            // the first TextEvent converts the message from
+                            // textStream to text type.
+                            final reasoningSections =
+                                _reasoningContents[message.id];
+                            if (reasoningSections != null &&
+                                reasoningSections.isNotEmpty) {
+                              return Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ReasoningSection(
+                                      sections: ReasoningSectionData(
+                                        texts: reasoningSections,
+                                        // During textStream phase, reasoning
+                                        // events are still being received (no
+                                        // TextEvent yet), so streaming is
+                                        // always true. Once TextEvent arrives,
+                                        // updateMessage() converts the message
+                                        // to text type and textMessageBuilder
+                                        // takes over with the correct flag.
+                                        streaming: isStreaming &&
+                                            message.id == _streamingMsgId &&
+                                            _isReasoningCompletedForMsg[
+                                                    message.id] !=
+                                                true,
+                                      ),
+                                      messageId: message.id,
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
                             return const Padding(
                               padding: EdgeInsets.all(12),
                               child: SizedBox(
