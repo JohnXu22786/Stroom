@@ -419,4 +419,86 @@ void main() {
           reason: 'Restoring empty text_records must not crash');
     });
   });
+
+  // ==================================================================
+  // Background archive encoding (anti-freeze fix)
+  // ==================================================================
+
+  group('Backup service progress reporting and ZIP validity', () {
+    testWidgets('buildBackupBytesForTest calls onProgress with proper progression',
+        (WidgetTester t) async {
+      // Insert a few records so there are items to process
+      await ManifestDatabase.insertImageRecord({
+        'id': 'img_1',
+        'name': 'test_img',
+        'hash': 'img_hash_1',
+        'format': 'jpg',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 100,
+        'folder': '',
+        'width': 100,
+        'height': 100,
+      });
+      await ManifestDatabase.insertAudioRecord({
+        'id': 'aud_1',
+        'name': 'test_aud',
+        'hash': 'aud_hash_1',
+        'format': 'wav',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 100,
+        'folder': '',
+        'duration': 1.0,
+      });
+
+      final progressValues = <double>[];
+      await BackupService.buildBackupBytesForTest(
+        onProgress: (p) => progressValues.add(p),
+      );
+
+      // Verify progress is reported in order
+      expect(progressValues.first, equals(0.0));
+      expect(progressValues.last, equals(1.0));
+      // Should have at least the expected milestone progress calls
+      expect(progressValues.length, greaterThanOrEqualTo(2));
+
+      // Verify values are monotonically non-decreasing
+      for (var i = 1; i < progressValues.length; i++) {
+        expect(progressValues[i], greaterThanOrEqualTo(progressValues[i - 1]),
+            reason: 'Progress values must be monotonically non-decreasing');
+      }
+    });
+
+    testWidgets('background encoding produces valid zip archive',
+        (WidgetTester t) async {
+      final bytes = await BackupService.buildBackupBytesForTest();
+      expect(bytes, isNotNull);
+      expect(bytes.length, greaterThan(0));
+
+      // Decode and verify it's a valid zip
+      final archive = ZipDecoder().decodeBytes(bytes);
+      expect(archive, isNotNull);
+
+      // Should contain at least manifest.json and stroom_manifest.json
+      final fileNames = archive.files
+          .where((f) => f.isFile)
+          .map((f) => f.name)
+          .toSet();
+      expect(fileNames, contains('manifest.json'));
+      expect(fileNames, contains('stroom_manifest.json'));
+
+      // Verify manifest.json content
+      Uint8List? manifestData;
+      for (final f in archive) {
+        if (f.isFile && f.name == 'manifest.json') {
+          manifestData = Uint8List.fromList(f.content as List<int>);
+          break;
+        }
+      }
+      expect(manifestData, isNotNull);
+
+      final manifest = jsonDecode(utf8.decode(manifestData!));
+      expect(manifest, isA<Map<String, dynamic>>());
+      expect((manifest as Map<String, dynamic>)['version'], equals(1));
+    });
+  });
 }
