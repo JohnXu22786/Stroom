@@ -33,6 +33,10 @@ class ChatService {
   // ── Instance fields (used when constructed with a provider) ─────
   final BaseChatProvider? _provider;
   final ModelConfig? _modelConfig;
+
+  /// Provider-level params to merge with model params.
+  /// Provider params serve as defaults; model params override on collision.
+  final ProviderConfigItem? _providerConfig;
   bool _isCancelledByUser = false;
   CancelToken? _cancelToken;
   StreamSubscription<AIStreamEvent>? _streamSubscription;
@@ -54,11 +58,14 @@ class ChatService {
   int? _lastResponseStatusCode;
 
   /// Construct an instance backed by a real provider and model config.
+  /// Optionally accepts [providerConfig] for provider-level params to merge.
   ChatService({
     required BaseChatProvider provider,
     required ModelConfig modelConfig,
+    ProviderConfigItem? providerConfig,
   })  : _provider = provider,
-        _modelConfig = modelConfig;
+        _modelConfig = modelConfig,
+        _providerConfig = providerConfig;
 
   /// Whether there's an active streaming session (instance or static).
   bool get isStreamActive => _controller != null && !_controller!.isClosed;
@@ -692,11 +699,13 @@ class ChatService {
   }
 
   /// Build extraParams map from typeConfig and customParams for the API call.
-  /// Merges model-level standard LLM params + [ProviderParam]s with
-  /// assistant-level [CustomParameter]s.
-  /// Assistant-level params take precedence when names collide.
+  /// Merges provider-level and model-level standard LLM params + [ProviderParam]s
+  /// with assistant-level [CustomParameter]s.
+  /// Rule: ALL enabled params from provider AND model are used.
+  ///       If duplicate names, model's value wins.
+  /// Assistant-level params take final precedence.
   /// When [reasoning] is true, also includes user-configured reasoning params
-  /// from the model config (sent only when reasoning is enabled).
+  /// from both provider and model configs (sent only when reasoning is enabled).
   Map<String, dynamic> _buildExtraParams({
     bool reasoning = false,
     String reasoningEffort = 'medium',
@@ -704,7 +713,89 @@ class ChatService {
   }) {
     final result = <String, dynamic>{};
 
-    // Standard LLM parameters from typeConfig (set via LlmModelConfigPage)
+    // 1. Provider-level params first (defaults)
+    if (_providerConfig != null) {
+      final pc = _providerConfig!.typeConfig;
+      // Top P
+      if (pc.containsKey('topP')) {
+        result['top_p'] = (pc['topP'] as num).toDouble();
+      }
+      // Frequency penalty
+      if (pc.containsKey('frequencyPenalty')) {
+        result['frequency_penalty'] =
+            (pc['frequencyPenalty'] as num).toDouble();
+      }
+      // Presence penalty
+      if (pc.containsKey('presencePenalty')) {
+        result['presence_penalty'] =
+            (pc['presencePenalty'] as num).toDouble();
+      }
+      // Seed
+      if (pc.containsKey('seed')) {
+        result['seed'] = (pc['seed'] as num).toInt();
+      }
+
+      // Provider-level custom params
+      for (final cp in _providerConfig!.customParams) {
+        result[cp.paramName] = switch (cp.type) {
+          'number' => double.tryParse(cp.defaultValue) ?? 0.0,
+          'boolean' => cp.defaultValue.toLowerCase() == 'true',
+          'json' => parseJsonValue(cp.defaultValue),
+          'string' || _ => cp.defaultValue,
+        };
+      }
+
+      // Provider-level reasoning params (when reasoning enabled)
+      if (reasoning) {
+        ReasoningParam? toggleParam;
+        final extraParams = <ReasoningParam>[];
+        for (final rp in _providerConfig!.reasoningParams) {
+          if (rp.isReasoningToggle) {
+            toggleParam = rp;
+          } else {
+            extraParams.add(rp);
+          }
+        }
+
+        // Reasoning toggle
+        if (toggleParam != null && toggleParam.isFilledToggle) {
+          final toggleValue = reasoning
+              ? (toggleParam.onValue ?? 'true')
+              : (toggleParam.offValue ?? 'false');
+          setNestedParam(
+            result,
+            toggleParam.paramName,
+            parseReasoningValue(toggleValue, toggleParam.type),
+          );
+        }
+
+        // Additional reasoning params (inference intensity etc.)
+        for (final rp in extraParams) {
+          if (!rp.enabled) continue;
+          if (rp.paramName.trim().isEmpty) continue;
+          // If options are empty, send the param name itself as the value
+          // (provider allows name-only inference intensity)
+          if (rp.options.isEmpty) {
+            setNestedParam(
+              result,
+              rp.paramName,
+              rp.paramName,
+            );
+          } else {
+            final selectedValue = reasoningParamValues[rp.paramName];
+            if (selectedValue != null && selectedValue.isNotEmpty) {
+              setNestedParam(
+                result,
+                rp.paramName,
+                parseReasoningValue(selectedValue, rp.type),
+              );
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Model-level params (override provider params on name collision)
     final tc = _modelConfig!.typeConfig;
     // Top P
     if (tc.containsKey('topP')) {
@@ -724,8 +815,7 @@ class ChatService {
     }
 
     // Model-level custom params
-    final modelParams = _modelConfig!.customParams;
-    for (final cp in modelParams) {
+    for (final cp in _modelConfig!.customParams) {
       result[cp.paramName] = switch (cp.type) {
         'number' => double.tryParse(cp.defaultValue) ?? 0.0,
         'boolean' => cp.defaultValue.toLowerCase() == 'true',
@@ -810,24 +900,6 @@ class ChatService {
             parseReasoningValue(selectedValue, rp.type),
           );
         }
-      }
-    }
-
-    // Assistant-level settings override model/reasoning params when enableXxx is true.
-    // These are applied last so they take final precedence.
-    if (_assistantSettings != null) {
-      final as = _assistantSettings!;
-      if (as.enableTopP) {
-        result['top_p'] = as.topP;
-      }
-      if (as.enableFrequencyPenalty) {
-        result['frequency_penalty'] = as.frequencyPenalty;
-      }
-      if (as.enablePresencePenalty) {
-        result['presence_penalty'] = as.presencePenalty;
-      }
-      if (as.enableSeed && as.seed != null) {
-        result['seed'] = as.seed;
       }
     }
 

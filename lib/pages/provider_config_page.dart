@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/provider_config.dart';
 import 'provider_config_detail_page.dart';
 import 'mcp_server_config_page.dart';
+import 'provider_settings_panel.dart';
 
 class ProviderConfigPage extends ConsumerStatefulWidget {
   final String entryId;
@@ -142,6 +143,31 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     setState(() {});
   }
 
+  Future<void> _openSettingsPanel(int configIndex) async {
+    final entry = _entry;
+    if (entry == null || configIndex < 0 || configIndex >= entry.configs.length) return;
+
+    final result = await showProviderSettingsPanel(
+      context: context,
+      config: entry.configs[configIndex],
+      providerType: entry.type,
+    );
+
+    if (result != null && mounted) {
+      var configs = entry.configs.map((c) => c.copy()).toList();
+      configs[configIndex] = result;
+      final updated = ProviderEntry(
+        id: entry.id,
+        type: entry.type,
+        name: entry.name,
+        configs: configs,
+      );
+      await ref.read(providerEntriesProvider.notifier).update(entry.id, updated);
+      if (!mounted) return;
+      setState(() {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final entry = _entry;
@@ -269,6 +295,11 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          IconButton(
+                            icon: const Icon(Icons.settings, color: Colors.grey),
+                            onPressed: () => _openSettingsPanel(i),
+                            tooltip: '设置',
+                          ),
                           IconButton(
                             icon: const Icon(Icons.delete, color: Colors.red),
                             onPressed: () => _deleteConfig(i),
