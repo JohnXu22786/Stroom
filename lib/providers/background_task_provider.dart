@@ -36,11 +36,14 @@ enum BackgroundTaskType {
   List<String> get stepLabels {
     switch (this) {
       case BackgroundTaskType.ocr:
+        // OCR: single request with all images
         return ['连接服务器', '上传图片', '识别中', '接收结果', '保存文件'];
       case BackgroundTaskType.asr:
-        return ['连接服务器', '上传音频', '转写中', '接收结果', '保存文件'];
+        // ASR: one request per file
+        return ['处理音频文件中...'];
       case BackgroundTaskType.audioSeparation:
-        return ['连接服务器', '上传音频', '分离中', '接收结果', '保存文件'];
+        // Audio Separation: local processing only, no API
+        return ['正在分离音频...'];
     }
   }
 }
@@ -116,6 +119,10 @@ class BackgroundTask {
   final List<BgTaskStep> steps; // Step chain for UI display
   final String?
       downloadedFilePath; // File path for "open file" button (like CatCatch)
+  final Map<String, dynamic>?
+      rawRequest; // Raw request data for error diagnostics
+  final Map<String, dynamic>?
+      rawResponse; // Raw response data for error diagnostics
 
   BackgroundTask({
     required this.id,
@@ -129,6 +136,8 @@ class BackgroundTask {
     this.statusChangedAt,
     this.steps = const [],
     this.downloadedFilePath,
+    this.rawRequest,
+    this.rawResponse,
   }) : createdAt = createdAt ?? DateTime.now();
 
   BackgroundTask copyWith({
@@ -139,8 +148,12 @@ class BackgroundTask {
     DateTime? statusChangedAt,
     List<BgTaskStep>? steps,
     String? downloadedFilePath,
+    Map<String, dynamic>? rawRequest,
+    Map<String, dynamic>? rawResponse,
     bool clearError = false,
     bool clearDownloadedFilePath = false,
+    bool clearRawRequest = false,
+    bool clearRawResponse = false,
   }) {
     final newStatus = status ?? this.status;
     final newStatusChangedAt = statusChangedAt ??
@@ -161,6 +174,12 @@ class BackgroundTask {
       downloadedFilePath: clearDownloadedFilePath
           ? null
           : (downloadedFilePath ?? this.downloadedFilePath),
+      rawRequest: clearRawRequest
+          ? null
+          : (rawRequest ?? this.rawRequest),
+      rawResponse: clearRawResponse
+          ? null
+          : (rawResponse ?? this.rawResponse),
     );
   }
 
@@ -177,6 +196,8 @@ class BackgroundTask {
         'steps': steps.map((s) => s.toMap()).toList(),
         if (downloadedFilePath != null)
           'downloadedFilePath': downloadedFilePath,
+        if (rawRequest != null) 'rawRequest': rawRequest,
+        if (rawResponse != null) 'rawResponse': rawResponse,
       };
 
   factory BackgroundTask.fromMap(Map<String, dynamic> map) => BackgroundTask(
@@ -199,6 +220,8 @@ class BackgroundTask {
                 .toList() ??
             [],
         downloadedFilePath: map['downloadedFilePath'] as String?,
+        rawRequest: map['rawRequest'] as Map<String, dynamic>?,
+        rawResponse: map['rawResponse'] as Map<String, dynamic>?,
       );
 }
 
@@ -240,8 +263,14 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   }
 
   /// Mark a task as failed with an optional error message.
-  void failTask(String taskId, {String? error}) {
-    _updateTask(taskId, TaskStatus.failed, error: error);
+  void failTask(String taskId,
+      {String? error,
+      Map<String, dynamic>? rawRequest,
+      Map<String, dynamic>? rawResponse}) {
+    _updateTask(taskId, TaskStatus.failed,
+        error: error,
+        rawRequest: rawRequest,
+        rawResponse: rawResponse);
   }
 
   /// Set the result text for a task (OCR extracted text, ASR transcription, etc.).
@@ -260,6 +289,22 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     state = state.map((t) {
       if (t.id != taskId) return t;
       return t.copyWith(steps: steps);
+    }).toList();
+    _persistTasks();
+  }
+
+  /// Set raw request/response diagnostic data for error viewing.
+  void setRawDiagnostics(
+    String taskId, {
+    Map<String, dynamic>? rawRequest,
+    Map<String, dynamic>? rawResponse,
+  }) {
+    state = state.map((t) {
+      if (t.id != taskId) return t;
+      return t.copyWith(
+        rawRequest: rawRequest,
+        rawResponse: rawResponse,
+      );
     }).toList();
     _persistTasks();
   }
@@ -307,6 +352,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     TaskStatus status, {
     String? error,
     String? downloadedFilePath,
+    Map<String, dynamic>? rawRequest,
+    Map<String, dynamic>? rawResponse,
   }) {
     BackgroundTask? oldTask;
     state = state.map((t) {
@@ -318,6 +365,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         error: error,
         clearError: shouldClearError,
         downloadedFilePath: downloadedFilePath,
+        rawRequest: rawRequest,
+        rawResponse: rawResponse,
         completedAt:
             status == TaskStatus.completed || status == TaskStatus.failed
                 ? DateTime.now()

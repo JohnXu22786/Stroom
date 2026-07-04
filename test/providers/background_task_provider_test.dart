@@ -333,8 +333,8 @@ void main() {
       // The task we called setSteps on (id1, index 1 since newest first) has 1 custom step
       expect(notifier.state[1].steps.length, 1,
           reason: 'OCR task should have 1 custom step');
-      // The other task (id2, index 0) still has its default 5 steps
-      expect(notifier.state[0].steps.length, 5,
+      // The other task (id2, index 0) still has its default 1 step
+      expect(notifier.state[0].steps.length, 1,
           reason: 'ASR task should still have default steps');
     });
 
@@ -431,6 +431,76 @@ void main() {
       expect(notifier.state.length, 1);
       notifier.completeTask(id);
       expect(notifier.state.length, 1, reason: '已完成任务应保留在列表中');
+    });
+
+    // ==================================================================
+    // Step count tests (after step label changes)
+    // ==================================================================
+
+    test('ASR task has 1 default step (single processing step)', () {
+      final notifier = BackgroundTaskNotifier();
+      notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR');
+      expect(notifier.state[0].steps.length, 1,
+          reason: 'ASR should have 1 step (处理音频文件中...)');
+      expect(notifier.state[0].steps[0].label, '处理音频文件中...');
+    });
+
+    test('AudioSeparation task has 1 default step (single processing step)', () {
+      final notifier = BackgroundTaskNotifier();
+      notifier.addTask(
+          type: BackgroundTaskType.audioSeparation, title: '音频分离');
+      expect(notifier.state[0].steps.length, 1,
+          reason: 'AudioSeparation should have 1 step (正在分离音频...)');
+      expect(notifier.state[0].steps[0].label, '正在分离音频...');
+    });
+
+    // ==================================================================
+    // Raw diagnostics (rawRequest/rawResponse) tests
+    // ==================================================================
+
+    test('toMap/fromMap preserves rawRequest and rawResponse', () {
+      const rawRequest = {'url': 'https://api.example.com/ocr', 'body': 'test'};
+      const rawResponse = {
+        'statusCode': 400,
+        'data': {'error': 'bad request'}
+      };
+      final task = BackgroundTask(
+        id: 'diag-id',
+        type: BackgroundTaskType.ocr,
+        title: '诊断测试',
+        status: TaskStatus.failed,
+        error: '识别失败',
+        rawRequest: rawRequest,
+        rawResponse: rawResponse,
+      );
+
+      final map = task.toMap();
+      final restored = BackgroundTask.fromMap(map);
+
+      expect(restored.rawRequest, rawRequest);
+      expect(restored.rawResponse, rawResponse);
+      expect(restored.error, '识别失败');
+    });
+
+    test('failTask with rawRequest/rawResponse stores diagnostics', () {
+      final notifier = BackgroundTaskNotifier();
+      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR诊断');
+
+      const rawRequest = {'url': 'https://api.example.com/ocr', 'body': 'test'};
+      const rawResponse = {
+        'statusCode': 500,
+        'data': {'error': 'server error'}
+      };
+
+      notifier.failTask(id,
+          error: 'OCR失败',
+          rawRequest: rawRequest,
+          rawResponse: rawResponse);
+
+      expect(notifier.state[0].status, TaskStatus.failed);
+      expect(notifier.state[0].error, 'OCR失败');
+      expect(notifier.state[0].rawRequest, rawRequest);
+      expect(notifier.state[0].rawResponse, rawResponse);
     });
   });
 }
