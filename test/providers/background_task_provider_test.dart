@@ -333,8 +333,8 @@ void main() {
       // The task we called setSteps on (id1, index 1 since newest first) has 1 custom step
       expect(notifier.state[1].steps.length, 1,
           reason: 'OCR task should have 1 custom step');
-      // The other task (id2, index 0) still has its default 1 step
-      expect(notifier.state[0].steps.length, 1,
+      // The other task (id2, index 0) still has its default 5 steps
+      expect(notifier.state[0].steps.length, 5,
           reason: 'ASR task should still have default steps');
     });
 
@@ -437,12 +437,14 @@ void main() {
     // Step count tests (after step label changes)
     // ==================================================================
 
-    test('ASR task has 1 default step (single processing step)', () {
+    test('ASR task has 5 default steps (connection, upload, transcribe, receive, save)', () {
       final notifier = BackgroundTaskNotifier();
       notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR');
-      expect(notifier.state[0].steps.length, 1,
-          reason: 'ASR should have 1 step (处理音频文件中...)');
-      expect(notifier.state[0].steps[0].label, '处理音频文件中...');
+      expect(notifier.state[0].steps.length, 5,
+          reason: 'ASR should have 5 default steps');
+      expect(notifier.state[0].steps[0].label, '连接服务器');
+      expect(notifier.state[0].steps[2].label, '转写中');
+      expect(notifier.state[0].steps[4].label, '保存文件');
     });
 
     test('AudioSeparation task has 1 default step (single processing step)',
