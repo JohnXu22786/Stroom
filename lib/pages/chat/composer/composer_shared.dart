@@ -342,42 +342,24 @@ class ModelNameChip extends StatelessWidget {
           ),
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.max,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.smart_toy_outlined,
                 size: 16,
                 color: isDisabled ? Colors.grey.withOpacity(0.4) : color),
             const SizedBox(width: 4),
-            // Flexible + LayoutBuilder ensures the text fits within the
-            // remaining space after icon and padding, regardless of the
-            // chip's overall width constraint from the parent Wrap.
             Flexible(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final availableWidth = constraints.maxWidth;
-                  final style = TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: isDisabled
-                        ? Colors.grey.withOpacity(0.4)
-                        : cs.onSurface,
-                  );
-                  final painter = TextPainter(
-                    text: TextSpan(text: label, style: style),
-                    textDirection: Directionality.of(context),
-                  )..layout();
-
-                  final displayText = painter.width <= availableWidth
-                      ? label
-                      : truncateDisplayName(label, availableWidth, painter);
-
-                  return Text(
-                    displayText,
-                    style: style,
-                    maxLines: 1,
-                    overflow: TextOverflow.clip,
-                  );
-                },
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: isDisabled
+                      ? Colors.grey.withOpacity(0.4)
+                      : cs.onSurface,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],

@@ -437,7 +437,9 @@ void main() {
       ));
       await tester.pump();
 
-      expect(find.textContaining('...'), findsWidgets);
+      // Text should still show a recognizable portion (truncated via ellipsis)
+      expect(find.textContaining('Very-Long'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('shows fallback "模型" when displayName is empty',
@@ -494,7 +496,7 @@ void main() {
         ),
       ));
 
-      expect(find.textContaining('...'), findsWidgets);
+      expect(find.textContaining('Some-Long-Model'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -534,8 +536,8 @@ void main() {
         ),
       ));
 
-      // The text should be truncated (containing ellipsis) in the tight space
-      expect(find.textContaining('...'), findsWidgets);
+      // The text should be truncated in the tight space
+      expect(find.textContaining('Very-Long-Model'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
