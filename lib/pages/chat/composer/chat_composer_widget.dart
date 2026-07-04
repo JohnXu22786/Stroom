@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,7 +12,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/providers/provider_config.dart' show ReasoningParam;
 import 'package:stroom/services/attachment_storage.dart';
-import 'package:stroom/widgets/gallery_choice_dialog.dart';
 import 'package:stroom/widgets/file_preview.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/widgets/chat_attachment_panel.dart';
@@ -487,41 +487,11 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     showChatAttachmentPanel(
       context: context,
       onPickFromCamera: _pickFromCamera,
-      onPickFromGallery: _showGalleryPicker,
+      // 设备相册直接打开系统相册（不再弹出中间选择对话框）
+      onPickFromGallery: _pickFromGallery,
       onPickFromFilePicker: _pickFromFilePicker,
       onPickFromAppFiles: _pickFromAppFiles,
     );
-  }
-
-  void _showGalleryPicker() {
-    showGalleryChoiceDialog(context).then((result) {
-      if (result == null) return;
-      if (result.choice == GalleryChoice.system) {
-        _pickFromGallery();
-      } else {
-        _pickFromAppAlbum();
-      }
-    });
-  }
-
-  /// Pick from app's internal album (ImageManifest) — legacy single-type picker.
-  Future<void> _pickFromAppAlbum() async {
-    try {
-      final result = await showAppAlbumPickerDialog(context);
-      if (result == null || result.isEmpty) return;
-      for (final entry in result) {
-        await _addPendingAttachment(entry.key, entry.value);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('导入失败: $e'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    }
   }
 
   /// Pick from app internal files (images, documents, etc.).
@@ -565,6 +535,13 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     }
   }
 
+  /// 从设备相册选取图片（系统 API）
+  ///
+  /// 支持多选图片，自动适配不同平台：
+  /// - Android/iOS: 原生系统相册
+  /// - Web (桌面/移动): 浏览器文件选择器（image/*）
+  /// - 桌面原生: 系统文件对话框
+  /// 不支持时显示清晰的错误信息。
   Future<void> _pickFromGallery() async {
     try {
       final picker = ImagePicker();
@@ -574,18 +551,52 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         final bytes = await file.readAsBytes();
         await _addPendingAttachment(file.name, bytes);
       }
-    } catch (e) {
+    } on UnsupportedError catch (e) {
+      // 平台不支持 ImagePicker（极少数情况）
       if (mounted) {
+        final platform = kIsWeb ? 'Web浏览器' : '当前设备';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('导入失败: $e'),
-            duration: const Duration(seconds: 2),
+            content: Text('$platform 不支持设备相册功能: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        final errorMsg = e.toString();
+        // 提供更友好的平台相关错误提示
+        String userHint;
+        if (errorMsg.contains('permission') ||
+            errorMsg.contains('denied') ||
+            errorMsg.contains('权限')) {
+          userHint = '请授予相册访问权限后重试';
+        } else if (errorMsg.contains('cancelled') ||
+            errorMsg.contains('cancel')) {
+          return; // 用户取消操作，不显示错误
+        } else if (kIsWeb &&
+            (errorMsg.contains('NotAllowedError') ||
+                errorMsg.contains('not allowed'))) {
+          userHint = '请在浏览器设置中允许此网站访问文件';
+        } else {
+          userHint = '请检查设备是否支持相册选择功能';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('导入图片失败: $e\n$userHint'),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
     }
   }
 
+  /// 从设备文件系统选取文件（系统 API）
+  ///
+  /// 支持所有平台，自动适配不同操作系统：
+  /// - Android/iOS: 系统文件选择器
+  /// - Web (桌面/移动): 浏览器文件选择器
+  /// - 桌面原生: 原生系统文件对话框
   Future<void> _pickFromFilePicker() async {
     try {
       final result = await FilePicker.pickFiles(
@@ -597,12 +608,38 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
       final bytes = file.bytes;
       if (bytes == null || bytes.isEmpty) return;
       await _addPendingAttachment(file.name, bytes);
-    } catch (e) {
+    } on UnsupportedError catch (e) {
       if (mounted) {
+        final platform = kIsWeb ? 'Web浏览器' : '当前设备';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('导入失败: $e'),
-            duration: const Duration(seconds: 2),
+            content: Text('$platform 不支持文件选择功能: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        final errorMsg = e.toString();
+        String userHint;
+        if (errorMsg.contains('permission') ||
+            errorMsg.contains('denied') ||
+            errorMsg.contains('权限')) {
+          userHint = '请授予文件访问权限后重试';
+        } else if (errorMsg.contains('cancelled') ||
+            errorMsg.contains('cancel')) {
+          return; // 用户取消操作，不显示错误
+        } else if (kIsWeb &&
+            (errorMsg.contains('NotAllowedError') ||
+                errorMsg.contains('not allowed'))) {
+          userHint = '请在浏览器设置中允许此网站访问文件';
+        } else {
+          userHint = '请确保设备支持文件选择功能';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('导入文件失败: $e\n$userHint'),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
