@@ -142,7 +142,7 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
     });
   }
 
-  /// 字号调节弹窗（数字在上，滑块在下）
+  /// 字号调节弹窗（数字在上，滑块在下，支持恢复默认）
   void _showFontSizePopup() {
     double temp = _fontSize;
     showDialog(
@@ -152,7 +152,7 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
           title: const Text('字号调整'),
           content: SizedBox(
             width: 260,
-            height: 80,
+            height: 100,
             child: Column(
               children: [
                 Text(
@@ -167,7 +167,7 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
                     value: temp,
                     min: _minFontSize,
                     max: _maxFontSize,
-                    divisions: ((_maxFontSize - _minFontSize) / 2).toInt(),
+                    divisions: (_maxFontSize - _minFontSize).toInt(),
                     label: '${temp.toInt()}',
                     onChanged: (v) {
                       temp = v.roundToDouble();
@@ -180,6 +180,14 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
             ),
           ),
           actions: [
+            TextButton(
+              onPressed: () {
+                temp = 14;
+                setDialogState(() {});
+                setState(() => _fontSize = temp);
+              },
+              child: const Text('恢复默认'),
+            ),
             TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('关闭'),
@@ -280,8 +288,14 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
         ),
       ];
     }
-    // 查看模式：编辑按钮（仅图标）+ mmd格式额外显示图表编辑按钮
+    // 查看模式：字号 + 编辑按钮（仅图标）+ mmd格式额外显示图表编辑按钮
     return [
+      // 字号调整按钮（查看模式下也可用）
+      IconButton(
+        icon: const Icon(Icons.format_size, size: 20),
+        tooltip: '字号调整',
+        onPressed: _showFontSizePopup,
+      ),
       if (widget.file.format == 'mmd')
         IconButton(
           icon: const Icon(Icons.account_tree, size: 20),
