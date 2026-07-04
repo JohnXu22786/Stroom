@@ -92,6 +92,11 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         ),
       );
 
+      // 等待一个微任务让对话框渲染完毕，然后再开始耗时的导出操作
+      // 防止对话框还未显示就进入耗时操作导致的"冻结感"
+      await Future<void>.delayed(Duration.zero);
+      if (!mounted) return;
+
       // 传递进度回调
       await BackupService.exportBackup(
         context,
