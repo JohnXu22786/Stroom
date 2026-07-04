@@ -122,9 +122,7 @@ class OcrService {
                   'Authorization': 'Bearer ${config.apiKey}',
                 ...openRouterAppHeaders,
               },
-              connectTimeout: const Duration(seconds: 30),
-              receiveTimeout: const Duration(seconds: 120),
-              sendTimeout: const Duration(seconds: 60),
+              // No timeouts — OCR tasks may take a long time
             ));
 
   /// Dio default headers, exposed for testing.

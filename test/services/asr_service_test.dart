@@ -119,34 +119,31 @@ void main() {
         expect(service.config.model, equals('whisper-1'));
       });
 
-      test('Dio has sendTimeout configured', () {
+      test('Dio has no sendTimeout (no timeout)', () {
         const config = AsrConfig(
           apiKey: 'test-key',
           host: 'https://api.openai.com/v1',
         );
         final service = AsrService(config: config);
-        expect(service.sendTimeout, isNotNull);
-        expect(service.sendTimeout!.inSeconds, equals(60));
+        expect(service.sendTimeout, isNull);
       });
 
-      test('Dio has connectTimeout configured', () {
+      test('Dio has no connectTimeout (no timeout)', () {
         const config = AsrConfig(
           apiKey: 'test-key',
           host: 'https://api.openai.com/v1',
         );
         final service = AsrService(config: config);
-        expect(service.connectTimeout, isNotNull);
-        expect(service.connectTimeout!.inSeconds, equals(30));
+        expect(service.connectTimeout, isNull);
       });
 
-      test('Dio has receiveTimeout configured', () {
+      test('Dio has no receiveTimeout (no timeout)', () {
         const config = AsrConfig(
           apiKey: 'test-key',
           host: 'https://api.openai.com/v1',
         );
         final service = AsrService(config: config);
-        expect(service.receiveTimeout, isNotNull);
-        expect(service.receiveTimeout!.inSeconds, equals(120));
+        expect(service.receiveTimeout, isNull);
       });
 
       test('throws on empty host', () async {
