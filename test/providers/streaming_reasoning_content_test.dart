@@ -144,37 +144,51 @@ void main() {
       final chunks = [
         {
           'choices': [
-            {'delta': {'content': '', 'role': 'assistant'}},
+            {
+              'delta': {'content': '', 'role': 'assistant'}
+            },
           ],
         },
         {
           'choices': [
-            {'delta': {'reasoning_content': 'Step 1: '}},
+            {
+              'delta': {'reasoning_content': 'Step 1: '}
+            },
           ],
         },
         {
           'choices': [
-            {'delta': {'reasoning_content': 'analyze'}},
+            {
+              'delta': {'reasoning_content': 'analyze'}
+            },
           ],
         },
         {
           'choices': [
-            {'delta': {'reasoning_content': ' data.'}},
+            {
+              'delta': {'reasoning_content': ' data.'}
+            },
           ],
         },
         {
           'choices': [
-            {'delta': {'content': 'Sure!'}},
+            {
+              'delta': {'content': 'Sure!'}
+            },
           ],
         },
         {
           'choices': [
-            {'delta': {'content': ' Here is'}},
+            {
+              'delta': {'content': ' Here is'}
+            },
           ],
         },
         {
           'choices': [
-            {'delta': {'content': ' the answer.'}},
+            {
+              'delta': {'content': ' the answer.'}
+            },
           ],
         },
       ];
@@ -203,8 +217,7 @@ void main() {
       expect(allEvents[5].text, ' the answer.');
     });
 
-    test(
-        'reasoning content sections are properly accumulated across chunks',
+    test('reasoning content sections are properly accumulated across chunks',
         () {
       // Simulate how the ChatService accumulates reasoning content
       String reasoningBuffer = '';
@@ -244,9 +257,11 @@ void main() {
       expect(textEvents.length, 2);
 
       // After the first text event arrives, reasoning is complete
-      final reasoningComplete = textEvents.isNotEmpty && reasoningBuffer.isNotEmpty;
+      final reasoningComplete =
+          textEvents.isNotEmpty && reasoningBuffer.isNotEmpty;
       expect(reasoningComplete, isTrue,
-          reason: 'When text events arrive after reasoning, reasoning should be complete');
+          reason:
+              'When text events arrive after reasoning, reasoning should be complete');
     });
 
     test('no reasoning section shown when only text content is streamed', () {
@@ -270,7 +285,8 @@ void main() {
 
       expect(allEvents.length, 2);
       expect(allEvents.every((e) => e.isReasoning == false), isTrue,
-          reason: 'No reasoning events should be present for text-only response');
+          reason:
+              'No reasoning events should be present for text-only response');
     });
   });
 }
