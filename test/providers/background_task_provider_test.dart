@@ -437,7 +437,9 @@ void main() {
     // Step count tests (after step label changes)
     // ==================================================================
 
-    test('ASR task has 5 default steps (connection, upload, transcribe, receive, save)', () {
+    test(
+        'ASR task has 5 default steps (connection, upload, transcribe, receive, save)',
+        () {
       final notifier = BackgroundTaskNotifier();
       notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR');
       expect(notifier.state[0].steps.length, 5,

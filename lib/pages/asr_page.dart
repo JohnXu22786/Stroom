@@ -963,7 +963,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             'statusCode': service.lastResponseStatusCode,
           if (service.lastResponseHeaders != null)
             'headers': service.lastResponseHeaders,
-          if (service.lastResponseData != null) 'data': service.lastResponseData,
+          if (service.lastResponseData != null)
+            'data': service.lastResponseData,
         };
         bgNotifier.failTask(taskId,
             error: '音频转写失败: $e',
