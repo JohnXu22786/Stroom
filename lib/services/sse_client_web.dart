@@ -10,6 +10,7 @@ Stream<String> sseStream(
   Map<String, String> headers,
   String body, {
   CancelToken? cancelToken,
+
   /// Callback invoked with the initial HTTP response headers, if available.
   void Function(Map<String, List<String>> headers)? onResponseHeaders,
 }) async* {
