@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -76,30 +75,6 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
         return _buildErrorWidget('Cannot load SVG');
       }
       return _buildSvgPage(bytes);
-    }
-
-    final path = await ImageManifest.readFilePath(record.storagePath);
-    if (path != null && File(path).existsSync()) {
-      return ExtendedImage.file(
-        File(path),
-        fit: BoxFit.contain,
-        mode: ExtendedImageMode.gesture,
-        initGestureConfigHandler: (_) => GestureConfig(
-          minScale: 0.5,
-          maxScale: 6.0,
-          animationMinScale: 0.5,
-          animationMaxScale: 6.0,
-          initialScale: 1.0,
-          cacheGesture: false,
-          inPageView: true,
-        ),
-        loadStateChanged: (state) {
-          if (state.extendedImageLoadState == LoadState.failed) {
-            return _buildErrorWidget('Cannot load image');
-          }
-          return null;
-        },
-      );
     }
 
     final bytes = await _readImageBytes(record);
