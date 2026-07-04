@@ -2,12 +2,15 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:extended_image/extended_image.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 /// Full-screen image preview dialog with close and edit buttons.
 ///
 /// Uses [ExtendedImage] (from the `extended_image` package) for built-in
 /// pinch-to-zoom, pan, and double-tap zoom gestures — no need for
 /// [InteractiveViewer] or a separate image cache.
+///
+/// For SVG images, uses [SvgPicture.memory] with [InteractiveViewer].
 ///
 /// Parameters:
 ///   [imageData]   — The image bytes to display. If null or empty,
@@ -23,6 +26,8 @@ class ImagePreviewDialog extends StatelessWidget {
     required this.fileName,
   });
 
+  bool get _isSvg => fileName.toLowerCase().endsWith('.svg');
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -31,8 +36,7 @@ class ImagePreviewDialog extends StatelessWidget {
       child: Stack(
         children: [
           Center(child: _buildContent(context)),
-          // Close button (top left) — with semi-transparent circular
-          // background so it's visible regardless of image color.
+          // Close button (top left)
           Positioned(
             top: MediaQuery.of(context).padding.top + 8,
             left: 8,
@@ -47,23 +51,23 @@ class ImagePreviewDialog extends StatelessWidget {
               ),
             ),
           ),
-          // Edit button (top right) — with semi-transparent circular
-          // background so it's visible regardless of image color.
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 8,
-            right: 8,
-            child: Container(
-              decoration: const BoxDecoration(
-                color: Color(0x66000000),
-                shape: BoxShape.circle,
-              ),
-              child: IconButton(
-                icon: const Icon(Icons.edit, color: Colors.white, size: 28),
-                tooltip: '编辑图片',
-                onPressed: () => Navigator.pop(context, true),
+          // Edit button (top right) — only for non-SVG
+          if (!_isSvg)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 8,
+              right: 8,
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Color(0x66000000),
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.edit, color: Colors.white, size: 28),
+                  tooltip: '编辑图片',
+                  onPressed: () => Navigator.pop(context, true),
+                ),
               ),
             ),
-          ),
           // Bottom file-name
           Positioned(
             bottom: 16,
@@ -97,8 +101,21 @@ class ImagePreviewDialog extends StatelessWidget {
       );
     }
 
-    // Use ExtendedImage.memory with gesture mode for built-in
-    // pinch-to-zoom, pan, and double-tap zoom.
+    if (_isSvg) {
+      return InteractiveViewer(
+        minScale: 0.5,
+        maxScale: 4.0,
+        child: Center(
+          child: SvgPicture.memory(
+            data,
+            fit: BoxFit.contain,
+            placeholderBuilder: (_) => const SizedBox(),
+          ),
+        ),
+      );
+    }
+
+    // For non-SVG: use ExtendedImage with gesture mode
     return ExtendedImage.memory(
       data,
       fit: BoxFit.contain,
@@ -124,7 +141,7 @@ class ImagePreviewDialog extends StatelessWidget {
             ),
           );
         }
-        return null; // Use default rendering
+        return null;
       },
     );
   }
