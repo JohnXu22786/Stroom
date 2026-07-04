@@ -890,6 +890,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── Pending attachments row (reorderable) ──
             if (hasAttachments)
