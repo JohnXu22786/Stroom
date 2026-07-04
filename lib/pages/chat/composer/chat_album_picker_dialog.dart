@@ -1,9 +1,13 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:stroom/providers/image_provider.dart';
 import 'package:stroom/utils/folder_path_utils.dart';
 import 'package:stroom/utils/image_manifest.dart';
+import 'package:stroom/widgets/image_preview_dialog.dart';
+import 'package:stroom/pages/extended_image_editor_page.dart';
 import 'album_picker_shared.dart';
 
 /// Shows a dialog for selecting images from the app's internal album.
@@ -39,10 +43,34 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   // 多选状态: key = recordId, value = (fileName, bytes)
   final Map<String, MapEntry<String, Uint8List>> _selectedItems = {};
 
+  /// Track temp file paths created during edit for cleanup on dialog close.
+  final List<String> _tempEditFiles = [];
+
   @override
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _cleanupTempFiles();
+    super.dispose();
+  }
+
+  /// Clean up any temp edit files written to the cache directory.
+  Future<void> _cleanupTempFiles() async {
+    for (final path in _tempEditFiles) {
+      try {
+        final file = File(path);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (_) {
+        // Non-critical cleanup
+      }
+    }
+    _tempEditFiles.clear();
   }
 
   Future<void> _loadData() async {
@@ -118,6 +146,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   }
 
   void _clearSelection() {
+    _cleanupTempFiles();
     setState(() => _selectedItems.clear());
   }
 
@@ -430,7 +459,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
 
     return Container(
       key: const Key('album_picker_preview_bar'),
-      height: 100,
+      height: 106,
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
         border: Border(
@@ -466,6 +495,8 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                   onRemove: () {
                     setState(() => _selectedItems.remove(mapEntry.key));
                   },
+                  onTap: () =>
+                      _onPreviewChipTap(mapEntry.key, entry.key, entry.value),
                 );
               },
             ),
@@ -473,6 +504,56 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
         ],
       ),
     );
+  }
+
+  /// Handle tap on a preview chip: show fullscreen preview with edit.
+  /// If the user edits the image, the edited bytes are saved to temp cache
+  /// and the selected item is updated in memory (original file is NOT overwritten).
+  Future<void> _onPreviewChipTap(
+    String recordKey,
+    String fileName,
+    Uint8List imageBytes,
+  ) async {
+    // Show the fullscreen preview dialog with edit button
+    final shouldEdit = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => ImagePreviewDialog(
+        imageData: imageBytes,
+        fileName: fileName,
+      ),
+    );
+
+    if (shouldEdit != true || !mounted) return;
+
+    // User tapped edit — open quick editor
+    final editedBytes = await Navigator.push<Uint8List>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ExtendedImageEditorPage(
+          imageBytes: imageBytes,
+          fileName: fileName,
+        ),
+      ),
+    );
+
+    if (editedBytes == null || !mounted) return;
+
+    // Save edited bytes to temp cache directory instead of overwriting original
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final tempFileName =
+          'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
+      final tempFile = File('${tempDir.path}/$tempFileName');
+      await tempFile.writeAsBytes(editedBytes);
+      _tempEditFiles.add(tempFile.path);
+    } catch (_) {
+      // Temp file save is best-effort; we keep the bytes in memory
+    }
+
+    // Update the selected item in-memory with edited bytes
+    setState(() {
+      _selectedItems[recordKey] = MapEntry(fileName, editedBytes);
+    });
   }
 
   String _formatSize(int bytes) {
