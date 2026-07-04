@@ -1,13 +1,17 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:extended_image/extended_image.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/file_record.dart';
 import 'package:stroom/utils/folder_path_utils.dart';
 import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/video_manifest.dart';
+import 'package:stroom/widgets/image_preview_dialog.dart';
+import 'package:stroom/pages/extended_image_editor_page.dart';
 import 'file_picker_shared.dart';
 
 // ====================================================================
@@ -53,6 +57,9 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   // Selected items across all tabs: key = "tabType:recordId", value = (fileName, bytes)
   final Map<String, MapEntry<String, Uint8List>> _selectedItems = {};
 
+  /// Track temp file paths created during edit for cleanup on dialog close.
+  final List<String> _tempEditFiles = [];
+
   // Tab data (loaded asynchronously)
   final Map<_FileTabType, _TabData> _tabData = {};
   final Map<_FileTabType, bool> _tabLoading = {};
@@ -92,8 +99,24 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
   @override
   void dispose() {
+    _cleanupTempFiles();
     _tabController.dispose();
     super.dispose();
+  }
+
+  /// Clean up any temp edit files written to the cache directory.
+  Future<void> _cleanupTempFiles() async {
+    for (final path in _tempEditFiles) {
+      try {
+        final file = File(path);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (_) {
+        // Non-critical cleanup
+      }
+    }
+    _tempEditFiles.clear();
   }
 
   Future<void> _loadTabData(_FileTabType type) async {
@@ -161,6 +184,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   }
 
   void _clearSelection() {
+    _cleanupTempFiles();
     setState(() {
       _selectedItems.clear();
     });
@@ -647,7 +671,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
     return Container(
       key: const Key('file_picker_preview_bar'),
-      height: 100,
+      height: 106,
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
         border: Border(
@@ -690,6 +714,9 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                       _selectedItems.remove(key);
                     });
                   },
+                  onTap: isImage
+                      ? () => _onPreviewImageTap(entry.key, entry.value)
+                      : null,
                 );
               },
             ),
@@ -697,5 +724,57 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
         ],
       ),
     );
+  }
+
+  /// Handle tap on an image preview chip: show fullscreen preview with edit.
+  /// Edited bytes are saved to temp cache (original file NOT overwritten).
+  Future<void> _onPreviewImageTap(String fileName, Uint8List imageBytes) async {
+    final shouldEdit = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => ImagePreviewDialog(
+        imageData: imageBytes,
+        fileName: fileName,
+      ),
+    );
+
+    if (shouldEdit != true || !mounted) return;
+
+    final editedBytes = await Navigator.push<Uint8List>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ExtendedImageEditorPage(
+          imageBytes: imageBytes,
+          fileName: fileName,
+        ),
+      ),
+    );
+
+    if (editedBytes == null || !mounted) return;
+
+    // Save edited bytes to temp cache directory (do NOT overwrite original)
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final tempFileName =
+          'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
+      final tempFile = File('${tempDir.path}/$tempFileName');
+      await tempFile.writeAsBytes(editedBytes);
+      _tempEditFiles.add(tempFile.path);
+    } catch (_) {
+      // Temp file save is best-effort; keep bytes in memory
+    }
+
+    // Update the selected item in-memory with edited bytes
+    try {
+      final key = _selectedItems.entries
+          .firstWhere((e) => e.value == MapEntry(fileName, imageBytes))
+          .key;
+      if (mounted) {
+        setState(() {
+          _selectedItems[key] = MapEntry(fileName, editedBytes);
+        });
+      }
+    } catch (_) {
+      // Item was removed while editor was open — silently ignore
+    }
   }
 }

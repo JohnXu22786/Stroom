@@ -87,70 +87,75 @@ class AlbumPreviewChip extends StatelessWidget {
   final String fileName;
   final Uint8List bytes;
   final VoidCallback onRemove;
+  final VoidCallback? onTap;
 
   const AlbumPreviewChip({
     required this.fileName,
     required this.bytes,
     required this.onRemove,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    return Container(
-      width: 72,
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            height: 72,
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: cs.outlineVariant, width: 0.5),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 72,
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              height: 72,
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: cs.outlineVariant, width: 0.5),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: ExtendedImage.memory(
+                bytes,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+                loadStateChanged: (state) {
+                  if (state.extendedImageLoadState == LoadState.failed) {
+                    return Icon(
+                      Icons.image,
+                      size: 24,
+                      color: cs.onSurfaceVariant,
+                    );
+                  }
+                  return null;
+                },
+              ),
             ),
-            clipBehavior: Clip.antiAlias,
-            child: ExtendedImage.memory(
-              bytes,
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
-              loadStateChanged: (state) {
-                if (state.extendedImageLoadState == LoadState.failed) {
-                  return Icon(
-                    Icons.image,
-                    size: 24,
-                    color: cs.onSurfaceVariant,
-                  );
-                }
-                return null;
-              },
-            ),
-          ),
-          // Remove button
-          Positioned(
-            top: -6,
-            right: -6,
-            child: GestureDetector(
-              onTap: onRemove,
-              child: Container(
-                width: 18,
-                height: 18,
-                decoration: BoxDecoration(
-                  color: cs.error,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.close,
-                  size: 12,
-                  color: cs.onError,
+            // Remove button
+            Positioned(
+              top: -6,
+              right: -6,
+              child: GestureDetector(
+                onTap: onRemove,
+                child: Container(
+                  width: 18,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: cs.error,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.close,
+                    size: 12,
+                    color: cs.onError,
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
