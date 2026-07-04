@@ -18,6 +18,8 @@ import '../utils/image_manifest.dart';
 import '../utils/text_manifest.dart';
 import '../widgets/folder_picker_dialog.dart';
 import 'chat/composer/chat_album_picker_dialog.dart';
+import 'extended_image_editor_page.dart';
+import 'image_editor_page.dart';
 import 'ocr/ocr_shared.dart';
 export 'ocr/ocr_shared.dart';
 
@@ -1076,7 +1078,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (index < 0 || index >= _selectedImages.length) return;
     final image = _selectedImages[index];
 
-    showDialog(
+    final shouldEdit = await showDialog<bool>(
       context: context,
       builder: (ctx) => Dialog(
         backgroundColor: Colors.black,
@@ -1086,7 +1088,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             Center(
               child: GestureDetector(
                 key: const Key('preview_tap_to_close'),
-                onTap: () => Navigator.pop(ctx),
+                onTap: () => Navigator.pop(ctx, false),
                 child: ExtendedImage.memory(
                   image.bytes,
                   fit: BoxFit.contain,
@@ -1119,13 +1121,36 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 ),
               ),
             ),
+            // Close button (top left)
             Positioned(
               top: MediaQuery.of(ctx).padding.top + 8,
               left: 8,
-              child: IconButton(
-                key: const Key('preview_close_btn'),
-                icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                onPressed: () => Navigator.pop(ctx),
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Color(0x66000000),
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  key: const Key('preview_close_btn'),
+                  icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                  onPressed: () => Navigator.pop(ctx, false),
+                ),
+              ),
+            ),
+            // Edit button (top right)
+            Positioned(
+              top: MediaQuery.of(ctx).padding.top + 8,
+              right: 8,
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Color(0x66000000),
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.edit, color: Colors.white, size: 28),
+                  tooltip: '编辑图片',
+                  onPressed: () => Navigator.pop(ctx, true),
+                ),
               ),
             ),
             if (_selectedImages.length > 1)
@@ -1143,6 +1168,88 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         ),
       ),
     );
+
+    if (shouldEdit != true || !mounted) return;
+    if (index >= _selectedImages.length) return;
+
+    // User wants to edit — show edit method choice dialog
+    final editMethod = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: const Text(
+          '选择编辑方式',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          '请选择编辑图片的方式：',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'quick'),
+            child: const Text(
+              '快速编辑',
+              style: TextStyle(color: Colors.blue),
+            ),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, 'full'),
+            child: const Text('图片编辑器'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              '取消',
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted || editMethod == null) return;
+
+    final currentImage = _selectedImages[index];
+    Uint8List? editedBytes;
+
+    if (editMethod == 'quick') {
+      editedBytes = await Navigator.push<Uint8List>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ExtendedImageEditorPage(
+            imageBytes: currentImage.bytes,
+            fileName: '图片_${index + 1}.${currentImage.format}',
+          ),
+        ),
+      );
+    } else {
+      final result = await Navigator.push<ImageEditorResult>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ImageEditorPage(
+            imageBytes: currentImage.bytes,
+            fromCamera: false,
+          ),
+        ),
+      );
+      if (result != null) {
+        editedBytes = result.editedBytes;
+      }
+    }
+
+    if (editedBytes == null || !mounted) return;
+    if (index >= _selectedImages.length) return;
+    // Verify the image at this index is still the same one
+    if (_selectedImages[index].bytes != currentImage.bytes) return;
+
+    // Update the selected image with edited bytes
+    setState(() {
+      _selectedImages[index] = SelectedImage(
+        bytes: editedBytes!,
+        format: currentImage.format,
+      );
+    });
   }
 
   void _removeImage(int index) {

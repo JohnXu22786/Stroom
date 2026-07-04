@@ -49,69 +49,74 @@ class PreviewChip extends StatelessWidget {
   final Uint8List bytes;
   final bool isImage;
   final VoidCallback onRemove;
+  final VoidCallback? onTap;
 
   const PreviewChip({
     required this.fileName,
     required this.bytes,
     required this.isImage,
     required this.onRemove,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    return Container(
-      width: isImage ? 72 : 140,
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            height: 72,
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: cs.outlineVariant, width: 0.5),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: isImage ? 72 : 140,
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              height: 72,
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: cs.outlineVariant, width: 0.5),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: isImage
+                  ? ExtendedImage.memory(
+                      bytes,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                      loadStateChanged: (state) {
+                        if (state.extendedImageLoadState == LoadState.failed) {
+                          return _buildFallback(cs);
+                        }
+                        return null;
+                      },
+                    )
+                  : _buildFileChipContent(cs),
             ),
-            clipBehavior: Clip.antiAlias,
-            child: isImage
-                ? ExtendedImage.memory(
-                    bytes,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    height: double.infinity,
-                    loadStateChanged: (state) {
-                      if (state.extendedImageLoadState == LoadState.failed) {
-                        return _buildFallback(cs);
-                      }
-                      return null;
-                    },
-                  )
-                : _buildFileChipContent(cs),
-          ),
-          // Remove button
-          Positioned(
-            top: -6,
-            right: -6,
-            child: GestureDetector(
-              onTap: onRemove,
-              child: Container(
-                width: 18,
-                height: 18,
-                decoration: BoxDecoration(
-                  color: cs.error,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.close,
-                  size: 12,
-                  color: cs.onError,
+            // Remove button
+            Positioned(
+              top: -6,
+              right: -6,
+              child: GestureDetector(
+                onTap: onRemove,
+                child: Container(
+                  width: 18,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: cs.error,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.close,
+                    size: 12,
+                    color: cs.onError,
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
