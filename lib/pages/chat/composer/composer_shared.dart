@@ -324,65 +324,75 @@ class ModelNameChip extends StatelessWidget {
     // Fallback label when no model name is available.
     final label = displayName.isNotEmpty ? displayName : '模型';
 
-    return InkWell(
-      onTap: isDisabled ? null : onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
+    // Use LayoutBuilder at the top to get available width from the parent
+    // (capped by ConstrainedBox(maxWidth: maxTagWidth)), then compute the
+    // truncated text before the Row so we can use MainAxisSize.min without
+    // losing truncation capability.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth;
+        final style = TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
           color: isDisabled
-              ? Colors.grey.withOpacity(0.08)
-              : color.withOpacity(0.1),
+              ? Colors.grey.withOpacity(0.4)
+              : cs.onSurface,
+        );
+        // Icon (16) + spacing (4) + padding (10 × 2) + small rendering buffer.
+        const nonTextWidth = 44;
+        final textAvailableWidth = availableWidth - nonTextWidth;
+        final painter = TextPainter(
+          text: TextSpan(text: label, style: style),
+          textDirection: Directionality.of(context),
+        )..layout();
+
+        final displayText = painter.width <= textAvailableWidth
+            ? label
+            : truncateDisplayName(label, textAvailableWidth, painter);
+
+        return InkWell(
+          onTap: isDisabled ? null : onTap,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isDisabled
-                ? Colors.grey.withOpacity(0.1)
-                : color.withOpacity(0.2),
-            width: 1,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.max,
-          children: [
-            Icon(Icons.smart_toy_outlined,
-                size: 16,
-                color: isDisabled ? Colors.grey.withOpacity(0.4) : color),
-            const SizedBox(width: 4),
-            // Flexible + LayoutBuilder ensures the text fits within the
-            // remaining space after icon and padding, regardless of the
-            // chip's overall width constraint from the parent Wrap.
-            Flexible(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final availableWidth = constraints.maxWidth;
-                  final style = TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: isDisabled
+                  ? Colors.grey.withOpacity(0.08)
+                  : color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isDisabled
+                    ? Colors.grey.withOpacity(0.1)
+                    : color.withOpacity(0.2),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.smart_toy_outlined,
+                    size: 16,
                     color: isDisabled
                         ? Colors.grey.withOpacity(0.4)
-                        : cs.onSurface,
-                  );
-                  final painter = TextPainter(
-                    text: TextSpan(text: label, style: style),
-                    textDirection: Directionality.of(context),
-                  )..layout();
-
-                  final displayText = painter.width <= availableWidth
-                      ? label
-                      : truncateDisplayName(label, availableWidth, painter);
-
-                  return Text(
+                        : color),
+                const SizedBox(width: 4),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: textAvailableWidth,
+                  ),
+                  child: Text(
                     displayText,
                     style: style,
                     maxLines: 1,
                     overflow: TextOverflow.clip,
-                  );
-                },
-              ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
