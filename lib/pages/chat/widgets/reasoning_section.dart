@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:markdown_widget/markdown_widget.dart';
@@ -67,7 +68,9 @@ class ReasoningSection extends ConsumerWidget {
 }
 
 /// A single clickable reasoning text line like "思考中 ›" or "思考完成 ›".
-class _ReasoningButton extends ConsumerWidget {
+///
+/// When streaming, the chevron animates through › ›› ››› at ~333ms intervals.
+class _ReasoningButton extends ConsumerStatefulWidget {
   final String reasoningText;
   final bool isStreaming;
   final bool isMulti;
@@ -83,9 +86,41 @@ class _ReasoningButton extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final label = isStreaming ? '思考中' : '思考完成';
-    final prefix = isMulti ? '思考 ${index + 1} ' : '';
+  ConsumerState<_ReasoningButton> createState() => _ReasoningButtonState();
+}
+
+class _ReasoningButtonState extends ConsumerState<_ReasoningButton> {
+  Timer? _chevronTimer;
+  int _chevronCount = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isStreaming) {
+      _chevronTimer = Timer.periodic(
+        const Duration(milliseconds: 333),
+        (_) {
+          if (mounted) {
+            setState(() {
+              _chevronCount = _chevronCount >= 3 ? 1 : _chevronCount + 1;
+            });
+          }
+        },
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _chevronTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final label = widget.isStreaming ? '思考中' : '思考完成';
+    final prefix = widget.isMulti ? '思考 ${widget.index + 1} ' : '';
+    final chevrons = '›' * _chevronCount;
     final accentColor = Colors.orange[700]!;
 
     return GestureDetector(
@@ -105,7 +140,7 @@ class _ReasoningButton extends ConsumerWidget {
             ),
             const SizedBox(width: 2),
             Text(
-              '›',
+              chevrons,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
@@ -122,10 +157,10 @@ class _ReasoningButton extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (ctx) => _ReasoningPanelDialog(
-        messageId: messageId,
-        sectionIndex: index,
-        initialReasoningText: reasoningText,
-        isStreaming: isStreaming,
+        messageId: widget.messageId,
+        sectionIndex: widget.index,
+        initialReasoningText: widget.reasoningText,
+        isStreaming: widget.isStreaming,
       ),
     );
   }
