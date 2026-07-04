@@ -195,8 +195,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 600));
       // Verify dialog is dismissed
-      expect(find.byType(Dialog), findsNothing,
-          reason: '点击关闭按钮后对话框应关闭');
+      expect(find.byType(Dialog), findsNothing, reason: '点击关闭按钮后对话框应关闭');
       // Pump additional frames to clear pending timers
       for (int i = 0; i < 10; i++) {
         await tester.pump(const Duration(milliseconds: 100));
@@ -244,8 +243,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 600));
       // Verify dialog is dismissed
-      expect(find.byType(Dialog), findsNothing,
-          reason: '点击关闭按钮后对话框应关闭');
+      expect(find.byType(Dialog), findsNothing, reason: '点击关闭按钮后对话框应关闭');
       for (int i = 0; i < 10; i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
