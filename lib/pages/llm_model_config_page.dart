@@ -233,6 +233,14 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
             orElse: () => null,
           );
 
+  bool get _isToggleComplete {
+    final toggle = _toggleReasoningParam;
+    if (toggle == null) return false;
+    return toggle.paramName.trim().isNotEmpty &&
+        (toggle.onValue != null && toggle.onValue!.trim().isNotEmpty) &&
+        (toggle.offValue != null && toggle.offValue!.trim().isNotEmpty);
+  }
+
   /// Builds the reasoning toggle card section.
   Widget _buildReasoningToggleSection(ColorScheme cs) {
     final toggle = _toggleReasoningParam;
@@ -365,6 +373,157 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                 fontSize: 11,
                 color: cs.onSurfaceVariant.withOpacity(0.7),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Builds the inference intensity section (similar to provider panel, but must have values).
+  Widget _buildInferenceIntensitySection(ColorScheme cs) {
+    final isToggleComplete = _isToggleComplete;
+    final intensityParams =
+        _reasoningParams.where((p) => !p.isReasoningToggle).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        Text('推理力度',
+            style: TextStyle(
+                fontWeight: FontWeight.w600, fontSize: 14, color: cs.primary)),
+        const SizedBox(height: 4),
+        Text(
+          '推理力度参数需添加具体选项值'
+          '${!isToggleComplete ? '（需先完整填写推理开关后才能配置）' : ''}',
+          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+        ),
+        const SizedBox(height: 8),
+        if (intensityParams.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Text(
+                isToggleComplete ? '暂无推理力度参数' : '请先完整填写推理开关',
+                style: TextStyle(color: Colors.grey, fontSize: 13),
+              ),
+            ),
+          )
+        else
+          ...List.generate(intensityParams.length, (i) {
+            final param = intensityParams[i];
+            final actualIndex = _reasoningParams.indexOf(param);
+            return _buildIntensityParamCard(
+                param, actualIndex, i, cs, isToggleComplete);
+          }),
+        const SizedBox(height: 4),
+        TextButton.icon(
+          icon: Icon(Icons.add, size: 16,
+              color: isToggleComplete ? null : Colors.grey),
+          label: Text('添加推理力度参数',
+              style: TextStyle(
+                  fontSize: 13,
+                  color: isToggleComplete ? null : Colors.grey)),
+          onPressed: isToggleComplete
+              ? () {
+                  final newParam = ReasoningParam(
+                    paramName: '',
+                    isReasoningToggle: false,
+                    enabled: true,
+                    options: [],
+                  );
+                  setState(() {
+                    _reasoningParams.add(newParam);
+                  });
+                }
+              : null,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildIntensityParamCard(ReasoningParam param, int actualIndex,
+      int displayIndex, ColorScheme cs, bool enabled) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    initialValue: param.paramName,
+                    decoration: InputDecoration(
+                      labelText: '参数名（支持点号嵌套）',
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      hintText: '如 reasoning_effort',
+                    ),
+                    onChanged: (v) {
+                      param.paramName = v;
+                      setState(() {});
+                    },
+                  ),
+                ),
+                const SizedBox(width: 4),
+                _buildTypeDropdown(param, cs),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                  onPressed: () => _removeReasoningParam(actualIndex),
+                  tooltip: '删除参数',
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text('选项值（模型必须添加至少一个选项值）',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurfaceVariant.withOpacity(0.7),
+                )),
+            const SizedBox(height: 8),
+            ...List.generate(param.options.length, (j) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        initialValue: param.options[j],
+                        decoration: InputDecoration(
+                          labelText: '选项 ${j + 1}',
+                          hintText: '如 low, medium, high',
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: (v) {
+                          param.options[j] = v;
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    if (param.options.length > 1)
+                      IconButton(
+                        icon: const Icon(Icons.remove_circle,
+                            color: Colors.red, size: 18),
+                        onPressed: () =>
+                            _removeOptionFromParam(actualIndex, j),
+                        tooltip: '删除选项',
+                      ),
+                  ],
+                ),
+              );
+            }),
+            const SizedBox(height: 4),
+            TextButton.icon(
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('添加选项', style: TextStyle(fontSize: 13)),
+              onPressed: () => _addOptionToParam(actualIndex),
             ),
           ],
         ),
@@ -596,7 +755,23 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       return;
     }
 
-    // Check 2: Validate each param individually
+    // Check 2: For model-level inference intensity (non-toggle), if name is filled,
+    // must have at least one option value
+    for (int i = 0; i < _reasoningParams.length; i++) {
+      final param = _reasoningParams[i];
+      if (param.isReasoningToggle) continue;
+      if (param.paramName.trim().isNotEmpty && param.options.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('推理力度参数必须至少添加一个选项值'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+    }
+
+    // Check 3: Validate each param individually
     for (int i = 0; i < _reasoningParams.length; i++) {
       final param = _reasoningParams[i];
       final error = param.validationError;
@@ -611,7 +786,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       }
     }
 
-    // Check 3: Duplicate name check across all reasoning params
+    // Check 4: Duplicate name check across all reasoning params
     final reasoningSeenNames = <String>{};
     for (int i = 0; i < _reasoningParams.length; i++) {
       final name = _reasoningParams[i].paramName.trim();
@@ -851,6 +1026,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
 
             // 推理开关 — 单独渲染，始终在第一个位置
             _buildReasoningToggleSection(cs),
+
+            // 推理力度
+            _buildInferenceIntensitySection(cs),
 
             // 附加推理参数
             if (_additionalReasoningParams.isNotEmpty)

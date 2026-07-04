@@ -181,7 +181,11 @@ class ChatAdapter {
       baseUrl: config.host,
       apiKey: config.key,
     );
-    _chatService = ChatService(provider: provider, modelConfig: modelConfig);
+    _chatService = ChatService(
+      provider: provider,
+      modelConfig: modelConfig,
+      providerConfig: config, // Pass provider-level params for merging
+    );
     currentConfigIndex = 0;
     currentModelIndex = 0;
   }
@@ -229,7 +233,11 @@ class ChatAdapter {
       baseUrl: config.host,
       apiKey: config.key,
     );
-    _chatService = ChatService(provider: provider, modelConfig: modelConfig);
+    _chatService = ChatService(
+      provider: provider,
+      modelConfig: modelConfig,
+      providerConfig: config,
+    );
     currentConfigIndex = configIndex;
     currentModelIndex = modelIndex;
   }
