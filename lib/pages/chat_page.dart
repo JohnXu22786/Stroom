@@ -91,6 +91,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
   final Map<String, int> _streamingRenderedLengths = {};
   String? _streamingMsgId;
 
+  // ── Auto-scroll / scroll-to-bottom state ──
+  /// Whether auto-scrolling is enabled. Initially false — user must click
+  /// the scroll-to-bottom button to enable it. Disabled when user scrolls up.
+  bool _autoScrollEnabled = false;
+
+  /// Whether the scroll-to-bottom button should be visible.
+  bool _showScrollToBottomButton = false;
+
+  /// Scroll controller for the chat message list.
+  late ScrollController _chatScrollController;
+
   bool _isSearching = false;
   SearchMode _searchMode = SearchMode.current;
   String _searchQuery = '';
@@ -172,6 +183,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _aiUser = User(id: 'ai1', name: 'Stroom');
     _adapter = ChatAdapter();
     _controller = InMemoryChatController();
+    _chatScrollController = ScrollController();
+    _chatScrollController.addListener(_onChatScroll);
 
     if (!_toolsRegistered) {
       _toolsRegistered = true;
@@ -245,6 +258,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     }
     _controller?.dispose();
     _searchTextController.dispose();
+    _chatScrollController.removeListener(_onChatScroll);
+    _chatScrollController.dispose();
     super.dispose();
   }
 
@@ -282,6 +297,47 @@ class _ChatPageState extends ConsumerState<ChatPage>
           );
         }
       }
+    });
+  }
+
+  /// Handles chat list scroll events to track auto-scroll state.
+  void _onChatScroll() {
+    if (!_chatScrollController.hasClients) return;
+    final maxScroll = _chatScrollController.position.maxScrollExtent;
+    final currentScroll = _chatScrollController.position.pixels;
+    final isAtBottom = (maxScroll - currentScroll) <= 80;
+
+    if (isAtBottom) {
+      // At bottom — user sees latest messages
+      if (_showScrollToBottomButton || (!_autoScrollEnabled)) {
+        setState(() {
+          _showScrollToBottomButton = false;
+          // Enable auto-scroll when user is at bottom (so new messages
+          // automatically keep them at the bottom).
+          if (_chatScrollController.hasClients &&
+              _chatScrollController.position.maxScrollExtent > 0) {
+            _autoScrollEnabled = true;
+          }
+        });
+      }
+    } else {
+      // Scrolled up — disable auto-scroll and show button
+      if (!_showScrollToBottomButton || _autoScrollEnabled) {
+        setState(() {
+          _autoScrollEnabled = false;
+          _showScrollToBottomButton = true;
+        });
+      }
+    }
+  }
+
+  /// Called when the user taps the scroll-to-bottom button.
+  /// Enables auto-scroll and scrolls to the bottom.
+  void _onScrollToBottomTap() {
+    _scrollToBottom();
+    setState(() {
+      _autoScrollEnabled = true;
+      _showScrollToBottomButton = false;
     });
   }
 
@@ -2042,24 +2098,41 @@ class _ChatPageState extends ConsumerState<ChatPage>
               Expanded(
                 child: controller == null
                     ? const SizedBox.shrink()
-                    : Chat(
-                        key: ValueKey(controller.hashCode),
-                        currentUserId: _currentUser.id,
-                        resolveUser: (id) async {
-                          if (id == _currentUser.id) return _currentUser;
-                          if (id == _aiUser.id) return _aiUser;
-                          return null;
-                        },
-                        chatController: controller,
-                        onMessageSend: (text) => _onMessageSend(text, []),
-                        theme: isDark ? ChatTheme.dark() : ChatTheme.light(),
-                        timeFormat: DateFormat('yyyy-MM-dd HH:mm'),
-                        builders: Builders(
-                          chatAnimatedListBuilder: (context, itemBuilder) =>
-                              ChatAnimatedList(
-                            itemBuilder: itemBuilder,
-                            onEndReached: _loadMoreMessages,
-                          ),
+                    : Stack(
+                        children: [
+                          Chat(
+                            key: ValueKey(controller.hashCode),
+                            currentUserId: _currentUser.id,
+                            resolveUser: (id) async {
+                              if (id == _currentUser.id) return _currentUser;
+                              if (id == _aiUser.id) return _aiUser;
+                              return null;
+                            },
+                            chatController: controller,
+                            onMessageSend: (text) => _onMessageSend(text, []),
+                            theme: isDark
+                                ? ChatTheme.dark()
+                                : ChatTheme.light(),
+                            timeFormat: DateFormat('yyyy-MM-dd HH:mm'),
+                            builders: Builders(
+                              chatAnimatedListBuilder:
+                                  (context, itemBuilder) =>
+                                      ChatAnimatedList(
+                                itemBuilder: itemBuilder,
+                                onEndReached: _loadMoreMessages,
+                                scrollController: _chatScrollController,
+                                // Initially disable auto-scroll. User must
+                                // tap the scroll-to-bottom button to enable.
+                                shouldScrollToEndWhenAtBottom:
+                                    _autoScrollEnabled,
+                                shouldScrollToEndWhenSendingMessage:
+                                    _autoScrollEnabled,
+                              ),
+                              // Suppress the built-in scroll-to-bottom
+                              // button — we provide our own overlay below.
+                              scrollToBottomBuilder: (context, animation,
+                                      onPressed) =>
+                                  const SizedBox.shrink(),
                           // Empty composer builder — the actual composer is
                           // rendered below the Chat widget so it participates
                           // in the Column layout flow instead of overlaying
@@ -2596,8 +2669,35 @@ class _ChatPageState extends ConsumerState<ChatPage>
                               ),
                             );
                           },
+                          ),
                         ),
-                      ),
+                        // ── Scroll-to-bottom overlay button ──
+                        if (_showScrollToBottomButton)
+                          Positioned(
+                            right: 16,
+                            bottom: 16,
+                            child: Material(
+                              elevation: 4,
+                              shape: const CircleBorder(),
+                              color: Colors.orange[700],
+                              child: InkWell(
+                                customBorder: const CircleBorder(),
+                                onTap: _onScrollToBottomTap,
+                                child: Container(
+                                  width: 36,
+                                  height: 36,
+                                  alignment: Alignment.center,
+                                  child: const Icon(
+                                    Icons.arrow_downward,
+                                    size: 20,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
               ),
               // ── Chat composer (below chat, in Column flow) ──
               // Rendered as a direct Column child so it participates in the
