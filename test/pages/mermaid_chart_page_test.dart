@@ -306,5 +306,53 @@ void main() {
       );
       expect(savedRecord.folder, '');
     });
+    // ═══════════════════════════════════════════════════
+    // Editor Mode Switching (UI only, no WebView)
+    // ═══════════════════════════════════════════════════
+
+    testWidgets('mode selector menu shows all three modes', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      // Should start in edit mode (code icon)
+      expect(find.byIcon(Icons.code), findsOneWidget);
+
+      // Open the mode selection menu
+      await tester.tap(find.byIcon(Icons.code));
+      await tester.pumpAndSettle();
+
+      // Menu should show all three mode options
+      expect(find.text('编辑模式'), findsOneWidget);
+      expect(find.text('编辑+预览'), findsOneWidget);
+      expect(find.text('预览模式'), findsOneWidget);
+    });
+
+    testWidgets('initial mode shows code icon when preview disabled',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
+      await tester.pump();
+
+      // Should start in edit mode
+      expect(find.byIcon(Icons.code), findsOneWidget);
+      expect(find.byIcon(Icons.view_column), findsNothing);
+      expect(find.byIcon(Icons.visibility), findsNothing);
+    });
+
+    testWidgets('mode menu options exist with correct icons', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      // Open the mode selection menu
+      await tester.tap(find.byIcon(Icons.code));
+      await tester.pumpAndSettle();
+
+      // Menu should show all three mode options with check on current
+      expect(find.text('编辑模式'), findsOneWidget);
+      expect(find.text('编辑+预览'), findsOneWidget);
+      expect(find.text('预览模式'), findsOneWidget);
+
+      // Current mode (edit) should have a checkmark
+      expect(find.byIcon(Icons.check), findsOneWidget);
+    });
   });
 }
