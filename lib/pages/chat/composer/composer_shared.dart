@@ -267,13 +267,14 @@ class ChipBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final text = count > 99 ? '99+' : count.toString();
     return Container(
-      width: 16,
-      height: 16,
+      width: 14,
+      height: 14,
       alignment: Alignment.center,
-      decoration: const BoxDecoration(
-        color: Colors.red,
+      decoration: BoxDecoration(
+        color: cs.tertiary,
         shape: BoxShape.circle,
       ),
       child: FittedBox(
