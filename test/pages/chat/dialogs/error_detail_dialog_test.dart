@@ -4,7 +4,8 @@ import 'package:stroom/pages/chat/dialogs/error_detail_dialog.dart';
 
 void main() {
   group('DataDetailDialog (unified 6-section dialog)', () {
-    testWidgets('shows empty state when no request/response data', (tester) async {
+    testWidgets('shows empty state when no request/response data',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Builder(
@@ -27,7 +28,8 @@ void main() {
       expect(find.text('No detail data available'), findsOneWidget);
     });
 
-    testWidgets('shows all 6 sections when full data is provided', (tester) async {
+    testWidgets('shows all 6 sections when full data is provided',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Builder(

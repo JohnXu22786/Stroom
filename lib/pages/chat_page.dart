@@ -936,13 +936,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
         _history.add(msg);
       }
       if (reasoningBuffer.isNotEmpty) {
-          // Reasoning sections already updated above via provider.
-          // Ensure _reasoningContents has the latest sections.
-          final sections = List<String>.from(
-            ref.read(streamingReasoningSectionsProvider),
-          );
-          _reasoningContents[aiMsgId] = sections;
-        }
+        // Reasoning sections already updated above via provider.
+        // Ensure _reasoningContents has the latest sections.
+        final sections = List<String>.from(
+          ref.read(streamingReasoningSectionsProvider),
+        );
+        _reasoningContents[aiMsgId] = sections;
+      }
     } catch (e, s) {
       debugPrint('[ChatPage] post-stream error: $e\n$s');
     } finally {
