@@ -543,10 +543,11 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
 
-        // The file-only panel should show all 4 file action buttons
+        // The file-only panel should show all 4 file action buttons with
+        // updated labels
         expect(find.text('拍照'), findsOneWidget);
-        expect(find.text('相册'), findsOneWidget);
-        expect(find.text('文件'), findsOneWidget);
+        expect(find.text('设备相册'), findsOneWidget);
+        expect(find.text('设备文件'), findsOneWidget);
         expect(find.text('应用内文件'), findsOneWidget);
 
         // Old settings section "推理设置" should not appear (it's not the button label)
