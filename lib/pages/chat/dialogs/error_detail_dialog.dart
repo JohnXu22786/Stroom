@@ -122,7 +122,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
         children: [
           if (_selectedSectionId != null)
             IconButton(
-              icon: const Icon(Icons.arrow_back, size: 18),
+              icon: Icon(Icons.arrow_back, size: 18, color: Theme.of(context).colorScheme.primary),
               onPressed: () {
                 setState(() {
                   _selectedSectionId = null;
@@ -133,9 +133,10 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
               tooltip: '返回',
             ),
           if (_selectedSectionId != null) const SizedBox(width: 8),
-          const Icon(
+          Icon(
             Icons.info_outline,
             size: 18,
+            color: Theme.of(context).colorScheme.primary,
           ),
           const SizedBox(width: 8),
           Text(
@@ -150,7 +151,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
           ),
           const Spacer(),
           IconButton(
-            icon: const Icon(Icons.close, size: 18),
+            icon: Icon(Icons.close, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
             onPressed: () => Navigator.pop(context),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -269,15 +270,16 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
       separatorBuilder: (_, __) => const Divider(height: 1),
       itemBuilder: (context, index) {
         final section = sections[index];
+        final cs = Theme.of(context).colorScheme;
         return Material(
           type: MaterialType.transparency,
           child: ListTile(
-            leading: Icon(section.icon, size: 20),
+            leading: Icon(section.icon, size: 20, color: cs.primary),
             title: Text(
               section.label,
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
             ),
-            trailing: const Icon(Icons.chevron_right, size: 18),
+            trailing: Icon(Icons.chevron_right, size: 18, color: cs.onSurfaceVariant),
             contentPadding: const EdgeInsets.symmetric(horizontal: 4),
             onTap: () {
               setState(() {

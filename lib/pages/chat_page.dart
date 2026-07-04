@@ -91,6 +91,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
   final Map<String, int> _streamingRenderedLengths = {};
   String? _streamingMsgId;
 
+  // ── Auto-scroll / scroll-to-bottom state ──
+  /// Whether auto-scrolling is enabled. Initially false — user must click
+  /// the scroll-to-bottom button to enable it. Disabled when user scrolls up.
+  bool _autoScrollEnabled = false;
+
+  /// Whether the scroll-to-bottom button should be visible.
+  bool _showScrollToBottomButton = false;
+
+  /// Scroll controller for the chat message list.
+  late ScrollController _chatScrollController;
+
   bool _isSearching = false;
   SearchMode _searchMode = SearchMode.current;
   String _searchQuery = '';
@@ -172,6 +183,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _aiUser = User(id: 'ai1', name: 'Stroom');
     _adapter = ChatAdapter();
     _controller = InMemoryChatController();
+    _chatScrollController = ScrollController();
+    _chatScrollController.addListener(_onChatScroll);
 
     if (!_toolsRegistered) {
       _toolsRegistered = true;
@@ -245,6 +258,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     }
     _controller?.dispose();
     _searchTextController.dispose();
+    _chatScrollController.removeListener(_onChatScroll);
+    _chatScrollController.dispose();
     super.dispose();
   }
 
@@ -282,6 +297,47 @@ class _ChatPageState extends ConsumerState<ChatPage>
           );
         }
       }
+    });
+  }
+
+  /// Handles chat list scroll events to track auto-scroll state.
+  void _onChatScroll() {
+    if (!_chatScrollController.hasClients) return;
+    final maxScroll = _chatScrollController.position.maxScrollExtent;
+    final currentScroll = _chatScrollController.position.pixels;
+    final isAtBottom = (maxScroll - currentScroll) <= 80;
+
+    if (isAtBottom) {
+      // At bottom — user sees latest messages
+      if (_showScrollToBottomButton || (!_autoScrollEnabled)) {
+        setState(() {
+          _showScrollToBottomButton = false;
+          // Enable auto-scroll when user is at bottom (so new messages
+          // automatically keep them at the bottom).
+          if (_chatScrollController.hasClients &&
+              _chatScrollController.position.maxScrollExtent > 0) {
+            _autoScrollEnabled = true;
+          }
+        });
+      }
+    } else {
+      // Scrolled up — disable auto-scroll and show button
+      if (!_showScrollToBottomButton || _autoScrollEnabled) {
+        setState(() {
+          _autoScrollEnabled = false;
+          _showScrollToBottomButton = true;
+        });
+      }
+    }
+  }
+
+  /// Called when the user taps the scroll-to-bottom button.
+  /// Enables auto-scroll and scrolls to the bottom.
+  void _onScrollToBottomTap() {
+    _scrollToBottom();
+    setState(() {
+      _autoScrollEnabled = true;
+      _showScrollToBottomButton = false;
     });
   }
 
@@ -2042,24 +2098,41 @@ class _ChatPageState extends ConsumerState<ChatPage>
               Expanded(
                 child: controller == null
                     ? const SizedBox.shrink()
-                    : Chat(
-                        key: ValueKey(controller.hashCode),
-                        currentUserId: _currentUser.id,
-                        resolveUser: (id) async {
-                          if (id == _currentUser.id) return _currentUser;
-                          if (id == _aiUser.id) return _aiUser;
-                          return null;
-                        },
-                        chatController: controller,
-                        onMessageSend: (text) => _onMessageSend(text, []),
-                        theme: isDark ? ChatTheme.dark() : ChatTheme.light(),
-                        timeFormat: DateFormat('yyyy-MM-dd HH:mm'),
-                        builders: Builders(
-                          chatAnimatedListBuilder: (context, itemBuilder) =>
-                              ChatAnimatedList(
-                            itemBuilder: itemBuilder,
-                            onEndReached: _loadMoreMessages,
-                          ),
+                    : Stack(
+                        children: [
+                          Chat(
+                            key: ValueKey(controller.hashCode),
+                            currentUserId: _currentUser.id,
+                            resolveUser: (id) async {
+                              if (id == _currentUser.id) return _currentUser;
+                              if (id == _aiUser.id) return _aiUser;
+                              return null;
+                            },
+                            chatController: controller,
+                            onMessageSend: (text) => _onMessageSend(text, []),
+                            theme: isDark
+                                ? ChatTheme.dark()
+                                : ChatTheme.light(),
+                            timeFormat: DateFormat('yyyy-MM-dd HH:mm'),
+                            builders: Builders(
+                              chatAnimatedListBuilder:
+                                  (context, itemBuilder) =>
+                                      ChatAnimatedList(
+                                itemBuilder: itemBuilder,
+                                onEndReached: _loadMoreMessages,
+                                scrollController: _chatScrollController,
+                                // Initially disable auto-scroll. User must
+                                // tap the scroll-to-bottom button to enable.
+                                shouldScrollToEndWhenAtBottom:
+                                    _autoScrollEnabled,
+                                shouldScrollToEndWhenSendingMessage:
+                                    _autoScrollEnabled,
+                              ),
+                              // Suppress the built-in scroll-to-bottom
+                              // button — we provide our own overlay below.
+                              scrollToBottomBuilder: (context, animation,
+                                      onPressed) =>
+                                  const SizedBox.shrink(),
                           // Empty composer builder — the actual composer is
                           // rendered below the Chat widget so it participates
                           // in the Column layout flow instead of overlaying
@@ -2384,6 +2457,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                     SimpleTextMessage(
                                       message: message,
                                       index: index,
+                                      showTime: false,
                                     ),
                                   if (hasAttachments)
                                     Padding(
@@ -2425,6 +2499,29 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                   ),
                                   child: messageBubble,
                                 ),
+                                // Timestamp below bubble (user messages only),
+                                // above action buttons, with theme-adaptive color.
+                                if (!isAi)
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                      left: 4,
+                                      top: 2,
+                                      bottom: 2,
+                                    ),
+                                    child: Text(
+                                      DateFormat('yyyy-MM-dd HH:mm')
+                                          .format(
+                                            (message.createdAt ?? message.resolvedTime ?? DateTime.now())
+                                                .toLocal(),
+                                          ),
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: isDark
+                                            ? Colors.grey[400]
+                                            : Colors.grey[600],
+                                      ),
+                                    ),
+                                  ),
                                 Padding(
                                   padding: const EdgeInsets.only(
                                     left: 4,
@@ -2472,7 +2569,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                             message.id,
                                           ),
                                         ),
-                                      const SizedBox(width: 2),
                                       // Raw data view button: only shown for AI messages when data exists.
                                       if (isAi &&
                                           _history.any(
@@ -2480,7 +2576,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                                 m.id == message.id &&
                                                 (m.rawRequest != null ||
                                                     m.rawResponse != null),
-                                          ))
+                                          )) ...[
+                                        const SizedBox(width: 2),
                                         ActionButton(
                                           icon: Icons.data_exploration,
                                           tooltip: '查看数据详情',
@@ -2489,7 +2586,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                             message.id,
                                           ),
                                         ),
-                                      const SizedBox(width: 2),
+                                      ],
                                       if (_developerMode &&
                                           isAi &&
                                           _history.any(
@@ -2497,7 +2594,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                                 m.id == message.id &&
                                                 (m.rawRequest != null ||
                                                     m.rawResponse != null),
-                                          ))
+                                          )) ...[
+                                        const SizedBox(width: 2),
                                         ActionButton(
                                           icon: Icons.code,
                                           tooltip: 'JSON 审查',
@@ -2505,6 +2603,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                             message.id,
                                           ),
                                         ),
+                                      ],
                                       const SizedBox(width: 2),
                                       ActionButton(
                                         icon: Icons.delete_outline,
@@ -2547,6 +2646,44 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                 ),
                               );
                             }
+                            // Check if reasoning content exists for this
+                            // message. If so, render the reasoning button
+                            // immediately instead of a spinner, even before
+                            // the first TextEvent converts the message from
+                            // textStream to text type.
+                            final reasoningSections =
+                                _reasoningContents[message.id];
+                            if (reasoningSections != null &&
+                                reasoningSections.isNotEmpty) {
+                              return Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ReasoningSection(
+                                      sections: ReasoningSectionData(
+                                        texts: reasoningSections,
+                                        // During textStream phase, reasoning
+                                        // events are still being received (no
+                                        // TextEvent yet), so streaming is
+                                        // always true. Once TextEvent arrives,
+                                        // updateMessage() converts the message
+                                        // to text type and textMessageBuilder
+                                        // takes over with the correct flag.
+                                        streaming: isStreaming &&
+                                            message.id == _streamingMsgId &&
+                                            _isReasoningCompletedForMsg[
+                                                    message.id] !=
+                                                true,
+                                      ),
+                                      messageId: message.id,
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
                             return const Padding(
                               padding: EdgeInsets.all(12),
                               child: SizedBox(
@@ -2558,8 +2695,35 @@ class _ChatPageState extends ConsumerState<ChatPage>
                               ),
                             );
                           },
+                          ),
                         ),
-                      ),
+                        // ── Scroll-to-bottom overlay button ──
+                        if (_showScrollToBottomButton)
+                          Positioned(
+                            right: 16,
+                            bottom: 16,
+                            child: Material(
+                              elevation: 4,
+                              shape: const CircleBorder(),
+                              color: Colors.orange[700],
+                              child: InkWell(
+                                customBorder: const CircleBorder(),
+                                onTap: _onScrollToBottomTap,
+                                child: Container(
+                                  width: 36,
+                                  height: 36,
+                                  alignment: Alignment.center,
+                                  child: const Icon(
+                                    Icons.arrow_downward,
+                                    size: 20,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
               ),
               // ── Chat composer (below chat, in Column flow) ──
               // Rendered as a direct Column child so it participates in the
