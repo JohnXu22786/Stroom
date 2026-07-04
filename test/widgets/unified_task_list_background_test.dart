@@ -460,8 +460,7 @@ void main() {
 
       // Expanded section should have "打开文件" button rendered
       // (AnimatedCrossFade keeps both in tree, but expanded state shows second child)
-      expect(find.text('打开文件'), findsWidgets,
-          reason: '展开后应显示"打开文件"按钮');
+      expect(find.text('打开文件'), findsWidgets, reason: '展开后应显示"打开文件"按钮');
 
       // Collapse by tapping the header again
       await tester.tap(find.text('展开卡片'));
@@ -474,8 +473,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       // Should still find button after re-expand
-      expect(find.text('打开文件'), findsWidgets,
-          reason: '重新展开后仍应显示"打开文件"按钮');
+      expect(find.text('打开文件'), findsWidgets, reason: '重新展开后仍应显示"打开文件"按钮');
     });
 
     testWidgets('tapping card header expands detail section', (tester) async {
@@ -494,8 +492,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       // After expand, the content should still be there
-      expect(find.text('等待开始...'), findsWidgets,
-          reason: '展开后应能找到步骤信息');
+      expect(find.text('等待开始...'), findsWidgets, reason: '展开后应能找到步骤信息');
     });
 
     testWidgets('tapping header again collapses the card', (tester) async {
@@ -509,8 +506,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       // Expanded - error should be findable
-      expect(find.text('提取失败: FFmpeg未安装'), findsWidgets,
-          reason: '展开后应能找到错误信息');
+      expect(find.text('提取失败: FFmpeg未安装'), findsWidgets, reason: '展开后应能找到错误信息');
 
       // Tap again to collapse
       await tester.tap(find.text('音频分离任务'));
