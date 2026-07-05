@@ -162,6 +162,11 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           ),
         ),
       );
+
+      // Refresh records after returning from viewer — edits (overwrite / save-as)
+      // create new records with new hashes, and the gallery grid needs to reflect
+      // these changes immediately.
+      ref.read(imageRecordsProvider.notifier).loadRecords();
     } finally {
       _isPreviewing = false;
     }
