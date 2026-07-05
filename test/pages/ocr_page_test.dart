@@ -19,15 +19,15 @@ Widget _buildTestApp({
   List<ProviderEntry>? entries,
   List<SelectedImage>? testImages,
 }) {
-  final overrides = <Override>[];
-  if (entries != null) {
-    final notifier = ProviderEntriesNotifier();
-    notifier.state = ProviderEntriesState(entries: entries);
-    overrides.add(providerEntriesProvider.overrideWith((ref) => notifier));
-  }
-
   return ProviderScope(
-    overrides: overrides,
+    overrides: [
+      if (entries != null)
+        providerEntriesProvider.overrideWith((ref) {
+          final notifier = ProviderEntriesNotifier();
+          notifier.state = ProviderEntriesState(entries: entries);
+          return notifier;
+        }),
+    ],
     child: MaterialApp(
       home: OcrPage(testImages: testImages),
       localizationsDelegates: const [
