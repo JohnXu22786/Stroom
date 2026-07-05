@@ -23,6 +23,7 @@ import 'asr_page.dart';
 import 'audio_separation_page.dart';
 import 'tts_create_page.dart';
 import 'mermaid_chart_page.dart';
+import 'math_graph_drawing_page.dart';
 
 /// 页面枚举，定义应用中的主要页面（不含加号按钮）
 enum AppPage { home, chat, files, settings }
@@ -660,6 +661,20 @@ class _HomePageState extends ConsumerState<HomePage>
                         context,
                         MaterialPageRoute(
                           builder: (_) => const MermaidChartPage(),
+                        ),
+                      );
+                    },
+                  ),
+                  _buildModuleCard(
+                    icon: Icons.show_chart,
+                    label: '数学绘图',
+                    subtitle: '函数图形绘制',
+                    color: Colors.blue,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const MathGraphDrawingPage(),
                         ),
                       );
                     },
