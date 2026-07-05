@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 
@@ -81,7 +82,8 @@ class _BackgroundOptimizationPageState
 
     // Try to get OS version from dart:io Platform (not available on web or in all tests)
     try {
-      _platformVersion = '${Platform.operatingSystem} ${Platform.operatingSystemVersion}';
+      _platformVersion =
+          '${Platform.operatingSystem} ${Platform.operatingSystemVersion}';
     } catch (_) {
       _platformVersion = _platformName;
     }

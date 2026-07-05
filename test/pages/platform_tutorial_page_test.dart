@@ -132,7 +132,8 @@ void main() {
       expect(find.text('Linux 后台运行优化指南'), findsOneWidget);
     });
 
-    testWidgets('tutorial page contains tutorial steps and tips', (tester) async {
+    testWidgets('tutorial page contains tutorial steps and tips',
+        (tester) async {
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {

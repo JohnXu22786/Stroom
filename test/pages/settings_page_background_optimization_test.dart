@@ -115,7 +115,8 @@ void main() {
       expect(find.text('平台教程'), findsOneWidget);
     });
 
-    testWidgets('settings page still renders all other sections', (tester) async {
+    testWidgets('settings page still renders all other sections',
+        (tester) async {
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
