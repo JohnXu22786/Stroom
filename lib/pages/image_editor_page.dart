@@ -140,10 +140,16 @@ class ImageEditorPage extends StatefulWidget {
   final Uint8List imageBytes;
   final bool fromCamera;
 
+  /// When `true` (default), shows the save dialog (overwrite / save-as) after
+  /// editing completes. When `false`, the edited bytes are returned directly
+  /// without asking the user (used by OCR page to overwrite in-memory data).
+  final bool showSaveDialog;
+
   const ImageEditorPage({
     super.key,
     required this.imageBytes,
     this.fromCamera = false,
+    this.showSaveDialog = true,
   });
 
   @override
@@ -174,6 +180,20 @@ class _ImageEditorPageState extends State<ImageEditorPage> {
     // Sub-editor modes — pop the sub-editor route from the Navigator.
     if (editorMode != EditorMode.main) {
       Navigator.pop(context);
+      return;
+    }
+
+    if (_editedBytes != null && !widget.showSaveDialog) {
+      // showSaveDialog is false — return bytes directly (OCR flow).
+      final bytes = _editedBytes;
+      if (bytes != null) {
+        Navigator.pop(
+          context,
+          ImageEditorResult(editedBytes: bytes, isSaveAs: false),
+        );
+      } else {
+        Navigator.pop(context, null);
+      }
       return;
     }
 
