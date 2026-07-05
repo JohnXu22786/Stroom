@@ -545,16 +545,20 @@ class _MathGraphDrawingPageState extends State<MathGraphDrawingPage> {
     final params = {'a': _paramA, 'b': _paramB, 'c': _paramC, 'd': _paramD};
 
     if (_viewMode == ViewMode.dim2 || _viewMode == ViewMode.split) {
-      _loadContent(_dim2Controller, () => MathGraphDrawingPage.build2dHtml(
-        formula,
-        params: params,
-      ));
+      _loadContent(
+          _dim2Controller,
+          () => MathGraphDrawingPage.build2dHtml(
+                formula,
+                params: params,
+              ));
     }
     if (_viewMode == ViewMode.dim3 || _viewMode == ViewMode.split) {
-      _loadContent(_dim3Controller, () => MathGraphDrawingPage.build3dHtml(
-        formula,
-        params: params,
-      ));
+      _loadContent(
+          _dim3Controller,
+          () => MathGraphDrawingPage.build3dHtml(
+                formula,
+                params: params,
+              ));
     }
   }
 
@@ -864,8 +868,7 @@ class _MathGraphDrawingPageState extends State<MathGraphDrawingPage> {
                         }
                       },
                     ),
-                    if (!_dim2Loaded)
-                      _buildLoadingOverlay(cs),
+                    if (!_dim2Loaded) _buildLoadingOverlay(cs),
                   ],
                 ),
               ),
@@ -923,8 +926,7 @@ class _MathGraphDrawingPageState extends State<MathGraphDrawingPage> {
                         }
                       },
                     ),
-                    if (!_dim3Loaded)
-                      _buildLoadingOverlay(cs),
+                    if (!_dim3Loaded) _buildLoadingOverlay(cs),
                   ],
                 ),
               ),
@@ -1082,9 +1084,8 @@ class _MathGraphDrawingPageState extends State<MathGraphDrawingPage> {
   // ---------------------------------------------------------------------------
 
   Widget _buildCoordinateList(ColorScheme cs) {
-    final displayCoords = _coordinates.length > 20
-        ? _coordinates.sublist(0, 20)
-        : _coordinates;
+    final displayCoords =
+        _coordinates.length > 20 ? _coordinates.sublist(0, 20) : _coordinates;
 
     return Container(
       constraints: const BoxConstraints(maxHeight: 100),
