@@ -482,6 +482,11 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         );
         current[paramName] = value;
         ref.read(reasoningParamValuesProvider.notifier).state = current;
+        // Sync reasoningEffortProvider when reasoning_effort changes
+        // so the chip label reflects the actual user selection.
+        if (paramName == 'reasoning_effort') {
+          ref.read(reasoningEffortProvider.notifier).state = value;
+        }
         SharedPreferences.getInstance().then(
           (prefs) => prefs.setString('reasoning_params', current.toString()),
         );

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 // Character-based truncation helpers
 // ═══════════════════════════════════════════════════════════════
 
-const int _maxPartLength = 15;
+const int _maxPartLength = 20;
 
 /// Truncates a single part to at most [_maxPartLength] characters,
 /// with "..." counting toward the limit.

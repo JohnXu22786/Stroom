@@ -938,6 +938,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           SelectedImage(
             bytes: bytes,
             format: _detectFormat(file.path),
+            // Camera: temp file, no source name
           ),
         );
       });
@@ -968,6 +969,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           SelectedImage(
             bytes: bytes,
             format: _detectFormat(file.path),
+            sourceName: file.name, // System file has original name
           ),
         );
       }
@@ -1020,6 +1022,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           SelectedImage(
             bytes: data,
             format: format,
+            sourceName: fileName, // App album file has original name
           ),
         );
       });
@@ -1050,6 +1053,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           SelectedImage(
             bytes: bytes,
             format: record.format,
+            // Can use record.name but this method is less used; keep simple
           ),
         );
       });
@@ -1300,7 +1304,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
     // Create a background task for tracking
     final timestamp = _currentTimestamp();
-    final title = 'OCR_$timestamp';
+    // Determine naming: if all images have source names (imported), use prefix + original name
+    final allHaveSourceNames =
+        _selectedImages.every((img) => img.sourceName != null);
+    final title = allHaveSourceNames
+        ? 'OCR_${_selectedImages.first.sourceName!}'
+        : 'OCR_$timestamp';
     final taskId =
         bgNotifier.addTask(type: BackgroundTaskType.ocr, title: title);
 
@@ -1397,7 +1406,29 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           }
         }
       }
-      bgNotifier.failTask(taskId, error: 'OCR识别失败: $e');
+      // Capture raw request/response diagnostics from OcrService
+      Map<String, dynamic>? rawRequest;
+      Map<String, dynamic>? rawResponse;
+      if (service != null) {
+        rawRequest = {
+          if (service.lastRequestUrl != null) 'url': service.lastRequestUrl,
+          if (service.lastRequestHeaders != null)
+            'headers': service.lastRequestHeaders,
+          if (service.lastRequestBody != null) 'body': service.lastRequestBody,
+        };
+        rawResponse = {
+          if (service.lastResponseStatusCode != null)
+            'statusCode': service.lastResponseStatusCode,
+          if (service.lastResponseHeaders != null)
+            'headers': service.lastResponseHeaders,
+          if (service.lastResponseData != null)
+            'data': service.lastResponseData,
+        };
+      }
+      bgNotifier.failTask(taskId,
+          error: 'OCR识别失败: $e',
+          rawRequest: rawRequest,
+          rawResponse: rawResponse);
     }
   }
 

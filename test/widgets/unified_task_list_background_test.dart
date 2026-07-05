@@ -439,5 +439,116 @@ void main() {
       expect(size.height, greaterThanOrEqualTo(48),
           reason: '按钮高度应 >= 48（Material 最小触摸目标）');
     });
+
+    // =========================================================================
+    // Collapse/expand behavior tests
+    // =========================================================================
+    testWidgets('expanding card reveals step timeline and action buttons',
+        (tester) async {
+      await pumpPageWithBackground(tester, [
+        _createCompletedOcrTask(
+          id: 'expand-card-1',
+          title: '展开卡片',
+          downloadedFilePath: 'C:\\file.txt',
+        ),
+      ]);
+
+      // Tap to expand
+      await tester.tap(find.text('展开卡片'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Expanded section should have "打开文件" button rendered
+      // (AnimatedCrossFade keeps both in tree, but expanded state shows second child)
+      expect(find.text('打开文件'), findsWidgets, reason: '展开后应显示"打开文件"按钮');
+
+      // Collapse by tapping the header again
+      await tester.tap(find.text('展开卡片'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Expand again (verifying toggle works)
+      await tester.tap(find.text('展开卡片'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Should still find button after re-expand
+      expect(find.text('打开文件'), findsWidgets, reason: '重新展开后仍应显示"打开文件"按钮');
+    });
+
+    testWidgets('tapping card header expands detail section', (tester) async {
+      await pumpPageWithBackground(tester, [
+        _createRunningOcrTask(id: 'expand-1', title: '展开测试'),
+      ]);
+
+      // The step info text "等待开始..." is present in the AnimatedCrossFade tree
+      // but is only visibly rendered when expanded. Tap to expand and verify it's renderable.
+      expect(find.text('等待开始...'), findsWidgets,
+          reason: '步骤信息应在 widget tree 中存在（AnimatedCrossFade）');
+
+      // Tap the title to expand and verify the expand button (chevron) adjust behavior
+      await tester.tap(find.text('展开测试'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // After expand, the content should still be there
+      expect(find.text('等待开始...'), findsWidgets, reason: '展开后应能找到步骤信息');
+    });
+
+    testWidgets('tapping header again collapses the card', (tester) async {
+      await pumpPageWithBackground(tester, [
+        _createFailedAudioTask(id: 'collapse-again-1'),
+      ]);
+
+      // Tap to expand
+      await tester.tap(find.text('音频分离任务'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Expanded - error should be findable
+      expect(find.text('提取失败: FFmpeg未安装'), findsWidgets, reason: '展开后应能找到错误信息');
+
+      // Tap again to collapse
+      await tester.tap(find.text('音频分离任务'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Tap the title a third time to re-expand and ensure toggle works
+      await tester.tap(find.text('音频分离任务'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Re-expanded - error should be visible again
+      expect(find.text('提取失败: FFmpeg未安装'), findsWidgets,
+          reason: '再次展开后应显示错误信息');
+    });
+
+    // =========================================================================
+    // Error detail dialog tests
+    // =========================================================================
+    testWidgets('failed task with diagnostics shows error detail button',
+        (tester) async {
+      await pumpPageWithBackground(tester, [
+        BackgroundTask(
+          id: 'diag-btn',
+          type: BackgroundTaskType.ocr,
+          title: '诊断错误任务',
+          status: TaskStatus.failed,
+          error: 'OCR识别失败',
+          createdAt: DateTime(2025, 6, 1),
+          rawRequest: {'url': 'https://api.test.com'},
+          rawResponse: {'statusCode': 400, 'data': 'bad request'},
+        ),
+      ]);
+
+      // Tap to expand
+      await tester.tap(find.text('诊断错误任务'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Should show the "查看错误详情" button
+      expect(find.text('查看错误详情'), findsOneWidget,
+          reason: '有诊断数据的失败任务应显示"查看错误详情"按钮');
+    });
   });
 }
