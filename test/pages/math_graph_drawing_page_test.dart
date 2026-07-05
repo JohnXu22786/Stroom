@@ -126,8 +126,7 @@ void main() {
     });
 
     test('extractCoordinatesFromJs() handles null input gracefully', () {
-      final coordinates =
-          MathGraphDrawingPage.extractCoordinatesFromJs(null);
+      final coordinates = MathGraphDrawingPage.extractCoordinatesFromJs(null);
 
       expect(coordinates, isEmpty);
     });
@@ -189,7 +188,8 @@ void main() {
       expect(find.text('3D'), findsOneWidget);
     });
 
-    testWidgets('3D view mode shows 3D formula label after switching', (tester) async {
+    testWidgets('3D view mode shows 3D formula label after switching',
+        (tester) async {
       await tester.pumpWidget(
         const ProviderScope(
           child: MaterialApp(
