@@ -238,8 +238,7 @@ void main() {
 
       // Encode to bytes
       final encoded = ZipEncoder().encode(archive);
-      expect(encoded, isNotNull);
-      final backupBytes = Uint8List.fromList(encoded!);
+      final backupBytes = Uint8List.fromList(encoded);
 
       // Clear database and file store
       await ManifestDatabase.clearAllData();

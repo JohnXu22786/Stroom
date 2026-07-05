@@ -112,9 +112,6 @@ class BackupService {
           archive.addFile(ArchiveFile(name, content.length, content));
         }
         final encoded = ZipEncoder().encode(archive);
-        if (encoded == null) {
-          throw Exception('zip 编码失败');
-        }
         return Uint8List.fromList(encoded);
       });
     } on UnsupportedError catch (e) {
@@ -134,9 +131,6 @@ class BackupService {
       archive.addFile(ArchiveFile(name, content.length, content));
     }
     final encoded = ZipEncoder().encode(archive);
-    if (encoded == null) {
-      throw Exception('zip 编码失败');
-    }
     return Uint8List.fromList(encoded);
   }
 
