@@ -425,7 +425,8 @@ void main() {
   // ==================================================================
 
   group('Backup service progress reporting and ZIP validity', () {
-    testWidgets('buildBackupBytesForTest calls onProgress with proper progression',
+    testWidgets(
+        'buildBackupBytesForTest calls onProgress with proper progression',
         (WidgetTester t) async {
       // Insert a few records so there are items to process
       await ManifestDatabase.insertImageRecord({
@@ -479,10 +480,8 @@ void main() {
       expect(archive, isNotNull);
 
       // Should contain at least manifest.json and stroom_manifest.json
-      final fileNames = archive.files
-          .where((f) => f.isFile)
-          .map((f) => f.name)
-          .toSet();
+      final fileNames =
+          archive.files.where((f) => f.isFile).map((f) => f.name).toSet();
       expect(fileNames, contains('manifest.json'));
       expect(fileNames, contains('stroom_manifest.json'));
 
