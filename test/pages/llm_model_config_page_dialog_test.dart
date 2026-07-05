@@ -21,7 +21,8 @@ void main() {
       expect(find.text('关闭时值'), findsOneWidget);
     });
 
-    testWidgets('can add reasoning param via button', (tester) async {
+    testWidgets('can add reasoning param via "添加推理参数" button',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: LlmModelConfigPage(),
@@ -30,12 +31,28 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
+      // Fill required fields
+      final textFields = find.byType(TextField);
+      await tester.enterText(textFields.at(1), 'test-model');
+      await tester.enterText(textFields.at(2), '4096');
+      await tester.pump();
+
+      // Fill toggle fields so additional params can be saved
+      final toggleFields = find.byType(TextFormField);
+      await tester.enterText(toggleFields.at(0), 'thinking.type');
+      await tester.enterText(toggleFields.at(1), 'enabled');
+      await tester.enterText(toggleFields.at(2), 'disabled');
+      await tester.pump();
+
       // Scroll to find "添加推理参数" button
       await tester.scrollUntilVisible(
         find.text('添加推理参数'),
         200,
         scrollable: find.byType(Scrollable).first,
       );
+      await tester.pump();
+      await tester.ensureVisible(find.text('添加推理参数'));
+      await tester.pump();
 
       expect(find.text('添加推理参数'), findsOneWidget);
 

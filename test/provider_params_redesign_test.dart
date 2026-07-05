@@ -222,7 +222,7 @@ void main() {
 
       // Now inference intensity should be enabled
       // Look for option fields or intensity-related UI
-      // The page should have "添加推理参数" button which includes intensity
+      // The page should have "添加推理参数" button for adding extra reasoning params
       await tester.scrollUntilVisible(
         find.text('添加推理参数'),
         200,
