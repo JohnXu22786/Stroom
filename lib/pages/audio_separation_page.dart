@@ -12,6 +12,7 @@ import '../providers/tts_state_provider.dart';
 import '../providers/background_task_provider.dart';
 import '../utils/file_manifest.dart';
 import '../widgets/folder_picker_dialog.dart';
+import 'audio_separation_selected_video.dart';
 import 'tts_page.dart';
 import 'audio_separation_shared.dart';
 import 'chat/composer/video_album_picker_dialog.dart';
@@ -26,19 +27,6 @@ class AudioSeparationPage extends ConsumerStatefulWidget {
   @override
   ConsumerState<AudioSeparationPage> createState() =>
       _AudioSeparationPageState();
-}
-
-/// Represents a single selected video file for audio separation.
-class SelectedVideo {
-  final Uint8List bytes;
-  final String name;
-  final String format;
-
-  SelectedVideo({
-    required this.bytes,
-    required this.name,
-    this.format = 'mp4',
-  });
 }
 
 class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {

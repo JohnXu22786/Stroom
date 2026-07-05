@@ -16,6 +16,8 @@ import '../utils/file_manifest.dart';
 import '../utils/text_manifest.dart';
 import '../widgets/app_media_picker_dialog.dart';
 import '../widgets/folder_picker_dialog.dart';
+import '../widgets/media_picker_config.dart';
+import 'asr_selected_audio.dart';
 import 'ocr/ocr_shared.dart';
 
 // ============================================================================
@@ -52,19 +54,6 @@ List<ModelConfig> _getAsrModels(WidgetRef ref) {
     }
   }
   return [];
-}
-
-// ============================================================================
-// Selected Audio Model
-// ============================================================================
-
-/// Represents a single selected audio file for ASR transcription.
-class SelectedAudio {
-  final Uint8List bytes;
-  final String name;
-  final String format;
-
-  SelectedAudio({required this.bytes, required this.name, this.format = 'wav'});
 }
 
 // ============================================================================

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:stroom/utils/video_manifest.dart';
 import 'package:stroom/widgets/app_media_picker_dialog.dart';
+import 'package:stroom/widgets/media_picker_config.dart';
 
 /// Result from the video picker containing both the record and its data bytes.
 class VideoPickerResult {

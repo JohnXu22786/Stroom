@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'home_page_types.dart';
 import 'home_shared.dart';
 
 import '../main.dart' as main_lib;
@@ -20,12 +21,6 @@ import 'asr_page.dart';
 import 'audio_separation_page.dart';
 import 'tts_create_page.dart';
 import 'mermaid_chart_page.dart';
-
-/// 页面枚举，定义应用中的主要页面（不含加号按钮）
-enum AppPage { home, chat, files, settings }
-
-/// 当前选中页面的状态提供器
-final selectedPageProvider = StateProvider<AppPage>((ref) => AppPage.home);
 
 /// 主页，采用 FlClash 风格的响应式布局：
 /// - 移动端：底部导航栏（主页、对话、文件、设置）

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/widgets/app_media_picker_dialog.dart';
+import 'package:stroom/widgets/media_picker_config.dart';
 
 // ============================================================================
 // Helper: A simple test record model
