@@ -1,6 +1,33 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dio/dio.dart';
 import 'package:stroom/services/asr_service.dart';
 import 'dart:typed_data';
+
+/// A mock [HttpClientAdapter] that captures the request options (including
+/// Content-Type) after Dio's transformer processes FormData, and returns a
+/// success response.
+class _CapturingAdapter implements HttpClientAdapter {
+  String? capturedContentType;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<dynamic>? cancelFuture,
+  ) async {
+    capturedContentType = options.contentType;
+    // Drain the request stream so the adapter completes cleanly
+    await requestStream?.drain<void>();
+    return ResponseBody.fromString(
+      '{"text":"Hello world"}',
+      200,
+      headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
 
 void main() {
   group('AsrService', () {
@@ -174,6 +201,59 @@ void main() {
           ),
           throwsA(isA<Exception>()),
         );
+      });
+
+      test(
+          'FormData request has correct Content-Type with boundary (no -- prefix)',
+          () async {
+        final adapter = _CapturingAdapter();
+        final mockDio = Dio()..httpClientAdapter = adapter;
+
+        const config = AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com',
+        );
+        final service = AsrService(config: config, dio: mockDio);
+
+        final result = await service.transcribe(
+          audioBytes: Uint8List.fromList([1, 2, 3]),
+          audioFormat: 'wav',
+        );
+
+        // After Dio's transformer processes the FormData, the Content-Type
+        // should include the boundary parameter.
+        final capturedContentType = adapter.capturedContentType;
+
+        expect(capturedContentType, isNotNull);
+        expect(
+          capturedContentType!.startsWith('multipart/form-data'),
+          isTrue,
+          reason: 'Content-Type must start with multipart/form-data',
+        );
+        expect(
+          capturedContentType.contains('boundary='),
+          isTrue,
+          reason:
+              'Content-Type must include boundary parameter. Got: $capturedContentType',
+        );
+
+        // Extract boundary value and verify it does NOT start with --
+        // Use a robust regex that stops at whitespace or semicolon.
+        final boundaryMatch =
+            RegExp(r'boundary=([^\s;]+)').firstMatch(capturedContentType);
+        expect(boundaryMatch, isNotNull);
+        final boundaryValue = boundaryMatch!.group(1)!;
+        expect(
+          boundaryValue.contains('--'),
+          isFalse,
+          reason:
+              'Boundary value must not contain -- prefix. '
+              'Valid example: boundary=dio-boundary-xxx, '
+              'invalid: boundary=--dio-boundary-xxx. Got: $boundaryValue',
+        );
+
+        // Verify the transcription still works after the fix
+        expect(result.text, equals('Hello world'));
       });
     });
 
