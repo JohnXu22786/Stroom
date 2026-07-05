@@ -5,8 +5,7 @@ import 'package:stroom/providers/provider_config.dart';
 
 void main() {
   group('LlmModelConfigPage - reasoning params structure', () {
-    testWidgets('shows 推理开关 card and 推理力度 card for new model',
-        (tester) async {
+    testWidgets('shows 推理开关 card and 推理力度 card for new model', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: LlmModelConfigPage(),

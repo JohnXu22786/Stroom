@@ -127,8 +127,7 @@ Widget _buildCodeBlock(String code, String language, PreConfig preConfig) {
   // default behaviour from CodeBlockNode.build() but without access to
   // visitor.richTextBuilder / visitor.splitRegExp).
   final splitRegExp = WidgetVisitor.defaultSplitRegExp;
-  var splitContents =
-      code.trim().split(splitRegExp);
+  var splitContents = code.trim().split(splitRegExp);
   if (splitContents.isNotEmpty && splitContents.last.isEmpty) {
     splitContents = splitContents.sublist(0, splitContents.length - 1);
   }
@@ -191,8 +190,7 @@ PreConfig codeBlockPreConfig({required bool isDark}) {
     textStyle: baseConfig.textStyle,
     styleNotMatched: baseConfig.styleNotMatched,
     language: baseConfig.language,
-    builder: (code, language) =>
-        _buildCodeBlock(code, language, baseConfig),
+    builder: (code, language) => _buildCodeBlock(code, language, baseConfig),
   );
 }
 
