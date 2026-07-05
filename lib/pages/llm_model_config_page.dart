@@ -420,8 +420,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           children: [
             Row(
               children: [
-                Icon(Icons.tune, size: 18,
-                    color: toggleComplete ? cs.primary : Colors.grey),
+                Icon(Icons.tune,
+                    size: 18, color: toggleComplete ? cs.primary : Colors.grey),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text('推理力度',
@@ -652,8 +652,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                       IconButton(
                         icon: const Icon(Icons.remove_circle,
                             color: Colors.red, size: 18),
-                        onPressed: () =>
-                            _removeOptionFromParam(actualIndex, j),
+                        onPressed: () => _removeOptionFromParam(actualIndex, j),
                         tooltip: '删除选项',
                       ),
                   ],

@@ -153,8 +153,7 @@ void main() {
   });
 
   group('Inference switch validation: all fields required', () {
-    testWidgets(
-        'click "添加推理参数" adds param regardless of toggle state',
+    testWidgets('click "添加推理参数" adds param regardless of toggle state',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
