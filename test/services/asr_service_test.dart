@@ -21,7 +21,9 @@ class _CapturingAdapter implements HttpClientAdapter {
     return ResponseBody.fromString(
       '{"text":"Hello world"}',
       200,
-      headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType]
+      },
     );
   }
 
@@ -246,8 +248,7 @@ void main() {
         expect(
           boundaryValue.contains('--'),
           isFalse,
-          reason:
-              'Boundary value must not contain -- prefix. '
+          reason: 'Boundary value must not contain -- prefix. '
               'Valid example: boundary=dio-boundary-xxx, '
               'invalid: boundary=--dio-boundary-xxx. Got: $boundaryValue',
         );
