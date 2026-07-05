@@ -53,7 +53,7 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
       codec.dispose();
 
       // Determine output size accounting for rotation
-      final needsRotation = action != null && action.rotateAngle % 180 != 0;
+      final needsRotation = action != null && action.rotateDegrees % 180 != 0;
       final int outputWidth =
           needsRotation ? originalImage.height : originalImage.width;
       final int outputHeight =
@@ -62,9 +62,9 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
       final output = await _processImage(
         image: originalImage,
         cropRect: cropRect,
-        rotateAngle: action?.rotateAngle ?? 0,
-        flipX: action?.flipX ?? false,
-        flipY: action?.flipY ?? false,
+        rotateAngle: action?.rotateDegrees ?? 0,
+        flipX: action?.flipY ?? false,
+        flipY: false,
         outputWidth: outputWidth,
         outputHeight: outputHeight,
         needsRotation: needsRotation,
@@ -226,14 +226,14 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
               icon: Icons.rotate_left,
               label: '左旋',
               onTap: () {
-                _editorKey.currentState?.rotate(right: false);
+                _editorKey.currentState?.rotate(degree: -90);
               },
             ),
             _buildToolButton(
               icon: Icons.rotate_right,
               label: '右旋',
               onTap: () {
-                _editorKey.currentState?.rotate(right: true);
+                _editorKey.currentState?.rotate(degree: 90);
               },
             ),
             _buildToolButton(

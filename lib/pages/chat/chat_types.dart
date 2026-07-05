@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:stroom/models/tool_call.dart';
 
 /// Segments that make up an AI message, rendered in order.

@@ -91,8 +91,7 @@ void main() {
           utf8.encode(jsonEncode(prefData))));
 
       final encoded = ZipEncoder().encode(archive);
-      expect(encoded, isNotNull);
-      final backupBytes = Uint8List.fromList(encoded!);
+      final backupBytes = Uint8List.fromList(encoded);
 
       // ===============================================================
       // Clear state and restore (this triggers migration automatically)
@@ -210,8 +209,7 @@ void main() {
           utf8.encode(jsonEncode(prefData))));
 
       final encoded = ZipEncoder().encode(archive);
-      expect(encoded, isNotNull);
-      final backupBytes = Uint8List.fromList(encoded!);
+      final backupBytes = Uint8List.fromList(encoded);
 
       // ===============================================================
       // Restore (triggers migration automatically)
@@ -311,8 +309,7 @@ void main() {
           utf8.encode(jsonEncode(prefData))));
 
       final encoded = ZipEncoder().encode(archive);
-      expect(encoded, isNotNull);
-      final backupBytes = Uint8List.fromList(encoded!);
+      final backupBytes = Uint8List.fromList(encoded);
 
       // Restore
       await ManifestDatabase.clearAllData();
@@ -356,8 +353,7 @@ void main() {
       // NO preferences.json — migration will see whatever prefs exist
 
       final encoded = ZipEncoder().encode(archive);
-      expect(encoded, isNotNull);
-      final backupBytes = Uint8List.fromList(encoded!);
+      final backupBytes = Uint8List.fromList(encoded);
 
       await ManifestDatabase.clearAllData();
       SharedPreferences.setMockInitialValues({

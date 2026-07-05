@@ -66,7 +66,7 @@ class NotificationService {
       );
 
       await _plugin!.initialize(
-        settings,
+        settings: settings,
         onDidReceiveNotificationResponse: _onNotificationResponse,
       );
 
@@ -213,10 +213,10 @@ class NotificationService {
           : '${payload.title} 失败: ${payload.error ?? "未知错误"}';
 
       await _plugin!.show(
-        payload.taskId.hashCode,
-        title,
-        body,
-        details,
+        id: payload.taskId.hashCode,
+        title: title,
+        body: body,
+        notificationDetails: details,
         payload: payload.taskId,
       );
     } catch (e) {
@@ -331,7 +331,6 @@ class _InAppNotificationBannerState extends State<InAppNotificationBanner>
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final isSuccess = widget.payload.success;
 
     return SlideTransition(

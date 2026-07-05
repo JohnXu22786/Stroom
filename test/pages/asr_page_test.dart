@@ -16,7 +16,8 @@ import 'package:stroom/utils/file_manifest.dart';
 // ============================================================================
 
 Widget _buildTestApp({List<ProviderEntry>? entries}) {
-  final overrides = <Override>[
+  // ignore: prefer_const_constructors
+  final overrides = [
     audioRecordsProvider.overrideWith((ref) => AudioRecordsNotifier()),
   ];
   if (entries != null) {
