@@ -87,7 +87,8 @@ void main() {
   });
 
   group('BackgroundOptimizationPage - navigation', () {
-    testWidgets('tapping Android tutorial card navigates to PlatformTutorialPage', (
+    testWidgets(
+        'tapping Android tutorial card navigates to PlatformTutorialPage', (
       tester,
     ) async {
       tester.view.physicalSize = const Size(1080, 4000);
@@ -108,7 +109,8 @@ void main() {
       expect(find.text('Android 后台运行教程'), findsOneWidget);
     });
 
-    testWidgets('tapping Windows tutorial card navigates to PlatformTutorialPage', (
+    testWidgets(
+        'tapping Windows tutorial card navigates to PlatformTutorialPage', (
       tester,
     ) async {
       tester.view.physicalSize = const Size(1080, 4000);
