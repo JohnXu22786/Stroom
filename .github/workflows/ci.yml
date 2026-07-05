@@ -26,6 +26,7 @@ jobs:
   # ── Static Analysis ───────────────────────────────────────────────────────
   analyze:
     name: Static Analysis
+    needs: [format]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
