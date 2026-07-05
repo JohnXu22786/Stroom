@@ -375,6 +375,9 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
       if (customParams != null) {
         params.addAll(customParams);
       }
+      // Parse JSON-type custom params from string to actual JSON
+      // objects/arrays so they are sent as raw JSON, not quoted strings.
+      _parseJsonCustomParams(params, modelConfig);
 
       // 执行合成
       var audioData = await provider.synthesize(
@@ -465,6 +468,9 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
       if (customParams != null) {
         params.addAll(customParams);
       }
+      // Parse JSON-type custom params from string to actual JSON
+      // objects/arrays so they are sent as raw JSON, not quoted strings.
+      _parseJsonCustomParams(params, modelConfig);
 
       final stream = provider.streamSynthesize(
         text,
@@ -530,5 +536,23 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
     await FileManifest.addRecord(record);
 
     return record;
+  }
+
+  /// Parse JSON-type custom param values from string to actual JSON
+  /// objects/arrays so they are sent as raw JSON, not quoted strings.
+  void _parseJsonCustomParams(
+      Map<String, dynamic> params, ModelConfig modelConfig) {
+    for (final cp in modelConfig.customParams) {
+      if (cp.type != 'json') continue;
+      if (!params.containsKey(cp.paramName)) continue;
+      final rawValue = params[cp.paramName];
+      if (rawValue is String) {
+        try {
+          params[cp.paramName] = jsonDecode(rawValue);
+        } catch (_) {
+          // Keep as string if not valid JSON
+        }
+      }
+    }
   }
 }

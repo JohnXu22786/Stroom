@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:dio/dio.dart';
@@ -87,6 +88,9 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       if (task.customParams != null) {
         params.addAll(task.customParams!);
       }
+      // Parse JSON-type custom param values from string to actual JSON
+      // objects/arrays so they are sent as raw JSON, not quoted strings.
+      parseJsonCustomParams(params, task.modelConfig);
 
       // 执行合成
       var audioData = await provider.synthesize(
@@ -429,5 +433,30 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     ];
     debugPrint(
         '[TaskListNotifier] Restored ${tasks.length} tasks from persistence');
+  }
+
+  /// Parse JSON-type custom param values from string to actual JSON
+  /// objects/arrays so they are sent as raw JSON, not quoted strings.
+  ///
+  /// Non-JSON type params are left unchanged. Invalid JSON strings are kept
+  /// as-is (fallback to raw string). Already-parsed values (Map/List) are
+  /// not double-parsed.
+  @visibleForTesting
+  static void parseJsonCustomParams(
+      Map<String, dynamic>? params, ModelConfig modelConfig) {
+    if (params == null) return;
+    for (final cp in modelConfig.customParams) {
+      if (cp.type != 'json') continue;
+      if (!params.containsKey(cp.paramName)) continue;
+      final rawValue = params[cp.paramName];
+      if (rawValue is String) {
+        try {
+          params[cp.paramName] = jsonDecode(rawValue);
+        } catch (_) {
+          // Keep as string if not valid JSON
+        }
+      }
+      // If already a Map/List/num/bool — leave as-is
+    }
   }
 }
