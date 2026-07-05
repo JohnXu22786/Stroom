@@ -13,6 +13,7 @@ import '../services/notification_service.dart';
 import '../widgets/update_dialog.dart';
 import 'provider_config_page.dart';
 import 'backup_restore_page.dart';
+import 'background_optimization_page.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -35,8 +36,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           _buildSectionHeader('主题'),
           _buildThemeSettings(themeMode, themeNotifier),
           const SizedBox(height: 24),
-          _buildSectionHeader('通知'),
+          _buildSectionHeader('任务'),
           _buildNotificationSettings(),
+          const SizedBox(height: 8),
+          _buildBackgroundOptimizationCard(),
           const SizedBox(height: 24),
           _buildSectionHeader('供应商设置'),
           _buildProviderSettings(),
@@ -172,6 +175,28 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               onTap: () {},
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBackgroundOptimizationCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: _buildListTile(
+          leading: const Icon(Icons.speed, color: Colors.deepPurple),
+          title: '后台运行优化',
+          subtitle: '检测系统环境与后台服务状态，查看优化教程',
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const BackgroundOptimizationPage(),
+              ),
+            );
+          },
         ),
       ),
     );
