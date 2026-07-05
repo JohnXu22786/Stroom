@@ -13,9 +13,12 @@ import 'package:file_picker/file_picker.dart';
 import '../providers/provider_config.dart';
 import '../providers/tts_state_provider.dart';
 import '../utils/file_manifest.dart';
+import '../utils/text_manifest.dart';
 import '../utils/audio_playback.dart';
 import '../utils/audio_utils.dart';
+import '../widgets/app_media_picker_dialog.dart';
 import 'audio_player_shared.dart';
+import 'audio_separation_shared.dart';
 import 'tts_create_page.dart';
 
 /// 音频播放器页面
@@ -137,8 +140,121 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     }
   }
 
-  /// 上传或修改源文本文件
-  Future<void> _uploadSourceText() async {
+  /// 显示选择源文本来源的面板（应用内文本 / 系统文本文件）
+  void _showSourceTextChoicePanel() {
+    final cs = Theme.of(context).colorScheme;
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 32,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                '选择源文本来源',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 24),
+              Column(
+                children: [
+                  ChoiceCard(
+                    icon: Icons.description_outlined,
+                    title: '从应用内文本选择',
+                    subtitle: '从应用内已保存的文本文件中选择',
+                    color: Colors.green,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _pickSourceTextFromApp();
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  ChoiceCard(
+                    icon: Icons.upload_file,
+                    title: '从系统文本文件选择',
+                    subtitle: '从设备文件中选择文本文件',
+                    color: Colors.blue,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _pickSourceTextFromSystem();
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 从应用内已保存的文本文件中选择源文本
+  Future<void> _pickSourceTextFromApp() async {
+    try {
+      final result = await showMediaPickerDialog<TextRecord>(
+        context,
+        MediaPickerConfig<TextRecord>(
+          title: '选择应用内文本',
+          emptyIcon: Icons.description_outlined,
+          emptyText: '暂无文本文件',
+          fileIcon: Icons.description,
+          fileIconColor: Colors.orange,
+          multiSelect: false,
+          loadRecords: TextManifest.loadRecords,
+          loadFolders: TextManifest.getAllFolders,
+          readFile: (record) => TextManifest.readFile(record.storagePath),
+          displayName: (record) => record.name,
+          subtitleBuilder: (record) => Row(
+            children: [
+              Text(
+                '${record.textLength}字',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                formatFileSize(record.size),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (result == null || result.isEmpty || !mounted) return;
+
+      await _applySourceTextContent(result.first.value);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('选择文本失败: $e')),
+        );
+      }
+    }
+  }
+
+  /// 从设备文件系统中选择源文本文件
+  Future<void> _pickSourceTextFromSystem() async {
     try {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
@@ -159,47 +275,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
         return;
       }
 
-      String textContent;
-      try {
-        textContent = utf8.decode(bytes);
-      } catch (_) {
-        // 尝试其他常见编码
-        try {
-          textContent = utf8.decode(bytes, allowMalformed: true);
-        } catch (_) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('无法解析文本文件编码，请使用 UTF-8 格式')),
-            );
-          }
-          return;
-        }
-      }
-      if (textContent.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('文本文件内容为空')),
-          );
-        }
-        return;
-      }
-
-      // 保存源文本
-      await _saveSourceText(textContent);
-
-      if (mounted) {
-        final wasEmpty = _sourceText.isEmpty;
-        setState(() {
-          _sourceText = textContent;
-          _textController.text = textContent;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(wasEmpty ? '源文本已上传' : '源文本已更新'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
+      await _applySourceTextContent(bytes);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -207,6 +283,63 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
         );
       }
     }
+  }
+
+  /// 将原始字节解码为文本并应用到源文本（保存 + 更新 UI）
+  Future<void> _applySourceTextContent(Uint8List bytes) async {
+    if (bytes.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('文本内容为空')),
+        );
+      }
+      return;
+    }
+
+    String textContent;
+    try {
+      textContent = utf8.decode(bytes);
+    } catch (_) {
+      textContent = utf8.decode(bytes, allowMalformed: true);
+    }
+
+    if (textContent.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('文本内容为空')),
+        );
+      }
+      return;
+    }
+
+    try {
+      await _saveSourceText(textContent);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('保存源文本失败: $e')),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+    final wasEmpty = _sourceText.isEmpty;
+    setState(() {
+      _sourceText = textContent;
+      _textController.text = textContent;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(wasEmpty ? '源文本已上传' : '源文本已更新'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// 上传或修改源文本文件 — 弹出选择面板
+  void _uploadSourceText() {
+    _showSourceTextChoicePanel();
   }
 
   /// 保存源文本到伴生文件并更新 AudioRecord
