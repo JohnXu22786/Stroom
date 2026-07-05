@@ -2172,8 +2172,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                           'Status Code: $statusCode',
                                           style: TextStyle(
                                             color: isDark
-                                                ? Colors.grey[300]
-                                                : Colors.grey[800],
+                                                ? Colors.red[200]
+                                                : Colors.red[800],
                                             fontSize: 13,
                                           ),
                                         ),
@@ -2191,8 +2191,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                           bodyText,
                                           style: TextStyle(
                                             color: isDark
-                                                ? Colors.grey[300]
-                                                : Colors.grey[800],
+                                                ? Colors.red[200]
+                                                : Colors.red[800],
                                             fontSize: 13,
                                           ),
                                         ),
@@ -2214,8 +2214,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                           originalErrorText,
                                           style: TextStyle(
                                             color: isDark
-                                                ? Colors.grey[300]
-                                                : Colors.grey[800],
+                                                ? Colors.red[200]
+                                                : Colors.red[800],
                                             fontSize: 13,
                                           ),
                                         ),
@@ -2229,8 +2229,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                       padding: const EdgeInsets.all(12),
                                       decoration: BoxDecoration(
                                         color: (isDark
-                                                ? Colors.grey[850]
-                                                : Colors.grey[100])!
+                                                ? Colors.red[900]
+                                                : Colors.red[50])!
                                             .withOpacity(0.7),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
@@ -2246,16 +2246,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                                 Icons.info_outline,
                                                 size: 14,
                                                 color: isDark
-                                                    ? Colors.grey[400]
-                                                    : Colors.grey[600],
+                                                    ? Colors.red[300]
+                                                    : Colors.red[700],
                                               ),
                                               const SizedBox(width: 4),
                                               Text(
                                                 '发送失败',
                                                 style: TextStyle(
                                                   color: isDark
-                                                      ? Colors.grey[400]
-                                                      : Colors.grey[600],
+                                                      ? Colors.red[300]
+                                                      : Colors.red[700],
                                                   fontSize: 12,
                                                   fontWeight: FontWeight.w600,
                                                 ),
@@ -2276,16 +2276,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                                   Icons.preview,
                                                   size: 14,
                                                   color: isDark
-                                                      ? Colors.grey[400]
-                                                      : Colors.grey[600],
+                                                      ? Colors.red[300]
+                                                      : Colors.red[700],
                                                 ),
                                                 label: Text(
                                                   '查看详细错误',
                                                   style: TextStyle(
                                                     fontSize: 12,
                                                     color: isDark
-                                                        ? Colors.grey[400]
-                                                        : Colors.grey[600],
+                                                        ? Colors.red[300]
+                                                        : Colors.red[700],
                                                   ),
                                                 ),
                                                 onPressed: () =>
@@ -2717,7 +2717,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
                               child: Material(
                                 elevation: 4,
                                 shape: const CircleBorder(),
-                                color: Colors.orange[700],
+                                color: isDark
+                                    ? Colors.grey[700]
+                                    : Colors.grey[300],
                                 child: InkWell(
                                   customBorder: const CircleBorder(),
                                   onTap: _onScrollToBottomTap,
@@ -2725,10 +2727,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                     width: 36,
                                     height: 36,
                                     alignment: Alignment.center,
-                                    child: const Icon(
+                                    child: Icon(
                                       Icons.arrow_downward,
                                       size: 20,
-                                      color: Colors.white,
+                                      color: isDark
+                                          ? Colors.grey[200]
+                                          : Colors.grey[700],
                                     ),
                                   ),
                                 ),

@@ -501,15 +501,117 @@ MERMAID_CODE_PLACEHOLDER
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Main content
+  // ---------------------------------------------------------------------------
+
   Widget _buildMainContent(ColorScheme cs) {
-    switch (_editorMode) {
-      case EditorMode.edit:
-        return _buildCodeEditor(cs);
-      case EditorMode.split:
-        return _buildSplitView(cs);
-      case EditorMode.preview:
-        return _buildPreviewOnly(cs);
-    }
+    // Preview panel is always at a fixed position (hidden in edit mode)
+    // to prevent InAppWebView from being destroyed and recreated when
+    // switching between split and preview modes.
+    final bool showPreview = _editorMode != EditorMode.edit;
+
+    return Stack(
+      children: [
+        // Preview — always at the same tree depth to keep InAppWebView alive
+        if (showPreview)
+          Positioned.fill(
+            child: _buildPreviewPanel(cs),
+          ),
+        // Editor overlay for edit mode
+        if (_editorMode == EditorMode.edit)
+          Positioned.fill(
+            child: _buildCodeEditor(cs),
+          ),
+        // Editor overlay for split mode (bottom half)
+        if (_editorMode == EditorMode.split)
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: _buildSplitEditorPart(cs),
+          ),
+      ],
+    );
+  }
+
+  /// Preview panel that wraps [InAppWebView] in a consistent widget tree.
+  /// In preview mode, [InteractiveViewer] is enabled for zoom/pan.
+  /// In split mode, [InteractiveViewer] is effectively disabled so the
+  /// preview fills the available space naturally.
+  Widget _buildPreviewPanel(ColorScheme cs) {
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: cs.outlineVariant, width: 0.5),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: InteractiveViewer(
+            minScale: _editorMode == EditorMode.preview ? 0.5 : 1.0,
+            maxScale: _editorMode == EditorMode.preview ? 5.0 : 1.0,
+            constrained: _editorMode != EditorMode.preview,
+            child: _buildPreviewContent(cs),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Editor-only part of the split view (no InAppWebView preview).
+  Widget _buildSplitEditorPart(ColorScheme cs) {
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.45,
+      child: Column(
+        children: [
+          // Divider + label
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                Icon(Icons.code, size: 14, color: cs.onSurfaceVariant),
+                const SizedBox(width: 4),
+                Text(
+                  '代码',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+                const Expanded(child: Divider(thickness: 0.5)),
+              ],
+            ),
+          ),
+          // Code editor
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+              child: TextField(
+                controller: _codeController,
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  contentPadding: const EdgeInsets.all(10),
+                  labelText: 'Mermaid 代码',
+                  isDense: true,
+                ),
+                maxLines: null,
+                expands: true,
+                textAlignVertical: TextAlignVertical.top,
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -536,105 +638,6 @@ MERMAID_CODE_PLACEHOLDER
           fontFamily: 'monospace',
           fontSize: 13,
           height: 1.5,
-        ),
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // Split view: preview on TOP, code on BOTTOM
-  // ---------------------------------------------------------------------------
-
-  Widget _buildSplitView(ColorScheme cs) {
-    return Column(
-      children: [
-        // Preview on TOP
-        Expanded(
-          flex: 1,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: cs.outlineVariant, width: 0.5),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: _buildPreviewContent(cs),
-              ),
-            ),
-          ),
-        ),
-
-        // Divider + label
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(
-            children: [
-              Icon(Icons.code, size: 14, color: cs.onSurfaceVariant),
-              const SizedBox(width: 4),
-              Text(
-                '代码',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: cs.onSurfaceVariant,
-                ),
-              ),
-              const Expanded(child: Divider(thickness: 0.5)),
-            ],
-          ),
-        ),
-
-        // Code editor on BOTTOM
-        Expanded(
-          flex: 1,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-            child: TextField(
-              controller: _codeController,
-              decoration: InputDecoration(
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                contentPadding: const EdgeInsets.all(10),
-                labelText: 'Mermaid 代码',
-                isDense: true,
-              ),
-              maxLines: null,
-              expands: true,
-              textAlignVertical: TextAlignVertical.top,
-              style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 12,
-                height: 1.4,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // Preview only (with gesture zoom)
-  // ---------------------------------------------------------------------------
-
-  Widget _buildPreviewOnly(ColorScheme cs) {
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: cs.outlineVariant, width: 0.5),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: InteractiveViewer(
-            minScale: 0.5,
-            maxScale: 5.0,
-            constrained: false,
-            child: _buildPreviewContent(cs),
-          ),
         ),
       ),
     );

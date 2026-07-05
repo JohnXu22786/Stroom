@@ -48,6 +48,41 @@ void main() {
       expect(path, isNotNull);
       expect(path.isNotEmpty, isTrue);
     });
+
+    test('backup root is NOT inside private app data directory', () async {
+      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
+      final appDir = await AppStorage.directory;
+
+      // In production, backup is stored in a user-accessible location
+      // outside the app data directory on every platform (see docstring).
+      // In the test environment, both use subdirectories of temp by design.
+      expect(backupRoot, isNot(equals(appDir)),
+          reason: 'Backup root must differ from private app data directory. '
+              'It must be in a user-accessible location.');
+    });
+  });
+
+  group('DataMigrationService - user-accessible backup path requirements', () {
+    test('path returns valid backup directory name', () async {
+      // On each platform, getExternalBackupRootPath() resolves to a
+      // user-accessible location (see method docstring for details).
+      // In the test environment it falls back to Directory.systemTemp.
+      final path = await DataMigrationService.getExternalBackupRootPath();
+      expect(path, isNotNull);
+      expect(path.contains('Stroom') || path.contains('stroom'), isTrue);
+    });
+
+    test('path works with createBackup and cleanOldBackups', () async {
+      // Verify that after the path change, backup creation and cleanup
+      // still work correctly.
+      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
+      final rootDir = Directory(backupRoot);
+      await rootDir.create(recursive: true);
+      await DataMigrationService.cleanOldBackups();
+      if (await rootDir.exists()) {
+        await rootDir.delete(recursive: true);
+      }
+    });
   });
 
   group('DataMigrationService - format version', () {

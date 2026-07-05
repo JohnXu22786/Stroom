@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/widgets/markdown_extensions.dart';
+import '../chat_types.dart';
 
 /// Data model for the reasoning sections to display.
 /// [texts] is a list of reasoning chain texts, one per reasoning round.
@@ -20,14 +22,14 @@ class ReasoningSectionData {
   bool get hasMultiple => texts.length > 1;
 }
 
-/// Reasoning section that shows clickable orange button(s).
+/// Reasoning section that shows clickable text line(s).
 ///
-/// Each reasoning chain gets its own button. When tapped, opens a panel dialog
-/// that renders the specific reasoning section's content using MarkdownWidget
-/// (same rendering as assistant replies).
+/// Each reasoning chain gets its own line like "思考中 ›" or "思考完成 ›".
+/// When tapped, opens a panel dialog that renders the specific reasoning
+/// section's content using MarkdownWidget (same rendering as assistant replies).
 ///
-/// During streaming, the last section shows "推理中" (reasoning in progress).
-/// Completed sections show "推理过程" (reasoning process).
+/// During streaming, the last section shows "思考中" (thinking in progress).
+/// Completed sections show "思考完成" (thinking complete).
 class ReasoningSection extends ConsumerWidget {
   final ReasoningSectionData sections;
   final String messageId;
@@ -65,8 +67,10 @@ class ReasoningSection extends ConsumerWidget {
   }
 }
 
-/// A single clickable reasoning button (orange pill).
-class _ReasoningButton extends ConsumerWidget {
+/// A single clickable reasoning text line like "思考中 ›" or "思考完成 ›".
+///
+/// When streaming, the chevron animates through › ›› ››› at ~333ms intervals.
+class _ReasoningButton extends ConsumerStatefulWidget {
   final String reasoningText;
   final bool isStreaming;
   final bool isMulti;
@@ -82,50 +86,68 @@ class _ReasoningButton extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final label = isStreaming ? '推理中' : '推理过程';
-    final bgColor =
-        isDark ? Colors.orange[900]!.withOpacity(0.2) : Colors.orange[50]!;
-    final textColor = Colors.orange[700]!;
+  ConsumerState<_ReasoningButton> createState() => _ReasoningButtonState();
+}
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(6),
-        onTap: () => _openReasoningPanel(context, ref),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: Colors.orange.withOpacity(0.3)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.psychology_outlined, size: 16, color: textColor),
-              const SizedBox(width: 4),
-              if (isMulti)
-                Text(
-                  '推理 ${index + 1}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: textColor,
-                  ),
-                ),
-              if (isMulti) const SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: textColor,
-                ),
+class _ReasoningButtonState extends ConsumerState<_ReasoningButton> {
+  Timer? _chevronTimer;
+  int _chevronCount = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isStreaming) {
+      _chevronTimer = Timer.periodic(
+        const Duration(milliseconds: 333),
+        (_) {
+          if (mounted) {
+            setState(() {
+              _chevronCount = _chevronCount >= 3 ? 1 : _chevronCount + 1;
+            });
+          }
+        },
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _chevronTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final label = widget.isStreaming ? '思考中' : '思考完成';
+    final prefix = widget.isMulti ? '思考 ${widget.index + 1} ' : '';
+    final chevrons = '›' * _chevronCount;
+    final accentColor = Colors.orange[700]!;
+
+    return GestureDetector(
+      onTap: () => _openReasoningPanel(context, ref),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$prefix$label',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: accentColor,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 2),
+            Text(
+              chevrons,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: accentColor,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -135,10 +157,10 @@ class _ReasoningButton extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (ctx) => _ReasoningPanelDialog(
-        messageId: messageId,
-        sectionIndex: index,
-        initialReasoningText: reasoningText,
-        isStreaming: isStreaming,
+        messageId: widget.messageId,
+        sectionIndex: widget.index,
+        initialReasoningText: widget.reasoningText,
+        isStreaming: widget.isStreaming,
       ),
     );
   }
@@ -148,6 +170,9 @@ class _ReasoningButton extends ConsumerWidget {
 ///
 /// Watches [streamingReasoningSectionsProvider] for live updates — during
 /// streaming it shows incremental content for the active section.
+/// Also watches [streamingHasFirstTokenProvider] and [isStreamingProvider]
+/// to reactively update the header from "思考中" to "思考完成" when
+/// reasoning completes (text content starts arriving or stream ends).
 class _ReasoningPanelDialog extends ConsumerStatefulWidget {
   final String messageId;
   final int sectionIndex;
@@ -167,12 +192,46 @@ class _ReasoningPanelDialog extends ConsumerStatefulWidget {
 }
 
 class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog> {
+  late ScrollController _scrollController;
+  bool _userScrolledUp = false;
   String _displayText = '';
+  int _previousTextLength = 0;
 
   @override
   void initState() {
     super.initState();
     _displayText = widget.initialReasoningText;
+    _previousTextLength = _displayText.length;
+    _scrollController = ScrollController();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+    final isAtBottom = (maxScroll - currentScroll) <= 50;
+    if (isAtBottom == _userScrolledUp) {
+      setState(() => _userScrolledUp = !isAtBottom);
+    }
+  }
+
+  void _scrollToBottom() {
+    _userScrolledUp = false;
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   @override
@@ -191,7 +250,31 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog> {
       }
     }
 
-    final showEmpty = _displayText.isEmpty && widget.isStreaming;
+    // Auto-scroll to bottom when new content arrives, unless the user
+    // has manually scrolled up (interrupted auto-scroll).
+    if (_displayText.length > _previousTextLength) {
+      _previousTextLength = _displayText.length;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_userScrolledUp && _scrollController.hasClients) {
+          _scrollController.jumpTo(
+            _scrollController.position.maxScrollExtent,
+          );
+        }
+      });
+    }
+
+    // Determine reasoning completion state reactively.
+    // Reasoning is "complete" when either:
+    // 1. A TextEvent has arrived (first token received) while reasoning
+    //    content exists, or
+    // 2. The stream has ended.
+    final hasFirstToken = ref.watch(streamingHasFirstTokenProvider);
+    final isStreamActive = ref.watch(isStreamingProvider);
+    final hasReasoningContent = _displayText.isNotEmpty;
+    final isReasoningComplete =
+        hasReasoningContent && (hasFirstToken || !isStreamActive);
+
+    final showEmpty = _displayText.isEmpty && !isReasoningComplete;
 
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -217,7 +300,7 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  widget.isStreaming ? '推理中' : '推理过程',
+                  isReasoningComplete ? '思考完成' : '思考中',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -236,7 +319,7 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog> {
                   ),
                 ],
                 const Spacer(),
-                if (widget.isStreaming)
+                if (!isReasoningComplete)
                   SizedBox(
                     width: 14,
                     height: 14,
@@ -245,7 +328,7 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog> {
                       color: Colors.orange[700],
                     ),
                   ),
-                if (widget.isStreaming) const SizedBox(width: 8),
+                if (!isReasoningComplete) const SizedBox(width: 8),
                 IconButton(
                   icon: const Icon(Icons.close, size: 20),
                   onPressed: () => Navigator.pop(context),
@@ -258,7 +341,7 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog> {
               ],
             ),
           ),
-          // ── Content ──
+          // ── Content (with auto-scroll) ──
           Flexible(
             child: showEmpty
                 ? const Padding(
@@ -271,16 +354,47 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog> {
                       ),
                     ),
                   )
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: MarkdownWidget(
-                      data: _displayText,
-                      selectable: true,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      config: markdownConfig,
-                      markdownGenerator: markdownGenerator,
-                    ),
+                : Stack(
+                    children: [
+                      SingleChildScrollView(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.all(16),
+                        child: MarkdownWidget(
+                          data: _displayText,
+                          selectable: true,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          config: markdownConfig,
+                          markdownGenerator: markdownGenerator,
+                        ),
+                      ),
+                      // "Jump to bottom" button — only visible when user
+                      // has manually scrolled up (interrupted auto-scroll).
+                      if (_userScrolledUp)
+                        Positioned(
+                          right: 16,
+                          bottom: 16,
+                          child: Material(
+                            elevation: 4,
+                            shape: const CircleBorder(),
+                            color: Colors.orange[700],
+                            child: InkWell(
+                              customBorder: const CircleBorder(),
+                              onTap: _scrollToBottom,
+                              child: Container(
+                                width: 36,
+                                height: 36,
+                                alignment: Alignment.center,
+                                child: const Icon(
+                                  Icons.arrow_downward,
+                                  size: 20,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
           ),
         ],
