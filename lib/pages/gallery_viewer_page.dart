@@ -144,9 +144,18 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
         ),
       );
 
-      if (editedBytes != null && mounted) {
-        await _saveEditedImage(record, editedBytes, isSaveAs: false);
-      }
+      if (editedBytes == null || !mounted) return;
+
+      // Show the same save dialog as the full editor uses.
+      final saveAction = await showImageSaveDialog(context);
+      if (!mounted) return;
+      if (saveAction == null || saveAction == SaveAction.cancel) return;
+
+      await _saveEditedImage(
+        record,
+        editedBytes,
+        isSaveAs: saveAction == SaveAction.saveAs,
+      );
     } finally {
       _isLoading = false;
     }
@@ -189,17 +198,18 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
       final newFileName = '$newHash.${file.format}';
       await ImageManifest.writeFile(newFileName, editedBytes);
 
+      ImageRecord newRecord;
+
       if (isSaveAs) {
-        await ImageManifest.addRecord(
-          ImageRecord(
-            name: '${file.name}_edited',
-            hash: newHash,
-            format: file.format,
-            createdAt: DateTime.now(),
-            size: editedBytes.length,
-            folder: file.folder,
-          ),
+        newRecord = ImageRecord(
+          name: '${file.name}_edited',
+          hash: newHash,
+          format: file.format,
+          createdAt: DateTime.now(),
+          size: editedBytes.length,
+          folder: file.folder,
         );
+        await ImageManifest.addRecord(newRecord);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -211,16 +221,15 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
       } else {
         await ImageManifest.deleteFile(file.storagePath);
         await ImageManifest.deleteRecord(file.id);
-        await ImageManifest.addRecord(
-          ImageRecord(
-            name: file.name,
-            hash: newHash,
-            format: file.format,
-            createdAt: file.createdAt,
-            size: editedBytes.length,
-            folder: file.folder,
-          ),
+        newRecord = ImageRecord(
+          name: file.name,
+          hash: newHash,
+          format: file.format,
+          createdAt: file.createdAt,
+          size: editedBytes.length,
+          folder: file.folder,
         );
+        await ImageManifest.addRecord(newRecord);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -230,7 +239,25 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
           );
         }
       }
+
+      // Update in-memory cache and widget data so the current page shows
+      // the new image immediately without requiring a manual refresh.
+      // Insert new cache entry before removing the old one to avoid a
+      // narrow window where a rebuild could attempt to read the deleted
+      // file from disk.
+      _imageCache[newRecord.id] = editedBytes;
       _imageCache.remove(file.id);
+
+      // Update the record in-place. The parent always passes a mutable
+      // list (gallery_page.dart line 155 — folderImages.toList()), so
+      // this is safe. Without this update the current page would still
+      // reference the old record ID and fail to display.
+      final idx = widget.images.indexWhere((r) => r.id == file.id);
+      if (idx >= 0) {
+        widget.images[idx] = newRecord;
+      }
+
+      if (mounted) setState(() {});
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
