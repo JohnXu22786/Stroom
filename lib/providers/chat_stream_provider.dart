@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 /// The ID of the message currently being streamed. Survives page disposal
 /// so the page can reconnect to the active stream when navigated back to.
