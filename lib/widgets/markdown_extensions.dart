@@ -3,6 +3,7 @@ import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:markdown/markdown.dart' as m;
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:flutter_highlight/themes/dracula.dart';
+import 'mermaid_render_widget.dart';
 
 /// Tag used by the LaTeX custom generator.
 const _latexTag = 'latex';
@@ -112,6 +113,54 @@ class LatexNode extends SpanNode {
   }
 }
 
+/// Builds a code block widget for the given [code] and [language].
+///
+/// If [language] is `'mermaid'`, renders the code using [MermaidRenderWidget].
+/// Otherwise, renders a syntax-highlighted code block using the configured
+/// [preConfig] theme and decoration.
+Widget _buildCodeBlock(String code, String language, PreConfig preConfig) {
+  if (language == 'mermaid') {
+    return MermaidRenderWidget(mermaidCode: code);
+  }
+
+  // Fallback: render as a syntax-highlighted code block (replicating the
+  // default behaviour from CodeBlockNode.build() but without access to
+  // visitor.richTextBuilder / visitor.splitRegExp).
+  final splitRegExp = WidgetVisitor.defaultSplitRegExp;
+  var splitContents =
+      code.trim().split(splitRegExp);
+  if (splitContents.isNotEmpty && splitContents.last.isEmpty) {
+    splitContents = splitContents.sublist(0, splitContents.length - 1);
+  }
+
+  return Container(
+    decoration: preConfig.decoration,
+    margin: preConfig.margin,
+    padding: preConfig.padding,
+    width: double.infinity,
+    child: SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: List.generate(splitContents.length, (index) {
+          final currentContent = splitContents[index];
+          return Text.rich(
+            TextSpan(
+              children: highLightSpans(
+                currentContent,
+                language: language,
+                theme: preConfig.theme,
+                textStyle: preConfig.textStyle,
+                styleNotMatched: preConfig.styleNotMatched,
+              ),
+            ),
+          );
+        }),
+      ),
+    ),
+  );
+}
+
 /// Returns a [PreConfig] for code blocks that adapts to dark/light mode.
 ///
 /// - Dark mode: uses a dark grey background (`0xff555555`) with
@@ -119,15 +168,31 @@ class LatexNode extends SpanNode {
 /// - Light mode: uses a light grey background (`0xffeff1f3`) with
 ///   the [draculaTheme] syntax highlighting.
 ///
+/// Mermaid code blocks (```` ```mermaid ````) are rendered using
+/// [MermaidRenderWidget] instead of syntax highlighting.
+///
 /// The [draculaTheme] is chosen for its high-contrast syntax colours
 /// which work well in both modes.
 PreConfig codeBlockPreConfig({required bool isDark}) {
-  return PreConfig(
+  final baseConfig = PreConfig(
     theme: draculaTheme,
     decoration: BoxDecoration(
       color: isDark ? const Color(0xff555555) : const Color(0xffeff1f3),
       borderRadius: BorderRadius.all(Radius.circular(8.0)),
     ),
+  );
+  // Use a builder so mermaid code blocks get rendered via WebView
+  // while all other code blocks still get syntax highlighting.
+  return PreConfig(
+    theme: baseConfig.theme,
+    decoration: baseConfig.decoration,
+    margin: baseConfig.margin,
+    padding: baseConfig.padding,
+    textStyle: baseConfig.textStyle,
+    styleNotMatched: baseConfig.styleNotMatched,
+    language: baseConfig.language,
+    builder: (code, language) =>
+        _buildCodeBlock(code, language, baseConfig),
   );
 }
 

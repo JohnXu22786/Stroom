@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/widgets/markdown_extensions.dart';
+import 'package:stroom/widgets/mermaid_render_widget.dart';
 
 import 'package:markdown/markdown.dart' as m;
 import 'package:markdown_widget/markdown_widget.dart';
@@ -269,6 +270,54 @@ void main() {
       expect(config.h4.divider, isNull);
       expect(config.h5.divider, isNull);
       expect(config.h6.divider, isNull);
+    });
+  });
+
+  group('Mermaid code block builder', () {
+    test('PreConfig.builder is set after adding mermaid support', () {
+      final pre = codeBlockPreConfig(isDark: false);
+      expect(pre.builder, isNotNull,
+          reason:
+              'codeBlockPreConfig should have a builder for mermaid detection');
+    });
+
+    test('returns MermaidRenderWidget for mermaid language', () {
+      final pre = codeBlockPreConfig(isDark: false);
+      final builder = pre.builder!;
+      final widget = builder('graph TD\nA-->B', 'mermaid');
+      expect(widget, isA<MermaidRenderWidget>());
+      final mermaidWidget = widget as MermaidRenderWidget;
+      expect(mermaidWidget.mermaidCode, 'graph TD\nA-->B');
+    });
+
+    test('returns Container for non-mermaid language', () {
+      final pre = codeBlockPreConfig(isDark: false);
+      final builder = pre.builder!;
+      final widget = builder('print("hello")', 'python');
+      // Non-mermaid code blocks should still render with syntax highlighting
+      // The result should be a Container (the default code block container)
+      expect(widget, isA<Container>());
+    });
+
+    test('returns Container for empty language', () {
+      final pre = codeBlockPreConfig(isDark: false);
+      final builder = pre.builder!;
+      final widget = builder('some code', '');
+      expect(widget, isA<Container>());
+    });
+
+    test('returns Container for unknown language', () {
+      final pre = codeBlockPreConfig(isDark: false);
+      final builder = pre.builder!;
+      final widget = builder('some code', 'unknown_language_xyz');
+      expect(widget, isA<Container>());
+    });
+
+    test('mermaid builder works in dark mode too', () {
+      final pre = codeBlockPreConfig(isDark: true);
+      final builder = pre.builder!;
+      final widget = builder('graph TD', 'mermaid');
+      expect(widget, isA<MermaidRenderWidget>());
     });
   });
 }

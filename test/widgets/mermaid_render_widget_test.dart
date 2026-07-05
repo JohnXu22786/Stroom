@@ -1,0 +1,50 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/widgets/mermaid_render_widget.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('MermaidRenderWidget - buildMermaidHtml', () {
+    test('replaces MERMAID_CODE_PLACEHOLDER with escaped code', () {
+      final code = 'graph TD\nA-->B';
+      final html = MermaidRenderWidget.buildMermaidHtml(code);
+      expect(html, contains('graph TD'));
+      // '-->' gets HTML-escaped to '--&gt;'
+      expect(html, contains('A--&gt;B'));
+      expect(html, isNot(contains('MERMAID_CODE_PLACEHOLDER')));
+    });
+
+    test('escapes HTML special characters in code', () {
+      final code = '<test> & "quote"';
+      final html = MermaidRenderWidget.buildMermaidHtml(code);
+      // The escaped code should be in the HTML
+      expect(html, contains('&lt;test&gt;'));
+      expect(html, contains('&amp;'));
+    });
+
+    test('includes mermaid.js script reference', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      expect(html, contains('mermaid@11'));
+      expect(html, contains('mermaid.min.js'));
+    });
+
+    test('includes mermaid initialize call', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      expect(html, contains('mermaid.initialize'));
+      expect(html, contains("securityLevel: 'loose'"));
+    });
+
+    test('handles empty code', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('');
+      expect(html, isNot(contains('MERMAID_CODE_PLACEHOLDER')));
+    });
+
+    test('handles code with newlines and special chars', () {
+      final code = 'sequenceDiagram\nAlice->>Bob: Hello\nBob-->>Alice: Hi';
+      final html = MermaidRenderWidget.buildMermaidHtml(code);
+      expect(html, contains('sequenceDiagram'));
+      expect(html, contains('Alice-&gt;&gt;Bob'));
+      expect(html, contains('Bob--&gt;&gt;Alice'));
+    });
+  });
+}
