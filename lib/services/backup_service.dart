@@ -373,7 +373,10 @@ class BackupService {
       var key = entry.key;
 
       // 跳过元数据文件
-      if (skipFiles.contains(key)) {restoreIndex++; continue;}
+      if (skipFiles.contains(key)) {
+        restoreIndex++;
+        continue;
+      }
 
       // 旧格式 binary: 去掉 files/ 前缀
       if (key.startsWith('files/')) {
@@ -396,7 +399,10 @@ class BackupService {
           break;
         }
       }
-      if (matchedDir == null) {restoreIndex++; continue;}
+      if (matchedDir == null) {
+        restoreIndex++;
+        continue;
+      }
 
       final relativePath = key.substring(matchedDir.length + 1);
 
