@@ -153,7 +153,8 @@ void main() {
   });
 
   group('Inference switch validation: all fields required', () {
-    testWidgets('click "添加推理参数" adds param regardless of toggle state',
+    testWidgets(
+        'click "添加推理参数" adds param regardless of toggle state',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -170,6 +171,13 @@ void main() {
       await tester.enterText(textFields.at(2), '4096');
       await tester.pump();
 
+      // Fill toggle fields so save validation can proceed
+      final toggleFields = find.byType(TextFormField);
+      await tester.enterText(toggleFields.at(0), 'thinking.type');
+      await tester.enterText(toggleFields.at(1), 'enabled');
+      await tester.enterText(toggleFields.at(2), 'disabled');
+      await tester.pump();
+
       // Scroll to find "添加推理参数" button
       await tester.scrollUntilVisible(
         find.text('添加推理参数'),
@@ -177,8 +185,10 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pump();
+      await tester.ensureVisible(find.text('添加推理参数'));
+      await tester.pump();
 
-      // Click "添加推理参数" - should add even with empty toggle
+      // Click "添加推理参数" - adds an extra reasoning param
       await tester.tap(find.text('添加推理参数'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
@@ -273,12 +283,15 @@ void main() {
       await tester.enterText(toggleFields.at(2), 'disabled');
       await tester.pump();
 
-      // Scroll to add a reasoning param
+      // Scroll to add a reasoning param via "添加推理参数" button
       await tester.scrollUntilVisible(
         find.text('添加推理参数'),
         200,
         scrollable: find.byType(Scrollable).first,
       );
+      await tester.pump();
+      await tester.ensureVisible(find.text('添加推理参数'));
+      await tester.pump();
       await tester.tap(find.text('添加推理参数'));
       await tester.pump();
 

@@ -148,15 +148,21 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     if (m != null) {
       _reasoningParams = m.reasoningParams.map((p) => p.copy()).toList();
     } else {
-      // New model: pre-populate with a default reasoning toggle that the user
-      // can customize. This ensures the reasoning panel is available out of
-      // the box, and the toggle-first validation guides correct configuration.
+      // New model: pre-populate with a default reasoning toggle and a default
+      // reasoning effort param. This ensures both the toggle and the effort
+      // card are available out of the box.
       _reasoningParams = [
         ReasoningParam(
           paramName: '',
           isReasoningToggle: true,
           onValue: '',
           offValue: '',
+          options: [],
+        ),
+        ReasoningParam(
+          paramName: '',
+          isReasoningToggle: false,
+          enabled: true,
           options: [],
         ),
       ];
@@ -222,16 +228,27 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   // 推理参数帮助方法
   // ===================================================================
 
-  /// Returns reasoning params that are NOT the toggle (additional params).
-  List<ReasoningParam> get _additionalReasoningParams =>
-      _reasoningParams.where((p) => !p.isReasoningToggle).toList();
-
   /// Returns the reasoning toggle param, or null if none exists.
   ReasoningParam? get _toggleReasoningParam =>
       _reasoningParams.cast<ReasoningParam?>().firstWhere(
             (p) => p?.isReasoningToggle ?? false,
             orElse: () => null,
           );
+
+  /// Returns the single reasoning effort param (first non-toggle), or null.
+  ReasoningParam? get _effortReasoningParam =>
+      _reasoningParams.cast<ReasoningParam?>().firstWhere(
+            (p) => p != null && !p.isReasoningToggle,
+            orElse: () => null,
+          );
+
+  /// Returns additional reasoning params (non-toggle, excluding the effort one).
+  List<ReasoningParam> get _additionalReasoningParams {
+    final effort = _effortReasoningParam;
+    return _reasoningParams
+        .where((p) => !p.isReasoningToggle && p != effort)
+        .toList();
+  }
 
   bool get _isToggleComplete {
     final toggle = _toggleReasoningParam;
@@ -380,70 +397,20 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     );
   }
 
-  /// Builds the inference intensity section (similar to provider panel, but must have values).
-  Widget _buildInferenceIntensitySection(ColorScheme cs) {
-    final isToggleComplete = _isToggleComplete;
-    final intensityParams =
-        _reasoningParams.where((p) => !p.isReasoningToggle).toList();
+  /// Builds the reasoning effort card — a single card, same style as the
+  /// toggle card. Only editable after the toggle is complete. There is
+  /// always exactly one effort param (like the toggle).
+  Widget _buildReasoningEffortCard(ColorScheme cs) {
+    final toggleComplete = _isToggleComplete;
+    final effort = _effortReasoningParam;
+    if (effort == null) return const SizedBox.shrink();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 12),
-        Text('推理力度',
-            style: TextStyle(
-                fontWeight: FontWeight.w600, fontSize: 14, color: cs.primary)),
-        const SizedBox(height: 4),
-        Text(
-          '推理力度参数需添加具体选项值'
-          '${!isToggleComplete ? '（需先完整填写推理开关后才能配置）' : ''}',
-          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-        ),
-        const SizedBox(height: 8),
-        if (intensityParams.isEmpty)
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Text(
-                isToggleComplete ? '暂无推理力度参数' : '请先完整填写推理开关',
-                style: TextStyle(color: Colors.grey, fontSize: 13),
-              ),
-            ),
-          )
-        else
-          ...List.generate(intensityParams.length, (i) {
-            final param = intensityParams[i];
-            final actualIndex = _reasoningParams.indexOf(param);
-            return _buildIntensityParamCard(
-                param, actualIndex, i, cs, isToggleComplete);
-          }),
-        const SizedBox(height: 4),
-        TextButton.icon(
-          icon: Icon(Icons.add,
-              size: 16, color: isToggleComplete ? null : Colors.grey),
-          label: Text('添加推理力度参数',
-              style: TextStyle(
-                  fontSize: 13, color: isToggleComplete ? null : Colors.grey)),
-          onPressed: isToggleComplete
-              ? () {
-                  final newParam = ReasoningParam(
-                    paramName: '',
-                    isReasoningToggle: false,
-                    enabled: true,
-                    options: [],
-                  );
-                  setState(() {
-                    _reasoningParams.add(newParam);
-                  });
-                }
-              : null,
-        ),
-      ],
-    );
-  }
+    final effortName = effort.paramName.trim();
+    final isDuplicate = effortName.isNotEmpty &&
+        (_reasoningParams.indexWhere((p) => p.paramName.trim() == effortName) !=
+                _reasoningParams.indexOf(effort) ||
+            _customParams.any((p) => p.paramName.trim() == effortName));
 
-  Widget _buildIntensityParamCard(ReasoningParam param, int actualIndex,
-      int displayIndex, ColorScheme cs, bool enabled) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
@@ -453,64 +420,85 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           children: [
             Row(
               children: [
-                Expanded(
-                  child: TextFormField(
-                    initialValue: param.paramName,
-                    decoration: InputDecoration(
-                      labelText: '参数名（支持点号嵌套）',
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                      hintText: '如 reasoning_effort',
-                    ),
-                    onChanged: (v) {
-                      param.paramName = v;
-                      setState(() {});
-                    },
-                  ),
-                ),
+                Icon(Icons.tune, size: 18,
+                    color: toggleComplete ? cs.primary : Colors.grey),
                 const SizedBox(width: 4),
-                _buildTypeDropdown(param, cs),
+                Expanded(
+                  child: Text('推理力度',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: toggleComplete ? cs.primary : Colors.grey,
+                      )),
+                ),
+                _buildTypeDropdown(effort, cs),
                 const SizedBox(width: 4),
                 IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                  onPressed: () => _removeReasoningParam(actualIndex),
-                  tooltip: '删除参数',
+                  onPressed: () =>
+                      _removeReasoningParam(_reasoningParams.indexOf(effort)),
+                  tooltip: '删除推理力度参数',
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
+            TextFormField(
+              initialValue: effort.paramName,
+              readOnly: !toggleComplete,
+              decoration: InputDecoration(
+                labelText: '参数名',
+                hintText: toggleComplete ? '如 reasoning_effort' : '请先填写推理开关',
+                border: const OutlineInputBorder(),
+                isDense: true,
+                errorText: isDuplicate ? '已存在该参数' : null,
+                errorStyle: const TextStyle(fontSize: 11),
+              ),
+              onChanged: (v) {
+                effort.paramName = v;
+                setState(() {});
+              },
+            ),
+            const SizedBox(height: 8),
             Text('选项值（模型必须添加至少一个选项值）',
                 style: TextStyle(
                   fontSize: 12,
-                  color: cs.onSurfaceVariant.withOpacity(0.7),
+                  color: toggleComplete
+                      ? cs.onSurfaceVariant.withOpacity(0.7)
+                      : Colors.grey,
                 )),
             const SizedBox(height: 8),
-            ...List.generate(param.options.length, (j) {
+            ...List.generate(effort.options.length, (j) {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Row(
                   children: [
                     Expanded(
                       child: TextFormField(
-                        initialValue: param.options[j],
+                        initialValue: effort.options[j],
+                        readOnly: !toggleComplete,
                         decoration: InputDecoration(
                           labelText: '选项 ${j + 1}',
-                          hintText: '如 low, medium, high',
+                          hintText: toggleComplete
+                              ? '如 low, medium, high'
+                              : '请先填写推理开关',
                           border: const OutlineInputBorder(),
                           isDense: true,
                         ),
                         onChanged: (v) {
-                          param.options[j] = v;
+                          effort.options[j] = v;
                           setState(() {});
                         },
                       ),
                     ),
                     const SizedBox(width: 4),
-                    if (param.options.length > 1)
+                    if (effort.options.length > 1)
                       IconButton(
                         icon: const Icon(Icons.remove_circle,
                             color: Colors.red, size: 18),
-                        onPressed: () => _removeOptionFromParam(actualIndex, j),
+                        onPressed: toggleComplete
+                            ? () => _removeOptionFromParam(
+                                _reasoningParams.indexOf(effort), j)
+                            : null,
                         tooltip: '删除选项',
                       ),
                   ],
@@ -519,10 +507,23 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
             }),
             const SizedBox(height: 4),
             TextButton.icon(
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('添加选项', style: TextStyle(fontSize: 13)),
-              onPressed: () => _addOptionToParam(actualIndex),
+              icon: Icon(Icons.add, size: 16),
+              label: Text('添加选项', style: TextStyle(fontSize: 13)),
+              onPressed: toggleComplete
+                  ? () => _addOptionToParam(_reasoningParams.indexOf(effort))
+                  : null,
             ),
+            if (!toggleComplete)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '请先完整填写推理开关后再配置推理力度',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -560,7 +561,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     );
   }
 
-  /// Builds a card for an additional (non-toggle) reasoning parameter.
+  /// Builds a card for an additional (non-toggle, non-effort) reasoning param.
   Widget _buildAdditionalReasoningParamCard(
       ReasoningParam param, int actualIndex, int displayIndex, ColorScheme cs) {
     final name = param.paramName.trim();
@@ -584,7 +585,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                       labelText: '参数名（支持点号嵌套）',
                       border: const OutlineInputBorder(),
                       isDense: true,
-                      hintText: '如 thinking.type 或 reasoning_effort',
+                      hintText: '如 thinking.type 或 budget_tokens',
                       errorText: isDuplicate ? '已存在该参数' : null,
                       errorStyle: const TextStyle(fontSize: 11),
                     ),
@@ -595,7 +596,6 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                   ),
                 ),
                 const SizedBox(width: 4),
-                // 参数值类型选择
                 _buildTypeDropdown(param, cs),
                 const SizedBox(width: 4),
                 Switch(
@@ -611,7 +611,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text('选项值',
                 style: TextStyle(
                   fontSize: 13,
@@ -652,7 +652,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                       IconButton(
                         icon: const Icon(Icons.remove_circle,
                             color: Colors.red, size: 18),
-                        onPressed: () => _removeOptionFromParam(actualIndex, j),
+                        onPressed: () =>
+                            _removeOptionFromParam(actualIndex, j),
                         tooltip: '删除选项',
                       ),
                   ],
@@ -1013,7 +1014,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
             const SizedBox(height: 4),
             Text(
               '推理开关控制聊天页面中推理功能的开启和关闭，由您定义参数名和对应的开/关值。'
-              '附加推理参数可添加多个，每个含参数名和可选项，显示在推理面板中供选择。'
+              '推理力度参数有且只有一个，每个含参数名和可选项，显示在推理面板中供选择。'
+              '您还可以通过底部按钮添加额外的推理参数。'
               '参数名支持点号嵌套（如 thinking.type 会展开为 {"thinking": {"type": "..."}}）。',
               style: TextStyle(
                 fontSize: 12,
@@ -1022,13 +1024,13 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
             ),
             const SizedBox(height: 12),
 
-            // 推理开关 — 单独渲染，始终在第一个位置
+            // 推理开关 — 始终在第一个位置
             _buildReasoningToggleSection(cs),
 
-            // 推理力度
-            _buildInferenceIntensitySection(cs),
+            // 推理力度 — 有且只有一个 card
+            _buildReasoningEffortCard(cs),
 
-            // 附加推理参数
+            // 附加推理参数（通过「添加推理参数」按钮添加）
             if (_additionalReasoningParams.isNotEmpty)
               ...List.generate(_additionalReasoningParams.length, (i) {
                 final param = _additionalReasoningParams[i];
@@ -1036,7 +1038,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                 return _buildAdditionalReasoningParamCard(
                     param, actualIndex, i, cs);
               }),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Center(
               child: TextButton.icon(
                 icon: const Icon(Icons.add, size: 18),
