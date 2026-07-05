@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/widgets/html_code_block_widget.dart';
 import 'package:stroom/widgets/markdown_extensions.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
@@ -290,11 +291,11 @@ void main() {
       expect(mermaidWidget.mermaidCode, 'graph TD\nA-->B');
     });
 
-    test('returns Container for non-mermaid language', () {
+    test('returns Container for non-mermaid/non-html language', () {
       final pre = codeBlockPreConfig(isDark: false);
       final builder = pre.builder!;
       final widget = builder('print("hello")', 'python');
-      // Non-mermaid code blocks should still render with syntax highlighting
+      // Non-mermaid/non-html code blocks should still render with syntax highlighting
       // The result should be a Container (the default code block container)
       expect(widget, isA<Container>());
     });
@@ -318,6 +319,61 @@ void main() {
       final builder = pre.builder!;
       final widget = builder('graph TD', 'mermaid');
       expect(widget, isA<MermaidRenderWidget>());
+    });
+  });
+
+  group('HTML code block builder', () {
+    test('returns HtmlCodeBlockWidget for html language', () {
+      final pre = codeBlockPreConfig(isDark: false);
+      final builder = pre.builder!;
+      final widget = builder('<h1>Hello</h1>', 'html');
+      expect(widget, isA<HtmlCodeBlockWidget>());
+      final htmlWidget = widget as HtmlCodeBlockWidget;
+      expect(htmlWidget.htmlCode, '<h1>Hello</h1>');
+    });
+
+    test('returns Container for non-html languages (python)', () {
+      final pre = codeBlockPreConfig(isDark: false);
+      final builder = pre.builder!;
+      final widget = builder('print("hello")', 'python');
+      expect(widget, isA<Container>());
+    });
+
+    test('returns Container for non-html languages (dart)', () {
+      final pre = codeBlockPreConfig(isDark: false);
+      final builder = pre.builder!;
+      final widget = builder('void main() {}', 'dart');
+      expect(widget, isA<Container>());
+    });
+
+    test('returns Container for empty language', () {
+      final pre = codeBlockPreConfig(isDark: false);
+      final builder = pre.builder!;
+      final widget = builder('<h1>test</h1>', '');
+      expect(widget, isA<Container>());
+    });
+
+    test('returns Container for unknown language', () {
+      final pre = codeBlockPreConfig(isDark: false);
+      final builder = pre.builder!;
+      final widget = builder('<h1>test</h1>', 'unknown_language_xyz');
+      expect(widget, isA<Container>());
+    });
+
+    test('html builder works in dark mode too', () {
+      final pre = codeBlockPreConfig(isDark: true);
+      final builder = pre.builder!;
+      final widget = builder('<button>Click</button>', 'html');
+      expect(widget, isA<HtmlCodeBlockWidget>());
+      final htmlWidget = widget as HtmlCodeBlockWidget;
+      expect(htmlWidget.htmlCode, '<button>Click</button>');
+    });
+
+    test('mermaid still works when HTML support is added', () {
+      final pre = codeBlockPreConfig(isDark: false);
+      final builder = pre.builder!;
+      final mermaidWidget = builder('graph TD', 'mermaid');
+      expect(mermaidWidget, isA<MermaidRenderWidget>());
     });
   });
 }
