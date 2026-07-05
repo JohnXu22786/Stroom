@@ -4,7 +4,7 @@ import 'package:stroom/pages/chat/composer/composer_shared.dart';
 
 void main() {
   // ═══════════════════════════════════════════════════════════════
-  // Unit tests for truncateDisplayName (char-based, max 15 per part)
+  // Unit tests for truncateDisplayName (char-based, max 20 per part)
   // ═══════════════════════════════════════════════════════════════
   group('truncateDisplayName', () {
     test('short text with separator: unchanged', () {
@@ -13,37 +13,37 @@ void main() {
       expect(result, full);
     });
 
-    test('long model part: truncated with ... at 15 chars total', () {
-      // 18 chars for model: "abcdefghijklmnopqr"
-      const full = 'abcdefghijklmnopqr | OpenAI';
+    test('long model part: truncated with ... at 20 chars total', () {
+      // 23 chars: "abcdefghijklmnopqrstuvw"
+      // → substring(0, 17) + "..." = 20
+      const full = 'abcdefghijklmnopqrstuvw | OpenAI';
       final result = truncateDisplayName(full);
-      // 12 visible + 3 dots = 15 for model; vendor stays "OpenAI" (≤15)
-      expect(result, 'abcdefghijkl... | OpenAI');
+      expect(result, 'abcdefghijklmnopq... | OpenAI');
     });
 
-    test('long vendor part: truncated with ... at 15 chars total', () {
-      const full = 'GPT-4o | abcdefghijklmnopqr';
+    test('long vendor part: truncated with ... at 20 chars total', () {
+      const full = 'GPT-4o | abcdefghijklmnopqrstuvw';
       final result = truncateDisplayName(full);
-      expect(result, 'GPT-4o | abcdefghijkl...');
+      expect(result, 'GPT-4o | abcdefghijklmnopq...');
     });
 
-    test('both parts long: each truncated to 15 chars total', () {
-      const full = 'abcdefghijklmnopqr | abcdefghijklmnopqr';
+    test('both parts long: each truncated to 20 chars total', () {
+      const full = 'abcdefghijklmnopqrstuvw | abcdefghijklmnopqrstuvw';
       final result = truncateDisplayName(full);
-      expect(result, 'abcdefghijkl... | abcdefghijkl...');
+      expect(result, 'abcdefghijklmnopq... | abcdefghijklmnopq...');
     });
 
-    test('exactly 15 chars: unchanged', () {
-      const full = 'abcdefghijklmno | XYZ';
+    test('exactly 20 chars: unchanged', () {
+      const full = 'abcdefghijklmnopqrst | XYZ';
       final result = truncateDisplayName(full);
       expect(result, full);
     });
 
-    test('no separator: simple truncation to 15 chars', () {
-      // 20 chars "abcdefghijklmnopqrst" → 12 visible + "..." = 15
-      const full = 'abcdefghijklmnopqrst';
+    test('no separator: simple truncation to 20 chars', () {
+      // 25 chars → substring(0, 17) + "..." = 20
+      const full = 'abcdefghijklmnopqrstuvwxy';
       final result = truncateDisplayName(full);
-      expect(result, 'abcdefghijkl...');
+      expect(result, 'abcdefghijklmnopq...');
     });
 
     test('very short parts: preserved', () {
@@ -59,7 +59,20 @@ void main() {
     test('long model, short vendor: only model truncated', () {
       const full = 'abcdefghijklmnopqrstuvwxyz | X';
       final result = truncateDisplayName(full);
-      expect(result, 'abcdefghijkl... | X');
+      expect(result, 'abcdefghijklmnopq... | X');
+    });
+
+    test('exactly 21 chars (one over limit): truncated', () {
+      // 21 chars → substring(0, 17) + "..." = 20
+      const full = 'abcdefghijklmnopqrstu | vendor';
+      final result = truncateDisplayName(full);
+      expect(result, 'abcdefghijklmnopq... | vendor');
+    });
+
+    test('20 chars exactly is preserved even with short vendor', () {
+      const full = 'abcdefghijklmnopqrst | short';
+      final result = truncateDisplayName(full);
+      expect(result, full);
     });
   });
 
@@ -262,8 +275,8 @@ void main() {
       await tester.pump();
 
       // Model "Very-Long-Model-Name-That-Should-Truncate" (42 chars)
-      // → first 12 visible + "..." = 15 chars: "Very-Long-Mo..."
-      expect(find.textContaining('Very-Long-Mo...'), findsOneWidget);
+      // → substring(0, 17) + "..." = 20 chars: "Very-Long-Model-N..."
+      expect(find.textContaining('Very-Long-Model-N...'), findsOneWidget);
     });
 
     testWidgets('shows fallback "模型" when displayName is empty',
@@ -306,7 +319,7 @@ void main() {
     });
 
     testWidgets('fits within constrained SizedBox width', (tester) async {
-      // With char-based truncation (15 chars max per part), the truncated
+      // With char-based truncation (20 chars max per part), the truncated
       // text is known and checked directly regardless of parent width.
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
@@ -322,8 +335,8 @@ void main() {
       ));
 
       // Model "Some-Long-Model-Name-That-Needs-Truncation" (39 chars)
-      // → "Some-Long-Mo..." (15 chars)
-      expect(find.textContaining('Some-Long-Mo...'), findsOneWidget);
+      // → substring(0, 17) + "..." = "Some-Long-Model-N..." (20 chars)
+      expect(find.textContaining('Some-Long-Model-N...'), findsOneWidget);
     });
 
     testWidgets('disabled chip does not crash', (tester) async {
@@ -361,8 +374,9 @@ void main() {
         ),
       ));
 
-      // Model "Very-Long-Model-Name-That-Should-Truncate-Properly" → 15 chars
-      expect(find.textContaining('Very-Long-Mo...'), findsOneWidget);
+      // Model "Very-Long-Model-Name-That-Should-Truncate-Properly" (45 chars)
+      // → substring(0, 17) + "..." = "Very-Long-Model-N..." (20 chars)
+      expect(find.textContaining('Very-Long-Model-N...'), findsOneWidget);
     });
 
     testWidgets('renders short text without truncation inside ConstrainedBox',

@@ -130,5 +130,38 @@ void main() {
       final settingsChip = tester.widget<SettingsChip>(chip);
       expect(settingsChip.color, Colors.grey);
     });
+
+    testWidgets('shows non-default effort value (high) when reasoning enabled',
+        (tester) async {
+      // This test validates that the chip label reflects the actual
+      // reasoningEffort provider value (not hard-coded 'medium').
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      await tester.pumpWidget(createComposerTestApp(
+        reasoningEnabled: true,
+        reasoningEffort: 'high',
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      // Should show 'high' (the actual effort value), not 'medium'
+      expect(find.text('high'), findsOneWidget);
+      expect(find.text('medium'), findsNothing);
+      expect(find.text('推理'), findsNothing);
+    });
+
+    testWidgets('shows low effort value when set', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      await tester.pumpWidget(createComposerTestApp(
+        reasoningEnabled: true,
+        reasoningEffort: 'low',
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      expect(find.text('low'), findsOneWidget);
+      expect(find.text('medium'), findsNothing);
+    });
   });
 }
