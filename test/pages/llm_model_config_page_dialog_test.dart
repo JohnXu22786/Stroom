@@ -21,8 +21,7 @@ void main() {
       expect(find.text('关闭时值'), findsOneWidget);
     });
 
-    testWidgets('can add reasoning param via "添加推理参数" button',
-        (tester) async {
+    testWidgets('can add reasoning param via "添加推理参数" button', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: LlmModelConfigPage(),
