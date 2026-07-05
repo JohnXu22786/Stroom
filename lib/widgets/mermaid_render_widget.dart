@@ -47,6 +47,7 @@ class MermaidRenderWidget extends StatefulWidget {
       background: transparent;
       display: flex;
       justify-content: center;
+      overflow-x: auto;
     }
     #container {
       max-width: 100%;
@@ -54,6 +55,11 @@ class MermaidRenderWidget extends StatefulWidget {
     }
     .mermaid {
       text-align: center;
+    }
+    /* Prevent mermaid SVG from overflowing its container */
+    .mermaid svg {
+      max-width: 100%;
+      height: auto;
     }
     .error-message {
       color: #e74c3c;
@@ -76,10 +82,16 @@ MERMAID_CODE_PLACEHOLDER
   <script>
     try {
       mermaid.initialize({
-        startOnLoad: true,
         theme: 'default',
         securityLevel: 'loose',
         fontFamily: 'sans-serif',
+      });
+      // Use mermaid.run() for v11 API compatibility (startOnLoad is deprecated)
+      mermaid.run({
+        nodes: [document.getElementById('mermaid-code')],
+      }).catch(function(err) {
+        document.getElementById('container').innerHTML =
+          '<div class="error-message">Mermaid render error: ' + err.message + '</div>';
       });
     } catch(e) {
       document.getElementById('container').innerHTML =
