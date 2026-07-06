@@ -730,7 +730,8 @@ void main() {
       expect(find.byIcon(Icons.videocam), findsNothing);
     });
 
-    testWidgets('shows default icon when thumbnailBuilder is null', (tester) async {
+    testWidgets('shows default icon when thumbnailBuilder is null',
+        (tester) async {
       final records = [
         const _TestRecord(id: '1', name: '普通文件', format: 'txt', size: 256),
       ];
@@ -772,7 +773,8 @@ void main() {
       expect(find.byIcon(Icons.insert_drive_file), findsOneWidget);
     });
 
-    testWidgets('thumbnailBuilder renders per-record custom widget', (tester) async {
+    testWidgets('thumbnailBuilder renders per-record custom widget',
+        (tester) async {
       final records = [
         const _TestRecord(id: '1', name: '文件A', format: 'mp4', size: 1024),
         const _TestRecord(id: '2', name: '文件B', format: 'mov', size: 2048),
