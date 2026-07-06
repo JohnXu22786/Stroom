@@ -416,6 +416,147 @@ void main() {
       expect(controller?.text, contains('graph TD'));
     });
 
+    // ═══════════════════════════════════════════════════
+    // initialCode → hide chart type selector
+    // ═══════════════════════════════════════════════════
+
+    testWidgets('initialCode hides chart type selector, keeps snippet buttons',
+        (tester) async {
+      const initialCode = 'graph TD\n  A[Custom] --> B[End]';
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: MermaidChartPage(
+              initialCode: initialCode,
+              initialShowPreview: false,
+            ),
+            localizationsDelegates: [
+              DefaultMaterialLocalizations.delegate,
+              DefaultWidgetsLocalizations.delegate,
+            ],
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Chart type selector chips (Row 1) should NOT be shown
+      expect(find.text('流程图'), findsNothing);
+      expect(find.text('时序图'), findsNothing);
+      expect(find.text('类图'), findsNothing);
+
+      // Snippet buttons (Row 2) SHOULD be shown
+      expect(find.text('添加节点'), findsOneWidget);
+      expect(find.text('添加连接线'), findsOneWidget);
+
+      // Code editor should contain the initial code
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      expect(textField.controller?.text, contains('graph TD'));
+      expect(textField.controller?.text, contains('Custom'));
+    });
+
+    testWidgets(
+        'initialCode with %% comment correctly detects type for snippets',
+        (tester) async {
+      const initialCode =
+          '%% Auto-generated sequence diagram\nsequenceDiagram\n  A->>B: Hello';
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: MermaidChartPage(
+              initialCode: initialCode,
+              initialShowPreview: false,
+            ),
+            localizationsDelegates: [
+              DefaultMaterialLocalizations.delegate,
+              DefaultWidgetsLocalizations.delegate,
+            ],
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Chart type selector should be hidden
+      expect(find.text('流程图'), findsNothing);
+
+      // Sequence diagram snippet buttons should be shown
+      // (based on correct type detection skipping %% comment)
+      expect(find.text('添加参与者'), findsOneWidget);
+      expect(find.text('添加请求'), findsOneWidget);
+
+      // Code editor should contain the initial code
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      expect(textField.controller?.text, contains('sequenceDiagram'));
+    });
+
+    testWidgets('initialCode with %%{init} directive correctly detects type',
+        (tester) async {
+      const initialCode =
+          '%%{init: {\'theme\': \'dark\'}}%%\ngantt\n  title Project';
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: MermaidChartPage(
+              initialCode: initialCode,
+              initialShowPreview: false,
+            ),
+            localizationsDelegates: [
+              DefaultMaterialLocalizations.delegate,
+              DefaultWidgetsLocalizations.delegate,
+            ],
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Chart type selector should be hidden
+      expect(find.text('甘特图'), findsNothing);
+
+      // Gantt snippet buttons should be shown
+      expect(find.text('添加任务'), findsOneWidget);
+    });
+
+    testWidgets(
+        'initialCode with only %% comments falls back to flowchart snippets',
+        (tester) async {
+      const initialCode = '%% comment line 1\n%% comment line 2\n';
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: MermaidChartPage(
+              initialCode: initialCode,
+              initialShowPreview: false,
+            ),
+            localizationsDelegates: [
+              DefaultMaterialLocalizations.delegate,
+              DefaultWidgetsLocalizations.delegate,
+            ],
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Chart type selector should be hidden
+      expect(find.text('流程图'), findsNothing);
+
+      // Fallback to flowchart snippets
+      expect(find.text('添加节点'), findsOneWidget);
+      expect(find.text('添加连接线'), findsOneWidget);
+    });
+
+    testWidgets('without initialCode shows chart type selector',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      // Chart type selector chips should be shown
+      expect(find.text('流程图'), findsOneWidget);
+      expect(find.text('时序图'), findsOneWidget);
+      expect(find.text('类图'), findsOneWidget);
+
+      // Snippet buttons should also be shown
+      expect(find.text('添加节点'), findsOneWidget);
+    });
+
     testWidgets('snippet insertion appends to existing code', (tester) async {
       await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
       await tester.pump();
