@@ -72,7 +72,7 @@ class _CapturingProvider extends BaseChatProvider {
 
 void main() {
   group('ChatService._buildExtraParams - JSON type handling', () {
-    test('JSON type model-level custom param is properly parsed', () {
+    test('JSON type model-level custom param is properly parsed', () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
@@ -94,31 +94,28 @@ void main() {
       final provider = _CapturingProvider();
       final service = ChatService(provider: provider, modelConfig: modelConfig);
 
-      // Use visibleForTesting method _buildExtraParams through sendStream
-      final events = <dynamic>[];
       provider.reset();
-      service.sendStream('Hi', history: []).listen((e) => events.add(e));
+      // sendStream uses Future.microtask internally, so we await a cycle
+      service.sendStream('Hi', history: []).listen((_) {});
+      await Future.delayed(Duration.zero);
 
-      // Wait for async execution
-      Future.delayed(Duration.zero, () {
-        final extraParams = provider.capturedExtraParams;
-        expect(extraParams, isNotNull);
+      final extraParams = provider.capturedExtraParams;
+      expect(extraParams, isNotNull);
 
-        // JSON-type params should be actual parsed objects, not strings
-        final responseFormat = extraParams!['response_format'];
-        expect(responseFormat, isA<Map>(),
-            reason: 'JSON type param should be a Map, not a String');
-        expect((responseFormat as Map)['type'], equals('json_object'));
+      // JSON-type params should be actual parsed objects, not strings
+      final responseFormat = extraParams!['response_format'];
+      expect(responseFormat, isA<Map>(),
+          reason: 'JSON type param should be a Map, not a String');
+      expect((responseFormat as Map)['type'], equals('json_object'));
 
-        final metadata = extraParams['metadata'];
-        expect(metadata, isA<Map>(),
-            reason: 'JSON type param should be a Map, not a String');
-        expect((metadata as Map)['source'], equals('test'));
-        expect((metadata as Map)['version'], equals(2));
-      });
+      final metadata = extraParams['metadata'];
+      expect(metadata, isA<Map>(),
+          reason: 'JSON type param should be a Map, not a String');
+      expect((metadata as Map)['source'], equals('test'));
+      expect((metadata as Map)['version'], equals(2));
     });
 
-    test('JSON type assistant-level custom param is properly parsed', () {
+    test('JSON type assistant-level custom param is properly parsed', () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
@@ -141,27 +138,25 @@ void main() {
         ),
       ]);
 
-      final events = <dynamic>[];
       provider.reset();
-      service.sendStream('Hi', history: []).listen((e) => events.add(e));
+      service.sendStream('Hi', history: []).listen((_) {});
+      await Future.delayed(Duration.zero);
 
-      Future.delayed(Duration.zero, () {
-        final extraParams = provider.capturedExtraParams;
-        expect(extraParams, isNotNull);
+      final extraParams = provider.capturedExtraParams;
+      expect(extraParams, isNotNull);
 
-        final responseFormat = extraParams!['response_format'];
-        expect(responseFormat, isA<Map>(),
-            reason: 'JSON type assistant param should be a Map');
-        expect((responseFormat as Map)['type'], equals('json_object'));
+      final responseFormat = extraParams!['response_format'];
+      expect(responseFormat, isA<Map>(),
+          reason: 'JSON type assistant param should be a Map');
+      expect((responseFormat as Map)['type'], equals('json_object'));
 
-        final toolsConfig = extraParams['tools_config'];
-        expect(toolsConfig, isA<List>(),
-            reason: 'JSON type assistant param (array) should be a List');
-        expect((toolsConfig as List).length, equals(2));
-      });
+      final toolsConfig = extraParams['tools_config'];
+      expect(toolsConfig, isA<List>(),
+          reason: 'JSON type assistant param (array) should be a List');
+      expect((toolsConfig as List).length, equals(2));
     });
 
-    test('malformed JSON falls back to raw string', () {
+    test('malformed JSON falls back to raw string', () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
@@ -178,21 +173,19 @@ void main() {
       final provider = _CapturingProvider();
       final service = ChatService(provider: provider, modelConfig: modelConfig);
 
-      final events = <dynamic>[];
       provider.reset();
-      service.sendStream('Hi', history: []).listen((e) => events.add(e));
+      service.sendStream('Hi', history: []).listen((_) {});
+      await Future.delayed(Duration.zero);
 
-      Future.delayed(Duration.zero, () {
-        final extraParams = provider.capturedExtraParams;
-        expect(extraParams, isNotNull);
-        // Malformed JSON should return the raw string
-        expect(extraParams!['bad_json'], equals('{invalid json}'));
-      });
+      final extraParams = provider.capturedExtraParams;
+      expect(extraParams, isNotNull);
+      // Malformed JSON should return the raw string
+      expect(extraParams!['bad_json'], equals('{invalid json}'));
     });
   });
 
   group('ChatService - number/boolean type handling', () {
-    test('number type model-level custom param is sent as number', () {
+    test('number type model-level custom param is sent as number', () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
@@ -214,21 +207,19 @@ void main() {
       final provider = _CapturingProvider();
       final service = ChatService(provider: provider, modelConfig: modelConfig);
 
-      final events = <dynamic>[];
       provider.reset();
-      service.sendStream('Hi', history: []).listen((e) => events.add(e));
+      service.sendStream('Hi', history: []).listen((_) {});
+      await Future.delayed(Duration.zero);
 
-      Future.delayed(Duration.zero, () {
-        final extraParams = provider.capturedExtraParams;
-        expect(extraParams, isNotNull);
-        expect(extraParams!['top_k'], equals(50.0),
-            reason: 'number type param should be sent as num, not string');
-        expect(extraParams['temperature'], equals(0.8),
-            reason: 'number type param should be sent as num, not string');
-      });
+      final extraParams = provider.capturedExtraParams;
+      expect(extraParams, isNotNull);
+      expect(extraParams!['top_k'], equals(50.0),
+          reason: 'number type param should be sent as num, not string');
+      expect(extraParams['temperature'], equals(0.8),
+          reason: 'number type param should be sent as num, not string');
     });
 
-    test('boolean type model-level custom param is sent as bool', () {
+    test('boolean type model-level custom param is sent as bool', () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
@@ -250,18 +241,16 @@ void main() {
       final provider = _CapturingProvider();
       final service = ChatService(provider: provider, modelConfig: modelConfig);
 
-      final events = <dynamic>[];
       provider.reset();
-      service.sendStream('Hi', history: []).listen((e) => events.add(e));
+      service.sendStream('Hi', history: []).listen((_) {});
+      await Future.delayed(Duration.zero);
 
-      Future.delayed(Duration.zero, () {
-        final extraParams = provider.capturedExtraParams;
-        expect(extraParams, isNotNull);
-        expect(extraParams!['use_cache'], isTrue,
-            reason: 'boolean type param should be sent as bool');
-        expect(extraParams['stream_options'], isFalse,
-            reason: 'boolean type param should be sent as bool');
-      });
+      final extraParams = provider.capturedExtraParams;
+      expect(extraParams, isNotNull);
+      expect(extraParams!['use_cache'], isTrue,
+          reason: 'boolean type param should be sent as bool');
+      expect(extraParams['stream_options'], isFalse,
+          reason: 'boolean type param should be sent as bool');
     });
   });
 
