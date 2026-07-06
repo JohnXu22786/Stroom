@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -813,7 +815,9 @@ void showAddCustomParameterDialog(
                     ? 'true 或 false'
                     : type == 'number'
                         ? '输入数字'
-                        : '输入值',
+                        : type == 'json'
+                            ? '例如: {"key": "value"}'
+                            : '输入值',
                 border: const OutlineInputBorder(),
               ),
             ),
@@ -835,6 +839,12 @@ void showAddCustomParameterDialog(
                     value;
               } else if (type == 'boolean') {
                 value = (value as String).toLowerCase() == 'true';
+              } else if (type == 'json') {
+                try {
+                  value = jsonDecode(value as String);
+                } catch (_) {
+                  // Keep as string if not valid JSON
+                }
               }
               onAdd(name, type, value);
               nameController.dispose();
@@ -857,9 +867,16 @@ void showEditCustomParameterDialog(
 ) {
   final nameController = TextEditingController(text: cp.name);
   String type = cp.type;
-  final valueController = TextEditingController(
-    text: cp.value?.toString() ?? '',
-  );
+  // Display JSON values using jsonEncode (proper JSON format) instead of
+  // .toString() (Dart format like {key: value}) which would produce
+  // invalid JSON and break round-trip editing.
+  String initialValue;
+  if (cp.type == 'json' && (cp.value is Map || cp.value is List)) {
+    initialValue = jsonEncode(cp.value);
+  } else {
+    initialValue = cp.value?.toString() ?? '';
+  }
+  final valueController = TextEditingController(text: initialValue);
 
   showDialog(
     context: context,
@@ -919,6 +936,12 @@ void showEditCustomParameterDialog(
                     value;
               } else if (type == 'boolean') {
                 value = (value as String).toLowerCase() == 'true';
+              } else if (type == 'json') {
+                try {
+                  value = jsonDecode(value as String);
+                } catch (_) {
+                  // Keep as string if not valid JSON
+                }
               }
               onEdit(name, type, value);
               nameController.dispose();
