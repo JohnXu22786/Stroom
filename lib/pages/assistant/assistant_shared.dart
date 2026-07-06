@@ -65,25 +65,6 @@ class AssistantCard extends StatelessWidget {
                     color: cs.onSurfaceVariant,
                   ),
                 ),
-              const Spacer(),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerHighest.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  assistant.prompt,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: cs.onSurfaceVariant.withOpacity(0.7),
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ),
             ],
           ),
         ),
