@@ -9,6 +9,7 @@ import 'app_restart.dart';
 import 'startup_check_service.dart';
 import 'startup_page.dart';
 import '../application.dart';
+import '../providers/update_provider.dart';
 
 // ====================================================================
 // StartupApp — 应用启动入口
@@ -19,9 +20,10 @@ import '../application.dart';
 //
 // 流程：
 // 1. 立即显示启动页面（至少 1 秒）
-// 2. 依次执行：数据格式版本检查 → 格式验证 → 完整性检查
-// 3. 检查完成后，如果进行了数据迁移，提示用户重启
-// 4. 否则无缝过渡到主应用
+// 2. 清除"更新后重启"标记（如存在）
+// 3. 依次执行：数据格式版本检查 → 格式验证 → 完整性检查
+// 4. 检查完成后，如果进行了数据迁移，提示用户重启
+// 5. 否则无缝过渡到主应用
 // ====================================================================
 
 /// The root widget shown at app launch.
@@ -84,6 +86,22 @@ class _StartupAppState extends State<StartupApp>
     final stopwatch = Stopwatch()..start();
 
     try {
+      // ---------------------------------------------------------------
+      // 清除"更新后重启"标记
+      // ---------------------------------------------------------------
+      // 如果 SharedPreferences 中存在 pending_update_restart 标记，
+      // 说明应用是在 APK 安装/更新后被系统重新启动的（冷启动）。
+      // 清除此标记，确保后续启动路径一致，避免标记残留。
+      // ---------------------------------------------------------------
+      try {
+        if (await hasPendingUpdateRestart()) {
+          debugPrint('[StartupApp] Detected pending update restart flag '
+              '(cold restart after APK install) — clearing it');
+          await clearPendingUpdateRestart();
+        }
+      } catch (_) {}
+      // In-memory flag is always clear on cold start, no action needed.
+
       // Update status as we go
       await _updateStatus('正在检查数据格式版本...', '1/4');
       final migrationResult = await StartupCheckService.checkFormatVersion();

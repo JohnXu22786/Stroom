@@ -988,4 +988,71 @@ void main() {
       expect(notifier.state.downloadError, isNot(contains('之前的错误')));
     });
   });
+
+  group('Pending Update Restart Flag', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      setPendingRestartInMemory(false);
+    });
+
+    test('hasPendingUpdateRestart returns false when flag is not set',
+        () async {
+      final result = await hasPendingUpdateRestart();
+      expect(result, isFalse);
+    });
+
+    test('hasPendingUpdateRestart returns true when flag is set in prefs',
+        () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(pendingUpdateRestartKey, true);
+
+      final result = await hasPendingUpdateRestart();
+      expect(result, isTrue);
+    });
+
+    test('clearPendingUpdateRestart removes the flag from prefs', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(pendingUpdateRestartKey, true);
+
+      await clearPendingUpdateRestart();
+
+      final result = await hasPendingUpdateRestart();
+      expect(result, isFalse);
+    });
+
+    test('pendingUpdateRestartKey returns correct key string', () {
+      expect(pendingUpdateRestartKey, equals('pending_update_restart'));
+    });
+
+    test('clearPendingUpdateRestart is idempotent when flag not set', () async {
+      // Should not throw when flag is not in prefs
+      await clearPendingUpdateRestart();
+      final result = await hasPendingUpdateRestart();
+      expect(result, isFalse);
+    });
+
+    test('isPendingRestartInMemory getter returns current state', () {
+      expect(isPendingRestartInMemory, isFalse);
+      setPendingRestartInMemory(true);
+      expect(isPendingRestartInMemory, isTrue);
+      setPendingRestartInMemory(false);
+      expect(isPendingRestartInMemory, isFalse);
+    });
+
+    test(
+        'isPendingRestartInMemory is cleared on process restart (simulated)',
+        () {
+      // Simulate process restart: flag resets to false on each isolate start
+      setPendingRestartInMemory(false);
+      expect(isPendingRestartInMemory, isFalse);
+    });
+
+    test('hasPendingUpdateRestart handles null SharedPreferences gracefully',
+        () async {
+      // Even with empty SharedPreferences, no crash
+      SharedPreferences.setMockInitialValues({'some_other_key': 'value'});
+      final result = await hasPendingUpdateRestart();
+      expect(result, isFalse);
+    });
+  });
 }

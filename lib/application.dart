@@ -2,9 +2,11 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'
     show debugPrint, defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:dynamic_color/dynamic_color.dart';
+import 'dart:io' show exit, Platform;
 
 import 'pages/home_page.dart';
 import 'pages/chat_page.dart';
@@ -23,7 +25,8 @@ class Application extends ConsumerStatefulWidget {
   ConsumerState<Application> createState() => _ApplicationState();
 }
 
-class _ApplicationState extends ConsumerState<Application> {
+class _ApplicationState extends ConsumerState<Application>
+    with WidgetsBindingObserver {
   /// Global key for the MaterialApp's Navigator, used to show the
   /// update dialog from a context that is INSIDE the navigator.
   ///
@@ -37,18 +40,141 @@ class _ApplicationState extends ConsumerState<Application> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
     // Web端不提供更新功能
     if (!kIsWeb) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _checkForUpdatesOnStartup();
       });
     }
+
     // Set up in-app notification handler
     NotificationService().onInAppNotification = (payload) {
       if (mounted) {
         ref.read(inAppNotificationProvider.notifier).state = payload;
       }
     };
+  }
+
+  // ---------------------------------------------------------------
+  // 生命周期检测：更新后热恢复处理
+  // ---------------------------------------------------------------
+  //
+  // 设计原理：
+  //
+  // 当用户在 app 内触发 APK 安装后，有两种可能的后续路径：
+  //
+  // 路径 A — Kotlin onNewIntent 处理（首选）
+  //   用户从安装器点击"打开" → 系统发送 Intent → Kotlin onNewIntent()
+  //   检测到 SharedPreferences 标记 → 清标记 → 调度 AlarmManager →
+  //   finishAffinity() + killProcess() → 干净的冷启动
+  //   这是首选路径，对用户无感。
+  //
+  // 路径 B — Dart 热恢复处理（备选）
+  //   如果 Kotlin 处理失败（例如异常、权限不足），
+  //   didChangeAppLifecycleState(resumed) 被调用。
+  //   此处理程序检查 SharedPreferences 标记，
+  //   如果存在则提示用户手动重启。
+  //
+  // 用户取消安装的场景：
+  //   用户按返回键取消安装器 → app 恢复 → resumed 被调用。
+  //   此时 isPendingRestartInMemory 为 false（已在 paused 时清除），
+  //   但 SharedPreferences 标记仍在。然而 dialog 只会在
+  //   isPendingRestartInMemory 为 true 时触发，因为 SharedPreferences
+  //   标记无法区分"安装完成"和"安装取消"。
+  //   所以正确的行为是：仅当 in-memory 标记为 true 时才显示 dialog。
+  //   但 in-memory 标记在 paused 时已清除... 这又回到了原点。
+  //
+  // 最终方案：
+  //   paused 时不清除 in-memory 标记。
+  //   而是利用 Kotlin onNewIntent() 作为主要处理方式。
+  //   Dart 侧仅作为备选：当 Kotlin 处理失败时，
+  //   检查 SharedPreferences 标记，如果存在则提示用户。
+  //   Kotlin 处理成功后进程被杀死，Dart 备选不会执行。
+  //
+  //   用户取消安装的场景：
+  //   - Kotlin onNewIntent 不触发（没有新的 Intent）
+  //   - Dart resumed 被调用，isPendingRestartInMemory 为 true
+  //   - 检查 SharedPreferences 标记 → 仍存在
+  //   - 但我们无法区分"安装完成"和"取消"
+  //   - 用 hasPendingUpdateRestart 验证标记确实存在
+  //   - 如果存在：显示对话框让用户选择是否重启（无害）
+  //   - 如果用户选择"稍后"：清除标记，继续使用
+  // ---------------------------------------------------------------
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    if (!isPendingRestartInMemory) return;
+
+    // Check SharedPreferences flag to confirm it's a real update scenario
+    // (not a stale in-memory flag from a previous failed install).
+    hasPendingUpdateRestart().then((bool hasPrefsFlag) {
+      if (!hasPrefsFlag) return; // SharedPreferences flag cleared externally
+      if (!mounted) return;
+
+      debugPrint('[Application] Warm resume after APK install detected — '
+          'showing restart dialog (Kotlin handler may have failed)');
+
+      // Clear both flags immediately to prevent re-entry
+      setPendingRestartInMemory(false);
+      clearPendingUpdateRestart();
+
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.system_update,
+                  color: Theme.of(ctx).colorScheme.primary),
+              const SizedBox(width: 8),
+              const Text('更新检测'),
+            ],
+          ),
+          content: const Text(
+            '检测到应用已更新，建议重启应用以确保稳定性。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                // User chose to continue — hope for the best
+              },
+              child: const Text('稍后重启'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                _exitApp();
+              },
+              child: const Text('立即重启'),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  /// Exits the application (triggers clean cold start on next launch).
+  void _exitApp() {
+    try {
+      if (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS) {
+        SystemNavigator.pop();
+      } else if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+        exit(0);
+      }
+    } catch (e) {
+      debugPrint('[Application] Failed to exit app: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   Future<void> _checkForUpdatesOnStartup() async {
