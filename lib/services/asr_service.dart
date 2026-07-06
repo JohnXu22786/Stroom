@@ -166,7 +166,7 @@ class AsrService {
       'response_format': 'json',
       if (config.language != null && config.language!.isNotEmpty)
         'language': config.language,
-    }, ListFormat.multi, false, 'dio-boundary');
+    }, ListFormat.multi, false);
 
     // Capture request diagnostics
     lastRequestBody = {
