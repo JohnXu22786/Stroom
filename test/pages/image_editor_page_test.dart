@@ -234,6 +234,38 @@ void main() {
   // ====================================================================
   // Tests for the discard-or-save dialog (camera source)
   // ====================================================================
+  // ====================================================================
+  // Tests for showSaveDialog parameter
+  // ====================================================================
+  group('ImageEditorPage showSaveDialog parameter', () {
+    testWidgets('renders with showSaveDialog=false without crash', (
+      tester,
+    ) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: ImageEditorPage(
+            imageBytes: testImage,
+            showSaveDialog: false,
+          ),
+        ),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byType(ImageEditorPage), findsOneWidget);
+    });
+
+    testWidgets('renders with showSaveDialog=true (default) without crash', (
+      tester,
+    ) async {
+      await tester.pumpWidget(createTestApp(testImage));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byType(ImageEditorPage), findsOneWidget);
+    });
+  });
+
   group('showDiscardOrSaveDialog', () {
     testWidgets('shows correct title and options', (tester) async {
       await tester.pumpWidget(MaterialApp(

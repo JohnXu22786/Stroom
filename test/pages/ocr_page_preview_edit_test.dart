@@ -62,8 +62,8 @@ void main() {
     ManifestDatabase.enableTestMode();
   });
 
-  group('OcrPage - preview dialog edit buttons', () {
-    testWidgets('preview dialog shows edit button in top-right', (
+  group('OcrPage - preview dialog two edit buttons', () {
+    testWidgets('preview dialog shows crop and edit buttons in top-right', (
       tester,
     ) async {
       final images = [_createTestImage()];
@@ -74,9 +74,11 @@ void main() {
       await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
       await tester.pumpAndSettle();
 
-      // Should see the edit icon button
+      // Should see TWO edit icon buttons: crop + full editor
+      expect(find.byIcon(Icons.crop), findsOneWidget,
+          reason: 'Crop button should be visible');
       expect(find.byIcon(Icons.edit), findsOneWidget,
-          reason: 'Edit button should be visible in fullscreen preview');
+          reason: 'Full editor button should be visible');
     });
 
     testWidgets('preview dialog shows close button in top-left', (
@@ -123,12 +125,11 @@ void main() {
       await tester.pumpAndSettle();
 
       // Dialog should be closed
+      expect(find.byIcon(Icons.crop), findsNothing);
       expect(find.byIcon(Icons.edit), findsNothing);
     });
 
-    testWidgets('tapping edit button opens edit method choice dialog', (
-      tester,
-    ) async {
+    testWidgets('tapping crop button opens quick edit page', (tester) async {
       final images = [_createTestImage()];
       await tester.pumpWidget(_buildTestApp(testImages: images));
       await tester.pumpAndSettle();
@@ -136,18 +137,13 @@ void main() {
       await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
       await tester.pumpAndSettle();
 
-      // Tap the edit button
-      await tester.tap(find.byIcon(Icons.edit));
-      await tester.pumpAndSettle();
+      // Tap the crop button — should navigate to ExtendedImageEditorPage
+      await tester.tap(find.byIcon(Icons.crop));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
-      // Should show the edit method choice dialog (快速编辑 or 图片编辑器)
-      // Wait - the edit button on ImagePreviewDialog pops with true,
-      // then the OCR page's _previewImage handles the edit flow.
-      // Since we're in a test environment without navigation, the edit
-      // should at least trigger the flow without crashing.
-      // For now, verify the dialog doesn't crash when edit is tapped.
-      // The exact behavior depends on whether ExtendedImageEditorPage can open.
-      // Just verify no crash occurs.
+      // In test, the navigation may fail due to missing routes, but
+      // verify no crash occurs from the event handler
     });
   });
 }

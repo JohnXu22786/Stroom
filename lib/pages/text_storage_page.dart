@@ -15,6 +15,7 @@ import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
 import '../widgets/file_manager_view.dart';
 import 'files_page_shared.dart';
+import 'mermaid_chart_page.dart';
 import 'text_preview_edit_page.dart';
 import 'text_storage_shared.dart';
 
@@ -230,13 +231,23 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       return;
     }
 
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) =>
-            TextPreviewEditPage(file: file, initialContent: content),
-      ),
-    );
+    // .mmd 文件直接打开图表制作页面（三态编辑模式），无需经过普通文本预览
+    if (file.format == 'mmd') {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MermaidChartPage(initialCode: content),
+        ),
+      );
+    } else {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              TextPreviewEditPage(file: file, initialContent: content),
+        ),
+      );
+    }
 
     if (mounted) {
       await ref.read(textRecordsProvider.notifier).loadRecords();

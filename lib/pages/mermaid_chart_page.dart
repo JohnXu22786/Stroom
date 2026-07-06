@@ -50,6 +50,9 @@ enum EditorMode {
 // MermaidChartPage
 // ============================================================================
 
+/// The height ratio of the split editor relative to the available space.
+const double _splitEditorHeightRatio = 0.45;
+
 /// 图表制作页面 — 使用 Mermaid.js 制作和预览各种图表
 ///
 /// 功能特点：
@@ -218,6 +221,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       background: transparent;
       display: flex;
       justify-content: center;
+      overflow-x: auto;
     }
     #container {
       max-width: 100%;
@@ -225,6 +229,11 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
     }
     .mermaid {
       text-align: center;
+    }
+    /* Prevent mermaid SVG from overflowing its container */
+    .mermaid svg {
+      max-width: 100%;
+      height: auto;
     }
     .error-message {
       color: #e74c3c;
@@ -247,10 +256,16 @@ MERMAID_CODE_PLACEHOLDER
   <script>
     try {
       mermaid.initialize({
-        startOnLoad: true,
         theme: 'default',
         securityLevel: 'loose',
         fontFamily: 'sans-serif',
+      });
+      // Use mermaid.run() for v11 API compatibility (startOnLoad is deprecated)
+      mermaid.run({
+        nodes: [document.getElementById('mermaid-code')],
+      }).catch(function(err) {
+        document.getElementById('container').innerHTML =
+          '<div class="error-message">Mermaid render error: ' + err.message + '</div>';
       });
     } catch(e) {
       document.getElementById('container').innerHTML =
@@ -502,13 +517,10 @@ MERMAID_CODE_PLACEHOLDER
   }
 
   // ---------------------------------------------------------------------------
-  // Main content
+  // Main content — no overlap between preview and editor
   // ---------------------------------------------------------------------------
 
   Widget _buildMainContent(ColorScheme cs) {
-    // Preview panel is always at a fixed position (hidden in edit mode)
-    // to prevent InAppWebView from being destroyed and recreated when
-    // switching between split and preview modes.
     final bool showPreview = _editorMode != EditorMode.edit;
 
     return Stack(
@@ -516,19 +528,25 @@ MERMAID_CODE_PLACEHOLDER
         // Preview — always at the same tree depth to keep InAppWebView alive
         if (showPreview)
           Positioned.fill(
+            // In split mode, leave bottom space for the code editor
+            bottom: _editorMode == EditorMode.split
+                ? MediaQuery.of(context).size.height * _splitEditorHeightRatio
+                : 0,
             child: _buildPreviewPanel(cs),
           ),
-        // Editor overlay for edit mode
+        // Editor overlay for edit mode (full area)
         if (_editorMode == EditorMode.edit)
           Positioned.fill(
             child: _buildCodeEditor(cs),
           ),
-        // Editor overlay for split mode (bottom half)
+        // Editor overlay for split mode (bottom portion, no overlap)
         if (_editorMode == EditorMode.split)
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
+            height:
+                MediaQuery.of(context).size.height * _splitEditorHeightRatio,
             child: _buildSplitEditorPart(cs),
           ),
       ],
@@ -537,9 +555,11 @@ MERMAID_CODE_PLACEHOLDER
 
   /// Preview panel that wraps [InAppWebView] in a consistent widget tree.
   /// In preview mode, [InteractiveViewer] is enabled for zoom/pan.
-  /// In split mode, [InteractiveViewer] is effectively disabled so the
-  /// preview fills the available space naturally.
+  /// In split mode, the preview is constrained to its top portion and the
+  /// WebView content is scrollable horizontally to prevent overflow.
   Widget _buildPreviewPanel(ColorScheme cs) {
+    final isPreviewMode = _editorMode == EditorMode.preview;
+
     return Padding(
       padding: const EdgeInsets.all(12),
       child: ClipRRect(
@@ -549,12 +569,14 @@ MERMAID_CODE_PLACEHOLDER
             border: Border.all(color: cs.outlineVariant, width: 0.5),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: InteractiveViewer(
-            minScale: _editorMode == EditorMode.preview ? 0.5 : 1.0,
-            maxScale: _editorMode == EditorMode.preview ? 5.0 : 1.0,
-            constrained: _editorMode != EditorMode.preview,
-            child: _buildPreviewContent(cs),
-          ),
+          child: isPreviewMode
+              ? InteractiveViewer(
+                  minScale: 0.5,
+                  maxScale: 5.0,
+                  constrained: false,
+                  child: _buildPreviewContent(cs),
+                )
+              : _buildPreviewContent(cs),
         ),
       ),
     );
@@ -563,11 +585,12 @@ MERMAID_CODE_PLACEHOLDER
   /// Editor-only part of the split view (no InAppWebView preview).
   Widget _buildSplitEditorPart(ColorScheme cs) {
     return SizedBox(
-      height: MediaQuery.of(context).size.height * 0.45,
+      height: MediaQuery.of(context).size.height * _splitEditorHeightRatio,
       child: Column(
         children: [
           // Divider + label
-          Padding(
+          Container(
+            color: cs.surfaceContainerLow,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
               children: [
