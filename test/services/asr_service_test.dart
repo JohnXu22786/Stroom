@@ -205,9 +205,7 @@ void main() {
         );
       });
 
-      test(
-          'FormData request has correct Content-Type with boundary',
-          () async {
+      test('FormData request has correct Content-Type with boundary', () async {
         final adapter = _CapturingAdapter();
         final mockDio = Dio()..httpClientAdapter = adapter;
 
