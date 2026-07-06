@@ -1,7 +1,7 @@
 name: stroom
 description: A Flutter app combining FlClash UI architecture with camera functionality.
 publish_to: "none"
-version: 0.4.32
+version: 0.4.35-alpha-1
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
