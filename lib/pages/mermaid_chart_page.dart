@@ -108,12 +108,21 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   }
 
   /// 从 Mermaid 代码中检测图表类型
+  ///
+  /// 跳过 %% 注释行和 %%{init} 配置指令以找到真正的图表类型声明。
   String _detectTypeFromCode(String code) {
-    final firstLine = code.trimLeft().split('\n').first.trim();
-    for (final type in MermaidTemplates.getAllTypes()) {
-      if (firstLine.startsWith(type.keyword)) {
-        return type.id;
+    final lines = code.trimLeft().split('\n');
+    for (final rawLine in lines) {
+      final line = rawLine.trim();
+      // Skip %% comment lines and %%{init} directive lines
+      if (line.isEmpty || line.startsWith('%%')) continue;
+      for (final type in MermaidTemplates.getAllTypes()) {
+        if (line.startsWith(type.keyword)) {
+          return type.id;
+        }
       }
+      // Found a non-comment line that doesn't match any known type → stop
+      break;
     }
     return 'flowchart';
   }
@@ -437,43 +446,45 @@ MERMAID_CODE_PLACEHOLDER
       ),
       body: Column(
         children: [
-          // ----- Diagram type selector chips -----
-          Container(
-            color: cs.surfaceContainerLow,
-            child: SizedBox(
-              height: 48,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                itemCount: types.length,
-                itemBuilder: (context, index) {
-                  final type = types[index];
-                  final isSelected = type.id == _selectedTypeId;
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 6,
-                    ),
-                    child: FilterChip(
-                      selected: isSelected,
-                      label: Text(
-                        type.label,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight:
-                              isSelected ? FontWeight.w600 : FontWeight.normal,
-                        ),
+          // ----- Diagram type selector chips (hidden when opening .mmd file) -----
+          if (widget.initialCode == null)
+            Container(
+              color: cs.surfaceContainerLow,
+              child: SizedBox(
+                height: 48,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  itemCount: types.length,
+                  itemBuilder: (context, index) {
+                    final type = types[index];
+                    final isSelected = type.id == _selectedTypeId;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 6,
                       ),
-                      avatar: Icon(type.icon, size: 16),
-                      onSelected: (_) => _selectDiagramType(type.id),
-                      showCheckmark: false,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  );
-                },
+                      child: FilterChip(
+                        selected: isSelected,
+                        label: Text(
+                          type.label,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: isSelected
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                          ),
+                        ),
+                        avatar: Icon(type.icon, size: 16),
+                        onSelected: (_) => _selectDiagramType(type.id),
+                        showCheckmark: false,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
-          ),
 
           // ----- Snippet buttons -----
           if (snippets.isNotEmpty)
