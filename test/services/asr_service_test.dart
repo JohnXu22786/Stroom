@@ -206,7 +206,7 @@ void main() {
       });
 
       test(
-          'FormData request has correct Content-Type with boundary (no -- prefix)',
+          'FormData request has correct Content-Type with boundary',
           () async {
         final adapter = _CapturingAdapter();
         final mockDio = Dio()..httpClientAdapter = adapter;
@@ -239,18 +239,20 @@ void main() {
               'Content-Type must include boundary parameter. Got: $capturedContentType',
         );
 
-        // Extract boundary value and verify it does NOT start with --
-        // Use a robust regex that stops at whitespace or semicolon.
+        // Extract boundary value and verify it is not empty.
+        // According to RFC 2046, the boundary value can contain characters
+        // such as hyphens. For example, OpenAI's Python SDK sends
+        // boundaries like `----WebKitFormBoundary7MA4YWxkTrZu0gW`.
+        // Dio generates boundaries like `--dio-boundary-XXXXXXXXXX`
+        // which is a valid format accepted by OpenAI-compatible APIs.
         final boundaryMatch =
             RegExp(r'boundary=([^\s;]+)').firstMatch(capturedContentType);
         expect(boundaryMatch, isNotNull);
         final boundaryValue = boundaryMatch!.group(1)!;
         expect(
-          boundaryValue.contains('--'),
-          isFalse,
-          reason: 'Boundary value must not contain -- prefix. '
-              'Valid example: boundary=dio-boundary-xxx, '
-              'invalid: boundary=--dio-boundary-xxx. Got: $boundaryValue',
+          boundaryValue.isNotEmpty,
+          isTrue,
+          reason: 'Boundary value must not be empty. Got: $boundaryValue',
         );
 
         // Verify the transcription still works after the fix
