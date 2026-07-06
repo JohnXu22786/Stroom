@@ -2,18 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../providers/theme_provider.dart';
 import '../providers/provider_config.dart';
 import '../providers/update_provider.dart';
-import '../providers/notification_provider.dart';
 import '../utils/app_version.dart';
-import '../services/notification_service.dart';
 import '../widgets/update_dialog.dart';
 import 'provider_config_page.dart';
 import 'backup_restore_page.dart';
 import 'background_optimization_page.dart';
+import 'notification_settings_page.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -128,53 +126,25 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   // ================================================================
 
   Widget _buildNotificationSettings() {
-    final notificationsEnabled = ref.watch(notificationSettingsProvider);
-
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Column(
-          children: [
-            _buildListTile(
-              leading: Icon(
-                Icons.notifications_active,
-                color: notificationsEnabled ? Colors.blue : Colors.grey,
+        child: _buildListTile(
+          leading: Icon(
+            Icons.notifications_active,
+            color: Colors.blue,
+          ),
+          title: '任务完成通知',
+          subtitle: '检测通知权限与系统设置，查看通知指南',
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const NotificationSettingsPage(),
               ),
-              title: '任务完成通知',
-              subtitle: '任务完成或失败时发送通知',
-              trailing: Switch(
-                value: notificationsEnabled,
-                activeColor: Colors.blue,
-                onChanged: (value) async {
-                  if (value) {
-                    final service = NotificationService();
-                    final hasPermission = await service.requestPermission(
-                      usageReason: '用于在任务完成时发送通知',
-                    );
-                    if (!hasPermission && context.mounted) {
-                      final status = await service.systemPermissionStatus;
-                      if (status.isPermanentlyDenied) {
-                        _showNotificationBlockedDialog();
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('需要通知权限才能发送任务完成通知'),
-                            duration: Duration(seconds: 3),
-                          ),
-                        );
-                      }
-                    }
-                  }
-                  if (context.mounted) {
-                    ref
-                        .read(notificationSettingsProvider.notifier)
-                        .setEnabled(value);
-                  }
-                },
-              ),
-              onTap: () {},
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
@@ -198,63 +168,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             );
           },
         ),
-      ),
-    );
-  }
-
-  void _showNotificationBlockedDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.notifications_off, color: Colors.red[700], size: 24),
-            const SizedBox(width: 8),
-            const Text('通知被屏蔽'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('系统已屏蔽 Stroom 的通知权限。'),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-              ),
-              child: Text(
-                NotificationService().blockedGuide,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: Colors.orange,
-                  height: 1.5,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '如果仍无法收到通知，请检查系统设置中是否开启了"勿扰模式"。',
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('关闭'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              openAppSettings();
-            },
-            child: const Text('前往系统设置'),
-          ),
-        ],
       ),
     );
   }
