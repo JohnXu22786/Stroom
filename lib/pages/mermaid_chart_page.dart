@@ -554,9 +554,10 @@ MERMAID_CODE_PLACEHOLDER
   }
 
   /// Preview panel that wraps [InAppWebView] in a consistent widget tree.
-  /// In preview mode, [InteractiveViewer] is enabled for zoom/pan.
-  /// In split mode, the preview is constrained to its top portion and the
-  /// WebView content is scrollable horizontally to prevent overflow.
+  /// In preview mode, [InteractiveViewer] pan/scale is enabled for zoom/pan.
+  /// In split mode, the InteractiveViewer is still present but interaction
+  /// is disabled, keeping the widget tree depth constant so the platform
+  /// view is never recreated on mode switch.
   Widget _buildPreviewPanel(ColorScheme cs) {
     final isPreviewMode = _editorMode == EditorMode.preview;
 
@@ -569,14 +570,16 @@ MERMAID_CODE_PLACEHOLDER
             border: Border.all(color: cs.outlineVariant, width: 0.5),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: isPreviewMode
-              ? InteractiveViewer(
-                  minScale: 0.5,
-                  maxScale: 5.0,
-                  constrained: false,
-                  child: _buildPreviewContent(cs),
-                )
-              : _buildPreviewContent(cs),
+          child: InteractiveViewer(
+            minScale: 0.5,
+            maxScale: 5.0,
+            constrained: false,
+            // Disable pan/scale in split mode so the WebView receives
+            // touch events normally; enable only in full preview mode.
+            panEnabled: isPreviewMode,
+            scaleEnabled: isPreviewMode,
+            child: _buildPreviewContent(cs),
+          ),
         ),
       ),
     );
@@ -671,81 +674,64 @@ MERMAID_CODE_PLACEHOLDER
   // ---------------------------------------------------------------------------
 
   Widget _buildPreviewContent(ColorScheme cs) {
-    return _webViewLoaded
-        ? InAppWebView(
-            initialSettings: InAppWebViewSettings(
-              javaScriptEnabled: true,
-              transparentBackground: true,
-              verticalScrollBarEnabled: false,
-            ),
-            onWebViewCreated: (ctrl) {
-              _webViewController = ctrl;
-              final html = _buildMermaidHtml(
-                _codeController.text.trim(),
-              );
-              ctrl.loadData(
-                data: html,
-                mimeType: 'text/html',
-                encoding: 'utf8',
-              );
-            },
-            onLoadStop: (ctrl, url) {
+    return Stack(
+      children: [
+        // Single InAppWebView with a const Key so it is never recreated
+        // on rebuild or mode switch. This eliminates the infinite
+        // recreation loop that previously froze the app.
+        InAppWebView(
+          key: const Key('mermaid_webview'),
+          initialSettings: InAppWebViewSettings(
+            javaScriptEnabled: true,
+            transparentBackground: true,
+            verticalScrollBarEnabled: false,
+          ),
+          onWebViewCreated: (ctrl) {
+            _webViewController = ctrl;
+            final html = _buildMermaidHtml(
+              _codeController.text.trim(),
+            );
+            ctrl.loadData(
+              data: html,
+              mimeType: 'text/html',
+              encoding: 'utf8',
+            );
+          },
+          onLoadStop: (ctrl, url) {
+            // Only set state once to prevent infinite build → recreate → load loop
+            if (!_isPreviewReady) {
               _webViewLoaded = true;
               if (mounted) setState(() => _isPreviewReady = true);
-            },
-          )
-        : Stack(
-            children: [
-              // Dummy WebView that will load when visible
-              if (!_webViewLoaded)
-                Opacity(
-                  opacity: 0,
-                  child: InAppWebView(
-                    initialSettings: InAppWebViewSettings(
-                      javaScriptEnabled: true,
-                      transparentBackground: true,
+            }
+          },
+        ),
+        // Loading overlay — shown until the WebView first finishes loading
+        if (!_isPreviewReady)
+          Positioned.fill(
+            child: Container(
+              color: cs.surface,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: cs.primary,
                     ),
-                    onWebViewCreated: (ctrl) {
-                      _webViewController = ctrl;
-                      final html = _buildMermaidHtml(
-                        _codeController.text.trim(),
-                      );
-                      ctrl.loadData(
-                        data: html,
-                        mimeType: 'text/html',
-                        encoding: 'utf8',
-                      );
-                    },
-                    onLoadStop: (ctrl, url) {
-                      _webViewLoaded = true;
-                      if (mounted) {
-                        setState(() => _isPreviewReady = true);
-                      }
-                    },
-                  ),
-                ),
-              // Loading indicator
-              if (!_isPreviewReady)
-                Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: cs.primary,
+                    const SizedBox(height: 8),
+                    Text(
+                      '加载渲染引擎...',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '加载渲染引擎...',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-            ],
-          );
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }

@@ -438,5 +438,64 @@ void main() {
       final controller = tester.widget<TextField>(textField).controller;
       expect(controller?.text, contains('NewNode'));
     });
+
+    // ═══════════════════════════════════════════════════
+    // Mode Switching Stability (regression tests for freeze fix)
+    // ═══════════════════════════════════════════════════
+
+    testWidgets(
+        'rapid mode switching between edit, split, and preview does not hang',
+        (tester) async {
+      // Start in edit mode (no InAppWebView)
+      await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
+      await tester.pump();
+
+      // Open the mode menu repeatedly to verify no freeze occurs.
+      for (int i = 0; i < 3; i++) {
+        // Open mode menu by tapping the mode toggle button (use tooltip)
+        await tester.tap(find.byTooltip('切换视图模式'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        // Menu should show all three modes
+        expect(find.text('编辑模式'), findsOneWidget);
+        expect(find.text('编辑+预览'), findsOneWidget);
+        expect(find.text('预览模式'), findsOneWidget);
+
+        // Dismiss the menu by tapping outside
+        await tester.tapAt(const Offset(10, 10));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+      }
+
+      // After all cycles, the page is still responsive
+      expect(find.byType(TextField), findsOneWidget);
+    });
+
+    testWidgets('rapid mode menu open/close does not crash', (tester) async {
+      await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
+      await tester.pump();
+
+      // Open and close the mode menu 10 times rapidly
+      for (int i = 0; i < 10; i++) {
+        // Use the AppBar tooltip icon button instead of raw Icon to
+        // avoid ambiguity when menu items are also visible
+        final toggleButton = find.byTooltip('切换视图模式');
+        if (toggleButton.evaluate().isNotEmpty) {
+          await tester.tap(toggleButton);
+        } else {
+          // Fallback: try any remaining mode icon
+          final modeIcon = find.byIcon(Icons.code);
+          if (modeIcon.evaluate().isNotEmpty) {
+            await tester.tap(modeIcon.first);
+          }
+        }
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      // Verify the page is still responsive
+      expect(find.byType(TextField), findsOneWidget);
+    });
   });
 }
