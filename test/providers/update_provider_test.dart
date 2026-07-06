@@ -1039,8 +1039,7 @@ void main() {
       expect(isPendingRestartInMemory, isFalse);
     });
 
-    test(
-        'isPendingRestartInMemory is cleared on process restart (simulated)',
+    test('isPendingRestartInMemory is cleared on process restart (simulated)',
         () {
       // Simulate process restart: flag resets to false on each isolate start
       setPendingRestartInMemory(false);
