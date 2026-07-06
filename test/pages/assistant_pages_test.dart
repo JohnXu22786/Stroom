@@ -225,6 +225,55 @@ void main() {
       expect(find.text('😊'), findsOneWidget);
     });
 
+    testWidgets('assistant card does NOT display prompt text', (tester) async {
+      // Given an assistant with a non-empty prompt
+      const promptText = '这是一个测试提示词';
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [
+            Assistant(
+              name: '提示测试',
+              prompt: promptText,
+              emoji: '🤖',
+              description: '带提示词的助手',
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Then the name and description should still be visible
+      expect(find.text('提示测试'), findsOneWidget);
+      expect(find.text('带提示词的助手'), findsOneWidget);
+
+      // But the prompt text should NOT be visible on the card
+      expect(find.text(promptText), findsNothing);
+    });
+
+    testWidgets(
+        'assistant card still shows name and description after removing prompt',
+        (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [
+            Assistant(
+              name: '助手1',
+              prompt: 'P1',
+              emoji: '🤖',
+              description: '第一个助手',
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('助手1'), findsOneWidget);
+      expect(find.text('第一个助手'), findsOneWidget);
+      expect(find.text('🤖'), findsOneWidget);
+    });
+
     testWidgets('uses responsive grid with MaxCrossAxisExtent (like homepage)',
         (
       tester,
