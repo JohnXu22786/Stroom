@@ -97,6 +97,63 @@ const String _kAllReleasesUrl =
 const String _kSkippedVersionKey = 'update_skipped_version';
 const String _kUpdateAvailableKey = 'update_available_data';
 const String _kAcceptPreReleaseKey = 'update_accept_pre_release';
+const String _kPendingUpdateRestartKey = 'pending_update_restart';
+
+/// In-memory flag that survives as long as the Dart isolate is alive.
+/// Set to `true` right before the APK installer is launched on Android.
+/// Checked by [Application]'s lifecycle listener to detect warm resume
+/// after an APK update install.
+///
+/// Unlike the SharedPreferences flag ([_kPendingUpdateRestartKey]), this
+/// flag IS cleared when the process is killed.  By comparing the two:
+/// - In-memory set + SharedPref set = process survived install → warm resume
+/// - In-memory clear + SharedPref set = process was killed → cold restart
+bool _pendingRestartInMemory = false;
+
+/// The SharedPreferences key used to persist the pending-update-restart flag.
+///
+/// Exported so that [main.dart] and [startup_app.dart] can check and clear
+/// it during cold-start without importing the notifier.
+String get pendingUpdateRestartKey => _kPendingUpdateRestartKey;
+
+/// Returns `true` if a pending-update-restart flag was found in
+/// SharedPreferences.  The caller should clear the flag after handling it.
+///
+/// This is used in two places:
+/// 1. [StartupApp._runStartupSequence] — on cold start, checks and clears it.
+/// 2. [Application] lifecycle listener — on warm resume from installer.
+Future<bool> hasPendingUpdateRestart() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_kPendingUpdateRestartKey) ?? false;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Clears the pending-update-restart flag from SharedPreferences.
+///
+/// Called after the flag has been handled on either cold start or warm resume.
+Future<void> clearPendingUpdateRestart() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_kPendingUpdateRestartKey);
+  } catch (_) {}
+}
+
+/// Returns the current value of the in-memory pending-restart flag.
+///
+/// This flag is set to `true` right before the APK installer is launched
+/// on Android, and cleared when the warm-resume handler fires or when the
+/// process is killed.  The flag is exposed primarily for testing.
+bool get isPendingRestartInMemory => _pendingRestartInMemory;
+
+/// Sets the in-memory pending-restart flag.
+///
+/// Only intended for use in testing and by [_installOnAndroid].
+void setPendingRestartInMemory(bool value) {
+  _pendingRestartInMemory = value;
+}
 
 class UpdateNotifier extends StateNotifier<UpdateState> {
   final Dio _dio;
@@ -750,7 +807,25 @@ rm -- "\$0"
   /// Native side ([MainActivity.kt]) returns `"ok"` on success or throws a
   /// [PlatformException] on failure with a Chinese error message in the
   /// exception details. The error message is displayed directly in the dialog.
+  ///
+  /// Before launching the installer, saves a [pending_update_restart] flag in
+  /// SharedPreferences AND sets the in-memory flag.  These are checked by the
+  /// startup/lifecycle code to detect the "reopen after update" scenario and
+  /// handle it gracefully (avoiding crashes caused by stale state or
+  /// data inconsistency between the old and new APK).
   Future<void> _installOnAndroid(String filePath) async {
+    // Save flags BEFORE launching the installer, so they survive a
+    // potential process kill during APK installation.
+    // Only set the in-memory flag AFTER the SharedPreferences write succeeds,
+    // ensuring both flags are consistent.
+    bool prefsOk = false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_kPendingUpdateRestartKey, true);
+      prefsOk = true;
+    } catch (_) {}
+    _pendingRestartInMemory = prefsOk;
+
     try {
       const channel = MethodChannel('com.johntsui.stroom/install');
       await channel.invokeMethod<String>('installApk', {
@@ -759,13 +834,27 @@ rm -- "\$0"
       // Success — native side successfully launched the package installer.
       // No error to report.
     } on PlatformException catch (e) {
+      // Install failed — clear both flags to prevent false "update complete" dialog
+      await _clearPendingRestartFlags();
       state = state.copyWith(
         downloadError: e.message ?? '安装失败，请手动打开 APK 安装',
       );
     } catch (e) {
+      // Install failed — clear both flags
+      await _clearPendingRestartFlags();
       state = state.copyWith(
         downloadError: '安装失败: $e',
       );
     }
+  }
+
+  /// Clears both the SharedPreferences and in-memory pending-restart flags.
+  /// Called when the install attempt fails or is cancelled.
+  Future<void> _clearPendingRestartFlags() async {
+    _pendingRestartInMemory = false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_kPendingUpdateRestartKey);
+    } catch (_) {}
   }
 }
