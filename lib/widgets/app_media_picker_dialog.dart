@@ -50,6 +50,11 @@ class MediaPickerConfig<T> {
   /// Typically shows format, size, duration, etc.
   final Widget Function(T record) subtitleBuilder;
 
+  /// Optional builder for a file thumbnail widget (e.g. a video thumbnail
+  /// image shown instead of [fileIcon]). When non-null, this widget replaces
+  /// the default icon in the file item tile.
+  final Widget Function(T record)? thumbnailBuilder;
+
   const MediaPickerConfig({
     required this.title,
     required this.emptyIcon,
@@ -62,6 +67,7 @@ class MediaPickerConfig<T> {
     required this.readFile,
     required this.displayName,
     required this.subtitleBuilder,
+    this.thumbnailBuilder,
   });
 }
 
@@ -488,16 +494,23 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                 height: 44,
                 margin: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.15),
+                  color: widget.config.thumbnailBuilder != null
+                      ? null
+                      : iconColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Center(
-                  child: Icon(
-                    widget.config.fileIcon,
-                    size: 22,
-                    color: iconColor,
-                  ),
-                ),
+                clipBehavior: widget.config.thumbnailBuilder != null
+                    ? Clip.antiAlias
+                    : Clip.none,
+                child: widget.config.thumbnailBuilder != null
+                    ? widget.config.thumbnailBuilder!(record)
+                    : Center(
+                        child: Icon(
+                          widget.config.fileIcon,
+                          size: 22,
+                          color: iconColor,
+                        ),
+                      ),
               ),
               // File info
               Expanded(

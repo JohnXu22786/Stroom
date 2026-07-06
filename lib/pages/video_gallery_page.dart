@@ -1,13 +1,15 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:cross_platform_video_thumbnails/cross_platform_video_thumbnails.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:path/path.dart' as p;
 import 'package:media_kit/media_kit.dart';
+import 'package:path/path.dart' as p;
 
 import '../providers/video_provider.dart';
 import 'video_gallery_shared.dart';
@@ -15,7 +17,6 @@ import '../utils/video_manifest.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
 import '../utils/manifest_bridge.dart';
-import '../utils/thumbnail_utils.dart';
 import '../widgets/file_manager_view.dart';
 import '../widgets/folder_picker_dialog.dart';
 import 'files_page_shared.dart';
@@ -32,6 +33,45 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
   /// fire for the same hash, they all await the same future instead of one
   /// proceeding and the others returning `null` permanently.
   final Map<String, Future<Uint8List?>> _thumbnailFutures = {};
+
+  /// Lazy initialization guard for [CrossPlatformVideoThumbnails].
+  bool _thumbnailInitialized = false;
+  Completer<void>? _initCompleter;
+
+  Future<void> _ensureThumbnailInitialized() async {
+    if (_thumbnailInitialized) return;
+    if (_initCompleter != null) return _initCompleter!.future;
+    _initCompleter = Completer<void>();
+    try {
+      await CrossPlatformVideoThumbnails.initialize();
+      _thumbnailInitialized = true;
+      _initCompleter!.complete();
+    } catch (e) {
+      _initCompleter!.completeError(e);
+      _initCompleter = null; // Allow retry on failure
+      rethrow;
+    }
+  }
+
+  /// Probe video duration using media_kit Player.
+  /// This is separate from thumbnail generation — Player.state.duration works
+  /// even when Player.screenshot() does not.
+  Future<int> _probeVideoDuration(String videoPath) async {
+    if (kIsWeb) return 0;
+    final probePlayer = Player();
+    try {
+      await probePlayer.open(
+        Media(Uri.file(videoPath).toString()),
+        play: false,
+      );
+      await Future.delayed(const Duration(milliseconds: 500));
+      return probePlayer.state.duration.inMilliseconds;
+    } catch (_) {
+      return 0;
+    } finally {
+      await probePlayer.dispose();
+    }
+  }
 
   @override
   void initState() {
@@ -147,31 +187,22 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         );
 
         await VideoManifest.writeFile(storageFileName, bytes);
-        // Try to obtain video duration and thumbnail from the file using media_kit
+        // Try to obtain video duration and thumbnail from the file
         int videoDurationMs = 0;
         final videoPath = await VideoManifest.readFilePath(storageFileName);
-        if (videoPath != null && videoPath.isNotEmpty && !kIsWeb) {
-          final probePlayer = Player();
+        if (videoPath != null && videoPath.isNotEmpty) {
           try {
-            await probePlayer.open(
-              Media(Uri.file(videoPath).toString()),
-              play: false,
-            );
-            await Future.delayed(const Duration(milliseconds: 500));
-            videoDurationMs = probePlayer.state.duration.inMilliseconds;
-            await probePlayer.seek(const Duration(seconds: 1));
-            await Future.delayed(const Duration(milliseconds: 200));
-            final thumbBytes = await probePlayer.screenshot();
-            if (thumbBytes != null && thumbBytes.isNotEmpty) {
+            videoDurationMs = await _probeVideoDuration(videoPath);
+            final thumbBytes = await _generateThumbnailFromPath(videoPath);
+            if (thumbBytes != null) {
               await VideoManifest.writeThumbnail(hash, thumbBytes);
             }
           } catch (_) {
             // Duration/thumbnail detection failed
-          } finally {
-            await probePlayer.dispose();
           }
         }
-        if (kIsWeb && videoPath != null && videoPath.isNotEmpty) {
+        if (videoPath == null || videoPath.isEmpty) {
+          // Fallback: try from bytes (e.g., web without direct path)
           try {
             final thumbBytes = await _generateThumbnailFromBytes(bytes);
             if (thumbBytes != null) {
@@ -262,33 +293,21 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         );
 
         final videoPath = await VideoManifest.writeFile(storageFileName, bytes);
-        // Try to obtain video duration and thumbnail from the file using media_kit
+        // Try to obtain video duration and thumbnail from the file
         int videoDurationMs = 0;
-        if (videoPath.isNotEmpty && !kIsWeb) {
-          final probePlayer = Player();
+        if (videoPath.isNotEmpty) {
           try {
-            await probePlayer.open(
-              Media(Uri.file(videoPath).toString()),
-              play: false,
-            );
-            // Wait for media to load
-            await Future.delayed(const Duration(milliseconds: 500));
-            videoDurationMs = probePlayer.state.duration.inMilliseconds;
-            // Generate thumbnail using screenshot
-            await probePlayer.seek(const Duration(seconds: 1));
-            await Future.delayed(const Duration(milliseconds: 200));
-            final thumbBytes = await probePlayer.screenshot();
-            if (thumbBytes != null && thumbBytes.isNotEmpty) {
+            videoDurationMs = await _probeVideoDuration(videoPath);
+            final thumbBytes = await _generateThumbnailFromPath(videoPath);
+            if (thumbBytes != null) {
               await VideoManifest.writeThumbnail(hash, thumbBytes);
             }
           } catch (_) {
             // Duration/thumbnail detection failed
-          } finally {
-            await probePlayer.dispose();
           }
         }
-        // For web, generate thumbnail from bytes after saving
-        if (kIsWeb && videoPath.isNotEmpty) {
+        if (videoPath.isEmpty) {
+          // Fallback: try from bytes (e.g., web without direct path)
           try {
             final thumbBytes = await _generateThumbnailFromBytes(bytes);
             if (thumbBytes != null) {
@@ -700,33 +719,20 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     Future<Uint8List?> generateThumbnailForFile(VideoRecord file) async {
       try {
         final videoPath = await VideoManifest.readFilePath(file.storagePath);
-        if (videoPath == null) return null;
-
-        Uint8List? thumbBytes;
-
-        if (kIsWeb) {
-          // Web: use JS-based thumbnail generation
+        if (videoPath == null || videoPath.isEmpty) {
+          // Fallback: read bytes and try from bytes
           final videoBytes = await VideoManifest.readFile(file.storagePath);
           if (videoBytes != null) {
-            thumbBytes = await _generateThumbnailFromBytes(videoBytes);
+            final thumbBytes = await _generateThumbnailFromBytes(videoBytes);
+            if (thumbBytes != null) {
+              await VideoManifest.writeThumbnail(file.hash, thumbBytes);
+              return thumbBytes;
+            }
           }
-        } else {
-          // Native: use media_kit Player.screenshot()
-          final thumbPlayer = Player();
-          try {
-            await thumbPlayer.open(
-              Media(Uri.file(videoPath).toString()),
-              play: false,
-            );
-            await Future.delayed(const Duration(milliseconds: 500));
-            await thumbPlayer.seek(const Duration(seconds: 1));
-            await Future.delayed(const Duration(milliseconds: 200));
-            thumbBytes = await thumbPlayer.screenshot();
-          } finally {
-            await thumbPlayer.dispose();
-          }
+          return null;
         }
 
+        final thumbBytes = await _generateThumbnailFromPath(videoPath);
         if (thumbBytes != null && thumbBytes.isNotEmpty) {
           await VideoManifest.writeThumbnail(file.hash, thumbBytes);
           return thumbBytes;
@@ -738,7 +744,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       return null;
     }
 
-    /// Try to read the cached thumbnail; if missing, generate it on demand using media_kit.
+    /// Try to read the cached thumbnail; if missing, generate it on demand.
     /// Uses a shared-future pattern ([_thumbnailFutures]) so that when multiple
     /// [FutureBuilder]s fire simultaneously for the same hash they all await the
     /// same in-progress generation instead of some getting `null` permanently.
@@ -985,27 +991,69 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     );
   }
 
-  /// Generate thumbnail from video bytes (used on web).
-  /// Creates a blob URL and uses media_kit Player to take a screenshot.
-  Future<Uint8List?> _generateThumbnailFromBytes(Uint8List videoBytes) async {
-    if (!kIsWeb) return null;
+  /// Generate thumbnail from a video file path using
+  /// [CrossPlatformVideoThumbnails].
+  Future<Uint8List?> _generateThumbnailFromPath(String videoPath) async {
     try {
-      final blobUrl = await createBlobUrl(videoBytes);
-      if (blobUrl == null || blobUrl.isEmpty) return null;
-
-      final thumbPlayer = Player();
-      try {
-        await thumbPlayer.open(Media(blobUrl), play: false);
-        await Future.delayed(const Duration(milliseconds: 1000));
-        await thumbPlayer.seek(const Duration(seconds: 1));
-        await Future.delayed(const Duration(milliseconds: 500));
-        return await thumbPlayer.screenshot();
-      } finally {
-        await thumbPlayer.dispose();
-        revokeBlobUrl(blobUrl);
+      await _ensureThumbnailInitialized();
+      final result = await CrossPlatformVideoThumbnails.generateThumbnail(
+        videoPath,
+        ThumbnailOptions(
+          timePosition: 1.0,
+          width: 320,
+          height: 240,
+          quality: 0.8,
+          format: ThumbnailFormat.jpeg,
+        ),
+      );
+      if (result.data.isNotEmpty) {
+        return Uint8List.fromList(result.data);
       }
-    } catch (_) {
-      return null;
+    } catch (e) {
+      debugPrint('_generateThumbnailFromPath error: $e');
     }
+    return null;
+  }
+
+  /// Generate thumbnail from video bytes (fallback for when file path is
+  /// unavailable, e.g. on some web deployments). Writes bytes to a temp file,
+  /// generates thumbnail, then cleans up.
+  Future<Uint8List?> _generateThumbnailFromBytes(Uint8List videoBytes) async {
+    // On web, we cannot create temp files — rely on path-based generation.
+    if (kIsWeb) return null;
+    try {
+      await _ensureThumbnailInitialized();
+      // Write bytes to a temporary file so the package can read it
+      final tempDir = Directory.systemTemp;
+      final tempFile = File(
+        '${tempDir.path}/stroom_thumb_${DateTime.now().millisecondsSinceEpoch}.mp4',
+      );
+      try {
+        await tempFile.writeAsBytes(videoBytes);
+        final result = await CrossPlatformVideoThumbnails.generateThumbnail(
+          tempFile.path,
+          ThumbnailOptions(
+            timePosition: 1.0,
+            width: 320,
+            height: 240,
+            quality: 0.8,
+            format: ThumbnailFormat.jpeg,
+          ),
+        );
+        if (result.data.isNotEmpty) {
+          return Uint8List.fromList(result.data);
+        }
+      } finally {
+        // Clean up temp file
+        try {
+          if (await tempFile.exists()) {
+            await tempFile.delete();
+          }
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('_generateThumbnailFromBytes error: $e');
+    }
+    return null;
   }
 }
