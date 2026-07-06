@@ -78,6 +78,29 @@ Future<List<VideoPickerResult>?> showAppVideoPickerDialog(
           ],
         ],
       ),
+      thumbnailBuilder: (record) => FutureBuilder<Uint8List?>(
+        future: VideoManifest.readThumbnail(record.hash),
+        builder: (context, snapshot) {
+          final data = snapshot.data;
+          if (data != null && data.isNotEmpty) {
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.memory(
+                data,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+                errorBuilder: (_, __, ___) => const Icon(
+                  Icons.videocam,
+                  size: 22,
+                  color: Colors.indigo,
+                ),
+              ),
+            );
+          }
+          return const Icon(Icons.videocam, size: 22, color: Colors.indigo);
+        },
+      ),
     ),
   );
 

@@ -508,7 +508,9 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                 clipBehavior: isImage ? Clip.antiAlias : Clip.none,
                 child: isImage
                     ? _buildImageThumbnail(record)
-                    : _buildFileIcon(record),
+                    : type == _FileTabType.video
+                        ? _buildVideoThumbnail(record as VideoRecord)
+                        : _buildFileIcon(record),
               ),
               // File info
               Expanded(
@@ -628,6 +630,28 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
           );
         }
         return _defaultIcon();
+      },
+    );
+  }
+
+  Widget _buildVideoThumbnail(VideoRecord record) {
+    return FutureBuilder<Uint8List?>(
+      future: VideoManifest.readThumbnail(record.hash),
+      builder: (context, snapshot) {
+        final data = snapshot.data;
+        if (data != null && data.isNotEmpty) {
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.memory(
+              data,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+              errorBuilder: (_, __, ___) => _buildFileIcon(record),
+            ),
+          );
+        }
+        return _buildFileIcon(record);
       },
     );
   }

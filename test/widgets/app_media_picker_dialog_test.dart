@@ -677,5 +677,154 @@ void main() {
       expect(find.textContaining('WAV'), findsOneWidget);
       expect(find.textContaining('2.0 KB'), findsOneWidget);
     });
+
+    // ====================================================================
+    // thumbnailBuilder tests
+    // ====================================================================
+
+    testWidgets('uses custom thumbnailBuilder when provided', (tester) async {
+      final records = [
+        const _TestRecord(id: '1', name: '视频文件', format: 'mp4', size: 4096),
+      ];
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () => showMediaPickerDialog(
+                  context,
+                  MediaPickerConfig<_TestRecord>(
+                    title: '测试选择器',
+                    emptyIcon: Icons.folder_outlined,
+                    emptyText: '暂无文件',
+                    fileIcon: Icons.videocam,
+                    multiSelect: true,
+                    loadRecords: () async => records,
+                    loadFolders: () async => <String>{},
+                    readFile: (record) async => Uint8List.fromList([1, 2, 3]),
+                    displayName: (record) => record.name,
+                    subtitleBuilder: (record) => const Text(''),
+                    thumbnailBuilder: (record) => const SizedBox(
+                      key: Key('custom_thumbnail'),
+                      width: 44,
+                      height: 44,
+                      child: Icon(Icons.movie, size: 22),
+                    ),
+                  ),
+                ),
+                child: const Text('Open'),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Custom thumbnail should be visible instead of default icon
+      expect(find.byKey(const Key('custom_thumbnail')), findsOneWidget);
+      // Default file icon should not be present
+      expect(find.byIcon(Icons.videocam), findsNothing);
+    });
+
+    testWidgets('shows default icon when thumbnailBuilder is null',
+        (tester) async {
+      final records = [
+        const _TestRecord(id: '1', name: '普通文件', format: 'txt', size: 256),
+      ];
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () => showMediaPickerDialog(
+                  context,
+                  MediaPickerConfig<_TestRecord>(
+                    title: '测试选择器',
+                    emptyIcon: Icons.folder_outlined,
+                    emptyText: '暂无文件',
+                    fileIcon: Icons.insert_drive_file,
+                    fileIconColor: Colors.blue,
+                    multiSelect: true,
+                    loadRecords: () async => records,
+                    loadFolders: () async => <String>{},
+                    readFile: (record) async => Uint8List.fromList([1, 2, 3]),
+                    displayName: (record) => record.name,
+                    subtitleBuilder: (record) => const Text(''),
+                    // thumbnailBuilder intentionally omitted (null)
+                  ),
+                ),
+                child: const Text('Open'),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Default file icon should be visible
+      expect(find.byIcon(Icons.insert_drive_file), findsOneWidget);
+    });
+
+    testWidgets('thumbnailBuilder renders per-record custom widget',
+        (tester) async {
+      final records = [
+        const _TestRecord(id: '1', name: '文件A', format: 'mp4', size: 1024),
+        const _TestRecord(id: '2', name: '文件B', format: 'mov', size: 2048),
+      ];
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () => showMediaPickerDialog(
+                  context,
+                  MediaPickerConfig<_TestRecord>(
+                    title: '测试选择器',
+                    emptyIcon: Icons.folder_outlined,
+                    emptyText: '暂无文件',
+                    fileIcon: Icons.videocam,
+                    multiSelect: true,
+                    loadRecords: () async => records,
+                    loadFolders: () async => <String>{},
+                    readFile: (record) async => Uint8List.fromList([1, 2, 3]),
+                    displayName: (record) => record.name,
+                    subtitleBuilder: (record) => const Text(''),
+                    thumbnailBuilder: (record) => Container(
+                      key: Key('thumb_${record.id}'),
+                      color: Colors.black,
+                      child: Text(
+                        record.format,
+                        style: const TextStyle(fontSize: 10),
+                      ),
+                    ),
+                  ),
+                ),
+                child: const Text('Open'),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Each record should have its own thumbnail widget
+      expect(find.byKey(const Key('thumb_1')), findsOneWidget);
+      expect(find.byKey(const Key('thumb_2')), findsOneWidget);
+      // Format text from thumbnails should be visible
+      expect(find.text('mp4'), findsOneWidget);
+      expect(find.text('mov'), findsOneWidget);
+    });
   });
 }
