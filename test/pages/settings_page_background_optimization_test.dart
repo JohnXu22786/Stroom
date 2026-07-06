@@ -52,7 +52,7 @@ void main() {
       expect(find.text('通知'), findsNothing);
     });
 
-    testWidgets('shows 任务完成通知 toggle', (tester) async {
+    testWidgets('shows 任务完成通知 as navigation card', (tester) async {
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -65,13 +65,16 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // Toggle text should still exist
+      // The text should still exist
       expect(find.text('任务完成通知'), findsOneWidget);
-      expect(find.text('任务完成或失败时发送通知'), findsOneWidget);
-      // At least one Switch should be present (the notification toggle)
-      expect(find.byType(Switch), findsWidgets);
-      // Specifically the notification toggle subtitle text should be present
-      expect(find.text('任务完成或失败时发送通知'), findsOneWidget);
+      // Subtitle describing the purpose
+      expect(find.text('检测通知权限与系统设置，查看通知指南'), findsOneWidget);
+      // Should have a chevron_right icon (navigation indicator)
+      expect(find.byIcon(Icons.chevron_right), findsWidgets);
+      // Should NOT have a Switch directly on the settings page for notifications
+      // (there may be other Switches like the pre-release toggle)
+      // Just verify the notification card is not a Switch-based toggle
+      expect(find.text('任务完成或失败时发送通知'), findsNothing);
     });
 
     testWidgets('shows 后台运行优化 card entry', (tester) async {
@@ -113,6 +116,34 @@ void main() {
       // Should navigate to BackgroundOptimizationPage (verify unique content)
       expect(find.text('系统环境检测'), findsOneWidget);
       expect(find.text('平台教程'), findsOneWidget);
+    });
+
+    testWidgets('tapping 任务完成通知 navigates to NotificationSettingsPage', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1080, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      SharedPreferences.setMockInitialValues({});
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Tap the 任务完成通知 card
+      await tester.tap(find.text('任务完成通知'));
+      // Push the new page - use pump without settle because
+      // CircularProgressIndicator animation prevents settling
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+
+      // Should navigate to NotificationSettingsPage (verify unique content)
+      expect(find.text('通知权限设置'), findsOneWidget);
+      expect(find.text('通知权限检测'), findsOneWidget);
+      expect(find.text('平台指南'), findsOneWidget);
     });
 
     testWidgets('settings page still renders all other sections',
