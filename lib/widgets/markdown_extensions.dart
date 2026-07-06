@@ -3,6 +3,7 @@ import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:markdown/markdown.dart' as m;
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:flutter_highlight/themes/dracula.dart';
+import 'html_code_block_widget.dart';
 import 'mermaid_render_widget.dart';
 
 /// Tag used by the LaTeX custom generator.
@@ -116,11 +117,16 @@ class LatexNode extends SpanNode {
 /// Builds a code block widget for the given [code] and [language].
 ///
 /// If [language] is `'mermaid'`, renders the code using [MermaidRenderWidget].
+/// If [language] is `'html'`, renders the code using [HtmlCodeBlockWidget].
 /// Otherwise, renders a syntax-highlighted code block using the configured
 /// [preConfig] theme and decoration.
 Widget _buildCodeBlock(String code, String language, PreConfig preConfig) {
   if (language == 'mermaid') {
     return MermaidRenderWidget(mermaidCode: code);
+  }
+
+  if (language == 'html') {
+    return HtmlCodeBlockWidget(htmlCode: code);
   }
 
   // Fallback: render as a syntax-highlighted code block (replicating the
@@ -170,6 +176,9 @@ Widget _buildCodeBlock(String code, String language, PreConfig preConfig) {
 /// Mermaid code blocks (```` ```mermaid ````) are rendered using
 /// [MermaidRenderWidget] instead of syntax highlighting.
 ///
+/// HTML code blocks (```` ```html ````) are rendered using
+/// [HtmlCodeBlockWidget] to provide a live preview of the HTML content.
+///
 /// The [draculaTheme] is chosen for its high-contrast syntax colours
 /// which work well in both modes.
 PreConfig codeBlockPreConfig({required bool isDark}) {
@@ -180,7 +189,7 @@ PreConfig codeBlockPreConfig({required bool isDark}) {
       borderRadius: BorderRadius.all(Radius.circular(8.0)),
     ),
   );
-  // Use a builder so mermaid code blocks get rendered via WebView
+  // Use a builder so mermaid and html code blocks get rendered via WebView
   // while all other code blocks still get syntax highlighting.
   return PreConfig(
     theme: baseConfig.theme,

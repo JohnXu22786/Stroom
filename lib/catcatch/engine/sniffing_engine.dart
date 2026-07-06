@@ -230,7 +230,12 @@ class SniffingEngine {
   ///
   /// [resources] 媒体资源列表
   /// [expectedDurationSec] 用户期望的时长（秒）。为 0 时不筛选。
-  /// [toleranceSec] 容差秒数（默认 2）
+  /// [toleranceSec] 容差秒数（默认 3）
+  ///
+  /// 筛选规则：
+  /// - 有时长信息且匹配 ±toleranceSec 范围的 → 保留
+  /// - 有时长信息但超出范围的 → 排除
+  /// - 没有时长信息的 → 保留（无法判断是否匹配，交给用户自行选择）
   static List<MediaResource> filterByDuration(
     List<MediaResource> resources,
     int expectedDurationSec, {
@@ -240,9 +245,17 @@ class SniffingEngine {
     if (expectedDurationSec <= 0) return resources;
     final result = <MediaResource>[];
     for (final res in resources) {
-      if (res.duration == null) continue;
+      if (res.duration == null) {
+        // 没有时长信息，保留（可能是直接媒体文件，无法判断时长）
+        result.add(res);
+        continue;
+      }
       final duration = _parseDurationToSeconds(res.duration!);
-      if (duration == null) continue;
+      if (duration == null) {
+        // 时长无法解析，保留
+        result.add(res);
+        continue;
+      }
       if ((duration - expectedDurationSec).abs() <= toleranceSec) {
         result.add(res);
       }

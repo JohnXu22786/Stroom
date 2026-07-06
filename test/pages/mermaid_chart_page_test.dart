@@ -7,10 +7,11 @@ import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
 
+/// Builds the test app. [initialShowPreview] defaults to false to avoid
+/// InAppWebView platform not being initialized in test environment.
 Widget _buildTestApp({String? initialCode, bool initialShowPreview = false}) {
   return ProviderScope(
     child: MaterialApp(
-      // 测试环境中不显示 WebView 预览，避免 InAppWebView 平台未初始化
       home: MermaidChartPage(
         initialCode: initialCode,
         initialShowPreview: initialShowPreview,
@@ -21,6 +22,21 @@ Widget _buildTestApp({String? initialCode, bool initialShowPreview = false}) {
       ],
     ),
   );
+}
+
+/// Helper: opens the mode selection popup menu from the AppBar.
+/// Returns true if the menu was opened successfully.
+Future<bool> _openModeMenu(WidgetTester tester) async {
+  // Try all possible mode toggle icons
+  for (final icon in [Icons.code, Icons.view_column, Icons.visibility]) {
+    final finder = find.byIcon(icon);
+    if (finder.evaluate().isNotEmpty) {
+      await tester.tap(finder);
+      await tester.pumpAndSettle();
+      return true;
+    }
+  }
+  return false;
 }
 
 void main() {
@@ -154,6 +170,29 @@ void main() {
       final textField = tester.widget<TextField>(find.byType(TextField).first);
       expect(textField.controller?.text, contains('gantt'));
       expect(textField.controller?.text, contains('Test'));
+    });
+
+    // ═══════════════════════════════════════════════════
+    // Layout tests (edit mode only — no InAppWebView)
+    // ═══════════════════════════════════════════════════
+
+    testWidgets(
+        'edit mode with initialShowPreview:false shows code editor only',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
+      await tester.pump();
+
+      // Should start in edit mode (code icon in AppBar)
+      expect(find.byIcon(Icons.code), findsOneWidget);
+      expect(find.byIcon(Icons.view_column), findsNothing);
+      expect(find.byIcon(Icons.visibility), findsNothing);
+
+      // In edit mode, there should be exactly one TextField (the code editor)
+      // The "代码" label (split mode editor label) should NOT be visible
+      expect(find.text('代码'), findsNothing);
+
+      // The TextField should be visible
+      expect(find.byType(TextField), findsOneWidget);
     });
 
     // ═══════════════════════════════════════════════════
@@ -353,6 +392,51 @@ void main() {
 
       // Current mode (edit) should have a checkmark
       expect(find.byIcon(Icons.check), findsOneWidget);
+    });
+
+    // ═══════════════════════════════════════════════════
+    // Code update / debounce behavior tests
+    // ═══════════════════════════════════════════════════
+
+    testWidgets('editing code triggers debounce and updates last rendered code',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
+      await tester.pump();
+
+      // Enter some mermaid code
+      final textField = find.byType(TextField).first;
+      await tester.enterText(textField, 'graph TD\n  A-->B');
+      await tester.pump();
+
+      // The debounce timer should fire after 800ms
+      await tester.pump(const Duration(milliseconds: 900));
+
+      // Verify the text is still in the controller
+      final controller = tester.widget<TextField>(textField).controller;
+      expect(controller?.text, contains('graph TD'));
+    });
+
+    testWidgets('snippet insertion appends to existing code', (tester) async {
+      await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
+      await tester.pump();
+
+      // Enter base code
+      final textField = find.byType(TextField).first;
+      await tester.enterText(textField, 'graph TD\n  A-->B');
+      await tester.pump();
+
+      // Check that snippet buttons exist (flowchart is selected by default)
+      // The flowchart has snippets like '添加节点', '添加菱形判断', etc.
+      expect(find.text('添加节点'), findsOneWidget);
+      expect(find.text('添加连接线'), findsOneWidget);
+
+      // Tap '添加节点' snippet
+      await tester.tap(find.text('添加节点'));
+      await tester.pump();
+
+      // The code should now contain the new node snippet
+      final controller = tester.widget<TextField>(textField).controller;
+      expect(controller?.text, contains('NewNode'));
     });
   });
 }

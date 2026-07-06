@@ -166,7 +166,7 @@ class AsrService {
       'response_format': 'json',
       if (config.language != null && config.language!.isNotEmpty)
         'language': config.language,
-    });
+    }, ListFormat.multi, false, 'dio-boundary');
 
     // Capture request diagnostics
     lastRequestBody = {
@@ -189,7 +189,6 @@ class AsrService {
       final response = await _dio.post(
         config.transcribeUrl,
         data: formData,
-        options: Options(contentType: 'multipart/form-data'),
       );
 
       stopwatch.stop();

@@ -1082,7 +1082,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (index < 0 || index >= _selectedImages.length) return;
     final image = _selectedImages[index];
 
-    final shouldEdit = await showDialog<bool>(
+    final result = await showDialog<String>(
       context: context,
       builder: (ctx) => Dialog(
         backgroundColor: Colors.black,
@@ -1092,7 +1092,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             Center(
               child: GestureDetector(
                 key: const Key('preview_tap_to_close'),
-                onTap: () => Navigator.pop(ctx, false),
+                onTap: () => Navigator.pop(ctx),
                 child: ExtendedImage.memory(
                   image.bytes,
                   fit: BoxFit.contain,
@@ -1137,24 +1137,44 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 child: IconButton(
                   key: const Key('preview_close_btn'),
                   icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                  onPressed: () => Navigator.pop(ctx, false),
+                  onPressed: () => Navigator.pop(ctx),
                 ),
               ),
             ),
-            // Edit button (top right)
+            // Edit buttons (top right) — same two-button design as gallery
+            // viewer page: crop (quick edit) + edit (full editor)
             Positioned(
               top: MediaQuery.of(ctx).padding.top + 8,
               right: 8,
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: Color(0x66000000),
-                  shape: BoxShape.circle,
-                ),
-                child: IconButton(
-                  icon: const Icon(Icons.edit, color: Colors.white, size: 28),
-                  tooltip: '编辑图片',
-                  onPressed: () => Navigator.pop(ctx, true),
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0x66000000),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon:
+                          const Icon(Icons.crop, color: Colors.white, size: 24),
+                      tooltip: '裁剪',
+                      onPressed: () => Navigator.pop(ctx, 'crop'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0x66000000),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon:
+                          const Icon(Icons.edit, color: Colors.white, size: 24),
+                      tooltip: '编辑',
+                      onPressed: () => Navigator.pop(ctx, 'edit'),
+                    ),
+                  ),
+                ],
               ),
             ),
             if (_selectedImages.length > 1)
@@ -1173,51 +1193,14 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       ),
     );
 
-    if (shouldEdit != true || !mounted) return;
+    if (result == null || !mounted) return;
     if (index >= _selectedImages.length) return;
-
-    // User wants to edit — show edit method choice dialog
-    final editMethod = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: const Text(
-          '选择编辑方式',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          '请选择编辑图片的方式：',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, 'quick'),
-            child: const Text(
-              '快速编辑',
-              style: TextStyle(color: Colors.blue),
-            ),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, 'full'),
-            child: const Text('图片编辑器'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              '取消',
-              style: TextStyle(color: Colors.white54),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (!mounted || editMethod == null) return;
 
     final currentImage = _selectedImages[index];
     Uint8List? editedBytes;
 
-    if (editMethod == 'quick') {
+    if (result == 'crop') {
+      // Quick edit — directly opens crop editor, no choice dialog needed
       editedBytes = await Navigator.push<Uint8List>(
         context,
         MaterialPageRoute(
@@ -1228,17 +1211,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         ),
       );
     } else {
-      final result = await Navigator.push<ImageEditorResult>(
+      // Full editor — opens with showSaveDialog=false so it directly
+      // overwrites the in-memory data without asking the user
+      final editorResult = await Navigator.push<ImageEditorResult>(
         context,
         MaterialPageRoute(
           builder: (_) => ImageEditorPage(
             imageBytes: currentImage.bytes,
-            fromCamera: false,
+            showSaveDialog: false,
           ),
         ),
       );
-      if (result != null) {
-        editedBytes = result.editedBytes;
+      if (editorResult != null) {
+        editedBytes = editorResult.editedBytes;
       }
     }
 
@@ -1247,7 +1232,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     // Verify the image at this index is still the same one
     if (_selectedImages[index].bytes != currentImage.bytes) return;
 
-    // Update the selected image with edited bytes
+    // Update the selected image with edited bytes (in-memory only)
     setState(() {
       _selectedImages[index] = SelectedImage(
         bytes: editedBytes!,

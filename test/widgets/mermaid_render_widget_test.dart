@@ -28,10 +28,21 @@ void main() {
       expect(html, contains('mermaid.min.js'));
     });
 
-    test('includes mermaid initialize call', () {
+    test('includes mermaid.initialize call', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       expect(html, contains('mermaid.initialize'));
-      expect(html, contains("securityLevel: 'loose'"));
+    });
+
+    test('uses mermaid.run() for v11 API compatibility', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      expect(html, contains('mermaid.run'));
+    });
+
+    test('includes CSS to prevent SVG overflow', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      // Should have CSS rules to constrain mermaid SVG output
+      expect(html, contains('.mermaid svg'));
+      expect(html, contains('max-width'));
     });
 
     test('handles empty code', () {
@@ -45,6 +56,16 @@ void main() {
       expect(html, contains('sequenceDiagram'));
       expect(html, contains('Alice-&gt;&gt;Bob'));
       expect(html, contains('Bob--&gt;&gt;Alice'));
+    });
+
+    test('HTML uses loose securityLevel for mermaid', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      expect(html, contains("securityLevel: 'loose'"));
+    });
+
+    test('HTML includes error container for rendering failures', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      expect(html, contains('error-message'));
     });
   });
 }
