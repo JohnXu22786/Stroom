@@ -1061,5 +1061,4 @@ class _MathGraphDrawingPageState extends State<MathGraphDrawingPage> {
       ],
     );
   }
-
 }
