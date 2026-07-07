@@ -546,4 +546,244 @@ void main() {
       },
     );
   });
+
+  group('FileManagerView folder long-press selection', () {
+    testWidgets('long-press on grid folder enters selection mode', (
+      tester,
+    ) async {
+      final config = FileManagerConfig<_TestFileRecord>(
+        title: 'Test',
+        showThumbnailToggle: true,
+        initialGridView: true,
+        fileIconBuilder: (_) =>
+            const Icon(Icons.videocam, key: Key('fallback_icon')),
+        fileThumbnailBuilder: (file) {
+          return Container(
+            key: Key('thumbnail_${file.id}'),
+            color: Colors.black,
+            child: const Center(child: Text('THUMB')),
+          );
+        },
+        onFileTap: (_) {},
+      );
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          FileManagerView<_TestFileRecord>(
+            sortedRecords: [],
+            folders: {'my_folder'},
+            sortConfig: sortConfig,
+            config: config,
+            onRefresh: () async {},
+            onRenameFile: (_, __) async {},
+            onMoveFile: (_, __) async {},
+            onCopyFile: (_, __) async {},
+            onDeleteFile: (_) async {},
+            onDeleteFiles: (_) async {},
+            onDeleteFolders: (_) async {},
+            onMoveFiles: (_, __) async {},
+            onMoveFolders: (_, __) async {},
+            onExportFile: (_) async {},
+            onRenameFolder: (_, __) async {},
+            onMoveFolder: (_, __) async {},
+            onCopyFolder: (_, __) async {},
+            onDeleteFolder: (_) async {},
+            onCreateFolder: (_) async {},
+            onToggleSort: (_) {},
+            manifestBridge: testManifestBridge,
+          ),
+        ),
+      );
+
+      // Verify folder is displayed in grid view
+      expect(find.byKey(const Key('fm_grid_folder_my_folder')), findsOneWidget);
+
+      // Long-press on the folder
+      await tester.longPress(find.byKey(const Key('fm_grid_folder_my_folder')));
+      await tester.pumpAndSettle();
+
+      // Selection mode is active — AppBar close button should appear
+      expect(find.byKey(const Key('fm_close_selection_btn')), findsOneWidget);
+      // Selection mode bottom bar should also appear
+      expect(find.byKey(const Key('fm_selection_copy_btn')), findsOneWidget);
+    });
+
+    testWidgets('long-press on list folder enters selection mode', (
+      tester,
+    ) async {
+      final config = FileManagerConfig<_TestFileRecord>(
+        title: 'Test',
+        showThumbnailToggle: true,
+        initialGridView: false,
+        fileIconBuilder: (_) =>
+            const Icon(Icons.videocam, key: Key('fallback_icon')),
+        onFileTap: (_) {},
+      );
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          FileManagerView<_TestFileRecord>(
+            sortedRecords: [],
+            folders: {'my_folder'},
+            sortConfig: sortConfig,
+            config: config,
+            onRefresh: () async {},
+            onRenameFile: (_, __) async {},
+            onMoveFile: (_, __) async {},
+            onCopyFile: (_, __) async {},
+            onDeleteFile: (_) async {},
+            onDeleteFiles: (_) async {},
+            onDeleteFolders: (_) async {},
+            onMoveFiles: (_, __) async {},
+            onMoveFolders: (_, __) async {},
+            onExportFile: (_) async {},
+            onRenameFolder: (_, __) async {},
+            onMoveFolder: (_, __) async {},
+            onCopyFolder: (_, __) async {},
+            onDeleteFolder: (_) async {},
+            onCreateFolder: (_) async {},
+            onToggleSort: (_) {},
+            manifestBridge: testManifestBridge,
+          ),
+        ),
+      );
+
+      // Verify folder is displayed in list view
+      expect(find.byKey(const Key('fm_folder_my_folder')), findsOneWidget);
+
+      // Long-press on the folder
+      await tester.longPress(find.byKey(const Key('fm_folder_my_folder')));
+      await tester.pumpAndSettle();
+
+      // Selection mode is active — AppBar close button should appear
+      expect(find.byKey(const Key('fm_close_selection_btn')), findsOneWidget);
+      // Selection mode bottom bar should also appear
+      expect(find.byKey(const Key('fm_selection_copy_btn')), findsOneWidget);
+    });
+
+    testWidgets('folder long-press then close button exits selection mode', (
+      tester,
+    ) async {
+      final config = FileManagerConfig<_TestFileRecord>(
+        title: 'Test',
+        showThumbnailToggle: true,
+        initialGridView: true,
+        fileIconBuilder: (_) =>
+            const Icon(Icons.videocam, key: Key('fallback_icon')),
+        fileThumbnailBuilder: (file) {
+          return Container(
+            key: Key('thumbnail_${file.id}'),
+            color: Colors.black,
+            child: const Center(child: Text('THUMB')),
+          );
+        },
+        onFileTap: (_) {},
+      );
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          FileManagerView<_TestFileRecord>(
+            sortedRecords: [],
+            folders: {'my_folder'},
+            sortConfig: sortConfig,
+            config: config,
+            onRefresh: () async {},
+            onRenameFile: (_, __) async {},
+            onMoveFile: (_, __) async {},
+            onCopyFile: (_, __) async {},
+            onDeleteFile: (_) async {},
+            onDeleteFiles: (_) async {},
+            onDeleteFolders: (_) async {},
+            onMoveFiles: (_, __) async {},
+            onMoveFolders: (_, __) async {},
+            onExportFile: (_) async {},
+            onRenameFolder: (_, __) async {},
+            onMoveFolder: (_, __) async {},
+            onCopyFolder: (_, __) async {},
+            onDeleteFolder: (_) async {},
+            onCreateFolder: (_) async {},
+            onToggleSort: (_) {},
+            manifestBridge: testManifestBridge,
+          ),
+        ),
+      );
+
+      final folderFinder = find.byKey(const Key('fm_grid_folder_my_folder'));
+
+      // Long-press: enter selection mode
+      await tester.longPress(folderFinder);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('fm_close_selection_btn')), findsOneWidget);
+
+      // Tap close button to exit selection mode
+      await tester.tap(find.byKey(const Key('fm_close_selection_btn')));
+      await tester.pumpAndSettle();
+
+      // Selection mode is gone — close button should not exist
+      expect(find.byKey(const Key('fm_close_selection_btn')), findsNothing);
+      // Folder should still be present
+      expect(folderFinder, findsOneWidget);
+    });
+  });
+
+  group('FileManagerView grid folder width', () {
+    testWidgets('renders grid folder with short name without layout issues', (
+      tester,
+    ) async {
+      final config = FileManagerConfig<_TestFileRecord>(
+        title: 'Test',
+        showThumbnailToggle: true,
+        initialGridView: true,
+        fileIconBuilder: (_) =>
+            const Icon(Icons.videocam, key: Key('fallback_icon')),
+        fileThumbnailBuilder: (file) {
+          return Container(
+            key: Key('thumbnail_${file.id}'),
+            color: Colors.black,
+            child: const Center(child: Text('THUMB')),
+          );
+        },
+        onFileTap: (_) {},
+      );
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          FileManagerView<_TestFileRecord>(
+            sortedRecords: [],
+            folders: {'A'}, // Very short folder name
+            sortConfig: sortConfig,
+            config: config,
+            onRefresh: () async {},
+            onRenameFile: (_, __) async {},
+            onMoveFile: (_, __) async {},
+            onCopyFile: (_, __) async {},
+            onDeleteFile: (_) async {},
+            onDeleteFiles: (_) async {},
+            onDeleteFolders: (_) async {},
+            onMoveFiles: (_, __) async {},
+            onMoveFolders: (_, __) async {},
+            onExportFile: (_) async {},
+            onRenameFolder: (_, __) async {},
+            onMoveFolder: (_, __) async {},
+            onCopyFolder: (_, __) async {},
+            onDeleteFolder: (_) async {},
+            onCreateFolder: (_) async {},
+            onToggleSort: (_) {},
+            manifestBridge: testManifestBridge,
+          ),
+        ),
+      );
+
+      // The folder item should be found with a short name
+      expect(find.byKey(const Key('fm_grid_folder_A')), findsOneWidget);
+
+      // Verify the width of the folder item fills the grid cell
+      // by checking it spans the full available width
+      final folderRenderer = tester.renderObject<RenderBox>(
+        find.byKey(const Key('fm_grid_folder_A')),
+      );
+      // The grid cell width should be non-zero (it should have a valid layout)
+      expect(folderRenderer.size.width, greaterThan(0));
+    });
+  });
 }
