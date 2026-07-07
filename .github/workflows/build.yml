@@ -40,7 +40,7 @@ jobs:
           mv build/app/outputs/flutter-apk/app-release.apk "artifacts/stroom-android-release-$TAG.apk"
       - uses: actions/upload-artifact@v4
         with:
-          name: android-apks
+          name: android-build
           path: artifacts/*.apk
 
   build-windows:
