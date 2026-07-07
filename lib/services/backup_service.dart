@@ -18,6 +18,15 @@ import 'storage_service.dart';
 import '../utils/app_version.dart';
 import '../utils/web_file_store.dart';
 
+/// Exception thrown when a backup operation is cancelled.
+class BackupCancelledException implements Exception {
+  final String message;
+  const BackupCancelledException([this.message = '备份操作已取消']);
+
+  @override
+  String toString() => message;
+}
+
 // ====================================================================
 // BackupService — 数据备份与恢复
 // ====================================================================
@@ -33,12 +42,20 @@ class BackupService {
   static Future<String> createBackup({
     required String outputPath,
     void Function(double progress)? onProgress,
+    bool Function()? isCancelled,
   }) async {
     if (kIsWeb) {
       throw UnsupportedError(
           'createBackup is not available on web. Use exportBackup instead.');
     }
-    final bytes = await _buildBackupBytes(onProgress: onProgress);
+    if (isCancelled != null && isCancelled()) {
+      throw const BackupCancelledException();
+    }
+    final bytes =
+        await _buildBackupBytes(onProgress: onProgress, isCancelled: isCancelled);
+    if (isCancelled != null && isCancelled()) {
+      throw const BackupCancelledException();
+    }
     await File(outputPath).writeAsBytes(bytes);
     return outputPath;
   }
@@ -135,11 +152,22 @@ class BackupService {
   }
 
   /// 构建备份归档的字节数据（双平台通用）。
+  ///
+  /// [isCancelled] 是一个可选的回调，在每次让出事件循环时被调用。
+  /// 如果返回 `true`，则抛出 [BackupCancelledException] 终止备份。
   static Future<Uint8List> _buildBackupBytes({
     void Function(double progress)? onProgress,
+    bool Function()? isCancelled,
   }) async {
+    void checkCancelled() {
+      if (isCancelled != null && isCancelled()) {
+        throw const BackupCancelledException();
+      }
+    }
+
     onProgress?.call(0.0);
     await _yieldToEventLoop();
+    checkCancelled();
     final archive = Archive();
 
     // 1. manifest.json
@@ -151,6 +179,7 @@ class BackupService {
     addStringToArchive(archive, 'manifest.json', jsonEncode(manifest));
     onProgress?.call(0.05);
     await _yieldToEventLoop();
+    checkCancelled();
 
     // 2. 数据库（按存储格式：根目录 stroom_manifest.json）
     final imageRecords = await ManifestDatabase.getAllImageRecords();
@@ -181,6 +210,7 @@ class BackupService {
     addStringToArchive(archive, 'stroom_manifest.json', jsonEncode(dbData));
     onProgress?.call(0.15);
     await _yieldToEventLoop();
+    checkCancelled();
 
     // 3. SharedPreferences
     final prefs = await SharedPreferences.getInstance();
@@ -192,6 +222,7 @@ class BackupService {
     addStringToArchive(archive, 'preferences.json', jsonEncode(prefData));
     onProgress?.call(0.25);
     await _yieldToEventLoop();
+    checkCancelled();
 
     // 4. 任务文件（按存储格式：synthesis/tasks.json, catcatch/tasks.json）
     // 在测试模式下跳过文件系统操作以避免平台通道挂起
@@ -207,6 +238,7 @@ class BackupService {
     }
     onProgress?.call(0.35);
     await _yieldToEventLoop();
+    checkCancelled();
 
     // 5. 二进制文件（按存储格式：pictures/, tts_audio/, videos/, texts/, attachments/）
     for (var i = 0; i < imageRecords.length; i++) {
@@ -219,10 +251,14 @@ class BackupService {
       await addFileToArchive(archive, 'pictures/${hash}_thumb.png', 'pictures',
           '${hash}_thumb.png');
       // 每处理 10 条记录让出一次事件循环，防止大量文件操作阻塞 UI
-      if (i % 10 == 0) await _yieldToEventLoop();
+      if (i % 10 == 0) {
+        await _yieldToEventLoop();
+        checkCancelled();
+      }
     }
     onProgress?.call(0.5);
     await _yieldToEventLoop();
+    checkCancelled();
 
     for (var i = 0; i < audioRecords.length; i++) {
       final record = audioRecords[i];
@@ -233,10 +269,14 @@ class BackupService {
           archive, 'tts_audio/$hash.$format', 'tts_audio', '$hash.$format');
       await addFileToArchive(
           archive, 'tts_audio/$hash.txt', 'tts_audio', '$hash.txt');
-      if (i % 10 == 0) await _yieldToEventLoop();
+      if (i % 10 == 0) {
+        await _yieldToEventLoop();
+        checkCancelled();
+      }
     }
     onProgress?.call(0.65);
     await _yieldToEventLoop();
+    checkCancelled();
 
     for (var i = 0; i < videoRecords.length; i++) {
       final record = videoRecords[i];
@@ -245,20 +285,28 @@ class BackupService {
       if (hash == null) continue;
       await addFileToArchive(
           archive, 'videos/$hash.$format', 'videos', '$hash.$format');
-      if (i % 10 == 0) await _yieldToEventLoop();
+      if (i % 10 == 0) {
+        await _yieldToEventLoop();
+        checkCancelled();
+      }
     }
     onProgress?.call(0.75);
     await _yieldToEventLoop();
+    checkCancelled();
 
     for (var i = 0; i < textRecords.length; i++) {
       final record = textRecords[i];
       final hash = record['hash'] as String?;
       if (hash == null) continue;
       await addFileToArchive(archive, 'texts/$hash.txt', 'texts', '$hash.txt');
-      if (i % 10 == 0) await _yieldToEventLoop();
+      if (i % 10 == 0) {
+        await _yieldToEventLoop();
+        checkCancelled();
+      }
     }
     onProgress?.call(0.8);
     await _yieldToEventLoop();
+    checkCancelled();
 
     final attachmentPaths = await collectAttachmentPaths();
     final pathList = attachmentPaths.toList();
@@ -269,15 +317,20 @@ class BackupService {
       final subDir = parts[0];
       final fileName = parts.sublist(1).join('/');
       await addFileToArchive(archive, storagePath, subDir, fileName);
-      if (i % 10 == 0) await _yieldToEventLoop();
+      if (i % 10 == 0) {
+        await _yieldToEventLoop();
+        checkCancelled();
+      }
     }
     onProgress?.call(0.85);
     await _yieldToEventLoop();
+    checkCancelled();
 
     // 6. 编码 — 在后台隔离中执行，不阻塞主 UI 线程
     final files = _extractArchiveFiles(archive);
     onProgress?.call(0.9);
     await _yieldToEventLoop();
+    checkCancelled();
 
     final encoded = await _encodeArchiveInBackground(files);
     onProgress?.call(1.0);
@@ -615,8 +668,9 @@ class BackupService {
   @visibleForTesting
   static Future<Uint8List> buildBackupBytesForTest({
     void Function(double progress)? onProgress,
+    bool Function()? isCancelled,
   }) =>
-      _buildBackupBytes(onProgress: onProgress);
+      _buildBackupBytes(onProgress: onProgress, isCancelled: isCancelled);
 
   /// 公开 [_restoreFromBytes] 供测试使用。
   @visibleForTesting
