@@ -658,6 +658,11 @@ class _FileManagerViewState<T extends FileRecord>
           _setCurrentFolder(folderName);
         }
       },
+      onLongPress: () {
+        if (!_selectionMode) {
+          _enterSelectionMode(folderName);
+        }
+      },
       child: Stack(
         children: [
           Container(
@@ -667,12 +672,15 @@ class _FileManagerViewState<T extends FileRecord>
               border: Border.all(color: Colors.amber.withValues(alpha: 0.2)),
             ),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(
-                  Icons.folder_outlined,
-                  size: 40,
-                  color: Colors.amber,
+                const Center(
+                  child: Icon(
+                    Icons.folder_outlined,
+                    size: 40,
+                    color: Colors.amber,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Padding(
@@ -689,9 +697,11 @@ class _FileManagerViewState<T extends FileRecord>
                   ),
                 ),
                 if (fileCount > 0)
-                  Text(
-                    '$fileCount',
-                    style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                  Center(
+                    child: Text(
+                      '$fileCount',
+                      style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                    ),
                   ),
               ],
             ),
@@ -806,6 +816,11 @@ class _FileManagerViewState<T extends FileRecord>
               _toggleFolderSelection(folderName);
             } else {
               _setCurrentFolder(folderName);
+            }
+          },
+          onLongPress: () {
+            if (!_selectionMode) {
+              _enterSelectionMode(folderName);
             }
           },
           borderRadius: BorderRadius.circular(8),
