@@ -153,6 +153,8 @@ class MathGraphDrawingPage extends StatefulWidget {
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <script src="https://cdn.jsdelivr.net/npm/jsxgraph/distrib/jsxgraphcore.js">
 </script>
+<script src="https://cdn.jsdelivr.net/npm/mathjs@12.2.1/lib/browser/math.min.js">
+</script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
@@ -179,12 +181,10 @@ class MathGraphDrawingPage extends StatefulWidget {
     if (!formulaStr || formulaStr.trim() === '') return null;
     try {
       var p = getParams();
-      var compiled = formulaStr
-        .replace(/a/g, '(' + p.a + ')')
-        .replace(/b/g, '(' + p.b + ')')
-        .replace(/c/g, '(' + p.c + ')')
-        .replace(/d/g, '(' + p.d + ')');
-      return function(x) { return eval(compiled); };
+      return function(x) {
+        var scope = { x: x, a: p.a, b: p.b, c: p.c, d: p.d };
+        return math.evaluate(formulaStr, scope);
+      };
     } catch(e) { return null; }
   }
 
@@ -206,15 +206,17 @@ class MathGraphDrawingPage extends StatefulWidget {
         strokeWidth: 2
       });
       board.on('update', function() {
-        var points = [];
-        try {
-          for (var x = -10; x <= 10; x += 0.5) {
-            var y = formula(x);
-            if (isFinite(y)) points.push({x: x, y: y});
-          }
-        } catch(e) {}
         if (window.flutter_inappwebview) {
-          window.flutter_inappwebview.callHandler('mathGraphCoordinates', JSON.stringify(points));
+          var points = [];
+          try {
+            for (var x = -10; x <= 10; x += 0.05) {
+              var y = formula(x);
+              if (isFinite(y)) points.push({x: x, y: y});
+            }
+          } catch(e) {}
+          if (points.length > 0) {
+            window.flutter_inappwebview.callHandler('mathGraphCoordinates', JSON.stringify(points));
+          }
         }
       });
     }
@@ -241,6 +243,8 @@ class MathGraphDrawingPage extends StatefulWidget {
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js">
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjs@12.2.1/lib/browser/math.min.js">
 </script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -271,12 +275,10 @@ class MathGraphDrawingPage extends StatefulWidget {
     if (!formulaStr || formulaStr.trim() === '') return null;
     try {
       var p = getParams();
-      var compiled = formulaStr
-        .replace(/a/g, '(' + p.a + ')')
-        .replace(/b/g, '(' + p.b + ')')
-        .replace(/c/g, '(' + p.c + ')')
-        .replace(/d/g, '(' + p.d + ')');
-      return function(x, y) { return eval(compiled); };
+      return function(x, y) {
+        var scope = { x: x, y: y, a: p.a, b: p.b, c: p.c, d: p.d };
+        return math.evaluate(formulaStr, scope);
+      };
     } catch(e) { return null; }
   }
 
@@ -491,9 +493,6 @@ class _MathGraphDrawingPageState extends State<MathGraphDrawingPage> {
   double _paramC = 0.0;
   double _paramD = 0.0;
 
-  // Coordinate data from canvas
-  List<CoordinatePoint> _coordinates = [];
-
   // WebView state
   InAppWebViewController? _dim2Controller;
   InAppWebViewController? _dim3Controller;
@@ -593,18 +592,6 @@ class _MathGraphDrawingPageState extends State<MathGraphDrawingPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // JavaScript handler for coordinate data from WebView
-  // ---------------------------------------------------------------------------
-
-  Future<void> _onCoordinatesReceived(String jsonData) async {
-    final coords = MathGraphDrawingPage.extractCoordinatesFromJs(jsonData);
-    if (!mounted) return;
-    setState(() {
-      _coordinates = coords;
-    });
-  }
-
-  // ---------------------------------------------------------------------------
   // Build
   // ---------------------------------------------------------------------------
 
@@ -630,8 +617,6 @@ class _MathGraphDrawingPageState extends State<MathGraphDrawingPage> {
           ),
           // Parameter sliders
           _buildParameterSliders(cs),
-          // Coordinate data list
-          _buildCoordinateList(cs),
         ],
       ),
     );
@@ -959,13 +944,11 @@ class _MathGraphDrawingPageState extends State<MathGraphDrawingPage> {
   }
 
   void _setupWebViewHandler(InAppWebViewController ctrl) {
+    // Keep the handler registered for potential future use
+    // but no longer process coordinate data in the UI
     ctrl.addJavaScriptHandler(
       handlerName: 'mathGraphCoordinates',
-      callback: (args) {
-        if (args.isNotEmpty && args[0] is String) {
-          _onCoordinatesReceived(args[0] as String);
-        }
-      },
+      callback: (args) {},
     );
   }
 
@@ -1079,85 +1062,4 @@ class _MathGraphDrawingPageState extends State<MathGraphDrawingPage> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Coordinate data list
-  // ---------------------------------------------------------------------------
-
-  Widget _buildCoordinateList(ColorScheme cs) {
-    final displayCoords =
-        _coordinates.length > 20 ? _coordinates.sublist(0, 20) : _coordinates;
-
-    return Container(
-      constraints: const BoxConstraints(maxHeight: 100),
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: cs.outlineVariant, width: 0.3),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 2),
-            child: Row(
-              children: [
-                Icon(Icons.table_chart, size: 14, color: cs.onSurfaceVariant),
-                const SizedBox(width: 4),
-                Text(
-                  '坐标数据 (${_coordinates.length} 点)',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: cs.onSurfaceVariant,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: displayCoords.isEmpty
-                ? Center(
-                    child: Text(
-                      '暂无数据',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: cs.onSurfaceVariant.withValues(alpha: 0.6),
-                      ),
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    scrollDirection: Axis.horizontal,
-                    itemCount: displayCoords.length,
-                    itemBuilder: (context, index) {
-                      final coord = displayCoords[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: Chip(
-                          label: Text(
-                            coord.z != null
-                                ? '(${coord.x.toStringAsFixed(1)}, ${coord.y.toStringAsFixed(1)}, ${coord.z!.toStringAsFixed(1)})'
-                                : '(${coord.x.toStringAsFixed(1)}, ${coord.y.toStringAsFixed(1)})',
-                            style: const TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 10,
-                            ),
-                          ),
-                          visualDensity: VisualDensity.compact,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          padding: EdgeInsets.zero,
-                          labelPadding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
 }

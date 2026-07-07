@@ -29,29 +29,68 @@ void main() {
   });
 
   group('MathGraphDrawingPage - Static HTML generation', () {
-    test('build2dHtml() generates valid HTML with formula placeholder', () {
+    test('build2dHtml() includes math.js CDN and JSXGraph', () {
       const formula = 'sin(x)';
       final html = MathGraphDrawingPage.build2dHtml(formula);
 
       expect(html, contains('<!DOCTYPE html'));
       expect(html, contains('jsxgraph'));
       expect(html, contains('JXG.JSXGraph.initBoard'));
-      expect(html, contains('sin(x)'));
+      expect(html, contains('mathjs'));
       // Should NOT have 3D content
       expect(html, contains('jxgbox'));
       expect(html, isNot(contains('three.min.js')));
     });
 
-    test('build3dHtml() generates valid HTML with formula placeholder', () {
+    test('build2dHtml() uses math.evaluate instead of eval', () {
+      const formula = '2x + 3';
+      final html = MathGraphDrawingPage.build2dHtml(formula);
+
+      // Should use math.evaluate for safe evaluation
+      expect(html, contains('math.evaluate'));
+      // Should NOT use direct eval
+      expect(html, isNot(contains('return eval(compiled)')));
+      expect(html, isNot(contains('return function(x) { return eval(')));
+    });
+
+    test('build2dHtml() includes x and a,b,c,d in math.evaluate scope', () {
+      const formula = 'a*x^2 + b*x + c';
+      final html = MathGraphDrawingPage.build2dHtml(formula);
+
+      // Scope should include x and parameters
+      expect(html, contains('x: x'));
+      expect(html, contains('a: p.a'));
+      expect(html, contains('b: p.b'));
+      expect(html, contains('c: p.c'));
+      expect(html, contains('d: p.d'));
+    });
+
+    test('build3dHtml() generates valid HTML with math.js', () {
       const formula = 'sin(x)*cos(y)';
       final html = MathGraphDrawingPage.build3dHtml(formula);
 
       expect(html, contains('<!DOCTYPE html'));
       expect(html, contains('three.min.js'));
+      expect(html, contains('mathjs'));
       expect(html, contains('sin(x)*cos(y)'));
       // Should NOT have 2D content
       expect(html, contains('container'));
       expect(html, isNot(contains('jsxgraph')));
+    });
+
+    test('build3dHtml() uses math.evaluate with x,y and a,b,c,d in scope', () {
+      const formula = 'a*x^2 + b*y^2';
+      final html = MathGraphDrawingPage.build3dHtml(formula);
+
+      expect(html, contains('math.evaluate'));
+      expect(html, contains('x: x'));
+      expect(html, contains('y: y'));
+      expect(html, contains('a: p.a'));
+      expect(html, contains('b: p.b'));
+      expect(html, contains('c: p.c'));
+      expect(html, contains('d: p.d'));
+      // Should NOT use direct eval
+      expect(html, isNot(contains('return function(x, y) { return eval(')));
     });
 
     test('build2dHtml() escapes dangerous characters in formula', () {
@@ -69,7 +108,7 @@ void main() {
       expect(html, contains('&#39;'));
     });
 
-    test('build3dHtml() preserves normal formula characters', () {
+    test('build3dHtml() preserves formula characters', () {
       const formula = 'a*x^2 + b*y^2';
       final html = MathGraphDrawingPage.build3dHtml(formula);
 
@@ -84,6 +123,23 @@ void main() {
       expect(html, contains('JXG.JSXGraph.initBoard'));
       // Should have the board even with empty formula
       expect(html, contains('jsxgraph'));
+    });
+
+    test('build2dHtml() has smooth curve plotting resolution', () {
+      const formula = 'x^2';
+      final html = MathGraphDrawingPage.build2dHtml(formula);
+
+      // Step should be 0.05 or smaller for smooth curves (was 0.5)
+      expect(html, contains('x += 0.05'));
+    });
+
+    test('build2dHtml() uses getParams() for parameter substitution', () {
+      const formula = '2x + 1';
+      final html = MathGraphDrawingPage.build2dHtml(formula);
+
+      // Parameters should be passed via scope, not string replacement
+      // The old approach had .replace(/a/g, ...) which is gone now
+      expect(html, isNot(contains('.replace(/a/g, ')));
     });
   });
 
@@ -260,6 +316,26 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('no coordinate data list is displayed by default', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: MathGraphDrawingPage(initialShowPreview: false),
+            localizationsDelegates: [
+              DefaultMaterialLocalizations.delegate,
+              DefaultWidgetsLocalizations.delegate,
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The old coordinate data table/chart icon should NOT be present
+      expect(find.byIcon(Icons.table_chart), findsNothing);
     });
   });
 
