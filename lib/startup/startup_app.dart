@@ -41,7 +41,15 @@ class StartupApp extends StatefulWidget {
 
 class _StartupAppState extends State<StartupApp>
     with SingleTickerProviderStateMixin {
-  bool _checkingComplete = false;
+  /// Whether the [Application] widget is being rendered behind the splash.
+  bool _appReady = false;
+
+  /// Whether the splash screen is still visible.
+  ///
+  /// Becomes [false] after the fade-out animation completes,
+  /// removing the splash from the widget tree entirely.
+  bool _showSplash = true;
+
   bool _isWorking = true;
   String _statusMessage = '';
   String? _progressDetail;
@@ -67,7 +75,7 @@ class _StartupAppState extends State<StartupApp>
     _fadeController.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
         setState(() {
-          _checkingComplete = true;
+          _showSplash = false;
           _isFadingOut = false;
         });
       }
@@ -149,8 +157,10 @@ class _StartupAppState extends State<StartupApp>
       if (didMigration) {
         await _showRestartDialog();
       } else {
-        // Start fade-out animation before transitioning to main app
+        // Pre-render the Application behind the splash, then fade out the
+        // splash so the user sees a smooth transition from splash to main app.
         setState(() {
+          _appReady = true;
           _isFadingOut = true;
         });
         _fadeController.forward();
@@ -164,8 +174,10 @@ class _StartupAppState extends State<StartupApp>
       });
       await Future.delayed(const Duration(milliseconds: 1500));
       if (!mounted) return;
-      // Fade out before showing main app even on error
+      // Pre-render the Application behind the splash, then fade out even
+      // on error so the transition is always smooth.
       setState(() {
+        _appReady = true;
         _isFadingOut = true;
       });
       _fadeController.forward();
@@ -238,42 +250,60 @@ class _StartupAppState extends State<StartupApp>
 
   @override
   Widget build(BuildContext context) {
-    // When startup checks are complete and fade-out is done,
-    // show the main application
-    if (_checkingComplete) {
-      // Use a key to force rebuild the Application widget fresh
-      // Wrap with an error boundary so that if the Application widget's
-      // provider initialization crashes due to residual data format issues,
-      // the app shows a recoverable error instead of crashing entirely.
-      return const _AppErrorBoundary(
-        key: ValueKey('app_error_boundary'),
-        child: Application(key: ValueKey('app_ready')),
-      );
-    }
+    // Use a non-directional alignment so the Stack works without a
+    // MaterialApp/Directionality ancestor (StartupApp is the root widget).
+    return Stack(
+      alignment: Alignment.topLeft,
+      children: [
+        // ===============================================================
+        // Layer 1: Main Application (behind the splash)
+        // ===============================================================
+        //
+        // Once the startup checks are done, we render the Application
+        // widget underneath the splash so that when the splash fades out,
+        // the user sees the fully rendered main page underneath.
+        //
+        if (_appReady)
+          Positioned.fill(
+            child: _AppErrorBoundary(
+              key: const ValueKey('app_error_boundary'),
+              child: Application(key: const ValueKey('app_ready')),
+            ),
+          ),
 
-    // Wrap the startup page with fade-out animation
-    return AnimatedBuilder(
-      animation: _fadeAnimation,
-      builder: (context, child) {
-        return Opacity(
-          opacity: _isFadingOut ? _fadeAnimation.value : 1.0,
-          child: child,
-        );
-      },
-      child: MaterialApp(
-        title: 'Stroom',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        ),
-        home: StartupPage(
-          isWorking: _isWorking,
-          statusMessage: _statusMessage,
-          progressDetail: _progressDetail,
-          migrationPerformed: _migrationPerformed,
-        ),
-      ),
+        // ===============================================================
+        // Layer 2: Splash screen (on top, with fade-out animation)
+        // ===============================================================
+        //
+        // The splash is always rendered on top of the Application.
+        // When the fade-out animation plays, the splash becomes
+        // transparent, revealing the Application underneath.
+        //
+        if (_showSplash)
+          AnimatedBuilder(
+            animation: _fadeAnimation,
+            builder: (context, child) {
+              return Opacity(
+                opacity: _isFadingOut ? _fadeAnimation.value : 1.0,
+                child: child,
+              );
+            },
+            child: MaterialApp(
+              title: 'Stroom',
+              debugShowCheckedModeBanner: false,
+              theme: ThemeData(
+                useMaterial3: true,
+                colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+              ),
+              home: StartupPage(
+                isWorking: _isWorking,
+                statusMessage: _statusMessage,
+                progressDetail: _progressDetail,
+                migrationPerformed: _migrationPerformed,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
