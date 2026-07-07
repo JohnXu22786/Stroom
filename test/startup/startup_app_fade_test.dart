@@ -76,8 +76,7 @@ void main() {
       await drainAllTimers(tester);
     });
 
-    testWidgets(
-        'splash UI visible during transition, removed after fade',
+    testWidgets('splash UI visible during transition, removed after fade',
         (tester) async {
       await tester.pumpWidget(
         const ProviderScope(child: StartupApp()),
@@ -114,8 +113,7 @@ void main() {
       await drainAllTimers(tester);
     });
 
-    testWidgets(
-        'renders Application behind splash during fade (stacking)',
+    testWidgets('renders Application behind splash during fade (stacking)',
         (tester) async {
       // This test verifies the key new behavior: during the fade transition,
       // the Application widget is rendered BEHIND the splash in a Stack.
@@ -142,7 +140,8 @@ void main() {
 
       // Only one MaterialApp should remain (Application's).
       expect(find.byType(MaterialApp), findsOneWidget,
-          reason: 'After fade completes, only the Application MaterialApp remains');
+          reason:
+              'After fade completes, only the Application MaterialApp remains');
 
       expect(tester.takeException(), isNull);
 
