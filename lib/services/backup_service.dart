@@ -51,8 +51,8 @@ class BackupService {
     if (isCancelled != null && isCancelled()) {
       throw const BackupCancelledException();
     }
-    final bytes =
-        await _buildBackupBytes(onProgress: onProgress, isCancelled: isCancelled);
+    final bytes = await _buildBackupBytes(
+        onProgress: onProgress, isCancelled: isCancelled);
     if (isCancelled != null && isCancelled()) {
       throw const BackupCancelledException();
     }

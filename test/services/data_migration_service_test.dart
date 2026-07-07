@@ -203,8 +203,7 @@ void main() {
       AppStorage.resetCache();
     });
 
-    test('createBackup creates a backup ZIP in external location',
-        () async {
+    test('createBackup creates a backup ZIP in external location', () async {
       final backupPath = await DataMigrationService.createBackup();
       expect(backupPath, isNotNull);
 
@@ -295,7 +294,8 @@ void main() {
       try {
         // Create 5 backup_ prefixed items (4 dirs + 1 zip)
         for (int i = 0; i < 4; i++) {
-          final d = Directory('${rootDir.path}/backup_2024-01-0${i + 1}T00-00-00');
+          final d =
+              Directory('${rootDir.path}/backup_2024-01-0${i + 1}T00-00-00');
           await d.create(recursive: true);
           await Future.delayed(const Duration(milliseconds: 100));
         }

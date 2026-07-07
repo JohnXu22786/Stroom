@@ -78,8 +78,7 @@ class AutoBackupService {
         await backupDir.create(recursive: true);
       }
 
-      final timestamp =
-          DateTime.now().toIso8601String().replaceAll(':', '-');
+      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
       final zipPath = p.join(backupRoot, 'backup_$timestamp.zip');
 
       if (_cancelRequested) return false;

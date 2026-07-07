@@ -31,8 +31,7 @@ void main() {
 
       // Create 5 dummy backup zip files with distinct timestamps
       for (int i = 0; i < 5; i++) {
-        final file =
-            File('${dir.path}/backup_2024-01-0${i + 1}T00-00-00.zip');
+        final file = File('${dir.path}/backup_2024-01-0${i + 1}T00-00-00.zip');
         await file.writeAsString('dummy_$i');
         await Future.delayed(const Duration(milliseconds: 100));
       }
@@ -58,8 +57,7 @@ void main() {
       }
 
       for (int i = 0; i < 2; i++) {
-        final file =
-            File('${dir.path}/backup_2024-01-0${i + 1}T00-00-00.zip');
+        final file = File('${dir.path}/backup_2024-01-0${i + 1}T00-00-00.zip');
         await file.writeAsString('dummy_$i');
         await Future.delayed(const Duration(milliseconds: 100));
       }
@@ -86,8 +84,7 @@ void main() {
 
       // 2 zips + 2 old-style dirs = 4 total → keep 3
       for (int i = 0; i < 2; i++) {
-        final file =
-            File('${dir.path}/backup_2024-01-0${i + 1}T00-00-00.zip');
+        final file = File('${dir.path}/backup_2024-01-0${i + 1}T00-00-00.zip');
         await file.writeAsString('dummy_$i');
         await Future.delayed(const Duration(milliseconds: 100));
       }
@@ -123,7 +120,8 @@ void main() {
   // ==================================================================
 
   group('cancellation', () {
-    test('BackupService.createBackup throws BackupCancelledException', () async {
+    test('BackupService.createBackup throws BackupCancelledException',
+        () async {
       expect(
         () => BackupService.createBackup(
           outputPath: '/tmp/test_cancel.zip',
