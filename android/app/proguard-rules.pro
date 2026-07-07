@@ -25,6 +25,10 @@
 # 保留 sqflite 原生方法
 -keep class com.tekartik.sqflite.** { *; }
 
+# Keep Play Core classes used by Flutter deferred components (R8)
+-dontwarn com.google.android.play.core.**
+-keep class com.google.android.play.core.** { *; }
+
 # Keep annotations used by reflection
 -keepattributes *Annotation*
 -keepattributes SourceFile,LineNumberTable
