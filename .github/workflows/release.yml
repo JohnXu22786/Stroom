@@ -67,12 +67,21 @@ jobs:
       - name: Create macOS archive
         shell: bash
         run: |
+          TAG="${{ env.TAG }}"
+          APP="build/macos/Build/Products/Release/Stroom.app"
           cd build/macos/Build/Products/Release
-          zip -r "$GITHUB_WORKSPACE/stroom-macos-release-$TAG.zip" .
+          zip -r "$GITHUB_WORKSPACE/stroom-macos-arm64-release-$TAG.zip" "Stroom.app"
+          cd "$GITHUB_WORKSPACE"
+          hdiutil create -volname "Stroom" \
+            -srcfolder "$APP" \
+            -ov -format UDZO \
+            "stroom-macos-arm64-release-$TAG.dmg"
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
-          files: stroom-macos-release-*.zip
+          files: |
+            stroom-macos-arm64-release-*.zip
+            stroom-macos-arm64-release-*.dmg
 
   linux:
     needs: prepare-version
