@@ -48,6 +48,14 @@ android {
         }
     }
 
+    splits {
+        abi {
+            enable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a")
+        }
+    }
+
     signingConfigs {
         create("release") {
             val sf = prop("storeFile", "KEYSTORE_PATH")

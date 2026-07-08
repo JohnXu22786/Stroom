@@ -32,12 +32,22 @@ jobs:
       - run: flutter pub get
       - name: Create dummy keystore for build
         run: keytool -genkey -v -keystore android/upload-keystore.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=CI, OU=Build, O=Stroom, L=Unknown, ST=Unknown, C=XX"
-      - run: flutter build apk --release
-      - name: Rename APK
+      - name: Build APK
+        env:
+          KEYSTORE_PATH: android/upload-keystore.jks
+          KEYSTORE_PASSWORD: android
+          KEY_ALIAS: upload
+          KEY_PASSWORD: android
+        run: flutter build apk --release
+      - name: Rename APKs
         run: |
           TAG="${{ github.ref_name }}"
           mkdir -p artifacts
-          mv build/app/outputs/flutter-apk/app-release.apk "artifacts/stroom-android-release-$TAG.apk"
+          for apk in build/app/outputs/flutter-apk/*.apk; do
+            name=$(basename "$apk")
+            arch=$(echo "$name" | sed -E 's/app-(.*)-release\.apk/\1/')
+            mv "$apk" "artifacts/stroom-android-$arch-release-$TAG.apk"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: android-build
