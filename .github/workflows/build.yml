@@ -39,15 +39,11 @@ jobs:
           KEY_ALIAS: upload
           KEY_PASSWORD: android
         run: flutter build apk --release
-      - name: Rename APKs
+      - name: Rename APK
         run: |
           TAG="${{ github.ref_name }}"
           mkdir -p artifacts
-          for apk in build/app/outputs/flutter-apk/*.apk; do
-            name=$(basename "$apk")
-            arch=$(echo "$name" | sed -E 's/app-(.*)-release\.apk/\1/')
-            mv "$apk" "artifacts/stroom-android-$arch-release-$TAG.apk"
-          done
+          mv build/app/outputs/flutter-apk/app-release.apk "artifacts/stroom-android-release-$TAG.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: android-build
