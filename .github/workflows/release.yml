@@ -172,16 +172,9 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: flutter build apk --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
-      - name: Rename APKs
-        run: |
-          TAG="${{ env.TAG }}"
-          for apk in build/app/outputs/flutter-apk/*.apk; do
-            name=$(basename "$apk")
-            arch=$(echo "$name" | sed -E 's/app-(.*)-release\.apk/\1/')
-            mv "$apk" "stroom-android-$arch-release-$TAG.apk"
-          done
+      - name: Rename APK
+        run: mv build/app/outputs/flutter-apk/app-release.apk "stroom-android-release-$TAG.apk"
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
-          files: |
-            stroom-android-*.apk
+          files: stroom-android-release-*.apk
