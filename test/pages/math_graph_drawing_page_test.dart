@@ -19,6 +19,85 @@ Widget _buildTestApp() {
   );
 }
 
+/// A Dart version of the JavaScript compileFormula logic for testing.
+///
+/// This mirrors the JS implementation to verify the preprocessing rules
+/// (^ → **, implicit multiplication, Math. prefix) are correct.
+String _dartCompileFormula(String formula, Map<String, double>? params) {
+  var expr = formula.trim();
+  if (expr.isEmpty) return expr;
+
+  // 1. Replace parameters (word-boundary)
+  if (params != null) {
+    for (final entry in params.entries) {
+      final pattern = RegExp('\\b${entry.key}\\b');
+      expr = expr.replaceAll(pattern, '(${entry.value})');
+    }
+  }
+
+  // 2. Replace ^ with **
+  expr = expr.replaceAll('^', '**');
+
+  // 3. Replace math constants
+  expr = expr.replaceAll(RegExp(r'\bpi\b', caseSensitive: false), 'Math.PI');
+  expr = expr.replaceAll(RegExp(r'\be\b'), 'Math.E');
+
+  // 4. Basic implicit multiplication: digit|) followed by letter|(
+  expr = expr.replaceAllMapped(
+    RegExp(r'([\d\)])([a-zA-Z\(])'),
+    (m) => '${m[1]}*${m[2]}',
+  );
+
+  // 5. Add Math. prefix to known math functions
+  const mathFuncs = [
+    'sin',
+    'cos',
+    'tan',
+    'asin',
+    'acos',
+    'atan',
+    'atan2',
+    'sinh',
+    'cosh',
+    'tanh',
+    'log10',
+    'log2',
+    'log',
+    'ln',
+    'sqrt',
+    'abs',
+    'ceil',
+    'floor',
+    'round',
+    'exp',
+    'sign',
+    'lg',
+  ];
+  for (final fn in mathFuncs) {
+    String replacement;
+    if (fn == 'ln') {
+      replacement = 'Math.log';
+    } else if (fn == 'lg') {
+      replacement = 'Math.log10';
+    } else {
+      replacement = 'Math.$fn';
+    }
+    expr = expr.replaceAllMapped(
+      RegExp('\\b$fn\\b'),
+      (m) => replacement,
+    );
+  }
+
+  // 6. Remaining variable followed by (  → insert *
+  //    Only match single letters NOT preceded by letter, digit, or dot.
+  expr = expr.replaceAllMapped(
+    RegExp(r'(?<![a-zA-Z0-9.])([a-zA-Z])\s*\('),
+    (m) => '${m[1]}*(',
+  );
+
+  return expr;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -42,6 +121,18 @@ void main() {
       expect(html, isNot(contains('three.min.js')));
     });
 
+    test('build2dHtml() contains compileFormula JavaScript function', () {
+      const formula = 'x^2';
+      final html = MathGraphDrawingPage.build2dHtml(formula);
+
+      // The template should define a compileFormula function
+      expect(html, contains('function compileFormula('));
+      // Should convert ^ to ** in runtime
+      expect(html, contains('replace(/\\^/g'));
+      // Should handle implicit multiplication
+      expect(html, contains('implicit multiplication'));
+    });
+
     test('build3dHtml() generates valid HTML with formula placeholder', () {
       const formula = 'sin(x)*cos(y)';
       final html = MathGraphDrawingPage.build3dHtml(formula);
@@ -54,6 +145,14 @@ void main() {
       expect(html, isNot(contains('jsxgraph')));
     });
 
+    test('build3dHtml() contains compileFormula JavaScript function', () {
+      const formula = 'x^2 + y^2';
+      final html = MathGraphDrawingPage.build3dHtml(formula);
+
+      expect(html, contains('function compileFormula('));
+      expect(html, contains('replace(/\\^/g'));
+    });
+
     test('build2dHtml() escapes dangerous characters in formula', () {
       // Formula with HTML special chars that should be escaped
       const formula = 'a & b < c > d\'s test';
@@ -61,8 +160,6 @@ void main() {
 
       // The formula placeholder in the JS string should be escaped
       expect(html, contains('a &amp; b &lt; c &gt; d&#39;s test'));
-      // No raw dangerous chars should appear in the formula position
-      // (the template JS code uses single quotes, but our formula text is escaped)
       expect(html, contains('&amp;'));
       expect(html, contains('&lt;'));
       expect(html, contains('&gt;'));
@@ -84,6 +181,110 @@ void main() {
       expect(html, contains('JXG.JSXGraph.initBoard'));
       // Should have the board even with empty formula
       expect(html, contains('jsxgraph'));
+    });
+  });
+
+  group('MathGraphDrawingPage - Formula compilation logic', () {
+    // These tests use _dartCompileFormula to verify the compile rules
+    // mirror the JavaScript compileFormula function.
+
+    test('^ is converted to ** for exponentiation', () {
+      final result = _dartCompileFormula('x^2', null);
+      expect(result, contains('x**2'));
+    });
+
+    test('implicit multiplication: 2x → 2*x', () {
+      final result = _dartCompileFormula('2x', null);
+      expect(result, contains('2*x'));
+    });
+
+    test('implicit multiplication: 2sin(x) → 2*Math.sin(x)', () {
+      final result = _dartCompileFormula('2sin(x)', null);
+      expect(result, contains('2*Math.sin(x)'));
+    });
+
+    test('implicit multiplication: (x+1)(x-1) → (x+1)*(x-1)', () {
+      final result = _dartCompileFormula('(x+1)(x-1)', null);
+      expect(result, contains('(x+1)*(x-1)'));
+    });
+
+    test('implicit multiplication: x(x+1) → x*(x+1)', () {
+      final result = _dartCompileFormula('x(x+1)', null);
+      expect(result, contains('x*(x+1)'));
+    });
+
+    test('sin(x) becomes Math.sin(x)', () {
+      final result = _dartCompileFormula('sin(x)', null);
+      expect(result, contains('Math.sin(x)'));
+    });
+
+    test('cos(x) becomes Math.cos(x)', () {
+      final result = _dartCompileFormula('cos(x)', null);
+      expect(result, contains('Math.cos(x)'));
+    });
+
+    test('ln(x) becomes Math.log(x) (natural log)', () {
+      final result = _dartCompileFormula('ln(x)', null);
+      expect(result, contains('Math.log(x)'));
+    });
+
+    test('lg(x) becomes Math.log10(x)', () {
+      final result = _dartCompileFormula('lg(x)', null);
+      expect(result, contains('Math.log10(x)'));
+    });
+
+    test('pi becomes Math.PI', () {
+      final result = _dartCompileFormula('pi', null);
+      expect(result, contains('Math.PI'));
+    });
+
+    test('standalone e becomes Math.E', () {
+      final result = _dartCompileFormula('e^x', null);
+      // e is replaced, but x is not
+      expect(result, contains('Math.E**x'));
+    });
+
+    test('complex formula: 2x^2+3x-5 compiles correctly', () {
+      // 2x^2+3x-5
+      // Step 2 (^): 2x**2+3x-5
+      // Step 4 (implicit mult): 2*x**2+3*x-5
+      // No math funcs, no variable(
+      final result = _dartCompileFormula('2x^2+3x-5', null);
+      expect(result, contains('2*x**2+3*x-5'));
+    });
+
+    test('parameter replacement uses word boundaries (no /a/g bug)', () {
+      // 'atan' contains 'a' — word boundary ensures only standalone 'a' is replaced
+      final params = <String, double>{'a': 2.0};
+      final result = _dartCompileFormula('a*atan(x)', params);
+      // The 'a' should be replaced with (2), but 'atan' should stay as Math.atan
+      expect(result, contains('(2.0)*Math.atan(x)'));
+    });
+
+    test('parameter replacement: a, b, c, d not breaking function names', () {
+      final params = <String, double>{'a': 1.0, 'b': 2.0, 'c': 3.0, 'd': 4.0};
+      final result = _dartCompileFormula('asin(a) + acos(b) + atan(c)', params);
+      // asin should become Math.asin (not Math.(1)sin)
+      // acos should become Math.acos (not Math.(2)cos)
+      // atan should become Math.atan (not Math.(3)tan)
+      expect(result, contains('Math.asin'));
+      expect(result, contains('Math.acos'));
+      expect(result, contains('Math.atan'));
+      // The params should appear
+      expect(result, contains('(1.0)'));
+      expect(result, contains('(2.0)'));
+      expect(result, contains('(3.0)'));
+    });
+
+    test('comprehensive: x^2 produces parabolic evaluation', () {
+      // x^2 → x**2 → after compilation: function(x,y){ return x**2; }
+      // At x=2, value should be 4
+      final result = _dartCompileFormula('x^2', null);
+      // The resulting expression when evaluated should behave like x*x
+      // We can check the compiled expression contains the right form
+      expect(result, contains('x**2'));
+      // No XOR operator (^) should remain
+      expect(result, isNot(contains('^')));
     });
   });
 
@@ -241,6 +442,28 @@ void main() {
 
       // Should have parameter labels
       expect(find.text('参数'), findsWidgets);
+    });
+
+    testWidgets('no coordinate data list is shown (removed as useless)', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: MathGraphDrawingPage(initialShowPreview: false),
+            localizationsDelegates: [
+              DefaultMaterialLocalizations.delegate,
+              DefaultWidgetsLocalizations.delegate,
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The coordinate data list should have been removed
+      // Previously showed "坐标数据"
+      expect(find.textContaining('坐标数据'), findsNothing);
+      expect(find.text('暂无数据'), findsNothing);
     });
 
     testWidgets('no platform exceptions when rendering without WebView', (

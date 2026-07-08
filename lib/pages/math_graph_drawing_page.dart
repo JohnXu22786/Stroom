@@ -68,14 +68,13 @@ class CoordinatePoint {
 
 /// 数学绘图页面 — 采用 Flutter + WebView 混合架构
 ///
-/// Flutter 原生层负责 UI 外壳、公式文本输入框、坐标数据列表及参数调节滑块。
+/// Flutter 原生层负责 UI 外壳、公式文本输入框及参数调节滑块。
 /// WebView 画布层嵌入本地网页，利用 JavaScript 数学库作为核心绘图引擎：
 /// - 2D 采用 JSXGraph
 /// - 3D 采用 Three.js（可替换为 MathBox.js）
 ///
-/// 通过双向通道实现数据高频同步：
-/// - Flutter → WebView: 公式/参数变化实时发送
-/// - WebView → Flutter: 坐标数据回传刷新原生界面
+/// 公式编译（^→**, 隐式乘法, Math.函数前缀等）在 JavaScript 侧的 compileFormula
+/// 函数中完成，无需依赖外部数学库进行表达式解析。
 class MathGraphDrawingPage extends StatefulWidget {
   /// 初始是否显示 WebView 预览。测试环境中设为 false 以避免
   /// InAppWebView 平台未初始化导致的崩溃。
@@ -146,7 +145,7 @@ class MathGraphDrawingPage extends StatefulWidget {
   // 2D HTML Template (JSXGraph)
   // ---------------------------------------------------------------------------
 
-  static const String _dim2HtmlTemplate = '''
+  static const String _dim2HtmlTemplate = r'''
 <!DOCTYPE html>
 <html>
 <head>
@@ -169,6 +168,68 @@ class MathGraphDrawingPage extends StatefulWidget {
 <script>
   PARAM_SCRIPT_PLACEHOLDER
 
+  // ==========================================================================
+  // Math Expression Compiler
+  // ==========================================================================
+  // Converts standard math notation into valid JavaScript:
+  //   - ^  →  **   (exponentiation)
+  //   - 2x → 2*x   (implicit multiplication)
+  //   - sin, cos, tan, ln, lg etc. → Math.sin, Math.cos etc.
+  //   - pi → Math.PI, e → Math.E
+  //   - parameters a,b,c,d replaced at word boundaries
+
+  function compileFormula(str, params) {
+    if (!str || str.trim() === '') return null;
+
+    // 1. Replace parameters at word boundaries (avoids breaking function names)
+    var expr = str.trim();
+    if (params) {
+      var keys = ['a', 'b', 'c', 'd'];
+      for (var k = 0; k < keys.length; k++) {
+        var key = keys[k];
+        var val = params[key];
+        if (val !== undefined) {
+          var re = new RegExp('\\b' + key + '\\b', 'g');
+          expr = expr.replace(re, '(' + val + ')');
+        }
+      }
+    }
+
+    // 2. Replace ^ with **  (exponentiation)
+    expr = expr.replace(/\^/g, '**');
+
+    // 3. Math constants
+    expr = expr.replace(/\bpi\b/gi, 'Math.PI');
+    expr = expr.replace(/\be\b/g, 'Math.E');
+
+    // 4. Implicit multiplication:
+    //    - digit or ) followed by letter or (  →  insert *
+    expr = expr.replace(/([\d\)])([a-zA-Z\(])/g, '$1*$2');
+
+    // 5. Add Math. prefix to known functions
+    var funcs = [
+      'sin','cos','tan','asin','acos','atan','atan2',
+      'sinh','cosh','tanh','log10','log2','sqrt','abs',
+      'ceil','floor','round','exp','sign'
+    ];
+    for (var f = 0; f < funcs.length; f++) {
+      var re = new RegExp('\\b' + funcs[f] + '\\b', 'g');
+      expr = expr.replace(re, 'Math.' + funcs[f]);
+    }
+    // ln  → Math.log (natural log)
+    expr = expr.replace(/\bln\b/g, 'Math.log');
+    // lg  → Math.log10 (base-10 log, common in Chinese math)
+    expr = expr.replace(/\blg\b/g, 'Math.log10');
+    // log → Math.log (natural log, programming convention)
+    expr = expr.replace(/\blog\b/g, 'Math.log');
+
+    // 6. Single-letter variable followed by (  →  insert *
+    //    Avoid matching inside Math.func( calls.
+    expr = expr.replace(/(?<![a-zA-Z0-9.])([a-zA-Z])\s*\(/g, '$1*(');
+
+    return expr;
+  }
+
   function getParams() {
     if (typeof params !== 'undefined') return params;
     return { a: 1, b: 0, c: 0, d: 0 };
@@ -179,12 +240,9 @@ class MathGraphDrawingPage extends StatefulWidget {
     if (!formulaStr || formulaStr.trim() === '') return null;
     try {
       var p = getParams();
-      var compiled = formulaStr
-        .replace(/a/g, '(' + p.a + ')')
-        .replace(/b/g, '(' + p.b + ')')
-        .replace(/c/g, '(' + p.c + ')')
-        .replace(/d/g, '(' + p.d + ')');
-      return function(x) { return eval(compiled); };
+      var compiled = compileFormula(formulaStr, p);
+      if (compiled === null) return null;
+      return new Function('x', 'return ' + compiled + ';');
     } catch(e) { return null; }
   }
 
@@ -203,19 +261,7 @@ class MathGraphDrawingPage extends StatefulWidget {
     if (formula) {
       var graph = board.create('functiongraph', [formula, -10, 10], {
         strokeColor: '#4A90D9',
-        strokeWidth: 2
-      });
-      board.on('update', function() {
-        var points = [];
-        try {
-          for (var x = -10; x <= 10; x += 0.5) {
-            var y = formula(x);
-            if (isFinite(y)) points.push({x: x, y: y});
-          }
-        } catch(e) {}
-        if (window.flutter_inappwebview) {
-          window.flutter_inappwebview.callHandler('mathGraphCoordinates', JSON.stringify(points));
-        }
+        strokeWidth: 2.5
       });
     }
     board.update();
@@ -235,7 +281,7 @@ class MathGraphDrawingPage extends StatefulWidget {
   // 3D HTML Template (Three.js)
   // ---------------------------------------------------------------------------
 
-  static const String _dim3HtmlTemplate = '''
+  static const String _dim3HtmlTemplate = r'''
 <!DOCTYPE html>
 <html>
 <head>
@@ -258,6 +304,49 @@ class MathGraphDrawingPage extends StatefulWidget {
 <script>
   PARAM_SCRIPT_PLACEHOLDER
 
+  // ==========================================================================
+  // Math Expression Compiler (same as 2D version)
+  // ==========================================================================
+
+  function compileFormula(str, params) {
+    if (!str || str.trim() === '') return null;
+
+    var expr = str.trim();
+    if (params) {
+      var keys = ['a', 'b', 'c', 'd'];
+      for (var k = 0; k < keys.length; k++) {
+        var key = keys[k];
+        var val = params[key];
+        if (val !== undefined) {
+          var re = new RegExp('\\b' + key + '\\b', 'g');
+          expr = expr.replace(re, '(' + val + ')');
+        }
+      }
+    }
+
+    expr = expr.replace(/\^/g, '**');
+    expr = expr.replace(/\bpi\b/gi, 'Math.PI');
+    expr = expr.replace(/\be\b/g, 'Math.E');
+    expr = expr.replace(/([\d\)])([a-zA-Z\(])/g, '$1*$2');
+
+    var funcs = [
+      'sin','cos','tan','asin','acos','atan','atan2',
+      'sinh','cosh','tanh','log10','log2','sqrt','abs',
+      'ceil','floor','round','exp','sign'
+    ];
+    for (var f = 0; f < funcs.length; f++) {
+      var re = new RegExp('\\b' + funcs[f] + '\\b', 'g');
+      expr = expr.replace(re, 'Math.' + funcs[f]);
+    }
+    expr = expr.replace(/\bln\b/g, 'Math.log');
+    expr = expr.replace(/\blg\b/g, 'Math.log10');
+    expr = expr.replace(/\blog\b/g, 'Math.log');
+
+    expr = expr.replace(/(?<![a-zA-Z0-9.])([a-zA-Z])\s*\(/g, '$1*(');
+
+    return expr;
+  }
+
   var scene, camera, renderer, controls;
   var mesh;
 
@@ -271,12 +360,9 @@ class MathGraphDrawingPage extends StatefulWidget {
     if (!formulaStr || formulaStr.trim() === '') return null;
     try {
       var p = getParams();
-      var compiled = formulaStr
-        .replace(/a/g, '(' + p.a + ')')
-        .replace(/b/g, '(' + p.b + ')')
-        .replace(/c/g, '(' + p.c + ')')
-        .replace(/d/g, '(' + p.d + ')');
-      return function(x, y) { return eval(compiled); };
+      var compiled = compileFormula(formulaStr, p);
+      if (compiled === null) return null;
+      return new Function('x', 'y', 'return ' + compiled + ';');
     } catch(e) { return null; }
   }
 
@@ -332,20 +418,6 @@ class MathGraphDrawingPage extends StatefulWidget {
     if (mesh) scene.remove(mesh);
     mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
-
-    // Send sample coordinates
-    if (window.flutter_inappwebview) {
-      var samplePoints = [];
-      for (var i = -4; i <= 4; i += 1) {
-        for (var j = -4; j <= 4; j += 1) {
-          try {
-            var zv = surfFunc(i, j);
-            if (isFinite(zv)) samplePoints.push({x: i, y: j, z: zv});
-          } catch(e) {}
-        }
-      }
-      window.flutter_inappwebview.callHandler('mathGraphCoordinates', JSON.stringify(samplePoints));
-    }
   }
 
   function initScene() {
@@ -491,9 +563,6 @@ class _MathGraphDrawingPageState extends State<MathGraphDrawingPage> {
   double _paramC = 0.0;
   double _paramD = 0.0;
 
-  // Coordinate data from canvas
-  List<CoordinatePoint> _coordinates = [];
-
   // WebView state
   InAppWebViewController? _dim2Controller;
   InAppWebViewController? _dim3Controller;
@@ -593,18 +662,6 @@ class _MathGraphDrawingPageState extends State<MathGraphDrawingPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // JavaScript handler for coordinate data from WebView
-  // ---------------------------------------------------------------------------
-
-  Future<void> _onCoordinatesReceived(String jsonData) async {
-    final coords = MathGraphDrawingPage.extractCoordinatesFromJs(jsonData);
-    if (!mounted) return;
-    setState(() {
-      _coordinates = coords;
-    });
-  }
-
-  // ---------------------------------------------------------------------------
   // Build
   // ---------------------------------------------------------------------------
 
@@ -630,8 +687,6 @@ class _MathGraphDrawingPageState extends State<MathGraphDrawingPage> {
           ),
           // Parameter sliders
           _buildParameterSliders(cs),
-          // Coordinate data list
-          _buildCoordinateList(cs),
         ],
       ),
     );
@@ -959,14 +1014,7 @@ class _MathGraphDrawingPageState extends State<MathGraphDrawingPage> {
   }
 
   void _setupWebViewHandler(InAppWebViewController ctrl) {
-    ctrl.addJavaScriptHandler(
-      handlerName: 'mathGraphCoordinates',
-      callback: (args) {
-        if (args.isNotEmpty && args[0] is String) {
-          _onCoordinatesReceived(args[0] as String);
-        }
-      },
-    );
+    // No JavaScript handlers needed; graph rendering is self-contained.
   }
 
   void _loadInitialContent(InAppWebViewController ctrl, bool isDim2) {
@@ -1076,88 +1124,6 @@ class _MathGraphDrawingPageState extends State<MathGraphDrawingPage> {
           ),
         ),
       ],
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // Coordinate data list
-  // ---------------------------------------------------------------------------
-
-  Widget _buildCoordinateList(ColorScheme cs) {
-    final displayCoords =
-        _coordinates.length > 20 ? _coordinates.sublist(0, 20) : _coordinates;
-
-    return Container(
-      constraints: const BoxConstraints(maxHeight: 100),
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: cs.outlineVariant, width: 0.3),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 2),
-            child: Row(
-              children: [
-                Icon(Icons.table_chart, size: 14, color: cs.onSurfaceVariant),
-                const SizedBox(width: 4),
-                Text(
-                  '坐标数据 (${_coordinates.length} 点)',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: cs.onSurfaceVariant,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: displayCoords.isEmpty
-                ? Center(
-                    child: Text(
-                      '暂无数据',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: cs.onSurfaceVariant.withValues(alpha: 0.6),
-                      ),
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    scrollDirection: Axis.horizontal,
-                    itemCount: displayCoords.length,
-                    itemBuilder: (context, index) {
-                      final coord = displayCoords[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: Chip(
-                          label: Text(
-                            coord.z != null
-                                ? '(${coord.x.toStringAsFixed(1)}, ${coord.y.toStringAsFixed(1)}, ${coord.z!.toStringAsFixed(1)})'
-                                : '(${coord.x.toStringAsFixed(1)}, ${coord.y.toStringAsFixed(1)})',
-                            style: const TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 10,
-                            ),
-                          ),
-                          visualDensity: VisualDensity.compact,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          padding: EdgeInsets.zero,
-                          labelPadding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
     );
   }
 }
