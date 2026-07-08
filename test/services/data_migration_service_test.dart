@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/data_migration_service.dart';
+import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/storage_service.dart';
 
 void main() {
@@ -11,6 +12,7 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    ManifestDatabase.enableTestMode();
     AppStorage.resetCache();
   });
 
@@ -163,7 +165,7 @@ void main() {
       expect(prefs.getString('conversations_bak'), isNotNull);
     });
 
-    test('backup directory is created in external location during migration',
+    test('backup ZIP is created in external location during migration',
         () async {
       final backupRoot = await DataMigrationService.getExternalBackupRootPath();
 
@@ -175,10 +177,14 @@ void main() {
 
       await DataMigrationService.checkAndMigrate();
 
-      // Backup root should exist (at least one subdirectory)
+      // Backup root should exist with at least one ZIP file
       expect(await rootDir.exists(), isTrue);
       final entries = await rootDir.list().toList();
-      expect(entries.length, greaterThan(0));
+      final zips = entries
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.zip'))
+          .toList();
+      expect(zips.length, greaterThan(0));
 
       // Cleanup after test
       if (await rootDir.exists()) {
@@ -197,36 +203,23 @@ void main() {
       AppStorage.resetCache();
     });
 
-    test(
-        'createBackup creates a backup directory with manifest in external location',
-        () async {
+    test('createBackup creates a backup ZIP in external location', () async {
       final backupPath = await DataMigrationService.createBackup();
       expect(backupPath, isNotNull);
 
-      final backupDir = Directory(backupPath!);
-      expect(await backupDir.exists(), isTrue);
+      final backupFile = File(backupPath!);
+      expect(await backupFile.exists(), isTrue);
 
-      // Verify manifest file exists
-      final manifestFile = File('${backupDir.path}/manifest.json');
-      expect(await manifestFile.exists(), isTrue);
-
-      // Verify manifest content
-      final manifestContent = await manifestFile.readAsString();
-      final manifest = jsonDecode(manifestContent) as Map<String, dynamic>;
-      expect(manifest['backupType'], equals('pre_migration'));
-
-      // Verify preferences backup
-      final prefsFile = File('${backupDir.path}/preferences.json');
-      final prefsContent = await prefsFile.readAsString();
-      final prefsData = jsonDecode(prefsContent) as Map<String, dynamic>;
-      expect(prefsData['test_key'], equals('test_value'));
+      // Verify it's a ZIP file
+      expect(backupPath.endsWith('.zip'), isTrue);
+      expect(await backupFile.length(), greaterThan(0));
 
       // Verify it's outside app data
       final appDir = await AppStorage.directory;
-      expect(backupPath, isNot(equals(appDir)));
+      expect(backupFile.parent.path, isNot(equals(appDir)));
 
       // Cleanup
-      await backupDir.delete(recursive: true);
+      await backupFile.delete();
     });
 
     test('getExternalBackupRootPath returns non-null on all platforms',
@@ -293,20 +286,33 @@ void main() {
       // No exception = test passes
     });
 
-    test('cleanOldBackups keeps recent backups', () async {
+    test('cleanOldBackups keeps 3 newest backup_ entries', () async {
       final backupRoot = await DataMigrationService.getExternalBackupRootPath();
       final rootDir = Directory(backupRoot);
       await rootDir.create(recursive: true);
 
       try {
-        // Create a recent backup
-        final recentDir = Directory('${rootDir.path}/recent_backup');
-        await recentDir.create(recursive: true);
+        // Create 5 backup_ prefixed items (4 dirs + 1 zip)
+        for (int i = 0; i < 4; i++) {
+          final d =
+              Directory('${rootDir.path}/backup_2024-01-0${i + 1}T00-00-00');
+          await d.create(recursive: true);
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+        final f = File('${rootDir.path}/backup_2024-01-05T00-00-00.zip');
+        await f.writeAsString('dummy');
+        await Future.delayed(const Duration(milliseconds: 100));
 
         await DataMigrationService.cleanOldBackups();
 
-        // Recent backup should still exist
-        expect(await recentDir.exists(), isTrue);
+        // Should keep exactly 3 of the 5
+        final entries = await rootDir.list().toList();
+        final backupItems = entries
+            .where((e) =>
+                (e is File && e.path.endsWith('.zip')) ||
+                (e is Directory && e.path.contains('backup_')))
+            .toList();
+        expect(backupItems.length, equals(3));
       } finally {
         if (await rootDir.exists()) {
           await rootDir.delete(recursive: true);

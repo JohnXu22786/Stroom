@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'auto_backup_service.dart';
 import 'manifest_database.dart';
 
 /// The key used in SharedPreferences to store the data format version.
@@ -39,7 +40,8 @@ class MigrationResult {
 // ====================================================================
 //
 // 每次启动时检查数据格式版本。如果版本过低，则执行迁移。
-// 每次迁移前会自动创建旧数据备份（保留 2 天后自动清理）。
+// 每次迁移前会自动创建完整数据备份。备份目录至少保留 3 个
+// 最新的备份文件，超出部分自动清理。
 // ====================================================================
 
 class DataMigrationService {
@@ -204,13 +206,13 @@ class DataMigrationService {
     }
   }
 
-  /// 创建当前数据的时间戳备份。
+  /// 创建当前数据的完整 ZIP 备份。
   ///
-  /// 备份内容：
-  /// - `manifest.json` — 备份元数据（时间、旧版本号）
-  /// - `preferences.json` — SharedPreferences 快照
+  /// 使用 [AutoBackupService] 创建包含所有应用数据的完整备份
+  /// 到 StroomBackups 目录。备份文件格式为：
+  ///   backup_YYYY-MM-DDTHH-MM-SS.zip
   ///
-  /// 返回备份目录路径，如果备份创建失败返回 `null`。
+  /// 返回备份文件路径，如果备份失败返回 `null`。
   static Future<String?> createBackup() async {
     if (kIsWeb) {
       debugPrint(
@@ -219,73 +221,48 @@ class DataMigrationService {
     }
 
     try {
+      final success = await AutoBackupService.performAutoBackup(
+        isPreMigration: true,
+      );
+      if (!success) return null;
+
+      // 获取最新的备份文件路径
       final backupRoot = await getExternalBackupRootPath();
-      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-      final backupDir = Directory(p.join(backupRoot, 'backup_$timestamp'));
-      await backupDir.create(recursive: true);
+      final backupDir = Directory(backupRoot);
+      if (!await backupDir.exists()) return null;
 
-      // 1. Create manifest.json
-      final manifest = {
-        'formatVersion': await getStoredFormatVersion(),
-        'createdAt': DateTime.now().toIso8601String(),
-        'backupType': 'pre_migration',
-      };
-      await File(p.join(backupDir.path, 'manifest.json'))
-          .writeAsString(jsonEncode(manifest));
+      final entries = await backupDir.list().toList();
+      final zipFiles = entries
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.zip'))
+          .toList();
+      if (zipFiles.isEmpty) return null;
 
-      // 2. Backup SharedPreferences (excluding flutter internal keys)
-      final prefs = await SharedPreferences.getInstance();
-      final prefData = <String, dynamic>{};
-      for (final key in prefs.getKeys()) {
-        if (key.startsWith('flutter.')) continue;
-        prefData[key] = prefs.get(key);
-      }
-      await File(p.join(backupDir.path, 'preferences.json'))
-          .writeAsString(jsonEncode(prefData));
+      // 按修改时间排序，取最新的
+      zipFiles.sort((a, b) {
+        try {
+          return b.statSync().modified.compareTo(a.statSync().modified);
+        } catch (_) {
+          return 0;
+        }
+      });
 
-      debugPrint('[DataMigrationService] Backup created at ${backupDir.path}');
-      return backupDir.path;
+      debugPrint(
+          '[DataMigrationService] Backup created at ${zipFiles.first.path}');
+      return zipFiles.first.path;
     } catch (e) {
       debugPrint('[DataMigrationService] Failed to create backup: $e');
       return null;
     }
   }
 
-  /// 清理超过 2 天的旧备份。
+  /// 清理旧备份，保留至少 3 个最新的。
   ///
+  /// 委托给 [AutoBackupService.cleanupOldBackups] 执行。
   /// 在每次启动时自动调用，确保旧备份不会无限累积。
   static Future<void> cleanOldBackups() async {
     if (kIsWeb) return;
-
-    try {
-      final backupRootPath = await getExternalBackupRootPath();
-      final backupRoot = Directory(backupRootPath);
-
-      if (!await backupRoot.exists()) return;
-
-      final cutoff = DateTime.now().subtract(const Duration(days: 2));
-      final entries = await backupRoot.list().toList();
-
-      for (final entry in entries) {
-        if (entry is! Directory) continue;
-        try {
-          final stat = entry.statSync();
-          if (stat.modified.isBefore(cutoff) ||
-              stat.modified.isAtSameMomentAs(cutoff)) {
-            await entry.delete(recursive: true);
-            debugPrint(
-              '[DataMigrationService] Cleaned old backup: ${entry.path}',
-            );
-          }
-        } catch (e) {
-          debugPrint(
-            '[DataMigrationService] Failed to clean backup ${entry.path}: $e',
-          );
-        }
-      }
-    } catch (e) {
-      debugPrint('[DataMigrationService] Failed to clean old backups: $e');
-    }
+    await AutoBackupService.cleanupOldBackups();
   }
 
   // ================================================================
