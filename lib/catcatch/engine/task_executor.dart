@@ -660,9 +660,9 @@ class TaskExecutor {
     }
     final appDirPath = await AppStorage.directory;
     final outputDir = p.join(appDirPath, 'catcatch', 'converted');
-    final outputName = '${p.basenameWithoutExtension(inputPath)}.mp4';
+    final outputName = '${p.basenameWithoutExtension(inputPath)}.ts';
     final outputPath = p.join(outputDir, outputName);
-    final result = await FFmpegConverter.convertToMp4(
+    final result = await FFmpegConverter.convertToTs(
         inputPath: inputPath,
         outputPath: outputPath,
         onProgress: (progress) {
