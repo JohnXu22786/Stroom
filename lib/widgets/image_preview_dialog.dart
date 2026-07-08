@@ -4,13 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:extended_image/extended_image.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-/// Full-screen image preview dialog with close and edit buttons.
+/// Full-screen image preview dialog with close, crop, and edit buttons.
 ///
 /// Uses [ExtendedImage] (from the `extended_image` package) for built-in
 /// pinch-to-zoom, pan, and double-tap zoom gestures — no need for
 /// [InteractiveViewer] or a separate image cache.
 ///
 /// For SVG images, uses [SvgPicture.memory] with [InteractiveViewer].
+///
+/// Both the crop and edit buttons pop the dialog with `true` (indicating
+/// the user wants to edit the image). The caller is expected to open
+/// [ExtendedImageEditorPage] in response.
 ///
 /// Parameters:
 ///   [imageData]   — The image bytes to display. If null or empty,
@@ -51,21 +55,40 @@ class ImagePreviewDialog extends StatelessWidget {
               ),
             ),
           ),
-          // Edit button (top right) — only for non-SVG
+          // Crop + Edit buttons (top right) — only for non-SVG
           if (!_isSvg)
             Positioned(
               top: MediaQuery.of(context).padding.top + 8,
               right: 8,
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: Color(0x66000000),
-                  shape: BoxShape.circle,
-                ),
-                child: IconButton(
-                  icon: const Icon(Icons.edit, color: Colors.white, size: 28),
-                  tooltip: '编辑图片',
-                  onPressed: () => Navigator.pop(context, true),
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0x66000000),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon:
+                          const Icon(Icons.crop, color: Colors.white, size: 24),
+                      tooltip: '裁剪',
+                      onPressed: () => Navigator.pop(context, true),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0x66000000),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon:
+                          const Icon(Icons.edit, color: Colors.white, size: 24),
+                      tooltip: '编辑',
+                      onPressed: () => Navigator.pop(context, true),
+                    ),
+                  ),
+                ],
               ),
             ),
           // Bottom file-name

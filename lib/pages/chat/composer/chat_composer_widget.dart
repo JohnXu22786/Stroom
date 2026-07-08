@@ -483,7 +483,8 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         current[paramName] = value;
         ref.read(reasoningParamValuesProvider.notifier).state = current;
         // Sync reasoningEffortProvider when reasoning_effort changes
-        // so the chip label reflects the actual user selection.
+        // so the effort value is available for API calls (chat_page sends
+        // it via ChatAdapter.sendStreamWithTools).
         if (paramName == 'reasoning_effort') {
           ref.read(reasoningEffortProvider.notifier).state = value;
         }
@@ -757,9 +758,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   }
 
   /// Called when a pending attachment chip is tapped.
-  /// For image attachments: shows [ImagePreviewDialog] with edit button.
-  ///   If user taps edit, opens [ExtendedImageEditorPage]; on save, updates the
-  ///   pending attachment with edited bytes.
+  /// For image attachments: shows [ImagePreviewDialog] with crop and edit
+  ///   buttons. If user taps either, opens [ExtendedImageEditorPage]; on save,
+  ///   updates the pending attachment with edited bytes.
   /// For non-image attachments: delegates to [widget.onPreviewAttachment].
   Future<void> _onTapPendingAttachment(int index) async {
     if (index < 0 || index >= _pendingAttachments.length) return;
@@ -873,16 +874,21 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     final hasAttachments = _pendingAttachments.isNotEmpty;
     final cs = Theme.of(context).colorScheme;
     final reasoningEnabled = ref.watch(reasoningEnabledProvider);
-    final reasoningEffort = ref.watch(reasoningEffortProvider);
+    final reasoningParamValues = ref.watch(reasoningParamValuesProvider);
 
     // Determine reasoning chip label and color based on reasoning state.
-    // When reasoning is enabled: show the current effort/reasoning level.
+    // When reasoning is enabled:
+    //   - If the user has selected a reasoning effort value in the model's
+    //     "推理力度" panel, show that value (e.g. "high", "low").
+    //   - Otherwise, show "推理" in purple (on state).
     // When reasoning is disabled: show gray "推理".
-    // When reasoning is enabled, show just the effort value (e.g. "medium").
-    // If no effort param (empty string), show "推理".
-    final reasoningLabel = (reasoningEnabled && reasoningEffort.isNotEmpty)
-        ? reasoningEffort
-        : '推理';
+    final String reasoningLabel;
+    if (reasoningEnabled &&
+        reasoningParamValues.containsKey('reasoning_effort')) {
+      reasoningLabel = reasoningParamValues['reasoning_effort']!;
+    } else {
+      reasoningLabel = '推理';
+    }
     final reasoningColor = reasoningEnabled ? Colors.purple : Colors.grey;
 
     return Material(
@@ -960,7 +966,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                       _SettingsChip(
                         icon: Icons.build_outlined,
                         label: '工具',
-                        color: cs.tertiary,
+                        color: Colors.indigo,
                         onTap: _showToolsPanel,
                         badgeCount: widget.enabledTools.length,
                       ),

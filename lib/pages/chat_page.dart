@@ -102,6 +102,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Scroll controller for the chat message list.
   late ScrollController _chatScrollController;
 
+  /// Tracks whether the soft keyboard was visible in the previous metrics
+  /// change, so [didChangeMetrics] can detect show/hide transitions.
+  bool _wasKeyboardVisible = false;
+
+  /// Captured scroll position before the keyboard opened, so it can be
+  /// restored when the keyboard is dismissed.
+  double? _lastScrollPositionBeforeKeyboard;
+
   bool _isSearching = false;
   SearchMode _searchMode = SearchMode.current;
   String _searchQuery = '';
@@ -269,33 +277,51 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (!mounted) return;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final isNowVisible = bottomInset > 100;
-    if (isNowVisible) {
-      // Scroll to bottom on every metrics change while the keyboard is
-      // visible, not just on the hidden→visible transition. This ensures
-      // the latest message stays visible during the keyboard animation
-      // (~300ms on Android/iOS), eliminating the ~1s lag that occurred
-      // when scrolling was gated by the transition-only check.
+
+    if (isNowVisible && !_wasKeyboardVisible) {
+      // Keyboard just appeared — save scroll position and jump to bottom
+      // immediately so the input area and latest message are visible.
+      if (_chatScrollController.hasClients) {
+        _lastScrollPositionBeforeKeyboard =
+            _chatScrollController.position.pixels;
+      }
       _scrollToBottom();
+    } else if (!isNowVisible && _wasKeyboardVisible) {
+      // Keyboard just disappeared — restore the scroll position that was
+      // captured before the keyboard opened.
+      _restoreScrollPositionAfterKeyboard();
+    }
+    _wasKeyboardVisible = isNowVisible;
+  }
+
+  /// Scrolls the chat list to the bottom-most message immediately when the
+  /// keyboard opens, keeping the input area and latest message visible.
+  void _scrollToBottom() {
+    if (_chatScrollController.hasClients) {
+      _chatScrollController.jumpTo(
+        _chatScrollController.position.maxScrollExtent,
+      );
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (_chatScrollController.hasClients) {
+          _scrollToBottom();
+        }
+      });
     }
   }
 
-  /// Scrolls the chat list to the bottom-most message, used when the soft
-  /// keyboard opens so the latest message and input field are visible
-  /// immediately rather than after a ~1s layout delay.
-  void _scrollToBottom() {
+  /// Restores the scroll position that was captured before the keyboard
+  /// opened, so the user returns to where they were reading.
+  void _restoreScrollPositionAfterKeyboard() {
+    final savedPos = _lastScrollPositionBeforeKeyboard;
+    _lastScrollPositionBeforeKeyboard = null;
+    if (savedPos == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final msgs = _controller?.messages;
-      if (msgs != null && msgs.isNotEmpty) {
-        final lastMsg = msgs.last;
-        final key = _messageKeys[lastMsg.id];
-        if (key?.currentContext != null) {
-          Scrollable.ensureVisible(
-            key!.currentContext!,
-            alignment: 1.0, // bottom of the item aligned with viewport bottom
-            duration: Duration.zero, // instant, no animation delay
-          );
-        }
+      if (_chatScrollController.hasClients) {
+        final maxScroll = _chatScrollController.position.maxScrollExtent;
+        _chatScrollController.jumpTo(savedPos.clamp(0.0, maxScroll));
       }
     });
   }
