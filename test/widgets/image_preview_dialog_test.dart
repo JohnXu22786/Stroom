@@ -100,7 +100,7 @@ void main() {
     // ================================================================
 
     testWidgets(
-        'close and edit buttons have circular semi-transparent backgrounds',
+        'close, crop, and edit buttons have circular semi-transparent backgrounds',
         (tester) async {
       await pumpDialog(tester, imageData: validPng);
 
@@ -121,18 +121,19 @@ void main() {
         }
       }
 
-      // Should have at least 2 circular-background containers (close + edit)
-      expect(circleDecoratedCount, greaterThanOrEqualTo(2),
+      // Should have at least 3 circular-background containers (close + crop + edit)
+      expect(circleDecoratedCount, greaterThanOrEqualTo(3),
           reason:
-              'Both close and edit buttons should have circular semi-transparent backgrounds');
+              'Close, crop, and edit buttons should have circular semi-transparent backgrounds');
     });
 
-    testWidgets('close button icon is inside a circular background',
-        (tester) async {
+    testWidgets('close, crop, and edit icons are present', (tester) async {
       await pumpDialog(tester, imageData: validPng);
 
       // The close icon should be present
       expect(find.byIcon(Icons.close), findsOneWidget);
+      // The crop icon should be present
+      expect(find.byIcon(Icons.crop), findsOneWidget);
       // The edit icon should be present
       expect(find.byIcon(Icons.edit), findsOneWidget);
     });
@@ -170,6 +171,35 @@ void main() {
       expect(result, false);
     });
 
+    testWidgets('crop button pops dialog with true', (tester) async {
+      bool? result;
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () async {
+              result = await showDialog<bool>(
+                context: context,
+                builder: (_) => ImagePreviewDialog(
+                  imageData: validPng,
+                  fileName: 'test.jpg',
+                ),
+              );
+            },
+            child: const Text('Open'),
+          ),
+        ),
+      ));
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.crop));
+      await tester.pump();
+
+      expect(result, true);
+    });
+
     testWidgets('edit button pops dialog with true', (tester) async {
       bool? result;
       await tester.pumpWidget(MaterialApp(
@@ -199,7 +229,7 @@ void main() {
       expect(result, true);
     });
 
-    testWidgets('edit button is always enabled', (tester) async {
+    testWidgets('crop and edit buttons are always enabled', (tester) async {
       bool? result;
       bool? dialogClosed;
 
@@ -225,20 +255,20 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // Edit button should be enabled immediately
-      final editIcon = find.byIcon(Icons.edit);
-      final editButton = tester.widget<IconButton>(
-        find.ancestor(of: editIcon, matching: find.byType(IconButton)),
+      // Crop button should be enabled immediately
+      final cropIcon = find.byIcon(Icons.crop);
+      final cropButton = tester.widget<IconButton>(
+        find.ancestor(of: cropIcon, matching: find.byType(IconButton)),
       );
-      expect(editButton.onPressed, isNotNull,
-          reason: 'Edit button should be enabled');
+      expect(cropButton.onPressed, isNotNull,
+          reason: 'Crop button should be enabled');
 
-      // Tapping edit button immediately pops dialog with true
-      await tester.tap(editIcon);
+      // Tapping crop button immediately pops dialog with true
+      await tester.tap(cropIcon);
       await tester.pump();
       expect(dialogClosed, isTrue,
-          reason: 'Dialog should close immediately after tapping edit button');
-      expect(result, isTrue, reason: 'Edit button should pop with true');
+          reason: 'Dialog should close immediately after tapping crop button');
+      expect(result, isTrue, reason: 'Crop button should pop with true');
     });
 
     // ================================================================
@@ -249,6 +279,20 @@ void main() {
       await pumpDialog(tester, imageData: validPng, fileName: 'my_photo.jpg');
 
       expect(find.text('my_photo.jpg'), findsOneWidget);
+    });
+
+    // ================================================================
+    // SVG files: crop and edit buttons hidden
+    // ================================================================
+
+    testWidgets('SVG files hide crop and edit buttons', (tester) async {
+      await pumpDialog(tester, imageData: validPng, fileName: 'image.svg');
+
+      // Close button should still be present
+      expect(find.byIcon(Icons.close), findsOneWidget);
+      // Crop and edit buttons should NOT be present for SVG
+      expect(find.byIcon(Icons.crop), findsNothing);
+      expect(find.byIcon(Icons.edit), findsNothing);
     });
 
     // ================================================================
