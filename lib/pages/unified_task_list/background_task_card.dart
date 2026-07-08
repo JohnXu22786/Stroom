@@ -9,9 +9,10 @@ import 'task_utils.dart';
 // 后台任务卡片（OCR / ASR / 音频分离）
 // 使用步骤链（连接 → 上传 → 处理 → 接收 → 保存）替代结果文字显示
 // 完成后显示"打开文件"按钮（类似下载任务）
+// 详细信息始终展开显示，不再折叠
 // =============================================================================
 
-class BackgroundTaskCard extends ConsumerStatefulWidget {
+class BackgroundTaskCard extends ConsumerWidget {
   final BackgroundTask task;
   final bool isUnread;
 
@@ -22,32 +23,8 @@ class BackgroundTaskCard extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<BackgroundTaskCard> createState() => _BackgroundTaskCardState();
-}
-
-class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
-  bool _expanded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _expanded = widget.task.status == TaskStatus.running;
-  }
-
-  @override
-  void didUpdateWidget(covariant BackgroundTaskCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.task.status == TaskStatus.running &&
-        oldWidget.task.status != TaskStatus.running) {
-      setState(() => _expanded = true);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final task = widget.task;
+  Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
-
     final statusColor = _statusColor(task.status);
     final statusIcon = _statusIcon(task.status);
 
@@ -59,98 +36,86 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         side: BorderSide(color: colorScheme.outlineVariant, width: 0.5),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () => setState(() => _expanded = !_expanded),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  if (widget.isUnread)
-                    Container(
-                      width: 6,
-                      height: 6,
-                      margin: const EdgeInsets.only(right: 4),
-                      decoration: BoxDecoration(
-                        color: colorScheme.primary,
-                        shape: BoxShape.circle,
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                if (isUnread)
+                  Container(
+                    width: 6,
+                    height: 6,
+                    margin: const EdgeInsets.only(right: 4),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                _buildStatusIcon(task.status, colorScheme),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          _taskTypeBadge(task.type, colorScheme),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              task.title,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  _buildStatusIcon(task.status, colorScheme),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            _taskTypeBadge(task.type, colorScheme),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                task.title,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          _buildStatusChip(task.status),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${formatRelativeTime(task.createdAt)}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[500],
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            _buildStatusChip(task.status),
-                            const SizedBox(width: 8),
-                            Text(
-                              '${formatRelativeTime(task.createdAt)}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[500],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  Icon(statusIcon, color: statusColor, size: 28),
-                  const SizedBox(width: 4),
-                  AnimatedRotation(
-                    turns: _expanded ? 0.5 : 0.0,
-                    duration: const Duration(milliseconds: 200),
-                    child: Icon(
-                      Icons.expand_more,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                Icon(statusIcon, color: statusColor, size: 28),
+              ],
             ),
           ),
-          if (_expanded) ...[
-            const Divider(height: 1, indent: 12, endIndent: 12),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: _buildExpandedContent(task, colorScheme),
-            ),
-          ],
+
+          // ── Always-expanded detail section ──
+          const Divider(height: 1, indent: 12, endIndent: 12),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: _buildDetailContent(task, colorScheme, ref),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildExpandedContent(BackgroundTask task, ColorScheme cs) {
+  Widget _buildDetailContent(BackgroundTask task, ColorScheme cs, WidgetRef ref) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Type and time info
+        // Type and time info (always shown as grey text, no ellipsis)
         _buildInfoRow(cs, Icons.category_outlined, '任务类型', task.type.label),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         _buildInfoRow(
           cs,
           Icons.access_time,
@@ -158,7 +123,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
           formatRelativeTime(task.createdAt),
         ),
         if (task.completedAt != null) ...[
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           _buildInfoRow(
             cs,
             Icons.check_circle_outline,
@@ -167,7 +132,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
           ),
         ],
 
-        // Step chain timeline (replaces old result text display)
+        // Step chain timeline — always visible
         const SizedBox(height: 10),
         _buildStepTimeline(task, cs),
 
@@ -219,7 +184,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
 
         // Action buttons
         const SizedBox(height: 12),
-        _buildActionButtons(task, cs),
+        _buildActionButtons(task, cs, ref),
       ],
     );
   }
@@ -229,10 +194,13 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
 
     if (steps.isEmpty) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Text(
           '等待开始...',
-          style: TextStyle(color: colorScheme.onSurfaceVariant),
+          style: TextStyle(
+            fontSize: 12,
+            color: colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -276,30 +244,41 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                 Expanded(
                   child: Padding(
                     padding: EdgeInsets.only(bottom: isLast ? 0 : 12),
-                    child: Text(
-                      step.label,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: step.completed
-                            ? Colors.green.shade700
-                            : step.skipped
-                                ? Colors.orange.shade700
-                                : step.running
-                                    ? colorScheme.primary
-                                    : step.failed
-                                        ? Colors.red.shade700
-                                        : colorScheme.onSurface,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          step.label,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: step.completed
+                                ? Colors.green.shade700
+                                : step.skipped
+                                    ? Colors.orange.shade700
+                                    : step.running
+                                        ? colorScheme.primary
+                                        : step.failed
+                                            ? Colors.red.shade700
+                                            : colorScheme.onSurface,
+                          ),
+                        ),
+                        // Show step error detail directly (no folding)
+                        if (step.failed && step.error != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            step.error!,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.red.shade400,
+                              height: 1.3,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ),
-                if (step.failed && step.error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: Icon(Icons.error_outline,
-                        size: 14, color: Colors.red.shade400),
-                  ),
               ],
             ),
           );
@@ -345,6 +324,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
     String value,
   ) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(icon, size: 14, color: cs.onSurfaceVariant),
         const SizedBox(width: 6),
@@ -360,18 +340,18 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
           child: Text(
             value,
             style: TextStyle(fontSize: 12, color: cs.onSurface),
-            overflow: TextOverflow.ellipsis,
+            // No overflow/ellipsis — show full text
           ),
         ),
       ],
     );
   }
 
-  Widget _buildActionButtons(BackgroundTask task, ColorScheme cs) {
+  Widget _buildActionButtons(BackgroundTask task, ColorScheme cs, WidgetRef ref) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        // Open file button for completed tasks (like CatCatch downloads)
+        // Open file button for completed tasks
         if (task.status == TaskStatus.completed &&
             task.downloadedFilePath != null)
           _actionButton(
@@ -447,6 +427,10 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
       ),
     );
   }
+
+  // ===========================================================================
+  // Stateless helpers
+  // ===========================================================================
 
   static Color _statusColor(TaskStatus status) {
     switch (status) {
