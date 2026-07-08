@@ -15,6 +15,7 @@ import 'pages/settings_page.dart';
 import 'providers/theme_provider.dart';
 import 'providers/update_provider.dart';
 import 'providers/notification_provider.dart';
+import 'services/auto_backup_service.dart';
 import 'services/notification_service.dart';
 import 'widgets/update_dialog.dart';
 
@@ -105,6 +106,16 @@ class _ApplicationState extends ConsumerState<Application>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // 如果应用进入后台/暂停状态，且后台备份正在运行，则取消备份
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      if (AutoBackupService.isRunning) {
+        debugPrint('[Application] 应用进入后台，取消正在运行的自动备份');
+        AutoBackupService.cancel();
+      }
+      return;
+    }
+
     if (state != AppLifecycleState.resumed) return;
     if (!isPendingRestartInMemory) return;
 

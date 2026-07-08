@@ -336,8 +336,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '如果数据丢失，可以在此路径下找到自动备份的文件夹（格式：backup_YYYY-MM-DDTHH-MM-SS），'
-                    '其中包含 preferences.json（配置数据）。超过2天的自动备份会被自动清理。',
+                    '应用在版本迁移或每次启动后会在此目录下自动创建完整数据备份（格式：backup_YYYY-MM-DDTHH-MM-SS.zip）。'
+                    '备份目录至少保留 3 个最新的备份文件，超出部分自动清理。',
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.grey.shade500,

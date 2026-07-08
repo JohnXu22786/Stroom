@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'home_shared.dart';
 
 import '../main.dart' as main_lib;
+import '../services/auto_backup_service.dart';
 import 'assistant_selection_page.dart';
 import 'files_page_shared.dart';
 import 'topic_selection_page.dart';
@@ -42,9 +44,27 @@ class HomePage extends ConsumerStatefulWidget {
 class _HomePageState extends ConsumerState<HomePage> {
   final _chatNavigatorKey = GlobalKey<NavigatorState>();
 
+  bool _autoBackupTriggered = false;
+
   @override
   void initState() {
     super.initState();
+    // 在主页构建完成后触发一次后台自动备份
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _triggerAutoBackup();
+    });
+  }
+
+  /// 触发后台自动备份（仅在非 Web 平台、非测试环境下执行一次）。
+  Future<void> _triggerAutoBackup() async {
+    if (_autoBackupTriggered) return;
+    if (kIsWeb) return;
+    _autoBackupTriggered = true;
+
+    // 以最小占用在后台执行备份，不阻塞前台操作
+    AutoBackupService.performAutoBackup().then((success) {
+      debugPrint('[HomePage] 自动后台备份${success ? '完成' : '未完成（可能已在运行或被取消）'}');
+    });
   }
 
   @override
