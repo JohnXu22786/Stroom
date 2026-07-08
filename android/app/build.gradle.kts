@@ -42,6 +42,11 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+
+        ndk {
+            abiFilters.clear()
+            abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a"))
+        }
     }
 
     signingConfigs {
@@ -64,6 +69,13 @@ android {
             }
         }
         release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+
             val hasStore = signingConfigs.getByName("release").storeFile != null
             if (hasStore) {
                 signingConfig = signingConfigs.getByName("release")
