@@ -48,6 +48,11 @@ class AutoBackupService {
   /// 创建包含所有应用数据的完整 ZIP 备份到 StroomBackups 目录。
   /// 备份完成后自动清理旧备份（保留至少 3 个）。
   ///
+  /// 使用原子写入模式：
+  /// 1. 先写入到 .tmp 临时文件
+  /// 2. 成功后重命名为 .zip
+  /// 3. 如果过程中被取消或进程终止，.tmp 文件会在下次备份时被清理
+  ///
   /// [isPreMigration] 标记是否为迁移前备份（仅用于日志区分）。
   ///
   /// 返回 `true` 表示备份成功，`false` 表示备份失败或被取消。
@@ -78,7 +83,14 @@ class AutoBackupService {
         await backupDir.create(recursive: true);
       }
 
+      // 清理上次中断备份残留的 .tmp 文件
+      await _cleanupTmpFiles(backupRoot);
+      // 让出事件循环，避免清理操作影响主页面首次帧渲染
+      await _yieldToEventLoop();
+
       final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+      // 先使用 .tmp 扩展名写入，原子重命名防止进程终止导致损坏的 .zip 留存
+      final tmpPath = p.join(backupRoot, 'backup_$timestamp.tmp');
       final zipPath = p.join(backupRoot, 'backup_$timestamp.zip');
 
       if (_cancelRequested) return false;
@@ -87,18 +99,24 @@ class AutoBackupService {
       debugPrint('[AutoBackupService] 开始 $backupType 备份到 $zipPath');
 
       await BackupService.createBackup(
-        outputPath: zipPath,
+        outputPath: tmpPath,
         isCancelled: () => _cancelRequested,
       );
 
       if (_cancelRequested) {
-        // 如果文件已部分写入，删除不完整的备份文件
-        final zipFile = File(zipPath);
-        if (await zipFile.exists()) {
-          await zipFile.delete();
+        // 删除不完整的临时文件
+        final tmpFile = File(tmpPath);
+        if (await tmpFile.exists()) {
+          await tmpFile.delete();
         }
         debugPrint('[AutoBackupService] 备份被取消');
         return false;
+      }
+
+      // 原子重命名：.tmp → .zip
+      final tmpFile = File(tmpPath);
+      if (await tmpFile.exists()) {
+        await tmpFile.rename(zipPath);
       }
 
       // 清理旧备份
@@ -115,6 +133,33 @@ class AutoBackupService {
     } finally {
       _isRunning = false;
       _cancelRequested = false;
+    }
+  }
+
+  /// 让出事件循环，确保 UI 可以处理帧渲染。
+  static Future<void> _yieldToEventLoop() {
+    return Future<void>.delayed(const Duration(milliseconds: 1));
+  }
+
+  /// 清理备份目录中的 .tmp 临时文件（上次中断备份留下的残留）。
+  static Future<void> _cleanupTmpFiles(String backupRoot) async {
+    try {
+      final dir = Directory(backupRoot);
+      if (!await dir.exists()) return;
+
+      final entries = await dir.list().toList();
+      for (final entry in entries) {
+        if (entry is File && entry.path.endsWith('.tmp')) {
+          try {
+            await entry.delete();
+            debugPrint('[AutoBackupService] 清理残留临时文件: ${entry.path}');
+          } catch (e) {
+            debugPrint('[AutoBackupService] 清理临时文件失败 ${entry.path}: $e');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[AutoBackupService] 清理临时文件失败: $e');
     }
   }
 

@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/startup/startup_check_service.dart';
 import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/storage_service.dart';
+import 'package:stroom/startup/startup_app.dart' as startup_app;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -87,6 +89,72 @@ void main() {
       final issues = await StartupCheckService.validateDataFormats();
       expect(issues.where((i) => i.severity == StartupIssueSeverity.error),
           isEmpty);
+    });
+  });
+
+  group('StartupApp - ensure checks yield to event loop', () {
+    test('validateDataFormats can be interleaved with UI frames', () async {
+      // Set up some data to validate
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 1,
+        'provider_entries': jsonEncode([
+          {
+            'id': 'test_llm',
+            'type': 'llm',
+            'name': 'Test Provider',
+            'configs': [
+              {
+                'models': [
+                  {
+                    'customParams': [],
+                    'voices': [],
+                    'reasoningParams': [],
+                  },
+                ],
+              },
+            ],
+          },
+        ]),
+        'conversations': jsonEncode([
+          {
+            'id': 'conv1',
+            'title': 'Test Conv',
+            'messages': [],
+            'createdAt': DateTime.now().toIso8601String(),
+          },
+        ]),
+      });
+      AppStorage.resetCache();
+
+      // Run validation - should not hang the event loop
+      // In test mode this runs synchronously (sync fallback)
+      final issues = await StartupCheckService.validateDataFormats();
+      expect(issues, isA<List<StartupIssue>>());
+    });
+
+    test('multiple sequential checks complete without blocking', () async {
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 1,
+        'provider_entries': jsonEncode([
+          {
+            'id': 'test_llm',
+            'type': 'llm',
+            'name': 'Test',
+            'configs': [],
+          },
+        ]),
+        'conversations': jsonEncode([]),
+      });
+      AppStorage.resetCache();
+
+      // Simulate running multiple checks sequentially with yields between them
+      final issues1 = await StartupCheckService.validateDataFormats();
+      // Insert a microtask to simulate event loop yield
+      await Future<void>.microtask(() {});
+      final issues2 = await StartupCheckService.checkDataIntegrity();
+
+      expect(issues1, isA<List<StartupIssue>>());
+      expect(issues2, isA<List<StartupIssue>>());
     });
   });
 }

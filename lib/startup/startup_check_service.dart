@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -97,7 +99,50 @@ class StartupCheckService {
   }
 
   // ================================================================
-  // 2. 数据格式验证
+  // 是否在测试环境中运行
+  // ================================================================
+
+  /// 检测是否在 Flutter 测试环境中运行。
+  /// 测试环境不支持 Isolate.run，需要回退到同步执行。
+  static bool _inTestMode() {
+    try {
+      return Platform.environment['FLUTTER_TEST'] == 'true';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ================================================================
+  // 可序列化的中间结果（用于 Isolate 通信）
+  // ================================================================
+
+  /// Isolate 间传递的可序列化检查结果。
+  @pragma('vm:entry-point')
+  static Map<String, String?> _makeIssueMap(
+      String message, String severity, String? dataKey) {
+    return {
+      'message': message,
+      'severity': severity,
+      'dataKey': dataKey,
+    };
+  }
+
+  /// 从可序列化 Map 转换为 [StartupIssue]。
+  static StartupIssue _issueFromMap(Map<String, String?> map) {
+    final sev = map['severity'] ?? 'info';
+    return StartupIssue(
+      message: map['message'] ?? '',
+      severity: sev == 'error'
+          ? StartupIssueSeverity.error
+          : sev == 'warning'
+              ? StartupIssueSeverity.warning
+              : StartupIssueSeverity.info,
+      dataKey: map['dataKey'],
+    );
+  }
+
+  // ================================================================
+  // 2. 数据格式验证（后台 Isolate 执行）
   // ================================================================
 
   /// 验证所有关键数据的 JSON 结构和字段完整性。
@@ -105,114 +150,130 @@ class StartupCheckService {
   /// 检查范围包括：
   /// - provider_entries: 确保是合法列表，每个条目有非空 id/type/name
   /// - conversations: 确保是合法列表，每个会话有 id/messages 字段
+  ///
+  /// CPU 密集的 JSON 解析工作会在后台 Isolate 中执行，
+  /// 避免阻塞主 UI 线程导致页面顿住。测试环境下回退到同步执行。
   static Future<List<StartupIssue>> validateDataFormats() async {
-    final issues = <StartupIssue>[];
     final prefs = await SharedPreferences.getInstance();
+    final providerEntriesJson = prefs.getString('provider_entries');
+    final conversationsJson = prefs.getString('conversations');
 
-    await _validateProviderEntries(prefs, issues);
-    await _validateConversations(prefs, issues);
+    // 在测试环境下回退到同步执行（Isolate 在 FakeAsync 中不可用）
+    if (_inTestMode()) {
+      return _validateDataFormatsSync(providerEntriesJson, conversationsJson);
+    }
+
+    // 生产环境：在后台 Isolate 中执行 CPU 密集的 JSON 解析和验证
+    try {
+      final resultMaps = await Isolate.run(() {
+        return _validateDataFormatsSync(providerEntriesJson, conversationsJson);
+      });
+      return resultMaps;
+    } catch (e) {
+      debugPrint('[StartupCheckService] Isolate validation failed: $e');
+      // Isolate 不可用时（如部分受限环境），回退到同步执行
+      return _validateDataFormatsSync(providerEntriesJson, conversationsJson);
+    }
+  }
+
+  /// 数据格式验证的同步实现（可在 Isolate 中执行或测试环境使用）。
+  @pragma('vm:entry-point')
+  static List<StartupIssue> _validateDataFormatsSync(
+      String? providerEntriesJson, String? conversationsJson) {
+    final issues = <StartupIssue>[];
+
+    _validateProviderEntriesSync(providerEntriesJson, issues);
+    _validateConversationsSync(conversationsJson, issues);
 
     return issues;
   }
 
   /// 验证 provider_entries 的 JSON 格式和字段完整性。
-  static Future<void> _validateProviderEntries(
-    SharedPreferences prefs,
+  static void _validateProviderEntriesSync(
+    String? json,
     List<StartupIssue> issues,
-  ) async {
-    try {
-      final json = prefs.getString('provider_entries');
-      if (json == null || json.isEmpty) return;
+  ) {
+    if (json == null || json.isEmpty) return;
 
-      List<dynamic> list;
-      try {
-        list = jsonDecode(json) as List<dynamic>;
-      } catch (_) {
-        issues.add(const StartupIssue(
-          message: 'provider_entries 数据格式错误：不是合法的 JSON 数组',
+    List<dynamic> list;
+    try {
+      list = jsonDecode(json) as List<dynamic>;
+    } catch (_) {
+      issues.add(const StartupIssue(
+        message: 'provider_entries 数据格式错误：不是合法的 JSON 数组',
+        severity: StartupIssueSeverity.error,
+        dataKey: 'provider_entries',
+      ));
+      return;
+    }
+
+    for (int i = 0; i < list.length; i++) {
+      // 兜底：跳过非 Map 条目，避免 `as Map` 类型转换闪退
+      if (list[i] is! Map<String, dynamic>) {
+        issues.add(StartupIssue(
+          message: 'provider_entries[$i]: 条目为 null 或类型无效',
           severity: StartupIssueSeverity.error,
           dataKey: 'provider_entries',
         ));
-        return;
+        continue;
+      }
+      final entry = list[i] as Map<String, dynamic>;
+
+      if (entry['id'] == null || (entry['id'] as String?)?.isEmpty == true) {
+        issues.add(StartupIssue(
+          message: 'provider_entries[$i]: id 字段缺失或为空',
+          severity: StartupIssueSeverity.error,
+          dataKey: 'provider_entries',
+        ));
       }
 
-      for (int i = 0; i < list.length; i++) {
-        // 兜底：跳过非 Map 条目，避免 `as Map` 类型转换闪退
-        if (list[i] is! Map<String, dynamic>) {
-          issues.add(StartupIssue(
-            message: 'provider_entries[$i]: 条目为 null 或类型无效',
-            severity: StartupIssueSeverity.error,
-            dataKey: 'provider_entries',
-          ));
-          continue;
-        }
-        final entry = list[i] as Map<String, dynamic>;
+      if (entry['type'] == null ||
+          (entry['type'] as String?)?.isEmpty == true) {
+        issues.add(StartupIssue(
+          message: 'provider_entries[$i]: type 字段缺失或为空',
+          severity: StartupIssueSeverity.warning,
+          dataKey: 'provider_entries',
+        ));
+      }
 
-        if (entry['id'] == null || (entry['id'] as String?)?.isEmpty == true) {
-          issues.add(StartupIssue(
-            message: 'provider_entries[$i]: id 字段缺失或为空',
-            severity: StartupIssueSeverity.error,
-            dataKey: 'provider_entries',
-          ));
-        }
+      if (entry['name'] == null ||
+          (entry['name'] as String?)?.isEmpty == true) {
+        issues.add(StartupIssue(
+          message: 'provider_entries[$i]: name 字段缺失或为空',
+          severity: StartupIssueSeverity.warning,
+          dataKey: 'provider_entries',
+        ));
+      }
 
-        if (entry['type'] == null ||
-            (entry['type'] as String?)?.isEmpty == true) {
-          issues.add(StartupIssue(
-            message: 'provider_entries[$i]: type 字段缺失或为空',
-            severity: StartupIssueSeverity.warning,
-            dataKey: 'provider_entries',
-          ));
-        }
-
-        if (entry['name'] == null ||
-            (entry['name'] as String?)?.isEmpty == true) {
-          issues.add(StartupIssue(
-            message: 'provider_entries[$i]: name 字段缺失或为空',
-            severity: StartupIssueSeverity.warning,
-            dataKey: 'provider_entries',
-          ));
-        }
-
-        // ================================================================
-        // 验证嵌套列表内容 — 检查 configs/models/customParams/voices/
-        // reasoningParams 中是否包含非 Map 条目（这些会导致 ProviderEntry
-        // 解析时 `as Map` 闪退）。
-        // ================================================================
-        _validateNestedList(entry, 'configs', i, issues);
-        final configs = entry['configs'] as List?;
-        if (configs != null) {
-          for (int ci = 0; ci < configs.length; ci++) {
-            if (configs[ci] is! Map<String, dynamic>) continue;
-            final config = configs[ci] as Map<String, dynamic>;
-            _validateNestedList(config, 'models', i, issues);
-            final models = config['models'] as List?;
-            if (models != null) {
-              for (int mi = 0; mi < models.length; mi++) {
-                if (models[mi] is! Map<String, dynamic>) continue;
-                final model = models[mi] as Map<String, dynamic>;
-                _validateNestedList(model, 'customParams', i, issues);
-                _validateNestedList(model, 'voices', i, issues);
-                _validateNestedList(model, 'reasoningParams', i, issues);
-              }
+      // ================================================================
+      // 验证嵌套列表内容 — 检查 configs/models/customParams/voices/
+      // reasoningParams 中是否包含非 Map 条目（这些会导致 ProviderEntry
+      // 解析时 `as Map` 闪退）。
+      // ================================================================
+      _validateNestedListSync(entry, 'configs', i, issues);
+      final configs = entry['configs'] as List?;
+      if (configs != null) {
+        for (int ci = 0; ci < configs.length; ci++) {
+          if (configs[ci] is! Map<String, dynamic>) continue;
+          final config = configs[ci] as Map<String, dynamic>;
+          _validateNestedListSync(config, 'models', i, issues);
+          final models = config['models'] as List?;
+          if (models != null) {
+            for (int mi = 0; mi < models.length; mi++) {
+              if (models[mi] is! Map<String, dynamic>) continue;
+              final model = models[mi] as Map<String, dynamic>;
+              _validateNestedListSync(model, 'customParams', i, issues);
+              _validateNestedListSync(model, 'voices', i, issues);
+              _validateNestedListSync(model, 'reasoningParams', i, issues);
             }
           }
         }
       }
-    } catch (e) {
-      issues.add(StartupIssue(
-        message: '验证 provider_entries 时出错: $e',
-        severity: StartupIssueSeverity.error,
-        dataKey: 'provider_entries',
-      ));
     }
   }
 
   /// 验证嵌套列表中是否包含非 Map 条目。
-  ///
-  /// 如果 [fieldName] 对应的值是列表但包含非 Map 条目，则报告错误。
-  /// 这些非 Map 条目会在 ProviderEntry/ModelConfig 解析时导致 `as Map` 闪退。
-  static void _validateNestedList(
+  static void _validateNestedListSync(
     Map<String, dynamic> parent,
     String fieldName,
     int entryIndex,
@@ -233,95 +294,100 @@ class StartupCheckService {
   }
 
   /// 验证 conversations 的 JSON 格式和字段完整性。
-  static Future<void> _validateConversations(
-    SharedPreferences prefs,
+  static void _validateConversationsSync(
+    String? json,
     List<StartupIssue> issues,
-  ) async {
+  ) {
+    if (json == null || json.isEmpty) return;
+
+    List<dynamic> list;
     try {
-      final json = prefs.getString('conversations');
-      if (json == null || json.isEmpty) return;
-
-      List<dynamic> list;
-      try {
-        list = jsonDecode(json) as List<dynamic>;
-      } catch (_) {
-        issues.add(const StartupIssue(
-          message: 'conversations 数据格式错误：不是合法的 JSON 数组',
-          severity: StartupIssueSeverity.error,
-          dataKey: 'conversations',
-        ));
-        return;
-      }
-
-      for (int i = 0; i < list.length; i++) {
-        // 兜底：跳过非 Map 条目，避免 `as Map` 类型转换闪退
-        if (list[i] is! Map<String, dynamic>) {
-          issues.add(StartupIssue(
-            message: 'conversations[$i]: 会话为 null 或类型无效',
-            severity: StartupIssueSeverity.error,
-            dataKey: 'conversations',
-          ));
-          continue;
-        }
-        final conv = list[i] as Map<String, dynamic>;
-
-        if (conv['id'] == null || (conv['id'] as String?)?.isEmpty == true) {
-          issues.add(StartupIssue(
-            message: 'conversations[$i]: id 字段缺失',
-            severity: StartupIssueSeverity.error,
-            dataKey: 'conversations',
-          ));
-        }
-
-        if (conv['messages'] == null) {
-          issues.add(StartupIssue(
-            message: 'conversations[$i]: messages 字段缺失',
-            severity: StartupIssueSeverity.warning,
-            dataKey: 'conversations',
-          ));
-        }
-      }
-    } catch (e) {
-      issues.add(StartupIssue(
-        message: '验证 conversations 时出错: $e',
+      list = jsonDecode(json) as List<dynamic>;
+    } catch (_) {
+      issues.add(const StartupIssue(
+        message: 'conversations 数据格式错误：不是合法的 JSON 数组',
         severity: StartupIssueSeverity.error,
         dataKey: 'conversations',
       ));
+      return;
+    }
+
+    for (int i = 0; i < list.length; i++) {
+      // 兜底：跳过非 Map 条目，避免 `as Map` 类型转换闪退
+      if (list[i] is! Map<String, dynamic>) {
+        issues.add(StartupIssue(
+          message: 'conversations[$i]: 会话为 null 或类型无效',
+          severity: StartupIssueSeverity.error,
+          dataKey: 'conversations',
+        ));
+        continue;
+      }
+      final conv = list[i] as Map<String, dynamic>;
+
+      if (conv['id'] == null || (conv['id'] as String?)?.isEmpty == true) {
+        issues.add(StartupIssue(
+          message: 'conversations[$i]: id 字段缺失',
+          severity: StartupIssueSeverity.error,
+          dataKey: 'conversations',
+        ));
+      }
+
+      if (conv['messages'] == null) {
+        issues.add(StartupIssue(
+          message: 'conversations[$i]: messages 字段缺失',
+          severity: StartupIssueSeverity.warning,
+          dataKey: 'conversations',
+        ));
+      }
     }
   }
 
   // ================================================================
-  // 3. 数据完整性检查
+  // 3. 数据完整性检查（后台 Isolate 执行）
   // ================================================================
 
   /// 检查数据一致性和完整性。
   ///
   /// 当前检查项：
   /// - provider_entries 中引用的类型是否在已知类型列表中
+  ///
+  /// CPU 密集的 JSON 解析工作在后台 Isolate 中执行，
+  /// 避免阻塞主 UI 线程。
   static Future<List<StartupIssue>> checkDataIntegrity() async {
-    final issues = <StartupIssue>[];
     final prefs = await SharedPreferences.getInstance();
+    final providerEntriesJson = prefs.getString('provider_entries');
 
-    await _checkProviderTypeRegistration(prefs, issues);
+    // 在测试环境下回退到同步执行
+    if (_inTestMode()) {
+      return _checkDataIntegritySync(providerEntriesJson);
+    }
 
-    return issues;
+    // 生产环境：在后台 Isolate 中执行
+    try {
+      final resultMaps = await Isolate.run(() {
+        return _checkDataIntegritySync(providerEntriesJson);
+      });
+      return resultMaps;
+    } catch (e) {
+      debugPrint('[StartupCheckService] Isolate check failed: $e');
+      return _checkDataIntegritySync(providerEntriesJson);
+    }
   }
 
-  /// 检查 provider_entries 中所有条目的 type 是否已知。
-  static Future<void> _checkProviderTypeRegistration(
-    SharedPreferences prefs,
-    List<StartupIssue> issues,
-  ) async {
-    try {
-      final json = prefs.getString('provider_entries');
-      if (json == null || json.isEmpty) return;
+  /// 数据完整性检查的同步实现（可在 Isolate 中或测试环境使用）。
+  @pragma('vm:entry-point')
+  static List<StartupIssue> _checkDataIntegritySync(
+      String? providerEntriesJson) {
+    final issues = <StartupIssue>[];
+    if (providerEntriesJson == null || providerEntriesJson.isEmpty) {
+      return issues;
+    }
 
-      final list = jsonDecode(json) as List<dynamic>;
+    try {
+      final list = jsonDecode(providerEntriesJson) as List<dynamic>;
       for (int i = 0; i < list.length; i++) {
-        // 兜底：跳过非 Map 条目，避免 `as Map<String, dynamic>` 闪退
+        // 兜底：跳过非 Map 条目
         if (list[i] is! Map<String, dynamic>) {
-          debugPrint(
-              '[StartupCheckService] Skipping non-Map entry at index $i in type registration check');
           continue;
         }
         final entry = list[i] as Map<String, dynamic>;
@@ -338,6 +404,7 @@ class StartupCheckService {
     } catch (e) {
       debugPrint('[StartupCheckService] Failed to check provider types: $e');
     }
+    return issues;
   }
 
   /// 检查类型是否在已知的供应商类型列表中。

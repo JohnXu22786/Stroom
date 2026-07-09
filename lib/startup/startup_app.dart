@@ -82,16 +82,13 @@ class _StartupAppState extends State<StartupApp>
   }
 
   /// Runs all startup checks, ensuring a minimum 1-second display.
+  /// Each check is separated by an event-loop yield so the UI never freezes.
   Future<void> _runStartupSequence() async {
     final stopwatch = Stopwatch()..start();
 
     try {
       // ---------------------------------------------------------------
       // 清除"更新后重启"标记
-      // ---------------------------------------------------------------
-      // 如果 SharedPreferences 中存在 pending_update_restart 标记，
-      // 说明应用是在 APK 安装/更新后被系统重新启动的（冷启动）。
-      // 清除此标记，确保后续启动路径一致，避免标记残留。
       // ---------------------------------------------------------------
       try {
         if (await hasPendingUpdateRestart()) {
@@ -100,18 +97,24 @@ class _StartupAppState extends State<StartupApp>
           await clearPendingUpdateRestart();
         }
       } catch (_) {}
-      // In-memory flag is always clear on cold start, no action needed.
 
-      // Update status as we go
+      // 让出事件循环，确保启动页的动画能先渲染一帧
+      await Future<void>.delayed(Duration.zero);
+
+      // Update status as we go — each call yields to the event loop
       await _updateStatus('正在检查数据格式版本...', '1/4');
       final migrationResult = await StartupCheckService.checkFormatVersion();
+      // 让出事件循环，避免顿住
+      await Future<void>.delayed(Duration.zero);
       final didMigration = migrationResult.needsMigration;
 
       await _updateStatus('正在验证数据格式...', '2/4');
       final formatIssues = await StartupCheckService.validateDataFormats();
+      await Future<void>.delayed(Duration.zero);
 
       await _updateStatus('正在检查数据完整性...', '3/4');
       final integrityIssues = await StartupCheckService.checkDataIntegrity();
+      await Future<void>.delayed(Duration.zero);
 
       await _updateStatus('正在准备应用...', '4/4');
 
@@ -149,10 +152,15 @@ class _StartupAppState extends State<StartupApp>
       if (didMigration) {
         await _showRestartDialog();
       } else {
-        // Start fade-out animation before transitioning to main app
+        // Before fading, ensure the main app is rendered underneath
+        // by setting _isFadingOut = true (which triggers Stack layout).
+        // The splash remains on top and fades via opacity.
         setState(() {
           _isFadingOut = true;
         });
+        // Let the frame render so the main app appears underneath
+        await Future<void>.delayed(Duration.zero);
+        if (!mounted) return;
         _fadeController.forward();
       }
     } catch (e) {
@@ -168,6 +176,8 @@ class _StartupAppState extends State<StartupApp>
       setState(() {
         _isFadingOut = true;
       });
+      await Future<void>.delayed(Duration.zero);
+      if (!mounted) return;
       _fadeController.forward();
     }
   }
@@ -179,8 +189,8 @@ class _StartupAppState extends State<StartupApp>
       _statusMessage = message;
       _progressDetail = detail;
     });
-    // Small delay so the user can see each status update
-    await Future.delayed(const Duration(milliseconds: 400));
+    // 让出事件循环，让 UI 有时间渲染更新（无需额外延迟）
+    await Future<void>.delayed(Duration.zero);
   }
 
   /// Shows a dialog indicating that migration was performed and the
@@ -238,41 +248,64 @@ class _StartupAppState extends State<StartupApp>
 
   @override
   Widget build(BuildContext context) {
-    // When startup checks are complete and fade-out is done,
-    // show the main application
+    // Phase 3: 启动完成 — 仅显示主应用
     if (_checkingComplete) {
-      // Use a key to force rebuild the Application widget fresh
-      // Wrap with an error boundary so that if the Application widget's
-      // provider initialization crashes due to residual data format issues,
-      // the app shows a recoverable error instead of crashing entirely.
       return const _AppErrorBoundary(
         key: ValueKey('app_error_boundary'),
         child: Application(key: ValueKey('app_ready')),
       );
     }
 
-    // Wrap the startup page with fade-out animation
-    return AnimatedBuilder(
-      animation: _fadeAnimation,
-      builder: (context, child) {
-        return Opacity(
-          opacity: _isFadingOut ? _fadeAnimation.value : 1.0,
-          child: child,
-        );
-      },
-      child: MaterialApp(
-        title: 'Stroom',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        ),
-        home: StartupPage(
-          isWorking: _isWorking,
-          statusMessage: _statusMessage,
-          progressDetail: _progressDetail,
-          migrationPerformed: _migrationPerformed,
-        ),
+    // Phase 2: 渐出中 — 主应用渲染在底层，启动页在最上层通过透明度渐出
+    if (_isFadingOut) {
+      return Stack(
+        children: [
+          // 底层：主应用（已渲染完成，通过相同 key 保持状态）
+          const _AppErrorBoundary(
+            key: ValueKey('app_fade_boundary'),
+            child: Application(key: ValueKey('app_ready')),
+          ),
+          // 顶层：启动页渐出
+          AnimatedBuilder(
+            animation: _fadeAnimation,
+            builder: (context, child) {
+              return Opacity(
+                opacity: _fadeAnimation.value,
+                child: child,
+              );
+            },
+            child: MaterialApp(
+              title: 'Stroom',
+              debugShowCheckedModeBanner: false,
+              theme: ThemeData(
+                useMaterial3: true,
+                colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+              ),
+              home: StartupPage(
+                isWorking: _isWorking,
+                statusMessage: _statusMessage,
+                progressDetail: _progressDetail,
+                migrationPerformed: _migrationPerformed,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Phase 1: 渐出前 — 仅显示启动页
+    return MaterialApp(
+      title: 'Stroom',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+      ),
+      home: StartupPage(
+        isWorking: _isWorking,
+        statusMessage: _statusMessage,
+        progressDetail: _progressDetail,
+        migrationPerformed: _migrationPerformed,
       ),
     );
   }
