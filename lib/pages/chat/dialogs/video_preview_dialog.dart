@@ -92,8 +92,7 @@ class _VideoPreviewDialogState extends State<VideoPreviewDialog> {
                 children: [
                   Icon(Icons.error_outline, color: Colors.white38, size: 48),
                   SizedBox(height: 12),
-                  Text('视频加载失败',
-                      style: TextStyle(color: Colors.white70)),
+                  Text('视频加载失败', style: TextStyle(color: Colors.white70)),
                 ],
               ),
             )
