@@ -273,7 +273,34 @@ void main() {
 
     // ==================== Discard ====================
 
-    testWidgets('discard reverts to view mode preserving original content',
+    testWidgets('close button is enabled in edit mode when no changes',
+        (tester) async {
+      await enterEditMode(tester);
+
+      // Close button should be enabled even when no changes have been made
+      final closeButtonFinder = find.ancestor(
+        of: find.byIcon(Icons.close),
+        matching: find.byType(IconButton),
+      );
+      final closeButton = tester.widget<IconButton>(closeButtonFinder);
+      expect(closeButton.onPressed, isNotNull);
+    });
+
+    testWidgets('close button discards directly when no changes made',
+        (tester) async {
+      await enterEditMode(tester);
+
+      // No modifications made - tap close (Icons.close)
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+
+      // Should be back in view mode without confirmation dialog
+      expect(find.byIcon(Icons.edit), findsOneWidget);
+      expect(find.text('放弃编辑？'), findsNothing);
+    });
+
+    testWidgets(
+        'close button shows confirmation dialog when changes have been made and "放弃" discards',
         (tester) async {
       await enterEditMode(tester);
 
@@ -287,6 +314,16 @@ void main() {
       await tester.tap(find.byIcon(Icons.close));
       await tester.pumpAndSettle();
 
+      // Confirmation dialog should appear
+      expect(find.text('放弃编辑？'), findsOneWidget);
+      expect(find.text('你有未保存的更改，确定要放弃吗？'), findsOneWidget);
+      expect(find.text('取消'), findsOneWidget);
+      expect(find.text('放弃'), findsOneWidget);
+
+      // Tap "放弃" to confirm discarding
+      await tester.tap(find.text('放弃'));
+      await tester.pumpAndSettle();
+
       // Should be back in view mode with the edit icon
       expect(find.byIcon(Icons.edit), findsOneWidget);
       expect(find.byIcon(Icons.save), findsNothing);
@@ -295,6 +332,34 @@ void main() {
       // Original content should be preserved (not the modified one)
       expect(find.text(testContent), findsOneWidget);
       expect(find.text('Modified content'), findsNothing);
+    });
+
+    testWidgets(
+        'close button dialog "取消" dismisses dialog and stays in edit mode',
+        (tester) async {
+      await enterEditMode(tester);
+
+      // Modify the content
+      final textField = tester.widget<TextField>(find.byType(TextField));
+      final controller = textField.controller;
+      controller?.text = 'Modified content';
+      await tester.pump();
+
+      // Tap close (Icons.close)
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+
+      // Confirmation dialog should appear
+      expect(find.text('放弃编辑？'), findsOneWidget);
+
+      // Tap "取消" to dismiss dialog
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+
+      // Should still be in edit mode with modified content
+      expect(find.byIcon(Icons.save), findsOneWidget);
+      expect(find.byIcon(Icons.close), findsOneWidget);
+      expect(find.text('Modified content'), findsOneWidget);
     });
 
     // ==================== Save ====================
