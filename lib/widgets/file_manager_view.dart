@@ -359,9 +359,7 @@ class _FileManagerViewState<T extends FileRecord>
       icon: icon,
       label: showLabel
           ? Text(label,
-              style: labelStyle,
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1)
+              style: labelStyle, overflow: TextOverflow.ellipsis, maxLines: 1)
           : const SizedBox.shrink(),
     );
   }

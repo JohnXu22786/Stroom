@@ -52,9 +52,7 @@ class _FilesPageState extends ConsumerState<FilesPage>
     final logicalIndex = tabOrder[physicalIndex];
     if (logicalIndex == _lastTappedLogicalTabIndex) {
       // Same tab tapped again → reset to root (home).
-      ref
-          .read(fileTabFolderResetSignalProvider(logicalIndex).notifier)
-          .state++;
+      ref.read(fileTabFolderResetSignalProvider(logicalIndex).notifier).state++;
     }
     _lastTappedLogicalTabIndex = logicalIndex;
   }

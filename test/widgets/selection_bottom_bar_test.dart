@@ -7,7 +7,11 @@ import 'package:stroom/widgets/file_manager_view.dart';
 
 /// Minimal test record for widget tests
 class _TestFileRecord
-    with Hashable, Storable, Renamable<_TestFileRecord>, Movable<_TestFileRecord>
+    with
+        Hashable,
+        Storable,
+        Renamable<_TestFileRecord>,
+        Movable<_TestFileRecord>
     implements FileRecord {
   @override
   final String id;
