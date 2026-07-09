@@ -204,6 +204,87 @@ void main() {
   });
 
   // ==================================================================
+  // Atomic rename (tmp -> zip)
+  // ==================================================================
+
+  group('atomic rename (tmp -> zip)', () {
+    test(
+        'performAutoBackup creates .tmp file during backup and renames to .zip',
+        () async {
+      final root = await DataMigrationService.getExternalBackupRootPath();
+      final dir = Directory(root);
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+
+      final result = await AutoBackupService.performAutoBackup();
+      expect(result, isTrue);
+
+      // Verify zip file was created (not .tmp)
+      expect(await dir.exists(), isTrue);
+      final entries = await dir.list().toList();
+      final zips = entries
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.zip'))
+          .toList();
+      final tmps = entries
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.tmp'))
+          .toList();
+      expect(zips.length, equals(1),
+          reason: 'Should create a .zip file after rename');
+      expect(tmps, isEmpty,
+          reason: 'Should not leave .tmp files after successful backup');
+      expect(zips.first.lengthSync(), greaterThan(0));
+
+      // Cleanup
+      await dir.delete(recursive: true);
+    });
+  });
+
+  // ==================================================================
+  // Tmp file cleanup on backup start
+  // ==================================================================
+
+  group('tmp file cleanup on next backup start', () {
+    test('leftover .tmp files are cleaned up at start of next backup',
+        () async {
+      final root = await DataMigrationService.getExternalBackupRootPath();
+      final dir = Directory(root);
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+      await dir.create(recursive: true);
+
+      // Create a leftover .tmp file simulating an interrupted backup
+      final tmpFile = File('${dir.path}/backup_leftover.tmp');
+      await tmpFile.writeAsString('leftover_data');
+
+      // Also create some valid zip files
+      for (int i = 0; i < 2; i++) {
+        final file = File('${dir.path}/backup_2024-01-0${i + 1}T00-00-00.zip');
+        await file.writeAsString('dummy_$i');
+        await Future.delayed(const Duration(milliseconds: 50));
+      }
+
+      // Run backup - should clean up tmp files first
+      final result = await AutoBackupService.performAutoBackup();
+      expect(result, isTrue);
+
+      // Verify no .tmp files remain
+      final entries = await dir.list().toList();
+      final tmps = entries
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.tmp'))
+          .toList();
+      expect(tmps, isEmpty, reason: 'Should clean up leftover .tmp files');
+
+      // Cleanup
+      await dir.delete(recursive: true);
+    });
+  });
+
+  // ==================================================================
   // DataMigrationService delegation
   // ==================================================================
 

@@ -41,7 +41,8 @@ class HomePage extends ConsumerStatefulWidget {
   ConsumerState<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends ConsumerState<HomePage> {
+class _HomePageState extends ConsumerState<HomePage>
+    with WidgetsBindingObserver {
   final _chatNavigatorKey = GlobalKey<NavigatorState>();
 
   bool _autoBackupTriggered = false;
@@ -49,6 +50,9 @@ class _HomePageState extends ConsumerState<HomePage> {
   @override
   void initState() {
     super.initState();
+    // 监听应用生命周期，在应用进入后台时取消正在运行的备份
+    WidgetsBinding.instance.addObserver(this);
+
     // 在主页构建完成后触发一次后台自动备份
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _triggerAutoBackup();
@@ -67,8 +71,24 @@ class _HomePageState extends ConsumerState<HomePage> {
     });
   }
 
+  /// 应用生命周期变化时取消后台备份。
+  ///
+  /// 当用户把应用切到后台或退出应用时，如果备份仍在进行中，
+  /// 取消本次备份以避免不完整的备份文件。备份会在下次启动时重新触发。
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      if (AutoBackupService.isRunning) {
+        debugPrint('[HomePage] 应用进入后台，取消正在运行的自动备份');
+        AutoBackupService.cancel();
+      }
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
