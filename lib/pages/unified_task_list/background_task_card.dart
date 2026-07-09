@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/background_task_provider.dart';
 import '../../providers/task_provider.dart';
 import '../chat/dialogs/error_detail_dialog.dart';
+import '../asr_page.dart';
+import '../ocr_page.dart';
+import '../audio_separation_page.dart';
 import 'task_utils.dart';
 
 // =============================================================================
@@ -430,6 +433,14 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
             color: Colors.green,
             onPressed: () => openFile(task.downloadedFilePath!),
           ),
+        // Retry button for failed tasks
+        if (task.status == TaskStatus.failed)
+          _actionButton(
+            icon: Icons.refresh,
+            label: '重试',
+            color: Colors.blue,
+            onPressed: () => _navigateToTaskPage(context, task),
+          ),
         // Delete button
         TextButton.icon(
           onPressed: () {
@@ -445,6 +456,29 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         ),
       ],
     );
+  }
+
+  void _navigateToTaskPage(BuildContext context, BackgroundTask task) {
+    switch (task.type) {
+      case BackgroundTaskType.ocr:
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const OcrPage()),
+        );
+        break;
+      case BackgroundTaskType.asr:
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const AsrPage()),
+        );
+        break;
+      case BackgroundTaskType.audioSeparation:
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const AudioSeparationPage()),
+        );
+        break;
+    }
   }
 
   Widget _actionButton({

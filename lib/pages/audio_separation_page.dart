@@ -684,6 +684,11 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
           .addTask(type: BackgroundTaskType.audioSeparation, title: title);
 
       try {
+        // Step 0: 分离音频 - mark as running
+        ref
+            .read(backgroundTasksProvider.notifier)
+            .updateStep(taskId, 0, running: true);
+
         final audioBytes = await _engine.extractAudio(
           videoBytes: video.bytes,
           videoFormat: video.format,
@@ -694,15 +699,32 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
           },
         );
 
-        // 保存到音频库
-        await _saveAudioToLibrary(
+        // Step 0: 分离音频 - mark as completed
+        ref
+            .read(backgroundTasksProvider.notifier)
+            .updateStep(taskId, 0, completed: true);
+
+        // Step 1: 保存到文件 - mark as running
+        ref
+            .read(backgroundTasksProvider.notifier)
+            .updateStep(taskId, 1, running: true);
+
+        // 保存到音频库 (返回文件路径)
+        final filePath = await _saveAudioToLibrary(
           audioBytes,
           displayName: title,
           videoName: video.name,
         );
 
-        // Mark task as completed
-        ref.read(backgroundTasksProvider.notifier).completeTask(taskId);
+        // Step 1: 保存到文件 - mark as completed
+        ref
+            .read(backgroundTasksProvider.notifier)
+            .updateStep(taskId, 1, completed: true);
+
+        // Mark task as completed with file path
+        ref
+            .read(backgroundTasksProvider.notifier)
+            .completeTask(taskId, downloadedFilePath: filePath);
       } catch (e) {
         // Mark task as failed (widget may be gone, but notifier is independent)
         ref
@@ -712,7 +734,8 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     }
   }
 
-  Future<void> _saveAudioToLibrary(
+  /// 保存音频到音频库，并返回保存的文件路径。如果获取路径失败则返回 null。
+  Future<String?> _saveAudioToLibrary(
     Uint8List audioBytes, {
     String? displayName,
     String? videoName,
@@ -744,8 +767,14 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     );
 
     await FileManifest.addRecord(record);
+
+    // 获取文件路径用于"打开文件"按钮
+    final filePath = await FileManifest.readFilePath('$hash.$format');
+
     // Fire-and-forget: refresh the audio library list asynchronously
     unawaited(ref.read(audioRecordsProvider.notifier).loadRecords());
+
+    return filePath;
   }
 
   void _goToAudioLibrary() {

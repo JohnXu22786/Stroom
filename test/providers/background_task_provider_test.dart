@@ -449,13 +449,13 @@ void main() {
       expect(notifier.state[0].steps[4].label, '保存文件');
     });
 
-    test('AudioSeparation task has 1 default step (single processing step)',
-        () {
+    test('AudioSeparation task has 2 default steps (分离音频, 保存到文件)', () {
       final notifier = BackgroundTaskNotifier();
       notifier.addTask(type: BackgroundTaskType.audioSeparation, title: '音频分离');
-      expect(notifier.state[0].steps.length, 1,
-          reason: 'AudioSeparation should have 1 step (正在分离音频...)');
-      expect(notifier.state[0].steps[0].label, '正在分离音频...');
+      expect(notifier.state[0].steps.length, 2,
+          reason: 'AudioSeparation should have 2 steps (分离音频, 保存到文件)');
+      expect(notifier.state[0].steps[0].label, '分离音频');
+      expect(notifier.state[0].steps[1].label, '保存到文件');
     });
 
     // ==================================================================

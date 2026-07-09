@@ -44,7 +44,7 @@ enum BackgroundTaskType {
         return ['连接服务器', '上传音频', '转写中', '接收结果', '保存文件'];
       case BackgroundTaskType.audioSeparation:
         // Audio Separation: local processing only, no API
-        return ['正在分离音频...'];
+        return ['分离音频', '保存到文件'];
     }
   }
 }
