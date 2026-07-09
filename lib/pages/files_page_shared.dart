@@ -1,4 +1,3 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 /// Provider that tracks the currently-active folder path in the Files page.
@@ -18,3 +17,10 @@ final filesPageCurrentFolderProvider = StateProvider<String>((ref) => '');
 /// This approach avoids timing issues between multiple nested/sibling PopScope
 /// widgets in the same route.
 final filesPageNavigateToParentSignalProvider = StateProvider<int>((ref) => 0);
+
+/// Per-tab reset signal providers.
+/// Increment the value for a logical tab index to tell the corresponding
+/// [FileManagerView] to reset its folder to root (go to home).
+/// Used for the "double-tap same tab → reset to root" behavior.
+final fileTabFolderResetSignalProvider =
+    StateProvider.family<int, int>((ref, tabIndex) => 0);

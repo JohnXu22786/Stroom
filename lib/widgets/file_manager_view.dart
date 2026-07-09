@@ -60,6 +60,11 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
   /// silent navigation in inactive tabs that were left in a subfolder.
   final bool isActiveTab;
 
+  /// External signal for "double-tap current tab → reset to root".
+  /// When this value changes, [_FileManagerViewState] resets [_currentFolder]
+  /// to an empty string (root), unless it is already at root.
+  final int tabResetSignal;
+
   const FileManagerView({
     super.key,
     required this.sortedRecords,
@@ -89,6 +94,7 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
     required this.manifestBridge,
     this.navigateToParentSignal = 0,
     this.isActiveTab = true,
+    this.tabResetSignal = 0,
   });
 
   @override
@@ -138,6 +144,11 @@ class _FileManagerViewState<T extends FileRecord>
           widget.manifestBridge.getParentFolderPath(_currentFolder),
         );
       }
+    }
+    // 检测同标签页双击重置信号 — _currentFolder非空时重置到根目录
+    if (widget.tabResetSignal != oldWidget.tabResetSignal &&
+        _currentFolder.isNotEmpty) {
+      _setCurrentFolder('');
     }
   }
 
@@ -279,40 +290,40 @@ class _FileManagerViewState<T extends FileRecord>
                 child: Row(
                   children: [
                     Expanded(
-                      child: OutlinedButton.icon(
+                      child: _buildSelectionActionButton(
                         key: const Key('fm_selection_copy_btn'),
                         onPressed: _copySelected,
                         icon: const Icon(Icons.copy, size: 20),
-                        label: const Text('复制'),
+                        label: '复制',
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: OutlinedButton.icon(
+                      child: _buildSelectionActionButton(
                         key: const Key('fm_selection_move_btn'),
                         onPressed: _moveSelected,
                         icon: const Icon(
                           Icons.drive_file_move_outline,
                           size: 20,
                         ),
-                        label: const Text('移动'),
+                        label: '移动',
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: OutlinedButton.icon(
+                      child: _buildSelectionActionButton(
                         key: const Key('fm_selection_export_btn'),
                         onPressed: _exportSelected,
                         icon: const Icon(
                           Icons.file_download_outlined,
                           size: 20,
                         ),
-                        label: const Text('导出'),
+                        label: '导出',
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: OutlinedButton.icon(
+                      child: _buildSelectionActionButton(
                         key: const Key('fm_selection_delete_btn'),
                         onPressed: _deleteSelected,
                         icon: const Icon(
@@ -320,10 +331,8 @@ class _FileManagerViewState<T extends FileRecord>
                           color: Colors.red,
                           size: 20,
                         ),
-                        label: const Text(
-                          '删除',
-                          style: TextStyle(color: Colors.red),
-                        ),
+                        label: '删除',
+                        labelStyle: const TextStyle(color: Colors.red),
                       ),
                     ),
                   ],
@@ -331,6 +340,29 @@ class _FileManagerViewState<T extends FileRecord>
               ),
             )
           : null,
+    );
+  }
+
+  /// Build a selection-mode action button that hides the label on narrow
+  /// screens (<400dp) to prevent text overflow / vertical wrapping.
+  Widget _buildSelectionActionButton({
+    required Key key,
+    required VoidCallback? onPressed,
+    required Widget icon,
+    required String label,
+    TextStyle? labelStyle,
+  }) {
+    final showLabel = MediaQuery.of(context).size.width >= 400;
+    return OutlinedButton.icon(
+      key: key,
+      onPressed: onPressed,
+      icon: icon,
+      label: showLabel
+          ? Text(label,
+              style: labelStyle,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1)
+          : const SizedBox.shrink(),
     );
   }
 

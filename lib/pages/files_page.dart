@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
+import 'files_page_shared.dart';
 import 'gallery_page.dart';
 import 'text_storage_page.dart';
 import 'tts_page.dart';
@@ -25,6 +26,12 @@ class _FilesPageState extends ConsumerState<FilesPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
+  /// Track the last tapped logical tab index for double-tap detection.
+  /// Uses the logical tab ID (0-3) instead of physical position, so tab
+  /// reordering does not cause false resets.
+  /// Initialized to -1 so the first tap never triggers a reset.
+  int _lastTappedLogicalTabIndex = -1;
+
   @override
   void initState() {
     super.initState();
@@ -38,6 +45,19 @@ class _FilesPageState extends ConsumerState<FilesPage>
   }
 
   static const _tabLabels = ['文本', '音频', '图片', '视频'];
+
+  void _onTabTapped(int physicalIndex) {
+    // Map physical position → logical tab index via the current order.
+    final tabOrder = ref.read(fileTabOrderProvider);
+    final logicalIndex = tabOrder[physicalIndex];
+    if (logicalIndex == _lastTappedLogicalTabIndex) {
+      // Same tab tapped again → reset to root (home).
+      ref
+          .read(fileTabFolderResetSignalProvider(logicalIndex).notifier)
+          .state++;
+    }
+    _lastTappedLogicalTabIndex = logicalIndex;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,6 +77,7 @@ class _FilesPageState extends ConsumerState<FilesPage>
               onLongPress: () => _showReorderDialog(context, tabOrder),
               child: TabBar(
                 controller: _tabController,
+                onTap: _onTabTapped,
                 tabs: tabOrder.map((i) => Tab(text: _tabLabels[i])).toList(),
               ),
             ),
@@ -69,14 +90,24 @@ class _FilesPageState extends ConsumerState<FilesPage>
                 switch (i) {
                   case 0:
                     return TextStoragePage(
-                        key: ValueKey('text_storage_$refreshSignal'));
+                      key: ValueKey('text_storage_$refreshSignal'),
+                      tabIndex: 0,
+                    );
                   case 1:
-                    return TtsPage(key: ValueKey('tts_$refreshSignal'));
+                    return TtsPage(
+                      key: ValueKey('tts_$refreshSignal'),
+                      tabIndex: 1,
+                    );
                   case 2:
-                    return GalleryPage(key: ValueKey('gallery_$refreshSignal'));
+                    return GalleryPage(
+                      key: ValueKey('gallery_$refreshSignal'),
+                      tabIndex: 2,
+                    );
                   case 3:
                     return VideoGalleryPage(
-                        key: ValueKey('video_gallery_$refreshSignal'));
+                      key: ValueKey('video_gallery_$refreshSignal'),
+                      tabIndex: 3,
+                    );
                   default:
                     return const SizedBox.shrink();
                 }
