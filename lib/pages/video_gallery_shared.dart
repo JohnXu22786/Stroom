@@ -1,7 +1,10 @@
-import 'package:flutter/material.dart';
-import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart';
+import 'dart:io';
 
+import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
+
+/// Full-screen video player page using Chewie + video_player (backed by fvp).
 class VideoPlayerPage extends StatefulWidget {
   final String filePath;
   final String displayName;
@@ -17,32 +20,58 @@ class VideoPlayerPage extends StatefulWidget {
 }
 
 class _VideoPlayerPageState extends State<VideoPlayerPage> {
-  late final Player _player;
-  late final VideoController _controller;
+  VideoPlayerController? _videoPlayerController;
+  ChewieController? _chewieController;
   bool _initialized = false;
+  bool _hasError = false;
 
   @override
   void initState() {
     super.initState();
-    _player = Player();
-    _controller = VideoController(_player);
-    _initializePlayer();
+    _initPlayer();
   }
 
-  Future<void> _initializePlayer() async {
+  Future<void> _initPlayer() async {
     try {
-      await _player.open(Media(Uri.file(widget.filePath).toString()));
+      final controller = VideoPlayerController.file(
+        File(widget.filePath),
+      );
+      _videoPlayerController = controller;
+      await controller.initialize();
+
+      _chewieController = ChewieController(
+        videoPlayerController: controller,
+        autoPlay: true,
+        looping: false,
+        allowFullScreen: true,
+        allowPlaybackSpeedChanging: true,
+        showControls: true,
+        materialProgressColors: ChewieProgressColors(
+          playedColor: Colors.red,
+          handleColor: Colors.red,
+          backgroundColor: Colors.grey,
+          bufferedColor: Colors.white24,
+        ),
+      );
+
       if (mounted) {
         setState(() => _initialized = true);
       }
     } catch (e) {
       debugPrint('VideoPlayerPage init error: $e');
+      // Dispose controller to prevent resource leak on init failure
+      _videoPlayerController?.dispose();
+      _videoPlayerController = null;
+      if (mounted) {
+        setState(() => _hasError = true);
+      }
     }
   }
 
   @override
   void dispose() {
-    _player.dispose();
+    _chewieController?.dispose();
+    _videoPlayerController?.dispose();
     super.dispose();
   }
 
@@ -57,12 +86,18 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
             style: const TextStyle(color: Colors.white)),
       ),
       body: Center(
-        child: _initialized
-            ? Video(
-                controller: _controller,
-                controls: MaterialVideoControls,
+        child: _hasError
+            ? const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, size: 48, color: Colors.white38),
+                  SizedBox(height: 16),
+                  Text('视频加载失败', style: TextStyle(color: Colors.white70)),
+                ],
               )
-            : const CircularProgressIndicator(color: Colors.white),
+            : _initialized && _chewieController != null
+                ? Chewie(controller: _chewieController!)
+                : const CircularProgressIndicator(color: Colors.white),
       ),
     );
   }

@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../catcatch/models/media_resource.dart';
 import '../../catcatch/providers/catcatch_provider.dart';
 import '../../catcatch/models/catcatch_task.dart' as catcatch;
-import '../catcatch_page.dart' hide showMediaPreview;
+import '../catcatch_page.dart';
 import 'task_utils.dart';
 import 'media_preview_sheet.dart';
 
