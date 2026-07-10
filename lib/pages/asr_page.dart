@@ -54,6 +54,30 @@ List<ModelConfig> _getAsrModels(WidgetRef ref) {
   return [];
 }
 
+/// Get the provider name from the first ASR provider config.
+String _getAsrProviderName(WidgetRef ref) {
+  final state = ref.read(providerEntriesProvider);
+  for (final entry in state.entries) {
+    if (entry.type == 'asr' && entry.configs.isNotEmpty) {
+      final config = entry.configs.first;
+      if (config.host.isNotEmpty && config.key.isNotEmpty) {
+        return config.providerName;
+      }
+    }
+  }
+  return '';
+}
+
+/// Build display text for a model: "ModelName | ProviderName"
+/// Falls back to model name only if provider name is empty.
+String _buildAsrModelDisplayText(ModelConfig model, String providerName) {
+  final modelName = model.name.isNotEmpty ? model.name : model.modelId;
+  if (providerName.isNotEmpty) {
+    return '$modelName | $providerName';
+  }
+  return modelName;
+}
+
 // ============================================================================
 // Selected Audio Model
 // ============================================================================
@@ -148,6 +172,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
   Widget _buildModelSelector(ColorScheme cs) {
     final models = _getAsrModels(ref);
+    final providerName = _getAsrProviderName(ref);
     if (models.isEmpty) return const SizedBox.shrink();
 
     final clampedIndex = _selectedModelIndex.clamp(0, models.length - 1);
@@ -226,10 +251,12 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     },
                     items: List.generate(models.length, (i) {
                       final model = models[i];
+                      final displayText =
+                          _buildAsrModelDisplayText(model, providerName);
                       return DropdownMenuItem<int>(
                         value: i,
                         child: Text(
-                          model.name.isNotEmpty ? model.name : model.modelId,
+                          displayText,
                           overflow: TextOverflow.ellipsis,
                         ),
                       );

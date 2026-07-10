@@ -116,8 +116,8 @@ void main() {
       await tester.pumpWidget(_buildTestApp(entries: [entry]));
       await tester.pumpAndSettle();
 
-      // Should show the model selector with first model name
-      expect(find.text('Whisper-1'), findsWidgets);
+      // Should show the model selector with "ModelName | ProviderName" format
+      expect(find.text('Whisper-1 | OpenAI'), findsWidgets);
     });
 
     testWidgets('model selector shows all models when tapped', (tester) async {
@@ -126,11 +126,61 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap the model selector dropdown
-      await tester.tap(find.text('Whisper-1').last);
+      await tester.tap(find.text('Whisper-1 | OpenAI').last);
       await tester.pumpAndSettle();
 
-      // Should show all models in dropdown
-      expect(find.text('Whisper-2'), findsWidgets);
+      // Should show all models in dropdown with provider name
+      expect(find.text('Whisper-2 | OpenAI'), findsWidgets);
+    });
+
+    testWidgets('model selector falls back to modelId when name is empty', (
+      tester,
+    ) async {
+      final entry = ProviderEntry(
+        id: 'test_asr',
+        type: 'asr',
+        name: '音频转写供应商',
+        configs: [
+          ProviderConfigItem(
+            providerName: 'TestAI',
+            host: 'https://api.test.ai',
+            key: 'test-key',
+            models: [
+              ModelConfig(name: '', modelId: 'test-asr-model'),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpWidget(_buildTestApp(entries: [entry]));
+      await tester.pumpAndSettle();
+
+      // Should show modelId | ProviderName when name is empty
+      expect(find.text('test-asr-model | TestAI'), findsWidgets);
+    });
+
+    testWidgets('model selector still works when provider name is empty', (
+      tester,
+    ) async {
+      final entry = ProviderEntry(
+        id: 'test_asr',
+        type: 'asr',
+        name: '音频转写供应商',
+        configs: [
+          ProviderConfigItem(
+            providerName: '',
+            host: 'https://api.test.ai',
+            key: 'test-key',
+            models: [
+              ModelConfig(name: 'TestModel', modelId: 'test-model-v1'),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpWidget(_buildTestApp(entries: [entry]));
+      await tester.pumpAndSettle();
+
+      // Should show just the model name when no provider name
+      expect(find.text('TestModel'), findsWidgets);
     });
 
     testWidgets('model selector label is visible', (tester) async {
