@@ -6,7 +6,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show PlatformDispatcher;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fvp/fvp.dart' as fvp;
-import 'package:media_kit/media_kit.dart';
 
 import 'startup/startup_app.dart';
 import 'providers/tts_config.dart';
@@ -137,7 +136,6 @@ Future<void> main() async {
       try {
         WidgetsFlutterBinding.ensureInitialized();
         fvp.registerWith();
-        MediaKit.ensureInitialized();
         if (defaultTargetPlatform == TargetPlatform.android ||
             defaultTargetPlatform == TargetPlatform.iOS) {
           await initializeBackgroundService();
