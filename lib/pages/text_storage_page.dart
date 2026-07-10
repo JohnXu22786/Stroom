@@ -21,7 +21,9 @@ import 'text_storage_shared.dart';
 
 /// 文本储存区页面 - 管理文本文件，支持导入、创建、预览和导出
 class TextStoragePage extends ConsumerStatefulWidget {
-  const TextStoragePage({super.key});
+  final int tabIndex;
+
+  const TextStoragePage({super.key, this.tabIndex = 0});
 
   @override
   ConsumerState<TextStoragePage> createState() => _TextStoragePageState();
@@ -656,8 +658,11 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
 
     final navigateToParentSignal =
         ref.watch(filesPageNavigateToParentSignalProvider);
+    final tabResetSignal =
+        ref.watch(fileTabFolderResetSignalProvider(widget.tabIndex));
 
     return FileManagerView<TextRecord>(
+      tabResetSignal: tabResetSignal,
       navigateToParentSignal: navigateToParentSignal,
       sortedRecords: sortedRecords,
       folders: folders,

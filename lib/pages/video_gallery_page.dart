@@ -22,7 +22,9 @@ import '../widgets/folder_picker_dialog.dart';
 import 'files_page_shared.dart';
 
 class VideoGalleryPage extends ConsumerStatefulWidget {
-  const VideoGalleryPage({super.key});
+  final int tabIndex;
+
+  const VideoGalleryPage({super.key, this.tabIndex = 0});
 
   @override
   ConsumerState<VideoGalleryPage> createState() => _VideoGalleryPageState();
@@ -867,8 +869,11 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     final navigateToParentSignal = ref.watch(
       filesPageNavigateToParentSignalProvider,
     );
+    final tabResetSignal =
+        ref.watch(fileTabFolderResetSignalProvider(widget.tabIndex));
 
     return FileManagerView<VideoRecord>(
+      tabResetSignal: tabResetSignal,
       navigateToParentSignal: navigateToParentSignal,
       sortedRecords: sortedRecords,
       folders: folders,
