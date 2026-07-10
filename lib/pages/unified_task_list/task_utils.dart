@@ -33,8 +33,9 @@ void openFile(String filePath) {
       return;
     }
     if (Platform.isWindows) {
-      Process.start('explorer', ['/select,', filePath],
-          mode: ProcessStartMode.detached);
+      // Use start command to open file with default associated application.
+      // Wrap filePath in quotes to handle paths with spaces.
+      Process.run('cmd', ['/c', 'start', '', '"$filePath"'], runInShell: true);
     } else if (Platform.isMacOS) {
       Process.start('open', [filePath], mode: ProcessStartMode.detached);
     } else {

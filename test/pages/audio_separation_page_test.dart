@@ -373,7 +373,8 @@ void main() {
       final content = file.readAsStringSync();
 
       // Locate the _saveAudioToLibrary method start
-      final methodStart = content.indexOf('Future<void> _saveAudioToLibrary');
+      final methodStart =
+          content.indexOf('Future<String?> _saveAudioToLibrary');
       expect(
         methodStart,
         greaterThanOrEqualTo(0),
@@ -409,6 +410,12 @@ void main() {
         methodCode.contains('audioRecordsProvider.notifier'),
         isTrue,
         reason: '_saveAudioToLibrary must refresh the audio records provider',
+      );
+      expect(
+        methodCode.contains('FileManifest.readFilePath'),
+        isTrue,
+        reason:
+            '_saveAudioToLibrary must get file path via FileManifest.readFilePath',
       );
     });
   });
