@@ -32,6 +32,8 @@ class SynthesisTask {
   /// 原始错误响应体（用于错误详情展示，不做解析）
   final String? originalResponse;
 
+  final String? downloadedFilePath; // File path for "open file" button
+
   SynthesisTask({
     required this.id,
     required this.title,
@@ -47,6 +49,7 @@ class SynthesisTask {
     this.trimPreset,
     this.originalRequest,
     this.originalResponse,
+    this.downloadedFilePath,
   }) : createdAt = createdAt ?? DateTime.now();
 
   SynthesisTask copyWith({
@@ -56,6 +59,8 @@ class SynthesisTask {
     DateTime? statusChangedAt,
     String? originalRequest,
     String? originalResponse,
+    String? downloadedFilePath,
+    bool clearDownloadedFilePath = false,
   }) {
     final newStatus = status ?? this.status;
     final newStatusChangedAt = statusChangedAt ??
@@ -77,6 +82,9 @@ class SynthesisTask {
       trimPreset: trimPreset,
       originalRequest: originalRequest ?? this.originalRequest,
       originalResponse: originalResponse ?? this.originalResponse,
+      downloadedFilePath: clearDownloadedFilePath
+          ? null
+          : (downloadedFilePath ?? this.downloadedFilePath),
     );
   }
 
@@ -95,6 +103,8 @@ class SynthesisTask {
         'trimPreset': trimPreset,
         'originalRequest': originalRequest,
         'originalResponse': originalResponse,
+        if (downloadedFilePath != null)
+          'downloadedFilePath': downloadedFilePath,
       };
 
   factory SynthesisTask.fromMap(Map<String, dynamic> map) => SynthesisTask(
@@ -122,5 +132,6 @@ class SynthesisTask {
             : null,
         originalRequest: map['originalRequest'] as String?,
         originalResponse: map['originalResponse'] as String?,
+        downloadedFilePath: map['downloadedFilePath'] as String?,
       );
 }

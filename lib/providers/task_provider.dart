@@ -128,7 +128,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       if (cancelToken.isCancelled) return;
 
       // 保存音频文件
-      await _saveAudioFile(
+      final filePath = await _saveAudioFile(
         audioData,
         actualFormat,
         task.text,
@@ -136,7 +136,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       );
 
       // 更新任务为完成
-      _updateTask(task.id, TaskStatus.completed);
+      _updateTask(task.id, TaskStatus.completed, downloadedFilePath: filePath);
 
       // 刷新文件列表
       ref.read(audioRecordsProvider.notifier).loadRecords();
@@ -327,7 +327,10 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
   }
 
   void _updateTask(String taskId, TaskStatus status,
-      {String? error, String? originalRequest, String? originalResponse}) {
+      {String? error,
+      String? originalRequest,
+      String? originalResponse,
+      String? downloadedFilePath}) {
     state = state.map((t) {
       if (t.id != taskId) return t;
       return t.copyWith(
@@ -335,6 +338,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
         error: error,
         originalRequest: originalRequest,
         originalResponse: originalResponse,
+        downloadedFilePath: downloadedFilePath,
         completedAt:
             status == TaskStatus.completed || status == TaskStatus.failed
                 ? DateTime.now()
@@ -345,7 +349,8 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
   }
 
   /// 保存音频文件（与 TTSStateNotifier 逻辑一致）
-  Future<AudioRecord> _saveAudioFile(
+  /// Returns the file path of the saved audio file, or null if unavailable.
+  Future<String?> _saveAudioFile(
     Uint8List audioData,
     String format,
     String text, {
@@ -376,7 +381,10 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     );
 
     await FileManifest.addRecord(record);
-    return record;
+
+    // Get the file path for "open file" button
+    final filePath = await FileManifest.readFilePath('$hash.$format');
+    return filePath;
   }
 
   // ============================================================================
