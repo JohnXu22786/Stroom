@@ -21,7 +21,9 @@ import 'audio_player_page.dart';
 import 'audio_recording_page.dart';
 
 class TtsPage extends ConsumerStatefulWidget {
-  const TtsPage({super.key});
+  final int tabIndex;
+
+  const TtsPage({super.key, this.tabIndex = 1});
 
   @override
   ConsumerState<TtsPage> createState() => _TtsPageState();
@@ -729,8 +731,11 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
 
     final navigateToParentSignal =
         ref.watch(filesPageNavigateToParentSignalProvider);
+    final tabResetSignal =
+        ref.watch(fileTabFolderResetSignalProvider(widget.tabIndex));
 
     return FileManagerView<AudioRecord>(
+      tabResetSignal: tabResetSignal,
       navigateToParentSignal: navigateToParentSignal,
       sortedRecords: sortedRecords,
       folders: folders,
