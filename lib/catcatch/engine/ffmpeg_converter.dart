@@ -159,14 +159,13 @@ class FFmpegConverter {
 
       // 等待转码完成
       final completer = Completer<void>();
-      StreamSubscription<({mdk.MediaStatus oldValue, mdk.MediaStatus newValue})>?
-          statusSub;
+      StreamSubscription<
+          ({mdk.MediaStatus oldValue, mdk.MediaStatus newValue})>? statusSub;
       StreamSubscription<mdk.MediaEvent>? eventSub;
 
       statusSub = player.onMediaStatus.listen((event) {
         final newStatus = event.newValue;
-        if (newStatus.test(mdk.MediaStatus.end) &&
-            !completer.isCompleted) {
+        if (newStatus.test(mdk.MediaStatus.end) && !completer.isCompleted) {
           player.record(); // 停止录制，保存文件
           completer.complete();
         }
