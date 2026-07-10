@@ -1531,8 +1531,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
   }
 
-  /// Video preview — opens a dialog with a video player powered by
-  /// [media_kit]. The user can play/pause the video file.
+  /// Video preview — opens a dialog with a Chewie + fvp video player.
   Future<void> _showVideoPreview(Attachment att, Uint8List data) async {
     // Save bytes to a temp file for the video player
     String? filePath;

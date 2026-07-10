@@ -1,5 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart' show debugPrint;
-import 'package:media_kit/media_kit.dart';
+import 'package:video_player/video_player.dart';
 
 class MediaProbeResult {
   final Duration? duration;
@@ -10,24 +12,34 @@ class MediaProbeResult {
 }
 
 class MediaProbe {
+  /// Probe media metadata (duration, width, height) using VideoPlayerController.
+  ///
+  /// [url] can be a local file path or a network URL (http/https).
+  /// Returns a [MediaProbeResult]; on failure returns empty result.
   static Future<MediaProbeResult> probe(String url) async {
-    final player = Player();
-    try {
-      await player.open(Media(url), play: false);
-      // 等待媒体信息加载
-      await Future.delayed(const Duration(seconds: 2));
+    final isNetworkUrl =
+        url.startsWith('http://') || url.startsWith('https://');
 
+    late final VideoPlayerController controller;
+    if (isNetworkUrl) {
+      controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    } else {
+      controller = VideoPlayerController.file(File(url));
+    }
+
+    try {
+      await controller.initialize();
       final result = MediaProbeResult(
-        duration: player.state.duration,
-        width: player.state.width,
-        height: player.state.height,
+        duration: controller.value.duration,
+        width: controller.value.size.width.toInt(),
+        height: controller.value.size.height.toInt(),
       );
       return result;
     } catch (e) {
       debugPrint('MediaProbe: failed to probe $url: $e');
       return const MediaProbeResult();
     } finally {
-      await player.dispose();
+      controller.dispose();
     }
   }
 }

@@ -271,7 +271,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  '未检测到 media_kit 引擎',
+                  '未检测到音频分离引擎',
                   style: TextStyle(fontSize: 12, color: Colors.orange[800]),
                 ),
               ),
@@ -662,7 +662,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     if (!_engineAvailable) {
       setState(() {
         _hasError = true;
-        _errorMessage = '音频分离引擎不可用，请检查 media_kit 组件。';
+        _errorMessage = '音频分离引擎不可用。';
       });
       return;
     }
