@@ -157,8 +157,8 @@ void main() {
       await tester.pumpWidget(_buildTestApp(entries: [entry]));
       await tester.pumpAndSettle();
 
-      // Should show the model selector
-      expect(find.text('GPT-4o'), findsWidgets);
+      // Should show the model selector with "ModelName | ProviderName" format
+      expect(find.text('GPT-4o | OpenAI'), findsWidgets);
     });
 
     testWidgets('model selector shows all available models when tapped', (
@@ -168,13 +168,63 @@ void main() {
       await tester.pumpWidget(_buildTestApp(entries: [entry]));
       await tester.pumpAndSettle();
 
-      // Tap the model selector dropdown
-      await tester.tap(find.text('GPT-4o').last);
+      // Tap the model selector dropdown - need to tap the displayed text
+      await tester.tap(find.text('GPT-4o | OpenAI').last);
       await tester.pumpAndSettle();
 
-      // Should show all models in the dropdown
-      expect(find.text('GPT-4o Mini'), findsWidgets);
-      expect(find.text('GPT-4 Vision'), findsWidgets);
+      // Should show all models in the dropdown with provider name
+      expect(find.text('GPT-4o Mini | OpenAI'), findsWidgets);
+      expect(find.text('GPT-4 Vision | OpenAI'), findsWidgets);
+    });
+
+    testWidgets('model selector falls back to modelId when name is empty', (
+      tester,
+    ) async {
+      final entry = ProviderEntry(
+        id: 'test_ocr',
+        type: 'ocr',
+        name: 'OCR供应商',
+        configs: [
+          ProviderConfigItem(
+            providerName: 'TestAI',
+            host: 'https://api.test.ai',
+            key: 'test-key',
+            models: [
+              ModelConfig(name: '', modelId: 'test-model-v1'),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpWidget(_buildTestApp(entries: [entry]));
+      await tester.pumpAndSettle();
+
+      // Should show modelId | ProviderName when name is empty
+      expect(find.text('test-model-v1 | TestAI'), findsWidgets);
+    });
+
+    testWidgets('model selector still works when provider name is empty', (
+      tester,
+    ) async {
+      final entry = ProviderEntry(
+        id: 'test_ocr',
+        type: 'ocr',
+        name: 'OCR供应商',
+        configs: [
+          ProviderConfigItem(
+            providerName: '',
+            host: 'https://api.test.ai',
+            key: 'test-key',
+            models: [
+              ModelConfig(name: 'TestModel', modelId: 'test-model-v1'),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpWidget(_buildTestApp(entries: [entry]));
+      await tester.pumpAndSettle();
+
+      // Should show just the model name when no provider name
+      expect(find.text('TestModel'), findsWidgets);
     });
 
     testWidgets('model selector label is visible', (tester) async {
