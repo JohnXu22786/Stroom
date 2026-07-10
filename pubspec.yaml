@@ -33,7 +33,6 @@ dependencies:
   video_player: ^2.9.2
   fvp: ^0.37.3
   media_kit: ^1.2.6
-  media_kit_video: ^2.0.1
   media_kit_native_event_loop: ^1.0.9
   media_kit_libs_video: ^1.0.7
   crypto: ^3.0.7
