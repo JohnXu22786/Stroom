@@ -142,6 +142,37 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
     });
   }
 
+  /// 处理关闭按钮点击
+  /// 若有修改则弹出确认对话框，否则直接放弃
+  Future<void> _handleClose() async {
+    if (!_hasChanges) {
+      _discardChanges();
+      return;
+    }
+
+    final shouldDiscard = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('放弃编辑？'),
+        content: const Text('你有未保存的更改，确定要放弃吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('放弃'),
+          ),
+        ],
+      ),
+    );
+    if (shouldDiscard == true && mounted) {
+      _discardChanges();
+    }
+  }
+
   /// 字号调节弹窗（数字在上，滑块在下，支持恢复默认）
   void _showFontSizePopup() {
     double temp = _fontSize;
@@ -284,7 +315,7 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
         IconButton(
           icon: const Icon(Icons.close, size: 20),
           tooltip: '放弃',
-          onPressed: (_hasChanges && !_isSaving) ? _discardChanges : null,
+          onPressed: !_isSaving ? _handleClose : null,
         ),
       ];
     }
