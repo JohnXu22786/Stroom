@@ -1,20 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:stroom/pages/chat/dialogs/html_preview_dialog.dart';
 
-/// A widget that renders HTML code inline inside a chat message using
-/// [InAppWebView], with a button to open the full-screen preview dialog.
+/// A widget that shows the raw HTML code inside a chat message (no inline
+/// rendering), with a button to open the full-screen preview dialog.
 ///
-/// Follows the same pattern as [MermaidRenderWidget] but for arbitrary HTML
-/// content. The inline WebView has JavaScript enabled and mixed content
-/// allowed so that CDN libraries and external resources can load.
-/// Navigation is intercepted in the inline view to prevent accidental
-/// navigation away from the chat context.
-class HtmlCodeBlockWidget extends StatefulWidget {
-  /// The raw HTML code to render.
+/// The HTML is **not** rendered inline — only the raw source code is
+/// displayed as a styled code block. The user must tap "全屏预览" to
+/// open a [WebView]-based dialog that actually renders the HTML.
+class HtmlCodeBlockWidget extends StatelessWidget {
+  /// The raw HTML code to display.
   final String htmlCode;
 
-  /// Optional height constraint for the inline preview. Defaults to 300.
+  /// Optional height constraint for the code block. Defaults to 300.
   final double? height;
 
   const HtmlCodeBlockWidget({
@@ -55,140 +52,56 @@ HTML_CONTENT_PLACEHOLDER
 </html>
 ''';
 
-  @override
-  State<HtmlCodeBlockWidget> createState() => _HtmlCodeBlockWidgetState();
-}
-
-class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
-  InAppWebViewController? _webViewController;
-  bool _isReady = false;
-
-  @override
-  void didUpdateWidget(HtmlCodeBlockWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.htmlCode != widget.htmlCode) {
-      _isReady = false;
-      _loadHtmlCode();
-    }
-  }
-
-  @override
-  void dispose() {
-    _webViewController = null;
-    super.dispose();
-  }
-
-  void _loadHtmlCode() {
-    final ctrl = _webViewController;
-    if (ctrl == null) return;
-    ctrl.loadData(
-      data: _getInitialHtml(),
-      mimeType: 'text/html',
-      encoding: 'utf8',
-    );
-  }
-
-  void _openFullScreen() {
+  void _openFullScreen(BuildContext context) {
     showHtmlPreviewDialog(
       context: context,
-      htmlCode: widget.htmlCode,
+      htmlCode: htmlCode,
     );
-  }
-
-  static const _emptyPlaceholderHtml = '''
-<html>
-<body style="background:transparent;display:flex;justify-content:center;align-items:center;height:100%;font-family:sans-serif;color:#999;font-size:14px;padding:16px;text-align:center;">
-<div>No HTML content to preview</div>
-</body>
-</html>''';
-
-  String _getInitialHtml() {
-    final code = widget.htmlCode.trim();
-    if (code.isEmpty) {
-      return _emptyPlaceholderHtml;
-    }
-    return HtmlCodeBlockWidget.buildHtmlDocument(code);
   }
 
   @override
   Widget build(BuildContext context) {
-    final effectiveHeight = widget.height ?? 300.0;
+    final effectiveHeight = height ?? 300.0;
     final cs = Theme.of(context).colorScheme;
+    final isDark = cs.brightness == Brightness.dark;
 
-    final showLoading = widget.htmlCode.trim().isNotEmpty && !_isReady;
+    final bgColor = isDark ? const Color(0xff555555) : const Color(0xffeff1f3);
+    final textColor =
+        isDark ? const Color(0xfff8f8f2) : const Color(0xff000000);
+    final borderColor = cs.outlineVariant;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
+    return SizedBox(
+      height: effectiveHeight,
       child: Container(
-        height: effectiveHeight,
         decoration: BoxDecoration(
-          border: Border.all(
-            color: cs.outlineVariant,
-            width: 0.5,
-          ),
+          color: bgColor,
+          border: Border.all(color: borderColor, width: 0.5),
           borderRadius: BorderRadius.circular(8),
         ),
+        clipBehavior: Clip.antiAlias,
         child: Stack(
           children: [
-            // The WebView — created once, stays alive
-            InAppWebView(
-              initialSettings: InAppWebViewSettings(
-                javaScriptEnabled: true,
-                mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
-                transparentBackground: true,
-              ),
-              initialData: InAppWebViewInitialData(
-                data: _getInitialHtml(),
-                mimeType: 'text/html',
-                encoding: 'utf8',
-              ),
-              onWebViewCreated: (ctrl) {
-                _webViewController = ctrl;
-              },
-              onLoadStop: (ctrl, url) {
-                if (mounted && !_isReady) {
-                  setState(() => _isReady = true);
-                }
-              },
-              onLoadError: (ctrl, url, code, message) {
-                if (mounted && !_isReady) {
-                  setState(() => _isReady = true);
-                }
-              },
-              // Intercept navigation in inline view so clicking links
-              // doesn't navigate away from the chat context. Users can
-              // still open links by using the full-screen preview.
-              shouldOverrideUrlLoading: (ctrl, navigationAction) async {
-                return NavigationActionPolicy.CANCEL;
-              },
-            ),
-
-            // Loading overlay
-            if (showLoading)
-              Positioned.fill(
-                child: Container(
-                  color: cs.surface,
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: cs.primary,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '加载 HTML 预览...',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
+            // Raw HTML source code shown as a scrollable code block
+            Positioned.fill(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.vertical,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                    child: SelectableText(
+                      htmlCode.isEmpty ? '(empty)' : htmlCode,
+                      style: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 13,
+                        color: textColor,
+                        height: 1.5,
+                      ),
                     ),
                   ),
                 ),
               ),
+            ),
 
             // Full-screen button (top right) with minimum 48x48 touch target
             Positioned(
@@ -208,7 +121,7 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
                     color: Colors.transparent,
                     child: InkWell(
                       borderRadius: BorderRadius.circular(20),
-                      onTap: _openFullScreen,
+                      onTap: () => _openFullScreen(context),
                       child: const Padding(
                         padding: EdgeInsets.symmetric(
                           horizontal: 10,
