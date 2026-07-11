@@ -135,7 +135,9 @@ Future<void> main() async {
     () async {
       try {
         WidgetsFlutterBinding.ensureInitialized();
-        fvp.registerWith();
+        if (!kIsWeb) {
+          fvp.registerWith();
+        }
         if (defaultTargetPlatform == TargetPlatform.android ||
             defaultTargetPlatform == TargetPlatform.iOS) {
           await initializeBackgroundService();
