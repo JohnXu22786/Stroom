@@ -117,7 +117,9 @@ class LatexNode extends SpanNode {
 /// Builds a code block widget for the given [code] and [language].
 ///
 /// If [language] is `'mermaid'`, renders the code using [MermaidRenderWidget].
-/// If [language] is `'html'`, renders the code using [HtmlCodeBlockWidget].
+/// If [language] is `'html'`, renders the code using [HtmlCodeBlockWidget]
+/// (which shows the raw HTML source without inline rendering; the user must
+/// tap the full-screen button to render the HTML in a dialog).
 /// Otherwise, renders a syntax-highlighted code block using the configured
 /// [preConfig] theme and decoration.
 Widget _buildCodeBlock(String code, String language, PreConfig preConfig) {
@@ -177,7 +179,9 @@ Widget _buildCodeBlock(String code, String language, PreConfig preConfig) {
 /// [MermaidRenderWidget] instead of syntax highlighting.
 ///
 /// HTML code blocks (```` ```html ````) are rendered using
-/// [HtmlCodeBlockWidget] to provide a live preview of the HTML content.
+/// [HtmlCodeBlockWidget] to show the raw HTML source without inline
+/// rendering; the user must tap the full-screen button to render the
+/// HTML in a dialog.
 ///
 /// The [draculaTheme] is chosen for its high-contrast syntax colours
 /// which work well in both modes.
