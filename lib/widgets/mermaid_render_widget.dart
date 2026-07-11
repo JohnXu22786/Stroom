@@ -6,6 +6,18 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 ///
 /// This widget is extracted from [MermaidChartPage] to be used inline
 /// in chat messages and other contexts where Mermaid rendering is needed.
+///
+/// ## UI Isolation
+///
+/// The [InAppWebView] creation is deferred to after the first frame via
+/// [WidgetsBinding.instance.addPostFrameCallback] so that creating the
+/// heavyweight platform view (WebView2 on Windows) does not freeze the
+/// initial page transition. A [CircularProgressIndicator] loading state
+/// is shown while the WebView is being created and initialized.
+///
+/// Mermaid rendering errors are reported from JavaScript back to Flutter
+/// via `callHandler`, so the widget can display a user-friendly error
+/// widget with a retry button.
 class MermaidRenderWidget extends StatefulWidget {
   /// The Mermaid diagram code to render.
   final String mermaidCode;
@@ -21,6 +33,9 @@ class MermaidRenderWidget extends StatefulWidget {
 
   /// Builds a complete HTML document with mermaid.js that renders the
   /// given [mermaidCode] as a diagram.
+  ///
+  /// This is the single source of truth for the Mermaid HTML/JS template.
+  /// Both [MermaidRenderWidget] and [MermaidChartPage] use this method.
   static String buildMermaidHtml(String mermaidCode) {
     final escaped = mermaidCode
         .replaceAll('&', '&amp;')
@@ -80,22 +95,28 @@ MERMAID_CODE_PLACEHOLDER
     </pre>
   </div>
   <script>
+    function reportError(msg) {
+      document.getElementById('container').innerHTML =
+        '<div class="error-message">' + msg + '</div>';
+      try {
+        if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+          window.flutter_inappwebview.callHandler('onMermaidError', msg);
+        }
+      } catch(_) {}
+    }
     try {
       mermaid.initialize({
         theme: 'default',
         securityLevel: 'loose',
         fontFamily: 'sans-serif',
       });
-      // Use mermaid.run() for v11 API compatibility (startOnLoad is deprecated)
       mermaid.run({
         nodes: [document.getElementById('mermaid-code')],
       }).catch(function(err) {
-        document.getElementById('container').innerHTML =
-          '<div class="error-message">Mermaid render error: ' + err.message + '</div>';
+        reportError('Mermaid render error: ' + err.message);
       });
     } catch(e) {
-      document.getElementById('container').innerHTML =
-        '<div class="error-message">Mermaid initialize error: ' + e.message + '</div>';
+      reportError('Mermaid initialize error: ' + e.message);
     }
   </script>
 </body>
@@ -109,13 +130,27 @@ MERMAID_CODE_PLACEHOLDER
 class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   InAppWebViewController? _webViewController;
   bool _isReady = false;
+  bool _shouldCreateWebView = false;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    // Defer WebView creation to after the first frame so that the
+    // page transition is not blocked by platform view creation.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_shouldCreateWebView) {
+        setState(() => _shouldCreateWebView = true);
+      }
+    });
+  }
 
   @override
   void didUpdateWidget(MermaidRenderWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.mermaidCode != widget.mermaidCode) {
-      // Reset ready state so the loading overlay reappears
       _isReady = false;
+      _errorMessage = null;
       _loadMermaidCode();
     }
   }
@@ -128,8 +163,6 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
 
   void _loadMermaidCode() {
     final ctrl = _webViewController;
-    // If the WebView hasn't been created yet, the initial data will
-    // already contain the correct content via _getInitialHtml().
     if (ctrl == null) return;
 
     final code = widget.mermaidCode.trim();
@@ -148,6 +181,16 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       mimeType: 'text/html',
       encoding: 'utf8',
     );
+  }
+
+  void _retry() {
+    setState(() {
+      _errorMessage = null;
+      _isReady = false;
+    });
+    // The WebView stays alive (never removed from tree), so the controller
+    // is still valid for reloading the mermaid code.
+    _loadMermaidCode();
   }
 
   static const _emptyPlaceholderHtml = '''
@@ -169,78 +212,194 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   Widget build(BuildContext context) {
     final effectiveHeight = widget.height ?? 300.0;
     final cs = Theme.of(context).colorScheme;
+    final code = widget.mermaidCode.trim();
 
-    // Determine if we should show the loading overlay
-    final showLoading = widget.mermaidCode.trim().isNotEmpty && !_isReady;
+    // ---- Loading placeholder (deferred WebView creation) ----
+    // Only shown before the WebView is first created.
+    if (!_shouldCreateWebView) {
+      return _buildBorderedContainer(
+        height: effectiveHeight,
+        cs: cs,
+        child: code.isEmpty
+            ? _buildEmptyPlaceholder(cs)
+            : _buildLoadingIndicator(cs, '正在准备渲染引擎...'),
+      );
+    }
 
+    // ---- WebView + overlays ----
+    // The WebView is always kept alive once created. Loading, empty code,
+    // and error states are overlaid on top so the platform view (WebView2)
+    // is never destroyed by removing it from the widget tree.
+    final showLoading = !_isReady && _errorMessage == null && code.isNotEmpty;
+    final showEmptyOverlay = code.isEmpty && _isReady;
+    final showErrorOverlay = _errorMessage != null;
+
+    return _buildBorderedContainer(
+      height: effectiveHeight,
+      cs: cs,
+      child: Stack(
+        children: [
+          // The WebView — kept alive once created via the key
+          InAppWebView(
+            key: const Key('mermaid_render_webview'),
+            initialSettings: InAppWebViewSettings(
+              javaScriptEnabled: true,
+              transparentBackground: true,
+            ),
+            initialData: InAppWebViewInitialData(
+              data: _getInitialHtml(),
+              mimeType: 'text/html',
+              encoding: 'utf8',
+            ),
+            onWebViewCreated: (ctrl) {
+              _webViewController = ctrl;
+              // Set up JavaScript handler to receive mermaid errors
+              ctrl.addJavaScriptHandler(
+                handlerName: 'onMermaidError',
+                callback: (args) {
+                  if (mounted) {
+                    final msg = args.isNotEmpty ? args[0].toString() : '未知错误';
+                    setState(() => _errorMessage = msg);
+                  }
+                },
+              );
+            },
+            onLoadStop: (ctrl, url) {
+              if (mounted && !_isReady) {
+                setState(() => _isReady = true);
+              }
+            },
+            onLoadError: (ctrl, url, code, message) {
+              if (mounted && !_isReady) {
+                setState(() {
+                  _isReady = true;
+                  _errorMessage = '页面加载失败: $message';
+                });
+              }
+            },
+          ),
+
+          // Loading overlay — shown while WebView is initializing
+          if (showLoading)
+            Positioned.fill(
+              child: Container(
+                color: cs.surface,
+                child: _buildLoadingIndicator(cs, '加载渲染引擎...'),
+              ),
+            ),
+
+          // Empty code overlay — shown when code is cleared but WebView stays alive
+          if (showEmptyOverlay)
+            Positioned.fill(
+              child: Container(
+                color: cs.surface,
+                child: _buildEmptyPlaceholder(cs),
+              ),
+            ),
+
+          // Error overlay — shown on top of the WebView when mermaid fails
+          if (showErrorOverlay)
+            Positioned.fill(
+              child: Container(
+                color: cs.surface,
+                child: _buildErrorWidget(cs, _errorMessage!),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Shared helpers
+  // ---------------------------------------------------------------------------
+
+  Widget _buildBorderedContainer({
+    required double height,
+    required ColorScheme cs,
+    required Widget child,
+  }) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        height: effectiveHeight,
+        height: height,
         decoration: BoxDecoration(
-          border: Border.all(
-            color: cs.outlineVariant,
-            width: 0.5,
-          ),
+          border: Border.all(color: cs.outlineVariant, width: 0.5),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Stack(
-          children: [
-            // The WebView — created once, stays alive
-            InAppWebView(
-              initialSettings: InAppWebViewSettings(
-                javaScriptEnabled: true,
-                transparentBackground: true,
-              ),
-              initialData: InAppWebViewInitialData(
-                data: _getInitialHtml(),
-                mimeType: 'text/html',
-                encoding: 'utf8',
-              ),
-              onWebViewCreated: (ctrl) {
-                _webViewController = ctrl;
-              },
-              onLoadStop: (ctrl, url) {
-                if (mounted && !_isReady) {
-                  setState(() => _isReady = true);
-                }
-              },
-              onLoadError: (ctrl, url, code, message) {
-                if (mounted && !_isReady) {
-                  // Even if the CDN fails, mark as ready so the loading
-                  // overlay disappears and the user can see the error
-                  // message displayed inside the WebView HTML.
-                  setState(() => _isReady = true);
-                }
-              },
-            ),
+        child: child,
+      ),
+    );
+  }
 
-            // Loading overlay — only shown while WebView is loading
-            if (showLoading)
-              Positioned.fill(
-                child: Container(
-                  color: cs.surface,
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: cs.primary,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '加载渲染引擎...',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+  Widget _buildLoadingIndicator(ColorScheme cs, String text) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircularProgressIndicator(
+            strokeWidth: 2,
+            color: cs.primary,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 12,
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyPlaceholder(ColorScheme cs) {
+    return Center(
+      child: Text(
+        'No Mermaid code to render',
+        style: TextStyle(
+          fontSize: 13,
+          color: cs.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorWidget(ColorScheme cs, String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline, size: 32, color: cs.error),
+            const SizedBox(height: 8),
+            Text(
+              '渲染图表时出错',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: cs.error,
               ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                color: cs.onSurfaceVariant,
+              ),
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _retry,
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('重试'),
+            ),
           ],
         ),
       ),

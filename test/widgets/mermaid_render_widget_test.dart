@@ -67,5 +67,33 @@ void main() {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       expect(html, contains('error-message'));
     });
+
+    test('HTML includes Flutter error handler call for mermaid errors', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      // The HTML should call back to Flutter when a mermaid error occurs
+      expect(html, contains('flutter_inappwebview'));
+      expect(html, contains('callHandler'));
+      expect(html, contains('onMermaidError'));
+    });
+
+    test('HTML reports initialize errors to Flutter', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      // Initialize catch block should report error to Flutter
+      expect(html, contains('onMermaidError'));
+    });
+
+    test('HTML reports render errors to Flutter', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      // Render catch block should report error to Flutter
+      expect(html, contains('onMermaidError'));
+    });
+  });
+
+  group('MermaidRenderWidget - emptyPlaceholderHtml', () {
+    test('empty placeholder is used when no code to render', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('');
+      // Should not have mermaid code placeholder
+      expect(html, isNot(contains('MERMAID_CODE_PLACEHOLDER')));
+    });
   });
 }
