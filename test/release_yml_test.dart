@@ -65,8 +65,7 @@ void main() {
           if (trimmed.contains('flutter build macos') &&
               trimmed.contains('--release')) {
             foundBuildCommand = true;
-            hasExcludedArchs =
-                trimmed.contains('EXCLUDED_ARCHS=arm64');
+            hasExcludedArchs = trimmed.contains('EXCLUDED_ARCHS=arm64');
           }
           // Stop at next top-level key
           if (trimmed.isNotEmpty &&
@@ -88,8 +87,7 @@ void main() {
     test('macos-13 does not appear in release.yml', () {
       // Ensure no macos-13 references remain in the release workflow
       expect(ymlContent, isNot(contains('macos-13')),
-          reason:
-              'No macos-13 references should remain in release.yml');
+          reason: 'No macos-13 references should remain in release.yml');
     });
 
     test('macos-x64 job build command still has dart-define=APP_VERSION', () {
