@@ -705,8 +705,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
               handlerName: 'onMermaidError',
               callback: (args) {
                 if (mounted) {
-                  final msg =
-                      args.isNotEmpty ? args[0].toString() : '未知错误';
+                  final msg = args.isNotEmpty ? args[0].toString() : '未知错误';
                   setState(() => _previewErrorMessage = msg);
                 }
               },
