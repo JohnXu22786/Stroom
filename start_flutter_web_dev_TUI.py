@@ -15,7 +15,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import Button, TextArea
 
-PORT = 7397
+PORT_START = 7390
 HOST = "localhost"
 DEVICE = "chrome"
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -161,10 +161,11 @@ def port_in_use(p):
 
 
 def find_port():
-    if not port_in_use(PORT):
-        return PORT
-    err("Port " + str(PORT) + " is in use")
-    return None
+    port = PORT_START
+    while port_in_use(port):
+        pport(f"Port {port} is in use, trying next...")
+        port += 1
+    return port
 
 
 def stop_old():
@@ -482,10 +483,6 @@ def main():
         sys.exit(1)
 
     port = find_port()
-    if not port:
-        input("Press Enter to exit...")
-        sys.exit(1)
-
     pport(f"Using port: {port}")
 
     # Launch Textual TUI
