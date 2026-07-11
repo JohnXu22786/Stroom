@@ -667,76 +667,81 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       return;
     }
 
-    // Check engine for each video before proceeding
     final videosToProcess = List<SelectedVideo>.from(_selectedVideos);
 
-    // Pop back to home page immediately so user can see task progress
+    // Capture notifier references BEFORE Navigator.pop — after the widget is
+    // disposed, ConsumerState.ref may become unreliable for read() calls.
+    final bgNotifier = ref.read(backgroundTasksProvider.notifier);
+    final audioRecordsNotifier = ref.read(audioRecordsProvider.notifier);
+
+    // Add ALL tasks to the task list first so they appear simultaneously.
+    // Each video gets its own background task with a unique title.
+    final taskIds = <String>[];
+    for (final video in videosToProcess) {
+      final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
+      final taskId = bgNotifier.addTask(
+        type: BackgroundTaskType.audioSeparation,
+        title: title,
+      );
+      taskIds.add(taskId);
+    }
+
+    // Pop back to home page so user can see ALL task progress
     if (mounted) {
       Navigator.pop(context);
     }
 
-    // Process each video as a separate background task
+    // Now process each video sequentially
     for (int i = 0; i < videosToProcess.length; i++) {
       final video = videosToProcess[i];
+      final taskId = taskIds[i];
       final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
-      final taskId = ref
-          .read(backgroundTasksProvider.notifier)
-          .addTask(type: BackgroundTaskType.audioSeparation, title: title);
 
       try {
         // Step 0: 分离音频 - mark as running
-        ref
-            .read(backgroundTasksProvider.notifier)
-            .updateStep(taskId, 0, running: true);
+        bgNotifier.updateStep(taskId, 0, running: true);
 
         final audioBytes = await _engine.extractAudio(
           videoBytes: video.bytes,
           videoFormat: video.format,
           onProgress: (progress) {
-            ref
-                .read(backgroundTasksProvider.notifier)
-                .setResult(taskId, '正在提取音频... $progress%');
+            bgNotifier.setResult(taskId, '正在提取音频... $progress%');
           },
         );
 
         // Step 0: 分离音频 - mark as completed
-        ref
-            .read(backgroundTasksProvider.notifier)
-            .updateStep(taskId, 0, completed: true);
+        bgNotifier.updateStep(taskId, 0, completed: true);
 
         // Step 1: 保存到文件 - mark as running
-        ref
-            .read(backgroundTasksProvider.notifier)
-            .updateStep(taskId, 1, running: true);
+        bgNotifier.updateStep(taskId, 1, running: true);
 
         // 保存到音频库 (返回文件路径)
         final filePath = await _saveAudioToLibrary(
           audioBytes,
+          audioRecordsNotifier: audioRecordsNotifier,
           displayName: title,
           videoName: video.name,
         );
 
         // Step 1: 保存到文件 - mark as completed
-        ref
-            .read(backgroundTasksProvider.notifier)
-            .updateStep(taskId, 1, completed: true);
+        bgNotifier.updateStep(taskId, 1, completed: true);
 
         // Mark task as completed with file path
-        ref
-            .read(backgroundTasksProvider.notifier)
-            .completeTask(taskId, downloadedFilePath: filePath);
+        bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
       } catch (e) {
-        // Mark task as failed (widget may be gone, but notifier is independent)
-        ref
-            .read(backgroundTasksProvider.notifier)
-            .failTask(taskId, error: '音频提取失败: $e');
+        // Mark task as failed (notifier is independent of widget lifecycle)
+        bgNotifier.failTask(taskId, error: '音频提取失败: $e');
       }
     }
+
+    // Fire-and-forget: refresh the audio library list after all tasks complete
+    unawaited(audioRecordsNotifier.loadRecords());
   }
 
   /// 保存音频到音频库，并返回保存的文件路径。如果获取路径失败则返回 null。
   Future<String?> _saveAudioToLibrary(
     Uint8List audioBytes, {
+    AudioRecordsNotifier? audioRecordsNotifier,
     String? displayName,
     String? videoName,
   }) async {
@@ -772,7 +777,12 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     final filePath = await FileManifest.readFilePath('$hash.$format');
 
     // Fire-and-forget: refresh the audio library list asynchronously
-    unawaited(ref.read(audioRecordsProvider.notifier).loadRecords());
+    // Use captured notifier if provided (safer after widget dispose)
+    if (audioRecordsNotifier != null) {
+      unawaited(audioRecordsNotifier.loadRecords());
+    } else {
+      unawaited(ref.read(audioRecordsProvider.notifier).loadRecords());
+    }
 
     return filePath;
   }
