@@ -66,7 +66,8 @@ HTML_CONTENT_PLACEHOLDER
     final isDark = cs.brightness == Brightness.dark;
 
     final bgColor = isDark ? const Color(0xff555555) : const Color(0xffeff1f3);
-    final textColor = isDark ? const Color(0xfff8f8f2) : const Color(0xff000000);
+    final textColor =
+        isDark ? const Color(0xfff8f8f2) : const Color(0xff000000);
     final borderColor = cs.outlineVariant;
 
     return SizedBox(
