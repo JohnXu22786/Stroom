@@ -7,6 +7,16 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/mermaid_templates.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
+import 'package:stroom/widgets/mermaid_render_widget.dart';
+
+/// Builds a complete HTML document with mermaid.js that renders the
+/// given [mermaidCode] as a diagram.
+///
+/// Delegates to [MermaidRenderWidget.buildMermaidHtml] which is the
+/// single source of truth for the HTML/JS template.
+String _buildMermaidHtml(String mermaidCode) {
+  return MermaidRenderWidget.buildMermaidHtml(mermaidCode);
+}
 
 // ============================================================================
 // Editor Mode
@@ -90,6 +100,13 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   InAppWebViewController? _webViewController;
   bool _webViewLoaded = false;
 
+  // Deferred WebView creation guards (see _schedulePreviewWebViewCreation)
+  bool _previewWebViewScheduled = false;
+  bool _previewWebViewReady = false;
+
+  // Mermaid render error state (set via JavaScript error handler)
+  String? _previewErrorMessage;
+
   // Previously rendered code (to avoid unnecessary re-renders)
   String _lastRenderedCode = '';
 
@@ -105,6 +122,12 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       _codeController.text = MermaidTemplates.getTemplate(_selectedTypeId);
     }
     _codeController.addListener(_onCodeChanged);
+
+    // Defer WebView creation to after the first frame so that the
+    // page transition animation is not blocked by platform view creation.
+    if (widget.initialShowPreview) {
+      _schedulePreviewWebViewCreation();
+    }
   }
 
   /// 从 Mermaid 代码中检测图表类型
@@ -206,7 +229,15 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       }).toList(),
     ).then((selected) {
       if (selected != null && selected != _editorMode) {
-        setState(() => _editorMode = selected);
+        setState(() {
+          _editorMode = selected;
+          // Schedule WebView creation when entering split or preview mode
+          if ((selected == EditorMode.split ||
+                  selected == EditorMode.preview) &&
+              !_previewWebViewScheduled) {
+            _schedulePreviewWebViewCreation();
+          }
+        });
       }
     });
   }
@@ -215,85 +246,16 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   // Mermaid rendering via WebView
   // ---------------------------------------------------------------------------
 
-  static const _mermaidHtmlTemplate = '''
-<!DOCTYPE html>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js">
-  </script>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: sans-serif;
-      padding: 16px;
-      background: transparent;
-      display: flex;
-      justify-content: center;
-      overflow-x: auto;
-    }
-    #container {
-      max-width: 100%;
-      overflow-x: auto;
-    }
-    .mermaid {
-      text-align: center;
-    }
-    /* Prevent mermaid SVG from overflowing its container */
-    .mermaid svg {
-      max-width: 100%;
-      height: auto;
-    }
-    .error-message {
-      color: #e74c3c;
-      padding: 16px;
-      border: 1px solid #e74c3c;
-      border-radius: 8px;
-      margin: 16px;
-      background: #fdf0ef;
-      font-family: monospace;
-      white-space: pre-wrap;
-    }
-  </style>
-</head>
-<body>
-  <div id="container">
-    <pre class="mermaid" id="mermaid-code">
-MERMAID_CODE_PLACEHOLDER
-    </pre>
-  </div>
-  <script>
-    try {
-      mermaid.initialize({
-        theme: 'default',
-        securityLevel: 'loose',
-        fontFamily: 'sans-serif',
-      });
-      // Use mermaid.run() for v11 API compatibility (startOnLoad is deprecated)
-      mermaid.run({
-        nodes: [document.getElementById('mermaid-code')],
-      }).catch(function(err) {
-        document.getElementById('container').innerHTML =
-          '<div class="error-message">Mermaid render error: ' + err.message + '</div>';
-      });
-    } catch(e) {
-      document.getElementById('container').innerHTML =
-        '<div class="error-message">Mermaid initialize error: ' + e.message + '</div>';
-    }
-  </script>
-</body>
-</html>
-''';
-
-  String _buildMermaidHtml(String mermaidCode) {
-    final escaped = mermaidCode
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;');
-    return _mermaidHtmlTemplate.replaceFirst(
-      'MERMAID_CODE_PLACEHOLDER',
-      escaped,
-    );
+  /// Schedules the WebView to be created after the next frame to avoid
+  /// blocking the page transition animation with platform view creation.
+  void _schedulePreviewWebViewCreation() {
+    if (_previewWebViewScheduled) return;
+    _previewWebViewScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() => _previewWebViewReady = true);
+      }
+    });
   }
 
   void _updatePreview() {
@@ -301,7 +263,31 @@ MERMAID_CODE_PLACEHOLDER
     if (code.isEmpty || code == _lastRenderedCode) return;
     _lastRenderedCode = code;
 
+    // Clear any previous error so the loading overlay reappears
+    if (_previewErrorMessage != null) {
+      _previewErrorMessage = null;
+      _isPreviewReady = false;
+      if (mounted) setState(() {});
+    }
+
     if (_webViewController != null && _webViewLoaded) {
+      final html = _buildMermaidHtml(code);
+      _webViewController!.loadData(
+        data: html,
+        mimeType: 'text/html',
+        encoding: 'utf8',
+      );
+    }
+  }
+
+  void _retryPreview() {
+    setState(() {
+      _previewErrorMessage = null;
+      _isPreviewReady = false;
+    });
+    // Reload the current code into the WebView
+    final code = _codeController.text.trim();
+    if (code.isNotEmpty && _webViewController != null) {
       final html = _buildMermaidHtml(code);
       _webViewController!.loadData(
         data: html,
@@ -536,14 +522,24 @@ MERMAID_CODE_PLACEHOLDER
 
     return Stack(
       children: [
-        // Preview — always at the same tree depth to keep InAppWebView alive
-        if (showPreview)
+        // Preview — once the WebView is ready, keep it alive in the widget
+        // tree (even across mode switches) to avoid recreation freezes.
+        if (_previewWebViewReady)
           Positioned.fill(
             // In split mode, leave bottom space for the code editor
             bottom: _editorMode == EditorMode.split
                 ? MediaQuery.of(context).size.height * _splitEditorHeightRatio
                 : 0,
             child: _buildPreviewPanel(cs),
+          ),
+        // Loading placeholder — shown when the user enters split or preview
+        // mode but the WebView has not yet been created (deferred creation).
+        if (!_previewWebViewReady && showPreview)
+          Positioned.fill(
+            bottom: _editorMode == EditorMode.split
+                ? MediaQuery.of(context).size.height * _splitEditorHeightRatio
+                : 0,
+            child: _buildPreviewPlaceholder(cs),
           ),
         // Editor overlay for edit mode (full area)
         if (_editorMode == EditorMode.edit)
@@ -685,6 +681,11 @@ MERMAID_CODE_PLACEHOLDER
   // ---------------------------------------------------------------------------
 
   Widget _buildPreviewContent(ColorScheme cs) {
+    // The WebView is always kept alive in the widget tree once created.
+    // Errors and loading states are overlaid on top so the platform view
+    // (WebView2) is never destroyed by removing it from the tree.
+    final showLoading = !_isPreviewReady && _previewErrorMessage == null;
+
     return Stack(
       children: [
         // Single InAppWebView with a const Key so it is never recreated
@@ -699,6 +700,17 @@ MERMAID_CODE_PLACEHOLDER
           ),
           onWebViewCreated: (ctrl) {
             _webViewController = ctrl;
+            // Set up JavaScript handler to receive mermaid errors
+            ctrl.addJavaScriptHandler(
+              handlerName: 'onMermaidError',
+              callback: (args) {
+                if (mounted) {
+                  final msg =
+                      args.isNotEmpty ? args[0].toString() : '未知错误';
+                  setState(() => _previewErrorMessage = msg);
+                }
+              },
+            );
             final html = _buildMermaidHtml(
               _codeController.text.trim(),
             );
@@ -715,9 +727,17 @@ MERMAID_CODE_PLACEHOLDER
               if (mounted) setState(() => _isPreviewReady = true);
             }
           },
+          onLoadError: (ctrl, url, code, message) {
+            if (mounted && !_isPreviewReady) {
+              setState(() {
+                _isPreviewReady = true;
+                _previewErrorMessage = '页面加载失败: $message';
+              });
+            }
+          },
         ),
         // Loading overlay — shown until the WebView first finishes loading
-        if (!_isPreviewReady)
+        if (showLoading)
           Positioned.fill(
             child: Container(
               color: cs.surface,
@@ -742,7 +762,85 @@ MERMAID_CODE_PLACEHOLDER
               ),
             ),
           ),
+        // Error overlay — shown on top of the WebView when mermaid fails.
+        // The WebView remains in the tree so the controller stays valid
+        // for retry.
+        if (_previewErrorMessage != null)
+          Positioned.fill(
+            child: Container(
+              color: cs.surface,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.error_outline, size: 32, color: cs.error),
+                      const SizedBox(height: 8),
+                      Text(
+                        '渲染图表时出错',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: cs.error,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _previewErrorMessage!,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: cs.onSurfaceVariant,
+                        ),
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: _retryPreview,
+                        icon: const Icon(Icons.refresh, size: 16),
+                        label: const Text('重试'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
       ],
+    );
+  }
+
+  /// Placeholder shown while the WebView is being created (deferred).
+  Widget _buildPreviewPlaceholder(ColorScheme cs) {
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: cs.outlineVariant, width: 0.5),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(
+                strokeWidth: 2,
+                color: cs.primary,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '正在准备渲染引擎...',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
