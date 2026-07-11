@@ -76,7 +76,7 @@ jobs:
 
   macos-x64:
     needs: prepare-version
-    runs-on: macos-13
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -87,8 +87,8 @@ jobs:
       - name: Configure CocoaPods
         run: |
           pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
-      - run: flutter build macos --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
-      - name: Create macOS archive
+      - run: flutter build macos --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }} --dart-define=EXCLUDED_ARCHS=arm64
+      - name: Create macOS x64 archive
         shell: bash
         run: |
           cd build/macos/Build/Products/Release
