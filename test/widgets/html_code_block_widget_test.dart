@@ -412,8 +412,8 @@ void main() {
       );
 
       // In no-wrap mode (default): horizontal Scrollable should exist
-      final horizontalScrollables =
-          find.byWidgetPredicate((w) => w is Scrollable && w.axis == Axis.horizontal);
+      final horizontalScrollables = find.byWidgetPredicate(
+          (w) => w is Scrollable && w.axis == Axis.horizontal);
       expect(horizontalScrollables, findsWidgets,
           reason: 'No-wrap mode should have horizontal scroll');
 
@@ -423,8 +423,8 @@ void main() {
 
       // In wrap mode: no horizontal Scrollable should exist
       // (Only vertical scrollable remains)
-      final horizontalScrollablesAfter =
-          find.byWidgetPredicate((w) => w is Scrollable && w.axis == Axis.horizontal);
+      final horizontalScrollablesAfter = find.byWidgetPredicate(
+          (w) => w is Scrollable && w.axis == Axis.horizontal);
       expect(horizontalScrollablesAfter, findsNothing,
           reason: 'Wrap mode should have no horizontal scroll');
     });

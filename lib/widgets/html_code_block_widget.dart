@@ -159,15 +159,25 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
       // with the start of each logical line. Cross-line selection is
       // per-line in this mode.
       return _buildWrapModeContent(
-        lines, textColor, lineNumWidth, lineNumStyle, codeStyle, lineHeight,
+        lines,
+        textColor,
+        lineNumWidth,
+        lineNumStyle,
+        codeStyle,
+        lineHeight,
       );
     } else {
       // --- NO-WRAP MODE ---
       // A single SelectableText preserves cross-line selection. Line
       // numbers are in a fixed Column alongside, each at lineHeight.
       return _buildNoWrapModeContent(
-        widget.htmlCode, lines, textColor, lineNumWidth, lineNumStyle,
-        codeStyle, lineHeight,
+        widget.htmlCode,
+        lines,
+        textColor,
+        lineNumWidth,
+        lineNumStyle,
+        codeStyle,
+        lineHeight,
       );
     }
   }
@@ -225,7 +235,9 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
   }
 
   /// Builds code content for no-wrap mode with a single SelectableText
-  /// for cross-line selection support.
+  /// for cross-line selection support, and a sticky line-number column
+  /// on the left that does NOT scroll away when the user drags
+  /// horizontally to see overflow content.
   Widget _buildNoWrapModeContent(
     String fullCode,
     List<String> lines,
@@ -235,7 +247,8 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
     TextStyle codeStyle,
     double lineHeight,
   ) {
-    // Line numbers column
+    // Line numbers column — stays fixed because it sits OUTSIDE the
+    // horizontal SingleChildScrollView below.
     final lineNumWidgets = List<Widget>.generate(lines.length, (i) {
       return SizedBox(
         width: lineNumWidth,
@@ -262,20 +275,28 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
       // SingleChildScrollView) prevents wrapping regardless.
     );
 
+    // Vertical scroll wraps a Row that, on the left, keeps the line-number
+    // column fixed, and on the right nests the horizontal scroll for the
+    // code content only.
     return SingleChildScrollView(
       scrollDirection: Axis.vertical,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(0, 40, 12, 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              lineNumColumn,
-              const SizedBox(width: 8),
-              codeWidget,
-            ],
-          ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 40, 12, 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Line numbers — outside the horizontal scroll, so they
+            // remain visible when the user scrolls the code sideways.
+            lineNumColumn,
+            const SizedBox(width: 8),
+            // Code scrolls horizontally while line numbers stay put.
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: codeWidget,
+              ),
+            ),
+          ],
         ),
       ),
     );
