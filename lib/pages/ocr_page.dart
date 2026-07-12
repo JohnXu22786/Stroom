@@ -36,9 +36,8 @@ OcrConfig? _resolveOcrConfig(WidgetRef ref) {
     if (entry.type == 'ocr') {
       for (final config in entry.configs) {
         if (config.host.isNotEmpty && config.key.isNotEmpty) {
-          final model = config.models.isNotEmpty
-              ? config.models.first.modelId
-              : 'gpt-4o';
+          final model =
+              config.models.isNotEmpty ? config.models.first.modelId : 'gpt-4o';
           return OcrConfig(host: config.host, apiKey: config.key, model: model);
         }
       }
