@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -21,7 +22,10 @@ import 'chat/composer/video_album_picker_dialog.dart';
 /// 允许用户选择视频文件，提取音频并保存到音频库。
 /// 桌面端使用 FFmpeg 进行音频提取，Web 端暂不支持。
 class AudioSeparationPage extends ConsumerStatefulWidget {
-  const AudioSeparationPage({super.key});
+  const AudioSeparationPage({super.key, this.retryData});
+
+  /// Retry data to pre-populate the form (video files, etc.).
+  final Map<String, dynamic>? retryData;
 
   @override
   ConsumerState<AudioSeparationPage> createState() =>
@@ -62,6 +66,34 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   void initState() {
     super.initState();
     _checkEngine();
+    _applyRetryData();
+  }
+
+  /// Pre-populate form from retry data if available.
+  void _applyRetryData() {
+    final data = widget.retryData;
+    if (data == null) return;
+
+    final videosData = data['videos'] as List<dynamic>?;
+    if (videosData != null) {
+      for (final videoData in videosData) {
+        if (videoData is Map) {
+          final bytesStr = videoData['bytes'] as String?;
+          if (bytesStr != null) {
+            try {
+              final bytes = base64Decode(bytesStr);
+              _selectedVideos.add(SelectedVideo(
+                bytes: bytes,
+                name: videoData['name'] as String? ?? 'video',
+                format: videoData['format'] as String? ?? 'mp4',
+              ));
+            } catch (e) {
+              debugPrint('Failed to decode retry video: $e');
+            }
+          }
+        }
+      }
+    }
   }
 
   Future<void> _checkEngine() async {
@@ -679,9 +711,24 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     final taskIds = <String>[];
     for (final video in videosToProcess) {
       final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
+
+      // Build retry data: encode only the current video bytes as base64
+      // so they can be restored on retry (each task handles one file)
+      final retryData = <String, dynamic>{
+        'type': 'audioSeparation',
+        'videos': [
+          <String, dynamic>{
+            'bytes': base64Encode(video.bytes),
+            'name': video.name,
+            'format': video.format,
+          },
+        ],
+      };
+
       final taskId = bgNotifier.addTask(
         type: BackgroundTaskType.audioSeparation,
         title: title,
+        retryData: retryData,
       );
       taskIds.add(taskId);
     }

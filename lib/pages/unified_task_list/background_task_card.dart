@@ -431,7 +431,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
             icon: Icons.folder_open,
             label: '打开文件',
             color: Colors.green,
-            onPressed: () => openFile(task.downloadedFilePath!),
+            onPressed: () => openFile(task.downloadedFilePath!, context),
           ),
         // Retry button for failed tasks
         if (task.status == TaskStatus.failed)
@@ -463,19 +463,25 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
       case BackgroundTaskType.ocr:
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => const OcrPage()),
+          MaterialPageRoute(
+            builder: (_) => OcrPage(retryData: task.retryData),
+          ),
         );
         break;
       case BackgroundTaskType.asr:
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => const AsrPage()),
+          MaterialPageRoute(
+            builder: (_) => AsrPage(retryData: task.retryData),
+          ),
         );
         break;
       case BackgroundTaskType.audioSeparation:
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => const AudioSeparationPage()),
+          MaterialPageRoute(
+            builder: (_) => AudioSeparationPage(retryData: task.retryData),
+          ),
         );
         break;
     }

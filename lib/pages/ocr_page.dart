@@ -95,11 +95,14 @@ String _buildOcrModelDisplayText(ModelConfig model, String providerName) {
 /// Main OCR page — allows taking photos or selecting from gallery,
 /// then performing OCR and saving results to text storage.
 class OcrPage extends ConsumerStatefulWidget {
-  const OcrPage({super.key, this.testImages});
+  const OcrPage({super.key, this.testImages, this.retryData});
 
   /// Test-only: pre-populate images for widget testing.
   @visibleForTesting
   final List<SelectedImage>? testImages;
+
+  /// Retry data to pre-populate the form (images, model, etc.).
+  final Map<String, dynamic>? retryData;
 
   @override
   ConsumerState<OcrPage> createState() => _OcrPageState();
@@ -134,6 +137,38 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     super.initState();
     if (widget.testImages != null) {
       _selectedImages.addAll(widget.testImages!);
+    }
+    _applyRetryData();
+  }
+
+  /// Pre-populate form from retry data if available.
+  void _applyRetryData() {
+    final data = widget.retryData;
+    if (data == null) return;
+
+    final imagesData = data['images'] as List<dynamic>?;
+    if (imagesData != null) {
+      for (final imgData in imagesData) {
+        if (imgData is Map) {
+          final bytesStr = imgData['bytes'] as String?;
+          if (bytesStr != null) {
+            try {
+              final bytes = base64Decode(bytesStr);
+              _selectedImages.add(SelectedImage(
+                bytes: bytes,
+                format: imgData['format'] as String? ?? 'jpeg',
+                sourceName: imgData['name'] as String?,
+              ));
+            } catch (e) {
+              debugPrint('Failed to decode retry image: $e');
+            }
+          }
+        }
+      }
+    }
+
+    if (data['modelIndex'] is int) {
+      _selectedModelIndex = data['modelIndex'] as int;
     }
   }
 
@@ -1328,8 +1363,26 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final title = allHaveSourceNames
         ? 'OCR_${_selectedImages.first.sourceName!}'
         : 'OCR_$timestamp';
-    final taskId =
-        bgNotifier.addTask(type: BackgroundTaskType.ocr, title: title);
+
+    // Build retry data: encode images as base64 so they can be restored on retry
+    final retryImages = _selectedImages.map((img) {
+      return <String, dynamic>{
+        'bytes': base64Encode(img.bytes),
+        'format': img.format,
+        'name': img.sourceName,
+      };
+    }).toList();
+    final retryData = <String, dynamic>{
+      'type': 'ocr',
+      'images': retryImages,
+      'modelIndex': _selectedModelIndex,
+    };
+
+    final taskId = bgNotifier.addTask(
+      type: BackgroundTaskType.ocr,
+      title: title,
+      retryData: retryData,
+    );
 
     // Pop back to home page immediately so user can see task progress
     if (mounted) {

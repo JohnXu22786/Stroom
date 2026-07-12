@@ -257,16 +257,28 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage> {
         if (item.isCatCatch) {
           final t = item.catCatchTask!;
           final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
-          return CatCatchTaskCard(task: t, isUnread: isUnread);
+          return CatCatchTaskCard(
+            key: ValueKey(item.id),
+            task: t,
+            isUnread: isUnread,
+          );
         }
         if (item.isBackground) {
           final t = item.backgroundTask!;
           final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
-          return BackgroundTaskCard(task: t, isUnread: isUnread);
+          return BackgroundTaskCard(
+            key: ValueKey(item.id),
+            task: t,
+            isUnread: isUnread,
+          );
         }
         final t = item.synthesisTask!;
         final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
-        return SynthesisTaskCard(task: t, isUnread: isUnread);
+        return SynthesisTaskCard(
+          key: ValueKey(item.id),
+          task: t,
+          isUnread: isUnread,
+        );
       },
     );
   }
