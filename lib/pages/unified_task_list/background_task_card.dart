@@ -422,6 +422,14 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
+        // "立即开始" button for waiting tasks
+        if (task.status == TaskStatus.waiting)
+          _actionButton(
+            icon: Icons.play_arrow,
+            label: '立即开始',
+            color: Colors.purple,
+            onPressed: () => _navigateToTaskPage(context, task),
+          ),
         // Open file button for completed tasks
         if (task.status == TaskStatus.completed &&
             task.downloadedFilePath != null)
@@ -550,6 +558,8 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         return Colors.red;
       case TaskStatus.paused:
         return Colors.orange;
+      case TaskStatus.waiting:
+        return Colors.purple;
     }
   }
 
@@ -563,6 +573,8 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         return Icons.error;
       case TaskStatus.paused:
         return Icons.pause_circle;
+      case TaskStatus.waiting:
+        return Icons.hourglass_empty;
     }
   }
 
@@ -574,6 +586,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         size: 24,
       );
     }
+    // Waiting uses a static icon (no spinning), handled by the fallback below.
     return Icon(_statusIcon(status), color: _statusColor(status), size: 24);
   }
 
@@ -625,6 +638,18 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
           child: const Text(
             '已暂停',
             style: TextStyle(fontSize: 11, color: Colors.orange),
+          ),
+        );
+      case TaskStatus.waiting:
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.purple.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Text(
+            '等待中',
+            style: TextStyle(fontSize: 11, color: Colors.purple),
           ),
         );
     }

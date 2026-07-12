@@ -243,24 +243,47 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   BackgroundTaskNotifier() : super([]);
 
-  /// Add a new background task (running) and return its ID.
+  /// Add a new background task and return its ID.
   /// Initializes default step chain based on task type.
   /// [retryData] stores the original input parameters (images, audio, model, etc.)
   /// so the retry flow can pre-populate the form.
+  /// When [startImmediately] is true (default), the task starts as [TaskStatus.running].
+  /// When false, the task starts as [TaskStatus.waiting] and can be started later via [startTask].
   String addTask({
     required BackgroundTaskType type,
     required String title,
     Map<String, dynamic>? retryData,
+    bool startImmediately = true,
   }) {
     final id = _uuid.v4();
     final steps = type.stepLabels
         .map((label) => BgTaskStep(label: label, status: BgStepStatus.pending))
         .toList();
     final task = BackgroundTask(
-        id: id, type: type, title: title, steps: steps, retryData: retryData);
+      id: id,
+      type: type,
+      title: title,
+      status: startImmediately ? TaskStatus.running : TaskStatus.waiting,
+      steps: steps,
+      retryData: retryData,
+    );
     state = [task, ...state];
     _persistTasks();
     return id;
+  }
+
+  /// Start a waiting task — transitions it from [TaskStatus.waiting] to [TaskStatus.running].
+  /// Does nothing if the task is not in waiting status (e.g. already running/completed).
+  void startTask(String taskId) {
+    state = state.map((t) {
+      if (t.id != taskId) return t;
+      if (t.status != TaskStatus.waiting) return t;
+      return t.copyWith(
+        status: TaskStatus.running,
+        statusChangedAt: DateTime.now(),
+      );
+    }).toList();
+    _persistTasks();
   }
 
   /// Mark a task as completed and keep it in the list (visible to user).
@@ -457,6 +480,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   /// Restore persisted tasks on startup.
   /// Running tasks are marked as failed since they can't be resumed.
+  /// Waiting tasks are kept as waiting (they haven't started yet).
   Future<void> restoreFromPersistence() async {
     final tasks = await _loadPersistedTasks();
     if (tasks.isEmpty) return;
