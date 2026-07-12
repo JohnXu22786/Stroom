@@ -172,6 +172,24 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
               decoration: InputDecoration(
                 hintText: '请输入视频/音频网页URL',
                 prefixIcon: const Icon(Icons.link),
+                suffixIcon: ListenableBuilder(
+                  listenable: _urlController,
+                  builder: (context, child) {
+                    if (_urlController.text.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    return IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _urlController.clear();
+                        _hourController.clear();
+                        _minuteController.clear();
+                        _secondController.clear();
+                      },
+                      tooltip: '清空所有输入',
+                    );
+                  },
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),

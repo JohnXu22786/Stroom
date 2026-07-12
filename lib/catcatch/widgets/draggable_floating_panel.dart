@@ -15,6 +15,10 @@ import 'package:flutter/material.dart';
 /// - Minimize/expand toggle
 /// - Close button
 ///
+/// Visibility is controlled externally via [visible]. The panel shows when
+/// [visible] is true and hides when false. This allows parent widgets to
+/// fully control show/hide behavior (e.g. via a bottom bar toggle button).
+///
 /// This widget is designed to be placed inside a [Stack] above a [WebView].
 class DraggableFloatingPanel extends StatefulWidget {
   /// The list of detected media URLs to display.
@@ -30,12 +34,17 @@ class DraggableFloatingPanel extends StatefulWidget {
   /// Optional initial position offset.
   final Offset? initialPosition;
 
+  /// Whether the panel is visible. The panel shows when true and hides
+  /// when false. Defaults to true.
+  final bool visible;
+
   const DraggableFloatingPanel({
     super.key,
     required this.detectedUrls,
     required this.onConfirmCapture,
     this.onClose,
     this.initialPosition,
+    this.visible = true,
   });
 
   @override
@@ -48,7 +57,6 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
   double _left = 0;
   double _top = 0;
   bool _minimized = false;
-  bool _visible = true;
   int? _selectedIndex;
 
   @override
@@ -70,11 +78,13 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
         _selectedIndex = null;
       }
     }
-  }
-
-  void _close() {
-    setState(() => _visible = false);
-    widget.onClose?.call();
+    // Reset selected index when panel transitions from hidden to visible
+    if (widget.visible && !oldWidget.visible) {
+      setState(() {
+        _selectedIndex = null;
+        _minimized = false;
+      });
+    }
   }
 
   void _toggleMinimize() {
@@ -137,138 +147,159 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_visible) return const SizedBox.shrink();
+    if (!widget.visible) return const SizedBox.shrink();
 
     final colorScheme = Theme.of(context).colorScheme;
 
-    // Note: This widget returns the panel content directly (without Positioned).
-    // The parent should wrap it in a Positioned or Stack as needed.
-    // Tests can place it directly in the widget tree without a Stack.
-    return GestureDetector(
-      onPanUpdate: (details) {
-        setState(() {
-          _left = max(0, _left + details.delta.dx);
-          _top = max(0, _top + details.delta.dy);
-        });
-      },
-      child: Material(
-        elevation: 8,
-        borderRadius: BorderRadius.circular(12),
-        color: colorScheme.surfaceContainerHigh,
-        surfaceTintColor: colorScheme.primaryContainer,
-        child: Container(
-          width: _panelWidth,
-          constraints: BoxConstraints(maxHeight: _panelMaxHeight),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: colorScheme.primary.withValues(alpha: 0.3),
-              width: 1.5,
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // --- Drag handle / Header ---
-              Container(
+    // Wrap the panel in a Stack + Positioned so it manages its own
+    // screen position internally. The parent no longer needs a
+    // Positioned wrapper.
+    // Use a Stack + Positioned so the panel manages its own position.
+    // SizedBox.expand() gives the inner Stack the full available size so
+    // that Positioned offsets work relative to the parent Stack's origin.
+    return Stack(
+      children: [
+        // IgnorePointer ensures the full-screen SizedBox does not
+        // intercept touch events from widgets below (e.g. the WebView).
+        const IgnorePointer(
+          child: SizedBox.expand(),
+        ),
+        Positioned(
+          left: _left,
+          top: _top,
+          child: GestureDetector(
+            onPanUpdate: (details) {
+              setState(() {
+                _left = max(0, _left + details.delta.dx);
+                _top = max(0, _top + details.delta.dy);
+              });
+            },
+            child: Material(
+              elevation: 8,
+              borderRadius: BorderRadius.circular(12),
+              color: colorScheme.surfaceContainerHigh,
+              surfaceTintColor: colorScheme.primaryContainer,
+              child: Container(
+                width: _panelWidth,
+                constraints: BoxConstraints(maxHeight: _panelMaxHeight),
                 decoration: BoxDecoration(
-                  color: colorScheme.primaryContainer,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(10),
-                    topRight: Radius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: colorScheme.primary.withValues(alpha: 0.3),
+                    width: 1.5,
                   ),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Row(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      Icons.pets,
-                      size: 16,
-                      color: colorScheme.onPrimaryContainer,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '猫抓嗅探',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onPrimaryContainer,
+                    // --- Drag handle / Header ---
+                    Container(
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer,
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(10),
+                          topRight: Radius.circular(10),
+                        ),
                       ),
-                    ),
-                    const Spacer(),
-                    // Count badge
-                    if (widget.detectedUrls.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 1,
-                        ),
-                        decoration: BoxDecoration(
-                          color: colorScheme.error,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          '${widget.detectedUrls.length}',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.pets,
+                            size: 16,
+                            color: colorScheme.onPrimaryContainer,
                           ),
-                        ),
-                      ),
-                    const SizedBox(width: 4),
-                    // Minimize
-                    InkWell(
-                      onTap: _toggleMinimize,
-                      borderRadius: BorderRadius.circular(12),
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Icon(
-                          _minimized ? Icons.expand_less : Icons.expand_more,
-                          size: 16,
-                          color: colorScheme.onPrimaryContainer,
-                        ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '猫抓嗅探',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onPrimaryContainer,
+                            ),
+                          ),
+                          const Spacer(),
+                          // Count badge
+                          if (widget.detectedUrls.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colorScheme.error,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '${widget.detectedUrls.length}',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          const SizedBox(width: 4),
+                          // Minimize
+                          InkWell(
+                            onTap: _toggleMinimize,
+                            borderRadius: BorderRadius.circular(12),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Icon(
+                                _minimized
+                                    ? Icons.expand_less
+                                    : Icons.expand_more,
+                                size: 16,
+                                color: colorScheme.onPrimaryContainer,
+                              ),
+                            ),
+                          ),
+                          // Close
+                          InkWell(
+                            onTap: widget.onClose,
+                            borderRadius: BorderRadius.circular(12),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Icon(
+                                Icons.close,
+                                size: 16,
+                                color: colorScheme.onPrimaryContainer,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    // Close
-                    InkWell(
-                      onTap: _close,
-                      borderRadius: BorderRadius.circular(12),
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Icon(
-                          Icons.close,
-                          size: 16,
-                          color: colorScheme.onPrimaryContainer,
+
+                    // --- Content ---
+                    if (!_minimized)
+                      Flexible(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // URL list
+                            Flexible(
+                              child: widget.detectedUrls.isEmpty
+                                  ? _buildEmptyState(colorScheme)
+                                  : _buildUrlList(colorScheme),
+                            ),
+                            // Action bar
+                            if (widget.detectedUrls.isNotEmpty)
+                              _buildActionBar(colorScheme),
+                          ],
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
-
-              // --- Content ---
-              if (!_minimized)
-                Flexible(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // URL list
-                      Flexible(
-                        child: widget.detectedUrls.isEmpty
-                            ? _buildEmptyState(colorScheme)
-                            : _buildUrlList(colorScheme),
-                      ),
-                      // Action bar
-                      if (widget.detectedUrls.isNotEmpty)
-                        _buildActionBar(colorScheme),
-                    ],
-                  ),
-                ),
-            ],
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 

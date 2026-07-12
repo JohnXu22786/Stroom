@@ -18,7 +18,7 @@ void main() {
     testWidgets('DraggableFloatingPanel can be composed in a Stack layout',
         (tester) async {
       // Simulate the layout: Stack with a Container (simulating WebView)
-      // and a floating panel overlay
+      // and a floating panel overlay (panel now manages its own position)
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -30,14 +30,12 @@ void main() {
                   width: 400,
                   height: 800,
                 ),
-                // Draggable floating panel on top
-                Positioned(
-                  top: 100,
-                  right: 10,
-                  child: DraggableFloatingPanel(
-                    detectedUrls: ['https://cdn.example.com/video.mp4'],
-                    onConfirmCapture: (_) {},
-                  ),
+                // Draggable floating panel on top (no Positioned wrapper
+                // needed - the panel positions itself internally)
+                DraggableFloatingPanel(
+                  detectedUrls: ['https://cdn.example.com/video.mp4'],
+                  onConfirmCapture: (_) {},
+                  initialPosition: const Offset(8, 8),
                 ),
               ],
             ),
@@ -86,13 +84,19 @@ void main() {
       expect(find.text('20'), findsOneWidget);
     });
 
-    testWidgets('DraggableFloatingPanel close button works', (tester) async {
+    testWidgets('DraggableFloatingPanel close button fires onClose callback',
+        (tester) async {
+      bool onCloseCalled = false;
+
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: DraggableFloatingPanel(
               detectedUrls: const ['https://cdn.example.com/video.mp4'],
               onConfirmCapture: (_) {},
+              onClose: () {
+                onCloseCalled = true;
+              },
             ),
           ),
         ),
@@ -100,6 +104,27 @@ void main() {
 
       // Tap the close button
       await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+
+      // The onClose callback should have been called
+      expect(onCloseCalled, isTrue);
+
+      // Panel should still be visible (parent controls visibility externally)
+      expect(find.byIcon(Icons.close), findsOneWidget);
+
+      // When parent sets visible: false, the panel hides
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DraggableFloatingPanel(
+              detectedUrls: const ['https://cdn.example.com/video.mp4'],
+              onConfirmCapture: (_) {},
+              onClose: () {},
+              visible: false,
+            ),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       // The panel should be dismissed
