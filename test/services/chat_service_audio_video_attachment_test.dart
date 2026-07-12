@@ -208,7 +208,8 @@ void main() {
       );
     });
 
-    test('large audio file (>10MB) gets skipped with descriptive text', () async {
+    test('large audio file (>10MB) gets skipped with descriptive text',
+        () async {
       final att = Attachment(
         fileName: 'big_audio.mp3',
         mimeType: 'audio/mpeg',
@@ -249,7 +250,8 @@ void main() {
       );
     });
 
-    test('large video file (>10MB) gets skipped with descriptive text', () async {
+    test('large video file (>10MB) gets skipped with descriptive text',
+        () async {
       final att = Attachment(
         fileName: 'big_video.mp4',
         mimeType: 'video/mp4',
@@ -286,7 +288,8 @@ void main() {
       );
     });
 
-    test('audio attachment without cached base64 would read from disk', () async {
+    test('audio attachment without cached base64 would read from disk',
+        () async {
       final att = Attachment(
         fileName: 'no_cache_audio.wav',
         mimeType: 'audio/wav',
@@ -361,9 +364,26 @@ void main() {
           // video handling
         } else {
           final textExts = [
-            'txt', 'md', 'json', 'csv', 'log', 'yaml', 'xml',
-            'ini', 'cfg', 'py', 'js', 'ts', 'dart', 'java',
-            'cpp', 'h', 'rs', 'go', 'rb', 'php',
+            'txt',
+            'md',
+            'json',
+            'csv',
+            'log',
+            'yaml',
+            'xml',
+            'ini',
+            'cfg',
+            'py',
+            'js',
+            'ts',
+            'dart',
+            'java',
+            'cpp',
+            'h',
+            'rs',
+            'go',
+            'rb',
+            'php',
           ];
           final ext = a.fileName.split('.').last.toLowerCase();
           if (textExts.contains(ext)) {
@@ -388,7 +408,8 @@ void main() {
       );
     });
 
-    test('non-audio/video/image files still produce text description', () async {
+    test('non-audio/video/image files still produce text description',
+        () async {
       final att = Attachment(
         fileName: 'archive.zip',
         mimeType: 'application/zip',
@@ -410,9 +431,26 @@ void main() {
           // video handling
         } else {
           final textExts = [
-            'txt', 'md', 'json', 'csv', 'log', 'yaml', 'xml',
-            'ini', 'cfg', 'py', 'js', 'ts', 'dart', 'java',
-            'cpp', 'h', 'rs', 'go', 'rb', 'php',
+            'txt',
+            'md',
+            'json',
+            'csv',
+            'log',
+            'yaml',
+            'xml',
+            'ini',
+            'cfg',
+            'py',
+            'js',
+            'ts',
+            'dart',
+            'java',
+            'cpp',
+            'h',
+            'rs',
+            'go',
+            'rb',
+            'php',
           ];
           final ext = a.fileName.split('.').last.toLowerCase();
           if (textExts.contains(ext)) {
