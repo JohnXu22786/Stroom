@@ -138,9 +138,9 @@ Future<void> main() async {
         registerVideoPlayer();
         if (defaultTargetPlatform == TargetPlatform.android ||
             defaultTargetPlatform == TargetPlatform.iOS) {
-          await initializeBackgroundService();
-          // 初始化通知服务
+          // 先初始化通知服务（创建通知渠道），再初始化后台服务
           await NotificationService().initialize();
+          await initializeBackgroundService();
         }
         registerBuiltinProviders();
         registerBuiltinProviderTypes();
