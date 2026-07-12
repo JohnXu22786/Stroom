@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dio/dio.dart';
 import 'package:stroom/providers/chat_api_provider.dart';
 import 'package:stroom/providers/tts_provider.dart';
 import 'package:stroom/services/ocr_service.dart';

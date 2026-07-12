@@ -62,7 +62,7 @@ void main() {
 
     test('handles title with only special chars', () {
       expect(
-        sanitizeForFileName('<>:"/\|?*'),
+        sanitizeForFileName('<>:"/|?*'),
         isEmpty,
       );
     });

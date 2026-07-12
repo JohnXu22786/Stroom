@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -56,13 +54,11 @@ void main() {
     });
 
     testWidgets('close button closes dialog and returns null', (tester) async {
-      Future<List<MapEntry<String, Uint8List>>?>? result;
-
       await tester.pumpWidget(MaterialApp(
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () {
-              result = showAppFilePickerDialog(context);
+              showAppFilePickerDialog(context);
             },
             child: const Text('Open Picker'),
           ),

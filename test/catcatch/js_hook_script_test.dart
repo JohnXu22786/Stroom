@@ -116,11 +116,10 @@ void main() {
 
     test('script trim is syntactically safe (balanced braces)', () {
       // Count opening and closing braces as a sanity check
-      final openBraces = '{)}';
       // Simple balanced brace count (ignores strings/regex)
       // This is a basic sanity check — not a full JS parser
-      final opens = '${JsHookScript.script}'.split('{').length - 1;
-      final closes = '${JsHookScript.script}'.split('}').length - 1;
+      final opens = JsHookScript.script.split('{').length - 1;
+      final closes = JsHookScript.script.split('}').length - 1;
       expect(opens, equals(closes),
           reason:
               'Braces should be balanced: $opens opening vs $closes closing');

@@ -280,8 +280,6 @@ void main() {
 
       await openPanel(tester);
 
-      // Find all option chip texts and verify order
-      final chipWidgets = find.byType(Padding);
       // Just verify all options are present
       expect(find.text('max'), findsOneWidget);
       expect(find.text('medium'), findsOneWidget);

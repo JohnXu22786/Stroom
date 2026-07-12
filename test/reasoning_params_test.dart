@@ -7,6 +7,7 @@ import 'package:stroom/services/chat_service.dart';
 
 /// Mock provider that captures the request body for inspection.
 class _MockProvider extends BaseChatProvider {
+  @override
   Map<String, dynamic>? lastRequestBody;
 
   @override

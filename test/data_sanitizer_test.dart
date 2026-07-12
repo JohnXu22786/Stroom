@@ -104,26 +104,16 @@ void main() {
       // Some base64 encoders insert newlines every 76 characters.
       // Need total >= 300 chars of base64 content (excluding newlines).
       // 76*4 = 304 + 3 newlines = 307 total
-      final b64WithNewlines = ('A' * 76) +
-          '\n' +
-          ('B' * 76) +
-          '\n' +
-          ('C' * 76) +
-          '\n' +
-          ('D' * 76);
+      final b64WithNewlines =
+          '${'A' * 76}\n${'B' * 76}\n${'C' * 76}\n${'D' * 76}';
       final result = DataSanitizer.sanitizeBase64String(b64WithNewlines);
       expect(result, '[base64 data: 307 bytes hidden]');
     });
 
     test('multi-line base64 with embedded carriage returns is detected', () {
       // 76*4 = 304 + 3*\r\n = 310 total chars, >= 300 threshold
-      final b64WithCR = ('X' * 76) +
-          '\r\n' +
-          ('Y' * 76) +
-          '\r\n' +
-          ('Z' * 76) +
-          '\r\n' +
-          ('W' * 76);
+      final b64WithCR =
+          '${'X' * 76}\r\n${'Y' * 76}\r\n${'Z' * 76}\r\n${'W' * 76}';
       final result = DataSanitizer.sanitizeBase64String(b64WithCR);
       expect(result, '[base64 data: 310 bytes hidden]');
     });

@@ -231,7 +231,6 @@ void main() {
 
       // Verify the badge size — it should be close to font size (~11px) but
       // slightly larger (16px). Measure from the rendered badge.
-      final badgeWidget = tester.widget<Container>(find.byType(Container).last);
       // The Container with ChipBadge style has width:16, height:16
       // Cannot easily get rendered size in test, but the container is
       // created with fixed 16x16 dimensions

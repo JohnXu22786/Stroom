@@ -199,7 +199,7 @@ void main() {
 
   group('FileManagerView back navigation to parent folder', () {
     /// Helper: wrap FileManagerView in MaterialApp + Scaffold for testing.
-    Widget _buildFM({
+    Widget buildFM({
       required int signal,
       required Set<String> folders,
       required FileManagerConfig<_TestFileRecord> config,
@@ -258,7 +258,7 @@ void main() {
         );
 
         // Initial render: FileManagerView with navigateToParentSignal = 0
-        await tester.pumpWidget(_buildFM(
+        await tester.pumpWidget(buildFM(
           signal: 0,
           folders: {'subfolder'},
           config: config,
@@ -270,7 +270,7 @@ void main() {
         expect(capturedCurrentFolder, 'subfolder');
 
         // Increment signal to simulate outer PopScope navigation request
-        await tester.pumpWidget(_buildFM(
+        await tester.pumpWidget(buildFM(
           signal: 1,
           folders: {'subfolder'},
           config: config,
@@ -313,7 +313,7 @@ void main() {
         );
 
         // Initial render
-        await tester.pumpWidget(_buildFM(
+        await tester.pumpWidget(buildFM(
           signal: 0,
           folders: {'photos', 'photos/vacation'},
           config: config,
@@ -332,7 +332,7 @@ void main() {
         expect(folderHistory.last, 'photos/vacation');
 
         // Increment signal: should go up to "photos"
-        await tester.pumpWidget(_buildFM(
+        await tester.pumpWidget(buildFM(
           signal: 1,
           folders: {'photos', 'photos/vacation'},
           config: config,
@@ -342,7 +342,7 @@ void main() {
         expect(folderHistory.last, 'photos');
 
         // Increment signal again: should go up to root ''
-        await tester.pumpWidget(_buildFM(
+        await tester.pumpWidget(buildFM(
           signal: 2,
           folders: {'photos', 'photos/vacation'},
           config: config,
@@ -369,7 +369,7 @@ void main() {
         );
 
         // Initial render
-        await tester.pumpWidget(_buildFM(
+        await tester.pumpWidget(buildFM(
           signal: 0,
           folders: {'subfolder'},
           config: config,
@@ -382,7 +382,7 @@ void main() {
         expect(capturedFolder, 'subfolder');
 
         // Increment signal to navigate to parent
-        await tester.pumpWidget(_buildFM(
+        await tester.pumpWidget(buildFM(
           signal: 1,
           folders: {'subfolder'},
           config: config,

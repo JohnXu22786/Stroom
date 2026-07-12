@@ -303,7 +303,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         .read(updateProvider.notifier)
                         .setAcceptPreRelease(value);
                   },
-                  activeColor: Colors.orange,
+                  activeThumbColor: Colors.orange,
                 ),
                 onTap: () {},
               ),

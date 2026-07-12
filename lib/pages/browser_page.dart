@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -220,7 +219,8 @@ class _BrowserPageState extends State<BrowserPage> {
               borderSide: BorderSide.none,
             ),
             filled: true,
-            fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.5),
+            fillColor:
+                colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             suffixIcon: IconButton(

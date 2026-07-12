@@ -186,7 +186,7 @@ class _Mp4Demuxer {
                 final stblEnd = icStart + icSize;
                 while (_offset < stblEnd) {
                   final scStart = _offset;
-                  final scSize = _readUint32();
+                  _readUint32(); // box size (advances offset)
                   final scType = _readString(4);
                   if (scType == 'stsd') {
                     _offset += 4;

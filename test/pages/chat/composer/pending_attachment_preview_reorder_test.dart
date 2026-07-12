@@ -9,7 +9,6 @@ import 'package:stroom/pages/chat/composer/chat_composer_widget.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
-import 'package:stroom/services/attachment_storage.dart';
 
 /// Helper: create a test Attachment with given file type.
 Attachment _createTestAttachment({
@@ -225,7 +224,6 @@ void main() {
       // 3. ImageEditorPage returns edited bytes
       // 4. Attachment is updated with new bytes, hash, and storage path
 
-      final originalBytes = Uint8List.fromList([0, 1, 2, 3, 4]);
       final editedBytes = Uint8List.fromList([5, 6, 7, 8, 9]);
 
       final att = _createTestAttachment(

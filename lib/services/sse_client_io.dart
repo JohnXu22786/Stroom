@@ -43,7 +43,7 @@ Stream<String> sseStream(
         yield line;
       }
     }
-  } on DioException catch (e) {
+  } on DioException catch (_) {
     // Rethrow the original DioException so that upstream code
     // (chat_api_provider.dart) can capture response data and status code.
     rethrow;

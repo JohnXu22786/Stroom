@@ -1,8 +1,6 @@
-import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/assistant.dart'
     show AssistantSettings, CustomParameter;
-import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/models/ai_stream_event.dart';
 import 'package:stroom/providers/chat_api_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -112,7 +110,7 @@ void main() {
       expect(metadata, isA<Map>(),
           reason: 'JSON type param should be a Map, not a String');
       expect((metadata as Map)['source'], equals('test'));
-      expect((metadata as Map)['version'], equals(2));
+      expect(metadata['version'], equals(2));
     });
 
     test('JSON type assistant-level custom param is properly parsed', () async {
@@ -294,7 +292,6 @@ void main() {
       final messagesIdx = keys.indexOf('messages');
       final modelIdx = keys.indexOf('model');
       final maxTokensIdx = keys.indexOf('max_tokens');
-      final temperatureIdx = keys.indexOf('temperature');
       final customParamIdx = keys.indexOf('custom_param_1');
 
       // custom_param_1 should be after standard params

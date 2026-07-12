@@ -49,7 +49,7 @@ void showChatAttachmentPanel({
                     width: 28,
                     height: 28,
                     decoration: BoxDecoration(
-                      color: cs.primary.withOpacity(0.15),
+                      color: cs.primary.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Icon(Icons.attach_file_outlined,
@@ -144,10 +144,10 @@ class _FileActionButton extends StatelessWidget {
         width: 80,
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: color.withOpacity(0.2),
+            color: color.withValues(alpha: 0.2),
             width: 1,
           ),
         ),
@@ -158,7 +158,7 @@ class _FileActionButton extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
+                color: color.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, size: 24, color: color),

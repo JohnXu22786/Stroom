@@ -389,7 +389,7 @@ void main() {
     });
 
     test('getSnippet truncates long text', () {
-      final longText = 'A' * 50 + 'Flutter' + 'B' * 50;
+      final longText = '${'A' * 50}Flutter${'B' * 50}';
       final snippet = MessageSearchPage.getSnippet(longText, 50, 57);
       expect(snippet, contains('Flutter'));
       // Should be truncated (total context 40+40+7=87 chars max)

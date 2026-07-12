@@ -616,7 +616,7 @@ class TaskExecutor {
         final tempDir = Directory(downloadDir);
         if (!await tempDir.exists()) await tempDir.create(recursive: true);
         final tempPath =
-            p.join(downloadDir, '.${fileName}${DefaultRules.tempFileSuffix}');
+            p.join(downloadDir, '.$fileName${DefaultRules.tempFileSuffix}');
 
         final downloadedFilePath = await DownloadManager.downloadFile(
           url: media.url,

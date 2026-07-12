@@ -152,7 +152,7 @@ class M3U8Parser {
     return lines.any((l) => l.trim().startsWith('#EXT-X-STREAM-INF:'));
   }
 
-  /// 解析 #EXTINF 时长，格式: #EXTINF:<duration>,[<title>]
+  /// 解析 #EXTINF 时长，格式: `#EXTINF:<duration>,[<title>]`
   static double _parseExtinfDuration(String line) {
     final raw = line.substring('#EXTINF:'.length).trim();
     final comma = raw.indexOf(',');

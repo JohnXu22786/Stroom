@@ -120,14 +120,6 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         extraParams: extraParams);
   }
 
-  /// Mask API key for display, showing only first 8 chars and last 4 chars.
-  String _maskApiKey(String key) {
-    if (key.isEmpty) return '****';
-    if (key.length <= 4) return '${key.substring(0, 1)}***';
-    if (key.length <= 16) return '${key.substring(0, 4)}****';
-    return '${key.substring(0, 8)}...${key.substring(key.length - 4)}';
-  }
-
   /// Parse a single SSE data event and return a list of [AIStreamEvent]s.
   ///
   /// Handles all known reasoning formats:
@@ -284,7 +276,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       return content;
     } on DioException catch (e) {
       _lastResponseStatusCode = e.response?.statusCode;
-      _lastResponseHeaders = e.response?.headers?.map;
+      _lastResponseHeaders = e.response?.headers.map;
       if (e.response?.data is Map) {
         _lastResponseData = Map<String, dynamic>.from(e.response!.data as Map);
       } else if (e.response?.data is String) {
@@ -453,7 +445,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         }
         // Preserve status code even when response body is unavailable.
         _lastResponseStatusCode = e.response?.statusCode;
-        _lastResponseHeaders = e.response?.headers?.map;
+        _lastResponseHeaders = e.response?.headers.map;
       } else {
         // Non-DioException errors (e.g., SSE stream parse failures):
         // Reset ALL optimistically-set or stale fields to avoid

@@ -208,8 +208,8 @@ class FFmpegConverter {
         await completer.future;
       } finally {
         timeout.ignore();
-        statusSub?.cancel();
-        eventSub?.cancel();
+        statusSub.cancel();
+        eventSub.cancel();
         progressTimer?.cancel();
       }
 

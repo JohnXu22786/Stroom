@@ -178,6 +178,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
 
     setState(() => _isImporting = true);
     try {
+      if (!mounted) return;
       final success = await BackupService.importBackup(context);
       if (success && mounted) {
         // 显示倒计时重启弹窗

@@ -269,11 +269,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 setState(() => _isReady = true);
               }
             },
-            onLoadError: (ctrl, url, code, message) {
+            onReceivedError: (controller, request, error) {
               if (mounted && !_isReady) {
                 setState(() {
                   _isReady = true;
-                  _errorMessage = '页面加载失败: $message';
+                  _errorMessage = '页面加载失败: ${error.description}';
                 });
               }
             },

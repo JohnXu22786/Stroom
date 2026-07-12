@@ -318,7 +318,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   itemCount: filtered.length,
                   buildDefaultDragHandles: false,
-                  onReorder: (oldIndex, newIndex) {
+                  onReorderItem: (oldIndex, newIndex) {
                     final convs = ref.read(conversationsProvider);
                     final item = filtered[oldIndex];
                     final realOld = convs.indexWhere((c) => c.id == item.id);

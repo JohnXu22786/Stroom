@@ -52,6 +52,7 @@ class PreviewChip extends StatelessWidget {
   final VoidCallback? onTap;
 
   const PreviewChip({
+    super.key,
     required this.fileName,
     required this.bytes,
     required this.isImage,

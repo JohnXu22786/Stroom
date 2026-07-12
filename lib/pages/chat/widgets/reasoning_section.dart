@@ -34,7 +34,7 @@ class ReasoningSection extends ConsumerWidget {
   final ReasoningSectionData sections;
   final String messageId;
 
-  ReasoningSection({
+  const ReasoningSection({
     super.key,
     required this.sections,
     required this.messageId,

@@ -52,7 +52,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   // 选中的视频文件列表（支持多选）
   final List<SelectedVideo> _selectedVideos = [];
 
-  bool _isProcessing = false;
+  final bool _isProcessing = false;
   bool _hasError = false;
   String _errorMessage = '';
   bool _engineChecked = false;

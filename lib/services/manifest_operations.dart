@@ -29,7 +29,7 @@ class ManifestOperations<T extends FileRecord> {
   /// SQLite 表名（如 'image_records' 或 'audio_records'）
   final String tableName;
 
-  /// record → Map<String, dynamic> 转换函数
+  /// record → `Map<String, dynamic>` 转换函数
   final Map<String, dynamic> Function(T record) toMap;
 
   /// 缩略图文件扩展名（含点号），如 '.png' 或 '.jpg'
@@ -131,7 +131,7 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   /// Web 上用 "storageDirName/fileName" 做前缀，与 Native 目录结构保持一致。
-  /// Native 上 tts_audio/<hash>.wav  ↔  Web 上 key = "tts_audio/<hash>.wav"
+  /// Native 上 `tts_audio/<hash>.wav`  ↔  Web 上 key = `"tts_audio/<hash>.wav"`
   String _webKey(String fileName) => '$storageDirName/$fileName';
 
   // ---- Load / Persist ---------------------------------------------------

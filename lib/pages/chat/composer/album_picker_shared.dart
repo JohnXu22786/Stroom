@@ -11,7 +11,7 @@ import 'package:stroom/utils/image_manifest.dart';
 class AlbumImageThumbnail extends StatefulWidget {
   final ImageRecord record;
 
-  const AlbumImageThumbnail({required this.record});
+  const AlbumImageThumbnail({super.key, required this.record});
 
   @override
   State<AlbumImageThumbnail> createState() => AlbumImageThumbnailState();
@@ -90,6 +90,7 @@ class AlbumPreviewChip extends StatelessWidget {
   final VoidCallback? onTap;
 
   const AlbumPreviewChip({
+    super.key,
     required this.fileName,
     required this.bytes,
     required this.onRemove,

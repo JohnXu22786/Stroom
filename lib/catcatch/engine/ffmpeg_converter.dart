@@ -8,5 +8,7 @@
 ///   通过 `package:fvp/mdk.dart` 进行实际转换。
 /// - **Web** (`dart.library.html`): 使用 [ffmpeg_converter_stub.dart]，
 ///   抛出 [UnsupportedError]，因为 Web 不支持文件系统媒体转换。
+library;
+
 export 'ffmpeg_converter_io.dart'
     if (dart.library.html) 'ffmpeg_converter_stub.dart';

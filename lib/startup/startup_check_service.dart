@@ -127,20 +127,6 @@ class StartupCheckService {
     };
   }
 
-  /// 从可序列化 Map 转换为 [StartupIssue]。
-  static StartupIssue _issueFromMap(Map<String, String?> map) {
-    final sev = map['severity'] ?? 'info';
-    return StartupIssue(
-      message: map['message'] ?? '',
-      severity: sev == 'error'
-          ? StartupIssueSeverity.error
-          : sev == 'warning'
-              ? StartupIssueSeverity.warning
-              : StartupIssueSeverity.info,
-      dataKey: map['dataKey'],
-    );
-  }
-
   // ================================================================
   // 2. 数据格式验证（后台 Isolate 执行）
   // ================================================================

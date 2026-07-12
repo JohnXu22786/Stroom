@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/models/ai_stream_event.dart';
 import 'package:stroom/providers/chat_api_provider.dart';
 
 void main() {

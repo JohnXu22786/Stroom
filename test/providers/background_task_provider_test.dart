@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/task_provider.dart';
@@ -257,7 +256,7 @@ void main() {
     test('addTask initializes task with default steps for the type', () {
       final notifier = BackgroundTaskNotifier();
 
-      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR');
+      notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR');
 
       // Steps are auto-initialized based on task type
       expect(notifier.state[0].steps.length, 5,
@@ -324,7 +323,7 @@ void main() {
       final notifier = BackgroundTaskNotifier();
 
       final id1 = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR');
-      final id2 = notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR');
+      notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR');
 
       notifier.setSteps(id1, [
         BgTaskStep(label: '连接服务器', status: BgStepStatus.completed),
@@ -345,7 +344,7 @@ void main() {
     test('addTask initializes task without result', () {
       final notifier = BackgroundTaskNotifier();
 
-      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR');
+      notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR');
 
       expect(notifier.state[0].result, isNull);
     });

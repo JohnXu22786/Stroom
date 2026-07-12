@@ -47,7 +47,7 @@ Widget createTestApp({
 void main() {
   group('EmojiPicker adaptive width', () {
     /// Find the emoji GridView inside the dialog (padding EdgeInsets.only(top: 4))
-    Finder _findEmojiGrid() {
+    Finder findEmojiGrid() {
       return find.byWidgetPredicate(
         (w) => w is GridView && w.padding == const EdgeInsets.only(top: 4),
       );
@@ -74,7 +74,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // Find the emoji grid inside the dialog
-        final gridFinder = _findEmojiGrid();
+        final gridFinder = findEmojiGrid();
         expect(gridFinder, findsOneWidget);
 
         // The picker is wrapped in Center + FittedBox, so on a wide screen
@@ -122,7 +122,7 @@ void main() {
       expect(find.text('表情'), findsOneWidget);
 
       // The grid should fit within the screen width (FittedBox scales it down)
-      final gridFinder = _findEmojiGrid();
+      final gridFinder = findEmojiGrid();
       expect(gridFinder, findsOneWidget);
       final gridRect = tester.getRect(gridFinder);
       expect(

@@ -293,7 +293,7 @@ void main() {
 
     /// Helper: extract raw PCM data from a WAV byte array by stripping the
     /// 44-byte RIFF/WAVE header and reading the 'data' chunk payload.
-    Uint8List _extractPcmFromWav(Uint8List wavData) {
+    Uint8List extractPcmFromWav(Uint8List wavData) {
       if (wavData.length < 44) return wavData;
       // RIFF/WAVE header is 44 bytes for standard PCM
       // Verify it has RIFF and WAVE markers
@@ -313,7 +313,7 @@ void main() {
     /// [pcmFrames] - number of 16-bit PCM sample frames (each frame = 2 bytes)
     /// [dataPattern] - if provided, fills audio data with this repeating pattern
     /// Returns a valid MP4 container as bytes.
-    Uint8List _buildMinimalMp4WithPcmAudio({
+    Uint8List buildMinimalMp4WithPcmAudio({
       int pcmFrames = 160,
       Uint8List? dataPattern,
     }) {
@@ -464,7 +464,7 @@ void main() {
 
     test('extractAudio from valid MP4 produces non-silent WAV output',
         () async {
-      final mp4Bytes = _buildMinimalMp4WithPcmAudio(pcmFrames: 160);
+      final mp4Bytes = buildMinimalMp4WithPcmAudio(pcmFrames: 160);
 
       final result = await engine.extractAudio(
         videoBytes: mp4Bytes,
@@ -481,7 +481,7 @@ void main() {
       expect(result[3], 0x46); // 'F'
 
       // Verify: WAV data chunk has non-zero data (NOT silent)
-      final pcmOut = _extractPcmFromWav(result);
+      final pcmOut = extractPcmFromWav(result);
       expect(pcmOut.length, greaterThan(0));
 
       // Verify the PCM data is not all zeros (would mean silent output)
@@ -503,7 +503,7 @@ void main() {
         () async {
       // Use a distinctive non-zero pattern
       final pattern = Uint8List.fromList([0xAB, 0xCD, 0xEF, 0x12, 0x34, 0x56]);
-      final mp4Bytes = _buildMinimalMp4WithPcmAudio(
+      final mp4Bytes = buildMinimalMp4WithPcmAudio(
         pcmFrames: 80, // 80 frames = 160 bytes of PCM
         dataPattern: pattern,
       );
@@ -514,7 +514,7 @@ void main() {
       );
 
       // Extract PCM from WAV
-      final pcmOut = _extractPcmFromWav(result);
+      final pcmOut = extractPcmFromWav(result);
 
       // Verify the PCM data contains our pattern (not all zeros)
       // The pattern repeats, so any 6 consecutive bytes should contain it
@@ -541,21 +541,21 @@ void main() {
         'extractAudio with different frame counts produces proportional output',
         () async {
       // Test with a small number of frames
-      final mp4Small = _buildMinimalMp4WithPcmAudio(pcmFrames: 16);
+      final mp4Small = buildMinimalMp4WithPcmAudio(pcmFrames: 16);
       final resultSmall = await engine.extractAudio(
         videoBytes: mp4Small,
         videoFormat: 'mp4',
       );
-      final pcmSmall = _extractPcmFromWav(resultSmall);
+      final pcmSmall = extractPcmFromWav(resultSmall);
       expect(pcmSmall.length, greaterThanOrEqualTo(32)); // 16 frames * 2 bytes
 
       // Test with a larger number of frames
-      final mp4Large = _buildMinimalMp4WithPcmAudio(pcmFrames: 320);
+      final mp4Large = buildMinimalMp4WithPcmAudio(pcmFrames: 320);
       final resultLarge = await engine.extractAudio(
         videoBytes: mp4Large,
         videoFormat: 'mp4',
       );
-      final pcmLarge = _extractPcmFromWav(resultLarge);
+      final pcmLarge = extractPcmFromWav(resultLarge);
       expect(
           pcmLarge.length, greaterThanOrEqualTo(640)); // 320 frames * 2 bytes
 
@@ -564,7 +564,7 @@ void main() {
     });
 
     test('extractAudio reports progress during extraction', () async {
-      final mp4Bytes = _buildMinimalMp4WithPcmAudio(pcmFrames: 160);
+      final mp4Bytes = buildMinimalMp4WithPcmAudio(pcmFrames: 160);
       final progressValues = <int>[];
 
       final result = await engine.extractAudio(

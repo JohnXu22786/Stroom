@@ -541,7 +541,7 @@ class ChatService {
                 if (bytes == null) throw Exception('file not readable');
                 final textContent = utf8.decode(bytes);
                 final truncated = textContent.length > 4000
-                    ? textContent.substring(0, 4000) + '\n... [truncated]'
+                    ? '${textContent.substring(0, 4000)}\n... [truncated]'
                     : textContent;
                 parts.add({
                   'type': 'text',

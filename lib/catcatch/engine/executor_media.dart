@@ -68,15 +68,15 @@ String buildDurationFilterDetail(
   final m = (expectedDurationSec % 3600) ~/ 60;
   final s = expectedDurationSec % 60;
   final parts = <String>[];
-  if (h > 0) parts.add('${h}小时');
-  if (m > 0) parts.add('${m}分钟');
-  parts.add('${s}秒');
+  if (h > 0) parts.add('$h小时');
+  if (m > 0) parts.add('$m分钟');
+  parts.add('$s秒');
   final durationStr = parts.join('');
   final removed = beforeCount - afterCount;
   if (removed > 0) {
-    return '按照${durationStr}时长筛选后剩余$afterCount个结果（已排除$removed个不匹配的资源）';
+    return '按照$durationStr时长筛选后剩余$afterCount个结果（已排除$removed个不匹配的资源）';
   }
-  return '按时长${durationStr}筛选，$afterCount个资源全部匹配';
+  return '按时长$durationStr筛选，$afterCount个资源全部匹配';
 }
 
 Future<List<MediaResource>> probeMediaResources(

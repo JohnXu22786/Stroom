@@ -49,7 +49,7 @@ void main() {
     });
 
     /// Simulates the OLD (buggy) filtering logic from chat_page.dart line 448-451.
-    List<ToolDefinition> _buggyFilter(
+    List<ToolDefinition> buggyFilter(
         List<ToolDefinition> allTools, Set<String> enabledTools) {
       return allTools.where((t) {
         final isMcp = mcpTools.any((m) => m.name == t.name);
@@ -59,7 +59,7 @@ void main() {
     }
 
     /// Simulates the FIXED filtering logic.
-    List<ToolDefinition> _fixedFilter(
+    List<ToolDefinition> fixedFilter(
         List<ToolDefinition> allTools, Set<String> enabledTools) {
       // All tools uniformly respect the enabled set
       return allTools.where((t) => enabledTools.contains(t.name)).toList();
@@ -68,7 +68,7 @@ void main() {
     group('Buggy filter (OLD behavior)', () {
       test('includes built-in tools even when NOT in enabledTools', () {
         // enabledTools contains only MCP tools, not the built-in calculator
-        final result = _buggyFilter(allTools, {'web_search'});
+        final result = buggyFilter(allTools, {'web_search'});
 
         final names = result.map((t) => t.name).toList();
         // BUG: calculator is included even though it's not in enabledTools
@@ -78,7 +78,7 @@ void main() {
       });
 
       test('includes built-in tools when enabledTools is empty', () {
-        final result = _buggyFilter(allTools, {});
+        final result = buggyFilter(allTools, {});
 
         final names = result.map((t) => t.name).toList();
         // BUG: calculator is included even with empty enabledTools
@@ -91,7 +91,7 @@ void main() {
 
     group('Fixed filter (NEW behavior)', () {
       test('excludes built-in tools when NOT in enabledTools', () {
-        final result = _fixedFilter(allTools, {'web_search'});
+        final result = fixedFilter(allTools, {'web_search'});
 
         final names = result.map((t) => t.name).toList();
         // calculator should NOT be included because it's not in enabledTools
@@ -101,13 +101,13 @@ void main() {
       });
 
       test('excludes all tools when enabledTools is empty', () {
-        final result = _fixedFilter(allTools, {});
+        final result = fixedFilter(allTools, {});
 
         expect(result, isEmpty);
       });
 
       test('includes only the enabled tools', () {
-        final result = _fixedFilter(allTools, {'calculator', 'file_reader'});
+        final result = fixedFilter(allTools, {'calculator', 'file_reader'});
 
         final names = result.map((t) => t.name).toList();
         expect(names, contains('calculator'));
@@ -117,14 +117,14 @@ void main() {
 
       test('includes all tools when enabledTools contains all tool names', () {
         final result =
-            _fixedFilter(allTools, {'calculator', 'web_search', 'file_reader'});
+            fixedFilter(allTools, {'calculator', 'web_search', 'file_reader'});
 
         expect(result.length, equals(3));
       });
 
       test('treats built-in and MCP tools uniformly', () {
         // Toggle calculator OFF, keep web_search ON
-        final result = _fixedFilter(allTools, {'web_search'});
+        final result = fixedFilter(allTools, {'web_search'});
 
         final names = result.map((t) => t.name).toList();
         // Both built-in (calculator) and MCP (web_search) are treated the same
