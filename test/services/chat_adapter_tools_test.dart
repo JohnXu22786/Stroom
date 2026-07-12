@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/services/chat_adapter.dart';
 import 'package:stroom/services/chat_service.dart';
-import 'package:stroom/providers/provider_config.dart';
 
 void main() {
   group('ChatAdapter.getAllToolDefinitions - built-in + MCP', () {

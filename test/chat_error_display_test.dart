@@ -226,16 +226,12 @@ void main() {
       };
       final url = 'https://api.example.com/v1/chat/completions';
 
-      Map<String, dynamic>? rawRequestCapture;
-      if (reqBody != null || headers != null || url != null) {
-        rawRequestCapture = {};
-        if (url != null) rawRequestCapture!['url'] = url;
-        if (headers != null) rawRequestCapture!['headers'] = headers;
-        if (reqBody != null) rawRequestCapture!['body'] = reqBody;
-      }
+      final rawRequestCapture = <String, dynamic>{};
+      rawRequestCapture['url'] = url;
+      rawRequestCapture['headers'] = headers;
+      rawRequestCapture['body'] = reqBody;
 
-      expect(rawRequestCapture, isNotNull);
-      expect(rawRequestCapture!['url'], url);
+      expect(rawRequestCapture['url'], url);
       expect(rawRequestCapture['headers'], headers);
       expect(rawRequestCapture['body'], reqBody);
       expect(rawRequestCapture['body']['model'], 'gpt-4');
@@ -248,15 +244,11 @@ void main() {
       };
       final statusCode = 400;
 
-      Map<String, dynamic>? rawResponseCapture;
-      if (respData != null || statusCode != null) {
-        rawResponseCapture = {};
-        if (statusCode != null) rawResponseCapture!['statusCode'] = statusCode;
-        if (respData != null) rawResponseCapture!['data'] = respData;
-      }
+      final rawResponseCapture = <String, dynamic>{};
+      rawResponseCapture['statusCode'] = statusCode;
+      rawResponseCapture['data'] = respData;
 
-      expect(rawResponseCapture, isNotNull);
-      expect(rawResponseCapture!['statusCode'], 400);
+      expect(rawResponseCapture['statusCode'], 400);
       expect(rawResponseCapture['data']['error']['message'], 'Bad Request');
     });
 
@@ -272,16 +264,12 @@ void main() {
         'x-request-id': ['req-abc-123'],
       };
 
-      Map<String, dynamic>? rawResponseCapture;
-      if (respData != null || statusCode != null || respHeaders != null) {
-        rawResponseCapture = {};
-        if (statusCode != null) rawResponseCapture!['statusCode'] = statusCode;
-        if (respHeaders != null) rawResponseCapture!['headers'] = respHeaders;
-        if (respData != null) rawResponseCapture!['data'] = respData;
-      }
+      final rawResponseCapture = <String, dynamic>{};
+      rawResponseCapture['statusCode'] = statusCode;
+      rawResponseCapture['headers'] = respHeaders;
+      rawResponseCapture['data'] = respData;
 
-      expect(rawResponseCapture, isNotNull);
-      expect(rawResponseCapture!['statusCode'], 429);
+      expect(rawResponseCapture['statusCode'], 429);
       expect(rawResponseCapture['headers']['retry-after'], ['120']);
       expect(rawResponseCapture['headers']['x-request-id'], ['req-abc-123']);
       expect(
@@ -290,25 +278,15 @@ void main() {
 
     test('network error (no response) captures error info in response', () {
       // Simulate a DNS failure or server-not-found error
-      final statusCode = null;
-      final respData = null;
       final errorMessage =
           'DioException [connectionError]: Failed to connect to host';
 
-      Map<String, dynamic>? rawResponseCapture;
-      if (respData != null || statusCode != null) {
-        rawResponseCapture = {};
-        if (statusCode != null) rawResponseCapture!['statusCode'] = statusCode;
-        if (respData != null) rawResponseCapture!['data'] = respData;
-      } else {
-        // For network errors with no response, capture the error message
-        rawResponseCapture = {
-          'error': errorMessage,
-        };
-      }
+      // For network errors with no response, capture the error message
+      final rawResponseCapture = <String, dynamic>{
+        'error': errorMessage,
+      };
 
-      expect(rawResponseCapture, isNotNull);
-      expect(rawResponseCapture!['error'], contains('Failed to connect'));
+      expect(rawResponseCapture['error'], contains('Failed to connect'));
       expect(rawResponseCapture.containsKey('statusCode'), false);
       expect(rawResponseCapture.containsKey('data'), false);
     });
@@ -318,13 +296,11 @@ void main() {
       final errorMessage =
           'DioException [connectionTimeout]: Timeout waiting for connection';
 
-      Map<String, dynamic>? rawResponseCapture;
-      rawResponseCapture = {
+      final rawResponseCapture = <String, dynamic>{
         'error': errorMessage,
       };
 
-      expect(rawResponseCapture, isNotNull);
-      expect(rawResponseCapture!['error'], contains('Timeout'));
+      expect(rawResponseCapture['error'], contains('Timeout'));
     });
   });
 }

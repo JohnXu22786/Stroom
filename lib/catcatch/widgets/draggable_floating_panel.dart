@@ -52,8 +52,8 @@ class DraggableFloatingPanel extends StatefulWidget {
 }
 
 class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
-  double _panelWidth = 280;
-  double _panelMaxHeight = 320;
+  final double _panelWidth = 280;
+  final double _panelMaxHeight = 320;
   double _left = 0;
   double _top = 0;
   bool _minimized = false;

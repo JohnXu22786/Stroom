@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -12,9 +11,7 @@ import '../providers/provider_config.dart';
 import '../providers/background_task_provider.dart';
 import '../providers/text_provider.dart';
 import '../services/ocr_service.dart';
-import '../services/storage_service.dart';
 import '../utils/data_sanitizer.dart';
-import '../utils/image_manifest.dart';
 import '../utils/text_manifest.dart';
 import '../widgets/folder_picker_dialog.dart';
 import 'chat/composer/chat_album_picker_dialog.dart';
@@ -657,7 +654,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           padding: const EdgeInsets.all(8),
           buildDefaultDragHandles: false,
           itemCount: _selectedImages.length,
-          onReorder: _onReorder,
+          onReorderItem: _onReorder,
           proxyDecorator: (child, index, animation) {
             return Material(
               elevation: 4,
@@ -1103,37 +1100,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     }
   }
 
-  /// Select an in-app image record and read its bytes.
-  Future<void> _selectFromAppAlbum(ImageRecord record) async {
-    try {
-      final bytes = await ImageManifest.readFile(record.storagePath);
-      if (bytes == null || bytes.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('无法读取图片文件')));
-        }
-        return;
-      }
-
-      setState(() {
-        _selectedImages.add(
-          SelectedImage(
-            bytes: bytes,
-            format: record.format,
-            // Can use record.name but this method is less used; keep simple
-          ),
-        );
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('读取图片失败: $e')));
-      }
-    }
-  }
-
   // ==================================================================
   // Image Reorder & Preview
   // ==================================================================
@@ -1343,16 +1309,13 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final textNotifier = ref.read(textRecordsProvider.notifier);
 
     // Resolve model BEFORE pop — ref is still valid here
-    bool useCustomModel;
     OcrConfig effectiveConfig;
     final models = _getOcrModels(ref);
     if (_selectedModelIndex < models.length) {
       final selectedModel = models[_selectedModelIndex];
       effectiveConfig = ocrConfig.copyWith(model: selectedModel.modelId);
-      useCustomModel = true;
     } else {
       effectiveConfig = ocrConfig;
-      useCustomModel = false;
     }
 
     // Create a background task for tracking
@@ -1678,17 +1641,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (lower.endsWith('.gif')) return 'gif';
     if (lower.endsWith('.webp')) return 'webp';
     return 'jpeg';
-  }
-
-  String _formatFileSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) {
-      return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    }
-    if (bytes < 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
   String _pad(int n) => n.toString().padLeft(2, '0');

@@ -1,10 +1,6 @@
-import 'dart:typed_data';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/manifest_database.dart';
-import 'package:stroom/services/manifest_database_shared.dart'
-    show ManifestTables;
 import 'package:stroom/utils/video_manifest.dart';
 
 void main() {

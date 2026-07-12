@@ -214,7 +214,7 @@ void main() {
   group('tabResetSignal feature', () {
     /// Create a [FileManagerView] with a file inside a subfolder so that
     /// entering the folder shows content (and the back-item is rendered).
-    FileManagerView<_TestFileRecord> _buildWithFilesAndFolders({
+    FileManagerView<_TestFileRecord> buildWithFilesAndFolders({
       required int signal,
       required Set<String> folders,
       required List<_TestFileRecord> records,
@@ -250,10 +250,10 @@ void main() {
       );
     }
 
-    Widget _buildWithSignal(int signal, Set<String> folders,
+    Widget buildWithSignal(int signal, Set<String> folders,
         [List<_TestFileRecord>? records]) {
       return _buildTestApp(
-        _buildWithFilesAndFolders(
+        buildWithFilesAndFolders(
           signal: signal,
           folders: folders,
           records: records ?? <_TestFileRecord>[],
@@ -281,7 +281,7 @@ void main() {
       await tester.pumpWidget(
         KeyedSubtree(
           key: const Key('fm_view_key'),
-          child: _buildWithSignal(0, folders, recordsWithFolder),
+          child: buildWithSignal(0, folders, recordsWithFolder),
         ),
       );
 
@@ -302,7 +302,7 @@ void main() {
       await tester.pumpWidget(
         KeyedSubtree(
           key: const Key('fm_view_key'),
-          child: _buildWithSignal(1, folders, recordsWithFolder),
+          child: buildWithSignal(1, folders, recordsWithFolder),
         ),
       );
       await tester.pumpAndSettle();
@@ -323,7 +323,7 @@ void main() {
       await tester.pumpWidget(
         KeyedSubtree(
           key: const Key('fm_view_key'),
-          child: _buildWithSignal(0, folders),
+          child: buildWithSignal(0, folders),
         ),
       );
 
@@ -334,7 +334,7 @@ void main() {
       await tester.pumpWidget(
         KeyedSubtree(
           key: const Key('fm_view_key'),
-          child: _buildWithSignal(1, folders),
+          child: buildWithSignal(1, folders),
         ),
       );
       await tester.pumpAndSettle();

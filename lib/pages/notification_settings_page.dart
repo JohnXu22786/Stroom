@@ -408,7 +408,7 @@ class _NotificationSettingsPageState
                   ),
                   Switch(
                     value: _notificationsEnabled && _canToggle,
-                    activeColor: Colors.blue,
+                    activeThumbColor: Colors.blue,
                     onChanged: _canToggle
                         ? (value) async {
                             await ref

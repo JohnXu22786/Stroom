@@ -26,13 +26,12 @@ class McpMessage {
   final Map<String, dynamic>? error;
 
   const McpMessage._({
-    this.jsonrpc = '2.0',
     this.id,
     this.method,
     this.params,
     this.result,
     this.error,
-  });
+  }) : jsonrpc = '2.0';
 
   /// 创建一个 JSON-RPC 请求
   factory McpMessage.request(String method, [Map<String, dynamic>? params]) {
@@ -279,7 +278,7 @@ class McpServerConfig {
     final args = argsRaw is List ? argsRaw.cast<String>() : <String>[];
     final envRaw = typeConfig['env'];
     final env = envRaw is Map
-        ? (envRaw as Map).map((k, v) => MapEntry(k.toString(), v.toString()))
+        ? envRaw.map((k, v) => MapEntry(k.toString(), v.toString()))
         : <String, String>{};
     final isVendor = typeConfig['isVendor'] as bool? ?? false;
 
@@ -330,7 +329,7 @@ class McpServerConfig {
     final args = argsRaw is List ? argsRaw.cast<String>() : <String>[];
     final envRaw = map['env'];
     final env = envRaw is Map
-        ? (envRaw as Map).map((k, v) => MapEntry(k.toString(), v.toString()))
+        ? envRaw.map((k, v) => MapEntry(k.toString(), v.toString()))
         : <String, String>{};
     final isVendor = map['isVendor'] as bool? ?? false;
 

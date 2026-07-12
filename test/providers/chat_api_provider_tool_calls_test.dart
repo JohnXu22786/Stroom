@@ -178,13 +178,13 @@ void main() {
     // DeepSeek: tool_calls[{id, type: "function", function: {name, arguments}}]
     // OpenRouter: same OpenAI-compatible format.
 
-    List<Map<String, dynamic>> _simulateAccumulatedToolCalls() {
+    List<Map<String, dynamic>> simulateAccumulatedToolCalls() {
       // Simulates the accumulation logic in chat_api_provider.dart
       // that runs in chatStream() after all SSE events are processed.
       final Map<int, Map<String, dynamic>> accumulators = {};
 
       // Simulate multiple streaming chunks for tool_call index 0
-      void _processChunk(Map<String, dynamic> delta) {
+      void processChunk(Map<String, dynamic> delta) {
         final toolCallsDelta = delta['tool_calls'] as List?;
         if (toolCallsDelta == null) return;
         for (final tc in toolCallsDelta) {
@@ -208,7 +208,7 @@ void main() {
       }
 
       // Chunk 1: First delta with role, tool_call id and type
-      _processChunk({
+      processChunk({
         'role': 'assistant',
         'content': null,
         'tool_calls': [
@@ -228,7 +228,7 @@ void main() {
       });
 
       // Chunk 2: Arguments for tool_call 0
-      _processChunk({
+      processChunk({
         'tool_calls': [
           {
             'index': 0,
@@ -238,7 +238,7 @@ void main() {
       });
 
       // Chunk 3: More arguments + args for tool_call 1
-      _processChunk({
+      processChunk({
         'tool_calls': [
           {
             'index': 0,
@@ -252,7 +252,7 @@ void main() {
       });
 
       // Chunk 4: Remaining arguments for tool_call 1
-      _processChunk({
+      processChunk({
         'tool_calls': [
           {
             'index': 1,
@@ -272,7 +272,7 @@ void main() {
     }
 
     test('accumulates streaming tool calls with correct DeepSeek format', () {
-      final toolCalls = _simulateAccumulatedToolCalls();
+      final toolCalls = simulateAccumulatedToolCalls();
 
       // DeepSeek spec: tool_calls is an array of {id, type: "function", function: {name, arguments}}
       expect(toolCalls.length, equals(2));
@@ -293,7 +293,7 @@ void main() {
     });
 
     test('accumulated tool call format matches OpenRouter spec', () {
-      final toolCalls = _simulateAccumulatedToolCalls();
+      final toolCalls = simulateAccumulatedToolCalls();
 
       // OpenRouter spec: same OpenAI-compatible format
       for (final tc in toolCalls) {
@@ -306,7 +306,7 @@ void main() {
     });
 
     test('accumulated format matches AIStreamEvent', () {
-      final toolCalls = _simulateAccumulatedToolCalls();
+      final toolCalls = simulateAccumulatedToolCalls();
 
       // This is the format that gets yielded as AIStreamEvent('', toolCalls: toolCalls)
       final event = AIStreamEvent('', toolCalls: toolCalls);

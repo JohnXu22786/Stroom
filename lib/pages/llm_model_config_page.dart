@@ -55,7 +55,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           _enableFrequencyPenalty ||
           _enablePresencePenalty ||
           _enableMaxTokens ||
-          _enableSeed) return true;
+          _enableSeed) {
+        return true;
+      }
       if (_maxTokensController.text.isNotEmpty) return true;
       if (_seedController.text.isNotEmpty) return true;
       if (_temperature != 0.7) return true;
@@ -68,41 +70,63 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     if (_nameController.text != m.name) return true;
     if (_modelIdController.text != m.modelId) return true;
     if (_contextController.text !=
-        ((m.typeConfig['context'] as num?)?.toInt()?.toString() ?? ''))
+        ((m.typeConfig['context'] as num?)?.toInt().toString() ?? '')) {
       return true;
+    }
     // LLM params
     if (((m.typeConfig['temperature'] as num?)?.toDouble() ?? 0.7) !=
-        _temperature) return true;
-    if (((m.typeConfig['topP'] as num?)?.toDouble() ?? 1.0) != _topP)
+        _temperature) {
       return true;
+    }
+    if (((m.typeConfig['topP'] as num?)?.toDouble() ?? 1.0) != _topP) {
+      return true;
+    }
     if (((m.typeConfig['frequencyPenalty'] as num?)?.toDouble() ?? 0.0) !=
-        _frequencyPenalty) return true;
+        _frequencyPenalty) {
+      return true;
+    }
     if (((m.typeConfig['presencePenalty'] as num?)?.toDouble() ?? 0.0) !=
-        _presencePenalty) return true;
+        _presencePenalty) {
+      return true;
+    }
     if ((m.typeConfig['enableTemperature'] as bool? ?? false) !=
-        _enableTemperature) return true;
-    if ((m.typeConfig['enableTopP'] as bool? ?? false) != _enableTopP)
+        _enableTemperature) {
       return true;
+    }
+    if ((m.typeConfig['enableTopP'] as bool? ?? false) != _enableTopP) {
+      return true;
+    }
     if ((m.typeConfig['enableFrequencyPenalty'] as bool? ?? false) !=
-        _enableFrequencyPenalty) return true;
+        _enableFrequencyPenalty) {
+      return true;
+    }
     if ((m.typeConfig['enablePresencePenalty'] as bool? ?? false) !=
-        _enablePresencePenalty) return true;
-    if ((m.typeConfig['enableMaxTokens'] as bool? ?? false) != _enableMaxTokens)
+        _enablePresencePenalty) {
       return true;
-    if ((m.typeConfig['enableSeed'] as bool? ?? false) != _enableSeed)
+    }
+    if ((m.typeConfig['enableMaxTokens'] as bool? ?? false) !=
+        _enableMaxTokens) {
       return true;
+    }
+    if ((m.typeConfig['enableSeed'] as bool? ?? false) != _enableSeed) {
+      return true;
+    }
     if ((m.typeConfig['maxTokens']?.toString() ?? '') !=
-        _maxTokensController.text) return true;
-    if ((m.typeConfig['seed']?.toString() ?? '') != _seedController.text)
+        _maxTokensController.text) {
       return true;
+    }
+    if ((m.typeConfig['seed']?.toString() ?? '') != _seedController.text) {
+      return true;
+    }
     // Custom params and reasoning params (simple check via serialization)
     final originalCustom = m.customParams.map((p) => p.toMap()).toList();
     final currentCustom = _customParams.map((p) => p.toMap()).toList();
     if (originalCustom.toString() != currentCustom.toString()) return true;
     final originalReasoning = m.reasoningParams.map((p) => p.toMap()).toList();
     final currentReasoning = _reasoningParams.map((p) => p.toMap()).toList();
-    if (originalReasoning.toString() != currentReasoning.toString())
+    if (originalReasoning.toString() != currentReasoning.toString()) {
       return true;
+    }
     return false;
   }
 
@@ -388,7 +412,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
               '关闭时发送「${toggle.offValue ?? ''}」',
               style: TextStyle(
                 fontSize: 11,
-                color: cs.onSurfaceVariant.withOpacity(0.7),
+                color: cs.onSurfaceVariant.withValues(alpha: 0.7),
               ),
             ),
           ],
@@ -463,7 +487,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                 style: TextStyle(
                   fontSize: 12,
                   color: toggleComplete
-                      ? cs.onSurfaceVariant.withOpacity(0.7)
+                      ? cs.onSurfaceVariant.withValues(alpha: 0.7)
                       : Colors.grey,
                 )),
             const SizedBox(height: 8),
@@ -623,7 +647,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
               '这些选项将按顺序显示在推理面板中供选择',
               style: TextStyle(
                 fontSize: 11,
-                color: cs.onSurfaceVariant.withOpacity(0.7),
+                color: cs.onSurfaceVariant.withValues(alpha: 0.7),
               ),
             ),
             const SizedBox(height: 8),
@@ -788,8 +812,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     final reasoningSeenNames = <String>{};
     for (int i = 0; i < _reasoningParams.length; i++) {
       final name = _reasoningParams[i].paramName.trim();
-      if (name.isEmpty)
+      if (name.isEmpty) {
         continue; // Empty names are caught by validationError above
+      }
       if (!reasoningSeenNames.add(name)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

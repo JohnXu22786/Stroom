@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
@@ -937,7 +936,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       if (!_cancelledByUser) {
         debugPrint('[ChatPage] streaming error: $e\n$s');
         final errorMsg = _formatErrorMessage(e);
-        if (context.mounted) {
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(errorMsg.replaceAll('错误: ', '').split('\n')[0]),
@@ -962,19 +961,18 @@ class _ChatPageState extends ConsumerState<ChatPage>
         final url = _adapter.lastRequestUrl;
         if (reqBody != null || headers != null || url != null) {
           rawRequestCapture = {};
-          if (url != null) rawRequestCapture!['url'] = url;
-          if (headers != null) rawRequestCapture!['headers'] = headers;
-          if (reqBody != null) rawRequestCapture!['body'] = reqBody;
+          if (url != null) rawRequestCapture['url'] = url;
+          if (headers != null) rawRequestCapture['headers'] = headers;
+          if (reqBody != null) rawRequestCapture['body'] = reqBody;
         }
         final respData = _adapter.lastResponseData;
         final statusCode = _adapter.lastResponseStatusCode;
         final respHeaders = _adapter.lastResponseHeaders;
         if (respData != null || statusCode != null || respHeaders != null) {
           rawResponseCapture = {};
-          if (statusCode != null)
-            rawResponseCapture!['statusCode'] = statusCode;
-          if (respHeaders != null) rawResponseCapture!['headers'] = respHeaders;
-          if (respData != null) rawResponseCapture!['data'] = respData;
+          if (statusCode != null) rawResponseCapture['statusCode'] = statusCode;
+          if (respHeaders != null) rawResponseCapture['headers'] = respHeaders;
+          if (respData != null) rawResponseCapture['data'] = respData;
         } else if (streamError is Exception) {
           // For network errors with no HTTP response, capture error string
           rawResponseCapture = {'error': streamError.toString()};
@@ -1596,8 +1594,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   void _scrollToCurrentMatch() {
-    if (_currentMatchIndex < 0 || _currentMatchIndex >= _searchMatches.length)
+    if (_currentMatchIndex < 0 || _currentMatchIndex >= _searchMatches.length) {
       return;
+    }
     final match = _searchMatches[_currentMatchIndex];
     final key = _messageKeys[match.messageId];
     if (key?.currentContext != null) {
@@ -2080,7 +2079,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                   ),
                   color: Theme.of(
                     context,
-                  ).colorScheme.errorContainer.withOpacity(0.3),
+                  ).colorScheme.errorContainer.withValues(alpha: 0.3),
                   child: Row(
                     children: [
                       Icon(
@@ -2256,7 +2255,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                         color: (isDark
                                                 ? Colors.red[900]
                                                 : Colors.red[50])!
-                                            .withOpacity(0.7),
+                                            .withValues(alpha: 0.7),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Column(

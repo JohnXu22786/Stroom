@@ -313,7 +313,7 @@ class _Mp4Demuxer {
 
                 while (_offset < stblEnd) {
                   final scStart = _offset;
-                  final scSize = _readUint32();
+                  _readUint32(); // box size (advances offset)
                   final scType = _readString(4);
 
                   if (scType == 'stsd') {
@@ -509,31 +509,3 @@ class _Mp4Demuxer {
 }
 
 // ============================================================================
-// WAV Writer
-// ============================================================================
-
-class _WavWriter {
-  final BytesBuilder _builder = BytesBuilder();
-
-  void writeString(String s) {
-    _builder.add(s.codeUnits.map((c) => c.toInt()).toList());
-  }
-
-  void writeInt32(int value) {
-    _builder.addByte(value & 0xff);
-    _builder.addByte((value >> 8) & 0xff);
-    _builder.addByte((value >> 16) & 0xff);
-    _builder.addByte((value >> 24) & 0xff);
-  }
-
-  void writeInt16(int value) {
-    _builder.addByte(value & 0xff);
-    _builder.addByte((value >> 8) & 0xff);
-  }
-
-  void writeBytes(Uint8List bytes) {
-    _builder.add(bytes);
-  }
-
-  Uint8List toBytes() => _builder.toBytes();
-}

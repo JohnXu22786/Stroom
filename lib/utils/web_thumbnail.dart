@@ -1,5 +1,7 @@
 /// Web thumbnail generation (web platform).
 /// Uses dart:js_interop for blob URL creation.
+library;
+
 import 'dart:js_interop';
 import 'dart:typed_data';
 

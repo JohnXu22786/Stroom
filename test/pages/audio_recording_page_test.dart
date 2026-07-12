@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -103,7 +102,6 @@ void main() {
     test('saves audio record with m4a format and retrieves by hash', () async {
       const hash = 'test_audio_hash_001';
       const format = 'm4a';
-      const filePath = '/tmp/test_recording.m4a';
       const duration = 30;
 
       // Create a record similar to what the page would create

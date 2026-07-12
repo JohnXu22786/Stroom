@@ -22,7 +22,7 @@ class VbTableCell extends StatelessWidget {
   final String text;
   final bool isHeader;
 
-  const VbTableCell(this.text, {this.isHeader = false});
+  const VbTableCell(this.text, {super.key, this.isHeader = false});
 
   @override
   Widget build(BuildContext context) {

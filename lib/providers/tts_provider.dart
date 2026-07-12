@@ -247,13 +247,16 @@ class CustomTTSProvider extends BaseTTSProvider {
         } else {
           bodyStr = body?.toString() ?? '无响应体';
         }
-        if (statusCode == 401 || statusCode == 403)
+        if (statusCode == 401 || statusCode == 403) {
           return 'API密钥无效或权限不足 (HTTP $statusCode): $bodyStr$extra';
+        }
         if (statusCode == 429) return '请求过于频繁，请稍后重试 (HTTP $statusCode)$extra';
-        if (statusCode == 404)
+        if (statusCode == 404) {
           return 'API端点不存在 (HTTP 404): $bodyStr\n请检查API基础URL设置是否正确$extra';
-        if (statusCode == 500)
+        }
+        if (statusCode == 500) {
           return '服务器内部错误 (HTTP $statusCode): $bodyStr$extra';
+        }
         return '服务器返回错误 (HTTP $statusCode): $bodyStr$extra';
       case DioExceptionType.cancel:
         return '请求已取消$extra';

@@ -320,7 +320,7 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
                     ),
                   )
                 : ReorderableListView(
-                    onReorder: _onReorder,
+                    onReorderItem: _onReorder,
                     buildDefaultDragHandles: false,
                     scrollController: _scrollController,
                     children: [

@@ -111,19 +111,6 @@ Widget _buildTestApp({Dio? dio}) {
   );
 }
 
-/// Creates a [ProviderContainer] with all required provider overrides.
-ProviderContainer _createContainer({Dio? dio}) {
-  return ProviderContainer(
-    overrides: [
-      themeProvider.overrideWith((ref) => ThemeNotifier()),
-      providerEntriesProvider.overrideWith(
-        (ref) => ProviderEntriesNotifier(),
-      ),
-      updateProvider.overrideWith((ref) => UpdateNotifier(dio: dio)),
-    ],
-  );
-}
-
 void main() {
   /// Sets up a large test surface and scrolls to the "检查更新" button.
   Future<void> setUpAndScrollToUpdateButton(WidgetTester tester,

@@ -116,7 +116,7 @@ class AsrPage extends ConsumerStatefulWidget {
 
 class _AsrPageState extends ConsumerState<AsrPage> {
   final List<SelectedAudio> _selectedAudios = [];
-  bool _isProcessing = false;
+  final bool _isProcessing = false;
   String? _errorMessage;
   String? _transcriptionResult;
   int _selectedModelIndex = 0;
@@ -1063,11 +1063,6 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             rawResponse: rawResponse);
       }
     }
-  }
-
-  String _currentTimestamp() {
-    final now = DateTime.now();
-    return '${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}';
   }
 
   /// Save the transcription result as a text record, named by the task title.

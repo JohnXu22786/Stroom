@@ -64,7 +64,7 @@ class ToolCallCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontFamily: 'monospace',
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
               ),
             ),
           ],
@@ -76,7 +76,7 @@ class ToolCallCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: isDark ? Colors.grey[900] : Colors.white,
                 borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: borderColor.withOpacity(0.5)),
+                border: Border.all(color: borderColor.withValues(alpha: 0.5)),
               ),
               child: Text(
                 data.result!,

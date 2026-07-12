@@ -24,21 +24,6 @@ Widget _buildTestApp({String? initialCode, bool initialShowPreview = false}) {
   );
 }
 
-/// Helper: opens the mode selection popup menu from the AppBar.
-/// Returns true if the menu was opened successfully.
-Future<bool> _openModeMenu(WidgetTester tester) async {
-  // Try all possible mode toggle icons
-  for (final icon in [Icons.code, Icons.view_column, Icons.visibility]) {
-    final finder = find.byIcon(icon);
-    if (finder.evaluate().isNotEmpty) {
-      await tester.tap(finder);
-      await tester.pumpAndSettle();
-      return true;
-    }
-  }
-  return false;
-}
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 

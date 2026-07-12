@@ -63,7 +63,7 @@ Stream<String> sseStream(
     if (onResponseHeaders != null && xhr.status != 0) {
       final headerMap = <String, List<String>>{};
       final allHeaders = xhr.getAllResponseHeaders();
-      if (allHeaders != null && allHeaders.isNotEmpty) {
+      if (allHeaders.isNotEmpty) {
         for (final line in allHeaders.split('\n')) {
           final colonPos = line.indexOf(':');
           if (colonPos > 0) {
@@ -95,7 +95,7 @@ Stream<String> sseStream(
     xhr.abort();
   });
 
-  void _cleanupSubs() {
+  void cleanupSubs() {
     progressSub.cancel();
     errorSub.cancel();
     loadEndSub.cancel();
@@ -103,7 +103,7 @@ Stream<String> sseStream(
 
   cancelToken?.whenCancel.then((_) {
     if (!controller.isClosed) {
-      _cleanupSubs();
+      cleanupSubs();
       xhr.abort();
       controller.close();
     }
@@ -115,7 +115,7 @@ Stream<String> sseStream(
     cancelCheckTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
       if (cancelToken.isCancelled && !controller.isClosed) {
         cancelCheckTimer?.cancel();
-        _cleanupSubs();
+        cleanupSubs();
         xhr.abort();
         controller.close();
       }
@@ -124,7 +124,7 @@ Stream<String> sseStream(
 
   controller.onCancel = () {
     cancelCheckTimer?.cancel();
-    _cleanupSubs();
+    cleanupSubs();
     xhr.abort();
   };
 

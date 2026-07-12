@@ -1,4 +1,5 @@
 /// Shared test utilities for MCP tests.
+library;
 
 /// Helper to check if running on a desktop platform (for stdio tests).
 bool isDesktopPlatform() {

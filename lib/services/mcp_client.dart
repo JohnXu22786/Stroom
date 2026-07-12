@@ -5,7 +5,6 @@ import 'dart:io' show Process, ProcessStartMode;
 import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../models/mcp.dart';
-import '../models/tool_call.dart';
 
 // ============================================================================
 // JSON-RPC 工具函数（纯逻辑，可直接测试）
@@ -62,17 +61,12 @@ class McpClient {
   Process? _process;
   StreamSubscription<String>? _stdoutSubscription;
   StreamSubscription<String>? _stderrSubscription;
-  final Completer<Map<String, dynamic>> _initializeCompleter =
-      Completer<Map<String, dynamic>>();
 
   /// 挂起的请求：id -> Completer
   final Map<String, Completer<Map<String, dynamic>>> _pendingRequests = {};
 
   /// 当前连接的工具列表（缓存）
   List<McpTool> _cachedTools = [];
-
-  /// 当前连接是否已初始化
-  bool _initialized = false;
 
   McpClient({required this.config}) {
     _validateConfig();
@@ -270,15 +264,6 @@ class McpClient {
 
     await _sendMessage(request.toJsonString());
 
-    // 设置超时
-    final timeout = Future.delayed(const Duration(seconds: 30), () {
-      if (!completer.isCompleted) {
-        _pendingRequests.remove(request.id);
-        completer
-            .completeError(TimeoutException('MCP request timed out: $method'));
-      }
-    });
-
     return await completer.future.timeout(const Duration(seconds: 30));
   }
 
@@ -303,7 +288,6 @@ class McpClient {
     _process?.kill();
     _process = null;
     _cachedTools = [];
-    _initialized = false;
   }
 }
 

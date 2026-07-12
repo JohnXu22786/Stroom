@@ -142,7 +142,6 @@ void main() {
 
     testWidgets('model panel fires onModelsReordered callback on drag',
         (tester) async {
-      List<String>? reorderedModels;
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -155,8 +154,7 @@ void main() {
                       models: ['GPT-4o', 'Claude 3', 'Gemini'],
                       selectedModelIndex: 0,
                       onModelSelected: (_) {},
-                      onModelsReordered: (models) =>
-                          reorderedModels = List<String>.from(models),
+                      onModelsReordered: (models) => List<String>.from(models),
                     );
                   },
                   child: const Text('Open'),

@@ -447,7 +447,6 @@ void main() {
     testWidgets(
       'does NOT navigate when navigateToParentSignal changes at root',
       (tester) async {
-        String? capturedCurrentFolder;
         int changeCount = 0;
 
         final bridge = ManifestBridge(
@@ -470,7 +469,6 @@ void main() {
               const Icon(Icons.videocam, key: Key('fallback_icon')),
           onFileTap: (_) {},
           onCurrentFolderChanged: (f) {
-            capturedCurrentFolder = f;
             changeCount++;
           },
         );
