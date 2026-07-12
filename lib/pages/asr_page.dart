@@ -22,46 +22,52 @@ import 'ocr/ocr_shared.dart';
 // Provider: Get the first configured ASR config from provider entries
 // ============================================================================
 
-/// Reads the first ASR provider config from the provider entries.
+/// Reads the first valid ASR provider config from the provider entries.
+/// Iterates through all configs in an entry, not just the first one.
 /// Returns null if none is configured.
 AsrConfig? _resolveAsrConfig(WidgetRef ref) {
   final state = ref.read(providerEntriesProvider);
   for (final entry in state.entries) {
-    if (entry.type == 'asr' && entry.configs.isNotEmpty) {
-      final config = entry.configs.first;
-      if (config.host.isNotEmpty && config.key.isNotEmpty) {
-        final model = config.models.isNotEmpty
-            ? config.models.first.modelId
-            : 'whisper-1';
-        return AsrConfig(host: config.host, apiKey: config.key, model: model);
+    if (entry.type == 'asr') {
+      for (final config in entry.configs) {
+        if (config.host.isNotEmpty && config.key.isNotEmpty) {
+          final model = config.models.isNotEmpty
+              ? config.models.first.modelId
+              : 'whisper-1';
+          return AsrConfig(host: config.host, apiKey: config.key, model: model);
+        }
       }
     }
   }
   return null;
 }
 
-/// Collect all available model names from the first ASR provider config.
+/// Collect all available model names from the first valid ASR provider config.
+/// Iterates through all configs in the entry to find the first valid one.
 List<ModelConfig> _getAsrModels(WidgetRef ref) {
   final state = ref.read(providerEntriesProvider);
   for (final entry in state.entries) {
-    if (entry.type == 'asr' && entry.configs.isNotEmpty) {
-      final config = entry.configs.first;
-      if (config.host.isNotEmpty && config.key.isNotEmpty) {
-        return config.models;
+    if (entry.type == 'asr') {
+      for (final config in entry.configs) {
+        if (config.host.isNotEmpty && config.key.isNotEmpty) {
+          return config.models;
+        }
       }
     }
   }
   return [];
 }
 
-/// Get the provider name from the first ASR provider config.
+/// Get the provider name from the first valid ASR provider config.
+/// Iterates through all configs in the entry to find the first valid one.
 String _getAsrProviderName(WidgetRef ref) {
   final state = ref.read(providerEntriesProvider);
   for (final entry in state.entries) {
-    if (entry.type == 'asr' && entry.configs.isNotEmpty) {
-      final config = entry.configs.first;
-      if (config.host.isNotEmpty && config.key.isNotEmpty) {
-        return config.providerName;
+    if (entry.type == 'asr') {
+      for (final config in entry.configs) {
+        if (config.host.isNotEmpty && config.key.isNotEmpty) {
+          return config.providerName;
+        }
       }
     }
   }
