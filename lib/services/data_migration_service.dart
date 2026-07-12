@@ -2,11 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auto_backup_service.dart';
+import 'backup_location_manager.dart';
 import 'manifest_database.dart';
 
 /// The key used in SharedPreferences to store the data format version.
@@ -119,26 +118,23 @@ class DataMigrationService {
   // 备份管理
   // ================================================================
 
-  /// 备份目录名称
-  static const String _backupRootName = 'StroomBackups';
-
   /// 获取外部备份根目录路径。
   ///
   /// 备份位置不在应用数据目录内，以防止应用数据被删除时备份也丢失。
   ///
   /// 位置策略（所有位置均对用户可见/可访问）：
-  /// - Windows: %USERPROFILE%\Documents\StroomBackups\
-  /// - macOS:   ~/Documents/StroomBackups/
-  /// - Linux:   ~/Documents/StroomBackups/
-  /// - Android: /storage/emulated/0/Android/data/<package>/files/StroomBackups/
-  ///   （应用内完全可读写；Android 10 及以下可通过 Files 应用直接访问；
-  ///    Android 11+ 部分文件管理器受限，但相比旧路径 /data/data/... 完全不可访问已是重大改进）
-  /// - iOS:     <app_group>/Documents/StroomBackups/（通过 Files 应用可访问）
+  /// - Windows: %USERPROFILE%\Documents\StroomData\AutoBackup\
+  /// - macOS:   ~/Documents/StroomData/AutoBackup/
+  /// - Linux:   ~/Documents/StroomData/AutoBackup/
+  /// - Android: 通过 SAF 选择 Documents 目录（优先），
+  ///   用户选择后调用 takePersistableUriPermission 固化权限。
+  /// - iOS:     <app_group>/Documents/StroomBackups/（通过文件 App 可访问）
   /// - 测试环境: Directory.systemTemp/stroom_backup_test/
+  ///
+  /// 注意：此方法委托给 [BackupLocationManager.getBackupRootPath]。
+  /// 在 Android 上如果 SAF URI 尚未配置，会返回 null。
   static Future<String> getExternalBackupRootPath() async {
     if (kIsWeb) {
-      // Web 平台使用 IndexedDB 路径前缀
-      // 注意：Web 不支持文件系统外部备份，此路径用于标记用途
       return '/stroom_backups';
     }
 
@@ -151,58 +147,17 @@ class DataMigrationService {
       debugPrint('[DataMigrationService] Error checking test env: $e');
     }
 
-    // Windows
-    try {
-      if (Platform.isWindows) {
-        final userProfile = Platform.environment['USERPROFILE'];
-        if (userProfile != null && userProfile.isNotEmpty) {
-          return p.join(userProfile, 'Documents', _backupRootName);
-        }
-      }
-    } catch (e) {
-      debugPrint(
-          '[DataMigrationService] Error resolving Windows backup path: $e');
+    // 委托给 BackupLocationManager
+    final path = await BackupLocationManager.getBackupRootPath();
+    if (path != null) {
+      return path;
     }
 
-    // macOS / Linux
+    // 兜底：系统临时目录
     try {
-      if (Platform.isMacOS || Platform.isLinux) {
-        final home = Platform.environment['HOME'];
-        if (home != null && home.isNotEmpty) {
-          return p.join(home, 'Documents', _backupRootName);
-        }
-      }
-    } catch (e) {
-      debugPrint('[DataMigrationService] Error resolving Unix backup path: $e');
-    }
-
-    // Android: 使用外部存储目录。
-    // 旧路径 /data/data/... 在 Android 11+ 上完全不可访问。
-    // 新路径 Android/data/<package>/files/... 无需额外权限，
-    // 应用内完全可读写，Android 10 及以下可通过 Files 应用直接访问。
-    try {
-      if (Platform.isAndroid) {
-        final extDir = await getExternalStorageDirectory();
-        if (extDir != null) {
-          return p.join(extDir.path, _backupRootName);
-        }
-      }
-    } catch (e) {
-      debugPrint(
-          '[DataMigrationService] Error resolving Android backup path: $e');
-    }
-
-    // iOS / Fallback: 使用 documents 目录。
-    // iOS 上可通过 Files 应用直接访问，无需额外处理。
-    try {
-      final docsDir = await getApplicationDocumentsDirectory();
-      return p.join(docsDir.path, _backupRootName);
+      return '${Directory.systemTemp.path}/StroomBackups';
     } catch (_) {
-      try {
-        return '${Directory.systemTemp.path}/$_backupRootName';
-      } catch (_) {
-        return '/tmp/$_backupRootName';
-      }
+      return '/tmp/StroomBackups';
     }
   }
 

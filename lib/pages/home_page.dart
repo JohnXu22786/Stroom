@@ -60,12 +60,19 @@ class _HomePageState extends ConsumerState<HomePage>
   }
 
   /// 触发后台自动备份（仅在非 Web 平台、非测试环境下执行一次）。
+  ///
+  /// 注意：启动流程已通过 [BackupStartupCheck] 执行了自动备份，
+  /// 因此这里的触发是兜底安全措施，仅在启动备份未完成时补充执行。
+  /// [AutoBackupService.performAutoBackup] 内部的 _isRunning 检查
+  /// 可以防止与启动备份并发执行。
   Future<void> _triggerAutoBackup() async {
     if (_autoBackupTriggered) return;
     if (kIsWeb) return;
     _autoBackupTriggered = true;
 
     // 以最小占用在后台执行备份，不阻塞前台操作
+    // 如果启动流程已执行过备份，performAutoBackup 会因 _isRunning
+    // 检查跳过或创建新的备份（旧备份会被自动清理）
     AutoBackupService.performAutoBackup().then((success) {
       debugPrint('[HomePage] 自动后台备份${success ? '完成' : '未完成（可能已在运行或被取消）'}');
     });
