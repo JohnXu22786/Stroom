@@ -510,6 +510,90 @@ class ChatService {
               'type': 'image_url',
               'image_url': {'url': 'data:image/$ext;base64,$b64'},
             });
+          } else if (att.fileType == 'audio') {
+            // ── Audio files: use input_audio format ──
+            final String b64;
+            if (att.base64Data != null && att.base64Data!.isNotEmpty) {
+              // Size check: skip oversized audio even when cached
+              if (att.fileSize > 10 * 1024 * 1024) {
+                parts.add({
+                  'type': 'text',
+                  'text': '[音频文件过大已跳过: ${att.fileName}]',
+                });
+                continue;
+              }
+              b64 = att.base64Data!;
+            } else {
+              // Check fileSize before reading to avoid loading huge files
+              if (att.fileSize > 10 * 1024 * 1024) {
+                parts.add({
+                  'type': 'text',
+                  'text': '[音频文件过大已跳过: ${att.fileName}]',
+                });
+                continue;
+              }
+              final bytes = await AttachmentStorage.readFile(att.storagePath);
+              if (bytes != null && bytes.isNotEmpty) {
+                b64 = base64Encode(bytes);
+                // Cache base64 for future use
+                att.base64Data = b64;
+              } else {
+                parts.add({
+                  'type': 'text',
+                  'text': '[音频加载失败: ${att.fileName}]',
+                });
+                continue;
+              }
+            }
+            final audioFormat = audioFormatFromMimeType(att.mimeType);
+            parts.add({
+              'type': 'input_audio',
+              'input_audio': {
+                'data': b64,
+                'format': audioFormat,
+              },
+            });
+          } else if (att.fileType == 'video') {
+            // ── Video files: send data as `data:` URI with video MIME type ──
+            final String b64;
+            if (att.base64Data != null && att.base64Data!.isNotEmpty) {
+              // Size check: skip oversized video even when cached
+              if (att.fileSize > 10 * 1024 * 1024) {
+                parts.add({
+                  'type': 'text',
+                  'text': '[视频文件过大已跳过: ${att.fileName}]',
+                });
+                continue;
+              }
+              b64 = att.base64Data!;
+            } else {
+              // Check fileSize before reading to avoid loading huge files
+              if (att.fileSize > 10 * 1024 * 1024) {
+                parts.add({
+                  'type': 'text',
+                  'text': '[视频文件过大已跳过: ${att.fileName}]',
+                });
+                continue;
+              }
+              final bytes = await AttachmentStorage.readFile(att.storagePath);
+              if (bytes != null && bytes.isNotEmpty) {
+                b64 = base64Encode(bytes);
+                // Cache base64 for future use
+                att.base64Data = b64;
+              } else {
+                parts.add({
+                  'type': 'text',
+                  'text': '[视频加载失败: ${att.fileName}]',
+                });
+                continue;
+              }
+            }
+            parts.add({
+              'type': 'image_url',
+              'image_url': {
+                'url': 'data:${att.mimeType};base64,$b64',
+              },
+            });
           } else {
             // Try to read text content for text-based files
             final textExts = [

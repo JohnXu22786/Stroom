@@ -14,6 +14,38 @@ String imageExtension(String mimeType) {
   }
 }
 
+/// Map audio MIME type to format identifier for [input_audio] content part.
+///
+/// The format field in the OpenAI [input_audio] spec expects values like
+/// 'mp3', 'wav', 'ogg', etc., derived from the MIME type.
+/// Falls back to 'mp3' for unrecognised audio MIME types.
+String audioFormatFromMimeType(String mimeType) {
+  switch (mimeType) {
+    case 'audio/mpeg':
+    case 'audio/mp3':
+      return 'mp3';
+    case 'audio/wav':
+    case 'audio/x-wav':
+    case 'audio/wave':
+      return 'wav';
+    case 'audio/ogg':
+      return 'ogg';
+    case 'audio/aac':
+      return 'aac';
+    case 'audio/flac':
+    case 'audio/x-flac':
+      return 'flac';
+    case 'audio/webm':
+      return 'webm';
+    case 'audio/mp4':
+    case 'audio/x-m4a':
+      return 'm4a';
+    default:
+      // Fall back to extracting extension from filename as last resort
+      return 'mp3';
+  }
+}
+
 /// Set a value at a dot-notation path in the given map.
 /// E.g. setNestedParam(map, 'thinking.type', 'enabled')
 ///   -> map['thinking']['type'] = 'enabled'
