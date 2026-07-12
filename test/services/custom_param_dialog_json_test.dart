@@ -261,9 +261,7 @@ void main() {
 
       dynamic value = inputValue;
       if (type == 'number') {
-        value = double.tryParse(value) ??
-            int.tryParse(value) ??
-            value;
+        value = double.tryParse(value) ?? int.tryParse(value) ?? value;
       }
 
       expect(value, isA<num>());

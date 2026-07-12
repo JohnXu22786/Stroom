@@ -154,8 +154,7 @@ void main() {
                       models: ['GPT-4o', 'Claude 3', 'Gemini'],
                       selectedModelIndex: 0,
                       onModelSelected: (_) {},
-                      onModelsReordered: (models) =>
-                          List<String>.from(models),
+                      onModelsReordered: (models) => List<String>.from(models),
                     );
                   },
                   child: const Text('Open'),

@@ -971,8 +971,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
         final respHeaders = _adapter.lastResponseHeaders;
         if (respData != null || statusCode != null || respHeaders != null) {
           rawResponseCapture = {};
-          if (statusCode != null)
-            rawResponseCapture['statusCode'] = statusCode;
+          if (statusCode != null) rawResponseCapture['statusCode'] = statusCode;
           if (respHeaders != null) rawResponseCapture['headers'] = respHeaders;
           if (respData != null) rawResponseCapture['data'] = respData;
         } else if (streamError is Exception) {

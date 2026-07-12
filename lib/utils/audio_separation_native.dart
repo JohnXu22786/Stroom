@@ -312,11 +312,11 @@ class _Mp4Demuxer {
                 final stblEnd = icStart + icSize;
 
                 while (_offset < stblEnd) {
-                    final scStart = _offset;
-                    _readUint32(); // box size (advances offset)
-                    final scType = _readString(4);
+                  final scStart = _offset;
+                  _readUint32(); // box size (advances offset)
+                  final scType = _readString(4);
 
-                    if (scType == 'stsd') {
+                  if (scType == 'stsd') {
                     _offset += 4; // version + flags
                     final entryCount = _readUint32();
                     for (var i = 0; i < entryCount; i++) {
@@ -509,4 +509,3 @@ class _Mp4Demuxer {
 }
 
 // ============================================================================
-

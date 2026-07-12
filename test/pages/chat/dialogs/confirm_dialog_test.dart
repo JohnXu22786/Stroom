@@ -10,7 +10,7 @@ void main() {
           MaterialApp(
             home: Builder(
               builder: (context) => ElevatedButton(
-                  onPressed: () => showRetryEditConfirmDialog(
+                onPressed: () => showRetryEditConfirmDialog(
                   context: context,
                   isUser: true,
                   newerMessagesExist: true,
@@ -36,7 +36,7 @@ void main() {
           MaterialApp(
             home: Builder(
               builder: (context) => ElevatedButton(
-                  onPressed: () => showRetryEditConfirmDialog(
+                onPressed: () => showRetryEditConfirmDialog(
                   context: context,
                   isUser: false,
                   newerMessagesExist: false,

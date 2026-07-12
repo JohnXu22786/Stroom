@@ -834,9 +834,7 @@ void showAddCustomParameterDialog(
               if (name.isEmpty) return;
               dynamic value = valueController.text.trim();
               if (type == 'number') {
-                value = double.tryParse(value) ??
-                    int.tryParse(value) ??
-                    value;
+                value = double.tryParse(value) ?? int.tryParse(value) ?? value;
               } else if (type == 'boolean') {
                 value = (value as String).toLowerCase() == 'true';
               } else if (type == 'json') {
@@ -931,9 +929,7 @@ void showEditCustomParameterDialog(
               if (name.isEmpty) return;
               dynamic value = valueController.text.trim();
               if (type == 'number') {
-                value = double.tryParse(value) ??
-                    int.tryParse(value) ??
-                    value;
+                value = double.tryParse(value) ?? int.tryParse(value) ?? value;
               } else if (type == 'boolean') {
                 value = (value as String).toLowerCase() == 'true';
               } else if (type == 'json') {

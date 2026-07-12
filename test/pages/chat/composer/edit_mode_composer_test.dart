@@ -180,10 +180,10 @@ void main() {
       expect(find.text('编辑消息'), findsNothing);
     });
 
-      testWidgets(
-        'edit capsule visible with X button when editingMessageId is set',
-        (tester) async {
-          await tester.binding.setSurfaceSize(const Size(1200, 2000));
+    testWidgets(
+      'edit capsule visible with X button when editingMessageId is set',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(1200, 2000));
         await tester.pumpWidget(
           wrapComposerInApp(
             editingMessageId: 'msg-1',
