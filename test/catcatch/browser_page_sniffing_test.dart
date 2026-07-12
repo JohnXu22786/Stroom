@@ -84,13 +84,19 @@ void main() {
       expect(find.text('20'), findsOneWidget);
     });
 
-    testWidgets('DraggableFloatingPanel close button works', (tester) async {
+    testWidgets('DraggableFloatingPanel close button fires onClose callback',
+        (tester) async {
+      bool onCloseCalled = false;
+
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: DraggableFloatingPanel(
               detectedUrls: const ['https://cdn.example.com/video.mp4'],
               onConfirmCapture: (_) {},
+              onClose: () {
+                onCloseCalled = true;
+              },
             ),
           ),
         ),
@@ -98,6 +104,27 @@ void main() {
 
       // Tap the close button
       await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+
+      // The onClose callback should have been called
+      expect(onCloseCalled, isTrue);
+
+      // Panel should still be visible (parent controls visibility externally)
+      expect(find.byIcon(Icons.close), findsOneWidget);
+
+      // When parent sets visible: false, the panel hides
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DraggableFloatingPanel(
+              detectedUrls: const ['https://cdn.example.com/video.mp4'],
+              onConfirmCapture: (_) {},
+              onClose: () {},
+              visible: false,
+            ),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       // The panel should be dismissed

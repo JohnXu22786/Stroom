@@ -164,12 +164,11 @@ void main() {
     // Persistence & dragging tests
     // ====================================================================
 
-    testWidgets('panel stays visible after page load (no URLs detected)', (
+    testWidgets('panel visibility is controlled by external visible parameter', (
       tester,
     ) async {
-      // The panel should remain visible even when there are no detected URLs
-      // and even when the page has finished loading. It should only hide
-      // when the user explicitly closes it.
+      // The panel should be visible or hidden based on the
+      // externally-controlled [visible] parameter.
       bool onCloseCalled = false;
 
       await tester.pumpWidget(
@@ -178,6 +177,7 @@ void main() {
             body: DraggableFloatingPanel(
               detectedUrls: const [],
               onConfirmCapture: (_) {},
+              visible: true,
               onClose: () {
                 onCloseCalled = true;
               },
@@ -186,7 +186,7 @@ void main() {
         ),
       );
 
-      // Panel should still be visible with empty state
+      // Panel should be visible
       expect(find.textContaining('暂无'), findsOneWidget);
       expect(find.byIcon(Icons.close), findsOneWidget);
 
@@ -194,9 +194,26 @@ void main() {
       await tester.tap(find.byIcon(Icons.close));
       await tester.pumpAndSettle();
 
+      // The onClose callback should be called
+      expect(onCloseCalled, isTrue);
+
+      // Rebuild with visible: false — panel should hide
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DraggableFloatingPanel(
+              detectedUrls: const [],
+              onConfirmCapture: (_) {},
+              visible: false,
+              onClose: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
       // Panel should be hidden now
       expect(find.textContaining('暂无'), findsNothing);
-      expect(onCloseCalled, isTrue);
     });
 
     testWidgets('panel position changes when dragged', (tester) async {

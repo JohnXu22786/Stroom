@@ -66,10 +66,11 @@ class _BrowserPageState extends State<BrowserPage> {
   /// Whether the cat-catch hook has been injected for the current page.
   bool _catCatchHookInjected = false;
 
-  /// Counter incremented on each page load so that the floating panel
-  /// gets a fresh key and re-appears (with default visible state) when
-  /// the user navigates to a new page.
-  int _pageLoadCounter = 0;
+  /// Whether the cat-catch floating panel is currently visible.
+  /// The panel persists its visibility state across page navigations
+  /// and is only hidden when the user manually closes it or toggles
+  /// the show/hide button in the bottom bar.
+  bool _catCatchPanelVisible = true;
 
   @override
   void initState() {
@@ -183,11 +184,12 @@ class _BrowserPageState extends State<BrowserPage> {
   }
 
   /// Reset detected URLs for a new page load.
+  /// The panel visibility is NOT reset here — it persists across page
+  /// navigations until the user manually closes it.
   void _resetDetection() {
     setState(() {
       _detectedUrls.clear();
       _catCatchHookInjected = false;
-      _pageLoadCounter++;
     });
   }
 
@@ -316,16 +318,17 @@ class _BrowserPageState extends State<BrowserPage> {
           ),
 
           // --- Draggable Floating Panel ---
-          // Always rendered. The panel manages its own visibility and
-          // position internally via its own Stack + Positioned.
-          // The ValueKey ensures the panel gets fresh state (visible=true)
-          // on each new page load.
+          // Visibility is controlled by the parent via [visible] so that
+          // the panel persists across page navigations until the user
+          // manually closes or toggles it.
           DraggableFloatingPanel(
-            key: ValueKey('catcatch_panel_$_pageLoadCounter'),
+            key: const ValueKey('catcatch_panel'),
+            visible: _catCatchPanelVisible,
             detectedUrls: _detectedUrls,
             onConfirmCapture: _onConfirmCapture,
             onClose: () {
               setState(() {
+                _catCatchPanelVisible = false;
                 _detectedUrls.clear();
               });
             },
@@ -380,6 +383,21 @@ class _BrowserPageState extends State<BrowserPage> {
                   );
                 }
                 _webViewController?.reload();
+              },
+            ),
+            // CatCatch panel show/hide toggle
+            IconButton(
+              icon: Icon(
+                Icons.pets,
+                color: _catCatchPanelVisible
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              tooltip: _catCatchPanelVisible ? '隐藏嗅探面板' : '显示嗅探面板',
+              onPressed: () {
+                setState(() {
+                  _catCatchPanelVisible = !_catCatchPanelVisible;
+                });
               },
             ),
           ],

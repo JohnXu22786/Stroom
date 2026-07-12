@@ -15,6 +15,10 @@ import 'package:flutter/material.dart';
 /// - Minimize/expand toggle
 /// - Close button
 ///
+/// Visibility is controlled externally via [visible]. The panel shows when
+/// [visible] is true and hides when false. This allows parent widgets to
+/// fully control show/hide behavior (e.g. via a bottom bar toggle button).
+///
 /// This widget is designed to be placed inside a [Stack] above a [WebView].
 class DraggableFloatingPanel extends StatefulWidget {
   /// The list of detected media URLs to display.
@@ -30,12 +34,17 @@ class DraggableFloatingPanel extends StatefulWidget {
   /// Optional initial position offset.
   final Offset? initialPosition;
 
+  /// Whether the panel is visible. The panel shows when true and hides
+  /// when false. Defaults to true.
+  final bool visible;
+
   const DraggableFloatingPanel({
     super.key,
     required this.detectedUrls,
     required this.onConfirmCapture,
     this.onClose,
     this.initialPosition,
+    this.visible = true,
   });
 
   @override
@@ -48,7 +57,6 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
   double _left = 0;
   double _top = 0;
   bool _minimized = false;
-  bool _visible = true;
   int? _selectedIndex;
 
   @override
@@ -70,11 +78,13 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
         _selectedIndex = null;
       }
     }
-  }
-
-  void _close() {
-    setState(() => _visible = false);
-    widget.onClose?.call();
+    // Reset selected index when panel transitions from hidden to visible
+    if (widget.visible && !oldWidget.visible) {
+      setState(() {
+        _selectedIndex = null;
+        _minimized = false;
+      });
+    }
   }
 
   void _toggleMinimize() {
@@ -137,7 +147,7 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_visible) return const SizedBox.shrink();
+    if (!widget.visible) return const SizedBox.shrink();
 
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -250,7 +260,7 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
                           ),
                           // Close
                           InkWell(
-                            onTap: _close,
+                            onTap: widget.onClose,
                             borderRadius: BorderRadius.circular(12),
                             child: Padding(
                               padding: const EdgeInsets.all(4),
