@@ -23,8 +23,10 @@ import 'files_page_shared.dart';
 
 class VideoGalleryPage extends ConsumerStatefulWidget {
   final int tabIndex;
+  final bool isActiveTab;
 
-  const VideoGalleryPage({super.key, this.tabIndex = 0});
+  const VideoGalleryPage(
+      {super.key, this.tabIndex = 0, this.isActiveTab = true});
 
   @override
   ConsumerState<VideoGalleryPage> createState() => _VideoGalleryPageState();
@@ -871,6 +873,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     return FileManagerView<VideoRecord>(
       tabResetSignal: tabResetSignal,
       navigateToParentSignal: navigateToParentSignal,
+      isActiveTab: widget.isActiveTab,
       sortedRecords: sortedRecords,
       folders: folders,
       sortConfig: sortConfig,
