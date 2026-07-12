@@ -1016,7 +1016,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     }
 
     // Step 2: Execute tasks in sequence one-by-one (auto-chain)
-    await _executeTaskChain(taskEntries, effectiveConfig, bgNotifier, textNotifier);
+    await _executeTaskChain(
+        taskEntries, effectiveConfig, bgNotifier, textNotifier);
   }
 
   /// Execute all tasks in sequence. Each task is started after the previous
