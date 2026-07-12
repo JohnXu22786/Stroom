@@ -461,8 +461,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 handlerName: 'onMermaidError',
                 callback: (args) {
                   if (mounted) {
-                    final msg =
-                        args.isNotEmpty ? args[0].toString() : '未知错误';
+                    final msg = args.isNotEmpty ? args[0].toString() : '未知错误';
                     setState(() => _errorMessage = msg);
                   }
                 },
@@ -471,8 +470,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 handlerName: 'onZoomChanged',
                 callback: (args) {
                   if (mounted && args.isNotEmpty) {
-                    final level =
-                        double.tryParse(args[0].toString()) ?? 1.0;
+                    final level = double.tryParse(args[0].toString()) ?? 1.0;
                     setState(() => _zoomLevel = level);
                   }
                 },
@@ -529,8 +527,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
 
   /// Builds the raw Mermaid source code view (similar to HTML code block).
   Widget _buildSourceCodeView(ColorScheme cs, bool isDark) {
-    final bgColor =
-        isDark ? const Color(0xff555555) : const Color(0xffeff1f3);
+    final bgColor = isDark ? const Color(0xff555555) : const Color(0xffeff1f3);
     final textColor =
         isDark ? const Color(0xfff8f8f2) : const Color(0xff000000);
 

@@ -140,8 +140,7 @@ class _MermaidPreviewDialogContentState
                   handlerName: 'onZoomChanged',
                   callback: (args) {
                     if (mounted && args.isNotEmpty) {
-                      final level =
-                          double.tryParse(args[0].toString()) ?? 1.0;
+                      final level = double.tryParse(args[0].toString()) ?? 1.0;
                       setState(() => _zoomLevel = level);
                     }
                   },
@@ -262,8 +261,8 @@ class _MermaidPreviewDialogContentState
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: cs.surfaceContainerHighest
-                            .withValues(alpha: 0.85),
+                        color:
+                            cs.surfaceContainerHighest.withValues(alpha: 0.85),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Text(
@@ -318,7 +317,8 @@ class _MermaidPreviewDialogContentState
             horizontal: 8,
             vertical: 12,
           ),
-          child: Icon(icon, size: 20, color: cs.onSurface, semanticLabel: label),
+          child:
+              Icon(icon, size: 20, color: cs.onSurface, semanticLabel: label),
         ),
       ),
     );
