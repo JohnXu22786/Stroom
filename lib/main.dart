@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show PlatformDispatcher;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:fvp/fvp.dart' as fvp;
+import 'services/video_player_init.dart';
 
 import 'startup/startup_app.dart';
 import 'providers/tts_config.dart';
@@ -135,9 +135,7 @@ Future<void> main() async {
     () async {
       try {
         WidgetsFlutterBinding.ensureInitialized();
-        if (!kIsWeb) {
-          fvp.registerWith();
-        }
+        registerVideoPlayer();
         if (defaultTargetPlatform == TargetPlatform.android ||
             defaultTargetPlatform == TargetPlatform.iOS) {
           await initializeBackgroundService();
