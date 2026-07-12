@@ -258,11 +258,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         .map((label) => BgTaskStep(label: label, status: BgStepStatus.pending))
         .toList();
     final task = BackgroundTask(
-        id: id,
-        type: type,
-        title: title,
-        steps: steps,
-        retryData: retryData);
+        id: id, type: type, title: title, steps: steps, retryData: retryData);
     state = [task, ...state];
     _persistTasks();
     return id;

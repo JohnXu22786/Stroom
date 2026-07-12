@@ -147,7 +147,8 @@ void main() {
     // -----------------------------------------------------------------------
     // Test: Text file opens TextPreviewEditPage
     // -----------------------------------------------------------------------
-    testWidgets('tapping Open File on .txt file navigates to TextPreviewEditPage',
+    testWidgets(
+        'tapping Open File on .txt file navigates to TextPreviewEditPage',
         (tester) async {
       await pumpPage(tester, [
         _createCompletedBgTask(
@@ -188,8 +189,8 @@ void main() {
   // ===========================================================================
   group('Issue 3: Deleting a task does not affect expansion of others', () {
     /// Helper: pump page with 3 background tasks for issue 3 tests.
-    Future<void> pumpThreeTasks(WidgetTester tester,
-        BackgroundTaskNotifier bgNotifier) async {
+    Future<void> pumpThreeTasks(
+        WidgetTester tester, BackgroundTaskNotifier bgNotifier) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -215,7 +216,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
-    testWidgets('delete expanded item 1 preserves expansion state of other items',
+    testWidgets(
+        'delete expanded item 1 preserves expansion state of other items',
         (tester) async {
       final bgNotifier = BackgroundTaskNotifier();
       bgNotifier.state = [
@@ -239,12 +241,9 @@ void main() {
       await pumpThreeTasks(tester, bgNotifier);
 
       // All three tasks should be visible
-      expect(find.text('第一个任务'), findsOneWidget,
-          reason: '第一个任务应该显示');
-      expect(find.text('第二个任务'), findsOneWidget,
-          reason: '第二个任务应该显示');
-      expect(find.text('第三个任务'), findsOneWidget,
-          reason: '第三个任务应该显示');
+      expect(find.text('第一个任务'), findsOneWidget, reason: '第一个任务应该显示');
+      expect(find.text('第二个任务'), findsOneWidget, reason: '第二个任务应该显示');
+      expect(find.text('第三个任务'), findsOneWidget, reason: '第三个任务应该显示');
 
       // Expand the first two tasks by tapping their headers
       await expandTask(tester, '第一个任务');
@@ -256,8 +255,7 @@ void main() {
       // hidden children in tree at zero size, so we need to target the visible one.
       // Since both first and second are expanded, find all delete buttons
       // and tap the first one (which belongs to the first task).
-      expect(find.text('删除'), findsAtLeast(1),
-          reason: '展开的任务应显示删除按钮');
+      expect(find.text('删除'), findsAtLeast(1), reason: '展开的任务应显示删除按钮');
 
       // Tap the first "删除" button
       await tester.tap(find.text('删除').first);
@@ -268,12 +266,9 @@ void main() {
       // - "第二个任务" should still be present
       // - "第三个任务" should still be present
       // - "第一个任务" should be gone
-      expect(find.text('第一个任务'), findsNothing,
-          reason: '删除后第一个任务应消失');
-      expect(find.text('第二个任务'), findsOneWidget,
-          reason: '删除后第二个任务应仍在');
-      expect(find.text('第三个任务'), findsOneWidget,
-          reason: '删除后第三个任务应仍在');
+      expect(find.text('第一个任务'), findsNothing, reason: '删除后第一个任务应消失');
+      expect(find.text('第二个任务'), findsOneWidget, reason: '删除后第二个任务应仍在');
+      expect(find.text('第三个任务'), findsOneWidget, reason: '删除后第三个任务应仍在');
 
       // Verify the task was actually removed from the provider
       final remainingIds = bgNotifier.state.map((t) => t.id).toList();
@@ -285,10 +280,8 @@ void main() {
           reason: 'task-1 应从 provider 中移除');
 
       // Verify the remaining tasks are in the correct order
-      expect(remainingIds[0], 'task-2',
-          reason: 'task-2 应该是第一个（最新）');
-      expect(remainingIds[1], 'task-3',
-          reason: 'task-3 应该是第二个');
+      expect(remainingIds[0], 'task-2', reason: 'task-2 应该是第一个（最新）');
+      expect(remainingIds[1], 'task-3', reason: 'task-3 应该是第二个');
     });
 
     testWidgets('delete collapsed item does not affect expanded items',
@@ -324,8 +317,7 @@ void main() {
 
       // Now expand and delete 任务A
       await expandTask(tester, '任务A');
-      expect(find.text('删除'), findsAtLeast(1),
-          reason: '展开的任务应显示删除按钮');
+      expect(find.text('删除'), findsAtLeast(1), reason: '展开的任务应显示删除按钮');
 
       // Tap the first "删除" button to delete 任务A
       await tester.tap(find.text('删除').first);
@@ -335,21 +327,15 @@ void main() {
       // After deleting 任务A:
       // - 任务A should be gone
       // - 任务B and 任务C should remain
-      expect(find.text('任务A'), findsNothing,
-          reason: '删除后任务A应消失');
-      expect(find.text('任务B'), findsOneWidget,
-          reason: '删除后任务B应仍在');
-      expect(find.text('任务C'), findsOneWidget,
-          reason: '删除后任务C应仍在');
+      expect(find.text('任务A'), findsNothing, reason: '删除后任务A应消失');
+      expect(find.text('任务B'), findsOneWidget, reason: '删除后任务B应仍在');
+      expect(find.text('任务C'), findsOneWidget, reason: '删除后任务C应仍在');
 
       // Verify provider state
       final remainingIds = bgNotifier.state.map((t) => t.id).toList();
-      expect(remainingIds, contains('task-c'),
-          reason: 'task-c 应保留');
-      expect(remainingIds, contains('task-b'),
-          reason: 'task-b 应保留');
-      expect(remainingIds, isNot(contains('task-a')),
-          reason: 'task-a 应被移除');
+      expect(remainingIds, contains('task-c'), reason: 'task-c 应保留');
+      expect(remainingIds, contains('task-b'), reason: 'task-b 应保留');
+      expect(remainingIds, isNot(contains('task-a')), reason: 'task-a 应被移除');
     });
   });
 
@@ -432,7 +418,9 @@ void main() {
       final notifier = BackgroundTaskNotifier();
       final retryData = <String, dynamic>{
         'type': 'ocr',
-        'images': [{'name': 'test', 'format': 'jpeg', 'bytes': 'AAAA'}],
+        'images': [
+          {'name': 'test', 'format': 'jpeg', 'bytes': 'AAAA'}
+        ],
         'modelIndex': 0,
       };
       final id = notifier.addTask(
@@ -463,8 +451,7 @@ void main() {
 
       // Expand and tap retry
       await expandTask(tester, 'OCR重试');
-      expect(find.text('重试'), findsOneWidget,
-          reason: '失败的任务展开后应显示"重试"按钮');
+      expect(find.text('重试'), findsOneWidget, reason: '失败的任务展开后应显示"重试"按钮');
 
       await tester.tap(find.text('重试'));
       await tester.pump();

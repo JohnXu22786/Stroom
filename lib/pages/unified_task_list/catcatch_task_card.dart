@@ -1119,7 +1119,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     icon: Icons.folder_open,
                     label: '打开文件',
                     color: Colors.green,
-                    onPressed: () => openFile(task.downloadedFilePath!, context),
+                    onPressed: () =>
+                        openFile(task.downloadedFilePath!, context),
                   ),
                 _actionButton(
                   icon: Icons.delete_outline,
