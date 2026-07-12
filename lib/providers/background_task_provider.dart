@@ -124,6 +124,8 @@ class BackgroundTask {
       rawRequest; // Raw request data for error diagnostics
   final Map<String, dynamic>?
       rawResponse; // Raw response data for error diagnostics
+  final Map<String, dynamic>?
+      retryData; // Retry data to pre-populate form when retrying
 
   BackgroundTask({
     required this.id,
@@ -139,6 +141,7 @@ class BackgroundTask {
     this.downloadedFilePath,
     this.rawRequest,
     this.rawResponse,
+    this.retryData,
   }) : createdAt = createdAt ?? DateTime.now();
 
   BackgroundTask copyWith({
@@ -151,10 +154,12 @@ class BackgroundTask {
     String? downloadedFilePath,
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
+    Map<String, dynamic>? retryData,
     bool clearError = false,
     bool clearDownloadedFilePath = false,
     bool clearRawRequest = false,
     bool clearRawResponse = false,
+    bool clearRetryData = false,
   }) {
     final newStatus = status ?? this.status;
     final newStatusChangedAt = statusChangedAt ??
@@ -177,6 +182,7 @@ class BackgroundTask {
           : (downloadedFilePath ?? this.downloadedFilePath),
       rawRequest: clearRawRequest ? null : (rawRequest ?? this.rawRequest),
       rawResponse: clearRawResponse ? null : (rawResponse ?? this.rawResponse),
+      retryData: clearRetryData ? null : (retryData ?? this.retryData),
     );
   }
 
@@ -195,6 +201,7 @@ class BackgroundTask {
           'downloadedFilePath': downloadedFilePath,
         if (rawRequest != null) 'rawRequest': rawRequest,
         if (rawResponse != null) 'rawResponse': rawResponse,
+        if (retryData != null) 'retryData': retryData,
       };
 
   factory BackgroundTask.fromMap(Map<String, dynamic> map) => BackgroundTask(
@@ -219,6 +226,7 @@ class BackgroundTask {
         downloadedFilePath: map['downloadedFilePath'] as String?,
         rawRequest: map['rawRequest'] as Map<String, dynamic>?,
         rawResponse: map['rawResponse'] as Map<String, dynamic>?,
+        retryData: map['retryData'] as Map<String, dynamic>?,
       );
 }
 
@@ -238,12 +246,19 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   /// Add a new background task (running) and return its ID.
   /// Initializes default step chain based on task type.
-  String addTask({required BackgroundTaskType type, required String title}) {
+  /// [retryData] stores the original input parameters (images, audio, model, etc.)
+  /// so the retry flow can pre-populate the form.
+  String addTask({
+    required BackgroundTaskType type,
+    required String title,
+    Map<String, dynamic>? retryData,
+  }) {
     final id = _uuid.v4();
     final steps = type.stepLabels
         .map((label) => BgTaskStep(label: label, status: BgStepStatus.pending))
         .toList();
-    final task = BackgroundTask(id: id, type: type, title: title, steps: steps);
+    final task = BackgroundTask(
+        id: id, type: type, title: title, steps: steps, retryData: retryData);
     state = [task, ...state];
     _persistTasks();
     return id;
