@@ -72,7 +72,7 @@ class _SearchPanelState extends State<SearchPanel> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: cs.onSurfaceVariant.withOpacity(0.3),
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -112,7 +112,7 @@ class _SearchPanelState extends State<SearchPanel> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     filled: true,
-                    fillColor: cs.surfaceContainerHighest.withOpacity(0.3),
+                    fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.3),
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16,
                       vertical: 12,
@@ -164,7 +164,7 @@ class _SearchPanelState extends State<SearchPanel> {
                           children: [
                             Icon(Icons.search_off,
                                 size: 40,
-                                color: cs.onSurfaceVariant.withOpacity(0.4)),
+                                color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
                             const SizedBox(height: 12),
                             Text(
                               _query.isEmpty ? '输入关键词开始搜索' : '没有找到匹配的对话',
@@ -203,7 +203,7 @@ class _SearchPanelState extends State<SearchPanel> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: cs.outlineVariant.withOpacity(0.5),
+          color: cs.outlineVariant.withValues(alpha: 0.5),
           width: 0.5,
         ),
       ),
@@ -218,7 +218,7 @@ class _SearchPanelState extends State<SearchPanel> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: cs.primaryContainer.withOpacity(0.3),
+                  color: cs.primaryContainer.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
@@ -268,7 +268,7 @@ class _SearchPanelState extends State<SearchPanel> {
                             color: cs.onSurfaceVariant,
                           ),
                         ),
-                        if (conv.messages.length > 0) ...[
+                        if (conv.messages.isNotEmpty) ...[
                           const SizedBox(width: 8),
                           Icon(Icons.message_outlined,
                               size: 12, color: cs.onSurfaceVariant),
@@ -289,7 +289,7 @@ class _SearchPanelState extends State<SearchPanel> {
               Icon(
                 Icons.chevron_right,
                 size: 18,
-                color: cs.onSurfaceVariant.withOpacity(0.5),
+                color: cs.onSurfaceVariant.withValues(alpha: 0.5),
               ),
             ],
           ),

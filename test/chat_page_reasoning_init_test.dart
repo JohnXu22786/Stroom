@@ -10,7 +10,7 @@ void main() {
       addTearDown(container.dispose);
 
       final sections = container.read(streamingReasoningSectionsProvider);
-      expect(sections, isEmpty, reason: '推理章节应在无推理内容时初始化为空列表，而非[\"\"]');
+      expect(sections, isEmpty, reason: '推理章节应在无推理内容时初始化为空列表，而非[""]');
     });
 
     test('streamingReasoningProvider starts as empty string', () {

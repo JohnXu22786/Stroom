@@ -6,7 +6,6 @@ import 'package:stroom/catcatch/providers/catcatch_provider.dart';
 import 'package:stroom/pages/unified_task_list_page.dart';
 import 'package:stroom/providers/task_provider.dart';
 import 'package:stroom/providers/background_task_provider.dart';
-import 'package:stroom/providers/task_provider_shared.dart';
 import 'package:stroom/providers/provider_config.dart';
 
 // =============================================================================

@@ -7,6 +7,7 @@ class OptionChip extends StatelessWidget {
   final VoidCallback onTap;
 
   const OptionChip({
+    super.key,
     required this.label,
     required this.selected,
     required this.onTap,

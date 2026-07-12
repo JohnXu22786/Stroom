@@ -24,8 +24,8 @@ class WebViewSniffer {
   /// - Network request interception for media files
   ///
   /// Returns a record with:
-  /// - $1: detected media resources (List<MediaResource>)
-  /// - $2: the HTML <title> of the page (String?), if available
+  /// - $1: detected media resources `(List<MediaResource>)`
+  /// - `$2`: the HTML `<title>` of the page (String?), if available
   static Future<(List<MediaResource>, String?)> sniff({
     required String url,
     Duration timeout = defaultTimeout,

@@ -154,7 +154,7 @@ class _FilesPageState extends ConsumerState<FilesPage>
                 children: [
                   ReorderableListView(
                     shrinkWrap: true,
-                    onReorder: (oldIndex, newIndex) {
+                    onReorderItem: (oldIndex, newIndex) {
                       setDialogState(() {
                         if (newIndex > oldIndex) newIndex--;
                         final item = order.removeAt(oldIndex);

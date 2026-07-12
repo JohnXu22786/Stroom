@@ -215,6 +215,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     if (result != null && mounted) {
       await ref.read(textRecordsProvider.notifier).loadRecords();
       await ref.read(textFolderListProvider.notifier).loadFolders();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('文本已保存'), duration: Duration(seconds: 2)),
       );

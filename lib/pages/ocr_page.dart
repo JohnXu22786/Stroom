@@ -654,7 +654,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           padding: const EdgeInsets.all(8),
           buildDefaultDragHandles: false,
           itemCount: _selectedImages.length,
-          onReorder: _onReorder,
+          onReorderItem: _onReorder,
           proxyDecorator: (child, index, animation) {
             return Material(
               elevation: 4,

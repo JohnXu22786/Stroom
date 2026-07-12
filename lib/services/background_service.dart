@@ -77,15 +77,15 @@ Future<void> _createNotificationChannel() async {
 
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) {
-  Timer? _timer;
+  Timer? timer;
   if (service is AndroidServiceInstance) {
     service.on('stopService').listen((_) {
-      _timer?.cancel();
+      timer?.cancel();
       service.stopSelf();
     });
   }
 
-  _timer = Timer.periodic(const Duration(seconds: 10), (timer) async {
+  timer = Timer.periodic(const Duration(seconds: 10), (timer) async {
     if (service is AndroidServiceInstance) {
       service.setForegroundNotificationInfo(
         title: _serviceTitle,

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -911,7 +910,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                   scrollDirection: Axis.horizontal,
                   buildDefaultDragHandles: false,
                   itemCount: _pendingAttachments.length,
-                  onReorder: _onReorderPendingAttachment,
+                  onReorderItem: _onReorderPendingAttachment,
                   itemBuilder: (ctx, i) {
                     final att = _pendingAttachments[i];
                     return ReorderableDelayedDragStartListener(
@@ -995,10 +994,10 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                 ),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: cs.primary.withOpacity(0.1),
+                    color: cs.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: cs.primary.withOpacity(0.3),
+                      color: cs.primary.withValues(alpha: 0.3),
                       width: 1,
                     ),
                   ),
@@ -1079,7 +1078,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                           borderSide: BorderSide.none,
                         ),
                         filled: true,
-                        fillColor: cs.surfaceContainerHigh.withOpacity(0.8),
+                        fillColor: cs.surfaceContainerHigh.withValues(alpha: 0.8),
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16,
                           vertical: 10,

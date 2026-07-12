@@ -45,6 +45,7 @@ class SettingsChip extends StatelessWidget {
   final int? badgeCount;
 
   const SettingsChip({
+    super.key,
     required this.icon,
     required this.label,
     required this.color,
@@ -66,13 +67,13 @@ class SettingsChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: isDisabled
-              ? Colors.grey.withOpacity(0.08)
-              : color.withOpacity(0.1),
+              ? Colors.grey.withValues(alpha: 0.08)
+              : color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isDisabled
-                ? Colors.grey.withOpacity(0.1)
-                : color.withOpacity(0.2),
+                ? Colors.grey.withValues(alpha: 0.1)
+                : color.withValues(alpha: 0.2),
             width: 1,
           ),
         ),
@@ -81,14 +82,14 @@ class SettingsChip extends StatelessWidget {
           children: [
             Icon(icon,
                 size: 16,
-                color: isDisabled ? Colors.grey.withOpacity(0.4) : color),
+                color: isDisabled ? Colors.grey.withValues(alpha: 0.4) : color),
             const SizedBox(width: 4),
             Text(
               label,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                color: isDisabled ? Colors.grey.withOpacity(0.4) : cs.onSurface,
+                color: isDisabled ? Colors.grey.withValues(alpha: 0.4) : cs.onSurface,
               ),
             ),
             if (showBadge) ...[
@@ -170,7 +171,7 @@ class ModelNameChip extends StatelessWidget {
     final style = TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w500,
-      color: isDisabled ? Colors.grey.withOpacity(0.4) : cs.onSurface,
+      color: isDisabled ? Colors.grey.withValues(alpha: 0.4) : cs.onSurface,
     );
 
     return InkWell(
@@ -180,13 +181,13 @@ class ModelNameChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: isDisabled
-              ? Colors.grey.withOpacity(0.08)
-              : color.withOpacity(0.1),
+              ? Colors.grey.withValues(alpha: 0.08)
+              : color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isDisabled
-                ? Colors.grey.withOpacity(0.1)
-                : color.withOpacity(0.2),
+                ? Colors.grey.withValues(alpha: 0.1)
+                : color.withValues(alpha: 0.2),
             width: 1,
           ),
         ),
@@ -195,7 +196,7 @@ class ModelNameChip extends StatelessWidget {
           children: [
             Icon(Icons.smart_toy_outlined,
                 size: 16,
-                color: isDisabled ? Colors.grey.withOpacity(0.4) : color),
+                color: isDisabled ? Colors.grey.withValues(alpha: 0.4) : color),
             const SizedBox(width: 4),
             Text(
               displayText,

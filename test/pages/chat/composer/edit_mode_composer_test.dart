@@ -122,7 +122,7 @@ void main() {
 
     test('cancel edit callback fires as expected', () {
       bool cancelCalled = false;
-      final cancel = () => cancelCalled = true;
+      void cancel() => cancelCalled = true;
 
       cancel();
       expect(cancelCalled, true);

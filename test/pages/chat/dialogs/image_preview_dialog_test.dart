@@ -199,7 +199,7 @@ void main() {
         if (decoration is BoxDecoration &&
             decoration.shape == BoxShape.circle &&
             decoration.color != null &&
-            decoration.color!.alpha < 255) {
+            decoration.color!.a < 1.0) {
           hasCircularBackground = true;
           break;
         }

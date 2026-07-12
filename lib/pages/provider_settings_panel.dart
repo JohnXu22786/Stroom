@@ -389,7 +389,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
             width: double.infinity,
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: cs.tertiaryContainer.withOpacity(0.3),
+              color: cs.tertiaryContainer.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
@@ -747,7 +747,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
               '关闭时发送「${toggle.offValue ?? ''}」',
               style: TextStyle(
                 fontSize: 11,
-                color: cs.onSurfaceVariant.withOpacity(0.7),
+                color: cs.onSurfaceVariant.withValues(alpha: 0.7),
               ),
             ),
           ],
@@ -860,7 +860,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
             Text('选项值（可选，仅填参数名时发送参数名本身）',
                 style: TextStyle(
                   fontSize: 12,
-                  color: cs.onSurfaceVariant.withOpacity(0.7),
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
                 )),
             const SizedBox(height: 8),
             ...List.generate(param.options.length, (j) {

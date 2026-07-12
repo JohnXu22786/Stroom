@@ -116,7 +116,7 @@ class AsrPage extends ConsumerStatefulWidget {
 
 class _AsrPageState extends ConsumerState<AsrPage> {
   final List<SelectedAudio> _selectedAudios = [];
-  bool _isProcessing = false;
+  final bool _isProcessing = false;
   String? _errorMessage;
   String? _transcriptionResult;
   int _selectedModelIndex = 0;

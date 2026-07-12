@@ -278,7 +278,8 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
             ],
           ),
         );
-        if (shouldDiscard == true && mounted) {
+        if (shouldDiscard == true) {
+          if (!context.mounted) return;
           setState(() {
             _isEditMode = false;
             _hasUnsavedChanges = false;

@@ -41,7 +41,7 @@ class AssistantSelectionPage extends ConsumerWidget {
                   Icon(
                     Icons.smart_toy_outlined,
                     size: 64,
-                    color: cs.onSurfaceVariant.withOpacity(0.4),
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.4),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -397,7 +397,7 @@ void showAssistantFullEditDialog(
                                   color: Theme.of(context)
                                       .colorScheme
                                       .tertiaryContainer
-                                      .withOpacity(0.3),
+                                      .withValues(alpha: 0.3),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Row(
@@ -791,7 +791,7 @@ void showAddCustomParameterDialog(
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: type,
+              initialValue: type,
               decoration: const InputDecoration(
                 labelText: '类型',
                 border: OutlineInputBorder(),
@@ -893,7 +893,7 @@ void showEditCustomParameterDialog(
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: type,
+              initialValue: type,
               decoration: const InputDecoration(
                 labelText: '类型',
                 border: OutlineInputBorder(),

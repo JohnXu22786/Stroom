@@ -267,7 +267,9 @@ class _ProviderConfigDetailPageState
             final config = _config;
             if (config == null ||
                 modelIndex < 0 ||
-                modelIndex >= config.models.length) return;
+                modelIndex >= config.models.length) {
+              return;
+            }
 
             final result = await Navigator.push<ModelConfig>(
               context,
@@ -303,7 +305,9 @@ class _ProviderConfigDetailPageState
             final config = _config;
             if (config == null ||
                 modelIndex < 0 ||
-                modelIndex >= config.models.length) return;
+                modelIndex >= config.models.length) {
+              return;
+            }
 
             final result = await Navigator.push<ModelConfig>(
               context,
@@ -486,7 +490,7 @@ class _ProviderConfigDetailPageState
             margin: const EdgeInsets.only(bottom: 16),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: cs.primaryContainer.withOpacity(0.3),
+              color: cs.primaryContainer.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: cs.primaryContainer,
@@ -499,7 +503,7 @@ class _ProviderConfigDetailPageState
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: cs.primaryContainer.withOpacity(0.5),
+                    color: cs.primaryContainer.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(Icons.dns, color: Colors.teal, size: 24),

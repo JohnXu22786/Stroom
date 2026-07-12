@@ -145,8 +145,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 
   Future<void> _openSettingsPanel(int configIndex) async {
     final entry = _entry;
-    if (entry == null || configIndex < 0 || configIndex >= entry.configs.length)
+    if (entry == null || configIndex < 0 || configIndex >= entry.configs.length) {
       return;
+    }
 
     final result = await showProviderSettingsPanel(
       context: context,
@@ -231,7 +232,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               sliver: SliverReorderableList(
                 itemCount: entry.configs.length,
-                onReorder: _reorderConfigs,
+                onReorderItem: _reorderConfigs,
                 proxyDecorator: (child, index, animation) => Material(
                   elevation: 2,
                   borderRadius: BorderRadius.circular(12),

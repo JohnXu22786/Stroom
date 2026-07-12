@@ -265,6 +265,7 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
         // 刷新记录列表
         await ref.read(audioRecordsProvider.notifier).loadRecords();
         await ref.read(folderListProvider.notifier).loadFolders();
+        if (!mounted) return;
 
         _showSnackBar('录音已保存: $defaultName');
 

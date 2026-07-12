@@ -74,7 +74,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: cs.tertiaryContainer.withOpacity(0.3),
+                    color: cs.tertiaryContainer.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: cs.tertiaryContainer,
@@ -261,7 +261,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: cs.primaryContainer.withOpacity(0.3),
+        color: cs.primaryContainer.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: cs.primaryContainer,

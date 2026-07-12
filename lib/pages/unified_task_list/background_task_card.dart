@@ -102,7 +102,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                             _buildStatusChip(widget.task.status),
                             const SizedBox(width: 8),
                             Text(
-                              '${formatRelativeTime(widget.task.createdAt)}',
+                              formatRelativeTime(widget.task.createdAt),
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey[500],

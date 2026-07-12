@@ -108,7 +108,8 @@ class _HtmlPreviewDialogContentState extends State<_HtmlPreviewDialogContent> {
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
         final shouldPop = await _onPopScope();
-        if (shouldPop && mounted) {
+        if (shouldPop) {
+          if (!context.mounted) return;
           Navigator.pop(context);
         }
       },
@@ -142,7 +143,7 @@ class _HtmlPreviewDialogContentState extends State<_HtmlPreviewDialogContent> {
                   setState(() => _isLoading = false);
                 }
               },
-              onLoadError: (ctrl, url, code, message) {
+              onReceivedError: (controller, request, error) {
                 if (mounted) {
                   setState(() {
                     _isLoading = false;
@@ -222,7 +223,7 @@ class _HtmlPreviewDialogContentState extends State<_HtmlPreviewDialogContent> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: cs.surfaceContainerHighest.withOpacity(0.85),
+                      color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
@@ -240,7 +241,7 @@ class _HtmlPreviewDialogContentState extends State<_HtmlPreviewDialogContent> {
                     padding: const EdgeInsets.only(right: 8),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: cs.surfaceContainerHighest.withOpacity(0.85),
+                        color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
                         shape: BoxShape.circle,
                       ),
                       child: IconButton(

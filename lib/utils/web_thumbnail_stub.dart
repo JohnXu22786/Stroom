@@ -1,5 +1,6 @@
 /// Web thumbnail generation stubs (native platform).
 /// Uses only native-compatible code.
+library;
 import 'dart:typed_data';
 
 /// Generate a thumbnail from video bytes (not supported on native via this method).

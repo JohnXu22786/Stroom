@@ -42,14 +42,14 @@ class TopicItem extends StatelessWidget {
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 8),
       color: isActive
-          ? cs.primaryContainer.withOpacity(0.2)
+          ? cs.primaryContainer.withValues(alpha: 0.2)
           : (isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
           color: isActive
-              ? cs.primary.withOpacity(0.3)
-              : cs.outlineVariant.withOpacity(0.5),
+              ? cs.primary.withValues(alpha: 0.3)
+              : cs.outlineVariant.withValues(alpha: 0.5),
           width: isActive ? 1.0 : 0.5,
         ),
       ),
@@ -70,7 +70,7 @@ class TopicItem extends StatelessWidget {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: cs.primaryContainer.withOpacity(0.3),
+                    color: cs.primaryContainer.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
@@ -149,7 +149,7 @@ class TopicItem extends StatelessWidget {
                         size: 18,
                         color: topic.isPinned
                             ? cs.primary
-                            : cs.onSurfaceVariant.withOpacity(0.7),
+                            : cs.onSurfaceVariant.withValues(alpha: 0.7),
                       ),
                       tooltip: topic.isPinned ? '取消置顶' : '置顶',
                       onPressed: onPinToggle,

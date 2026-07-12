@@ -73,7 +73,7 @@ void showModelPanel({
                         width: 28,
                         height: 28,
                         decoration: BoxDecoration(
-                          color: Colors.teal.withOpacity(0.15),
+                          color: Colors.teal.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: const Icon(Icons.smart_toy_outlined,
@@ -110,7 +110,7 @@ void showModelPanel({
                         shrinkWrap: true,
                         buildDefaultDragHandles: false,
                         itemCount: localModels.length,
-                        onReorder: (oldIndex, newIndex) {
+                        onReorderItem: (oldIndex, newIndex) {
                           handleReorder(oldIndex, newIndex);
                         },
                         proxyDecorator: (child, index, animation) {
@@ -140,7 +140,7 @@ void showModelPanel({
                               elevation: 0,
                               color: isSelected
                                   ? cs.primaryContainer
-                                  : cs.surfaceContainerHighest.withOpacity(0.3),
+                                  : cs.surfaceContainerHighest.withValues(alpha: 0.3),
                               child: ListTile(
                                 dense: true,
                                 leading: ReorderableDragStartListener(
@@ -233,7 +233,7 @@ void showToolsPanel({
                         width: 28,
                         height: 28,
                         decoration: BoxDecoration(
-                          color: cs.tertiary.withOpacity(0.15),
+                          color: cs.tertiary.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Icon(Icons.build_outlined,
@@ -270,7 +270,7 @@ void showToolsPanel({
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 4),
                         child: Material(
-                          color: cs.surfaceContainerHighest.withOpacity(0.3),
+                          color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(10),
                           child: SwitchListTile(
                             dense: true,
@@ -285,7 +285,7 @@ void showToolsPanel({
                               });
                               onToolToggle(tool.name, enabled);
                             },
-                            activeColor: cs.primary,
+                            activeThumbColor: cs.primary,
                             title: Text(
                               tool.name,
                               style: TextStyle(
@@ -375,7 +375,7 @@ void showReasoningPanel({
                         width: 28,
                         height: 28,
                         decoration: BoxDecoration(
-                          color: Colors.purple.withOpacity(0.15),
+                          color: Colors.purple.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: const Icon(Icons.psychology_outlined,
@@ -396,7 +396,7 @@ void showReasoningPanel({
                   // Reasoning toggle
                   Container(
                     decoration: BoxDecoration(
-                      color: cs.surfaceContainerHighest.withOpacity(0.5),
+                      color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     padding:
@@ -415,7 +415,7 @@ void showReasoningPanel({
                         ),
                         Switch(
                           value: localEnabled && hasParams,
-                          activeColor: cs.primary,
+                          activeThumbColor: cs.primary,
                           onChanged: hasParams
                               ? (value) {
                                   setState(() => localEnabled = value);
@@ -479,7 +479,7 @@ void showReasoningPanel({
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 13,
-                            color: cs.onSurfaceVariant.withOpacity(0.6),
+                            color: cs.onSurfaceVariant.withValues(alpha: 0.6),
                           ),
                         ),
                       ),

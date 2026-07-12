@@ -4,4 +4,5 @@
 /// 基于 FFmpeg 的 demux 思路：解析容器 → 找到音频流 → 提取音频数据。
 ///
 /// 所有平台通用，无需系统组件或外部 FFmpeg 安装。
+library;
 export 'audio_separation_native.dart';
