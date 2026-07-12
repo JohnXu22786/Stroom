@@ -145,7 +145,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 
   Future<void> _openSettingsPanel(int configIndex) async {
     final entry = _entry;
-    if (entry == null || configIndex < 0 || configIndex >= entry.configs.length) {
+    if (entry == null ||
+        configIndex < 0 ||
+        configIndex >= entry.configs.length) {
       return;
     }
 

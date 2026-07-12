@@ -89,7 +89,9 @@ class SettingsChip extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                color: isDisabled ? Colors.grey.withValues(alpha: 0.4) : cs.onSurface,
+                color: isDisabled
+                    ? Colors.grey.withValues(alpha: 0.4)
+                    : cs.onSurface,
               ),
             ),
             if (showBadge) ...[

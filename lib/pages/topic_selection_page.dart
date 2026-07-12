@@ -241,7 +241,8 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
           const SizedBox(height: 8),
           Text('创建一个新对话开始对话',
               style: TextStyle(
-                  fontSize: 13, color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
+                  fontSize: 13,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
         ],
       ),
     );
@@ -291,7 +292,8 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.error_outline,
-                      size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+                      size: 48,
+                      color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
                   const SizedBox(height: 16),
                   Text('未选择助手', style: TextStyle(color: cs.onSurfaceVariant)),
                   const SizedBox(height: 16),

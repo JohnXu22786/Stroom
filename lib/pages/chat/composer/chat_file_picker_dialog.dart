@@ -502,7 +502,10 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                 decoration: BoxDecoration(
                   color: isImage
                       ? null
-                      : Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                      : Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 clipBehavior: isImage ? Clip.antiAlias : Clip.none,

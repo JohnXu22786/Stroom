@@ -219,7 +219,8 @@ class _BrowserPageState extends State<BrowserPage> {
               borderSide: BorderSide.none,
             ),
             filled: true,
-            fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            fillColor:
+                colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             suffixIcon: IconButton(

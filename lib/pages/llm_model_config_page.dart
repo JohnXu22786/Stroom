@@ -104,7 +104,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         _enablePresencePenalty) {
       return true;
     }
-    if ((m.typeConfig['enableMaxTokens'] as bool? ?? false) != _enableMaxTokens) {
+    if ((m.typeConfig['enableMaxTokens'] as bool? ?? false) !=
+        _enableMaxTokens) {
       return true;
     }
     if ((m.typeConfig['enableSeed'] as bool? ?? false) != _enableSeed) {

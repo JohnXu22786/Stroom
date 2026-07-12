@@ -1078,7 +1078,8 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                           borderSide: BorderSide.none,
                         ),
                         filled: true,
-                        fillColor: cs.surfaceContainerHigh.withValues(alpha: 0.8),
+                        fillColor:
+                            cs.surfaceContainerHigh.withValues(alpha: 0.8),
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16,
                           vertical: 10,

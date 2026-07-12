@@ -2,5 +2,6 @@
 /// - Web: uses dart:js_interop for blob URL creation
 /// - Native: stub implementation
 library;
+
 export 'web_thumbnail_stub.dart'
     if (dart.library.js_interop) 'web_thumbnail.dart';

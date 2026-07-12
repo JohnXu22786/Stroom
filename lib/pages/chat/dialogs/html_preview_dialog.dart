@@ -241,7 +241,8 @@ class _HtmlPreviewDialogContentState extends State<_HtmlPreviewDialogContent> {
                     padding: const EdgeInsets.only(right: 8),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
+                        color:
+                            cs.surfaceContainerHighest.withValues(alpha: 0.85),
                         shape: BoxShape.circle,
                       ),
                       child: IconButton(

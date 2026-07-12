@@ -112,7 +112,8 @@ class _SearchPanelState extends State<SearchPanel> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     filled: true,
-                    fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+                    fillColor:
+                        cs.surfaceContainerHighest.withValues(alpha: 0.3),
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16,
                       vertical: 12,
@@ -164,7 +165,8 @@ class _SearchPanelState extends State<SearchPanel> {
                           children: [
                             Icon(Icons.search_off,
                                 size: 40,
-                                color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+                                color:
+                                    cs.onSurfaceVariant.withValues(alpha: 0.4)),
                             const SizedBox(height: 12),
                             Text(
                               _query.isEmpty ? '输入关键词开始搜索' : '没有找到匹配的对话',

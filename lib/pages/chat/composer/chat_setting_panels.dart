@@ -140,7 +140,8 @@ void showModelPanel({
                               elevation: 0,
                               color: isSelected
                                   ? cs.primaryContainer
-                                  : cs.surfaceContainerHighest.withValues(alpha: 0.3),
+                                  : cs.surfaceContainerHighest
+                                      .withValues(alpha: 0.3),
                               child: ListTile(
                                 dense: true,
                                 leading: ReorderableDragStartListener(
@@ -270,7 +271,8 @@ void showToolsPanel({
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 4),
                         child: Material(
-                          color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+                          color:
+                              cs.surfaceContainerHighest.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(10),
                           child: SwitchListTile(
                             dense: true,

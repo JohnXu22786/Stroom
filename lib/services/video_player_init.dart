@@ -9,5 +9,6 @@
 /// This avoids compile-time errors from `package:fvp`'s `dart:ffi` import
 /// when building for web.
 library;
+
 export 'video_player_init_stub.dart'
     if (dart.library.io) 'video_player_init_io.dart';
