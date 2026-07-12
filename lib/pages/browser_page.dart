@@ -257,9 +257,8 @@ class _BrowserPageState extends State<BrowserPage> {
                         MixedContentMode.MIXED_CONTENT_COMPATIBILITY_MODE,
                     useWideViewPort: true,
                     supportZoom: true,
-                    userAgent: _isDesktopMode
-                        ? _desktopUserAgent
-                        : _mobileUserAgent,
+                    userAgent:
+                        _isDesktopMode ? _desktopUserAgent : _mobileUserAgent,
                   ),
                   onWebViewCreated: (controller) {
                     _webViewController = controller;
@@ -362,11 +361,9 @@ class _BrowserPageState extends State<BrowserPage> {
                   _isDesktopMode = !_isDesktopMode;
                 });
                 // Apply the new user agent while preserving other settings
-                final currentSettings =
-                    await _webViewController?.getSettings();
-                final ua = _isDesktopMode
-                    ? _desktopUserAgent
-                    : _mobileUserAgent;
+                final currentSettings = await _webViewController?.getSettings();
+                final ua =
+                    _isDesktopMode ? _desktopUserAgent : _mobileUserAgent;
                 if (currentSettings != null) {
                   await _webViewController?.setSettings(
                     settings: InAppWebViewSettings(
@@ -375,14 +372,10 @@ class _BrowserPageState extends State<BrowserPage> {
                           currentSettings.javaScriptEnabled ?? true,
                       domStorageEnabled:
                           currentSettings.domStorageEnabled ?? false,
-                      mixedContentMode:
-                          currentSettings.mixedContentMode ??
-                              MixedContentMode
-                                  .MIXED_CONTENT_COMPATIBILITY_MODE,
-                      useWideViewPort:
-                          currentSettings.useWideViewPort ?? true,
-                      supportZoom:
-                          currentSettings.supportZoom ?? true,
+                      mixedContentMode: currentSettings.mixedContentMode ??
+                          MixedContentMode.MIXED_CONTENT_COMPATIBILITY_MODE,
+                      useWideViewPort: currentSettings.useWideViewPort ?? true,
+                      supportZoom: currentSettings.supportZoom ?? true,
                     ),
                   );
                 }
