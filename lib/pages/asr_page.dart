@@ -99,7 +99,10 @@ class SelectedAudio {
 /// in-app recordings (multi-select), then performing speech-to-text
 /// transcription and saving results to text storage.
 class AsrPage extends ConsumerStatefulWidget {
-  const AsrPage({super.key});
+  const AsrPage({super.key, this.retryData});
+
+  /// Retry data to pre-populate the form (audio files, model, etc.).
+  final Map<String, dynamic>? retryData;
 
   @override
   ConsumerState<AsrPage> createState() => _AsrPageState();
@@ -120,6 +123,43 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
   /// Captured raw response data from the last failed ASR call.
   Map<String, dynamic>? _lastRawResponse;
+
+  @override
+  void initState() {
+    super.initState();
+    _applyRetryData();
+  }
+
+  /// Pre-populate form from retry data if available.
+  void _applyRetryData() {
+    final data = widget.retryData;
+    if (data == null) return;
+
+    final audiosData = data['audios'] as List<dynamic>?;
+    if (audiosData != null) {
+      for (final audioData in audiosData) {
+        if (audioData is Map) {
+          final bytesStr = audioData['bytes'] as String?;
+          if (bytesStr != null) {
+            try {
+              final bytes = base64Decode(bytesStr);
+              _selectedAudios.add(SelectedAudio(
+                bytes: bytes,
+                name: audioData['name'] as String? ?? 'audio',
+                format: audioData['format'] as String? ?? 'wav',
+              ));
+            } catch (e) {
+              debugPrint('Failed to decode retry audio: $e');
+            }
+          }
+        }
+      }
+    }
+
+    if (data['modelIndex'] is int) {
+      _selectedModelIndex = data['modelIndex'] as int;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -938,8 +978,26 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     // Create one task per audio file, each with its own 5-step chain
     for (final audio in audiosToProcess) {
       final title = 'ASR_${audio.name}';
-      final taskId =
-          bgNotifier.addTask(type: BackgroundTaskType.asr, title: title);
+
+      // Build retry data: encode only the current audio bytes as base64
+      // so they can be restored on retry (each task handles one file)
+      final retryData = <String, dynamic>{
+        'type': 'asr',
+        'audios': [
+          <String, dynamic>{
+            'bytes': base64Encode(audio.bytes),
+            'name': audio.name,
+            'format': audio.format,
+          },
+        ],
+        'modelIndex': _selectedModelIndex,
+      };
+
+      final taskId = bgNotifier.addTask(
+        type: BackgroundTaskType.asr,
+        title: title,
+        retryData: retryData,
+      );
 
       final service = AsrService(config: effectiveConfig);
 

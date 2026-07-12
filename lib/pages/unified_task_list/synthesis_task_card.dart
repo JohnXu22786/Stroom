@@ -250,7 +250,7 @@ class SynthesisTaskCard extends ConsumerWidget {
                     SizedBox(
                       height: 32,
                       child: TextButton.icon(
-                        onPressed: () => openFile(task.downloadedFilePath!),
+                        onPressed: () => openFile(task.downloadedFilePath!, context),
                         icon: const Icon(Icons.folder_open, size: 16),
                         label:
                             const Text('打开文件', style: TextStyle(fontSize: 13)),
