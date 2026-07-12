@@ -674,13 +674,13 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
 
     // Immediately compute base64 for the attachment so it's cached
     // and ready to send without waiting for conversion.
-    // Only cache for images (which need base64 for API calls) and
-    // text files (which may be sent inline).
+    // Cache for images, audio, and video files which need base64 for API calls.
+    // Also cache text files which may be sent inline.
     final String? base64Data;
-    if (fileType == 'image') {
+    if (fileType == 'image' || fileType == 'audio' || fileType == 'video') {
       base64Data = base64Encode(bytes);
     } else {
-      // For non-image files, base64 is not needed for API calls
+      // For document files, base64 may not be needed for API calls
       base64Data = null;
     }
 
