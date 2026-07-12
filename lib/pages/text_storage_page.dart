@@ -24,7 +24,8 @@ class TextStoragePage extends ConsumerStatefulWidget {
   final int tabIndex;
   final bool isActiveTab;
 
-  const TextStoragePage({super.key, this.tabIndex = 0, this.isActiveTab = true});
+  const TextStoragePage(
+      {super.key, this.tabIndex = 0, this.isActiveTab = true});
 
   @override
   ConsumerState<TextStoragePage> createState() => _TextStoragePageState();

@@ -25,7 +25,8 @@ class VideoGalleryPage extends ConsumerStatefulWidget {
   final int tabIndex;
   final bool isActiveTab;
 
-  const VideoGalleryPage({super.key, this.tabIndex = 0, this.isActiveTab = true});
+  const VideoGalleryPage(
+      {super.key, this.tabIndex = 0, this.isActiveTab = true});
 
   @override
   ConsumerState<VideoGalleryPage> createState() => _VideoGalleryPageState();

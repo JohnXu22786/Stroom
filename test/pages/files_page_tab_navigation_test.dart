@@ -29,8 +29,7 @@ void main() {
   });
 
   group('FilesPage tab navigation - provider unit tests', () {
-    test('fileTabFolderResetSignalProvider starts at 0 for all tabs',
-        () async {
+    test('fileTabFolderResetSignalProvider starts at 0 for all tabs', () async {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
@@ -46,7 +45,8 @@ void main() {
       expect(container.read(filesPageCurrentFolderProvider), equals(''));
     });
 
-    test('fileTabFolderResetSignalProvider can be incremented independently per tab',
+    test(
+        'fileTabFolderResetSignalProvider can be incremented independently per tab',
         () async {
       final container = ProviderContainer();
       addTearDown(container.dispose);
@@ -134,7 +134,8 @@ void main() {
       expect(find.widgetWithText(Tab, '文本'), findsOneWidget);
     });
 
-    testWidgets('fileTabFolderResetSignalProvider is NOT incremented on initial load',
+    testWidgets(
+        'fileTabFolderResetSignalProvider is NOT incremented on initial load',
         (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
