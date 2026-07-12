@@ -11,7 +11,9 @@ void main() {
   });
 
   group('BackgroundService', () {
-    test('initializeBackgroundService handles errors gracefully in non-supported platforms', () async {
+    test(
+        'initializeBackgroundService handles errors gracefully in non-supported platforms',
+        () async {
       // In test environment (not Android/iOS), the platform channel
       // will throw "FlutterBackgroundService is currently supported
       // for Android and iOS Platform only"
@@ -21,13 +23,17 @@ void main() {
       expect(true, isTrue);
     });
 
-    test('startBackgroundService handles errors gracefully when platform unavailable', () async {
+    test(
+        'startBackgroundService handles errors gracefully when platform unavailable',
+        () async {
       // Should not crash even if service is not available
       await startBackgroundService();
       expect(true, isTrue);
     });
 
-    test('stopBackgroundService handles errors gracefully when platform unavailable', () async {
+    test(
+        'stopBackgroundService handles errors gracefully when platform unavailable',
+        () async {
       await stopBackgroundService();
       expect(true, isTrue);
     });

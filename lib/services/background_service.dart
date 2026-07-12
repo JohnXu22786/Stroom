@@ -47,7 +47,8 @@ Future<void> initializeBackgroundService() async {
       ),
     );
   } catch (e) {
-    debugPrint('[BackgroundService] Failed to configure background service: $e');
+    debugPrint(
+        '[BackgroundService] Failed to configure background service: $e');
   }
 }
 
@@ -59,9 +60,8 @@ Future<void> _createNotificationChannel() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
 
   final plugin = FlutterLocalNotificationsPlugin();
-  final androidPlugin =
-      plugin.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
+  final androidPlugin = plugin.resolvePlatformSpecificImplementation<
+      AndroidFlutterLocalNotificationsPlugin>();
   if (androidPlugin == null) return;
 
   await androidPlugin.createNotificationChannel(
