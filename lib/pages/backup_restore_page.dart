@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../services/backup_location_manager.dart';
 import '../services/backup_service.dart';
 import '../services/data_migration_service.dart';
 import '../startup/app_restart.dart';
@@ -34,7 +35,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
 
   Future<void> _loadExternalBackupPath() async {
     try {
-      final path = await DataMigrationService.getExternalBackupRootPath();
+      final path = await BackupLocationManager.getDisplayPath();
       if (mounted) {
         setState(() => _externalBackupPath = path);
       }
@@ -303,7 +304,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '应用在数据格式升级或版本迁移时，会自动将当前数据备份到以下外部位置（不在应用数据目录内，防止应用删除时备份丢失）：',
+                    '自动备份文件保存在以下公开位置（不在应用数据目录内，彻底防止应用被删除或清除数据时备份丢失，你可以随时通过文件管理器找到并手动恢复）：',
                     style: TextStyle(
                       fontSize: 13,
                       color: Colors.grey.shade700,
@@ -337,7 +338,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                   const SizedBox(height: 8),
                   Text(
                     '应用在版本迁移或每次启动后会在此目录下自动创建完整数据备份（格式：backup_YYYY-MM-DDTHH-MM-SS.zip）。'
-                    '备份目录至少保留 3 个最新的备份文件，超出部分自动清理。',
+                    '备份目录至少保留 3 个最新的备份文件，超出部分自动清理。'
+                    '这些文件在应用被卸载或清除数据后依然存在，你可通过系统文件管理器直接访问。',
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.grey.shade500,
