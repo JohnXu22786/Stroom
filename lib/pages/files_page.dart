@@ -14,7 +14,8 @@ final fileTabOrderProvider = StateProvider<List<int>>((ref) => [0, 1, 2, 3]);
 /// Refresh signal provider - increment to trigger refresh of files sub-pages
 final filesRefreshSignalProvider = StateProvider<int>((ref) => 0);
 
-/// 文件页面 - 包含文本、图片、视频和音频四个标签页，支持左右滑动切换和标签排序
+/// 文件页面 - 包含文本、图片、视频和音频四个标签页，支持标签排序
+/// 使用 IndexedStack 保持各标签页的导航状态（如已打开的文件夹）在切换时不变。
 class FilesPage extends ConsumerStatefulWidget {
   const FilesPage({super.key});
 
@@ -36,12 +37,21 @@ class _FilesPageState extends ConsumerState<FilesPage>
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(_onTabControllerChanged);
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_onTabControllerChanged);
     _tabController.dispose();
     super.dispose();
+  }
+
+  /// Trigger a rebuild when the tab index changes so [IndexedStack] shows
+  /// the correct child. Without this listener the build method would not be
+  /// called on tab switch, leaving [IndexedStack] stuck on the old index.
+  void _onTabControllerChanged() {
+    setState(() {});
   }
 
   static const _tabLabels = ['文本', '音频', '图片', '视频'];
@@ -81,30 +91,39 @@ class _FilesPageState extends ConsumerState<FilesPage>
             ),
           ),
           // Content area - each page handles its own Scaffold
+          // Uses IndexedStack instead of TabBarView to keep all tab children
+          // alive in the widget tree, preserving their navigation state (e.g.
+          // open subfolders) when the user switches between tabs. Only the
+          // visible tab is rendered, but inactive tabs retain their State.
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
+            child: IndexedStack(
+              index: _tabController.index,
               children: tabOrder.map((i) {
+                final isActiveTab = tabOrder[_tabController.index] == i;
                 switch (i) {
                   case 0:
                     return TextStoragePage(
                       key: ValueKey('text_storage_$refreshSignal'),
                       tabIndex: 0,
+                      isActiveTab: isActiveTab,
                     );
                   case 1:
                     return TtsPage(
                       key: ValueKey('tts_$refreshSignal'),
                       tabIndex: 1,
+                      isActiveTab: isActiveTab,
                     );
                   case 2:
                     return GalleryPage(
                       key: ValueKey('gallery_$refreshSignal'),
                       tabIndex: 2,
+                      isActiveTab: isActiveTab,
                     );
                   case 3:
                     return VideoGalleryPage(
                       key: ValueKey('video_gallery_$refreshSignal'),
                       tabIndex: 3,
+                      isActiveTab: isActiveTab,
                     );
                   default:
                     return const SizedBox.shrink();
