@@ -18,7 +18,7 @@ void main() {
     testWidgets('DraggableFloatingPanel can be composed in a Stack layout',
         (tester) async {
       // Simulate the layout: Stack with a Container (simulating WebView)
-      // and a floating panel overlay
+      // and a floating panel overlay (panel now manages its own position)
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -30,14 +30,12 @@ void main() {
                   width: 400,
                   height: 800,
                 ),
-                // Draggable floating panel on top
-                Positioned(
-                  top: 100,
-                  right: 10,
-                  child: DraggableFloatingPanel(
-                    detectedUrls: ['https://cdn.example.com/video.mp4'],
-                    onConfirmCapture: (_) {},
-                  ),
+                // Draggable floating panel on top (no Positioned wrapper
+                // needed - the panel positions itself internally)
+                DraggableFloatingPanel(
+                  detectedUrls: ['https://cdn.example.com/video.mp4'],
+                  onConfirmCapture: (_) {},
+                  initialPosition: const Offset(8, 8),
                 ),
               ],
             ),
