@@ -164,7 +164,8 @@ void main() {
     // Persistence & dragging tests
     // ====================================================================
 
-    testWidgets('panel visibility is controlled by external visible parameter', (
+    testWidgets('panel visibility is controlled by external visible parameter',
+        (
       tester,
     ) async {
       // The panel should be visible or hidden based on the
