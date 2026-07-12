@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show exit, Platform;
 
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import 'startup_check_service.dart';
 import 'startup_page.dart';
 import '../application.dart';
 import '../providers/update_provider.dart';
+import '../services/data_migration_service.dart';
 
 // ====================================================================
 // StartupApp — 应用启动入口
@@ -81,8 +83,9 @@ class _StartupAppState extends State<StartupApp>
     super.dispose();
   }
 
-  /// Runs all startup checks, ensuring a minimum 1-second display.
-  /// Each check is separated by an event-loop yield so the UI never freezes.
+  /// Runs all startup checks in parallel so the UI thread is never blocked.
+  /// Ensures a minimum 1-second display and sets [_isWorking] to false only
+  /// after all checks complete.
   Future<void> _runStartupSequence() async {
     final stopwatch = Stopwatch()..start();
 
@@ -98,25 +101,63 @@ class _StartupAppState extends State<StartupApp>
         }
       } catch (_) {}
 
-      // 让出事件循环，确保启动页的动画能先渲染一帧
-      await Future<void>.delayed(Duration.zero);
+      // 确保启动页的动画能先渲染一帧
+      await _yieldToFrame();
 
-      // Update status as we go — each call yields to the event loop
-      await _updateStatus('正在检查数据格式版本...', '1/4');
-      final migrationResult = await StartupCheckService.checkFormatVersion();
-      // 让出事件循环，避免顿住
-      await Future<void>.delayed(Duration.zero);
+      // ===============================================================
+      // 并行启动所有检查，互不阻塞
+      // ===============================================================
+      //
+      // 设计原理：
+      // 所有三个检查同时发起（Future.wait），每个检查通过 .then() 在
+      // 自身完成时更新进度状态。这样：
+      // 1. 总耗时 = 最慢的那个检查，而非三个之和
+      // 2. UI 动画（脉冲、渐变、旋转）在检查执行期间始终保持流畅
+      // 3. 状态文本随每个检查完成实时更新
+      // ===============================================================
+
+      await _updateStatus('正在检查数据...', '1/3');
+
+      final migrationResultFuture =
+          StartupCheckService.checkFormatVersion().then((result) {
+        if (mounted) _updateStatus('正在验证数据格式...', '2/3');
+        return result;
+      }).catchError((Object e) {
+        debugPrint('[StartupApp] checkFormatVersion failed: $e');
+        if (mounted) _updateStatus('正在验证数据格式...', '2/3');
+        return const MigrationResult(needsMigration: false);
+      });
+
+      final formatIssuesFuture =
+          StartupCheckService.validateDataFormats().then((issues) {
+        if (mounted) _updateStatus('正在检查数据完整性...', '3/3');
+        return issues;
+      }).catchError((Object e) {
+        debugPrint('[StartupApp] validateDataFormats failed: $e');
+        if (mounted) _updateStatus('正在检查数据完整性...', '3/3');
+        return <StartupIssue>[];
+      });
+
+      final integrityIssuesFuture =
+          StartupCheckService.checkDataIntegrity().catchError((Object e) {
+        debugPrint('[StartupApp] checkDataIntegrity failed: $e');
+        return <StartupIssue>[];
+      });
+
+      // 等待所有检查完成（并行执行）
+      final results = await Future.wait([
+        migrationResultFuture,
+        formatIssuesFuture,
+        integrityIssuesFuture,
+      ]);
+
+      final migrationResult = results[0] as MigrationResult;
+      final formatIssues = results[1] as List<StartupIssue>;
+      final integrityIssues = results[2] as List<StartupIssue>;
       final didMigration = migrationResult.needsMigration;
 
-      await _updateStatus('正在验证数据格式...', '2/4');
-      final formatIssues = await StartupCheckService.validateDataFormats();
-      await Future<void>.delayed(Duration.zero);
-
-      await _updateStatus('正在检查数据完整性...', '3/4');
-      final integrityIssues = await StartupCheckService.checkDataIntegrity();
-      await Future<void>.delayed(Duration.zero);
-
-      await _updateStatus('正在准备应用...', '4/4');
+      // 确保一帧渲染让状态文本显示
+      await _yieldToFrame();
 
       final allIssues = <StartupIssue>[
         ...formatIssues,
@@ -152,14 +193,13 @@ class _StartupAppState extends State<StartupApp>
       if (didMigration) {
         await _showRestartDialog();
       } else {
-        // Before fading, ensure the main app is rendered underneath
-        // by setting _isFadingOut = true (which triggers Stack layout).
-        // The splash remains on top and fades via opacity.
+        // Start fade-out — the main app is rendered underneath the splash
+        // via the Stack layout when _isFadingOut = true.
         setState(() {
           _isFadingOut = true;
         });
-        // Let the frame render so the main app appears underneath
-        await Future<void>.delayed(Duration.zero);
+        // 让一帧渲染，使主应用出现在启动页下方，然后启动流畅的渐出动画
+        await _yieldToFrame();
         if (!mounted) return;
         _fadeController.forward();
       }
@@ -176,21 +216,45 @@ class _StartupAppState extends State<StartupApp>
       setState(() {
         _isFadingOut = true;
       });
-      await Future<void>.delayed(Duration.zero);
+      await _yieldToFrame();
       if (!mounted) return;
       _fadeController.forward();
     }
   }
 
-  /// Updates the status message and progress detail on the startup page.
+  /// 更新启动页面的状态文本和进度详情。
+  /// 等待下一帧被渲染后才返回，确保用户能看到状态变化。
+  /// 如果有超时（无帧被调度），则安全降级为事件循环让出。
   Future<void> _updateStatus(String message, String detail) async {
     if (!mounted) return;
+    final completer = Completer<void>();
     setState(() {
       _statusMessage = message;
       _progressDetail = detail;
     });
-    // 让出事件循环，让 UI 有时间渲染更新（无需额外延迟）
-    await Future<void>.delayed(Duration.zero);
+    // 等待下一个帧被渲染，确保用户能看到状态变化
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!completer.isCompleted) completer.complete();
+    });
+    // 超时保护：如果在 100ms 内无帧回调，则不阻塞后续流程
+    await completer.future.timeout(
+      const Duration(milliseconds: 100),
+      onTimeout: () => completer.complete(),
+    );
+  }
+
+  /// 让出到下一帧，确保动画/状态更新有机会渲染。
+  /// 超时后降级为事件循环让出，避免死锁。
+  Future<void> _yieldToFrame() async {
+    final completer = Completer<void>();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!completer.isCompleted) completer.complete();
+    });
+    // 超时保护
+    await completer.future.timeout(
+      const Duration(milliseconds: 100),
+      onTimeout: () => completer.complete(),
+    );
   }
 
   /// Shows a dialog indicating that migration was performed and the
