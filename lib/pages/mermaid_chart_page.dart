@@ -205,8 +205,6 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   // ---------------------------------------------------------------------------
 
   void _showEditorModeMenu() {
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-
     showMenu<EditorMode>(
       context: context,
       position: RelativeRect.fromLTRB(

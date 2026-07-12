@@ -834,8 +834,8 @@ void showAddCustomParameterDialog(
               if (name.isEmpty) return;
               dynamic value = valueController.text.trim();
               if (type == 'number') {
-                value = double.tryParse(value as String) ??
-                    int.tryParse(value as String) ??
+                value = double.tryParse(value) ??
+                    int.tryParse(value) ??
                     value;
               } else if (type == 'boolean') {
                 value = (value as String).toLowerCase() == 'true';
@@ -931,8 +931,8 @@ void showEditCustomParameterDialog(
               if (name.isEmpty) return;
               dynamic value = valueController.text.trim();
               if (type == 'number') {
-                value = double.tryParse(value as String) ??
-                    int.tryParse(value as String) ??
+                value = double.tryParse(value) ??
+                    int.tryParse(value) ??
                     value;
               } else if (type == 'boolean') {
                 value = (value as String).toLowerCase() == 'true';

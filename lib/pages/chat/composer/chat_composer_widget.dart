@@ -22,7 +22,6 @@ import 'package:stroom/pages/extended_image_editor_page.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'chat_setting_panels.dart';
-import 'chat_album_picker_dialog.dart';
 import 'chat_file_picker_dialog.dart';
 import 'composer_shared.dart';
 

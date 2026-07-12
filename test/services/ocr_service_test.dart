@@ -27,32 +27,6 @@ class _SuccessInterceptor extends Interceptor {
   }
 }
 
-/// Create a mock Dio that throws a [DioException].
-Dio _mockDioWithError({int statusCode = 400, dynamic data}) {
-  final response = Response(
-    requestOptions: RequestOptions(path: 'http://example.com/chat/completions'),
-    statusCode: statusCode,
-    data: data,
-  );
-  final exception = DioException(
-    type: DioExceptionType.badResponse,
-    requestOptions: RequestOptions(path: 'http://example.com/chat/completions'),
-    response: response,
-    message: 'Bad response',
-  );
-  return Dio()..interceptors.add(_ThrowingInterceptor(exception));
-}
-
-class _ThrowingInterceptor extends Interceptor {
-  final DioException _exception;
-  _ThrowingInterceptor(this._exception);
-
-  @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    handler.reject(_exception);
-  }
-}
-
 const _testOcrConfig = OcrConfig(
   model: 'gpt-4o',
   apiKey: 'test-key',

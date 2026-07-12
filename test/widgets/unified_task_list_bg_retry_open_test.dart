@@ -4,8 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:stroom/catcatch/providers/catcatch_provider.dart';
 import 'package:stroom/pages/unified_task_list_page.dart';
-import 'package:stroom/pages/unified_task_list/background_task_card.dart';
-import 'package:stroom/pages/unified_task_list/synthesis_task_card.dart';
 import 'package:stroom/providers/task_provider.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/task_provider_shared.dart';

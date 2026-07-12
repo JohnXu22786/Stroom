@@ -223,7 +223,7 @@ class AsrService {
       lastResponseData = null;
     }
     lastResponseStatusCode = e.response?.statusCode;
-    lastResponseHeaders = e.response?.headers?.map;
+    lastResponseHeaders = e.response?.headers.map;
   }
 
   /// Extract text from the standard OpenAI transcription response.

@@ -6,16 +6,15 @@ void main() {
   group('ConfirmDialogs', () {
     group('showRetryEditConfirmDialog', () {
       testWidgets('shows edit message dialog for user message', (tester) async {
-        bool confirmed = false;
         await tester.pumpWidget(
           MaterialApp(
             home: Builder(
               builder: (context) => ElevatedButton(
-                onPressed: () => showRetryEditConfirmDialog(
+                  onPressed: () => showRetryEditConfirmDialog(
                   context: context,
                   isUser: true,
                   newerMessagesExist: true,
-                  onEdit: () => confirmed = true,
+                  onEdit: () {},
                   onRetry: () {},
                 ),
                 child: const Text('Show'),
@@ -33,17 +32,16 @@ void main() {
       });
 
       testWidgets('shows retry dialog for assistant message', (tester) async {
-        bool retried = false;
         await tester.pumpWidget(
           MaterialApp(
             home: Builder(
               builder: (context) => ElevatedButton(
-                onPressed: () => showRetryEditConfirmDialog(
+                  onPressed: () => showRetryEditConfirmDialog(
                   context: context,
                   isUser: false,
                   newerMessagesExist: false,
                   onEdit: () {},
-                  onRetry: () => retried = true,
+                  onRetry: () {},
                 ),
                 child: const Text('Show'),
               ),

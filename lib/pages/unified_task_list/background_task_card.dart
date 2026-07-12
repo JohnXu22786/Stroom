@@ -35,8 +35,6 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final statusColor = _statusColor(widget.task.status);
-    final statusIcon = _statusIcon(widget.task.status);
     final hasRawData =
         widget.task.rawRequest != null || widget.task.rawResponse != null;
 

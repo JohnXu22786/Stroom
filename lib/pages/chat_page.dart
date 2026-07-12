@@ -962,9 +962,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
         final url = _adapter.lastRequestUrl;
         if (reqBody != null || headers != null || url != null) {
           rawRequestCapture = {};
-          if (url != null) rawRequestCapture!['url'] = url;
-          if (headers != null) rawRequestCapture!['headers'] = headers;
-          if (reqBody != null) rawRequestCapture!['body'] = reqBody;
+          if (url != null) rawRequestCapture['url'] = url;
+          if (headers != null) rawRequestCapture['headers'] = headers;
+          if (reqBody != null) rawRequestCapture['body'] = reqBody;
         }
         final respData = _adapter.lastResponseData;
         final statusCode = _adapter.lastResponseStatusCode;
@@ -972,9 +972,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
         if (respData != null || statusCode != null || respHeaders != null) {
           rawResponseCapture = {};
           if (statusCode != null)
-            rawResponseCapture!['statusCode'] = statusCode;
-          if (respHeaders != null) rawResponseCapture!['headers'] = respHeaders;
-          if (respData != null) rawResponseCapture!['data'] = respData;
+            rawResponseCapture['statusCode'] = statusCode;
+          if (respHeaders != null) rawResponseCapture['headers'] = respHeaders;
+          if (respData != null) rawResponseCapture['data'] = respData;
         } else if (streamError is Exception) {
           // For network errors with no HTTP response, capture error string
           rawResponseCapture = {'error': streamError.toString()};

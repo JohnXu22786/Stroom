@@ -206,7 +206,7 @@ void main() {
         caught = ex;
       }
 
-      final msg = formatChatErrorMessage(caught!);
+      final msg = formatChatErrorMessage(caught);
       expect(msg, contains('HTTP 400'));
       expect(msg, contains('Bad request'));
       expect(msg, startsWith('错误:'));
@@ -227,7 +227,7 @@ void main() {
         caught = ex;
       }
 
-      final msg = formatChatErrorMessage(caught!);
+      final msg = formatChatErrorMessage(caught);
       expect(msg, contains('DioException'));
     });
   });

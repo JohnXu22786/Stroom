@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../models/assistant.dart';
 import '../pages/assistant_selection_page.dart';
 import '../providers/assistant_provider.dart';
 import '../providers/conversation_provider.dart';
 import '../widgets/llm/assistant_avatar.dart';
 import '../widgets/search_panel.dart';
 import '../widgets/topic_item.dart';
-import '../utils/conversation_utils.dart';
 import '../services/attachment_storage.dart';
 
 /// Merged page: after selecting an assistant, choose or create a conversation.

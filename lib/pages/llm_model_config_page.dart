@@ -68,7 +68,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     if (_nameController.text != m.name) return true;
     if (_modelIdController.text != m.modelId) return true;
     if (_contextController.text !=
-        ((m.typeConfig['context'] as num?)?.toInt()?.toString() ?? ''))
+        ((m.typeConfig['context'] as num?)?.toInt().toString() ?? ''))
       return true;
     // LLM params
     if (((m.typeConfig['temperature'] as num?)?.toDouble() ?? 0.7) !=

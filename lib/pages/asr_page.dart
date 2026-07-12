@@ -1065,11 +1065,6 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     }
   }
 
-  String _currentTimestamp() {
-    final now = DateTime.now();
-    return '${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}';
-  }
-
   /// Save the transcription result as a text record, named by the task title.
   Future<void> _saveTranscriptionResult(String text, {String? title}) async {
     final now = DateTime.now();

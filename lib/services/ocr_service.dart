@@ -281,7 +281,7 @@ class OcrService {
       lastResponseData = null;
     }
     lastResponseStatusCode = e.response?.statusCode;
-    lastResponseHeaders = e.response?.headers?.map;
+    lastResponseHeaders = e.response?.headers.map;
   }
 
   /// Build the standard OpenAI-compatible request body.

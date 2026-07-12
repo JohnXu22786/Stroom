@@ -63,7 +63,7 @@ Stream<String> sseStream(
     if (onResponseHeaders != null && xhr.status != 0) {
       final headerMap = <String, List<String>>{};
       final allHeaders = xhr.getAllResponseHeaders();
-      if (allHeaders != null && allHeaders.isNotEmpty) {
+      if (allHeaders.isNotEmpty) {
         for (final line in allHeaders.split('\n')) {
           final colonPos = line.indexOf(':');
           if (colonPos > 0) {

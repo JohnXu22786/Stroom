@@ -1,12 +1,10 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/startup/startup_check_service.dart';
 import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/storage_service.dart';
-import 'package:stroom/startup/startup_app.dart' as startup_app;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

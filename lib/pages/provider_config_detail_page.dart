@@ -27,9 +27,6 @@ class _ProviderConfigDetailPageState
   final _hostController = TextEditingController();
   final _keyController = TextEditingController();
 
-  bool _isSaving = false;
-  bool _obscureKey = true;
-
   bool get _isExistingConfig => widget.configIndex >= 0;
   final List<ModelConfig> _pendingModels = [];
 

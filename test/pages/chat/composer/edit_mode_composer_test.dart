@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/chat/composer/chat_composer_widget.dart';
-import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/pages/chat_page.dart';
@@ -181,16 +180,15 @@ void main() {
       expect(find.text('编辑消息'), findsNothing);
     });
 
-    testWidgets(
-      'edit capsule visible with X button when editingMessageId is set',
-      (tester) async {
-        String? cancelCalled;
-        await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      testWidgets(
+        'edit capsule visible with X button when editingMessageId is set',
+        (tester) async {
+          await tester.binding.setSurfaceSize(const Size(1200, 2000));
         await tester.pumpWidget(
           wrapComposerInApp(
             editingMessageId: 'msg-1',
             editingMessageText: 'original text',
-            onEditCancel: () => cancelCalled = 'cancelled',
+            onEditCancel: () {},
           ),
         );
         await tester.pump();
