@@ -3,13 +3,15 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Tests for main.dart web compatibility changes.
+/// Tests for web compilation compatibility.
 ///
 /// Verifies that:
-/// - fvp.registerWith() is guarded by `if (!kIsWeb)` so it's not called on web
-/// - The import for kIsWeb is already present in main.dart
+/// - `main.dart` no longer directly imports `package:fvp` (which uses `dart:ffi`)
+/// - A conditional export wrapper (`video_player_init.dart`) is used instead
+/// - The native implementation calls `fvp.registerWith()`
+/// - The web stub is a no-op
 void main() {
-  group('main.dart web compatibility', () {
+  group('fvp conditional import for web', () {
     test('kIsWeb constant is accessible from package:flutter/foundation.dart',
         () {
       // This verifies the import works and the constant is available
@@ -17,32 +19,45 @@ void main() {
       expect(kIsWeb, isA<bool>());
     });
 
-    test('fvp.registerWith() is guarded by if (!kIsWeb)', () {
-      // Read main.dart source to verify the guard pattern
+    test('main.dart does NOT directly import fvp', () {
       final mainSource = File('lib/main.dart').readAsStringSync();
+      // fvp should not be directly imported in main.dart
+      expect(mainSource, isNot(contains("import 'package:fvp/fvp.dart'")));
+      expect(mainSource, isNot(contains('fvp.registerWith()')));
+    });
 
-      // Verify fvp.registerWith() is present
-      expect(mainSource, contains('fvp.registerWith()'));
+    test('main.dart calls registerVideoPlayer() instead', () {
+      final mainSource = File('lib/main.dart').readAsStringSync();
+      expect(mainSource, contains('registerVideoPlayer()'));
+      expect(
+        mainSource,
+        contains("import 'services/video_player_init.dart'"),
+      );
+    });
 
-      // Verify it is wrapped with if (!kIsWeb)
-      // We check that the line containing fvp.registerWith() is preceded by
-      // an if (!kIsWeb) block
-      final lines = mainSource.split('\n');
-      bool foundGuard = false;
-      for (int i = 0; i < lines.length; i++) {
-        if (lines[i].contains('fvp.registerWith()')) {
-          // Check surrounding lines for the kIsWeb guard
-          final start = i > 2 ? i - 2 : 0;
-          final end = i < lines.length - 1 ? i + 1 : lines.length - 1;
-          final context = lines.sublist(start, end + 1).join('\n');
-          if (context.contains('if (!kIsWeb)')) {
-            foundGuard = true;
-          }
-        }
-      }
-      expect(foundGuard, isTrue,
-          reason:
-              'fvp.registerWith() should be wrapped with if (!kIsWeb) { ... }');
+    test('video_player_init.dart uses conditional export', () {
+      final initSource =
+          File('lib/services/video_player_init.dart').readAsStringSync();
+      expect(initSource, contains('export'));
+      expect(initSource, contains("if (dart.library.io)"));
+      expect(initSource, contains("video_player_init_stub.dart"));
+      expect(initSource, contains("video_player_init_io.dart"));
+    });
+
+    test('video_player_init_io.dart registers fvp on native', () {
+      final ioSource =
+          File('lib/services/video_player_init_io.dart').readAsStringSync();
+      expect(ioSource, contains("import 'package:fvp/fvp.dart'"));
+      expect(ioSource, contains('fvp.registerWith()'));
+    });
+
+    test('video_player_init_stub.dart is a no-op for web', () {
+      final stubSource =
+          File('lib/services/video_player_init_stub.dart').readAsStringSync();
+      expect(stubSource, contains('void registerVideoPlayer()'));
+      // Should NOT import fvp (no dart:ffi on web)
+      expect(stubSource, isNot(contains("import 'package:fvp/fvp.dart'")));
+      expect(stubSource, isNot(contains('registerWith')));
     });
 
     test('main.dart already imports package:flutter/foundation.dart', () {
@@ -51,15 +66,6 @@ void main() {
         mainSource,
         contains("import 'package:flutter/foundation.dart'"),
       );
-    });
-
-    test(
-        'existing kIsWeb pattern in _initGlobalErrorHandling is consistent with new guard',
-        () {
-      final mainSource = File('lib/main.dart').readAsStringSync();
-      // Verify the existing pattern uses `if (!kIsWeb)` style (not `if (kIsWeb)`)
-      // to ensure consistency with our new guard
-      expect(mainSource, contains('if (!kIsWeb)'));
     });
   });
 }
