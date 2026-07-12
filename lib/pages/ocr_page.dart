@@ -27,45 +27,51 @@ export 'ocr/ocr_shared.dart';
 // Provider: Get the first configured OCR config from provider entries
 // ============================================================================
 
-/// Reads the first OCR provider config from the provider entries.
+/// Reads the first valid OCR provider config from the provider entries.
+/// Iterates through all configs in an entry, not just the first one.
 /// Returns null if none is configured.
 OcrConfig? _resolveOcrConfig(WidgetRef ref) {
   final state = ref.read(providerEntriesProvider);
   for (final entry in state.entries) {
-    if (entry.type == 'ocr' && entry.configs.isNotEmpty) {
-      final config = entry.configs.first;
-      if (config.host.isNotEmpty && config.key.isNotEmpty) {
-        final model =
-            config.models.isNotEmpty ? config.models.first.modelId : 'gpt-4o';
-        return OcrConfig(host: config.host, apiKey: config.key, model: model);
+    if (entry.type == 'ocr') {
+      for (final config in entry.configs) {
+        if (config.host.isNotEmpty && config.key.isNotEmpty) {
+          final model =
+              config.models.isNotEmpty ? config.models.first.modelId : 'gpt-4o';
+          return OcrConfig(host: config.host, apiKey: config.key, model: model);
+        }
       }
     }
   }
   return null;
 }
 
-/// Collect all available model names from the first OCR provider config.
+/// Collect all available model names from the first valid OCR provider config.
+/// Iterates through all configs in the entry to find the first valid one.
 List<ModelConfig> _getOcrModels(WidgetRef ref) {
   final state = ref.read(providerEntriesProvider);
   for (final entry in state.entries) {
-    if (entry.type == 'ocr' && entry.configs.isNotEmpty) {
-      final config = entry.configs.first;
-      if (config.host.isNotEmpty && config.key.isNotEmpty) {
-        return config.models;
+    if (entry.type == 'ocr') {
+      for (final config in entry.configs) {
+        if (config.host.isNotEmpty && config.key.isNotEmpty) {
+          return config.models;
+        }
       }
     }
   }
   return [];
 }
 
-/// Get the provider name from the first OCR provider config.
+/// Get the provider name from the first valid OCR provider config.
+/// Iterates through all configs in the entry to find the first valid one.
 String _getOcrProviderName(WidgetRef ref) {
   final state = ref.read(providerEntriesProvider);
   for (final entry in state.entries) {
-    if (entry.type == 'ocr' && entry.configs.isNotEmpty) {
-      final config = entry.configs.first;
-      if (config.host.isNotEmpty && config.key.isNotEmpty) {
-        return config.providerName;
+    if (entry.type == 'ocr') {
+      for (final config in entry.configs) {
+        if (config.host.isNotEmpty && config.key.isNotEmpty) {
+          return config.providerName;
+        }
       }
     }
   }
