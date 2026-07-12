@@ -38,7 +38,6 @@ void main() {
     test('preserves HTML with special characters like & < >', () {
       const html = '<div>A && B < C > D</div>';
       final doc = HtmlCodeBlockWidget.buildHtmlDocument(html);
-      // HTML special chars should be preserved as-is in the raw HTML
       expect(doc, contains('A && B < C > D'));
     });
 
@@ -86,10 +85,8 @@ void main() {
   });
 
   group('HtmlCodeBlockWidget - widget rendering', () {
-    testWidgets('is a StatelessWidget', (tester) async {
+    testWidgets('renders as a StatefulWidget', (tester) async {
       const widget = HtmlCodeBlockWidget(htmlCode: '<h1>Hello</h1>');
-      // If it compiles as StatelessWidget, this is already verified.
-      // We verify by checking it builds without a state.
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -112,12 +109,10 @@ void main() {
 
       // The raw HTML source should be visible as text
       expect(find.text('<h1>Hello World</h1>'), findsOneWidget);
-      // The rendered equivalent should NOT be present
-      // (we can't check for absence of a rendered h1 in a simple test,
-      // but we verify the raw code is shown)
     });
 
-    testWidgets('shows fullscreen preview button', (tester) async {
+    testWidgets('shows fullscreen preview and wrap toggle buttons',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -130,6 +125,64 @@ void main() {
       expect(find.text('全屏预览'), findsOneWidget);
       // The fullscreen icon should be present
       expect(find.byIcon(Icons.fullscreen), findsOneWidget);
+      // The wrap toggle button with "换行显示" text should be present
+      expect(find.text('换行显示'), findsOneWidget);
+      // The wrap toggle icon should be present
+      expect(find.byIcon(Icons.wrap_text), findsOneWidget);
+    });
+
+    testWidgets('wrap toggle button is positioned left of fullscreen button',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(htmlCode: '<p>test</p>'),
+          ),
+        ),
+      );
+
+      // Find both buttons by their text
+      final wrapToggle = tester.widget<Text>(find.text('换行显示'));
+      final fullscreen = tester.widget<Text>(find.text('全屏预览'));
+
+      // Get their global positions
+      final wrapPos = tester.getCenter(find.text('换行显示'));
+      final fullscreenPos = tester.getCenter(find.text('全屏预览'));
+
+      // Wrap toggle should be to the left of fullscreen button
+      expect(wrapPos.dx, lessThan(fullscreenPos.dx),
+          reason: 'Wrap toggle should be left of the fullscreen button');
+    });
+
+    testWidgets('wrap toggle switches between wrap and no-wrap state',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(htmlCode: '<p>test</p>'),
+          ),
+        ),
+      );
+
+      // Initially shows '换行显示' (wrap toggle in OFF state)
+      expect(find.text('换行显示'), findsOneWidget);
+      expect(find.text('取消换行'), findsNothing);
+
+      // Tap the wrap toggle button
+      await tester.tap(find.text('换行显示'));
+      await tester.pumpAndSettle();
+
+      // After tap, should show '取消换行' (wrap toggle in ON state)
+      expect(find.text('取消换行'), findsOneWidget);
+      expect(find.text('换行显示'), findsNothing);
+
+      // Tap the wrap toggle button again
+      await tester.tap(find.text('取消换行'));
+      await tester.pumpAndSettle();
+
+      // Should be back to '换行显示'
+      expect(find.text('换行显示'), findsOneWidget);
+      expect(find.text('取消换行'), findsNothing);
     });
 
     testWidgets('shows (empty) for empty HTML code', (tester) async {
@@ -142,6 +195,69 @@ void main() {
       );
 
       expect(find.text('(empty)'), findsOneWidget);
+      // No line numbers for empty code
+      expect(find.text('1'), findsNothing);
+    });
+
+    testWidgets('shows line numbers for multiline code (no-wrap default)',
+        (tester) async {
+      const html = '<div>\n  <p>Line 1</p>\n</div>';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(htmlCode: html),
+          ),
+        ),
+      );
+
+      // In no-wrap mode, code is a single SelectableText with full text
+      expect(find.text(html), findsOneWidget);
+
+      // Should have line numbers 1, 2, 3
+      expect(find.text('1'), findsOneWidget);
+      expect(find.text('2'), findsOneWidget);
+      expect(find.text('3'), findsOneWidget);
+    });
+
+    testWidgets('shows individual code lines in wrap mode', (tester) async {
+      const html = '<div>\n  <p>Line 1</p>\n</div>';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(htmlCode: html),
+          ),
+        ),
+      );
+
+      // Switch to wrap mode first
+      await tester.tap(find.text('换行显示'));
+      await tester.pumpAndSettle();
+
+      // In wrap mode, each line is a separate SelectableText
+      expect(find.text('<div>'), findsOneWidget);
+      expect(find.text('  <p>Line 1</p>'), findsOneWidget);
+      expect(find.text('</div>'), findsOneWidget);
+
+      // Should have line numbers 1, 2, 3
+      expect(find.text('1'), findsOneWidget);
+      expect(find.text('2'), findsOneWidget);
+      expect(find.text('3'), findsOneWidget);
+    });
+
+    testWidgets('shows line number 1 for single line code', (tester) async {
+      const html = '<p>Hello</p>';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(htmlCode: html),
+          ),
+        ),
+      );
+
+      // Should show the code
+      expect(find.text('<p>Hello</p>'), findsOneWidget);
+      // Should show line number 1
+      expect(find.text('1'), findsOneWidget);
     });
 
     testWidgets('respects custom height', (tester) async {
@@ -194,10 +310,13 @@ void main() {
       expect(find.byType(HtmlCodeBlockWidget), findsOneWidget);
       // The fullscreen button should still be present
       expect(find.text('全屏预览'), findsOneWidget);
+      // The wrap toggle should still be present
+      expect(find.text('换行显示'), findsOneWidget);
     });
 
-    testWidgets('shows multiline HTML code', (tester) async {
-      const html = '<div>\n  <p>Line 1</p>\n</div>';
+    testWidgets('shows multiline code with correct line numbers in wrap mode',
+        (tester) async {
+      const html = '<div>\n  <p>Line 1</p>\n  <p>Line 2</p>\n</div>';
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -206,8 +325,21 @@ void main() {
         ),
       );
 
-      // Verify the raw multi-line code is displayed
-      expect(find.text('<div>\n  <p>Line 1</p>\n</div>'), findsOneWidget);
+      // Switch to wrap mode
+      await tester.tap(find.text('换行显示'));
+      await tester.pumpAndSettle();
+
+      // Verify the raw multi-line code is displayed as individual lines
+      expect(find.text('<div>'), findsOneWidget);
+      expect(find.text('  <p>Line 1</p>'), findsOneWidget);
+      expect(find.text('  <p>Line 2</p>'), findsOneWidget);
+      expect(find.text('</div>'), findsOneWidget);
+
+      // Verify line numbers 1-4
+      expect(find.text('1'), findsOneWidget);
+      expect(find.text('2'), findsOneWidget);
+      expect(find.text('3'), findsOneWidget);
+      expect(find.text('4'), findsOneWidget);
     });
 
     testWidgets('fullscreen button is present and tappable', (tester) async {
@@ -228,6 +360,73 @@ void main() {
       await tester.tap(find.text('全屏预览'));
       // Just pump once — dialog opening will be handled in integration tests
       // with real platform support
+    });
+
+    testWidgets('wrap toggle button is present and tappable', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(htmlCode: '<p>test</p>'),
+          ),
+        ),
+      );
+
+      // The wrap toggle button should be present
+      expect(find.text('换行显示'), findsOneWidget);
+      expect(find.byIcon(Icons.wrap_text), findsOneWidget);
+
+      // Tapping should toggle to "取消换行" without throwing
+      await tester.tap(find.text('换行显示'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('取消换行'), findsOneWidget);
+    });
+
+    testWidgets('handles code with trailing newline', (tester) async {
+      const html = '<div>\n</div>\n';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(htmlCode: html),
+          ),
+        ),
+      );
+
+      // Should show full code including trailing newline
+      expect(find.text(html), findsOneWidget);
+
+      // Three lines: '<div>', '</div>', ''
+      expect(find.text('1'), findsOneWidget);
+      expect(find.text('2'), findsOneWidget);
+      expect(find.text('3'), findsOneWidget);
+    });
+
+    testWidgets('wrap mode changes scroll configuration', (tester) async {
+      const html = '<div>\n  <p>long line</p>\n</div>';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(htmlCode: html),
+          ),
+        ),
+      );
+
+      // In no-wrap mode (default): horizontal Scrollable should exist
+      final horizontalScrollables =
+          find.byWidgetPredicate((w) => w is Scrollable && w.axis == Axis.horizontal);
+      expect(horizontalScrollables, findsWidgets,
+          reason: 'No-wrap mode should have horizontal scroll');
+
+      // Switch to wrap mode
+      await tester.tap(find.text('换行显示'));
+      await tester.pumpAndSettle();
+
+      // In wrap mode: no horizontal Scrollable should exist
+      // (Only vertical scrollable remains)
+      final horizontalScrollablesAfter =
+          find.byWidgetPredicate((w) => w is Scrollable && w.axis == Axis.horizontal);
+      expect(horizontalScrollablesAfter, findsNothing,
+          reason: 'Wrap mode should have no horizontal scroll');
     });
   });
 }
