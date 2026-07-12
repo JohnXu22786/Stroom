@@ -1169,4 +1169,138 @@ void main() {
       expect(secondCard.color, Colors.blue);
     });
   });
+
+  // ====================================================================
+  // NEW TESTS: Multiple configs within a single OCR entry
+  // ====================================================================
+
+  group('OcrPage - multiple configs', () {
+    testWidgets(
+      'shows models from valid config when first config has no host/key',
+      (tester) async {
+        final entry = ProviderEntry(
+          id: 'test_ocr',
+          type: 'ocr',
+          name: 'OCR供应商',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'Empty',
+              host: '',
+              key: '',
+              models: [
+                ModelConfig(name: 'Empty-Model', modelId: 'empty-model'),
+              ],
+            ),
+            ProviderConfigItem(
+              providerName: 'Valid',
+              host: 'https://api.valid.com',
+              key: 'valid-key-123',
+              models: [
+                ModelConfig(name: 'Valid-Model', modelId: 'valid-model'),
+              ],
+            ),
+          ],
+        );
+        await tester.pumpWidget(_buildTestApp(entries: [entry]));
+        await tester.pumpAndSettle();
+
+        // Should show the valid config's model
+        expect(find.text('Valid-Model | Valid'), findsWidgets);
+      },
+    );
+
+    testWidgets(
+      'shows models from first valid config when all configs are valid',
+      (tester) async {
+        final entry = ProviderEntry(
+          id: 'test_ocr',
+          type: 'ocr',
+          name: 'OCR供应商',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'First',
+              host: 'https://api.first.com',
+              key: 'first-key',
+              models: [
+                ModelConfig(name: 'First-Model', modelId: 'first-model'),
+              ],
+            ),
+            ProviderConfigItem(
+              providerName: 'Second',
+              host: 'https://api.second.com',
+              key: 'second-key',
+              models: [
+                ModelConfig(name: 'Second-Model', modelId: 'second-model'),
+              ],
+            ),
+          ],
+        );
+        await tester.pumpWidget(_buildTestApp(entries: [entry]));
+        await tester.pumpAndSettle();
+
+        // Should show the first valid config's models
+        expect(find.text('First-Model | First'), findsWidgets);
+        // Models from the second config should NOT appear
+        expect(find.text('Second-Model | Second'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'shows no model selector when no config has valid host/key',
+      (tester) async {
+        final entry = ProviderEntry(
+          id: 'test_ocr',
+          type: 'ocr',
+          name: 'OCR供应商',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'Empty',
+              host: '',
+              key: '',
+              models: [
+                ModelConfig(name: 'Empty-Model', modelId: 'empty-model'),
+              ],
+            ),
+            ProviderConfigItem(
+              providerName: 'Also Empty',
+              host: '',
+              key: '',
+              models: [
+                ModelConfig(name: 'Also-Empty', modelId: 'also-empty'),
+              ],
+            ),
+          ],
+        );
+        await tester.pumpWidget(_buildTestApp(entries: [entry]));
+        await tester.pumpAndSettle();
+
+        // No model selector should be shown
+        expect(find.textContaining('识别模型'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'hides model selector when no valid OCR config exists',
+      (tester) async {
+        final entry = ProviderEntry(
+          id: 'test_ocr',
+          type: 'ocr',
+          name: 'OCR供应商',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'Empty',
+              host: '',
+              key: '',
+              models: [],
+            ),
+          ],
+        );
+        await tester.pumpWidget(_buildTestApp(entries: [entry]));
+        await tester.pumpAndSettle();
+
+        // No model selector should show
+        expect(find.textContaining('识别模型'), findsNothing);
+      },
+    );
+  });
 }

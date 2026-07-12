@@ -476,4 +476,141 @@ void main() {
       },
     );
   });
+
+  // ====================================================================
+  // NEW TESTS: Multiple configs within a single ASR entry
+  // ====================================================================
+
+  group('AsrPage - multiple configs', () {
+    testWidgets(
+      'shows models from valid config when first config has no host/key',
+      (tester) async {
+        final entry = ProviderEntry(
+          id: 'test_asr',
+          type: 'asr',
+          name: '音频转写供应商',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'Empty',
+              host: '',
+              key: '',
+              models: [
+                ModelConfig(name: 'Empty-Model', modelId: 'empty-model'),
+              ],
+            ),
+            ProviderConfigItem(
+              providerName: 'Valid',
+              host: 'https://api.valid.com/v1/audio/transcriptions',
+              key: 'valid-key-123',
+              models: [
+                ModelConfig(name: 'Valid-Model', modelId: 'valid-model'),
+              ],
+            ),
+          ],
+        );
+        await tester.pumpWidget(_buildTestApp(entries: [entry]));
+        await tester.pumpAndSettle();
+
+        // Should show the valid config's model, not the empty one
+        // (falls through first config with no host/key to the valid one)
+        expect(find.text('Valid-Model | Valid'), findsWidgets);
+      },
+    );
+
+    testWidgets(
+      'shows models from first valid config when all configs are valid',
+      (tester) async {
+        final entry = ProviderEntry(
+          id: 'test_asr',
+          type: 'asr',
+          name: '音频转写供应商',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'First',
+              host: 'https://api.first.com/v1/audio/transcriptions',
+              key: 'first-key',
+              models: [
+                ModelConfig(name: 'First-Model', modelId: 'first-model'),
+              ],
+            ),
+            ProviderConfigItem(
+              providerName: 'Second',
+              host: 'https://api.second.com/v1/audio/transcriptions',
+              key: 'second-key',
+              models: [
+                ModelConfig(name: 'Second-Model', modelId: 'second-model'),
+                ModelConfig(name: 'Second-Model-2', modelId: 'second-model-2'),
+              ],
+            ),
+          ],
+        );
+        await tester.pumpWidget(_buildTestApp(entries: [entry]));
+        await tester.pumpAndSettle();
+
+        // Should show the first valid config's models
+        expect(find.text('First-Model | First'), findsWidgets);
+        // Models from the second config should NOT appear
+        expect(find.text('Second-Model | Second'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'shows no model selector when no config has valid host/key',
+      (tester) async {
+        final entry = ProviderEntry(
+          id: 'test_asr',
+          type: 'asr',
+          name: '音频转写供应商',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'Empty',
+              host: '',
+              key: '',
+              models: [
+                ModelConfig(name: 'Empty-Model', modelId: 'empty-model'),
+              ],
+            ),
+            ProviderConfigItem(
+              providerName: 'Also Empty',
+              host: '',
+              key: '',
+              models: [
+                ModelConfig(name: 'Also-Empty', modelId: 'also-empty'),
+              ],
+            ),
+          ],
+        );
+        await tester.pumpWidget(_buildTestApp(entries: [entry]));
+        await tester.pumpAndSettle();
+
+        // No model selector should be shown (no valid config)
+        // "识别模型" label should NOT be present
+        expect(find.textContaining('识别模型'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'hides model selector when no valid ASR config exists',
+      (tester) async {
+        final entry = ProviderEntry(
+          id: 'test_asr',
+          type: 'asr',
+          name: '音频转写供应商',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'Empty',
+              host: '',
+              key: '',
+              models: [],
+            ),
+          ],
+        );
+        await tester.pumpWidget(_buildTestApp(entries: [entry]));
+        await tester.pumpAndSettle();
+
+        // No model selector should show
+        expect(find.textContaining('识别模型'), findsNothing);
+      },
+    );
+  });
 }
