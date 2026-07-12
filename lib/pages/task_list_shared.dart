@@ -286,7 +286,8 @@ class TaskCard extends ConsumerWidget {
       case TaskStatus.paused:
         return const Icon(Icons.pause_circle, color: Colors.orange, size: 24);
       case TaskStatus.waiting:
-        return const Icon(Icons.hourglass_empty, color: Colors.purple, size: 24);
+        return const Icon(Icons.hourglass_empty,
+            color: Colors.purple, size: 24);
     }
   }
 
