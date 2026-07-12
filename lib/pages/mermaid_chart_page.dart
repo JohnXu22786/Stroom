@@ -104,6 +104,9 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   bool _previewWebViewScheduled = false;
   bool _previewWebViewReady = false;
 
+  // Timer for delayed WebView creation to ensure page transition completes
+  Timer? _webViewCreationTimer;
+
   // Mermaid render error state (set via JavaScript error handler)
   String? _previewErrorMessage;
 
@@ -153,6 +156,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   @override
   void dispose() {
     _debounceTimer?.cancel();
+    _webViewCreationTimer?.cancel();
     _codeController.removeListener(_onCodeChanged);
     _codeController.dispose();
     _webViewController = null;
@@ -246,15 +250,34 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   // Mermaid rendering via WebView
   // ---------------------------------------------------------------------------
 
-  /// Schedules the WebView to be created after the next frame to avoid
-  /// blocking the page transition animation with platform view creation.
+  /// Schedules the WebView to be created after the page transition animation
+  /// completes, to avoid blocking the UI with platform view creation.
+  ///
+  /// Uses a two-phase approach:
+  /// 1. After the first frame (postFrameCallback), the loading placeholder is shown
+  /// 2. After a 300ms delay, the WebView is actually created
+  ///
+  /// This ensures the page transition animation completes smoothly before the
+  /// heavyweight platform view (WebView2 on Windows, WKWebView on iOS, etc.)
+  /// is created on the main thread.
   void _schedulePreviewWebViewCreation() {
     if (_previewWebViewScheduled) return;
     _previewWebViewScheduled = true;
+
+    // Phase 1: After the first frame, show the loading placeholder
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        setState(() => _previewWebViewReady = true);
-      }
+      if (!mounted) return;
+
+      // Phase 2: After 300ms (page transition completes), create the WebView
+      _webViewCreationTimer = Timer(
+        const Duration(milliseconds: 300),
+        () {
+          _webViewCreationTimer = null;
+          if (mounted) {
+            setState(() => _previewWebViewReady = true);
+          }
+        },
+      );
     });
   }
 
@@ -688,52 +711,54 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
 
     return Stack(
       children: [
-        // Single InAppWebView with a const Key so it is never recreated
-        // on rebuild or mode switch. This eliminates the infinite
-        // recreation loop that previously froze the app.
-        InAppWebView(
-          key: const Key('mermaid_webview'),
-          initialSettings: InAppWebViewSettings(
-            javaScriptEnabled: true,
-            transparentBackground: true,
-            verticalScrollBarEnabled: false,
+        // RepaintBoundary isolates the WebView's rendering layer so that
+        // the platform view (WebView2 on Windows, WKWebView on iOS, etc.)
+        // does not force relayouts or repaints in the rest of the widget tree.
+        RepaintBoundary(
+          child: InAppWebView(
+            key: const Key('mermaid_webview'),
+            initialSettings: InAppWebViewSettings(
+              javaScriptEnabled: true,
+              transparentBackground: true,
+              verticalScrollBarEnabled: false,
+            ),
+            onWebViewCreated: (ctrl) {
+              _webViewController = ctrl;
+              // Set up JavaScript handler to receive mermaid errors
+              ctrl.addJavaScriptHandler(
+                handlerName: 'onMermaidError',
+                callback: (args) {
+                  if (mounted) {
+                    final msg = args.isNotEmpty ? args[0].toString() : '未知错误';
+                    setState(() => _previewErrorMessage = msg);
+                  }
+                },
+              );
+              final html = _buildMermaidHtml(
+                _codeController.text.trim(),
+              );
+              ctrl.loadData(
+                data: html,
+                mimeType: 'text/html',
+                encoding: 'utf8',
+              );
+            },
+            onLoadStop: (ctrl, url) {
+              // Only set state once to prevent infinite build → recreate → load loop
+              if (!_isPreviewReady) {
+                _webViewLoaded = true;
+                if (mounted) setState(() => _isPreviewReady = true);
+              }
+            },
+            onLoadError: (ctrl, url, code, message) {
+              if (mounted && !_isPreviewReady) {
+                setState(() {
+                  _isPreviewReady = true;
+                  _previewErrorMessage = '页面加载失败: $message';
+                });
+              }
+            },
           ),
-          onWebViewCreated: (ctrl) {
-            _webViewController = ctrl;
-            // Set up JavaScript handler to receive mermaid errors
-            ctrl.addJavaScriptHandler(
-              handlerName: 'onMermaidError',
-              callback: (args) {
-                if (mounted) {
-                  final msg = args.isNotEmpty ? args[0].toString() : '未知错误';
-                  setState(() => _previewErrorMessage = msg);
-                }
-              },
-            );
-            final html = _buildMermaidHtml(
-              _codeController.text.trim(),
-            );
-            ctrl.loadData(
-              data: html,
-              mimeType: 'text/html',
-              encoding: 'utf8',
-            );
-          },
-          onLoadStop: (ctrl, url) {
-            // Only set state once to prevent infinite build → recreate → load loop
-            if (!_isPreviewReady) {
-              _webViewLoaded = true;
-              if (mounted) setState(() => _isPreviewReady = true);
-            }
-          },
-          onLoadError: (ctrl, url, code, message) {
-            if (mounted && !_isPreviewReady) {
-              setState(() {
-                _isPreviewReady = true;
-                _previewErrorMessage = '页面加载失败: $message';
-              });
-            }
-          },
         ),
         // Loading overlay — shown until the WebView first finishes loading
         if (showLoading)
