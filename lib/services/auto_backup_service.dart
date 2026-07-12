@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as p;
 
+import 'backup_location_manager.dart';
 import 'backup_service.dart';
 import 'data_migration_service.dart';
 
@@ -19,8 +20,14 @@ import 'data_migration_service.dart';
 // 2. 迁移前备份
 //    在数据格式升级/版本迁移前，自动创建备份再执行迁移。
 //
-// 备份文件以 ZIP 格式保存到 StroomBackups 目录，格式为：
+// 备份文件以 ZIP 格式保存到公共目录，格式为：
 //   backup_YYYY-MM-DDTHH-MM-SS.zip
+//
+// 各平台存储位置由 [BackupLocationManager] 统一管理：
+// - Android: 通过 SAF 选择 Documents 目录
+// - iOS: 应用 Documents 目录（通过文件 App 可访问）
+// - Desktop: ~/Documents/StroomData/AutoBackup
+// - Web: 不支持
 //
 // 备份目录至少保留 3 个最新的备份文件，超出部分自动清理。
 // ====================================================================
@@ -45,13 +52,11 @@ class AutoBackupService {
 
   /// 执行一次自动后台备份。
   ///
-  /// 创建包含所有应用数据的完整 ZIP 备份到 StroomBackups 目录。
+  /// 创建包含所有应用数据的完整 ZIP 备份到公共目录。
   /// 备份完成后自动清理旧备份（保留至少 3 个）。
   ///
-  /// 使用原子写入模式：
-  /// 1. 先写入到 .tmp 临时文件
-  /// 2. 成功后重命名为 .zip
-  /// 3. 如果过程中被取消或进程终止，.tmp 文件会在下次备份时被清理
+  /// 在 Android SAF 模式下，备份写入系统临时目录后通过 SAF
+  /// 写入用户选择的 Documents 目录，确保文件持久化到公共位置。
   ///
   /// [isPreMigration] 标记是否为迁移前备份（仅用于日志区分）。
   ///
@@ -66,8 +71,6 @@ class AutoBackupService {
     }
 
     _isRunning = true;
-    // 如果 cancel() 在 performAutoBackup() 开始前已被调用（例如应用进入后台），
-    // 直接放弃本次备份并重置取消标记，避免影响后续备份。
     if (_cancelRequested) {
       _isRunning = false;
       _cancelRequested = false;
@@ -76,54 +79,87 @@ class AutoBackupService {
     }
     _cancelRequested = false;
 
+    String? safTempPath; // SAF 模式下写入的系统临时文件路径
     try {
-      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
-      final backupDir = Directory(backupRoot);
-      if (!await backupDir.exists()) {
-        await backupDir.create(recursive: true);
-      }
-
-      // 清理上次中断备份残留的 .tmp 文件
-      await _cleanupTmpFiles(backupRoot);
-      // 让出事件循环，避免清理操作影响主页面首次帧渲染
-      await _yieldToEventLoop();
-
+      final isAndroidSaf = await BackupLocationManager.isUsingSafMode();
       final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-      // 先使用 .tmp 扩展名写入，原子重命名防止进程终止导致损坏的 .zip 留存
-      final tmpPath = p.join(backupRoot, 'backup_$timestamp.tmp');
-      final zipPath = p.join(backupRoot, 'backup_$timestamp.zip');
-
-      if (_cancelRequested) return false;
-
+      final tmpFileName = 'backup_$timestamp.tmp';
+      final zipFileName = 'backup_$timestamp.zip';
       final backupType = isPreMigration ? 'pre-migration' : 'startup';
-      debugPrint('[AutoBackupService] 开始 $backupType 备份到 $zipPath');
 
-      await BackupService.createBackup(
-        outputPath: tmpPath,
-        isCancelled: () => _cancelRequested,
-      );
+      if (isAndroidSaf) {
+        // ============================================================
+        // Android SAF 模式：通过 SAF 写入公共 Documents 目录
+        // ============================================================
+        final sysTempDir = Directory.systemTemp.path;
+        safTempPath = p.join(sysTempDir, tmpFileName);
 
-      if (_cancelRequested) {
-        // 删除不完整的临时文件
+        debugPrint('[AutoBackupService] 开始 $backupType 备份(SAF)');
+
+        await BackupService.createBackup(
+          outputPath: safTempPath,
+          isCancelled: () => _cancelRequested,
+        );
+
+        if (_cancelRequested) {
+          debugPrint('[AutoBackupService] 备份被取消');
+          return false;
+        }
+
+        // 读取临时文件并通过 SAF 写入公共目录
+        final bytes = await File(safTempPath!).readAsBytes();
+        await BackupLocationManager.writeBackupFile(zipFileName, bytes);
+
+        // 清理旧备份
+        await _cleanupOldBackupsSaf();
+
+        debugPrint('[AutoBackupService] $backupType 备份完成(SAF): $zipFileName');
+        return true;
+      } else {
+        // ============================================================
+        // 非 SAF 模式（Desktop/iOS/Test）：直接使用 dart:io
+        // ============================================================
+        final backupRoot =
+            await DataMigrationService.getExternalBackupRootPath();
+        final backupDir = Directory(backupRoot);
+        if (!await backupDir.exists()) {
+          await backupDir.create(recursive: true);
+        }
+
+        // 清理残留的 .tmp 文件
+        await _cleanupTmpFiles(backupRoot);
+        await _yieldToEventLoop();
+
+        final tmpPath = p.join(backupRoot, tmpFileName);
+        final zipPath = p.join(backupRoot, zipFileName);
+
+        if (_cancelRequested) return false;
+
+        debugPrint('[AutoBackupService] 开始 $backupType 备份到 $zipPath');
+
+        await BackupService.createBackup(
+          outputPath: tmpPath,
+          isCancelled: () => _cancelRequested,
+        );
+
+        if (_cancelRequested) {
+          await _deleteSystemTempFile(tmpPath);
+          debugPrint('[AutoBackupService] 备份被取消');
+          return false;
+        }
+
+        // 原子重命名：.tmp → .zip
         final tmpFile = File(tmpPath);
         if (await tmpFile.exists()) {
-          await tmpFile.delete();
+          await tmpFile.rename(zipPath);
         }
-        debugPrint('[AutoBackupService] 备份被取消');
-        return false;
+
+        // 清理旧备份
+        await _cleanupOldBackups(backupRoot);
+
+        debugPrint('[AutoBackupService] $backupType 备份完成: $zipPath');
+        return true;
       }
-
-      // 原子重命名：.tmp → .zip
-      final tmpFile = File(tmpPath);
-      if (await tmpFile.exists()) {
-        await tmpFile.rename(zipPath);
-      }
-
-      // 清理旧备份
-      await _cleanupOldBackups(backupRoot);
-
-      debugPrint('[AutoBackupService] $backupType 备份完成: $zipPath');
-      return true;
     } on BackupCancelledException {
       debugPrint('[AutoBackupService] 备份被取消');
       return false;
@@ -131,6 +167,10 @@ class AutoBackupService {
       debugPrint('[AutoBackupService] 备份失败: $e');
       return false;
     } finally {
+      // 清理 SAF 遗留的系统临时文件（无论成功失败）
+      if (safTempPath != null) {
+        await _deleteSystemTempFile(safTempPath!);
+      }
       _isRunning = false;
       _cancelRequested = false;
     }
@@ -139,6 +179,16 @@ class AutoBackupService {
   /// 让出事件循环，确保 UI 可以处理帧渲染。
   static Future<void> _yieldToEventLoop() {
     return Future<void>.delayed(const Duration(milliseconds: 1));
+  }
+
+  /// 删除系统临时目录中的文件。
+  static Future<void> _deleteSystemTempFile(String path) async {
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {}
   }
 
   /// 清理备份目录中的 .tmp 临时文件（上次中断备份留下的残留）。
@@ -163,7 +213,7 @@ class AutoBackupService {
     }
   }
 
-  /// 清理旧备份，保留至少 3 个最新的备份文件。
+  /// 清理旧备份（非 SAF 模式），保留至少 3 个最新的。
   ///
   /// 同时处理旧格式（目录格式）和新格式（ZIP 格式）的备份。
   /// 排序规则按修改时间，保留最新的 3 个，删除其余。
@@ -177,16 +227,13 @@ class AutoBackupService {
 
       for (final entry in entries) {
         if (entry is File && entry.path.endsWith('.zip')) {
-          // 新格式：ZIP 文件
           backupItems.add(entry);
         } else if (entry is Directory &&
             p.basename(entry.path).startsWith('backup_')) {
-          // 旧格式：backup_ 开头的目录（兼容旧版本）
           backupItems.add(entry);
         }
       }
 
-      // 按修改时间排序（最早的在前）
       backupItems.sort((a, b) {
         try {
           return a.statSync().modified.compareTo(b.statSync().modified);
@@ -195,7 +242,6 @@ class AutoBackupService {
         }
       });
 
-      // 保留至少 3 个
       while (backupItems.length > 3) {
         final oldest = backupItems.removeAt(0);
         try {
@@ -214,11 +260,34 @@ class AutoBackupService {
     }
   }
 
+  /// 清理旧备份（SAF 模式），保留至少 3 个最新的。
+  static Future<void> _cleanupOldBackupsSaf() async {
+    try {
+      final files = await BackupLocationManager.listBackupFiles();
+      final zipFiles = files.where((f) => f.endsWith('.zip')).toList();
+
+      // 按文件名排序（文件名包含时间戳）
+      zipFiles.sort();
+
+      while (zipFiles.length > 3) {
+        final oldest = zipFiles.removeAt(0);
+        await BackupLocationManager.deleteBackupFile(oldest);
+        debugPrint('[AutoBackupService] 删除旧备份(SAF): $oldest');
+      }
+    } catch (e) {
+      debugPrint('[AutoBackupService] 清理旧备份失败(SAF): $e');
+    }
+  }
+
   /// 清理备份目录中的旧备份，保留至少 3 个最新的。
   ///
   /// 供 [DataMigrationService] 等外部调用。
   static Future<void> cleanupOldBackups() async {
-    final backupRoot = await DataMigrationService.getExternalBackupRootPath();
-    await _cleanupOldBackups(backupRoot);
+    if (await BackupLocationManager.isUsingSafMode()) {
+      await _cleanupOldBackupsSaf();
+    } else {
+      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
+      await _cleanupOldBackups(backupRoot);
+    }
   }
 }

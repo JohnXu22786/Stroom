@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/services.dart' show SystemNavigator;
 
 import 'app_restart.dart';
+import 'backup_startup_check.dart';
 import 'startup_check_service.dart';
 import 'startup_page.dart';
 import '../application.dart';
@@ -175,6 +176,19 @@ class _StartupAppState extends State<StartupApp>
         await Future.delayed(
             Duration(milliseconds: _minimumDisplayMs - elapsed));
       }
+
+      if (!mounted) return;
+
+      // ---------------------------------------------------------------
+      // 步骤 5: 备份存储位置与自动备份检查
+      // ---------------------------------------------------------------
+      // 此检查会引导用户完成 Android SAF 授权（如需），
+      // 并在授权后自动执行一次启动备份。如果空间不足或备份
+      // 失败，会循环提示用户直到问题解决。
+      // ---------------------------------------------------------------
+      await _updateStatus('正在检查备份存储...', '5/5');
+      final backupResult = await BackupStartupCheck.runCheck(context);
+      await Future<void>.delayed(Duration.zero);
 
       if (!mounted) return;
 
