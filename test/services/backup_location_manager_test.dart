@@ -114,7 +114,8 @@ void main() {
 
       // 清理
       await BackupLocationManager.deleteBackupFile(testFileName);
-      final afterDelete = await BackupLocationManager.readBackupFile(testFileName);
+      final afterDelete =
+          await BackupLocationManager.readBackupFile(testFileName);
       expect(afterDelete, isNull);
     });
 
@@ -148,7 +149,8 @@ void main() {
     });
 
     test('readBackupFile returns null for non-existent file', () async {
-      final bytes = await BackupLocationManager.readBackupFile('nonexistent.zip');
+      final bytes =
+          await BackupLocationManager.readBackupFile('nonexistent.zip');
       expect(bytes, isNull);
     });
 

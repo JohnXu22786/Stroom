@@ -298,8 +298,7 @@ class BackupLocationManager {
         if (Platform.isAndroid) {
           final uri = await _getSavedSafUri();
           if (uri == null) return null;
-          final result =
-              await _safChannel.invokeMethod<Uint8List>('readFile', {
+          final result = await _safChannel.invokeMethod<Uint8List>('readFile', {
             'uri': uri,
             'fileName': relativePath,
           });
@@ -420,10 +419,7 @@ class BackupLocationManager {
     final dir = Directory(rootPath);
     if (!await dir.exists()) return [];
     final entries = await dir.list().toList();
-    return entries
-        .whereType<File>()
-        .map((f) => p.basename(f.path))
-        .toList();
+    return entries.whereType<File>().map((f) => p.basename(f.path)).toList();
   }
 
   /// 检查是否有足够的可用空间。

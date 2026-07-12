@@ -119,7 +119,8 @@ class AutoBackupService {
         // ============================================================
         // 非 SAF 模式（Desktop/iOS/Test）：直接使用 dart:io
         // ============================================================
-        final backupRoot = await DataMigrationService.getExternalBackupRootPath();
+        final backupRoot =
+            await DataMigrationService.getExternalBackupRootPath();
         final backupDir = Directory(backupRoot);
         if (!await backupDir.exists()) {
           await backupDir.create(recursive: true);
@@ -285,8 +286,7 @@ class AutoBackupService {
     if (await BackupLocationManager.isUsingSafMode()) {
       await _cleanupOldBackupsSaf();
     } else {
-      final backupRoot =
-          await DataMigrationService.getExternalBackupRootPath();
+      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
       await _cleanupOldBackups(backupRoot);
     }
   }

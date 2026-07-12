@@ -154,9 +154,7 @@ class _StartupAppState extends State<StartupApp>
       setState(() {
         _isWorking = false;
         _migrationPerformed = didMigration;
-        _statusMessage = didMigration
-            ? '数据检查完成，准备启动应用'
-            : '准备启动应用';
+        _statusMessage = didMigration ? '数据检查完成，准备启动应用' : '准备启动应用';
       });
 
       // Wait a moment so the user can see the completion state

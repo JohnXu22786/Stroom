@@ -136,8 +136,7 @@ void main() {
                     barrierDismissible: false,
                     builder: (ctx) => AlertDialog(
                       title: const Text('存储空间不足'),
-                      content: const Text(
-                          '设备存储空间不足，无法正常完成自动备份。'),
+                      content: const Text('设备存储空间不足，无法正常完成自动备份。'),
                       actions: [
                         FilledButton(
                           onPressed: () => Navigator.of(ctx).pop(true),

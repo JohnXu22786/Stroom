@@ -58,8 +58,7 @@ class BackupStartupCheck {
   /// 3. 自动备份执行成功
   ///
   /// 在 Web 平台上直接返回（不支持本地备份）。
-  static Future<BackupStartupResult> runCheck(
-      BuildContext context) async {
+  static Future<BackupStartupResult> runCheck(BuildContext context) async {
     if (kIsWeb) {
       return const BackupStartupResult(storageReady: false);
     }
@@ -80,8 +79,7 @@ class BackupStartupCheck {
       // 请求存储访问权限
       final granted = await BackupLocationManager.requestStorageAccess();
       if (granted) {
-        storageAccessible =
-            await BackupLocationManager.isStorageAccessible();
+        storageAccessible = await BackupLocationManager.isStorageAccessible();
       }
 
       if (!storageAccessible && context.mounted) {
@@ -160,8 +158,7 @@ class BackupStartupCheck {
       builder: (ctx) => AlertDialog(
         title: Row(
           children: [
-            Icon(Icons.folder_open,
-                color: Colors.orange.shade700, size: 24),
+            Icon(Icons.folder_open, color: Colors.orange.shade700, size: 24),
             const SizedBox(width: 8),
             const Text('备份存储授权'),
           ],
@@ -246,8 +243,7 @@ class BackupStartupCheck {
       builder: (ctx) => AlertDialog(
         title: Row(
           children: [
-            Icon(Icons.error_outline,
-                color: Colors.red.shade400, size: 24),
+            Icon(Icons.error_outline, color: Colors.red.shade400, size: 24),
             const SizedBox(width: 8),
             const Text('授权失败'),
           ],
@@ -278,8 +274,7 @@ class BackupStartupCheck {
       builder: (ctx) => AlertDialog(
         title: Row(
           children: [
-            Icon(Icons.storage,
-                color: Colors.orange.shade700, size: 24),
+            Icon(Icons.storage, color: Colors.orange.shade700, size: 24),
             const SizedBox(width: 8),
             const Text('存储空间不足'),
           ],
@@ -314,8 +309,7 @@ class BackupStartupCheck {
       builder: (ctx) => AlertDialog(
         title: Row(
           children: [
-            Icon(Icons.error_outline,
-                color: Colors.red.shade400, size: 24),
+            Icon(Icons.error_outline, color: Colors.red.shade400, size: 24),
             const SizedBox(width: 8),
             const Text('自动备份失败'),
           ],
