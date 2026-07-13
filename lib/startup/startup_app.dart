@@ -106,58 +106,61 @@ class _StartupAppState extends State<StartupApp>
       await _yieldToFrame();
 
       // ===============================================================
-      // 并行启动所有检查，互不阻塞
+      // 依次执行所有检查，逐个进行
       // ===============================================================
       //
       // 设计原理：
-      // 所有三个检查同时发起（Future.wait），每个检查通过 .then() 在
-      // 自身完成时更新进度状态。这样：
-      // 1. 总耗时 = 最慢的那个检查，而非三个之和
-      // 2. UI 动画（脉冲、渐变、旋转）在检查执行期间始终保持流畅
-      // 3. 状态文本随每个检查完成实时更新
+      // 全部5个检查依次执行（而非并行），每次执行前更新状态文字，
+      // 并在每个检查之间让出一帧以确保 UI 动画流畅。
+      //
+      // 1. 检查数据格式版本
+      // 2. 验证数据格式
+      // 3. 检查数据完整性
+      // 4. 处理检查结果
+      // 5. 检查备份存储
       // ===============================================================
 
-      await _updateStatus('正在检查数据...', '1/3');
-
-      final migrationResultFuture =
-          StartupCheckService.checkFormatVersion().then((result) {
-        if (mounted) _updateStatus('正在验证数据格式...', '2/3');
-        return result;
-      }).catchError((Object e) {
+      // ---- Task 1: 检查数据格式版本 ----
+      await _updateStatus('正在检查数据格式版本...', '1/5');
+      MigrationResult migrationResult;
+      try {
+        migrationResult = await StartupCheckService.checkFormatVersion();
+      } catch (e) {
         debugPrint('[StartupApp] checkFormatVersion failed: $e');
-        if (mounted) _updateStatus('正在验证数据格式...', '2/3');
-        return const MigrationResult(needsMigration: false);
-      });
+        migrationResult = const MigrationResult(needsMigration: false);
+      }
+      if (!mounted) return;
+      await _yieldToFrame();
 
-      final formatIssuesFuture =
-          StartupCheckService.validateDataFormats().then((issues) {
-        if (mounted) _updateStatus('正在检查数据完整性...', '3/3');
-        return issues;
-      }).catchError((Object e) {
+      // ---- Task 2: 验证数据格式 ----
+      await _updateStatus('正在验证数据格式...', '2/5');
+      List<StartupIssue> formatIssues;
+      try {
+        formatIssues = await StartupCheckService.validateDataFormats();
+      } catch (e) {
         debugPrint('[StartupApp] validateDataFormats failed: $e');
-        if (mounted) _updateStatus('正在检查数据完整性...', '3/3');
-        return <StartupIssue>[];
-      });
+        formatIssues = <StartupIssue>[];
+      }
+      if (!mounted) return;
+      await _yieldToFrame();
 
-      final integrityIssuesFuture =
-          StartupCheckService.checkDataIntegrity().catchError((Object e) {
+      // ---- Task 3: 检查数据完整性 ----
+      await _updateStatus('正在检查数据完整性...', '3/5');
+      List<StartupIssue> integrityIssues;
+      try {
+        integrityIssues = await StartupCheckService.checkDataIntegrity();
+      } catch (e) {
         debugPrint('[StartupApp] checkDataIntegrity failed: $e');
-        return <StartupIssue>[];
-      });
+        integrityIssues = <StartupIssue>[];
+      }
+      if (!mounted) return;
+      await _yieldToFrame();
 
-      // 等待所有检查完成（并行执行）
-      final results = await Future.wait([
-        migrationResultFuture,
-        formatIssuesFuture,
-        integrityIssuesFuture,
-      ]);
-
-      final migrationResult = results[0] as MigrationResult;
-      final formatIssues = results[1] as List<StartupIssue>;
-      final integrityIssues = results[2] as List<StartupIssue>;
       final didMigration = migrationResult.needsMigration;
 
-      // 确保一帧渲染让状态文本显示
+      // ---- Task 4: 处理检查结果 ----
+      // 汇总所有发现问题并记录日志
+      await _updateStatus('正在处理检查结果...', '4/5');
       await _yieldToFrame();
 
       final allIssues = <StartupIssue>[
@@ -180,14 +183,16 @@ class _StartupAppState extends State<StartupApp>
       if (!mounted) return;
 
       // ---------------------------------------------------------------
-      // 步骤 5: 备份存储位置与自动备份检查
+      // Task 5: 备份存储位置与自动备份检查
       // ---------------------------------------------------------------
       // 此检查会引导用户完成 Android SAF 授权（如需），
       // 并在授权后自动执行一次启动备份。如果空间不足或备份
       // 失败，会循环提示用户直到问题解决。
       // ---------------------------------------------------------------
       await _updateStatus('正在检查备份存储...', '5/5');
-      final backupResult = await BackupStartupCheck.runCheck(context);
+      // The backup check runs its own UI/dialogs; we only await completion
+      if (!mounted) return;
+      await BackupStartupCheck.runCheck(context);
       await Future<void>.delayed(Duration.zero);
 
       if (!mounted) return;
@@ -222,7 +227,7 @@ class _StartupAppState extends State<StartupApp>
       if (!mounted) return;
       setState(() {
         _isWorking = false;
-        _statusMessage = '启动检查失败，可继续使用应用';
+        _statusMessage = '启动检查失败：$e\n\n可继续使用应用';
       });
       await Future.delayed(const Duration(milliseconds: 1500));
       if (!mounted) return;
@@ -326,29 +331,30 @@ class _StartupAppState extends State<StartupApp>
 
   @override
   Widget build(BuildContext context) {
-    // Phase 3: 启动完成 — 仅显示主应用
-    if (_checkingComplete) {
-      return const _AppErrorBoundary(
-        key: ValueKey('app_error_boundary'),
-        child: Application(key: ValueKey('app_ready')),
-      );
-    }
+    // 单一布局策略：Stack 中包含主应用（始终存在于 Widget 树中）和
+    // 启动页（启动检查完成后移除）两层。
+    //
+    // 设计原理：
+    // - Application 从第一次 build 起就存在于 Widget 树中，
+    //   确保其在渐出开始时已经完全初始化，消除渐出卡顿。
+    // - 启动页始终覆盖在主应用之上，通过在渐出过程中降低透明度
+    //   来让主应用自然显示出来。
+    // - 渐出完成后移除启动页，只显示主应用。
+    return Stack(
+      children: [
+        // 主应用（始终存在，确保启动时完全初始化）
+        const _AppErrorBoundary(
+          key: ValueKey('app_fade_boundary'),
+          child: Application(key: ValueKey('app_ready')),
+        ),
 
-    // Phase 2: 渐出中 — 主应用渲染在底层，启动页在最上层通过透明度渐出
-    if (_isFadingOut) {
-      return Stack(
-        children: [
-          // 底层：主应用（已渲染完成，通过相同 key 保持状态）
-          const _AppErrorBoundary(
-            key: ValueKey('app_fade_boundary'),
-            child: Application(key: ValueKey('app_ready')),
-          ),
-          // 顶层：启动页渐出
+        // 启动页覆盖层（检查完成后移除）
+        if (!_checkingComplete)
           AnimatedBuilder(
             animation: _fadeAnimation,
             builder: (context, child) {
               return Opacity(
-                opacity: _fadeAnimation.value,
+                opacity: _isFadingOut ? _fadeAnimation.value : 1.0,
                 child: child,
               );
             },
@@ -367,24 +373,7 @@ class _StartupAppState extends State<StartupApp>
               ),
             ),
           ),
-        ],
-      );
-    }
-
-    // Phase 1: 渐出前 — 仅显示启动页
-    return MaterialApp(
-      title: 'Stroom',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-      ),
-      home: StartupPage(
-        isWorking: _isWorking,
-        statusMessage: _statusMessage,
-        progressDetail: _progressDetail,
-        migrationPerformed: _migrationPerformed,
-      ),
+      ],
     );
   }
 }
