@@ -237,8 +237,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
-              Icon(Icons.warning_amber_rounded,
-                  size: 20, color: cs.error),
+              Icon(Icons.warning_amber_rounded, size: 20, color: cs.error),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -258,8 +257,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) =>
-                            ProviderConfigPage(entryId: entryId),
+                        builder: (_) => ProviderConfigPage(entryId: entryId),
                       ),
                     );
                   } else {
@@ -286,8 +284,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       );
     }
 
-    final clampedIndex =
-        _selectedModelIndex.clamp(0, modelOptions.length - 1);
+    final clampedIndex = _selectedModelIndex.clamp(0, modelOptions.length - 1);
     if (clampedIndex != _selectedModelIndex) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) setState(() => _selectedModelIndex = clampedIndex);
@@ -363,10 +360,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     },
                     items: List.generate(modelOptions.length, (i) {
                       final opt = modelOptions[i];
-                      final modelName =
-                          opt.model.name.isNotEmpty
-                              ? opt.model.name
-                              : opt.model.modelId;
+                      final modelName = opt.model.name.isNotEmpty
+                          ? opt.model.name
+                          : opt.model.modelId;
                       final displayText = opt.providerName.isNotEmpty
                           ? '$modelName | ${opt.providerName}'
                           : modelName;
