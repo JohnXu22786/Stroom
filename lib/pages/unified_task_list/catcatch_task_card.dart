@@ -88,6 +88,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         statusColor = Colors.orange;
         statusIcon = Icons.pause_circle;
         break;
+      case catcatch.TaskStatus.waiting:
+        statusColor = Colors.purple;
+        statusIcon = Icons.hourglass_empty;
+        break;
     }
 
     return Card(

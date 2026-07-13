@@ -165,6 +165,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     if (data['modelIndex'] is int) {
       _selectedModelIndex = data['modelIndex'] as int;
     }
+
+    // Restore save folder from retry data
+    if (data['saveFolder'] is String) {
+      _saveFolder = data['saveFolder'] as String;
+    }
   }
 
   @override
@@ -981,7 +986,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       Navigator.pop(context);
     }
 
-    // Create one task per audio file, each with its own 5-step chain
+    // Step 1: Create ALL tasks as waiting first so they appear in the list
+    final taskEntries = <_TaskEntry>[];
     for (final audio in audiosToProcess) {
       final title = 'ASR_${audio.name}';
 
@@ -997,15 +1003,38 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           },
         ],
         'modelIndex': _selectedModelIndex,
+        'saveFolder': _saveFolder,
       };
 
       final taskId = bgNotifier.addTask(
         type: BackgroundTaskType.asr,
         title: title,
         retryData: retryData,
+        startImmediately: false, // create as waiting
       );
+      taskEntries.add(_TaskEntry(taskId, audio, title));
+    }
 
-      final service = AsrService(config: effectiveConfig);
+    // Step 2: Execute tasks in sequence one-by-one (auto-chain)
+    await _executeTaskChain(
+        taskEntries, effectiveConfig, bgNotifier, textNotifier);
+  }
+
+  /// Execute all tasks in sequence. Each task is started after the previous
+  /// one completes or fails, regardless of the outcome.
+  Future<void> _executeTaskChain(
+    List<_TaskEntry> entries,
+    AsrConfig config,
+    BackgroundTaskNotifier bgNotifier,
+    TextRecordsNotifier textNotifier,
+  ) async {
+    for (final entry in entries) {
+      final taskId = entry.taskId;
+
+      // Start the waiting task (transition waiting -> running)
+      bgNotifier.startTask(taskId);
+
+      final service = AsrService(config: config);
 
       try {
         // Step 0: 连接服务器
@@ -1016,8 +1045,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         bgNotifier.updateStep(taskId, 1, running: true);
 
         final result = await service.transcribe(
-          audioBytes: audio.bytes,
-          audioFormat: audio.format,
+          audioBytes: entry.audio.bytes,
+          audioFormat: entry.audio.format,
         );
 
         // Step 1 complete
@@ -1034,7 +1063,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         bgNotifier.updateStep(taskId, 3, completed: true);
         bgNotifier.updateStep(taskId, 4, running: true);
 
-        await _saveTranscriptionResult(result.text, title: title);
+        await _saveTranscriptionResult(result.text, title: entry.title);
 
         bgNotifier.updateStep(taskId, 4, completed: true);
         bgNotifier.completeTask(taskId);
@@ -1062,6 +1091,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             rawRequest: rawRequest,
             rawResponse: rawResponse);
       }
+      // Continue to next task in the for loop regardless of success/failure
     }
   }
 
@@ -1246,4 +1276,13 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   }
 
   String _pad(int n) => n.toString().padLeft(2, '0');
+}
+
+/// Helper to pair a task ID with its audio data and title for chained execution.
+class _TaskEntry {
+  final String taskId;
+  final SelectedAudio audio;
+  final String title;
+
+  const _TaskEntry(this.taskId, this.audio, this.title);
 }

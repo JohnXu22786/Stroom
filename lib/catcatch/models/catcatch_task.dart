@@ -137,7 +137,8 @@ enum TaskStatus {
   running('运行中'),
   completed('已完成'),
   failed('失败'),
-  paused('已暂停');
+  paused('已暂停'),
+  waiting('等待中');
 
   final String label;
   const TaskStatus(this.label);

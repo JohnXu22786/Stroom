@@ -285,6 +285,9 @@ class TaskCard extends ConsumerWidget {
         return const Icon(Icons.error, color: Colors.red, size: 24);
       case TaskStatus.paused:
         return const Icon(Icons.pause_circle, color: Colors.orange, size: 24);
+      case TaskStatus.waiting:
+        return const Icon(Icons.hourglass_empty,
+            color: Colors.purple, size: 24);
     }
   }
 
@@ -336,6 +339,18 @@ class TaskCard extends ConsumerWidget {
           child: const Text(
             '已暂停',
             style: TextStyle(fontSize: 11, color: Colors.orange),
+          ),
+        );
+      case TaskStatus.waiting:
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.purple.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Text(
+            '等待中',
+            style: TextStyle(fontSize: 11, color: Colors.purple),
           ),
         );
     }
