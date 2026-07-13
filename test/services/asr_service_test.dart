@@ -257,8 +257,7 @@ void main() {
 
         // Verify diagnostics (lastRequestBody) show truncated base64
         expect(service.lastRequestBody, isNotNull);
-        final diagAudio =
-            service.lastRequestBody!['input_audio'] as Map;
+        final diagAudio = service.lastRequestBody!['input_audio'] as Map;
         expect(
           (diagAudio['data'] as String).contains('${audioBytes.length} bytes'),
           true,
@@ -313,8 +312,7 @@ void main() {
         expect(testService.lastRequestBody!['model'], 'whisper-1');
         expect(testService.lastRequestBody!['response_format'], 'json');
 
-        final inputAudio =
-            testService.lastRequestBody!['input_audio'] as Map;
+        final inputAudio = testService.lastRequestBody!['input_audio'] as Map;
         expect(inputAudio['format'], 'mp3');
         // The data should be truncated in diagnostics but still contain
         // the first few characters of the base64 string
