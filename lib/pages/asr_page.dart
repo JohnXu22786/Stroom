@@ -17,71 +17,56 @@ import '../utils/text_manifest.dart';
 import '../widgets/app_media_picker_dialog.dart';
 import '../widgets/folder_picker_dialog.dart';
 import 'ocr/ocr_shared.dart';
+import 'provider_config_page.dart';
 
 // ============================================================================
-// Provider: Get the first configured ASR config from provider entries
+// Helper: Pair model config with its source provider info
 // ============================================================================
 
-/// Reads the first valid ASR provider config from the provider entries.
-/// Iterates through all configs in an entry, not just the first one.
-/// Returns null if none is configured.
-AsrConfig? _resolveAsrConfig(WidgetRef ref) {
+/// Pair of model config with its source provider info for display and
+/// request building.
+class _ModelOption {
+  final ModelConfig model;
+  final String providerName;
+  final String host;
+  final String apiKey;
+  const _ModelOption(this.model, this.providerName, this.host, this.apiKey);
+}
+
+/// Collect all available models with their source provider info from ALL
+/// configured ASR provider configs (not just the first one).
+/// Only includes configs with valid host and API key.
+List<_ModelOption> _getAsrModelOptions(WidgetRef ref) {
   final state = ref.read(providerEntriesProvider);
+  final result = <_ModelOption>[];
   for (final entry in state.entries) {
     if (entry.type == 'asr') {
       for (final config in entry.configs) {
         if (config.host.isNotEmpty && config.key.isNotEmpty) {
-          final model = config.models.isNotEmpty
-              ? config.models.first.modelId
-              : 'whisper-1';
-          return AsrConfig(host: config.host, apiKey: config.key, model: model);
+          for (final model in config.models) {
+            result.add(_ModelOption(
+              model,
+              config.providerName,
+              config.host,
+              config.key,
+            ));
+          }
         }
       }
+    }
+  }
+  return result;
+}
+
+/// Get the first ASR entry ID for navigation to its config page.
+String? _getFirstAsrEntryId(WidgetRef ref) {
+  final state = ref.read(providerEntriesProvider);
+  for (final entry in state.entries) {
+    if (entry.type == 'asr') {
+      return entry.id;
     }
   }
   return null;
-}
-
-/// Collect all available model names from the first valid ASR provider config.
-/// Iterates through all configs in the entry to find the first valid one.
-List<ModelConfig> _getAsrModels(WidgetRef ref) {
-  final state = ref.read(providerEntriesProvider);
-  for (final entry in state.entries) {
-    if (entry.type == 'asr') {
-      for (final config in entry.configs) {
-        if (config.host.isNotEmpty && config.key.isNotEmpty) {
-          return config.models;
-        }
-      }
-    }
-  }
-  return [];
-}
-
-/// Get the provider name from the first valid ASR provider config.
-/// Iterates through all configs in the entry to find the first valid one.
-String _getAsrProviderName(WidgetRef ref) {
-  final state = ref.read(providerEntriesProvider);
-  for (final entry in state.entries) {
-    if (entry.type == 'asr') {
-      for (final config in entry.configs) {
-        if (config.host.isNotEmpty && config.key.isNotEmpty) {
-          return config.providerName;
-        }
-      }
-    }
-  }
-  return '';
-}
-
-/// Build display text for a model: "ModelName | ProviderName"
-/// Falls back to model name only if provider name is empty.
-String _buildAsrModelDisplayText(ModelConfig model, String providerName) {
-  final modelName = model.name.isNotEmpty ? model.name : model.modelId;
-  if (providerName.isNotEmpty) {
-    return '$modelName | $providerName';
-  }
-  return modelName;
 }
 
 // ============================================================================
@@ -222,11 +207,72 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   // ==================================================================
 
   Widget _buildModelSelector(ColorScheme cs) {
-    final models = _getAsrModels(ref);
-    final providerName = _getAsrProviderName(ref);
-    if (models.isEmpty) return const SizedBox.shrink();
+    final modelOptions = _getAsrModelOptions(ref);
 
-    final clampedIndex = _selectedModelIndex.clamp(0, models.length - 1);
+    // No models configured — show configure prompt (like TTS page)
+    if (modelOptions.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: cs.errorContainer.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: cs.error.withValues(alpha: 0.3),
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, size: 20, color: cs.error),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '识别模型',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              TextButton(
+                onPressed: () {
+                  final entryId = _getFirstAsrEntryId(ref);
+                  if (entryId != null) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ProviderConfigPage(entryId: entryId),
+                      ),
+                    );
+                  } else {
+                    Navigator.pushNamed(context, '/settings');
+                  }
+                },
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  foregroundColor: cs.error,
+                ),
+                child: const Text(
+                  '去配置',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final clampedIndex = _selectedModelIndex.clamp(0, modelOptions.length - 1);
     if (clampedIndex != _selectedModelIndex) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) setState(() => _selectedModelIndex = clampedIndex);
@@ -297,13 +343,17 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                       color: cs.onSurface,
                     ),
                     onChanged: (idx) {
-                      if (idx == null || idx >= models.length) return;
+                      if (idx == null || idx >= modelOptions.length) return;
                       setState(() => _selectedModelIndex = idx);
                     },
-                    items: List.generate(models.length, (i) {
-                      final model = models[i];
-                      final displayText =
-                          _buildAsrModelDisplayText(model, providerName);
+                    items: List.generate(modelOptions.length, (i) {
+                      final opt = modelOptions[i];
+                      final modelName = opt.model.name.isNotEmpty
+                          ? opt.model.name
+                          : opt.model.modelId;
+                      final displayText = opt.providerName.isNotEmpty
+                          ? '$modelName | ${opt.providerName}'
+                          : modelName;
                       return DropdownMenuItem<int>(
                         value: i,
                         child: Text(
@@ -955,28 +1005,27 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   Future<void> _startTranscription() async {
     if (_selectedAudios.isEmpty) return;
 
-    final asrConfig = _resolveAsrConfig(ref);
-    if (asrConfig == null) {
+    final modelOptions = _getAsrModelOptions(ref);
+    if (modelOptions.isEmpty || _selectedModelIndex >= modelOptions.length) {
       setState(() {
-        _errorMessage = '请先在设置中配置音频转写供应商';
+        _errorMessage = '请先在设置中配置音频转写供应商和模型';
       });
       return;
     }
+
+    // Build config from the selected model's own source config,
+    // ensuring host/API key match the model's provider.
+    final selectedOption = modelOptions[_selectedModelIndex];
+    final effectiveConfig = AsrConfig(
+      host: selectedOption.host,
+      apiKey: selectedOption.apiKey,
+      model: selectedOption.model.modelId,
+    );
 
     // Capture notifier references BEFORE Navigator.pop — after the widget is
     // disposed, ConsumerState.ref becomes null and ref.read() would throw.
     final bgNotifier = ref.read(backgroundTasksProvider.notifier);
     final textNotifier = ref.read(textRecordsProvider.notifier);
-
-    // Use the selected model from dropdown
-    final models = _getAsrModels(ref);
-    AsrConfig effectiveConfig;
-    if (_selectedModelIndex < models.length) {
-      final selectedModel = models[_selectedModelIndex];
-      effectiveConfig = asrConfig.copyWith(model: selectedModel.modelId);
-    } else {
-      effectiveConfig = asrConfig;
-    }
 
     // Capture the list before pop
     final audiosToProcess = List<SelectedAudio>.from(_selectedAudios);
