@@ -131,41 +131,78 @@ Widget _buildCodeBlock(String code, String language, PreConfig preConfig) {
     return HtmlCodeBlockWidget(htmlCode: code);
   }
 
-  // Fallback: render as a syntax-highlighted code block (replicating the
-  // default behaviour from CodeBlockNode.build() but without access to
-  // visitor.richTextBuilder / visitor.splitRegExp).
+  // Fallback: render as a syntax-highlighted code block with height
+  // constraint capped at roughly 4:3 aspect ratio (height = width * 3/4).
+  // If the content fits within the cap, the height matches the content;
+  // otherwise, scrolling is enabled for both horizontal and vertical overflow.
   final splitRegExp = WidgetVisitor.defaultSplitRegExp;
   var splitContents = code.trim().split(splitRegExp);
   if (splitContents.isNotEmpty && splitContents.last.isEmpty) {
     splitContents = splitContents.sublist(0, splitContents.length - 1);
   }
 
-  return Container(
-    decoration: preConfig.decoration,
-    margin: preConfig.margin,
-    padding: preConfig.padding,
-    width: double.infinity,
-    child: SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: List.generate(splitContents.length, (index) {
-          final currentContent = splitContents[index];
-          return Text.rich(
-            TextSpan(
-              children: highLightSpans(
-                currentContent,
-                language: language,
-                theme: preConfig.theme,
-                textStyle: preConfig.textStyle,
-                styleNotMatched: preConfig.styleNotMatched,
+  return LayoutBuilder(
+    builder: (context, constraints) {
+      final maxWidth = constraints.maxWidth;
+      final maxAllowedHeight = maxWidth * 0.75;
+      const lineHeight = 19.5;
+      // Estimate content height: lines + approximate vertical padding
+      final estimatedPadding = preConfig.padding.vertical;
+      final contentHeight =
+          splitContents.length * lineHeight + estimatedPadding;
+      // Ensure lower bound (40) does not exceed upper bound (maxAllowedHeight)
+      // when the available width is very narrow
+      final effectiveMax = maxAllowedHeight < 40.0 ? 40.0 : maxAllowedHeight;
+      final effectiveHeight = contentHeight.clamp(40.0, effectiveMax);
+
+      return Container(
+        decoration: preConfig.decoration,
+        margin: preConfig.margin,
+        padding: EdgeInsets.zero,
+        width: double.infinity,
+        height: effectiveHeight,
+        child: ClipRRect(
+          borderRadius: _extractBorderRadius(preConfig.decoration),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.vertical,
+            child: Padding(
+              padding: preConfig.padding,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: List.generate(splitContents.length, (index) {
+                    final currentContent = splitContents[index];
+                    return Text.rich(
+                      TextSpan(
+                        children: highLightSpans(
+                          currentContent,
+                          language: language,
+                          theme: preConfig.theme,
+                          textStyle: preConfig.textStyle,
+                          styleNotMatched: preConfig.styleNotMatched,
+                        ),
+                      ),
+                    );
+                  }),
+                ),
               ),
             ),
-          );
-        }),
-      ),
-    ),
+          ),
+        ),
+      );
+    },
   );
+}
+
+/// Extracts [BorderRadiusGeometry] from a [Decoration] if it is a
+/// [BoxDecoration] with a non-null [BoxDecoration.borderRadius]; otherwise
+/// returns zero [BorderRadius].
+BorderRadiusGeometry _extractBorderRadius(Decoration decoration) {
+  if (decoration is BoxDecoration && decoration.borderRadius != null) {
+    return decoration.borderRadius!;
+  }
+  return BorderRadius.zero;
 }
 
 /// Returns a [PreConfig] for code blocks that adapts to dark/light mode.
