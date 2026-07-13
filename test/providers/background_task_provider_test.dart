@@ -520,7 +520,9 @@ void main() {
       expect(notifier.state.length, 1);
       expect(notifier.state[0].id, id);
       expect(notifier.state[0].status, TaskStatus.waiting);
-      expect(notifier.state[0].steps.every((s) => s.status == BgStepStatus.pending),
+      expect(
+          notifier.state[0].steps
+              .every((s) => s.status == BgStepStatus.pending),
           isTrue,
           reason: '等待中的任务所有步骤应为 pending');
     });
@@ -672,13 +674,16 @@ void main() {
       // Verify initial steps
       final initialSteps = notifier.state[0].steps;
       expect(initialSteps.length, 5);
-      expect(initialSteps.every((s) => s.status == BgStepStatus.pending), isTrue);
+      expect(
+          initialSteps.every((s) => s.status == BgStepStatus.pending), isTrue);
 
       notifier.startTask(id);
 
       // Steps should remain unchanged after startTask
       expect(notifier.state[0].steps.length, initialSteps.length);
-      expect(notifier.state[0].steps.every((s) => s.status == BgStepStatus.pending),
+      expect(
+          notifier.state[0].steps
+              .every((s) => s.status == BgStepStatus.pending),
           isTrue,
           reason: 'startTask 不应修改步骤状态');
       expect(notifier.state[0].title, '待启动任务');
