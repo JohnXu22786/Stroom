@@ -4,7 +4,7 @@ import '../providers/provider_config.dart';
 // 任务状态枚举
 // ============================================================================
 
-enum TaskStatus { running, completed, failed, paused }
+enum TaskStatus { running, completed, failed, paused, waiting }
 
 // ============================================================================
 // 合成任务模型
