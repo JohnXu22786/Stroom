@@ -1,7 +1,8 @@
+import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:http_parser/http_parser.dart';
 import '../providers/chat_api_provider.dart';
 
 import '../utils/http_utils.dart';
@@ -10,29 +11,29 @@ import '../utils/http_utils.dart';
 // Helpers
 // ============================================================================
 
-/// Map audio format extension to its MIME type for the multipart file upload.
-/// If the format is unknown, returns `application/octet-stream` as fallback.
-MediaType audioFormatMimeType(String format) {
+/// Map audio format extension to its MIME type label for display purposes.
+/// If the format is unknown, returns `octet-stream` as fallback.
+String _audioFormatLabel(String format) {
   switch (format.toLowerCase()) {
     case 'mp3':
     case 'mpga':
-      return MediaType('audio', 'mpeg');
+      return 'mpeg';
     case 'wav':
-      return MediaType('audio', 'wav');
+      return 'wav';
     case 'ogg':
     case 'opus':
-      return MediaType('audio', 'ogg');
+      return 'ogg';
     case 'flac':
-      return MediaType('audio', 'flac');
+      return 'flac';
     case 'm4a':
     case 'mp4':
-      return MediaType('audio', 'mp4');
+      return 'mp4';
     case 'webm':
-      return MediaType('audio', 'webm');
+      return 'webm';
     case 'wma':
-      return MediaType('audio', 'x-ms-wma');
+      return 'x-ms-wma';
     default:
-      return MediaType('application', 'octet-stream');
+      return 'octet-stream';
   }
 }
 
@@ -46,8 +47,12 @@ MediaType audioFormatMimeType(String format) {
 /// The user provides the full endpoint URL (e.g. https://api.openai.com/v1/audio/transcriptions),
 /// which is used directly without appending any path. The request is sent as:
 ///   POST {host}
-///   Content-Type: multipart/form-data
-///   Body: file, model, language (optional), response_format=json
+///   Content-Type: application/json
+///   Body: { "model": "...", "input_audio": { "data": "<base64>", "format": "..." } }
+///
+/// The JSON format (with `input_audio`) follows the OpenRouter STT convention
+/// and avoids multipart Content-Type issues. The raw base64 data is also
+/// visible in diagnostic capturer for easier debugging.
 class AsrConfig {
   final String model;
   final String apiKey;
@@ -108,11 +113,10 @@ class AsrResult {
 /// An ASR service that uses an OpenAI-compatible audio/transcriptions API
 /// to transcribe audio into text.
 ///
-/// The API is called with a multipart/form-data POST request containing:
-/// - `file`: the audio file data
-/// - `model`: the Whisper model ID (default: whisper-1)
-/// - `language` (optional): ISO language code
-/// - `response_format`: json (default)
+/// The API is called with a JSON POST request (OpenRouter STT convention):
+///   POST {host}
+///   Content-Type: application/json
+///   Body: { "model": "...", "input_audio": { "data": "<base64>", "format": "..." } }
 ///
 /// The response follows the standard OpenAI transcription format:
 /// `{ "text": "transcribed text" }`.
@@ -177,6 +181,11 @@ class AsrService {
   /// [audioBytes] - The raw audio data (e.g., WAV, MP3, M4A, etc.).
   /// [audioFormat] - The audio file extension/format (e.g., 'wav', 'mp3', 'm4a').
   /// Returns [AsrResult] with the transcribed text.
+  ///
+  /// The request is sent as JSON (OpenRouter STT convention) with the audio
+  /// data base64-encoded inside `input_audio.data`. This avoids multipart
+  /// Content-Type issues and makes the actual file content visible in the
+  /// diagnostic capture (`lastRequestBody`).
   Future<AsrResult> transcribe({
     required Uint8List audioBytes,
     String audioFormat = 'wav',
@@ -190,28 +199,32 @@ class AsrService {
 
     final stopwatch = Stopwatch()..start();
 
-    final fileName = 'audio.$audioFormat';
-    final fileMimeType = audioFormatMimeType(audioFormat);
-    final formData = FormData.fromMap({
-      'file': MultipartFile.fromBytes(
-        audioBytes,
-        filename: fileName,
-        contentType: fileMimeType,
-      ),
-      'model': config.model,
-      'response_format': 'json',
-      if (config.language != null && config.language!.isNotEmpty)
-        'language': config.language,
-    }, ListFormat.multi, false);
+    // Encode audio as base64 for the JSON request body (OpenRouter STT format)
+    final b64 = base64Encode(audioBytes);
 
-    // Capture request diagnostics
-    lastRequestBody = {
-      'file': 'audio.$audioFormat (${audioBytes.length} bytes)',
+    final body = <String, dynamic>{
       'model': config.model,
+      'input_audio': {
+        'data': b64,
+        'format': audioFormat.toLowerCase(),
+      },
       'response_format': 'json',
-      if (config.language != null && config.language!.isNotEmpty)
-        'language': config.language,
     };
+    if (config.language != null && config.language!.isNotEmpty) {
+      body['language'] = config.language;
+    }
+
+    // Capture request diagnostics — shows truncated base64 data
+    // Use json decode/encode to deep-copy, so modifications don't affect
+    // the actual request body sent via _dio.post().
+    final reqBody = Map<String, dynamic>.from(
+      jsonDecode(jsonEncode(body)) as Map,
+    );
+    final inputAudio = reqBody['input_audio'] as Map<String, dynamic>;
+    final data = inputAudio['data'] as String;
+    inputAudio['data'] =
+        '${data.substring(0, math.min(80, data.length))}... (${audioBytes.length} bytes)';
+    lastRequestBody = reqBody;
     lastRequestUrl = config.transcribeUrl;
     lastRequestHeaders = {
       if (config.apiKey.isNotEmpty)
@@ -224,7 +237,12 @@ class AsrService {
     try {
       final response = await _dio.post(
         config.transcribeUrl,
-        data: formData,
+        data: body,
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        ),
       );
 
       stopwatch.stop();
