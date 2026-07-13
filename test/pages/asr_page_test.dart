@@ -518,7 +518,7 @@ void main() {
     );
 
     testWidgets(
-      'shows models from first valid config when all configs are valid',
+      'shows models from ALL valid configs (not just first)',
       (tester) async {
         final entry = ProviderEntry(
           id: 'test_asr',
@@ -547,15 +547,21 @@ void main() {
         await tester.pumpWidget(_buildTestApp(entries: [entry]));
         await tester.pumpAndSettle();
 
-        // Should show the first valid config's models
-        expect(find.text('First-Model | First'), findsWidgets);
-        // Models from the second config should NOT appear
-        expect(find.text('Second-Model | Second'), findsNothing);
+        // First model is selected by default (visible in collapsed dropdown)
+        expect(find.text('First-Model | First'), findsOneWidget);
+
+        // Tap the dropdown to open it and see all items
+        await tester.tap(find.text('First-Model | First'));
+        await tester.pumpAndSettle();
+
+        // Should show models from ALL valid configs in the dropdown
+        expect(find.text('Second-Model | Second'), findsWidgets);
+        expect(find.text('Second-Model-2 | Second'), findsWidgets);
       },
     );
 
     testWidgets(
-      'shows no model selector when no config has valid host/key',
+      'shows configure prompt when no config has valid host/key',
       (tester) async {
         final entry = ProviderEntry(
           id: 'test_asr',
@@ -583,14 +589,14 @@ void main() {
         await tester.pumpWidget(_buildTestApp(entries: [entry]));
         await tester.pumpAndSettle();
 
-        // No model selector should be shown (no valid config)
-        // "识别模型" label should NOT be present
-        expect(find.textContaining('识别模型'), findsNothing);
+        // Should show configure prompt instead of hiding
+        expect(find.text('识别模型'), findsOneWidget);
+        expect(find.textContaining('配置'), findsWidgets);
       },
     );
 
     testWidgets(
-      'hides model selector when no valid ASR config exists',
+      'shows configure prompt when no ASR models exist',
       (tester) async {
         final entry = ProviderEntry(
           id: 'test_asr',
@@ -608,8 +614,21 @@ void main() {
         await tester.pumpWidget(_buildTestApp(entries: [entry]));
         await tester.pumpAndSettle();
 
-        // No model selector should show
-        expect(find.textContaining('识别模型'), findsNothing);
+        // Should show configure prompt
+        expect(find.text('识别模型'), findsOneWidget);
+        expect(find.textContaining('配置'), findsWidgets);
+      },
+    );
+
+    testWidgets(
+      'shows configure prompt when no ASR entry exists',
+      (tester) async {
+        await tester.pumpWidget(_buildTestApp(entries: []));
+        await tester.pumpAndSettle();
+
+        // Should show configure prompt
+        expect(find.text('识别模型'), findsOneWidget);
+        expect(find.textContaining('配置'), findsWidgets);
       },
     );
   });
