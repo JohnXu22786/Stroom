@@ -88,9 +88,23 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     // SAF (Storage Access Framework) 支持
-    implementation("androidx.documentfile:documentfile:1.0.1")
-    // Activity Result API (registerForActivityResult)
-    implementation("androidx.activity:activity-ktx:1.9.3")
+    implementation("androidx.documentfile:documentfile:1.0.1") {
+        because("DocumentFile.fromTreeUri() for SAF access")
+    }
+    // Activity Result API (registerForActivityResult) — force high version
+    implementation("androidx.activity:activity:1.9.3") {
+        because("ComponentActivity.registerForActivityResult()")
+    }
+    implementation("androidx.activity:activity-ktx:1.9.3") {
+        because("Kotlin extensions for Activity Result API")
+    }
+}
+
+configurations.all {
+    resolutionStrategy {
+        force("androidx.activity:activity:1.9.3")
+        force("androidx.activity:activity-ktx:1.9.3")
+    }
 }
 
 flutter {
