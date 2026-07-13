@@ -128,7 +128,8 @@ void main() {
       );
     });
 
-    test('audio attachment with cached base64 produces input_audio content part',
+    test(
+        'audio attachment with cached base64 produces input_audio content part',
         () async {
       final audioBytes = Uint8List.fromList([0xFF, 0xF3, 0x44, 0x00]);
       final b64 = base64Encode(audioBytes);
@@ -171,7 +172,8 @@ void main() {
       );
     });
 
-    test('video attachment produces descriptive text (not image_url)', () async {
+    test('video attachment produces descriptive text (not image_url)',
+        () async {
       final videoBytes = Uint8List.fromList([0x00, 0x00, 0x00, 0x1C]);
       final att = Attachment(
         fileName: 'video.mp4',
