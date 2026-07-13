@@ -365,7 +365,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             _buildListTile(
               leading: const Icon(Icons.description, color: Colors.brown),
               title: '开源协议',
-              subtitle: 'GNU General Public License v3.0',
+              subtitle: 'GNU Affero General Public License v3.0',
               trailing: const Icon(Icons.open_in_new, size: 18),
               onTap: () => _openUrl(
                 'https://github.com/JohnXu22786/Stroom/blob/main/LICENSE',
