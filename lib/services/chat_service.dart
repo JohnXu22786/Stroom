@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
@@ -554,10 +555,11 @@ class ChatService {
               },
             });
           } else if (att.fileType == 'video') {
-            // ── Video files: send data as `data:` URI with video MIME type ──
+            // ── Video files: send as video_url with base64 data URI ──
+            // OpenRouter supports the `video_url` content type for video files.
+            // Format: { type: "video_url", video_url: { url: "data:video/mp4;base64,..." } }
             final String b64;
             if (att.base64Data != null && att.base64Data!.isNotEmpty) {
-              // Size check: skip oversized video even when cached
               if (att.fileSize > 10 * 1024 * 1024) {
                 parts.add({
                   'type': 'text',
@@ -567,7 +569,6 @@ class ChatService {
               }
               b64 = att.base64Data!;
             } else {
-              // Check fileSize before reading to avoid loading huge files
               if (att.fileSize > 10 * 1024 * 1024) {
                 parts.add({
                   'type': 'text',
@@ -578,7 +579,6 @@ class ChatService {
               final bytes = await AttachmentStorage.readFile(att.storagePath);
               if (bytes != null && bytes.isNotEmpty) {
                 b64 = base64Encode(bytes);
-                // Cache base64 for future use
                 att.base64Data = b64;
               } else {
                 parts.add({
@@ -589,40 +589,83 @@ class ChatService {
               }
             }
             parts.add({
-              'type': 'image_url',
-              'image_url': {
+              'type': 'video_url',
+              'video_url': {
                 'url': 'data:${att.mimeType};base64,$b64',
               },
             });
           } else {
             // Try to read text content for text-based files
             final textExts = [
+              // Documentation & markup
               'txt',
               'md',
+              'tex',
+              'rst',
+              'asciidoc',
+              // Data & config
               'json',
               'csv',
               'log',
               'yaml',
+              'yml',
               'xml',
+              'toml',
               'ini',
               'cfg',
+              'conf',
+              'env',
+              'properties',
+              'plist',
+              // Web
+              'html',
+              'htm',
+              'css',
+              'scss',
+              'less',
+              'svg',
+              // Shell & scripts
+              'sh',
+              'bash',
+              'zsh',
+              'ps1',
+              'bat',
+              'cmd',
               'py',
               'js',
               'ts',
+              'jsx',
+              'tsx',
               'dart',
               'java',
               'cpp',
+              'c',
               'h',
+              'hpp',
               'rs',
               'go',
               'rb',
               'php',
+              'swift',
+              'kt',
+              'scala',
+              'r',
+              'lua',
+              'pl',
+              'sql',
+              // Git & project
+              'gitignore',
+              'editorconfig',
+              'makefile',
+              'dockerfile',
             ];
             final ext = att.fileName.split('.').last.toLowerCase();
             if (textExts.contains(ext)) {
               try {
                 final bytes = await AttachmentStorage.readFile(att.storagePath);
-                if (bytes == null) throw Exception('file not readable');
+                if (bytes == null || bytes.isEmpty) {
+                  throw Exception('file not readable');
+                }
                 final textContent = utf8.decode(bytes);
                 final truncated = textContent.length > 4000
                     ? '${textContent.substring(0, 4000)}\n... [truncated]'
@@ -638,10 +681,39 @@ class ChatService {
                 });
               }
             } else {
-              parts.add({
-                'type': 'text',
-                'text': '[Attached file: ${att.fileName}]',
-              });
+              // ── Non-text document files: send as file content part ──
+              // OpenRouter supports the `file` content type for PDFs and other
+              // documents. Format: { type: "file", file: { filename: "...",
+              // file_data: "data:application/pdf;base64,..." } }
+              if (att.fileSize > 10 * 1024 * 1024) {
+                parts.add({
+                  'type': 'text',
+                  'text': '[文件过大已跳过: ${att.fileName}]',
+                });
+              } else {
+                Uint8List? bytes;
+                if (att.base64Data != null && att.base64Data!.isNotEmpty) {
+                  bytes = base64Decode(att.base64Data!);
+                } else {
+                  bytes = await AttachmentStorage.readFile(att.storagePath);
+                }
+                if (bytes != null && bytes.isNotEmpty) {
+                  final b64 = base64Encode(bytes);
+                  final dataUri = 'data:${att.mimeType};base64,$b64';
+                  parts.add({
+                    'type': 'file',
+                    'file': {
+                      'filename': att.fileName,
+                      'file_data': dataUri,
+                    },
+                  });
+                } else {
+                  parts.add({
+                    'type': 'text',
+                    'text': '[${att.fileName} - 无法读取文件内容]',
+                  });
+                }
+              }
             }
           }
         }
