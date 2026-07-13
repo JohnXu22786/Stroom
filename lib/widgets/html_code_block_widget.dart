@@ -102,9 +102,8 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
 
     // Adaptive height: cap at roughly 4:3 aspect ratio (height = width * 3/4)
     const verticalPadding = 40.0 + 12.0; // top button row + bottom padding
-    final lineCount = widget.htmlCode.isEmpty
-        ? 0
-        : widget.htmlCode.split('\n').length;
+    final lineCount =
+        widget.htmlCode.isEmpty ? 0 : widget.htmlCode.split('\n').length;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -115,8 +114,7 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
             : 40.0; // minimal height for empty state
         // Ensure lower bound (40) does not exceed upper bound (maxAllowedHeight)
         // when the available width is very narrow
-        final effectiveMax =
-            maxAllowedHeight < 40.0 ? 40.0 : maxAllowedHeight;
+        final effectiveMax = maxAllowedHeight < 40.0 ? 40.0 : maxAllowedHeight;
         final adaptiveHeight = contentHeight.clamp(40.0, effectiveMax);
 
         return _buildSizedCodeBlock(

@@ -456,12 +456,10 @@ void main() {
       final sizedBox = find.byType(SizedBox).first;
       final sizedBoxWidget = tester.widget<SizedBox>(sizedBox);
 
-      expect(sizedBoxWidget.height,
-          lessThan(500),
+      expect(sizedBoxWidget.height, lessThan(500),
           reason:
               'Height should be capped, not matching the full 50 lines of content');
-      expect(sizedBoxWidget.height,
-          greaterThan(0),
+      expect(sizedBoxWidget.height, greaterThan(0),
           reason: 'Height should be positive');
     });
 
@@ -486,8 +484,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Find vertical scrollable — should exist and allow scrolling
-      final verticalScrollables = find.byWidgetPredicate(
-          (w) => w is Scrollable && w.axis == Axis.vertical);
+      final verticalScrollables = find
+          .byWidgetPredicate((w) => w is Scrollable && w.axis == Axis.vertical);
       expect(verticalScrollables, findsWidgets,
           reason: 'Vertical scrollable should exist for tall content');
     });

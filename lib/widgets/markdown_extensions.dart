@@ -152,8 +152,7 @@ Widget _buildCodeBlock(String code, String language, PreConfig preConfig) {
           splitContents.length * lineHeight + estimatedPadding;
       // Ensure lower bound (40) does not exceed upper bound (maxAllowedHeight)
       // when the available width is very narrow
-      final effectiveMax =
-          maxAllowedHeight < 40.0 ? 40.0 : maxAllowedHeight;
+      final effectiveMax = maxAllowedHeight < 40.0 ? 40.0 : maxAllowedHeight;
       final effectiveHeight = contentHeight.clamp(40.0, effectiveMax);
 
       return Container(

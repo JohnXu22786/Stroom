@@ -148,7 +148,8 @@ void main() {
     test('setZoom accepts optional centerX and centerY parameters', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       // Should declare setZoom with centerX and centerY parameters
-      expect(html, contains('window.setZoom = function(level, centerX, centerY)'),
+      expect(
+          html, contains('window.setZoom = function(level, centerX, centerY)'),
           reason: 'setZoom must accept centerX and centerY parameters');
     });
 
@@ -179,9 +180,11 @@ void main() {
       expect(html, contains('clientX'),
           reason: 'touch handler should access touch clientX');
       // Should compute midpoint and pass it to setZoom
-      expect(html, contains('(e.touches[0].clientX + e.touches[1].clientX) / 2'),
+      expect(
+          html, contains('(e.touches[0].clientX + e.touches[1].clientX) / 2'),
           reason: 'touch handler should compute midpoint X');
-      expect(html, contains('(e.touches[0].clientY + e.touches[1].clientY) / 2'),
+      expect(
+          html, contains('(e.touches[0].clientY + e.touches[1].clientY) / 2'),
           reason: 'touch handler should compute midpoint Y');
       // Should pass centerX/centerY to setZoom
       expect(html, contains('setZoom(zoomLevel * scale, centerX, centerY)'),
