@@ -1,13 +1,15 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dio/dio.dart';
 import 'package:stroom/services/asr_service.dart';
-import 'dart:typed_data';
 
-/// A mock [HttpClientAdapter] that captures the request options (including
-/// Content-Type) after Dio's transformer processes FormData, and returns a
-/// success response.
+/// A mock [HttpClientAdapter] that captures the request data for inspection
+/// and returns a success response.
 class _CapturingAdapter implements HttpClientAdapter {
   String? capturedContentType;
+  List<int>? capturedBodyBytes;
 
   @override
   Future<ResponseBody> fetch(
@@ -16,8 +18,14 @@ class _CapturingAdapter implements HttpClientAdapter {
     Future<dynamic>? cancelFuture,
   ) async {
     capturedContentType = options.contentType;
-    // Drain the request stream so the adapter completes cleanly
-    await requestStream?.drain<void>();
+    // Capture the request body bytes
+    if (requestStream != null) {
+      final bytes = <int>[];
+      await for (final chunk in requestStream) {
+        bytes.addAll(chunk);
+      }
+      capturedBodyBytes = bytes;
+    }
     return ResponseBody.fromString(
       '{"text":"Hello world"}',
       200,
@@ -205,7 +213,7 @@ void main() {
         );
       });
 
-      test('FormData request has correct Content-Type with boundary', () async {
+      test('request sends base64 audio via JSON body', () async {
         final adapter = _CapturingAdapter();
         final mockDio = Dio()..httpClientAdapter = adapter;
 
@@ -215,46 +223,45 @@ void main() {
         );
         final service = AsrService(config: config, dio: mockDio);
 
+        final audioBytes = Uint8List.fromList([1, 2, 3]);
         final result = await service.transcribe(
-          audioBytes: Uint8List.fromList([1, 2, 3]),
+          audioBytes: audioBytes,
           audioFormat: 'wav',
         );
 
-        // After Dio's transformer processes the FormData, the Content-Type
-        // should include the boundary parameter.
+        // Content-Type should be application/json
         final capturedContentType = adapter.capturedContentType;
-
         expect(capturedContentType, isNotNull);
         expect(
-          capturedContentType!.startsWith('multipart/form-data'),
-          isTrue,
-          reason: 'Content-Type must start with multipart/form-data',
-        );
-        expect(
-          capturedContentType.contains('boundary='),
+          capturedContentType!.startsWith('application/json'),
           isTrue,
           reason:
-              'Content-Type must include boundary parameter. Got: $capturedContentType',
+              'Content-Type must be application/json. Got: $capturedContentType',
         );
 
-        // Extract boundary value and verify it is not empty.
-        // According to RFC 2046, the boundary value can contain characters
-        // such as hyphens. For example, OpenAI's Python SDK sends
-        // boundaries like `----WebKitFormBoundary7MA4YWxkTrZu0gW`.
-        // Dio generates boundaries like `--dio-boundary-XXXXXXXXXX`
-        // which is a valid format accepted by OpenAI-compatible APIs.
-        final boundaryMatch =
-            RegExp(r'boundary=([^\s;]+)').firstMatch(capturedContentType);
-        expect(boundaryMatch, isNotNull);
-        final boundaryValue = boundaryMatch!.group(1)!;
-        expect(
-          boundaryValue.isNotEmpty,
-          isTrue,
-          reason: 'Boundary value must not be empty. Got: $boundaryValue',
-        );
+        // Request body should contain base64-encoded audio
+        final bodyBytes = adapter.capturedBodyBytes;
+        expect(bodyBytes, isNotNull);
+        final bodyStr = utf8.decode(bodyBytes!);
+        final body = jsonDecode(bodyStr) as Map<String, dynamic>;
 
-        // Verify the transcription still works after the fix
+        expect(body['model'], 'whisper-1');
+        expect(body['response_format'], 'json');
+
+        final inputAudio = body['input_audio'] as Map<String, dynamic>;
+        expect(inputAudio['format'], 'wav');
+        expect(inputAudio['data'], base64Encode(audioBytes));
+
+        // Verify the transcription still works
         expect(result.text, equals('Hello world'));
+
+        // Verify diagnostics (lastRequestBody) show truncated base64
+        expect(service.lastRequestBody, isNotNull);
+        final diagAudio = service.lastRequestBody!['input_audio'] as Map;
+        expect(
+          (diagAudio['data'] as String).contains('${audioBytes.length} bytes'),
+          true,
+        );
       });
     });
 
@@ -279,6 +286,40 @@ void main() {
           language: 'zh',
         );
         expect(service.config.language, equals('zh'));
+      });
+    });
+
+    group('input_audio format in diagnostics', () {
+      test('audio data appears in lastRequestBody', () async {
+        const config = AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com',
+        );
+        final service = AsrService(config: config);
+
+        // Call transcribe with a mock adapter to prevent real network call
+        final adapter = _CapturingAdapter();
+        final mockDio = Dio()..httpClientAdapter = adapter;
+        final testService = AsrService(config: config, dio: mockDio);
+
+        final audioBytes = Uint8List.fromList([10, 20, 30, 40]);
+        await testService.transcribe(
+          audioBytes: audioBytes,
+          audioFormat: 'mp3',
+        );
+
+        expect(testService.lastRequestBody, isNotNull);
+        expect(testService.lastRequestBody!['model'], 'whisper-1');
+        expect(testService.lastRequestBody!['response_format'], 'json');
+
+        final inputAudio = testService.lastRequestBody!['input_audio'] as Map;
+        expect(inputAudio['format'], 'mp3');
+        // The data should be truncated in diagnostics but still contain
+        // the first few characters of the base64 string
+        expect(
+          (inputAudio['data'] as String).contains('${audioBytes.length} bytes'),
+          true,
+        );
       });
     });
   });
