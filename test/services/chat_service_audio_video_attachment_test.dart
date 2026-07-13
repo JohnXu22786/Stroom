@@ -84,6 +84,12 @@ void main() {
     });
 
     test('video attachment sends actual file data via data URI', () async {
+      // NOTE: This test simulates the OLD behavior (video sent as image_url)
+      // which was incorrect. The production code has been fixed in
+      // _prepareApiMessages to send video as descriptive text.
+      // See chat_service_attachment_content_test.dart for the actual
+      // production code path test. This test remains to document the
+      // historical expected format only.
       final videoBytes = Uint8List.fromList([5, 10, 15, 20]);
       final b64 = base64Encode(videoBytes);
       final att = Attachment(
@@ -165,6 +171,9 @@ void main() {
     });
 
     test('video attachment with cached base64 uses cache', () async {
+      // NOTE: Same as above — simulates OLD behavior (video as image_url).
+      // See chat_service_attachment_content_test.dart for the actual
+      // production code path test.
       final b64 = 'cached_video_base64_data';
       final att = Attachment(
         fileName: 'movie.mp4',
