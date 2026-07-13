@@ -554,75 +554,94 @@ class ChatService {
               },
             });
           } else if (att.fileType == 'video') {
-            // ── Video files: send data as `data:` URI with video MIME type ──
-            final String b64;
-            if (att.base64Data != null && att.base64Data!.isNotEmpty) {
-              // Size check: skip oversized video even when cached
-              if (att.fileSize > 10 * 1024 * 1024) {
-                parts.add({
-                  'type': 'text',
-                  'text': '[视频文件过大已跳过: ${att.fileName}]',
-                });
-                continue;
-              }
-              b64 = att.base64Data!;
+            // ── Video files: descriptive text ──
+            // Standard chat completions API (OpenAI-compatible) does not
+            // support video content natively. Using `image_url` would be
+            // semantically incorrect and cause API errors. Send a descriptive
+            // text referencing the attached video file instead.
+            if (att.fileSize > 10 * 1024 * 1024) {
+              parts.add({
+                'type': 'text',
+                'text': '[视频文件过大已跳过: ${att.fileName}]',
+              });
             } else {
-              // Check fileSize before reading to avoid loading huge files
-              if (att.fileSize > 10 * 1024 * 1024) {
-                parts.add({
-                  'type': 'text',
-                  'text': '[视频文件过大已跳过: ${att.fileName}]',
-                });
-                continue;
-              }
-              final bytes = await AttachmentStorage.readFile(att.storagePath);
-              if (bytes != null && bytes.isNotEmpty) {
-                b64 = base64Encode(bytes);
-                // Cache base64 for future use
-                att.base64Data = b64;
-              } else {
-                parts.add({
-                  'type': 'text',
-                  'text': '[视频加载失败: ${att.fileName}]',
-                });
-                continue;
-              }
+              parts.add({
+                'type': 'text',
+                'text': '[视频文件已附加: ${att.fileName}]',
+              });
             }
-            parts.add({
-              'type': 'image_url',
-              'image_url': {
-                'url': 'data:${att.mimeType};base64,$b64',
-              },
-            });
           } else {
             // Try to read text content for text-based files
             final textExts = [
+              // Documentation & markup
               'txt',
               'md',
+              'tex',
+              'rst',
+              'asciidoc',
+              // Data & config
               'json',
               'csv',
               'log',
               'yaml',
+              'yml',
               'xml',
+              'toml',
               'ini',
               'cfg',
+              'conf',
+              'env',
+              'properties',
+              'plist',
+              // Web
+              'html',
+              'htm',
+              'css',
+              'scss',
+              'less',
+              'svg',
+              // Shell & scripts
+              'sh',
+              'bash',
+              'zsh',
+              'ps1',
+              'bat',
+              'cmd',
               'py',
               'js',
               'ts',
+              'jsx',
+              'tsx',
               'dart',
               'java',
               'cpp',
+              'c',
               'h',
+              'hpp',
               'rs',
               'go',
               'rb',
               'php',
+              'swift',
+              'kt',
+              'scala',
+              'r',
+              'lua',
+              'pl',
+              'sql',
+              // Git & project
+              'gitignore',
+              'editorconfig',
+              'makefile',
+              'dockerfile',
             ];
             final ext = att.fileName.split('.').last.toLowerCase();
             if (textExts.contains(ext)) {
               try {
                 final bytes = await AttachmentStorage.readFile(att.storagePath);
-                if (bytes == null) throw Exception('file not readable');
+                if (bytes == null || bytes.isEmpty) {
+                  throw Exception('file not readable');
+                }
                 final textContent = utf8.decode(bytes);
                 final truncated = textContent.length > 4000
                     ? '${textContent.substring(0, 4000)}\n... [truncated]'
