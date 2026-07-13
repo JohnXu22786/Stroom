@@ -1,9 +1,40 @@
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:http_parser/http_parser.dart';
 import '../providers/chat_api_provider.dart';
 
 import '../utils/http_utils.dart';
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/// Map audio format extension to its MIME type for the multipart file upload.
+/// If the format is unknown, returns `application/octet-stream` as fallback.
+MediaType audioFormatMimeType(String format) {
+  switch (format.toLowerCase()) {
+    case 'mp3':
+    case 'mpga':
+      return MediaType('audio', 'mpeg');
+    case 'wav':
+      return MediaType('audio', 'wav');
+    case 'ogg':
+    case 'opus':
+      return MediaType('audio', 'ogg');
+    case 'flac':
+      return MediaType('audio', 'flac');
+    case 'm4a':
+    case 'mp4':
+      return MediaType('audio', 'mp4');
+    case 'webm':
+      return MediaType('audio', 'webm');
+    case 'wma':
+      return MediaType('audio', 'x-ms-wma');
+    default:
+      return MediaType('application', 'octet-stream');
+  }
+}
 
 // ============================================================================
 // ASR Config
@@ -160,8 +191,13 @@ class AsrService {
     final stopwatch = Stopwatch()..start();
 
     final fileName = 'audio.$audioFormat';
+    final fileMimeType = audioFormatMimeType(audioFormat);
     final formData = FormData.fromMap({
-      'file': MultipartFile.fromBytes(audioBytes, filename: fileName),
+      'file': MultipartFile.fromBytes(
+        audioBytes,
+        filename: fileName,
+        contentType: fileMimeType,
+      ),
       'model': config.model,
       'response_format': 'json',
       if (config.language != null && config.language!.isNotEmpty)

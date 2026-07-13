@@ -1,7 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dio/dio.dart';
 import 'package:stroom/services/asr_service.dart';
-import 'dart:typed_data';
 
 /// A mock [HttpClientAdapter] that captures the request options (including
 /// Content-Type) after Dio's transformer processes FormData, and returns a
@@ -279,6 +280,27 @@ void main() {
           language: 'zh',
         );
         expect(service.config.language, equals('zh'));
+      });
+    });
+
+    group('audioFormatMimeType', () {
+      test('returns correct MIME type for common audio formats', () {
+        expect(audioFormatMimeType('mp3').mimeType, 'audio/mpeg');
+        expect(audioFormatMimeType('MP3').mimeType, 'audio/mpeg');
+        expect(audioFormatMimeType('wav').mimeType, 'audio/wav');
+        expect(audioFormatMimeType('ogg').mimeType, 'audio/ogg');
+        expect(audioFormatMimeType('opus').mimeType, 'audio/ogg');
+        expect(audioFormatMimeType('flac').mimeType, 'audio/flac');
+        expect(audioFormatMimeType('m4a').mimeType, 'audio/mp4');
+        expect(audioFormatMimeType('mp4').mimeType, 'audio/mp4');
+        expect(audioFormatMimeType('webm').mimeType, 'audio/webm');
+        expect(audioFormatMimeType('mpga').mimeType, 'audio/mpeg');
+        expect(audioFormatMimeType('wma').mimeType, 'audio/x-ms-wma');
+      });
+
+      test('falls back to application/octet-stream for unknown formats', () {
+        expect(audioFormatMimeType('xyz').mimeType, 'application/octet-stream');
+        expect(audioFormatMimeType('').mimeType, 'application/octet-stream');
       });
     });
   });
