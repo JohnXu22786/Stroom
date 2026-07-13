@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
@@ -554,22 +555,45 @@ class ChatService {
               },
             });
           } else if (att.fileType == 'video') {
-            // ── Video files: descriptive text ──
-            // Standard chat completions API (OpenAI-compatible) does not
-            // support video content natively. Using `image_url` would be
-            // semantically incorrect and cause API errors. Send a descriptive
-            // text referencing the attached video file instead.
-            if (att.fileSize > 10 * 1024 * 1024) {
-              parts.add({
-                'type': 'text',
-                'text': '[视频文件过大已跳过: ${att.fileName}]',
-              });
+            // ── Video files: send as video_url with base64 data URI ──
+            // OpenRouter supports the `video_url` content type for video files.
+            // Format: { type: "video_url", video_url: { url: "data:video/mp4;base64,..." } }
+            final String b64;
+            if (att.base64Data != null && att.base64Data!.isNotEmpty) {
+              if (att.fileSize > 10 * 1024 * 1024) {
+                parts.add({
+                  'type': 'text',
+                  'text': '[视频文件过大已跳过: ${att.fileName}]',
+                });
+                continue;
+              }
+              b64 = att.base64Data!;
             } else {
-              parts.add({
-                'type': 'text',
-                'text': '[视频文件已附加: ${att.fileName}]',
-              });
+              if (att.fileSize > 10 * 1024 * 1024) {
+                parts.add({
+                  'type': 'text',
+                  'text': '[视频文件过大已跳过: ${att.fileName}]',
+                });
+                continue;
+              }
+              final bytes = await AttachmentStorage.readFile(att.storagePath);
+              if (bytes != null && bytes.isNotEmpty) {
+                b64 = base64Encode(bytes);
+                att.base64Data = b64;
+              } else {
+                parts.add({
+                  'type': 'text',
+                  'text': '[视频加载失败: ${att.fileName}]',
+                });
+                continue;
+              }
             }
+            parts.add({
+              'type': 'video_url',
+              'video_url': {
+                'url': 'data:${att.mimeType};base64,$b64',
+              },
+            });
           } else {
             // Try to read text content for text-based files
             final textExts = [
@@ -657,10 +681,39 @@ class ChatService {
                 });
               }
             } else {
-              parts.add({
-                'type': 'text',
-                'text': '[Attached file: ${att.fileName}]',
-              });
+              // ── Non-text document files: send as file content part ──
+              // OpenRouter supports the `file` content type for PDFs and other
+              // documents. Format: { type: "file", file: { filename: "...",
+              // file_data: "data:application/pdf;base64,..." } }
+              if (att.fileSize > 10 * 1024 * 1024) {
+                parts.add({
+                  'type': 'text',
+                  'text': '[文件过大已跳过: ${att.fileName}]',
+                });
+              } else {
+                Uint8List? bytes;
+                if (att.base64Data != null && att.base64Data!.isNotEmpty) {
+                  bytes = base64Decode(att.base64Data!);
+                } else {
+                  bytes = await AttachmentStorage.readFile(att.storagePath);
+                }
+                if (bytes != null && bytes.isNotEmpty) {
+                  final b64 = base64Encode(bytes);
+                  final dataUri = 'data:${att.mimeType};base64,$b64';
+                  parts.add({
+                    'type': 'file',
+                    'file': {
+                      'filename': att.fileName,
+                      'file_data': dataUri,
+                    },
+                  });
+                } else {
+                  parts.add({
+                    'type': 'text',
+                    'text': '[${att.fileName} - 无法读取文件内容]',
+                  });
+                }
+              }
             }
           }
         }

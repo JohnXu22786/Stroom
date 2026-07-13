@@ -172,9 +172,9 @@ void main() {
       );
     });
 
-    test('video attachment produces descriptive text (not image_url)',
-        () async {
+    test('video attachment produces video_url content part', () async {
       final videoBytes = Uint8List.fromList([0x00, 0x00, 0x00, 0x1C]);
+      final b64 = base64Encode(videoBytes);
       final att = Attachment(
         fileName: 'video.mp4',
         mimeType: 'video/mp4',
@@ -182,10 +182,7 @@ void main() {
         hash: 'videohash789',
         storagePath: 'attachments/videohash789_video.mp4',
         fileSize: videoBytes.length,
-      );
-      // Note: base64Data is intentionally NOT set because the video branch
-      // in _prepareApiMessages does not read it (video is sent as
-      // descriptive text, not as base64 content part).
+      )..base64Data = b64;
 
       final history = [
         ChatMessage(
@@ -206,13 +203,14 @@ void main() {
 
       expect(parts.length, 2);
       expect(parts[0]['type'], 'text');
-      expect(parts[1]['type'], 'text');
-      // Should NOT be image_url (the broken format from PR #390)
+      // Should be video_url (correct format), not image_url (broken), not text
+      expect(parts[1]['type'], 'video_url');
       expect(parts[1]['type'], isNot('image_url'));
-      // Should contain exact descriptive reference to the video file
+      expect(parts[1]['type'], isNot('text'));
+      final videoUrl = parts[1]['video_url'] as Map;
       expect(
-        parts[1]['text'],
-        '[视频文件已附加: video.mp4]',
+        videoUrl['url'],
+        'data:video/mp4;base64,$b64',
       );
     });
 
@@ -261,26 +259,67 @@ void main() {
       );
     });
 
-    test('non-text document attachment produces descriptive text', () async {
+    test('non-text document with cached base64 produces file content part',
+        () async {
+      final docBytes = Uint8List.fromList([0x50, 0x4B, 0x03, 0x04]);
+      final b64 = base64Encode(docBytes);
       final att = Attachment(
-        fileName: 'archive.zip',
-        mimeType: 'application/zip',
+        fileName: 'document.pdf',
+        mimeType: 'application/pdf',
         fileType: 'document',
-        hash: 'ziphash222',
-        storagePath: 'attachments/ziphash222_archive.zip',
-        fileSize: 1000,
-      );
+        hash: 'pdfhash444',
+        storagePath: 'attachments/pdfhash444_document.pdf',
+        fileSize: docBytes.length,
+      )..base64Data = b64;
 
       final history = [
         ChatMessage(
           role: 'user',
-          content: 'Extract this',
+          content: 'Read this PDF',
           attachments: [att],
         ),
       ];
 
       final service = ChatService(provider: provider, modelConfig: modelConfig);
-      service.sendStream('Extract this', history: history).listen((_) {});
+      service.sendStream('Read this PDF', history: history).listen((_) {});
+
+      await provider.waitForCall();
+      final messages = provider.lastMessages!;
+
+      final userMsg = messages.firstWhere((m) => m['role'] == 'user');
+      final parts = userMsg['content'] as List;
+
+      expect(parts.length, 2);
+      expect(parts[0]['type'], 'text');
+      expect(parts[1]['type'], 'file');
+      final fileObj = parts[1]['file'] as Map;
+      expect(fileObj['filename'], 'document.pdf');
+      expect(fileObj['file_data'], 'data:application/pdf;base64,$b64');
+    });
+
+    test('non-text document with large file (>10MB) gets skip message',
+        () async {
+      final docBytes = Uint8List.fromList([0x50, 0x4B, 0x03, 0x04]);
+      final b64 = base64Encode(docBytes);
+      final att = Attachment(
+        fileName: 'big_doc.bin',
+        mimeType: 'application/octet-stream',
+        fileType: 'document',
+        hash: 'bighash555',
+        storagePath: 'attachments/bighash555_big.bin',
+        fileSize: 11 * 1024 * 1024, // 11MB
+      )..base64Data = b64;
+
+      final history = [
+        ChatMessage(
+          role: 'user',
+          content: 'Read this',
+          attachments: [att],
+        ),
+      ];
+
+      final service = ChatService(provider: provider, modelConfig: modelConfig);
+      service.sendStream('Read this', history: history).listen((_) {});
 
       await provider.waitForCall();
       final messages = provider.lastMessages!;
@@ -291,7 +330,7 @@ void main() {
       expect(parts.length, 2);
       expect(parts[1]['type'], 'text');
       expect(
-        (parts[1]['text'] as String).contains('archive.zip'),
+        (parts[1]['text'] as String).contains('big_doc.bin'),
         true,
       );
     });
