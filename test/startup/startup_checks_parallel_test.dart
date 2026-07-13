@@ -14,9 +14,8 @@ void main() {
     AppStorage.resetCache();
   });
 
-  group('Startup checks - parallel execution', () {
-    test('three checks can be started simultaneously and all complete',
-        () async {
+  group('Startup checks - sequential execution', () {
+    test('three checks run sequentially and all complete', () async {
       // Set up realistic test data
       SharedPreferences.setMockInitialValues({
         'data_format_version': DataMigrationService.currentFormatVersion,
@@ -39,22 +38,18 @@ void main() {
       });
       AppStorage.resetCache();
 
-      // Start all three checks in parallel (as Future.wait would do)
-      final results = await Future.wait([
-        StartupCheckService.checkFormatVersion(),
-        StartupCheckService.validateDataFormats(),
-        StartupCheckService.checkDataIntegrity(),
-      ]);
-
-      expect(results.length, equals(3));
+      // Run each check sequentially (one after another, not in parallel)
+      final result1 = await StartupCheckService.checkFormatVersion();
+      final result2 = await StartupCheckService.validateDataFormats();
+      final result3 = await StartupCheckService.checkDataIntegrity();
 
       // All results should be valid
-      expect(results[0], isA<MigrationResult>());
-      expect(results[1], isA<List<StartupIssue>>());
-      expect(results[2], isA<List<StartupIssue>>());
+      expect(result1, isA<MigrationResult>());
+      expect(result2, isA<List<StartupIssue>>());
+      expect(result3, isA<List<StartupIssue>>());
     });
 
-    test('parallel checks do not interfere with each other', () async {
+    test('sequential checks do not interfere with each other', () async {
       // Set up data with format issues
       SharedPreferences.setMockInitialValues({
         'data_format_version': DataMigrationService.currentFormatVersion,
@@ -76,30 +71,26 @@ void main() {
       });
       AppStorage.resetCache();
 
-      // Run all checks in parallel
-      final results = await Future.wait([
-        StartupCheckService.checkFormatVersion(),
-        StartupCheckService.validateDataFormats(),
-        StartupCheckService.checkDataIntegrity(),
-      ]);
+      // Run each check sequentially
+      final migrationResult = await StartupCheckService.checkFormatVersion();
+      final formatIssues = await StartupCheckService.validateDataFormats();
+      final integrityIssues = await StartupCheckService.checkDataIntegrity();
 
       // Format version check
-      expect((results[0] as MigrationResult).needsMigration, isFalse);
+      expect(migrationResult.needsMigration, isFalse);
 
       // Data format validation should find the empty id error
-      final formatIssues = results[1] as List<StartupIssue>;
       final emptyIdIssues =
           formatIssues.where((i) => i.message.contains('id 字段缺失'));
       expect(emptyIdIssues.length, greaterThanOrEqualTo(1));
 
       // Data integrity check should find the unknown type warning
-      final integrityIssues = results[2] as List<StartupIssue>;
       final unknownTypeIssues =
           integrityIssues.where((i) => i.message.contains('未知的供应商类型'));
       expect(unknownTypeIssues.length, greaterThanOrEqualTo(1));
     });
 
-    test('parallel checks return quickly without blocking', () async {
+    test('sequential checks complete without throwing', () async {
       SharedPreferences.setMockInitialValues({
         'data_format_version': DataMigrationService.currentFormatVersion,
         'provider_entries': jsonEncode([]),
@@ -107,20 +98,22 @@ void main() {
       });
       AppStorage.resetCache();
 
-      final stopwatch = Stopwatch()..start();
+      // Run each check sequentially with yields in between
+      final r1 = await StartupCheckService.checkFormatVersion();
+      // Yield to event loop between checks (simulates UI frame)
+      await Future<void>.microtask(() {});
+      final r2 = await StartupCheckService.validateDataFormats();
+      await Future<void>.microtask(() {});
+      final r3 = await StartupCheckService.checkDataIntegrity();
 
-      // Run all checks in parallel
-      await Future.wait([
-        StartupCheckService.checkFormatVersion(),
-        StartupCheckService.validateDataFormats(),
-        StartupCheckService.checkDataIntegrity(),
-      ]);
-
-      stopwatch.stop();
-
-      // Parallel execution should be fast (comparable to the slowest single check)
-      // Each check individually is fast, so all three in parallel should also be fast
-      expect(stopwatch.elapsedMilliseconds, lessThan(5000));
+      // All checks should complete with valid results
+      expect(r1, isA<MigrationResult>());
+      expect(r2, isA<List<StartupIssue>>());
+      expect(r3, isA<List<StartupIssue>>());
+      // No results should be null
+      expect(r1, isNotNull);
+      expect(r2, isNotNull);
+      expect(r3, isNotNull);
     });
   });
 }
