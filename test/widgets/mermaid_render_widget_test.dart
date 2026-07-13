@@ -142,6 +142,51 @@ void main() {
       expect(html, contains('max-width: none'));
       expect(html, contains('max-height: none'));
     });
+
+    // ---- Zoom center fix tests ----
+
+    test('setZoom accepts optional centerX and centerY parameters', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      // Should declare setZoom with centerX and centerY parameters
+      expect(html, contains('window.setZoom = function(level, centerX, centerY)'),
+          reason: 'setZoom must accept centerX and centerY parameters');
+    });
+
+    test('setZoom adjusts pan when centerX/centerY provided', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      // Should calculate new pan to keep center point fixed
+      expect(html, contains('panX'),
+          reason: 'setZoom should adjust panX when center is provided');
+      expect(html, contains('panY'),
+          reason: 'setZoom should adjust panY when center is provided');
+    });
+
+    test('wheel handler passes cursor position relative to viewport', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      // The wheel handler should get the viewport rect and compute
+      // cursor position relative to it for zoom centering
+      expect(html, contains('getBoundingClientRect'),
+          reason: 'wheel handler should get viewport bounding rect');
+      expect(html, contains('centerX'),
+          reason: 'wheel handler should compute centerX');
+      expect(html, contains('centerY'),
+          reason: 'wheel handler should compute centerY');
+    });
+
+    test('touch pinch handler passes midpoint to setZoom', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      // The pinch handler should compute the midpoint of two touches
+      expect(html, contains('clientX'),
+          reason: 'touch handler should access touch clientX');
+      // Should compute midpoint and pass it to setZoom
+      expect(html, contains('(e.touches[0].clientX + e.touches[1].clientX) / 2'),
+          reason: 'touch handler should compute midpoint X');
+      expect(html, contains('(e.touches[0].clientY + e.touches[1].clientY) / 2'),
+          reason: 'touch handler should compute midpoint Y');
+      // Should pass centerX/centerY to setZoom
+      expect(html, contains('setZoom(zoomLevel * scale, centerX, centerY)'),
+          reason: 'touch handler should pass center to setZoom');
+    });
   });
 
   group('MermaidRenderWidget - widget rendering', () {

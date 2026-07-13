@@ -77,7 +77,6 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveHeight = widget.height ?? 300.0;
     final cs = Theme.of(context).colorScheme;
     final isDark = cs.brightness == Brightness.dark;
 
@@ -86,8 +85,66 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
         isDark ? const Color(0xfff8f8f2) : const Color(0xff000000);
     final borderColor = cs.outlineVariant;
 
+    const lineHeight = 13.0 * 1.5; // fontSize * height
+
+    if (widget.height != null) {
+      // Explicit height provided — use fixed height
+      return _buildSizedCodeBlock(
+        height: widget.height!,
+        bgColor: bgColor,
+        textColor: textColor,
+        borderColor: borderColor,
+        isDark: isDark,
+        context: context,
+        cs: cs,
+      );
+    }
+
+    // Adaptive height: cap at roughly 4:3 aspect ratio (height = width * 3/4)
+    const verticalPadding = 40.0 + 12.0; // top button row + bottom padding
+    final lineCount = widget.htmlCode.isEmpty
+        ? 0
+        : widget.htmlCode.split('\n').length;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth;
+        final maxAllowedHeight = maxWidth * 0.75; // 4:3 width-to-height ratio
+        final contentHeight = lineCount > 0
+            ? lineCount * lineHeight + verticalPadding
+            : 40.0; // minimal height for empty state
+        // Ensure lower bound (40) does not exceed upper bound (maxAllowedHeight)
+        // when the available width is very narrow
+        final effectiveMax =
+            maxAllowedHeight < 40.0 ? 40.0 : maxAllowedHeight;
+        final adaptiveHeight = contentHeight.clamp(40.0, effectiveMax);
+
+        return _buildSizedCodeBlock(
+          height: adaptiveHeight,
+          bgColor: bgColor,
+          textColor: textColor,
+          borderColor: borderColor,
+          isDark: isDark,
+          context: context,
+          cs: cs,
+        );
+      },
+    );
+  }
+
+  /// Builds the code block container with the given [height], shared by both
+  /// the explicit-height branch and the adaptive-height branch.
+  Widget _buildSizedCodeBlock({
+    required double height,
+    required Color bgColor,
+    required Color textColor,
+    required Color borderColor,
+    required bool isDark,
+    required BuildContext context,
+    required ColorScheme cs,
+  }) {
     return SizedBox(
-      height: effectiveHeight,
+      height: height,
       child: Container(
         decoration: BoxDecoration(
           color: bgColor,
@@ -97,8 +154,6 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
         clipBehavior: Clip.antiAlias,
         child: Stack(
           children: [
-            // Raw HTML source code shown as a scrollable code block
-            // with line numbers
             Positioned.fill(
               child: widget.htmlCode.isEmpty
                   ? Padding(
@@ -115,8 +170,6 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
                     )
                   : _buildCodeContent(textColor, isDark),
             ),
-
-            // Button row (top right): wrap toggle + fullscreen preview
             Positioned(
               top: 4,
               right: 4,

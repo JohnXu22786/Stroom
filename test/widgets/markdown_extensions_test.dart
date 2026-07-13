@@ -291,27 +291,27 @@ void main() {
       expect(mermaidWidget.mermaidCode, 'graph TD\nA-->B');
     });
 
-    test('returns Container for non-mermaid/non-html language', () {
+    test('returns LayoutBuilder for non-mermaid/non-html language', () {
       final pre = codeBlockPreConfig(isDark: false);
       final builder = pre.builder!;
       final widget = builder('print("hello")', 'python');
-      // Non-mermaid/non-html code blocks should still render with syntax highlighting
-      // The result should be a Container (the default code block container)
-      expect(widget, isA<Container>());
+      // Non-mermaid/non-html code blocks use LayoutBuilder for adaptive
+      // height constraint with 4:3 aspect ratio cap
+      expect(widget, isA<LayoutBuilder>());
     });
 
-    test('returns Container for empty language', () {
+    test('returns LayoutBuilder for empty language', () {
       final pre = codeBlockPreConfig(isDark: false);
       final builder = pre.builder!;
       final widget = builder('some code', '');
-      expect(widget, isA<Container>());
+      expect(widget, isA<LayoutBuilder>());
     });
 
-    test('returns Container for unknown language', () {
+    test('returns LayoutBuilder for unknown language', () {
       final pre = codeBlockPreConfig(isDark: false);
       final builder = pre.builder!;
       final widget = builder('some code', 'unknown_language_xyz');
-      expect(widget, isA<Container>());
+      expect(widget, isA<LayoutBuilder>());
     });
 
     test('mermaid builder works in dark mode too', () {
@@ -332,32 +332,32 @@ void main() {
       expect(htmlWidget.htmlCode, '<h1>Hello</h1>');
     });
 
-    test('returns Container for non-html languages (python)', () {
+    test('returns LayoutBuilder for non-html languages (python)', () {
       final pre = codeBlockPreConfig(isDark: false);
       final builder = pre.builder!;
       final widget = builder('print("hello")', 'python');
-      expect(widget, isA<Container>());
+      expect(widget, isA<LayoutBuilder>());
     });
 
-    test('returns Container for non-html languages (dart)', () {
+    test('returns LayoutBuilder for non-html languages (dart)', () {
       final pre = codeBlockPreConfig(isDark: false);
       final builder = pre.builder!;
       final widget = builder('void main() {}', 'dart');
-      expect(widget, isA<Container>());
+      expect(widget, isA<LayoutBuilder>());
     });
 
-    test('returns Container for empty language', () {
+    test('returns LayoutBuilder for empty language', () {
       final pre = codeBlockPreConfig(isDark: false);
       final builder = pre.builder!;
       final widget = builder('<h1>test</h1>', '');
-      expect(widget, isA<Container>());
+      expect(widget, isA<LayoutBuilder>());
     });
 
-    test('returns Container for unknown language', () {
+    test('returns LayoutBuilder for unknown language', () {
       final pre = codeBlockPreConfig(isDark: false);
       final builder = pre.builder!;
       final widget = builder('<h1>test</h1>', 'unknown_language_xyz');
-      expect(widget, isA<Container>());
+      expect(widget, isA<LayoutBuilder>());
     });
 
     test('html builder works in dark mode too', () {
