@@ -281,6 +281,11 @@ class MainActivity : FlutterActivity() {
             val uri = Uri.parse(uriStr)
             val documentFile = DocumentFile.fromTreeUri(this, uri)
 
+            if (documentFile == null) {
+                result.success(false)
+                return
+            }
+
             // 尝试创建临时测试文件
             val testFileName = ".saf_access_test_${System.currentTimeMillis()}.tmp"
             val testFile = documentFile.createFile("application/octet-stream", testFileName)
@@ -310,6 +315,11 @@ class MainActivity : FlutterActivity() {
         try {
             val uri = Uri.parse(uriStr)
             val treeDocument = DocumentFile.fromTreeUri(this, uri)
+
+            if (treeDocument == null) {
+                result.error("TREE_DOC_FAILED", "无法访问目录", null)
+                return
+            }
 
             // 获取或创建备份子目录
             val backupDir = treeDocument.findFile("StroomBackups")
@@ -351,6 +361,10 @@ class MainActivity : FlutterActivity() {
         try {
             val uri = Uri.parse(uriStr)
             val treeDocument = DocumentFile.fromTreeUri(this, uri)
+            if (treeDocument == null) {
+                result.success(null)
+                return
+            }
             val backupDir = treeDocument.findFile("StroomBackups")
                 ?: run {
                     result.success(null)
@@ -380,6 +394,10 @@ class MainActivity : FlutterActivity() {
         try {
             val uri = Uri.parse(uriStr)
             val treeDocument = DocumentFile.fromTreeUri(this, uri)
+            if (treeDocument == null) {
+                result.success(null)
+                return
+            }
             val backupDir = treeDocument.findFile("StroomBackups")
                 ?: run {
                     result.success(null)
@@ -408,6 +426,10 @@ class MainActivity : FlutterActivity() {
         try {
             val uri = Uri.parse(uriStr)
             val treeDocument = DocumentFile.fromTreeUri(this, uri)
+            if (treeDocument == null) {
+                result.error("TREE_DOC_FAILED", "无法访问目录", null)
+                return
+            }
             val backupDir = treeDocument.findFile("StroomBackups")
                 ?: run {
                     result.error("DIR_NOT_FOUND", "备份目录不存在", null)
@@ -465,6 +487,10 @@ class MainActivity : FlutterActivity() {
         try {
             val uri = Uri.parse(uriStr)
             val treeDocument = DocumentFile.fromTreeUri(this, uri)
+            if (treeDocument == null) {
+                result.success(emptyList<String>())
+                return
+            }
             val backupDir = treeDocument.findFile("StroomBackups")
                 ?: run {
                     result.success(emptyList<String>())
