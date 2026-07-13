@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:stroom/pages/chat/dialogs/mermaid_preview_dialog.dart';
 
 /// A reusable widget that renders Mermaid diagram code using [InAppWebView]
 /// with mermaid.js loaded from CDN.
@@ -18,6 +19,20 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 /// Mermaid rendering errors are reported from JavaScript back to Flutter
 /// via `callHandler`, so the widget can display a user-friendly error
 /// widget with a retry button.
+///
+/// ## Pan / Zoom / Controls
+///
+/// The rendered diagram supports:
+/// - **Drag to pan** with the mouse (click and drag on the diagram area).
+/// - **Zoom** via Ctrl+MouseWheel, pinch-to-zoom on touch devices, or
+///   the zoom in/out buttons in the top-right toolbar.
+/// - **Fullscreen** button opens [MermaidPreviewDialog].
+/// - **Toggle source code** button switches between the rendered diagram
+///   and the raw Mermaid source code view.
+///
+/// The pan and zoom logic is implemented in JavaScript inside the WebView
+/// HTML template. The Flutter side communicates zoom level changes via
+/// [InAppWebViewController.evaluateJavascript].
 class MermaidRenderWidget extends StatefulWidget {
   /// The Mermaid diagram code to render.
   final String mermaidCode;
@@ -25,10 +40,19 @@ class MermaidRenderWidget extends StatefulWidget {
   /// Optional height constraint. If null, a default of 300 is used.
   final double? height;
 
+  /// {@template mermaid_render_widget_test_only_show_source_code}
+  /// Test-only: if true, the widget starts in source-code view mode instead of
+  /// render mode. This allows widget tests to verify the source code view and
+  /// button behaviors without triggering [InAppWebView] creation (which
+  /// requires a platform implementation).
+  /// {@endtemplate}
+  final bool? testOnlyShowSourceCode;
+
   const MermaidRenderWidget({
     super.key,
     required this.mermaidCode,
     this.height,
+    this.testOnlyShowSourceCode,
   });
 
   /// Builds a complete HTML document with mermaid.js that renders the
@@ -51,30 +75,37 @@ class MermaidRenderWidget extends StatefulWidget {
 <!DOCTYPE html>
 <html>
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js">
   </script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: sans-serif;
-      padding: 16px;
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
       background: transparent;
-      display: flex;
-      justify-content: center;
-      overflow-x: auto;
     }
-    #container {
-      max-width: 100%;
-      overflow-x: auto;
+    #viewport {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      position: relative;
+    }
+    #diagram-container {
+      transform-origin: 0 0;
+      display: inline-block;
+      cursor: grab;
+    }
+    #diagram-container:active {
+      cursor: grabbing;
     }
     .mermaid {
-      text-align: center;
+      text-align: left;
     }
-    /* Prevent mermaid SVG from overflowing its container */
     .mermaid svg {
-      max-width: 100%;
-      height: auto;
+      max-width: none;
+      max-height: none;
     }
     .error-message {
       color: #e74c3c;
@@ -89,14 +120,31 @@ class MermaidRenderWidget extends StatefulWidget {
   </style>
 </head>
 <body>
-  <div id="container">
-    <pre class="mermaid" id="mermaid-code">
+  <div id="viewport">
+    <div id="diagram-container">
+      <pre class="mermaid" id="mermaid-code">
 MERMAID_CODE_PLACEHOLDER
-    </pre>
+      </pre>
+    </div>
   </div>
   <script>
+    var zoomLevel = 1;
+    var panX = 0;
+    var panY = 0;
+    var isDragging = false;
+    var dragStartX = 0;
+    var dragStartY = 0;
+    var panStartX = 0;
+    var panStartY = 0;
+
+    function updateTransform() {
+      var container = document.getElementById('diagram-container');
+      container.style.transform =
+        'translate(' + panX + 'px, ' + panY + 'px) scale(' + zoomLevel + ')';
+    }
+
     function reportError(msg) {
-      document.getElementById('container').innerHTML =
+      document.getElementById('viewport').innerHTML =
         '<div class="error-message">' + msg + '</div>';
       try {
         if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
@@ -104,6 +152,101 @@ MERMAID_CODE_PLACEHOLDER
         }
       } catch(_) {}
     }
+
+    // Called from Flutter to set zoom level
+    window.setZoom = function(level) {
+      zoomLevel = Math.max(0.1, Math.min(10, level));
+      updateTransform();
+      try {
+        if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+          window.flutter_inappwebview.callHandler('onZoomChanged', zoomLevel);
+        }
+      } catch(_) {}
+    };
+
+    // Called from Flutter to set pan offset
+    window.setPan = function(x, y) {
+      panX = x;
+      panY = y;
+      updateTransform();
+    };
+
+    // Drag-to-pan with mouse
+    document.addEventListener('mousedown', function(e) {
+      if (e.target.closest('#diagram-container')) {
+        isDragging = true;
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+        panStartX = panX;
+        panStartY = panY;
+        e.preventDefault();
+      }
+    });
+
+    document.addEventListener('mousemove', function(e) {
+      if (isDragging) {
+        panX = panStartX + (e.clientX - dragStartX);
+        panY = panStartY + (e.clientY - dragStartY);
+        updateTransform();
+        e.preventDefault();
+      }
+    });
+
+    document.addEventListener('mouseup', function() {
+      isDragging = false;
+    });
+
+    // Zoom with Ctrl/Meta + MouseWheel
+    document.addEventListener('wheel', function(e) {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        var delta = e.deltaY > 0 ? -0.1 : 0.1;
+        window.setZoom(zoomLevel + delta);
+      }
+    }, { passive: false });
+
+    // Touch events for mobile pan
+    var touchStartX, touchStartY;
+    var touchPanStartX, touchPanStartY;
+    var lastTouchDist = 0;
+
+    document.addEventListener('touchstart', function(e) {
+      if (e.touches.length === 1) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchPanStartX = panX;
+        touchPanStartY = panY;
+      } else if (e.touches.length === 2) {
+        lastTouchDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+      }
+    });
+
+    document.addEventListener('touchmove', function(e) {
+      if (e.touches.length === 1) {
+        panX = touchPanStartX + (e.touches[0].clientX - touchStartX);
+        panY = touchPanStartY + (e.touches[0].clientY - touchStartY);
+        updateTransform();
+        e.preventDefault();
+      } else if (e.touches.length === 2) {
+        var dist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        var scale = dist / lastTouchDist;
+        lastTouchDist = dist;
+        window.setZoom(zoomLevel * scale);
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    document.addEventListener('touchend', function() {
+      lastTouchDist = 0;
+    });
+
+    // Initialize mermaid
     try {
       mermaid.initialize({
         theme: 'default',
@@ -133,9 +276,21 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   bool _shouldCreateWebView = false;
   String? _errorMessage;
 
+  /// Whether the source code view is shown instead of the rendered diagram.
+  bool _showSourceCode = false;
+
+  /// Current zoom level tracked on the Flutter side.
+  double _zoomLevel = 1.0;
+
   @override
   void initState() {
     super.initState();
+    // Test-only: start in source code mode if requested (avoids creating
+    // InAppWebView which requires a platform implementation).
+    if (widget.testOnlyShowSourceCode == true) {
+      _showSourceCode = true;
+      return;
+    }
     // Defer WebView creation to after the first frame so that the
     // page transition is not blocked by platform view creation.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -151,6 +306,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     if (oldWidget.mermaidCode != widget.mermaidCode) {
       _isReady = false;
       _errorMessage = null;
+      _showSourceCode = false;
+      _zoomLevel = 1.0;
       _loadMermaidCode();
     }
   }
@@ -188,9 +345,34 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       _errorMessage = null;
       _isReady = false;
     });
-    // The WebView stays alive (never removed from tree), so the controller
-    // is still valid for reloading the mermaid code.
     _loadMermaidCode();
+  }
+
+  Future<void> _zoomIn() async {
+    final newZoom = (_zoomLevel + 0.1).clamp(0.1, 10.0);
+    setState(() => _zoomLevel = newZoom);
+    await _webViewController?.evaluateJavascript(
+      source: 'window.setZoom($newZoom)',
+    );
+  }
+
+  Future<void> _zoomOut() async {
+    final newZoom = (_zoomLevel - 0.1).clamp(0.1, 10.0);
+    setState(() => _zoomLevel = newZoom);
+    await _webViewController?.evaluateJavascript(
+      source: 'window.setZoom($newZoom)',
+    );
+  }
+
+  void _toggleSourceCode() {
+    setState(() => _showSourceCode = !_showSourceCode);
+  }
+
+  void _openFullScreen() {
+    showMermaidPreviewDialog(
+      context: context,
+      mermaidCode: widget.mermaidCode,
+    );
   }
 
   static const _emptyPlaceholderHtml = '''
@@ -212,26 +394,48 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   Widget build(BuildContext context) {
     final effectiveHeight = widget.height ?? 300.0;
     final cs = Theme.of(context).colorScheme;
+    final isDark = cs.brightness == Brightness.dark;
     final code = widget.mermaidCode.trim();
 
+    // ---- Empty code placeholder ----
+    if (code.isEmpty) {
+      return _buildBorderedContainer(
+        height: effectiveHeight,
+        cs: cs,
+        child: _buildEmptyPlaceholder(cs),
+      );
+    }
+
+    // ---- Source code mode: show raw code without WebView ----
+    if (_showSourceCode) {
+      return _buildBorderedContainer(
+        height: effectiveHeight,
+        cs: cs,
+        child: Stack(
+          children: [
+            _buildSourceCodeView(cs, isDark),
+            // Button row at top right
+            Positioned(
+              top: 4,
+              right: 4,
+              child: _buildButtonRow(cs),
+            ),
+          ],
+        ),
+      );
+    }
+
     // ---- Loading placeholder (deferred WebView creation) ----
-    // Only shown before the WebView is first created.
     if (!_shouldCreateWebView) {
       return _buildBorderedContainer(
         height: effectiveHeight,
         cs: cs,
-        child: code.isEmpty
-            ? _buildEmptyPlaceholder(cs)
-            : _buildLoadingIndicator(cs, '正在准备渲染引擎...'),
+        child: _buildLoadingIndicator(cs, '正在准备渲染引擎...'),
       );
     }
 
-    // ---- WebView + overlays ----
-    // The WebView is always kept alive once created. Loading, empty code,
-    // and error states are overlaid on top so the platform view (WebView2)
-    // is never destroyed by removing it from the widget tree.
-    final showLoading = !_isReady && _errorMessage == null && code.isNotEmpty;
-    final showEmptyOverlay = code.isEmpty && _isReady;
+    // ---- Render mode: WebView + overlays + button row ----
+    final showLoading = !_isReady && _errorMessage == null;
     final showErrorOverlay = _errorMessage != null;
 
     return _buildBorderedContainer(
@@ -239,7 +443,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       cs: cs,
       child: Stack(
         children: [
-          // The WebView — kept alive once created via the key
+          // The WebView — kept alive once created
           InAppWebView(
             key: const Key('mermaid_render_webview'),
             initialSettings: InAppWebViewSettings(
@@ -253,13 +457,21 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
             ),
             onWebViewCreated: (ctrl) {
               _webViewController = ctrl;
-              // Set up JavaScript handler to receive mermaid errors
               ctrl.addJavaScriptHandler(
                 handlerName: 'onMermaidError',
                 callback: (args) {
                   if (mounted) {
                     final msg = args.isNotEmpty ? args[0].toString() : '未知错误';
                     setState(() => _errorMessage = msg);
+                  }
+                },
+              );
+              ctrl.addJavaScriptHandler(
+                handlerName: 'onZoomChanged',
+                callback: (args) {
+                  if (mounted && args.isNotEmpty) {
+                    final level = double.tryParse(args[0].toString()) ?? 1.0;
+                    setState(() => _zoomLevel = level);
                   }
                 },
               );
@@ -279,7 +491,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
             },
           ),
 
-          // Loading overlay — shown while WebView is initializing
+          // Loading overlay
           if (showLoading)
             Positioned.fill(
               child: Container(
@@ -288,16 +500,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
               ),
             ),
 
-          // Empty code overlay — shown when code is cleared but WebView stays alive
-          if (showEmptyOverlay)
-            Positioned.fill(
-              child: Container(
-                color: cs.surface,
-                child: _buildEmptyPlaceholder(cs),
-              ),
-            ),
-
-          // Error overlay — shown on top of the WebView when mermaid fails
+          // Error overlay
           if (showErrorOverlay)
             Positioned.fill(
               child: Container(
@@ -305,7 +508,124 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 child: _buildErrorWidget(cs, _errorMessage!),
               ),
             ),
+
+          // Button row (top right) — only show when ready and no error
+          if (!showLoading && !showErrorOverlay)
+            Positioned(
+              top: 4,
+              right: 4,
+              child: _buildButtonRow(cs),
+            ),
         ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Source code view
+  // ---------------------------------------------------------------------------
+
+  /// Builds the raw Mermaid source code view (similar to HTML code block).
+  Widget _buildSourceCodeView(ColorScheme cs, bool isDark) {
+    final bgColor = isDark ? const Color(0xff555555) : const Color(0xffeff1f3);
+    final textColor =
+        isDark ? const Color(0xfff8f8f2) : const Color(0xff000000);
+
+    return Container(
+      color: bgColor,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(12, 40, 12, 12),
+        child: SelectableText(
+          widget.mermaidCode,
+          style: TextStyle(
+            fontFamily: 'monospace',
+            fontSize: 13,
+            color: textColor,
+            height: 1.5,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Button row (top right toolbar)
+  // ---------------------------------------------------------------------------
+
+  Widget _buildButtonRow(ColorScheme cs) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(
+        minWidth: 48,
+        minHeight: 48,
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ---- Zoom controls (only in render mode) ----
+            if (!_showSourceCode) ...[
+              _buildActionButton(
+                icon: Icons.zoom_out,
+                label: '缩小',
+                onTap: _zoomOut,
+              ),
+              _buildActionButton(
+                icon: Icons.zoom_in,
+                label: '放大',
+                onTap: _zoomIn,
+              ),
+              _buildActionButton(
+                icon: Icons.fullscreen,
+                label: '全屏',
+                onTap: _openFullScreen,
+              ),
+            ],
+
+            // ---- Source code toggle ----
+            _buildActionButton(
+              icon: _showSourceCode ? Icons.image : Icons.code,
+              label: _showSourceCode ? '查看图表' : '查看源码',
+              onTap: _toggleSourceCode,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 16,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, semanticLabel: label),
+              if (_showSourceCode) ...[
+                const SizedBox(width: 4),
+                Text(
+                  label,
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
