@@ -49,11 +49,14 @@ class MainActivity : FlutterActivity() {
                 )
                 Log.i(TAG, "SAF: 权限已固化: $uri")
             } catch (e: SecurityException) {
-                Log.e(TAG, "SAF: 固化权限失败", e)
-                pendingSafResult?.error("PERMISSION_FAILED", "无法固化目录权限", null)
-                pendingSafResult = null
-                return@registerForActivityResult
+                Log.w(TAG, "SAF: 无法固化权限: $uri", e)
             }
+        }
+        pendingSafResult?.let { result ->
+            result.success(uri?.toString())
+            pendingSafResult = null
+        }
+    }
 
             pendingSafResult?.success(uri.toString())
         } else {
