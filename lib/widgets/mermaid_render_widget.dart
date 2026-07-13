@@ -153,9 +153,17 @@ MERMAID_CODE_PLACEHOLDER
       } catch(_) {}
     }
 
-    // Called from Flutter to set zoom level
-    window.setZoom = function(level) {
+    // Called from Flutter or local handlers to set zoom level.
+    // When centerX / centerY are provided, the zoom is anchored at that
+    // point (in viewport coordinates) instead of the top-left corner.
+    window.setZoom = function(level, centerX, centerY) {
+      var oldZoom = zoomLevel;
       zoomLevel = Math.max(0.1, Math.min(10, level));
+      if (centerX !== undefined && centerY !== undefined) {
+        // Adjust pan so that (centerX, centerY) stays fixed on screen.
+        panX = centerX - (centerX - panX) * (zoomLevel / oldZoom);
+        panY = centerY - (centerY - panY) * (zoomLevel / oldZoom);
+      }
       updateTransform();
       try {
         if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
@@ -196,12 +204,15 @@ MERMAID_CODE_PLACEHOLDER
       isDragging = false;
     });
 
-    // Zoom with Ctrl/Meta + MouseWheel
+    // Zoom with Ctrl/Meta + MouseWheel — zooms towards the cursor position.
     document.addEventListener('wheel', function(e) {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
+        var rect = document.getElementById('viewport').getBoundingClientRect();
+        var centerX = e.clientX - rect.left;
+        var centerY = e.clientY - rect.top;
         var delta = e.deltaY > 0 ? -0.1 : 0.1;
-        window.setZoom(zoomLevel + delta);
+        window.setZoom(zoomLevel + delta, centerX, centerY);
       }
     }, { passive: false });
 
@@ -237,7 +248,13 @@ MERMAID_CODE_PLACEHOLDER
         );
         var scale = dist / lastTouchDist;
         lastTouchDist = dist;
-        window.setZoom(zoomLevel * scale);
+        // Compute the midpoint of the two touches in viewport coordinates
+        var midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        var midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        var rect = document.getElementById('viewport').getBoundingClientRect();
+        var centerX = midX - rect.left;
+        var centerY = midY - rect.top;
+        window.setZoom(zoomLevel * scale, centerX, centerY);
         e.preventDefault();
       }
     }, { passive: false });

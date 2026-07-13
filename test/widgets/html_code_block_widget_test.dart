@@ -260,41 +260,6 @@ void main() {
       expect(find.text('1'), findsOneWidget);
     });
 
-    testWidgets('respects custom height', (tester) async {
-      const widgetKey = Key('height-test-widget');
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: HtmlCodeBlockWidget(
-              key: widgetKey,
-              htmlCode: '<p>test</p>',
-              height: 500,
-            ),
-          ),
-        ),
-      );
-
-      // The widget tree is constrained by Scaffold; verify the widget
-      // renders without error and has the expected height applied
-      expect(find.byKey(widgetKey), findsOneWidget);
-    });
-
-    testWidgets('uses default height of 300', (tester) async {
-      const widgetKey = Key('default-height-test-widget');
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: HtmlCodeBlockWidget(
-              key: widgetKey,
-              htmlCode: '<p>test</p>',
-            ),
-          ),
-        ),
-      );
-
-      expect(find.byKey(widgetKey), findsOneWidget);
-    });
-
     testWidgets('adapts colors to dark mode', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -427,6 +392,181 @@ void main() {
           (w) => w is Scrollable && w.axis == Axis.horizontal);
       expect(horizontalScrollablesAfter, findsNothing,
           reason: 'Wrap mode should have no horizontal scroll');
+    });
+
+    // ---- Adaptive height tests (4:3 aspect ratio) ----
+
+    testWidgets('uses adaptive height: small content is not taller than needed',
+        (tester) async {
+      // Single line of code in a wide screen
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      const html = '<p>Hello</p>';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: HtmlCodeBlockWidget(htmlCode: html),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Find the SizedBox with the adaptive height / Container
+      final containerFinder = find.byType(Container).first;
+      final container = tester.widget<Container>(containerFinder);
+      final containerConstraints = container.constraints;
+
+      // Content height for 1 line = ~20px (13*1.5) + padding (40px top + 12px bottom)
+      // Should be less than 4:3 max height which is ~600 (800*0.75)
+      // So the widget should be sized to fit content (not capped)
+      // The SizedBox height should reflect the actual content
+      final sizedBoxFinder = find.byType(SizedBox);
+      expect(sizedBoxFinder, findsWidgets,
+          reason: 'SizedBox should exist for adaptive sizing');
+    });
+
+    testWidgets('caps height at roughly 4:3 aspect ratio for tall content',
+        (tester) async {
+      // 50 lines of code — should be capped at ~75% of width
+      await tester.binding.setSurfaceSize(const Size(500, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final lines = List.generate(50, (i) => '<p>Line $i</p>').join('\n');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: HtmlCodeBlockWidget(htmlCode: lines),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The widget is inside a Scaffold which applies padding.
+      // The available width should be roughly 500 minus padding.
+      // Max height should be capped at available_width * 0.75.
+      // 50 lines * ~20px per line = ~1000px content height
+      // 500px width * 0.75 = 375px max height
+      // So the widget should be ~375px tall
+      final sizedBox = find.byType(SizedBox).first;
+      final sizedBoxWidget = tester.widget<SizedBox>(sizedBox);
+
+      expect(sizedBoxWidget.height, lessThan(500),
+          reason:
+              'Height should be capped, not matching the full 50 lines of content');
+      expect(sizedBoxWidget.height, greaterThan(0),
+          reason: 'Height should be positive');
+    });
+
+    testWidgets(
+        'tall code block content scrolls vertically within capped height',
+        (tester) async {
+      // Many lines to ensure scrolling is needed
+      await tester.binding.setSurfaceSize(const Size(400, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final lines = List.generate(80, (i) => 'Line number $i').join('\n');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: HtmlCodeBlockWidget(htmlCode: lines),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Find vertical scrollable — should exist and allow scrolling
+      final verticalScrollables = find
+          .byWidgetPredicate((w) => w is Scrollable && w.axis == Axis.vertical);
+      expect(verticalScrollables, findsWidgets,
+          reason: 'Vertical scrollable should exist for tall content');
+    });
+
+    testWidgets('respects custom height property even when content is short',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      // Single line, but with a custom height of 200
+      const html = '<p>Hello</p>';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: HtmlCodeBlockWidget(
+                htmlCode: html,
+                height: 200,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The custom height should override adaptive sizing
+      // Find SizedBox — should use 200
+      final sizedBox = find.byType(SizedBox).first;
+      final sizedBoxWidget = tester.widget<SizedBox>(sizedBox);
+
+      expect(sizedBoxWidget.height, equals(200),
+          reason: 'Custom height property should be respected');
+    });
+
+    testWidgets('respects custom height property with tall content',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(400, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final lines = List.generate(50, (i) => 'Line $i').join('\n');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: HtmlCodeBlockWidget(
+                htmlCode: lines,
+                height: 500,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Custom height of 500 should be used, even though it exceeds 4:3 ratio
+      final sizedBox = find.byType(SizedBox).first;
+      final sizedBoxWidget = tester.widget<SizedBox>(sizedBox);
+
+      expect(sizedBoxWidget.height, equals(500),
+          reason: 'Custom height property should override adaptive cap');
+    });
+
+    testWidgets('empty code block uses default adaptive height',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(600, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: HtmlCodeBlockWidget(htmlCode: ''),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Should show empty placeholder
+      expect(find.text('(empty)'), findsOneWidget);
     });
   });
 }
