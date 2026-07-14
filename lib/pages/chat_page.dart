@@ -146,8 +146,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Whether there are more older messages to load.
   bool get _hasMoreMessages => _loadedUpToIndex > 0;
 
-  static bool _toolsRegistered = false;
-
   /// Returns true if [text] ends with an unclosed LaTeX math delimiter.
   ///
   /// Checks for:
@@ -193,27 +191,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _chatScrollController = ScrollController();
     _chatScrollController.addListener(_onChatScroll);
 
-    if (!_toolsRegistered) {
-      _toolsRegistered = true;
-      ChatService.registerTool(
-        const ToolDefinition(
-          name: 'calculator',
-          description: 'Evaluate a math expression and return the result',
-          parameters: {
-            'type': 'object',
-            'properties': {
-              'expression': {
-                'type': 'string',
-                'description': 'A math expression to evaluate e.g. 2 + 2',
-              },
-            },
-            'required': ['expression'],
-          },
-        ),
-        _executeCalculator,
-      );
-    }
-
     WidgetsBinding.instance.addPostFrameCallback((_) => _initialize());
     // If initialSearchQuery is provided, activate search mode after init
     if (widget.initialSearchQuery != null &&
@@ -224,32 +201,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
         _isSearching = true;
         _performSearch(widget.initialSearchQuery!);
       });
-    }
-  }
-
-  String _executeCalculator(Map<String, dynamic> args) {
-    try {
-      final expr = (args['expression'] as String?) ?? '';
-      final sanitized = expr.replaceAll(' ', '');
-      final double result;
-      if (sanitized.contains('+')) {
-        final parts = sanitized.split('+');
-        result = parts.map((p) => double.parse(p)).reduce((a, b) => a + b);
-      } else if (sanitized.contains('*')) {
-        final parts = sanitized.split('*');
-        result = parts.map((p) => double.parse(p)).reduce((a, b) => a * b);
-      } else if (sanitized.contains('/')) {
-        final nums = sanitized.split('/').map((p) => double.parse(p)).toList();
-        result = nums.reduce((a, b) => a / b);
-      } else if (sanitized.contains('-')) {
-        final parts = sanitized.split('-');
-        result = parts.map((p) => double.parse(p)).reduce((a, b) => a - b);
-      } else {
-        result = double.parse(sanitized);
-      }
-      return result.toString();
-    } catch (e) {
-      return 'Error: $e';
     }
   }
 
