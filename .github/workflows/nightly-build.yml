@@ -156,7 +156,10 @@ jobs:
       - name: Configure CocoaPods
         run: |
           pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
-      - run: flutter build macos --release
+      - name: Build macOS ARM64
+        run: flutter build macos --release
+        env:
+          FLUTTER_XCODE_ARCHS: arm64
 
   # ── macOS x64 Build ───────────────────────────────────────────────────────
   build-macos-x64:
@@ -178,7 +181,10 @@ jobs:
       - name: Configure CocoaPods
         run: |
           pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
-      - run: flutter build macos --release
+      - name: Build macOS x64
+        run: flutter build macos --release
+        env:
+          FLUTTER_XCODE_ARCHS: x86_64
 
   # ── iOS Build ────────────────────────────────────────────────────────────
   build-ios:
