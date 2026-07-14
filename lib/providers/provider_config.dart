@@ -156,12 +156,20 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         final hasMcp = entries.any((e) => e.type == 'mcp');
         if (!hasMcp) {
           entries.add(
-            ProviderEntry(id: 'builtin_mcp', type: 'mcp', name: 'MCP供应商'),
+            ProviderEntry(
+              id: 'builtin_mcp',
+              type: 'mcp',
+              name: 'MCP供应商',
+              configs: _createBuiltinMcpConfigs(),
+            ),
           );
           await prefs.setString(
             'provider_entries',
             jsonEncode(entries.map((e) => e.toMap()).toList()),
           );
+        } else {
+          // 第7步：确保已有的 MCP 条目包含内置 MCP 配置
+          await _migrateBuiltinMcpConfigs(prefs, entries);
         }
 
         state = ProviderEntriesState(entries: entries);
@@ -178,7 +186,12 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         ProviderEntry(id: 'builtin_llm', type: 'llm', name: 'LLM供应商'),
         ProviderEntry(id: 'builtin_ocr', type: 'ocr', name: 'OCR供应商'),
         ProviderEntry(id: 'builtin_asr', type: 'asr', name: '音频转写供应商'),
-        ProviderEntry(id: 'builtin_mcp', type: 'mcp', name: 'MCP供应商'),
+        ProviderEntry(
+          id: 'builtin_mcp',
+          type: 'mcp',
+          name: 'MCP供应商',
+          configs: _createBuiltinMcpConfigs(),
+        ),
       ],
     );
   }
@@ -318,6 +331,152 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       }
     } catch (e) {
       debugPrint('Failed to migrate custom param types: $e');
+    }
+  }
+
+  /// 创建内置 MCP 配置列表（预置的供应商 MCP 服务）
+  List<ProviderConfigItem> _createBuiltinMcpConfigs() {
+    return [
+      // == MCP Remote (SSE) ==
+      _buildMcpConfig(
+        name: 'Exa',
+        transport: 'sse',
+        url: 'https://mcp.exa.ai/mcp',
+        headers: {'x-api-key': ''},
+        env: {},
+        apiKeyHint: '请在 Exa 官网获取 API Key',
+      ),
+      _buildMcpConfig(
+        name: 'Tavily',
+        transport: 'sse',
+        url: 'https://mcp.tavily.com/mcp/?tavilyApiKey=tvly-',
+        headers: {},
+        env: {},
+        apiKeyHint: '请在 Tavily 官网获取 API Key (tvly- 开头)',
+      ),
+      // == MCP Local (stdio) ==
+      _buildMcpConfig(
+        name: 'Jina AI',
+        transport: 'stdio',
+        command: 'npx',
+        args: ['-y', '@jina-ai/mcp-server'],
+        env: {'JINA_API_KEY': ''},
+        apiKeyHint: '请在 Jina AI 官网获取 API Key',
+      ),
+      _buildMcpConfig(
+        name: 'Firecrawl',
+        transport: 'stdio',
+        command: 'npx',
+        args: ['-y', 'firecrawl-mcp'],
+        env: {'FIRECRAWL_API_KEY': ''},
+        apiKeyHint: '请在 Firecrawl 官网获取 API Key',
+      ),
+      _buildMcpConfig(
+        name: 'Brave Search',
+        transport: 'stdio',
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-brave-search'],
+        env: {'BRAVE_API_KEY': ''},
+        apiKeyHint: '请在 Brave Search 官网获取 API Key',
+      ),
+      _buildMcpConfig(
+        name: 'Searxng',
+        transport: 'stdio',
+        command: 'npx',
+        args: ['-y', 'mcp-remote', 'http://localhost:8080'],
+        env: {},
+      ),
+      // == REST API (配置为 SSE 模式) ==
+      _buildMcpConfig(
+        name: 'Bocha',
+        transport: 'sse',
+        url: 'https://api.bochaai.com/v1/web-search',
+        headers: {'Authorization': 'Bearer '},
+        env: {},
+        apiKeyHint: '请在 Bocha 官网获取 API Key (Bearer Token)',
+      ),
+      _buildMcpConfig(
+        name: 'Querit',
+        transport: 'sse',
+        url: 'https://api.querit.ai/v1/search',
+        headers: {'Authorization': 'Bearer '},
+        env: {},
+        apiKeyHint: '请在 Querit 官网获取 API Key (Bearer Token)',
+      ),
+      _buildMcpConfig(
+        name: 'Zhipu',
+        transport: 'sse',
+        url: 'https://open.bigmodel.cn/api/paas/v4/web_search',
+        headers: {'Authorization': 'Bearer '},
+        env: {},
+        apiKeyHint: '请在智谱 AI 官网获取 API Key (Bearer Token)',
+      ),
+    ];
+  }
+
+  /// 构建单个内置 MCP 配置项
+  ProviderConfigItem _buildMcpConfig({
+    required String name,
+    required String transport,
+    String? command,
+    List<String>? args,
+    String? url,
+    Map<String, String>? headers,
+    Map<String, String>? env,
+    String? apiKeyHint,
+  }) {
+    final typeConfig = <String, dynamic>{
+      'transport': transport,
+      'isVendor': true,
+      'apiKeyHint': apiKeyHint,
+    };
+    if (command != null) typeConfig['command'] = command;
+    if (args != null && args.isNotEmpty) typeConfig['args'] = args;
+    if (url != null) typeConfig['url'] = url;
+    if (headers != null && headers.isNotEmpty) typeConfig['headers'] = headers;
+    if (env != null && env.isNotEmpty) typeConfig['env'] = env;
+
+    return ProviderConfigItem(
+      providerName: name,
+      host: url ?? '',
+      key: '',
+      models: [
+        ModelConfig(
+          name: name,
+          modelId: transport,
+          typeConfig: typeConfig,
+        ),
+      ],
+    );
+  }
+
+  /// 迁移：为已有 MCP 条目添加缺失的内置 MCP 配置
+  Future<void> _migrateBuiltinMcpConfigs(
+    SharedPreferences prefs,
+    List<ProviderEntry> entries,
+  ) async {
+    final mcpEntryIdx = entries.indexWhere((e) => e.type == 'mcp');
+    if (mcpEntryIdx < 0) return;
+
+    final mcpEntry = entries[mcpEntryIdx];
+    final builtin = _createBuiltinMcpConfigs();
+    final existingNames =
+        mcpEntry.configs.map((c) => c.providerName).toSet();
+    bool changed = false;
+
+    for (final builtinConfig in builtin) {
+      if (!existingNames.contains(builtinConfig.providerName)) {
+        mcpEntry.configs.add(builtinConfig);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      entries[mcpEntryIdx] = mcpEntry;
+      await prefs.setString(
+        'provider_entries',
+        jsonEncode(entries.map((e) => e.toMap()).toList()),
+      );
     }
   }
 

@@ -353,8 +353,18 @@ void main() {
       final mcpEntry = state.entries.firstWhere((e) => e.type == 'mcp');
       expect(mcpEntry.id, equals('builtin_mcp'));
       expect(mcpEntry.name, equals('MCP供应商'));
-      expect(mcpEntry.configs.length, equals(1));
-      expect(mcpEntry.configs[0].providerName, equals('自定义MCP'));
+      // Custom config + 9 built-in vendor configs = 10 total
+      expect(mcpEntry.configs.length, equals(10));
+      // Custom config should be preserved
+      final customConfigs =
+          mcpEntry.configs.where((c) => c.providerName == '自定义MCP').toList();
+      expect(customConfigs.length, equals(1));
+      // Built-in configs should be added
+      expect(
+        mcpEntry.configs.any((c) => c.providerName == 'Exa'),
+        isTrue,
+        reason: 'Built-in Exa config should be auto-added',
+      );
     });
   });
 }
