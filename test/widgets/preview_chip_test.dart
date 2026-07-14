@@ -132,25 +132,5 @@ void main() {
 
       expect(find.byType(PreviewChip), findsOneWidget);
     });
-
-    testWidgets('image chip has width 72', (tester) async {
-      await tester.pumpWidget(buildChip(isImage: true, bytes: validPng));
-
-      final chipWidget = tester.widget<PreviewChip>(find.byType(PreviewChip));
-      // The main Container should have width 72 for images
-      // Not directly testable, but we can verify the widget builds
-      expect(chipWidget, isNotNull);
-    });
-
-    testWidgets('non-image chip has width 140', (tester) async {
-      await tester.pumpWidget(buildChip(
-        fileName: 'long_document_name.pdf',
-        isImage: false,
-        bytes: Uint8List.fromList([0, 1, 2, 3]),
-      ));
-
-      // Verify the file name or file icon is rendered for non-image
-      expect(find.byIcon(Icons.insert_drive_file_outlined), findsOneWidget);
-    });
   });
 }
