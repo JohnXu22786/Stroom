@@ -52,6 +52,7 @@ jobs:
 
 
 
+  # Builds native arm64 binary on Apple Silicon (ARM64) runner.
   macos-arm64:
     needs: prepare-version
     runs-on: macos-15
@@ -81,6 +82,8 @@ jobs:
           tag_name: ${{ env.TAG }}
           files: stroom-macos-arm64-release-*.zip
 
+  # x86_64 is cross-compiled on ARM64 via Xcode cross-compilation.
+  # GitHub no longer provides Intel macOS runners (macos-13 removed).
   macos-x64:
     needs: prepare-version
     runs-on: macos-15
