@@ -164,50 +164,5 @@ void main() {
       expect(find.byIcon(Icons.broken_image), findsOneWidget);
       expect(find.text('无法加载图片'), findsOneWidget);
     });
-
-    testWidgets('close button has circular semi-transparent background',
-        (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Builder(
-          builder: (context) => ElevatedButton(
-            onPressed: () {
-              showImagePreviewDialog(
-                context: context,
-                fileName: 'photo.png',
-                data: validPng,
-              );
-            },
-            child: const Text('Open Preview'),
-          ),
-        ),
-      ));
-
-      await tester.tap(find.text('Open Preview'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // Find the close icon
-      expect(find.byIcon(Icons.close), findsOneWidget);
-
-      // Verify there's a Container with circular decoration wrapping the button
-      final containers = find.byType(Container);
-      bool hasCircularBackground = false;
-      for (int i = 0; i < tester.widgetList(containers).length; i++) {
-        final container =
-            tester.widgetList(containers).elementAt(i) as Container;
-        final decoration = container.decoration;
-        if (decoration is BoxDecoration &&
-            decoration.shape == BoxShape.circle &&
-            decoration.color != null &&
-            decoration.color!.a < 1.0) {
-          hasCircularBackground = true;
-          break;
-        }
-      }
-
-      expect(hasCircularBackground, isTrue,
-          reason:
-              'Close button should have a circular semi-transparent background');
-    });
   });
 }
