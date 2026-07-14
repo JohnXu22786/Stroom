@@ -67,8 +67,11 @@ jobs:
       - name: Configure CocoaPods
         run: |
           pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
-      - run: flutter build macos --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
-      - name: Create macOS archive
+      - name: Build macOS arm64
+        run: flutter build macos --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
+        env:
+          FLUTTER_XCODE_ARCHS: arm64
+      - name: Create macOS arm64 archive
         shell: bash
         run: |
           cd build/macos/Build/Products/Release
@@ -93,7 +96,10 @@ jobs:
       - name: Configure CocoaPods
         run: |
           pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
-      - run: flutter build macos --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }} --dart-define=EXCLUDED_ARCHS=arm64
+      - name: Build macOS x64
+        run: flutter build macos --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
+        env:
+          FLUTTER_XCODE_ARCHS: x86_64
       - name: Create macOS x64 archive
         shell: bash
         run: |
