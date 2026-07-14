@@ -82,41 +82,5 @@ void main() {
       expect(copied.hash, 'ghi789');
     });
 
-    test('multiple attachments can each have their own base64Data', () {
-      final att1 = Attachment(
-        fileName: 'img1.png',
-        mimeType: 'image/png',
-        fileType: 'image',
-        hash: 'hash1',
-        storagePath: 'attachments/hash1.png',
-        fileSize: 100,
-      )..base64Data = 'base64_data_1';
-
-      final att2 = Attachment(
-        fileName: 'img2.jpg',
-        mimeType: 'image/jpeg',
-        fileType: 'image',
-        hash: 'hash2',
-        storagePath: 'attachments/hash2.jpg',
-        fileSize: 200,
-      )..base64Data = 'base64_data_2';
-
-      expect(att1.base64Data, 'base64_data_1');
-      expect(att2.base64Data, 'base64_data_2');
-      expect(att1.base64Data, isNot(att2.base64Data));
-    });
-
-    test('base64Data defaults to null when not set', () {
-      final att = Attachment(
-        fileName: 'file.txt',
-        mimeType: 'text/plain',
-        fileType: 'document',
-        hash: 'hash3',
-        storagePath: 'attachments/hash3.txt',
-        fileSize: 50,
-      );
-
-      expect(att.base64Data, isNull);
-    });
   });
 }

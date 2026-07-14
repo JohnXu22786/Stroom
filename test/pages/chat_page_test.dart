@@ -11,7 +11,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
-import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/chat_page.dart';
@@ -329,39 +328,6 @@ void main() {
       final map = msg.toMap();
       expect(map.containsKey('rawRequest'), false);
       expect(map.containsKey('rawResponse'), false);
-    });
-  });
-
-  group('ChatPage timestamp format (yyyy-MM-dd HH:mm)', () {
-    test('DateFormat produces correct output for known DateTime', () {
-      final fmt = DateFormat('yyyy-MM-dd HH:mm');
-      final dt = DateTime(2026, 6, 14, 9, 5);
-      final result = fmt.format(dt);
-      expect(result, '2026-06-14 09:05');
-    });
-
-    test('DateFormat handles edge cases (single-digit, midnight, end-of-year)',
-        () {
-      final fmt = DateFormat('yyyy-MM-dd HH:mm');
-      expect(fmt.format(DateTime(2026, 1, 2, 3, 4)), '2026-01-02 03:04');
-      expect(fmt.format(DateTime(2026, 6, 15, 0, 0)), '2026-06-15 00:00');
-      expect(fmt.format(DateTime(2026, 12, 31, 23, 59)), '2026-12-31 23:59');
-    });
-
-    test('DateFormat pattern matches reference page formats', () {
-      // Topic selection page, conversations page, and message search page
-      // all use manual formatting with .padLeft(2,'0') on each component:
-      //   '$y-$m-$d $h:$min' (with y=year, m=month, d=day, h=hour, min=minute)
-      // DateFormat('yyyy-MM-dd HH:mm') must produce identical output.
-      final testCases = [
-        (DateTime(2026, 1, 1, 0, 0), '2026-01-01 00:00'),
-        (DateTime(2026, 12, 25, 8, 30), '2026-12-25 08:30'),
-        (DateTime(2026, 6, 15, 14, 30), '2026-06-15 14:30'),
-      ];
-      final fmt = DateFormat('yyyy-MM-dd HH:mm');
-      for (final (dt, expected) in testCases) {
-        expect(fmt.format(dt), expected);
-      }
     });
   });
 

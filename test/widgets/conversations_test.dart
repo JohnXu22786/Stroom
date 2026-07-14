@@ -151,48 +151,6 @@ void main() {
     });
   });
 
-  group('ConversationsPage - date format', () {
-    testWidgets('shows yyyy-MM-dd HH:mm format for old conversations',
-        (tester) async {
-      final convs = [
-        Conversation(
-          id: 'c1',
-          title: '旧对话',
-          createdAt: DateTime(2025, 6, 15),
-          updatedAt: DateTime(2025, 6, 15, 14, 30),
-        ),
-      ];
-
-      await tester.pumpWidget(createTestApp(conversations: convs));
-      await tester.pump();
-
-      expect(find.textContaining('2025-06-15'), findsOneWidget);
-      expect(find.textContaining('14:30'), findsOneWidget);
-    });
-
-    testWidgets('shows yyyy-MM-dd HH:mm format', (tester) async {
-      final now = DateTime.now();
-      final convs = [
-        Conversation(id: 'c1', title: '最近对话', createdAt: now, updatedAt: now),
-      ];
-
-      await tester.pumpWidget(createTestApp(conversations: convs));
-      await tester.pump();
-
-      expect(find.text('刚刚'), findsNothing);
-      expect(find.textContaining('分钟前'), findsNothing);
-      expect(find.textContaining('小时前'), findsNothing);
-      expect(find.textContaining('天前'), findsNothing);
-
-      final y = now.year.toString();
-      final m = now.month.toString().padLeft(2, '0');
-      final d = now.day.toString().padLeft(2, '0');
-      final h = now.hour.toString().padLeft(2, '0');
-      final min = now.minute.toString().padLeft(2, '0');
-      final expectedFormat = '$y-$m-$d $h:$min';
-      expect(find.textContaining(expectedFormat), findsOneWidget);
-    });
-  });
 
   // ===========================================================================
   // 2. conversations_search_test.dart

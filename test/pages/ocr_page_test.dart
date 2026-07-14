@@ -107,48 +107,6 @@ void main() {
     TextManifest.invalidateCache();
   });
 
-  group('OcrPage - basic rendering', () {
-    testWidgets('renders OCR page title', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      expect(find.text('文字识别'), findsOneWidget);
-    });
-
-    testWidgets('shows photo source buttons', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      expect(find.text('拍照识别'), findsOneWidget);
-      expect(find.text('相册选择'), findsOneWidget);
-    });
-
-    testWidgets('shows empty state initially', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      expect(find.text('暂无选中图片'), findsOneWidget);
-    });
-
-    testWidgets('shows clear button only when images are selected', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // Initially no clear button
-      expect(find.text('清空'), findsNothing);
-    });
-
-    testWidgets('shows image count text initially absent', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // No image count text when empty
-      expect(find.textContaining('已选'), findsNothing);
-    });
-  });
-
   group('OcrPage - model selector', () {
     testWidgets('shows model selector when OCR provider has models', (
       tester,

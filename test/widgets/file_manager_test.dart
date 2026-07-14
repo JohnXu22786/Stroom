@@ -1225,9 +1225,9 @@ void main() {
   });
 
   // ===========================================================================
-  // 3. file_preview_test.dart
+  // 3/4. file_preview_chip_test.dart (merged)
   // ===========================================================================
-  group('FilePreviewChip - bytes & document variants', () {
+  group('FilePreviewChip', () {
     final testBytes = Uint8List.fromList([0x89, 0x50, 0x4E, 0x47]);
 
     Attachment createImageAttachment() {
@@ -1330,45 +1330,14 @@ void main() {
 
       expect(find.text('aaaaaaaaaaaaaa…'), findsOneWidget);
     });
-  });
-
-  // ===========================================================================
-  // 4. file_preview_chip_test.dart
-  // ===========================================================================
-  group('FilePreviewChip - tap & type variants', () {
-    final testAttachment = Attachment(
-      id: 'att-1',
-      fileName: 'photo.jpg',
-      mimeType: 'image/jpeg',
-      fileType: 'image',
-      hash: 'abc123',
-      storagePath: 'attachments/abc123_1234567890.jpg',
-      fileSize: 102400,
-    );
-
-    testWidgets('renders file icon and name', (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: FilePreviewChip(
-            attachment: testAttachment,
-          ),
-        ),
-      ));
-
-      expect(find.byIcon(Icons.image_outlined), findsOneWidget);
-      expect(find.text('photo.jpg'), findsOneWidget);
-    });
 
     testWidgets('onTap is called when chip is tapped', (tester) async {
+      final att = createImageAttachment();
       bool tapped = false;
 
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: FilePreviewChip(
-            attachment: testAttachment,
-            onTap: () => tapped = true,
-          ),
-        ),
+      await tester.pumpWidget(buildChip(
+        attachment: att,
+        onTap: () => tapped = true,
       ));
 
       await tester.tap(find.byType(GestureDetector));
@@ -1376,34 +1345,11 @@ void main() {
     });
 
     testWidgets('works without onTap (no crash)', (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: FilePreviewChip(
-            attachment: testAttachment,
-          ),
-        ),
+      await tester.pumpWidget(buildChip(
+        attachment: createImageAttachment(),
       ));
 
       expect(find.byType(FilePreviewChip), findsOneWidget);
-    });
-
-    testWidgets('onTap and onRemove both work independently', (tester) async {
-      bool tapped = false;
-      bool removed = false;
-
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: FilePreviewChip(
-            attachment: testAttachment,
-            onTap: () => tapped = true,
-            onRemove: () => removed = true,
-          ),
-        ),
-      ));
-
-      await tester.tap(find.byType(GestureDetector).first);
-      expect(tapped, true);
-      expect(removed, false);
     });
 
     testWidgets('tapping remove button fires onRemove, NOT onTap',
@@ -1411,40 +1357,15 @@ void main() {
       bool tapped = false;
       bool removed = false;
 
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: FilePreviewChip(
-            attachment: testAttachment,
-            onTap: () => tapped = true,
-            onRemove: () => removed = true,
-          ),
-        ),
+      await tester.pumpWidget(buildChip(
+        attachment: createImageAttachment(),
+        onTap: () => tapped = true,
+        onRemove: () => removed = true,
       ));
 
       await tester.tap(find.byIcon(Icons.close));
       expect(removed, true);
       expect(tapped, false);
-    });
-
-    testWidgets('long filename is truncated with ellipsis', (tester) async {
-      final longNameAttachment = Attachment(
-        id: 'att-long',
-        fileName: 'a_very_long_file_name_that_exceeds.png',
-        mimeType: 'image/png',
-        fileType: 'image',
-        hash: 'mno345',
-        storagePath: 'attachments/mno345_1234567890.png',
-        fileSize: 51200,
-      );
-
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: FilePreviewChip(attachment: longNameAttachment),
-        ),
-      ));
-
-      expect(find.text('a_very_long_file_name_that_exceeds.png'), findsNothing);
-      expect(find.text('a_very_long_fi…'), findsOneWidget);
     });
 
     testWidgets('different file types show correct icons', (tester) async {
@@ -1466,10 +1387,8 @@ void main() {
           fileSize: 1024,
         );
 
-        await tester.pumpWidget(MaterialApp(
-          home: Scaffold(
-            body: FilePreviewChip(attachment: att),
-          ),
+        await tester.pumpWidget(buildChip(
+          attachment: att,
         ));
 
         expect(find.byIcon(entry.value), findsOneWidget,

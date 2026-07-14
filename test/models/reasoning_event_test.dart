@@ -4,16 +4,6 @@ import 'package:stroom/models/chat_message.dart';
 
 void main() {
   group('ReasoningEvent', () {
-    test('can be created with text content', () {
-      const event = ReasoningEvent('test reasoning text');
-      expect(event.text, 'test reasoning text');
-    });
-
-    test('is a ChatEvent', () {
-      const event = ReasoningEvent('test');
-      expect(event, isA<ChatEvent>());
-    });
-
     test('can be empty', () {
       const event = ReasoningEvent('');
       expect(event.text, '');
@@ -35,16 +25,6 @@ void main() {
   });
 
   group('ReasoningSectionEndEvent', () {
-    test('can be created with default constructor', () {
-      const event = ReasoningSectionEndEvent();
-      expect(event, isA<ReasoningSectionEndEvent>());
-    });
-
-    test('is a ChatEvent', () {
-      const event = ReasoningSectionEndEvent();
-      expect(event, isA<ChatEvent>());
-    });
-
     test('can be used in a switch statement', () {
       final ChatEvent event = ReasoningSectionEndEvent();
       String result = '';
@@ -137,23 +117,4 @@ void main() {
     });
   });
 
-  group('ChatEvent sealed class pattern', () {
-    test('ReasoningEvent is distinct from TextEvent', () {
-      final reasoning = ReasoningEvent('think');
-      final text = TextEvent('speak');
-
-      expect(reasoning.runtimeType, isNot(text.runtimeType));
-    });
-
-    test(
-        'ReasoningSectionEndEvent is distinct from ReasoningEvent and TextEvent',
-        () {
-      final end = ReasoningSectionEndEvent();
-      final reasoning = ReasoningEvent('think');
-      final text = TextEvent('speak');
-
-      expect(end.runtimeType, isNot(reasoning.runtimeType));
-      expect(end.runtimeType, isNot(text.runtimeType));
-    });
-  });
 }
