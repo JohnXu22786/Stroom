@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:stroom/pages/chat/dialogs/mermaid_preview_dialog.dart';
+import 'code_block_source_widget.dart';
 
 /// A reusable widget that renders Mermaid diagram code using [InAppWebView]
 /// with mermaid.js loaded from CDN.
@@ -259,8 +260,18 @@ MERMAID_CODE_PLACEHOLDER
       }
     }, { passive: false });
 
-    document.addEventListener('touchend', function() {
+    document.addEventListener('touchend', function(e) {
       lastTouchDist = 0;
+      // When lifting one finger after a multi-touch gesture (e.g. pinch),
+      // update the pan start state to the remaining finger's current
+      // position. This prevents a sudden position jump when the user
+      // transitions from a two-finger pinch to a one-finger pan.
+      if (e.touches.length === 1) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchPanStartX = panX;
+        touchPanStartY = panY;
+      }
     });
 
     // Initialize mermaid
@@ -424,22 +435,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     }
 
     // ---- Source code mode: show raw code without WebView ----
+    // Uses CodeBlockSourceView directly (which provides its own border,
+    // background, line numbers, and wrap toggle) so we do NOT wrap it
+    // in _buildBorderedContainer to avoid double borders.
     if (_showSourceCode) {
-      return _buildBorderedContainer(
-        height: effectiveHeight,
-        cs: cs,
-        child: Stack(
-          children: [
-            _buildSourceCodeView(cs, isDark),
-            // Button row at top right
-            Positioned(
-              top: 4,
-              right: 4,
-              child: _buildButtonRow(cs),
-            ),
-          ],
-        ),
-      );
+      return _buildSourceCodeView(cs, isDark, effectiveHeight);
     }
 
     // ---- Loading placeholder (deferred WebView creation) ----
@@ -542,23 +542,45 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   // Source code view
   // ---------------------------------------------------------------------------
 
-  /// Builds the raw Mermaid source code view (similar to HTML code block).
-  Widget _buildSourceCodeView(ColorScheme cs, bool isDark) {
-    final bgColor = isDark ? const Color(0xff555555) : const Color(0xffeff1f3);
-    final textColor =
-        isDark ? const Color(0xfff8f8f2) : const Color(0xff000000);
+  /// Builds the raw Mermaid source code view using the shared
+  /// [CodeBlockSourceView] widget, providing a unified code display
+  /// area UI with line numbers and a wrap toggle.
+  ///
+  /// The [effectiveHeight] is passed through so the source code view
+  /// uses the same height as the render mode, ensuring visual consistency.
+  /// The "查看图表" toggle button is passed as an action button.
+  Widget _buildSourceCodeView(ColorScheme cs, bool isDark, double effectiveHeight) {
+    return CodeBlockSourceView(
+      code: widget.mermaidCode,
+      height: effectiveHeight,
+      actionButtons: [
+        _buildSrcCodeActionButton(),
+      ],
+    );
+  }
 
-    return Container(
-      color: bgColor,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(12, 40, 12, 12),
-        child: SelectableText(
-          widget.mermaidCode,
-          style: TextStyle(
-            fontFamily: 'monospace',
-            fontSize: 13,
-            color: textColor,
-            height: 1.5,
+  /// Builds the "查看图表" action button for the source code view.
+  Widget _buildSrcCodeActionButton() {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: _toggleSourceCode,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 16,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.image, size: 18, semanticLabel: '查看图表'),
+              const SizedBox(width: 4),
+              const Text(
+                '查看图表',
+                style: TextStyle(fontSize: 12),
+              ),
+            ],
           ),
         ),
       ),
