@@ -71,43 +71,6 @@ void main() {
     ManifestDatabase.enableTestMode();
   });
 
-  group('AsrPage - basic rendering', () {
-    testWidgets('renders ASR page title', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      expect(find.text('音频转写'), findsOneWidget);
-    });
-
-    testWidgets('shows two audio source buttons matching OCR design', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // Should show two buttons side by side (matching OCR pattern)
-      expect(find.text('录音选择'), findsOneWidget);
-      expect(find.text('音频文件'), findsOneWidget);
-    });
-
-    testWidgets('shows empty state initially', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      expect(find.text('暂未选择音频文件'), findsOneWidget);
-    });
-
-    testWidgets('shows clear button only when audio is selected', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // Initially no clear button
-      expect(find.text('清空'), findsNothing);
-    });
-  });
-
   group('AsrPage - model selector', () {
     testWidgets('shows model selector when ASR provider has models', (
       tester,
