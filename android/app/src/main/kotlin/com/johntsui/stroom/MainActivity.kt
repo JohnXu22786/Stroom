@@ -12,7 +12,6 @@ import android.os.Environment
 import android.os.Process
 import android.provider.DocumentsContract
 import android.util.Log
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
 import androidx.documentfile.provider.DocumentFile
 import io.flutter.embedding.android.FlutterActivity
@@ -35,32 +34,29 @@ class MainActivity : FlutterActivity() {
         private var pendingSafResult: MethodChannel.Result? = null
     }
 
-    // SAF 目录选择器的 ActivityResultLauncher
-    private val safDirectoryPickerLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            // 立即固化权限
-            try {
-                contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                )
-                Log.i(TAG, "SAF: 权限已固化: $uri")
-            } catch (e: SecurityException) {
-                Log.e(TAG, "SAF: 固化权限失败", e)
-                pendingSafResult?.error("PERMISSION_FAILED", "无法固化目录权限", null)
-                pendingSafResult = null
-                return@registerForActivityResult
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == SAF_REQUEST_CODE) {
+            if (resultCode == Activity.RESULT_OK && data?.data != null) {
+                val uri = data.data!!
+                // 立即固化权限
+                try {
+                    contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                    Log.i(TAG, "SAF: 权限已固化: $uri")
+                } catch (e: SecurityException) {
+                    Log.w(TAG, "SAF: 无法固化权限: $uri", e)
+                }
+                pendingSafResult?.success(uri.toString())
+            } else {
+                Log.i(TAG, "SAF: 用户取消了目录选择")
+                pendingSafResult?.success(null)
             }
-
-            pendingSafResult?.success(uri.toString())
-        } else {
-            Log.i(TAG, "SAF: 用户取消了目录选择")
-            pendingSafResult?.success(null)
+            pendingSafResult = null
         }
-        pendingSafResult = null
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -264,7 +260,8 @@ class MainActivity : FlutterActivity() {
     private fun openSafDirectoryPicker(result: MethodChannel.Result) {
         pendingSafResult = result
         try {
-            safDirectoryPickerLauncher.launch(null)
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+            startActivityForResult(intent, SAF_REQUEST_CODE)
         } catch (e: Exception) {
             Log.e(TAG, "SAF: 打开目录选择器失败", e)
             pendingSafResult = null
@@ -280,6 +277,11 @@ class MainActivity : FlutterActivity() {
         try {
             val uri = Uri.parse(uriStr)
             val documentFile = DocumentFile.fromTreeUri(this, uri)
+
+            if (documentFile == null) {
+                result.success(false)
+                return
+            }
 
             // 尝试创建临时测试文件
             val testFileName = ".saf_access_test_${System.currentTimeMillis()}.tmp"
@@ -310,6 +312,11 @@ class MainActivity : FlutterActivity() {
         try {
             val uri = Uri.parse(uriStr)
             val treeDocument = DocumentFile.fromTreeUri(this, uri)
+
+            if (treeDocument == null) {
+                result.error("TREE_DOC_FAILED", "无法访问目录", null)
+                return
+            }
 
             // 获取或创建备份子目录
             val backupDir = treeDocument.findFile("StroomBackups")
@@ -351,6 +358,10 @@ class MainActivity : FlutterActivity() {
         try {
             val uri = Uri.parse(uriStr)
             val treeDocument = DocumentFile.fromTreeUri(this, uri)
+            if (treeDocument == null) {
+                result.success(null)
+                return
+            }
             val backupDir = treeDocument.findFile("StroomBackups")
                 ?: run {
                     result.success(null)
@@ -380,6 +391,10 @@ class MainActivity : FlutterActivity() {
         try {
             val uri = Uri.parse(uriStr)
             val treeDocument = DocumentFile.fromTreeUri(this, uri)
+            if (treeDocument == null) {
+                result.success(null)
+                return
+            }
             val backupDir = treeDocument.findFile("StroomBackups")
                 ?: run {
                     result.success(null)
@@ -408,6 +423,10 @@ class MainActivity : FlutterActivity() {
         try {
             val uri = Uri.parse(uriStr)
             val treeDocument = DocumentFile.fromTreeUri(this, uri)
+            if (treeDocument == null) {
+                result.error("TREE_DOC_FAILED", "无法访问目录", null)
+                return
+            }
             val backupDir = treeDocument.findFile("StroomBackups")
                 ?: run {
                     result.error("DIR_NOT_FOUND", "备份目录不存在", null)
@@ -465,6 +484,10 @@ class MainActivity : FlutterActivity() {
         try {
             val uri = Uri.parse(uriStr)
             val treeDocument = DocumentFile.fromTreeUri(this, uri)
+            if (treeDocument == null) {
+                result.success(emptyList<String>())
+                return
+            }
             val backupDir = treeDocument.findFile("StroomBackups")
                 ?: run {
                     result.success(emptyList<String>())
