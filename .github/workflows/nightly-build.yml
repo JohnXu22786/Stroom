@@ -22,6 +22,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+          pub-cache: true
       - run: flutter pub get
       - name: Run all tests with coverage
         run: flutter test --coverage
@@ -43,6 +45,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+          pub-cache: true
       - run: flutter pub get
       - name: Install xvfb for headless display
         run: sudo apt-get install -y xvfb
@@ -67,6 +71,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+          pub-cache: true
       - name: Install Linux dependencies
         run: |
           sudo apt-get update -y
@@ -84,6 +90,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+          pub-cache: true
       - run: flutter pub get
       - run: flutter build web --release
 
@@ -100,6 +108,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+          pub-cache: true
       - uses: actions/cache@v4
         with:
           path: ~/.gradle
@@ -121,6 +131,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+          pub-cache: true
       - run: flutter pub get
       - run: flutter build windows --release
 
@@ -133,6 +145,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+          pub-cache: true
       - run: flutter create --platforms=macos .
       - run: flutter pub get
       - name: Clean SwiftPM cache
@@ -153,6 +167,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+          pub-cache: true
       - run: flutter create --platforms=macos .
       - run: flutter pub get
       - name: Clean SwiftPM cache
@@ -173,6 +189,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+          pub-cache: true
       - run: flutter create --platforms=ios .
       - run: flutter pub get
       - name: Clean SwiftPM cache
