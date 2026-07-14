@@ -9,7 +9,6 @@ void main() {
         final segment = TextSegment('Hello world');
         expect(segment.text, 'Hello world');
       });
-
     });
 
     group('ToolCallSegment', () {
@@ -28,7 +27,6 @@ void main() {
         expect(segment.data.status, ToolCallStatus.completed);
         expect(segment.data.result, '4');
       });
-
     });
 
     group('SearchMatch', () {

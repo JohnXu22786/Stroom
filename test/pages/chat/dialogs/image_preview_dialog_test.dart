@@ -164,6 +164,5 @@ void main() {
       expect(find.byIcon(Icons.broken_image), findsOneWidget);
       expect(find.text('无法加载图片'), findsOneWidget);
     });
-
   });
 }

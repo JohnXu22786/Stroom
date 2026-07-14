@@ -28,8 +28,6 @@ Widget createChatTestApp({String? activeConversationId}) {
 }
 
 void main() {
-
-
   // ═══════════════════════════════════════════════════════════
   // ChatComposer Settings Row Tests
   // ═══════════════════════════════════════════════════════════

@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/widgets/gallery_choice_dialog.dart';
 
 void main() {
-
   group('showGalleryChoiceDialog', () {
     testWidgets(
         'renders both gallery options with same UI style as camera dialog',

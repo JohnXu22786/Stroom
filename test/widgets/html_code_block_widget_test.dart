@@ -5,7 +5,6 @@ import 'package:stroom/widgets/html_code_block_widget.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-
   group('HtmlCodeBlockWidget - widget rendering', () {
     testWidgets('renders as a StatefulWidget', (tester) async {
       const widget = HtmlCodeBlockWidget(htmlCode: '<h1>Hello</h1>');

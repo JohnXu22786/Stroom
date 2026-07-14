@@ -132,7 +132,5 @@ void main() {
 
       expect(find.byType(PreviewChip), findsOneWidget);
     });
-
-
   });
 }

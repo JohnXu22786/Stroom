@@ -87,8 +87,7 @@ void main() {
     // startup check completes very fast in the sandbox — the home
     // welcome text. Accept either outcome.
     final hasSplashText = find.text('Stroom').evaluate().isNotEmpty;
-    final hasHomeText =
-        find.text('欢迎使用 Stroom').evaluate().isNotEmpty;
+    final hasHomeText = find.text('欢迎使用 Stroom').evaluate().isNotEmpty;
 
     expect(
       hasSplashText || hasHomeText,

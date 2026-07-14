@@ -81,6 +81,5 @@ void main() {
       expect(copied.fileName, 'renamed.pdf');
       expect(copied.hash, 'ghi789');
     });
-
   });
 }
