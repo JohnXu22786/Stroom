@@ -39,6 +39,48 @@ class _CapturingAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
+/// Check that [bodyBytes] contains a multipart field with the given [name]
+/// whose value starts with [valuePrefix].
+bool _multipartFieldContains(
+    List<int> bodyBytes, String name, String valuePrefix) {
+  // Use allowMalformed=true because the body also contains binary audio data
+  // which is not valid UTF-8. Dio serializes text fields before file fields,
+  // so the field headers/values we search for are in the early text portion.
+  final bodyStr = utf8.decode(bodyBytes, allowMalformed: true);
+  // Each form-data field looks like:
+  // --boundary\r\n
+  // Content-Disposition: form-data; name="<name>"\r\n
+  // \r\n
+  // <value>
+  final pattern = 'name="$name"';
+  final nameIdx = bodyStr.indexOf(pattern);
+  if (nameIdx == -1) return false;
+  // Find the double \r\n after the header
+  final headerEnd = bodyStr.indexOf('\r\n\r\n', nameIdx);
+  if (headerEnd == -1) return false;
+  final valueStart = headerEnd + 4;
+  final valueEnd = bodyStr.indexOf('\r\n', valueStart);
+  if (valueEnd == -1) return false;
+  final value = bodyStr.substring(valueStart, valueEnd);
+  return value.startsWith(valuePrefix);
+}
+
+/// Check that [needle] bytes appear sequentially in [haystack].
+bool _bodyContains(List<int> haystack, List<int> needle) {
+  if (needle.length > haystack.length) return false;
+  for (var i = 0; i <= haystack.length - needle.length; i++) {
+    var match = true;
+    for (var j = 0; j < needle.length; j++) {
+      if (haystack[i + j] != needle[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) return true;
+  }
+  return false;
+}
+
 void main() {
   group('AsrService', () {
     group('AsrConfig', () {
@@ -213,7 +255,7 @@ void main() {
         );
       });
 
-      test('request sends base64 audio via JSON body', () async {
+      test('request sends multipart/form-data with file and fields', () async {
         final adapter = _CapturingAdapter();
         final mockDio = Dio()..httpClientAdapter = adapter;
 
@@ -229,39 +271,90 @@ void main() {
           audioFormat: 'wav',
         );
 
-        // Content-Type should be application/json
+        // Content-Type should be multipart/form-data (with boundary)
         final capturedContentType = adapter.capturedContentType;
         expect(capturedContentType, isNotNull);
         expect(
-          capturedContentType!.startsWith('application/json'),
+          capturedContentType!.startsWith('multipart/form-data'),
           isTrue,
           reason:
-              'Content-Type must be application/json. Got: $capturedContentType',
+              'Content-Type must be multipart/form-data. Got: $capturedContentType',
         );
 
-        // Request body should contain base64-encoded audio
+        // Request body should contain multipart-formatted data
         final bodyBytes = adapter.capturedBodyBytes;
         expect(bodyBytes, isNotNull);
-        final bodyStr = utf8.decode(bodyBytes!);
-        final body = jsonDecode(bodyStr) as Map<String, dynamic>;
 
-        expect(body['model'], 'whisper-1');
-        expect(body['response_format'], 'json');
+        // Verify audio file bytes are in the body
+        expect(
+          _bodyContains(bodyBytes!, audioBytes),
+          isTrue,
+          reason: 'Audio file bytes should be present in multipart body',
+        );
 
-        final inputAudio = body['input_audio'] as Map<String, dynamic>;
-        expect(inputAudio['format'], 'wav');
-        expect(inputAudio['data'], base64Encode(audioBytes));
+        // Verify model field
+        expect(
+          _multipartFieldContains(bodyBytes, 'model', 'whisper-1'),
+          isTrue,
+          reason: 'Multipart body should contain model=whisper-1',
+        );
+
+        // Verify response_format field
+        expect(
+          _multipartFieldContains(bodyBytes, 'response_format', 'json'),
+          isTrue,
+          reason: 'Multipart body should contain response_format=json',
+        );
+
+        // Verify file name in Content-Disposition
+        final bodyStr = utf8.decode(bodyBytes);
+        expect(
+          bodyStr.contains('filename="audio.wav"'),
+          isTrue,
+          reason: 'Multipart body should contain filename="audio.wav"',
+        );
 
         // Verify the transcription still works
         expect(result.text, equals('Hello world'));
 
-        // Verify diagnostics (lastRequestBody) show truncated base64
+        // Verify diagnostics (lastRequestBody) show file metadata
         expect(service.lastRequestBody, isNotNull);
-        final diagAudio = service.lastRequestBody!['input_audio'] as Map;
         expect(
-          (diagAudio['data'] as String).contains('${audioBytes.length} bytes'),
+          (service.lastRequestBody!['file'] as String)
+              .contains('audio.wav (${audioBytes.length} bytes)'),
           true,
         );
+      });
+
+      test('request includes language in multipart when set', () async {
+        final adapter = _CapturingAdapter();
+        final mockDio = Dio()..httpClientAdapter = adapter;
+
+        const config = AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com',
+          language: 'zh',
+        );
+        final service = AsrService(config: config, dio: mockDio);
+
+        await service.transcribe(
+          audioBytes: Uint8List.fromList([1, 2, 3]),
+          audioFormat: 'wav',
+        );
+
+        final bodyBytes = adapter.capturedBodyBytes;
+        expect(bodyBytes, isNotNull);
+
+        // Verify language field is present
+        expect(
+          _multipartFieldContains(bodyBytes!, 'language', 'zh'),
+          isTrue,
+          reason: 'Multipart body should contain language=zh when configured',
+        );
+
+        // Verify diagnostics also include language
+        expect(service.lastRequestBody, isNotNull);
+        expect(service.lastRequestBody!['language'], 'zh');
       });
     });
 
@@ -289,8 +382,8 @@ void main() {
       });
     });
 
-    group('input_audio format in diagnostics', () {
-      test('audio data appears in lastRequestBody', () async {
+    group('form-data diagnostics', () {
+      test('lastRequestBody shows file metadata and fields', () async {
         const config = AsrConfig(
           apiKey: 'test-key',
           host: 'https://api.test.com',
@@ -311,13 +404,9 @@ void main() {
         expect(testService.lastRequestBody, isNotNull);
         expect(testService.lastRequestBody!['model'], 'whisper-1');
         expect(testService.lastRequestBody!['response_format'], 'json');
-
-        final inputAudio = testService.lastRequestBody!['input_audio'] as Map;
-        expect(inputAudio['format'], 'mp3');
-        // The data should be truncated in diagnostics but still contain
-        // the first few characters of the base64 string
         expect(
-          (inputAudio['data'] as String).contains('${audioBytes.length} bytes'),
+          (testService.lastRequestBody!['file'] as String)
+              .contains('audio.mp3 (${audioBytes.length} bytes)'),
           true,
         );
       });
