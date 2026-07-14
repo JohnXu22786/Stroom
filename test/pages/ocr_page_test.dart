@@ -1,3 +1,4 @@
+// Merged from: ocr_page_test.dart, ocr_page_preview_edit_test.dart
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -1320,5 +1321,94 @@ void main() {
         expect(find.textContaining('配置'), findsWidgets);
       },
     );
+  });
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Merged from: test/pages/ocr_page_preview_edit_test.dart
+  // ─────────────────────────────────────────────────────────────────────
+
+  group('OcrPage - preview dialog two edit buttons', () {
+    testWidgets('preview dialog shows crop and edit buttons in top-right', (
+      tester,
+    ) async {
+      final images = [_createTestImage()];
+      await tester.pumpWidget(_buildTestApp(testImages: images));
+      await tester.pumpAndSettle();
+
+      // Tap the image to open preview
+      await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
+      await tester.pumpAndSettle();
+
+      // Should see TWO edit icon buttons: crop + full editor
+      expect(find.byIcon(Icons.crop), findsOneWidget,
+          reason: 'Crop button should be visible');
+      expect(find.byIcon(Icons.edit), findsOneWidget,
+          reason: 'Full editor button should be visible');
+    });
+
+    testWidgets('preview dialog shows close button in top-left', (
+      tester,
+    ) async {
+      final images = [_createTestImage()];
+      await tester.pumpWidget(_buildTestApp(testImages: images));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
+      await tester.pumpAndSettle();
+
+      // Close button should be present
+      expect(find.byKey(const Key('preview_close_btn')), findsOneWidget);
+    });
+
+    testWidgets('preview dialog shows position indicator for multiple images', (
+      tester,
+    ) async {
+      final images = [_createTestImage(), _createTestImage()];
+      await tester.pumpWidget(_buildTestApp(testImages: images));
+      await tester.pumpAndSettle();
+
+      // Tap the first image
+      await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
+      await tester.pumpAndSettle();
+
+      // Should show the position indicator
+      expect(find.text('1 / 2'), findsOneWidget);
+    });
+
+    testWidgets('preview dialog can be closed with close button', (
+      tester,
+    ) async {
+      final images = [_createTestImage()];
+      await tester.pumpWidget(_buildTestApp(testImages: images));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
+      await tester.pumpAndSettle();
+
+      // Tap close button
+      await tester.tap(find.byKey(const Key('preview_close_btn')));
+      await tester.pumpAndSettle();
+
+      // Dialog should be closed
+      expect(find.byIcon(Icons.crop), findsNothing);
+      expect(find.byIcon(Icons.edit), findsNothing);
+    });
+
+    testWidgets('tapping crop button opens quick edit page', (tester) async {
+      final images = [_createTestImage()];
+      await tester.pumpWidget(_buildTestApp(testImages: images));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
+      await tester.pumpAndSettle();
+
+      // Tap the crop button — should navigate to ExtendedImageEditorPage
+      await tester.tap(find.byIcon(Icons.crop));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // In test, the navigation may fail due to missing routes, but
+      // verify no crash occurs from the event handler
+    });
   });
 }
