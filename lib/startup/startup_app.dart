@@ -389,6 +389,7 @@ class _StartupAppState extends State<StartupApp>
     //   来让主应用自然显示出来。
     // - 渐出完成后移除启动页，只显示主应用。
     return Stack(
+      textDirection: TextDirection.ltr,
       children: [
         // 主应用（始终存在，确保启动时完全初始化）
         const _AppErrorBoundary(
