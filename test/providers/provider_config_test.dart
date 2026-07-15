@@ -946,8 +946,12 @@ void main() {
       await tester.enterText(textFields.at(2), '4096');
       await tester.pump();
 
-      // Scroll to find inference intensity section
-      // First fill the toggle fields so intensity becomes available
+      // Add toggle first (no default toggle for new models)
+      await tester.tap(find.text('添加推理开关'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Fill the toggle fields so intensity becomes available
       final toggleFields = find.byType(TextFormField);
       await tester.enterText(toggleFields.at(0), 'thinking.type');
       await tester.enterText(toggleFields.at(1), 'enabled');
