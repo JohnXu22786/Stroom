@@ -184,6 +184,9 @@ class _StartupPageState extends State<StartupPage>
   }
 
   Widget _buildLoadingSection() {
+    // Capture widget values locally for safe null handling
+    final progressDetail = widget.progressDetail;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -219,11 +222,10 @@ class _StartupPageState extends State<StartupPage>
             ),
           ),
         // Progress detail
-        if (widget.progressDetail != null &&
-            widget.progressDetail!.isNotEmpty) ...[
+        if (progressDetail != null && progressDetail.isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(
-            widget.progressDetail!,
+            progressDetail,
             style: TextStyle(
               fontSize: 13,
               color: Colors.white.withValues(alpha: 0.6),

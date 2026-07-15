@@ -17,6 +17,7 @@ import 'providers/update_provider.dart';
 import 'providers/notification_provider.dart';
 import 'services/auto_backup_service.dart';
 import 'services/notification_service.dart';
+import 'startup/backup_startup_check.dart';
 import 'widgets/update_dialog.dart';
 
 class Application extends ConsumerStatefulWidget {
@@ -38,15 +39,19 @@ class _ApplicationState extends ConsumerState<Application>
   /// [NavigatorState] it needs.
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
+  bool _postStartupTasksStarted = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // Web端不提供更新功能
+    // 在进入主界面后执行启动后流程（非 Web 端）：
+    // 1. 检查更新（必须弹窗而非静默）
+    // 2. 检查备份存储授权 + 自动备份（与检查更新并行）
     if (!kIsWeb) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _checkForUpdatesOnStartup();
+        _runPostStartupTasks();
       });
     }
 
@@ -56,6 +61,46 @@ class _ApplicationState extends ConsumerState<Application>
         ref.read(inAppNotificationProvider.notifier).state = payload;
       }
     };
+  }
+
+  /// 执行启动后流程：
+  /// - 检查更新（有更新必须弹窗）
+  /// - 检查备份存储授权 + 自动备份（并行运行）
+  Future<void> _runPostStartupTasks() async {
+    if (_postStartupTasksStarted) return;
+    _postStartupTasksStarted = true;
+
+    // 并行执行两个启动后任务：
+    // 1. 检查更新
+    // 2. 检查备份存储授权并自动备份
+    await Future.wait([
+      _checkForUpdatesOnStartup(),
+      _checkBackupOnStartup(),
+    ]);
+  }
+
+  /// 启动后检查备份存储：
+  /// - 如果未授权目录，立即弹窗要求授权
+  /// - 授权后自动执行备份
+  /// - 未授权不允许继续使用应用
+  Future<void> _checkBackupOnStartup() async {
+    try {
+      // 获取 Navigator context 用于显示对话框
+      final navigatorContext = _navigatorKey.currentContext;
+      if (navigatorContext == null || !navigatorContext.mounted) return;
+
+      final result = await BackupStartupCheck.runCheck(navigatorContext);
+
+      // 长时间异步后检查 mounted 状态
+      if (!mounted) return;
+
+      if (result.storageReady && result.autoBackupPerformed) {
+        debugPrint('[Application] 启动后备份检查完成: 已就绪');
+      }
+    } catch (e, stack) {
+      debugPrint('[Application] 启动后备份检查失败: $e');
+      debugPrint('[Application] Backup check stack: $stack');
+    }
   }
 
   // ---------------------------------------------------------------
@@ -199,8 +244,8 @@ class _ApplicationState extends ConsumerState<Application>
     final navigatorContext = _navigatorKey.currentContext;
 
     // 直接请求 GitHub API 检查最新版本
-    // silent=true 表示启动时不把网络错误暴露给用户
-    await notifier.checkForUpdate(silent: true);
+    // silent=false 表示有更新时必须弹窗通知用户
+    await notifier.checkForUpdate(silent: false);
 
     // 如果发现有新版本，弹出更新面板
     if (mounted && navigatorContext != null && navigatorContext.mounted) {
