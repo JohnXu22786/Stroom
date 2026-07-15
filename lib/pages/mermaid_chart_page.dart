@@ -442,10 +442,9 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final availableHeight = constraints.maxHeight;
-        final editorHeight =
-            _editorMode == EditorMode.split
-                ? availableHeight * _splitEditorHeightRatio
-                : 0.0;
+        final editorHeight = _editorMode == EditorMode.split
+            ? availableHeight * _splitEditorHeightRatio
+            : 0.0;
 
         return Stack(
           children: [

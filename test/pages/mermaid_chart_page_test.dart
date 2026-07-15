@@ -629,7 +629,8 @@ void main() {
     // Mermaid preview toolbar & split layout
     // ═══════════════════════════════════════════════════
 
-    testWidgets('split mode preview does NOT show zoom/fullscreen toolbar buttons',
+    testWidgets(
+        'split mode preview does NOT show zoom/fullscreen toolbar buttons',
         (tester) async {
       // Regression: the Mermaid page preview should not show the 4-button
       // toolbar (zoom_in, zoom_out, fullscreen, code toggle) that is used

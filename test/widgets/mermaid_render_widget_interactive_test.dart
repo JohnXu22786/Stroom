@@ -73,8 +73,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets(
-        'showToolbar:false toolbar buttons absent in source code view',
+    testWidgets('showToolbar:false toolbar buttons absent in source code view',
         (tester) async {
       // Regression: when showToolbar is false (used by MermaidChartPage),
       // the toolbar buttons (zoom in/out, fullscreen) must not be rendered
