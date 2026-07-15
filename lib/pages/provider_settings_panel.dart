@@ -154,14 +154,6 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
             orElse: () => null,
           );
 
-  bool get _isToggleComplete {
-    final toggle = _toggleReasoningParam;
-    if (toggle == null) return false;
-    return toggle.paramName.trim().isNotEmpty &&
-        (toggle.onValue != null && toggle.onValue!.trim().isNotEmpty) &&
-        (toggle.offValue != null && toggle.offValue!.trim().isNotEmpty);
-  }
-
   // =================================================================
   // Save
   // =================================================================
@@ -432,9 +424,18 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
             const SizedBox(height: 12),
             Center(
               child: TextButton.icon(
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('添加推理参数'),
-                onPressed: () => _addReasoningParam(),
+                icon: Icon(Icons.add,
+                    size: 16,
+                    color: _toggleReasoningParam != null ? null : Colors.grey),
+                label: Text('添加推理参数',
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: _toggleReasoningParam != null
+                            ? null
+                            : Colors.grey)),
+                onPressed: _toggleReasoningParam != null
+                    ? () => _addReasoningParam()
+                    : null,
               ),
             ),
             const SizedBox(height: 24),
@@ -643,21 +644,12 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
     if (toggle == null) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          children: [
-            Center(
-              child: Text('暂无推理开关',
-                  style: TextStyle(color: Colors.grey, fontSize: 13)),
-            ),
-            const SizedBox(height: 4),
-            Center(
-              child: TextButton.icon(
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('添加推理开关', style: TextStyle(fontSize: 13)),
-                onPressed: () => _addReasoningParam(isToggle: true),
-              ),
-            ),
-          ],
+        child: Center(
+          child: TextButton.icon(
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('添加推理开关', style: TextStyle(fontSize: 13)),
+            onPressed: () => _addReasoningParam(isToggle: true),
+          ),
         ),
       );
     }
@@ -760,7 +752,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   // Inference intensity section (provider version: name-only allowed)
   // =================================================================
   Widget _buildInferenceIntensitySection(ColorScheme cs) {
-    final isToggleComplete = _isToggleComplete;
+    final hasToggle = _toggleReasoningParam != null;
 
     // Find existing inference intensity param (non-toggle)
     final intensityParams =
@@ -775,21 +767,11 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
         const SizedBox(height: 4),
         Text(
           '推理力度参数支持只填参数名而不添加具体选项值'
-          '${!isToggleComplete ? '（需先完整填写推理开关后才能配置）' : ''}',
+          '${!hasToggle ? '（需先添加推理开关后才能配置）' : ''}',
           style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
         ),
         const SizedBox(height: 8),
-        if (intensityParams.isEmpty)
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Text(
-                isToggleComplete ? '暂无推理力度参数' : '请先完整填写推理开关',
-                style: TextStyle(color: Colors.grey, fontSize: 13),
-              ),
-            ),
-          )
-        else
+        if (intensityParams.isNotEmpty)
           ...List.generate(intensityParams.length, (i) {
             final param = intensityParams[i];
             final actualIndex = _reasoningParams.indexOf(param);
@@ -797,12 +779,12 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
           }),
         const SizedBox(height: 4),
         TextButton.icon(
-          icon: Icon(Icons.add,
-              size: 16, color: isToggleComplete ? null : Colors.grey),
+          icon:
+              Icon(Icons.add, size: 16, color: hasToggle ? null : Colors.grey),
           label: Text('添加推理力度参数',
               style: TextStyle(
-                  fontSize: 13, color: isToggleComplete ? null : Colors.grey)),
-          onPressed: isToggleComplete
+                  fontSize: 13, color: hasToggle ? null : Colors.grey)),
+          onPressed: hasToggle
               ? () {
                   final newParam = ReasoningParam(
                     paramName: '',
