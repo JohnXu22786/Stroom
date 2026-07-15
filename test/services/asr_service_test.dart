@@ -81,6 +81,25 @@ bool _bodyContains(List<int> haystack, List<int> needle) {
   return false;
 }
 
+/// Check that the multipart body contains a file part with the given [mimeType]
+/// in its content-type header.
+bool _multipartFileHasMimeType(List<int> bodyBytes, String mimeType) {
+  final bodyStr = utf8.decode(bodyBytes, allowMalformed: true);
+  // The file part looks like:
+  // content-disposition: form-data; name="file"; filename="..."\r\n
+  // content-type: <mimeType>\r\n
+  final filePartPattern = 'name="file"';
+  final fileIdx = bodyStr.indexOf(filePartPattern);
+  if (fileIdx == -1) return false;
+  // Find the content-type header after the file part
+  final ctIdx = bodyStr.indexOf('content-type: ', fileIdx);
+  if (ctIdx == -1) return false;
+  final ctEnd = bodyStr.indexOf('\r\n', ctIdx);
+  if (ctEnd == -1) return false;
+  final ctValue = bodyStr.substring(ctIdx, ctEnd);
+  return ctValue.contains(mimeType);
+}
+
 void main() {
   group('AsrService', () {
     group('AsrConfig', () {
@@ -281,15 +300,32 @@ void main() {
               'Content-Type must be multipart/form-data. Got: $capturedContentType',
         );
 
+        // Content-Type should include a boundary parameter
+        expect(
+          capturedContentType.contains('boundary='),
+          isTrue,
+          reason:
+              'Content-Type must include boundary parameter. Got: $capturedContentType',
+        );
+
         // Request body should contain multipart-formatted data
         final bodyBytes = adapter.capturedBodyBytes;
         expect(bodyBytes, isNotNull);
 
-        // Verify audio file bytes are in the body
+        // Verify audio file bytes (binary) are in the body
         expect(
           _bodyContains(bodyBytes!, audioBytes),
           isTrue,
-          reason: 'Audio file bytes should be present in multipart body',
+          reason: 'Audio file bytes should be present in multipart body, '
+              'not just a text placeholder',
+        );
+
+        // Verify file part has proper MIME type for WAV
+        expect(
+          _multipartFileHasMimeType(bodyBytes, 'audio/wav'),
+          isTrue,
+          reason:
+              'File part in multipart body should have content-type: audio/wav',
         );
 
         // Verify model field
@@ -321,8 +357,62 @@ void main() {
         expect(service.lastRequestBody, isNotNull);
         expect(
           (service.lastRequestBody!['file'] as String)
-              .contains('audio.wav (${audioBytes.length} bytes)'),
+              .contains('audio.wav (${audioBytes.length} bytes, audio/wav)'),
           true,
+        );
+      });
+
+      test('request sends correct MIME type for mp3 format', () async {
+        final adapter = _CapturingAdapter();
+        final mockDio = Dio()..httpClientAdapter = adapter;
+
+        const config = AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com',
+        );
+        final service = AsrService(config: config, dio: mockDio);
+
+        await service.transcribe(
+          audioBytes: Uint8List.fromList([10, 20, 30]),
+          audioFormat: 'mp3',
+        );
+
+        final bodyBytes = adapter.capturedBodyBytes;
+        expect(bodyBytes, isNotNull);
+
+        // Verify file part has proper MIME type for MP3
+        expect(
+          _multipartFileHasMimeType(bodyBytes!, 'audio/mpeg'),
+          isTrue,
+          reason:
+              'File part in multipart body should have content-type: audio/mpeg for mp3',
+        );
+      });
+
+      test('request sends correct MIME type for m4a format', () async {
+        final adapter = _CapturingAdapter();
+        final mockDio = Dio()..httpClientAdapter = adapter;
+
+        const config = AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com',
+        );
+        final service = AsrService(config: config, dio: mockDio);
+
+        await service.transcribe(
+          audioBytes: Uint8List.fromList([10, 20, 30]),
+          audioFormat: 'm4a',
+        );
+
+        final bodyBytes = adapter.capturedBodyBytes;
+        expect(bodyBytes, isNotNull);
+
+        // Verify file part has proper MIME type for M4A
+        expect(
+          _multipartFileHasMimeType(bodyBytes!, 'audio/mp4'),
+          isTrue,
+          reason:
+              'File part in multipart body should have content-type: audio/mp4 for m4a',
         );
       });
 
@@ -388,7 +478,6 @@ void main() {
           apiKey: 'test-key',
           host: 'https://api.test.com',
         );
-        final service = AsrService(config: config);
 
         // Call transcribe with a mock adapter to prevent real network call
         final adapter = _CapturingAdapter();
@@ -406,7 +495,7 @@ void main() {
         expect(testService.lastRequestBody!['response_format'], 'json');
         expect(
           (testService.lastRequestBody!['file'] as String)
-              .contains('audio.mp3 (${audioBytes.length} bytes)'),
+              .contains('audio.mp3 (${audioBytes.length} bytes, audio/mpeg)'),
           true,
         );
       });

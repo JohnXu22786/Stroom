@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import '../providers/chat_api_provider.dart';
-
+import '../utils/audio_utils.dart';
 import '../utils/http_utils.dart';
 
 // ============================================================================
@@ -16,7 +16,7 @@ import '../utils/http_utils.dart';
 /// which is used directly without appending any path. The request is sent as:
 ///   POST {host}
 ///   Content-Type: multipart/form-data (with boundary)
-///   Body: file, model, language (optional), response_format=json
+///   Body: file (binary), model, language (optional), response_format=json
 ///
 /// This follows the standard OpenAI STT multipart/form-data convention,
 /// which is compatible with OpenAI, OpenRouter, aihubmix, and other
@@ -169,17 +169,26 @@ class AsrService {
     final stopwatch = Stopwatch()..start();
 
     final fileName = 'audio.$audioFormat';
+    final mimeTypeString = getMimeType(audioFormat);
+    final mimeType = mimeTypeString.contains('/')
+        ? DioMediaType.parse(mimeTypeString)
+        : null;
     final formData = FormData.fromMap({
-      'file': MultipartFile.fromBytes(audioBytes, filename: fileName),
+      'file': MultipartFile.fromBytes(
+        audioBytes,
+        filename: fileName,
+        contentType: mimeType,
+      ),
       'model': config.model,
       'response_format': 'json',
       if (config.language != null && config.language!.isNotEmpty)
         'language': config.language,
-    }, ListFormat.multi, false);
+    });
 
-    // Capture request diagnostics
+    // Capture request diagnostics (for error details dialog).
+    // This is a summary only — the actual binary data is sent via FormData.
     lastRequestBody = {
-      'file': '$fileName (${audioBytes.length} bytes)',
+      'file': '$fileName (${audioBytes.length} bytes, $mimeTypeString)',
       'model': config.model,
       'response_format': 'json',
       if (config.language != null && config.language!.isNotEmpty)
