@@ -131,6 +131,7 @@ void main() {
         'options': ['low', 'medium', 'high'],
         'enabled': false,
         'isReasoningToggle': false,
+        'isEffortParam': false,
         'type': 'string',
       });
     });
