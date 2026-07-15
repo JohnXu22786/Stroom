@@ -69,22 +69,29 @@ Uint8List pcmToWav(
 }
 
 /// 获取MIME类型
+///
+/// 支持 OpenAI STT API 所列的全部格式：
+/// flac, mp3, mp4, mpeg, mpga, m4a, ogg, opus, wav, webm
 String getMimeType(String format) {
   switch (format.toLowerCase()) {
     case 'wav':
       return 'audio/wav';
     case 'mp3':
+    case 'mpga':
+    case 'mpeg':
       return 'audio/mpeg';
     case 'flac':
       return 'audio/flac';
     case 'ogg':
+    case 'opus':
       return 'audio/ogg';
     case 'aac':
       return 'audio/aac';
     case 'm4a':
+    case 'mp4':
       return 'audio/mp4';
-    case 'opus':
-      return 'audio/ogg';
+    case 'webm':
+      return 'audio/webm';
     case 'wma':
       return 'audio/x-ms-wma';
     case 'pcm':
