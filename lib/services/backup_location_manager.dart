@@ -192,6 +192,47 @@ class BackupLocationManager {
     }
   }
 
+  /// 检查 SAF URI 是否指向有效的文档路径（非根目录）。
+  ///
+  /// 确保用户选择的不是存储根目录（如 primary:），
+  /// 而是至少包含一个子目录（如 primary:Documents 或更深的路径）。
+  ///
+  /// [uri] 为 SAF tree URI 字符串，如
+  /// `content://com.android.externalstorage.documents/tree/primary%3ADocuments`。
+  /// 传入 null 或空字符串返回 false。
+  static bool isValidBackupPath(String? uri) {
+    if (uri == null || uri.isEmpty) return false;
+
+    try {
+      // 提取 URI 中 "tree/" 后的路径段
+      const treePrefix = 'tree/';
+      final treeIndex = uri.indexOf(treePrefix);
+      if (treeIndex == -1) return false;
+
+      final encodedPath = uri.substring(treeIndex + treePrefix.length);
+      if (encodedPath.isEmpty) return false;
+
+      // URI 解码（处理 %3A → :, %2F → / 等）
+      final decodedPath = Uri.decodeComponent(encodedPath);
+
+      // 拒绝根路径：路径格式通常为 "primary:Documents" 或 "XXXX-XXXX:folder"
+      // 根路径则为 "primary:" 或 "XXXX-XXXX:" — 冒号后无有效内容
+      // 取冒号后的部分，如果为空或仅包含 / 和空格则判定为根路径
+      final colonIndex = decodedPath.indexOf(':');
+      if (colonIndex == -1) return false;
+
+      final afterColon = decodedPath.substring(colonIndex + 1);
+      final trimmedAfterColon = afterColon.replaceAll('/', '').trim();
+
+      if (trimmedAfterColon.isEmpty) return false;
+
+      return true;
+    } catch (e) {
+      debugPrint('[BackupLocationManager] URI 路径验证失败: $e');
+      return false;
+    }
+  }
+
   /// 请求存储访问权限。
   ///
   /// Android: 打开 SAF 目录选择器，引导用户选择 Documents 目录。
@@ -209,6 +250,13 @@ class BackupLocationManager {
             final uri = await _safChannel.invokeMethod<String>('pickDirectory');
             if (uri == null || uri.isEmpty) {
               debugPrint('[BackupLocationManager] 用户取消了 SAF 目录选择');
+              return false;
+            }
+
+            // 验证选择的路径是否为有效的文档路径（非根目录）
+            if (!isValidBackupPath(uri)) {
+              debugPrint('[BackupLocationManager] 用户选择了无效路径(根目录)'
+                  '，需要重新授权: $uri');
               return false;
             }
 
