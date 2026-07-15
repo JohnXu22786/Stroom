@@ -6,6 +6,7 @@ import 'package:stroom/pages/mermaid_chart_page.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
+import 'package:stroom/widgets/mermaid_render_widget.dart';
 
 /// Builds the test app. [initialShowPreview] defaults to false to avoid
 /// InAppWebView platform not being initialized in test environment.
@@ -622,6 +623,33 @@ void main() {
 
       // Verify the page is still responsive
       expect(find.byType(TextField), findsOneWidget);
+    });
+
+    // ═══════════════════════════════════════════════════
+    // Mermaid preview toolbar & split layout
+    // ═══════════════════════════════════════════════════
+
+    testWidgets(
+        'split mode preview does NOT show zoom/fullscreen toolbar buttons',
+        (tester) async {
+      // Regression: the Mermaid page preview should not show the 4-button
+      // toolbar (zoom_in, zoom_out, fullscreen, code toggle) that is used
+      // in chat inline rendering, because MermaidChartPage passes
+      // showToolbar:false to MermaidRenderWidget.
+      await tester.pumpWidget(_buildTestApp(initialShowPreview: true));
+
+      // Only pump once — MermaidRenderWidget shows its loading state.
+      // The postFrameCallback fires during pumpWidget but creating an
+      // InAppWebView would require a real platform implementation not
+      // available in test mode. The loading state is enough to verify
+      // that MermaidRenderWidget is present without the toolbar.
+      expect(find.byType(MermaidRenderWidget), findsOneWidget);
+
+      // No toolbar buttons should appear (showToolbar:false prevents
+      // the button row even when the widget is in render mode).
+      expect(find.byIcon(Icons.zoom_in), findsNothing);
+      expect(find.byIcon(Icons.zoom_out), findsNothing);
+      expect(find.byIcon(Icons.fullscreen), findsNothing);
     });
   });
 }
