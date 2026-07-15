@@ -479,6 +479,33 @@ class _HomePageState extends ConsumerState<HomePage> {
             )
             .length;
 
+    // --- Compute status counts for the status card ---
+    int inProgressCount = 0;
+    int completedCount = 0;
+    int failedCount = 0;
+
+    void countCatchStatusName(String statusName) {
+      if (statusName == 'running' ||
+          statusName == 'paused' ||
+          statusName == 'waiting') {
+        inProgressCount++;
+      } else if (statusName == 'completed') {
+        completedCount++;
+      } else if (statusName == 'failed') {
+        failedCount++;
+      }
+    }
+
+    for (final t in catcatchTasks) {
+      countCatchStatusName(t.status.name);
+    }
+    for (final t in synthesisTasks) {
+      countCatchStatusName(t.status.name);
+    }
+    for (final t in backgroundTasks) {
+      countCatchStatusName(t.status.name);
+    }
+
     return SafeArea(
       top: true,
       child: Padding(
@@ -486,8 +513,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header — notification button integrated into the row
-            // so it never overlaps or causes overflow on small screens.
+            // Header — no notification button (replaced by status card)
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
               child: Row(
@@ -505,25 +531,6 @@ class _HomePageState extends ConsumerState<HomePage> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(20),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const UnifiedTaskListPage(),
-                        ),
-                      );
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.all(10),
-                      child: Badge(
-                        isLabelVisible: activeTaskCount > 0,
-                        label: Text('$activeTaskCount'),
-                        child: const Icon(Icons.pending_actions, size: 22),
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -532,7 +539,11 @@ class _HomePageState extends ConsumerState<HomePage> {
               '选择一个功能模块开始使用',
               style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+            // Status card — shows task counts by status
+            _buildStatusCard(context, inProgressCount, completedCount,
+                failedCount),
+            const SizedBox(height: 16),
             // Module grid
             Expanded(
               child: GridView(
@@ -684,6 +695,160 @@ class _HomePageState extends ConsumerState<HomePage> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  /// 构建状态概览卡片
+  Widget _buildStatusCard(
+    BuildContext context,
+    int inProgressCount,
+    int completedCount,
+    int failedCount,
+  ) {
+    final cs = Theme.of(context).colorScheme;
+
+    Widget _statusItem({
+      required int count,
+      required String label,
+      required Color dotColor,
+      required int tabIndex,
+    }) {
+      return Expanded(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    UnifiedTaskListPage(initialTab: tabIndex),
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '$count',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: cs.onSurface,
+                    height: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: dotColor,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: cs.outlineVariant, width: 0.5),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+        child: Column(
+          children: [
+            // "查看全部" button at top right
+            Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const UnifiedTaskListPage(initialTab: 0),
+                      ),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '查看全部',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.primary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(width: 2),
+                        Icon(
+                          Icons.chevron_right,
+                          size: 16,
+                          color: cs.primary,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            // Status items row
+            Row(
+              children: [
+                _statusItem(
+                  count: inProgressCount,
+                  label: '进行中',
+                  dotColor: const Color(0xFFFF9800), // orange
+                  tabIndex: 1,
+                ),
+                _statusItem(
+                  count: completedCount,
+                  label: '已完成',
+                  dotColor: const Color(0xFF4CAF50), // green
+                  tabIndex: 2,
+                ),
+                _statusItem(
+                  count: failedCount,
+                  label: '失败',
+                  dotColor: const Color(0xFFF44336), // red
+                  tabIndex: 3,
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

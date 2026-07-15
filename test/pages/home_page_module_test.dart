@@ -138,7 +138,7 @@ void main() {
 
   group('HomePage responsive layout', () {
     testWidgets(
-      'welcome text and notification button both visible on small screen',
+      'welcome text and status card visible on small screen',
       (tester) async {
         _setSmallScreen(tester);
 
@@ -148,8 +148,8 @@ void main() {
         // Welcome text should be visible
         expect(find.text('欢迎使用 Stroom'), findsOneWidget);
 
-        // Notification button should be visible
-        expect(find.byIcon(Icons.pending_actions), findsOneWidget);
+        // Status card should be visible with "查看全部" button
+        expect(find.text('查看全部'), findsOneWidget);
 
         // Subtitle should be visible
         expect(find.text('选择一个功能模块开始使用'), findsOneWidget);
@@ -175,13 +175,13 @@ void main() {
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
       expect(find.text('OCR'), findsOneWidget);
       expect(find.text('语音识别'), findsOneWidget);
-      expect(find.byIcon(Icons.pending_actions), findsOneWidget);
+      expect(find.text('查看全部'), findsOneWidget);
 
       // No overflow exceptions
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('notification button does not overlap with header text', (
+    testWidgets('status card is below welcome text and subtitle', (
       tester,
     ) async {
       _setSmallScreen(tester);
@@ -189,30 +189,32 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // Get the render box of the welcome text to find its right edge
+      // Get the position of the welcome text
       final welcomeTextFinder = find.text('欢迎使用 Stroom');
       expect(welcomeTextFinder, findsOneWidget);
 
       final welcomeRenderBox = tester.renderObject<RenderBox>(
         welcomeTextFinder,
       );
-      final welcomeRect =
-          welcomeRenderBox.localToGlobal(Offset.zero) & welcomeRenderBox.size;
+      final welcomeBottom =
+          welcomeRenderBox.localToGlobal(Offset.zero).dy +
+          welcomeRenderBox.size.height;
 
-      // Get the render box of the notification button
-      final notifBtnFinder = find.byIcon(Icons.pending_actions);
-      expect(notifBtnFinder, findsOneWidget);
+      // Get the position of the status card's "查看全部"
+      final viewAllFinder = find.text('查看全部');
+      expect(viewAllFinder, findsOneWidget);
 
-      final notifRenderBox = tester.renderObject<RenderBox>(notifBtnFinder);
-      final notifRect =
-          notifRenderBox.localToGlobal(Offset.zero) & notifRenderBox.size;
+      final viewAllRenderBox = tester.renderObject<RenderBox>(
+        viewAllFinder,
+      );
+      final viewAllTop =
+          viewAllRenderBox.localToGlobal(Offset.zero).dy;
 
-      // The notification button should be to the RIGHT of the welcome text
-      // (not overlapping horizontally)
+      // The status card should be below the welcome text
       expect(
-        notifRect.left,
-        greaterThanOrEqualTo(welcomeRect.right - 8),
-        reason: 'Notification button should not overlap with welcome text',
+        viewAllTop,
+        greaterThan(welcomeBottom),
+        reason: 'Status card should be positioned below the welcome text',
       );
     });
 
@@ -298,7 +300,10 @@ void main() {
       expect(find.text('选择一个功能模块开始使用'), findsOneWidget);
       expect(find.text('OCR'), findsOneWidget);
       expect(find.text('语音识别'), findsOneWidget);
-      expect(find.byIcon(Icons.pending_actions), findsOneWidget);
+      expect(find.text('查看全部'), findsOneWidget);
+      expect(find.text('进行中'), findsAtLeast(1));
+      expect(find.text('已完成'), findsAtLeast(1));
+      expect(find.text('失败'), findsAtLeast(1));
 
       // No overflow exceptions
       expect(tester.takeException(), isNull);

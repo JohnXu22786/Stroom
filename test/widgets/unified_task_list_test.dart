@@ -313,16 +313,8 @@ void main() {
   // ===========================================================================
   // 1. unified_task_list_page_test.dart
   // ===========================================================================
-  group('UnifiedTaskListPage - No tabs (single unified list)', () {
-    testWidgets('no TabBar exists in the page', (tester) async {
-      await pumpPage(tester, []);
-      expect(find.byType(TabBar), findsNothing,
-          reason: 'Tabs should be removed, no TabBar should exist');
-      expect(find.byType(TabController), findsNothing,
-          reason: 'No TabController should exist');
-    });
-
-    testWidgets('all tasks shown in one unified list', (tester) async {
+  group('UnifiedTaskListPage - All tasks shown on default tab', () {
+    testWidgets('all tasks shown in one unified list on 全部 tab', (tester) async {
       await pumpPage(tester, [
         _createCompletedTask(
             id: 'downloaded-1', downloadedFilePath: 'C:\\a.mp4'),
@@ -330,9 +322,9 @@ void main() {
       ]);
 
       expect(find.text('测试视频 downloaded-1'), findsOneWidget,
-          reason: 'Completed download task should be visible');
+          reason: 'Completed download task should be visible on 全部 tab');
       expect(find.text('运行中 running-1'), findsOneWidget,
-          reason: 'Running download task should be visible');
+          reason: 'Running download task should be visible on 全部 tab');
     });
 
     testWidgets('empty task list shows placeholder', (tester) async {
@@ -507,7 +499,7 @@ void main() {
       ]);
 
       expect(find.text('运行中任务'), findsOneWidget);
-      expect(find.text('进行中'), findsOneWidget, reason: '进行中的任务应显示"进行中"状态');
+      expect(find.text('进行中'), findsAtLeast(1), reason: '进行中的任务应显示"进行中"状态');
     });
 
     testWidgets('completed background task shows completed status',
@@ -544,7 +536,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(find.text('OCR已完成'), findsOneWidget, reason: '已完成的任务应显示在列表中');
-      expect(find.text('已完成'), findsOneWidget, reason: '已完成的任务应显示"已完成"状态');
+      expect(find.text('已完成'), findsAtLeast(1), reason: '已完成的任务应显示"已完成"状态');
     });
 
     testWidgets('background task shows failed task with error', (tester) async {
@@ -553,7 +545,7 @@ void main() {
       ]);
 
       expect(find.text('音频分离任务'), findsOneWidget, reason: '应显示失败的音频分离任务');
-      expect(find.text('失败'), findsOneWidget, reason: '失败的任务应显示"失败"状态');
+      expect(find.text('失败'), findsAtLeast(1), reason: '失败的任务应显示"失败"状态');
 
       await tester.tap(find.text('音频分离任务'));
       await tester.pump();
@@ -616,7 +608,7 @@ void main() {
 
       expect(find.byIcon(Icons.check_circle), findsAtLeast(1),
           reason: '已完成的任务应显示完成图标');
-      expect(find.text('已完成'), findsOneWidget);
+      expect(find.text('已完成'), findsAtLeast(1));
     });
 
     testWidgets('background task does NOT show "识别结果" label', (tester) async {
@@ -731,14 +723,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(find.text('转换中的任务'), findsOneWidget);
-      expect(find.text('进行中'), findsOneWidget);
+      expect(find.text('进行中'), findsAtLeast(1));
 
       bgNotifier.completeTask(taskId);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(find.text('转换中的任务'), findsOneWidget);
-      expect(find.text('已完成'), findsOneWidget);
+      expect(find.text('已完成'), findsAtLeast(1));
       expect(find.byIcon(Icons.check_circle), findsAtLeast(1));
     });
 
@@ -775,14 +767,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(find.text('转写任务'), findsOneWidget);
-      expect(find.text('进行中'), findsOneWidget);
+      expect(find.text('进行中'), findsAtLeast(1));
 
       bgNotifier.failTask(taskId, error: '转写失败: API错误');
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(find.text('转写任务'), findsOneWidget);
-      expect(find.text('失败'), findsOneWidget);
+      expect(find.text('失败'), findsAtLeast(1));
       expect(find.byIcon(Icons.error), findsAtLeast(1));
     });
 
@@ -912,7 +904,7 @@ void main() {
       ]);
 
       expect(find.text('失败任务测试'), findsOneWidget);
-      expect(find.text('失败'), findsOneWidget);
+      expect(find.text('失败'), findsAtLeast(1));
 
       await tester.tap(find.text('失败任务测试'));
       await tester.pump();
@@ -1032,7 +1024,7 @@ void main() {
       ]);
 
       expect(find.text('可打开文件'), findsOneWidget);
-      expect(find.text('已完成'), findsOneWidget);
+      expect(find.text('已完成'), findsAtLeast(1));
       expect(find.text('打开文件'), findsOneWidget,
           reason: '有文件路径的合成任务应显示"打开文件"按钮');
     });

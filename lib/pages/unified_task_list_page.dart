@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../catcatch/models/catcatch_task.dart' as catcatch;
 import '../catcatch/providers/catcatch_provider.dart';
 import '../providers/task_provider.dart';
 import '../providers/background_task_provider.dart';
@@ -25,18 +26,82 @@ export 'unified_task_list/task_utils.dart'
         loadTaskListLastRead,
         formatRelativeTime;
 
+/// Task tab categories.
+enum TaskTab { all, inProgress, completed, failed }
+
+/// Map a [UnifiedTaskItem] to its [TaskTab] category.
+TaskTab _taskTab(UnifiedTaskItem item) {
+  if (item.isCatCatch) {
+    final t = item.catCatchTask!;
+    switch (t.status) {
+      case catcatch.TaskStatus.running:
+      case catcatch.TaskStatus.paused:
+      case catcatch.TaskStatus.waiting:
+        return TaskTab.inProgress;
+      case catcatch.TaskStatus.completed:
+        return TaskTab.completed;
+      case catcatch.TaskStatus.failed:
+        return TaskTab.failed;
+    }
+  } else {
+    final TaskStatus status;
+    if (item.isBackground) {
+      status = item.backgroundTask!.status;
+    } else {
+      status = item.synthesisTask!.status;
+    }
+    switch (status) {
+      case TaskStatus.running:
+      case TaskStatus.paused:
+      case TaskStatus.waiting:
+        return TaskTab.inProgress;
+      case TaskStatus.completed:
+        return TaskTab.completed;
+      case TaskStatus.failed:
+        return TaskTab.failed;
+    }
+  }
+}
+
+/// Tab labels and their icons for the task list.
+const _taskTabData = [
+  _TabData('全部', Icons.list),
+  _TabData('进行中', Icons.play_circle_outline),
+  _TabData('已完成', Icons.check_circle_outline),
+  _TabData('失败', Icons.error_outline),
+];
+
+class _TabData {
+  final String label;
+  final IconData icon;
+  const _TabData(this.label, this.icon);
+}
+
 class UnifiedTaskListPage extends ConsumerStatefulWidget {
-  const UnifiedTaskListPage({super.key});
+  final int initialTab;
+
+  const UnifiedTaskListPage({super.key, this.initialTab = 0});
 
   @override
   ConsumerState<UnifiedTaskListPage> createState() =>
       _UnifiedTaskListPageState();
 }
 
-class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage> {
+class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(
+      length: 4,
+      vsync: this,
+      initialIndex: widget.initialTab.clamp(0, 3),
+    );
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final now = DateTime.now();
@@ -44,6 +109,12 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage> {
         persistTaskListLastRead(now);
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   @override
@@ -79,10 +150,23 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage> {
         ),
     ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
+    // Filter tasks based on selected tab
+    final filteredTasks = _filteredTasks(allTasks, _tabController.index);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('任务列表'),
         centerTitle: true,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: TabBar(
+            controller: _tabController,
+            tabs: [
+              for (final tab in _taskTabData)
+                Tab(text: tab.label, icon: Icon(tab.icon, size: 18)),
+            ],
+          ),
+        ),
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
@@ -100,7 +184,9 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage> {
                 }
                 for (final t in backgroundTasks) {
                   if (t.status == TaskStatus.completed) {
-                    ref.read(backgroundTasksProvider.notifier).removeTask(t.id);
+                    ref
+                        .read(backgroundTasksProvider.notifier)
+                        .removeTask(t.id);
                   }
                 }
               } else if (value == 'clear_failed') {
@@ -217,10 +303,18 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage> {
           ),
         ],
       ),
-      body: allTasks.isEmpty
+      body: filteredTasks.isEmpty
           ? _buildEmptyState(context)
-          : _buildTaskList(allTasks),
+          : _buildTaskList(filteredTasks),
     );
+  }
+
+  /// Filter [allTasks] by the currently selected tab.
+  List<UnifiedTaskItem> _filteredTasks(
+      List<UnifiedTaskItem> allTasks, int tabIndex) {
+    if (tabIndex == 0) return allTasks; // 全部 — no filter
+    final targetTab = TaskTab.values[tabIndex];
+    return allTasks.where((item) => _taskTab(item) == targetTab).toList();
   }
 
   Widget _buildEmptyState(BuildContext context) {
@@ -247,16 +341,17 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage> {
     );
   }
 
-  Widget _buildTaskList(List<UnifiedTaskItem> allTasks) {
+  Widget _buildTaskList(List<UnifiedTaskItem> tasks) {
     return ListView.builder(
       padding: const EdgeInsets.only(top: 8, bottom: 24),
-      itemCount: allTasks.length,
+      itemCount: tasks.length,
       itemBuilder: (_, i) {
-        final item = allTasks[i];
+        final item = tasks[i];
         final lastRead = ref.watch(taskListLastReadProvider);
         if (item.isCatCatch) {
           final t = item.catCatchTask!;
-          final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
+          final isUnread =
+              (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
           return CatCatchTaskCard(
             key: ValueKey(item.id),
             task: t,
@@ -265,7 +360,8 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage> {
         }
         if (item.isBackground) {
           final t = item.backgroundTask!;
-          final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
+          final isUnread =
+              (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
           return BackgroundTaskCard(
             key: ValueKey(item.id),
             task: t,
@@ -273,7 +369,8 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage> {
           );
         }
         final t = item.synthesisTask!;
-        final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
+        final isUnread =
+            (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
         return SynthesisTaskCard(
           key: ValueKey(item.id),
           task: t,
