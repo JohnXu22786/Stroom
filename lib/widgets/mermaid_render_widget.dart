@@ -417,8 +417,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveHeight =
-        widget.expand ? null : (widget.height ?? 300.0);
+    final effectiveHeight = widget.expand ? null : (widget.height ?? 300.0);
     final cs = Theme.of(context).colorScheme;
     final isDark = cs.brightness == Brightness.dark;
     final code = widget.mermaidCode.trim();

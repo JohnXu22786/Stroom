@@ -34,8 +34,7 @@ void main() {
   });
 
   group('MermaidChartPage - freeze fix: uses MermaidRenderWidget', () {
-    testWidgets(
-        'no direct InAppWebView — uses MermaidRenderWidget for preview',
+    testWidgets('no direct InAppWebView — uses MermaidRenderWidget for preview',
         (tester) async {
       // Start in edit mode (no preview)
       await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
@@ -67,8 +66,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets(
-        'switching from edit to split mode shows MermaidRenderWidget',
+    testWidgets('switching from edit to split mode shows MermaidRenderWidget',
         (tester) async {
       await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
       await tester.pump();

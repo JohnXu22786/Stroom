@@ -48,8 +48,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets(
-        'split mode shows MermaidRenderWidget without platform crash',
+    testWidgets('split mode shows MermaidRenderWidget without platform crash',
         (tester) async {
       // Start with initialShowPreview:true — this shows the preview pane
       // with MermaidRenderWidget. The WebView creation is deferred via
@@ -70,8 +69,7 @@ void main() {
       expect(find.text('正在准备渲染引擎...'), findsOneWidget);
     });
 
-    testWidgets(
-        'switching from edit to split mode shows MermaidRenderWidget',
+    testWidgets('switching from edit to split mode shows MermaidRenderWidget',
         (tester) async {
       // Start in edit mode
       await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
