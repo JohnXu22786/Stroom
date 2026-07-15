@@ -294,6 +294,11 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   // Show API key hint if available
                   final apiKeyHint = mcpTypeConfig?['apiKeyHint'] as String?;
 
+                  // Description text (replaces platform badges)
+                  final mcpDescription = entry.type == 'mcp'
+                      ? (mcpTypeConfig?['description'] as String?)
+                      : null;
+
                   return Card(
                     key: ValueKey('config_${widget.entryId}_$i'),
                     margin: const EdgeInsets.only(bottom: 8),
@@ -365,22 +370,18 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                               ),
                             ),
                           // 显示描述文本（替代原来的平台标签）
-                          if (entry.type == 'mcp') ...[
-                            final description =
-                                mcpTypeConfig?['description'] as String?;
-                            if (description != null &&
-                                description.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                description,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey[600],
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
+                          if (mcpDescription != null &&
+                              mcpDescription.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              mcpDescription,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey[600],
                               ),
-                            ],
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ],
                         ],
                       ),

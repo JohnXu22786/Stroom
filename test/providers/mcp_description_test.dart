@@ -59,7 +59,8 @@ void main() {
 
       final state = container.read(providerEntriesProvider);
       final mcpEntry = state.entries.firstWhere((e) => e.type == 'mcp');
-      final exaConfig = mcpEntry.configs.firstWhere((c) => c.providerName == 'Exa');
+      final exaConfig =
+          mcpEntry.configs.firstWhere((c) => c.providerName == 'Exa');
       final exaDesc = exaConfig.models[0].typeConfig['description'] as String?;
       expect(exaDesc, isNotEmpty);
 

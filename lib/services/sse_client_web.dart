@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:html' as html;
 
 import 'package:dio/dio.dart';
@@ -252,8 +251,8 @@ Future<String> ssePost(
       final response = xhr.responseText ?? '';
       controller.complete(response);
     } else if (xhr.status != null && xhr.status! > 0) {
-      controller.completeError(
-          Exception('HTTP ${xhr.status}: ${xhr.statusText}'));
+      controller
+          .completeError(Exception('HTTP ${xhr.status}: ${xhr.statusText}'));
     } else {
       controller.completeError(Exception('请求失败'));
     }

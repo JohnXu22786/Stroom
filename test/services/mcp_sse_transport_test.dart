@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -21,7 +20,8 @@ void main() {
     });
 
     test('parses absolute endpoint URL', () {
-      const event = 'event: endpoint\ndata: https://mcp.example.com/messages\n\n';
+      const event =
+          'event: endpoint\ndata: https://mcp.example.com/messages\n\n';
       final lines = event.split('\n');
       String? endpointUrl;
       for (final line in lines) {
@@ -136,7 +136,8 @@ void main() {
         url: 'http://localhost:3001/sse',
       );
       final client = McpClient(config: config);
-      expect(() => (client.cachedTools as dynamic).add(null), throws);
+      expect(() => (client.cachedTools as dynamic).add(null),
+          throwsA(isA<Error>()));
     });
 
     test('dispose clears cached tools', () {

@@ -64,7 +64,8 @@ Stream<String> sseConnect(
   final dio = Dio(BaseOptions(
     headers: headers,
     connectTimeout: const Duration(seconds: 10),
-    receiveTimeout: const Duration(seconds: 0), // No timeout for persistent connection
+    receiveTimeout:
+        const Duration(seconds: 0), // No timeout for persistent connection
   ));
 
   final response = await dio.get(

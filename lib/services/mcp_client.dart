@@ -209,7 +209,8 @@ class McpClient {
     _sseEndpointUrl = null;
     _sseEndpointCompleter = Completer<void>();
 
-    debugPrint('MCP[${config.name}]: Establishing persistent SSE connection to ${config.url}');
+    debugPrint(
+        'MCP[${config.name}]: Establishing persistent SSE connection to ${config.url}');
 
     _cancelToken = CancelToken();
 
@@ -239,7 +240,8 @@ class McpClient {
             if (currentEvent == 'endpoint') {
               // Standard MCP: server sends event: endpoint with URL to post messages
               _sseEndpointUrl = data.trim();
-              debugPrint('MCP[${config.name}]: received endpoint URL: $_sseEndpointUrl');
+              debugPrint(
+                  'MCP[${config.name}]: received endpoint URL: $_sseEndpointUrl');
               if (!_sseEndpointCompleter.isCompleted) {
                 _sseEndpointCompleter.complete();
               }
@@ -273,7 +275,8 @@ class McpClient {
       // Wait for the endpoint event with a 30-second timeout
       await _sseEndpointCompleter.future.timeout(const Duration(seconds: 30));
       _state = _McpClientState.connected;
-      debugPrint('MCP[${config.name}]: SSE transport connected, endpoint: $_sseEndpointUrl');
+      debugPrint(
+          'MCP[${config.name}]: SSE transport connected, endpoint: $_sseEndpointUrl');
     } catch (e) {
       debugPrint('MCP[${config.name}]: SSE connect failed: $e');
       _sseSubscription?.cancel();
@@ -405,7 +408,8 @@ class McpClient {
       if (msgId != null) {
         final completer = _pendingRequests.remove(msgId);
         if (completer != null && !completer.isCompleted) {
-          completer.completeError(TimeoutException('MCP SSE request timed out'));
+          completer
+              .completeError(TimeoutException('MCP SSE request timed out'));
         }
       }
     } catch (e) {
