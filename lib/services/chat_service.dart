@@ -785,10 +785,9 @@ class ChatService {
 
   /// Register a tool handler for a given tool definition.
   /// The handler receives parsed arguments and returns a result string.
-  /// The handler can be sync (`String`) or async (`Future<String>`).
   static void registerTool(
     ToolDefinition def,
-    dynamic Function(Map<String, dynamic>) handler,
+    String Function(Map<String, dynamic>) handler,
   ) {
     _toolRegistries[def.name] = {'definition': def, 'handler': handler};
   }
@@ -797,14 +796,8 @@ class ChatService {
     // First check locally registered tools
     final entry = _toolRegistries[name];
     if (entry != null) {
-      final handler =
-          entry['handler'] as dynamic Function(Map<String, dynamic>);
-      final result = handler(args);
-      // Handle both sync and async handlers
-      if (result is Future<String>) {
-        return await result;
-      }
-      return result as String;
+      final handler = entry['handler'] as String Function(Map<String, dynamic>);
+      return handler(args);
     }
 
     // Then check MCP clients

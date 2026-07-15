@@ -7,7 +7,6 @@ import '../models/mcp.dart';
 import '../models/tool_call.dart';
 import '../providers/provider_config.dart';
 import 'chat_service.dart';
-import 'http_tool_service.dart';
 import '../providers/chat_api_provider.dart';
 import 'mcp_client.dart';
 
@@ -71,36 +70,17 @@ class ChatAdapter {
   List<ToolDefinition> get mcpToolDefinitions =>
       List.unmodifiable(_mcpToolDefinitions);
 
-  /// 初始化 MCP 客户端 + HTTP 工具并配置 ChatService
+  /// 初始化 MCP 客户端并发现工具
   Future<void> initializeMcpServers(ProviderEntriesState entriesState) async {
     final mcpEntry =
         entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
     if (mcpEntry == null || mcpEntry.configs.isEmpty) return;
 
-    // Build MCP server configs + collect HTTP tool API keys
+    // Build MCP server configs from provider configs
     final mcpConfigs = <McpServerConfig>[];
-    String? braveApiKey, bochaApiKey, queritApiKey, searxngUrl, searxngApiKey;
-
     for (final config in mcpEntry.configs) {
       final typeConfig =
           config.models.isNotEmpty ? config.models[0].typeConfig : null;
-
-      // Check if this is an HTTP tool (pure Dart, not MCP)
-      final isHttpTool = typeConfig?['isHttpTool'] as bool? ?? false;
-      if (isHttpTool) {
-        debugPrint('Config: initializing HTTP tool "${config.providerName}"');
-        _collectHttpToolApiKey(
-          config.providerName,
-          typeConfig,
-          (key) => braveApiKey ??= key,
-          (key) => bochaApiKey ??= key,
-          (key) => queritApiKey ??= key,
-          (url) => searxngUrl ??= url,
-          (key) => searxngApiKey ??= key,
-        );
-        continue;
-      }
-
       final serverConfig = McpServerConfig.fromProviderConfig(
         providerName: config.providerName,
         typeConfig: typeConfig,
@@ -109,18 +89,6 @@ class ChatAdapter {
         mcpConfigs.add(serverConfig);
       }
     }
-
-    // Initialize HttpToolService with collected API keys
-    HttpToolService.updateApiKeys(
-      braveApiKey: braveApiKey,
-      bochaApiKey: bochaApiKey,
-      queritApiKey: queritApiKey,
-      searxngUrl: searxngUrl,
-      searxngApiKey: searxngApiKey,
-    );
-
-    // Register HTTP tool handlers in ChatService (idempotent)
-    _registerHttpTools();
 
     // Set McpClientManager on ChatService for tool routing
     ChatService.setMcpClientManager(_mcpClientManager);
@@ -145,85 +113,6 @@ class ChatAdapter {
       }
     }
     _mcpToolDefinitions = allTools;
-  }
-
-  /// Collect API key from an HTTP tool config entry
-  void _collectHttpToolApiKey(
-    String name,
-    Map<String, dynamic>? typeConfig,
-    void Function(String) setBrave,
-    void Function(String) setBocha,
-    void Function(String) setQuerit,
-    void Function(String) setSearxngUrl,
-    void Function(String) setSearxngKey,
-  ) {
-    if (typeConfig == null) return;
-
-    // Try apiKey field first, then headers, then env
-    String? extractKey() {
-      final apiKey = typeConfig['apiKey'] as String?;
-      if (apiKey != null && apiKey.isNotEmpty) return apiKey;
-      final headersRaw = typeConfig['headers'];
-      if (headersRaw is Map) {
-        for (final val in headersRaw.values) {
-          final s = val.toString().trim();
-          if (s.isNotEmpty && s.length > 3) {
-            if (s.startsWith('Bearer ')) return s.substring(7).trim();
-            return s;
-          }
-        }
-      }
-      final envRaw = typeConfig['env'];
-      if (envRaw is Map) {
-        for (final val in envRaw.values) {
-          final s = val.toString();
-          if (s.isNotEmpty) return s;
-        }
-      }
-      return null;
-    }
-
-    switch (name) {
-      case 'Brave Search':
-        setBrave(extractKey() ?? '');
-      case 'Bocha':
-        setBocha(extractKey() ?? '');
-      case 'Querit':
-        setQuerit(extractKey() ?? '');
-      case 'Searxng':
-        final url = typeConfig['url'] as String? ?? 'http://localhost:8080';
-        setSearxngUrl(url);
-        setSearxngKey(extractKey() ?? '');
-    }
-  }
-
-  /// Register HTTP tool handlers in ChatService (idempotent — uses static flag)
-  static bool _httpToolsRegistered = false;
-  void _registerHttpTools() {
-    if (_httpToolsRegistered) return;
-    _httpToolsRegistered = true;
-
-    for (final def in HttpToolService.toolDefinitions) {
-      // Async handler that delegates to the HTTP tool service
-      Future<String> handler(Map<String, dynamic> args) async {
-        switch (def.name) {
-          case 'brave_web_search':
-            return await HttpToolService.handleBraveSearch(args);
-          case 'bocha_web_search':
-            return await HttpToolService.handleBochaSearch(args);
-          case 'querit_search':
-            return await HttpToolService.handleQueritSearch(args);
-          case 'searxng_search':
-            return await HttpToolService.handleSearxngSearch(args);
-          default:
-            return '错误: 未知的 HTTP 工具 "${def.name}"';
-        }
-      }
-
-      ChatService.registerTool(def, handler);
-    }
-    debugPrint(
-        'Registered ${HttpToolService.toolDefinitions.length} HTTP tools');
   }
 
   /// 释放 MCP 资源
