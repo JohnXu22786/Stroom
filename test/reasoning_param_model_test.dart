@@ -38,6 +38,7 @@ void main() {
         'options': ['low', 'medium', 'high'],
         'enabled': false,
         'isReasoningToggle': false,
+        'isEffortParam': false,
         'type': 'string',
       });
     });
@@ -82,7 +83,7 @@ void main() {
       expect(param.enabled, isFalse);
     });
 
-    test('toMap serialization includes enabled', () {
+    test('toMap serialization includes enabled and isEffortParam', () {
       final param = ReasoningParam(
         paramName: 'reasoning_effort',
         options: ['low', 'medium', 'high'],
@@ -94,6 +95,7 @@ void main() {
         'options': ['low', 'medium', 'high'],
         'enabled': false,
         'isReasoningToggle': false,
+        'isEffortParam': false,
         'type': 'string',
       });
     });
