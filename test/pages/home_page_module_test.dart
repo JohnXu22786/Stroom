@@ -301,9 +301,9 @@ void main() {
       expect(find.text('OCR'), findsOneWidget);
       expect(find.text('语音识别'), findsOneWidget);
       expect(find.text('查看全部'), findsOneWidget);
-      expect(find.text('进行中'), findsAtLeast(1));
-      expect(find.text('已完成'), findsAtLeast(1));
-      expect(find.text('失败'), findsAtLeast(1));
+      expect(find.text('进行中'), findsOneWidget);
+      expect(find.text('已完成'), findsOneWidget);
+      expect(find.text('失败'), findsOneWidget);
 
       // No overflow exceptions
       expect(tester.takeException(), isNull);

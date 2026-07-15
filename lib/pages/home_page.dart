@@ -452,32 +452,6 @@ class _HomePageState extends ConsumerState<HomePage> {
     final catcatchTasks = ref.watch(catcatchTasksProvider);
     final synthesisTasks = ref.watch(taskListProvider);
     final backgroundTasks = ref.watch(backgroundTasksProvider);
-    final lastRead = ref.watch(taskListLastReadProvider);
-    final activeTaskCount = catcatchTasks
-            .where(
-              (t) =>
-                  t.status.name != 'completed' &&
-                  ((t.statusChangedAt ?? t.createdAt).isAfter(lastRead) ||
-                      (t.status.name == 'running' &&
-                          t.steps.any(
-                            (s) => s.type.name == 'userSelecting' && s.running,
-                          ))),
-            )
-            .length +
-        synthesisTasks
-            .where(
-              (t) =>
-                  t.status.name != 'completed' &&
-                  (t.statusChangedAt ?? t.createdAt).isAfter(lastRead),
-            )
-            .length +
-        backgroundTasks
-            .where(
-              (t) =>
-                  t.status != TaskStatus.completed &&
-                  (t.statusChangedAt ?? t.createdAt).isAfter(lastRead),
-            )
-            .length;
 
     // --- Compute status counts for the status card ---
     int inProgressCount = 0;
