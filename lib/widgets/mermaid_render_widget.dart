@@ -558,7 +558,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// uses the same height as the render mode, ensuring visual consistency.
   /// The "查看图表" toggle button is passed as an action button.
   Widget _buildSourceCodeView(
-      ColorScheme cs, bool isDark, double effectiveHeight) {
+      ColorScheme cs, bool isDark, double? effectiveHeight) {
     return CodeBlockSourceView(
       code: widget.mermaidCode,
       height: effectiveHeight,
