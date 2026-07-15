@@ -207,6 +207,9 @@ class AsrService {
       final response = await _dio.post(
         config.transcribeUrl,
         data: formData,
+        options: Options(
+          contentType: 'multipart/form-data',
+        ),
       );
 
       stopwatch.stop();
