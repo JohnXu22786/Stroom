@@ -552,8 +552,8 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       final container = ProviderContainer(
         overrides: [
-          updateProvider.overrideWith(
-              (ref) => UpdateNotifier(dio: Dio(BaseOptions()))),
+          updateProvider
+              .overrideWith((ref) => UpdateNotifier(dio: Dio(BaseOptions()))),
         ],
       );
       final notifier = container.read(updateProvider.notifier);
@@ -563,15 +563,13 @@ void main() {
           AvailableUpdate(
             version: '0.2.16',
             releaseNotes: 'Version 0.2.16',
-            downloadUrl:
-                'https://example.com/v0.2.16.zip',
+            downloadUrl: 'https://example.com/v0.2.16.zip',
             isPreRelease: false,
           ),
           AvailableUpdate(
             version: '0.2.15',
             releaseNotes: 'Version 0.2.15',
-            downloadUrl:
-                'https://example.com/v0.2.15.zip',
+            downloadUrl: 'https://example.com/v0.2.15.zip',
             isPreRelease: false,
           ),
         ],
@@ -616,8 +614,8 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       final container = ProviderContainer(
         overrides: [
-          updateProvider.overrideWith(
-              (ref) => UpdateNotifier(dio: Dio(BaseOptions()))),
+          updateProvider
+              .overrideWith((ref) => UpdateNotifier(dio: Dio(BaseOptions()))),
         ],
       );
       final notifier = container.read(updateProvider.notifier);
@@ -627,15 +625,13 @@ void main() {
           AvailableUpdate(
             version: '0.2.16',
             releaseNotes: 'Version 0.2.16 notes',
-            downloadUrl:
-                'https://example.com/v0.2.16.zip',
+            downloadUrl: 'https://example.com/v0.2.16.zip',
             isPreRelease: false,
           ),
           AvailableUpdate(
             version: '0.2.15',
             releaseNotes: 'Version 0.2.15 notes',
-            downloadUrl:
-                'https://example.com/v0.2.15.zip',
+            downloadUrl: 'https://example.com/v0.2.15.zip',
             isPreRelease: false,
           ),
         ],
@@ -686,8 +682,8 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       final container = ProviderContainer(
         overrides: [
-          updateProvider.overrideWith(
-              (ref) => UpdateNotifier(dio: Dio(BaseOptions()))),
+          updateProvider
+              .overrideWith((ref) => UpdateNotifier(dio: Dio(BaseOptions()))),
         ],
       );
       final notifier = container.read(updateProvider.notifier);
@@ -697,8 +693,7 @@ void main() {
           AvailableUpdate(
             version: '0.2.14',
             releaseNotes: 'Bug fixes',
-            downloadUrl:
-                'https://example.com/v0.2.14.zip',
+            downloadUrl: 'https://example.com/v0.2.14.zip',
             isPreRelease: false,
           ),
         ],

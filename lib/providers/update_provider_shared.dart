@@ -16,7 +16,8 @@ class AvailableUpdate {
   });
 
   @override
-  String toString() => 'AvailableUpdate($version${isPreRelease ? " preview" : ""})';
+  String toString() =>
+      'AvailableUpdate($version${isPreRelease ? " preview" : ""})';
 }
 
 /// A semantic version that preserves pre-release information.

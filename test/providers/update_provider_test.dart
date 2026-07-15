@@ -675,8 +675,7 @@ void main() {
       expect(notifier.state.acceptPreRelease, true);
     });
 
-    test(
-        'checkForUpdate with acceptPreRelease=false finds stable updates',
+    test('checkForUpdate with acceptPreRelease=false finds stable updates',
         () async {
       SharedPreferences.setMockInitialValues({});
       final dio = _createMockDio(_githubRelease('v0.2.14'));
@@ -993,7 +992,8 @@ void main() {
   });
 
   group('UpdateNotifier - Multi-version support', () {
-    test('checkForUpdate with acceptPreRelease=false populates availableVersions with only stable releases',
+    test(
+        'checkForUpdate with acceptPreRelease=false populates availableVersions with only stable releases',
         () async {
       SharedPreferences.setMockInitialValues({});
       final releases = _githubReleases([
@@ -1011,7 +1011,8 @@ void main() {
 
       expect(notifier.state.updateAvailable, true);
       expect(notifier.state.availableVersions, isNotNull);
-      expect(notifier.state.availableVersions!.length, 3); // 0.2.16, 0.2.15, 0.2.14
+      expect(notifier.state.availableVersions!.length,
+          3); // 0.2.16, 0.2.15, 0.2.14
       // Should be sorted descending (newest first)
       expect(notifier.state.availableVersions![0].version, '0.2.16');
       expect(notifier.state.availableVersions![1].version, '0.2.15');
@@ -1042,7 +1043,8 @@ void main() {
       expect(notifier.state.availableVersions!.length, 4);
       // Sorted descending: same base version, stable sorts before pre-release
       expect(notifier.state.availableVersions![0].version, '0.2.16');
-      expect(notifier.state.availableVersions![1].version, '0.2.15'); // stable before pre-release
+      expect(notifier.state.availableVersions![1].version,
+          '0.2.15'); // stable before pre-release
       expect(notifier.state.availableVersions![2].version, '0.2.15-alpha');
       expect(notifier.state.availableVersions![3].version, '0.2.14');
       // The prerelease flag from GitHub should be preserved
@@ -1200,12 +1202,12 @@ void main() {
       expect(notifier.state.availableVersions![1].isPreRelease, true);
     });
 
-    test('AvailableUpdate stores downloadUrl correctly',
-        () async {
+    test('AvailableUpdate stores downloadUrl correctly', () async {
       final update = AvailableUpdate(
         version: '0.2.16',
         releaseNotes: 'Notes',
-        downloadUrl: 'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.16/test.zip',
+        downloadUrl:
+            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.16/test.zip',
         isPreRelease: false,
       );
 
@@ -1214,7 +1216,8 @@ void main() {
       expect(update.isPreRelease, false);
     });
 
-    test('checkForUpdate with acceptPreRelease=false never shows prerelease even when only prerelease is newer',
+    test(
+        'checkForUpdate with acceptPreRelease=false never shows prerelease even when only prerelease is newer',
         () async {
       SharedPreferences.setMockInitialValues({});
       final releases = _githubReleases([
