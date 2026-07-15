@@ -81,6 +81,12 @@ class ChatAdapter {
     for (final config in mcpEntry.configs) {
       final typeConfig =
           config.models.isNotEmpty ? config.models[0].typeConfig : null;
+      // Skip REST API configs (they are not actual MCP servers)
+      final isRestApi = typeConfig?['isRestApi'] as bool? ?? false;
+      if (isRestApi) {
+        debugPrint('MCP: skipping REST API config "${config.providerName}"');
+        continue;
+      }
       final serverConfig = McpServerConfig.fromProviderConfig(
         providerName: config.providerName,
         typeConfig: typeConfig,
