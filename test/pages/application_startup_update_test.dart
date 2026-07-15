@@ -8,7 +8,8 @@ import 'package:stroom/application.dart';
 import 'package:stroom/providers/update_provider.dart';
 import 'package:stroom/providers/theme_provider.dart';
 
-/// Creates a mock [Dio] that returns the given [jsonResponse].
+/// Creates a mock [Dio] that returns the given [jsonResponse] wrapped in
+/// a list (matching the [/releases] array response from the unified endpoint).
 Dio _createMockDio(String jsonResponse, {int statusCode = 200}) {
   final dio = Dio(BaseOptions());
   dio.interceptors.add(InterceptorsWrapper(
@@ -18,7 +19,7 @@ Dio _createMockDio(String jsonResponse, {int statusCode = 200}) {
           requestOptions: options,
           statusCode: statusCode,
           data: statusCode == 200
-              ? jsonDecode(jsonResponse) as Map<String, dynamic>
+              ? jsonDecode('[$jsonResponse]') as List<dynamic>
               : jsonResponse,
         ),
       );
