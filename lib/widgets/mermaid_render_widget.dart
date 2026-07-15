@@ -48,6 +48,12 @@ class MermaidRenderWidget extends StatefulWidget {
   /// Defaults to false for backward compatibility (inline chat usage).
   final bool expand;
 
+  /// If true (default), shows a toolbar in the top-right corner with zoom,
+  /// fullscreen, and source-code toggle buttons. Set to false to hide the
+  /// toolbar, e.g. when the widget is embedded in [MermaidChartPage] which
+  /// provides its own navigation and mode controls.
+  final bool showToolbar;
+
   /// {@template mermaid_render_widget_test_only_show_source_code}
   /// Test-only: if true, the widget starts in source-code view mode instead of
   /// render mode. This allows widget tests to verify the source code view and
@@ -61,6 +67,7 @@ class MermaidRenderWidget extends StatefulWidget {
     required this.mermaidCode,
     this.height,
     this.expand = false,
+    this.showToolbar = true,
     this.testOnlyShowSourceCode,
   });
 
@@ -534,8 +541,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
               ),
             ),
 
-          // Button row (top right) — only show when ready and no error
-          if (!showLoading && !showErrorOverlay)
+          // Button row (top right) — only show when widget.showToolbar is true
+          // and the WebView is ready with no error.
+          if (widget.showToolbar && !showLoading && !showErrorOverlay)
             Positioned(
               top: 4,
               right: 4,
