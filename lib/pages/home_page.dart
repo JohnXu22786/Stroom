@@ -515,8 +515,8 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
             const SizedBox(height: 16),
             // Status card — shows task counts by status
-            _buildStatusCard(context, inProgressCount, completedCount,
-                failedCount),
+            _buildStatusCard(
+                context, inProgressCount, completedCount, failedCount),
             const SizedBox(height: 16),
             // Module grid
             Expanded(
@@ -696,8 +696,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) =>
-                    UnifiedTaskListPage(initialTab: tabIndex),
+                builder: (_) => UnifiedTaskListPage(initialTab: tabIndex),
               ),
             );
           },
@@ -762,8 +761,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) =>
-                          const UnifiedTaskListPage(initialTab: 0),
+                      builder: (_) => const UnifiedTaskListPage(initialTab: 0),
                     ),
                   );
                 },

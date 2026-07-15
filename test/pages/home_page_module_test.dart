@@ -196,8 +196,7 @@ void main() {
       final welcomeRenderBox = tester.renderObject<RenderBox>(
         welcomeTextFinder,
       );
-      final welcomeBottom =
-          welcomeRenderBox.localToGlobal(Offset.zero).dy +
+      final welcomeBottom = welcomeRenderBox.localToGlobal(Offset.zero).dy +
           welcomeRenderBox.size.height;
 
       // Get the position of the status card's "查看全部"
@@ -207,8 +206,7 @@ void main() {
       final viewAllRenderBox = tester.renderObject<RenderBox>(
         viewAllFinder,
       );
-      final viewAllTop =
-          viewAllRenderBox.localToGlobal(Offset.zero).dy;
+      final viewAllTop = viewAllRenderBox.localToGlobal(Offset.zero).dy;
 
       // The status card should be below the welcome text
       expect(
