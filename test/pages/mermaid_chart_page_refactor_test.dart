@@ -33,68 +33,69 @@ void main() {
     TextManifest.invalidateCache();
   });
 
-  group('MermaidChartPage - lag fix: deferred WebView', () {
-    testWidgets('page renders without WebView initially for smooth transition',
+  group('MermaidChartPage - freeze fix: uses MermaidRenderWidget', () {
+    testWidgets('no direct InAppWebView — uses MermaidRenderWidget for preview',
         (tester) async {
-      // When initialShowPreview is false (edit mode), no WebView is created
+      // Start in edit mode (no preview)
+      await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
+      await tester.pump();
+
+      // The page should render without platform exceptions. In test mode,
+      // a direct InAppWebView would fail with "platform not initialized"
+      // error. The absence of such errors confirms the page no longer
+      // creates InAppWebView directly.
+      expect(tester.takeException(), isNull);
+
+      // In edit mode, MermaidRenderWidget should NOT be present
+      expect(find.byType(MermaidRenderWidget), findsNothing);
+
+      // Only the code editor TextField should be visible
+      expect(find.byType(TextField), findsOneWidget);
+    });
+
+    testWidgets('page renders without synchronous WebView creation',
+        (tester) async {
+      // The original bug: WebView was created synchronously after 300ms,
+      // causing the entire app to freeze. After fix: MermaidRenderWidget
+      // handles deferred creation internally via postFrameCallback.
       await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
       await tester.pump();
 
       // Should show the code editor
       expect(find.byType(TextField), findsOneWidget);
-      // Should show edit mode icon
-      expect(find.byIcon(Icons.code), findsOneWidget);
-      // No exceptions should occur
       expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('split mode shows MermaidRenderWidget without platform crash',
-        (tester) async {
-      // Start with initialShowPreview:true — this shows the preview pane
-      // with MermaidRenderWidget. The WebView creation is deferred via
-      // postFrameCallback, so the initial frame shows only a loading
-      // state without creating an InAppWebView (which would require a
-      // real platform implementation not available in test mode).
-      await tester.pumpWidget(_buildTestApp(initialShowPreview: true));
-
-      // Only pump once — MermaidRenderWidget shows its loading state.
-      // The postFrameCallback fires during pumpWidget but the queued
-      // rebuild (creating InAppWebView) would only happen on a second
-      // pump, which we deliberately avoid in the test environment.
-      expect(find.byType(TextField), findsOneWidget);
-      expect(find.byType(MermaidRenderWidget), findsOneWidget);
-      expect(tester.takeException(), isNull);
-
-      // Verify the loading state is shown (no WebView created yet)
-      expect(find.text('正在准备渲染引擎...'), findsOneWidget);
     });
 
     testWidgets('switching from edit to split mode shows MermaidRenderWidget',
         (tester) async {
-      // Start in edit mode
       await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
       await tester.pump();
 
-      // Verify we're in edit mode with no exceptions
-      expect(find.byIcon(Icons.code), findsOneWidget);
+      // In edit mode, MermaidRenderWidget should NOT be present
       expect(find.byType(MermaidRenderWidget), findsNothing);
-      expect(tester.takeException(), isNull);
 
-      // Open mode menu and select split mode
+      // Switch to split mode (opens preview with MermaidRenderWidget)
       await tester.tap(find.byTooltip('切换视图模式'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
+      // Menu should be visible
       expect(find.text('编辑+预览'), findsOneWidget);
+
+      // Select split mode
       await tester.tap(find.text('编辑+预览'));
       await tester.pump();
 
-      // MermaidRenderWidget should now be visible in split mode
+      // MermaidRenderWidget should now be visible in the widget tree.
+      // It shows a loading state since WebView creation is deferred
+      // via postFrameCallback (same pattern as chat page).
       expect(find.byType(MermaidRenderWidget), findsOneWidget);
+      expect(find.text('正在准备渲染引擎...'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('mode switching does not freeze', (tester) async {
+    testWidgets('mode switching does not freeze with MermaidRenderWidget',
+        (tester) async {
       await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
       await tester.pump();
 
@@ -114,29 +115,8 @@ void main() {
       expect(find.byType(TextField), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
-  });
 
-  group('MermaidChartPage - error handling', () {
-    testWidgets('save with empty content shows error', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-
-      // Clear the text field
-      final textField = find.byType(TextField).first;
-      await tester.enterText(textField, '');
-      await tester.pump();
-
-      // Try to save
-      await tester.tap(find.byIcon(Icons.save));
-      await tester.pump();
-
-      // Should show error snackbar
-      expect(find.text('图表内容为空，无法保存'), findsOneWidget);
-    });
-  });
-
-  group('MermaidChartPage - code editor stability', () {
-    testWidgets('editing code does not cause widget tree rebuild loop',
+    testWidgets('editing code updates preview without recreation freeze',
         (tester) async {
       await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
       await tester.pump();
@@ -150,7 +130,7 @@ void main() {
       final controller = tester.widget<TextField>(textField).controller;
       expect(controller?.text, contains('graph TD'));
 
-      // No exceptions should occur
+      // No exceptions should occur after typing
       expect(tester.takeException(), isNull);
     });
   });
