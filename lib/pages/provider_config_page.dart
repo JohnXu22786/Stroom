@@ -143,6 +143,33 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     setState(() {});
   }
 
+  /// Build a small platform compatibility badge.
+  Widget _platformBadge(BuildContext context, String label, bool supported) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        color: supported
+            ? Colors.green.withValues(alpha: 0.1)
+            : Colors.grey.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(
+          color: supported
+              ? Colors.green.withValues(alpha: 0.3)
+              : Colors.grey.withValues(alpha: 0.15),
+          width: 0.5,
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 9,
+          color: supported ? Colors.green[700] : Colors.grey[500],
+        ),
+      ),
+    );
+  }
+
   Future<void> _openSettingsPanel(int configIndex) async {
     final entry = _entry;
     if (entry == null ||
@@ -246,18 +273,32 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                       ? config.providerName
                       : '（未命名）';
 
+                  // Determine if this is a built-in (vendor) MCP config
+                  final mcpTypeConfig =
+                      entry.type == 'mcp' && config.models.isNotEmpty
+                          ? config.models[0].typeConfig
+                          : null;
+                  final isVendor = mcpTypeConfig?['isVendor'] as bool? ?? false;
+
                   // For MCP entries, show transport details
                   String subtitle;
                   IconData leadIcon;
                   Color iconColor;
+                  final isHttpTool = entry.type == 'mcp'
+                      ? (mcpTypeConfig?['isHttpTool'] as bool? ?? false)
+                      : false;
 
                   if (entry.type == 'mcp') {
-                    final mcpTypeConfig = config.models.isNotEmpty
-                        ? config.models[0].typeConfig
-                        : null;
                     final transport =
                         mcpTypeConfig?['transport'] as String? ?? 'sse';
-                    if (transport == 'stdio') {
+
+                    if (isHttpTool) {
+                      // HTTP 工具（纯 Dart 实现，非 MCP 协议）
+                      final url = mcpTypeConfig?['url'] as String? ?? '';
+                      leadIcon = Icons.http;
+                      iconColor = Colors.orange;
+                      subtitle = 'HTTP 工具: ${url.isNotEmpty ? url : '(未设置)'}';
+                    } else if (transport == 'stdio') {
                       final cmd = mcpTypeConfig?['command'] as String? ?? '';
                       leadIcon = Icons.desktop_windows;
                       iconColor = Colors.purple;
@@ -277,27 +318,102 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                         config.host.isNotEmpty ? config.host : '(未设置 Host)';
                   }
 
+                  // Show API key hint if available
+                  final apiKeyHint = mcpTypeConfig?['apiKeyHint'] as String?;
+
                   return Card(
                     key: ValueKey('config_${widget.entryId}_$i'),
                     margin: const EdgeInsets.only(bottom: 8),
+                    color: isVendor
+                        ? Theme.of(context)
+                            .colorScheme
+                            .primaryContainer
+                            .withValues(alpha: 0.15)
+                        : null,
                     child: ListTile(
                       leading: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          ReorderableDragStartListener(
-                            index: i,
-                            child: const Icon(Icons.drag_handle,
-                                color: Colors.grey),
-                          ),
+                          if (!isVendor)
+                            ReorderableDragStartListener(
+                              index: i,
+                              child: const Icon(Icons.drag_handle,
+                                  color: Colors.grey),
+                            ),
+                          if (isVendor) const SizedBox(width: 32),
                           const SizedBox(width: 8),
                           Icon(leadIcon, color: iconColor),
                         ],
                       ),
-                      title: Text(providerName,
-                          style: const TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text(subtitle,
-                          style:
-                              TextStyle(fontSize: 12, color: Colors.grey[600])),
+                      title: Row(
+                        children: [
+                          Flexible(
+                            child: Text(providerName,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600)),
+                          ),
+                          if (isVendor) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '内置',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Theme.of(context).colorScheme.primary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(subtitle,
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.grey[600])),
+                          if (apiKeyHint != null && apiKeyHint.isNotEmpty)
+                            Text(
+                              '提示: $apiKeyHint',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey[500],
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          // Cross-platform compatibility info
+                          if (entry.type == 'mcp') ...[
+                            const SizedBox(height: 4),
+                            Wrap(
+                              spacing: 4,
+                              children: [
+                                _platformBadge(
+                                  context,
+                                  '🖥️ 桌面',
+                                  isHttpTool ||
+                                      mcpTypeConfig?['transport'] == 'sse',
+                                ),
+                                _platformBadge(
+                                  context,
+                                  '📱 移动・🌐 Web',
+                                  isHttpTool ||
+                                      mcpTypeConfig?['transport'] == 'sse',
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -307,11 +423,12 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                             onPressed: () => _openSettingsPanel(i),
                             tooltip: '设置',
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => _deleteConfig(i),
-                            tooltip: '删除配置',
-                          ),
+                          if (!isVendor)
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => _deleteConfig(i),
+                              tooltip: '删除配置',
+                            ),
                           const Icon(Icons.chevron_right),
                         ],
                       ),

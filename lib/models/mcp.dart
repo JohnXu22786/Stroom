@@ -197,6 +197,12 @@ class McpServerConfig {
   /// 环境变量
   final Map<String, String> env;
 
+  /// HTTP 请求头（用于 SSE 模式）
+  final Map<String, String> headers;
+
+  /// API 密钥（便捷字段，自动根据传输方式使用）
+  final String? apiKey;
+
   /// 是否为内置供应商 MCP 服务器
   final bool isVendor;
 
@@ -207,6 +213,8 @@ class McpServerConfig {
     this.args,
     this.url,
     this.env = const {},
+    this.headers = const {},
+    this.apiKey,
     this.isVendor = false,
   });
 
@@ -217,6 +225,7 @@ class McpServerConfig {
     List<String>? args,
     Map<String, String>? env,
     bool isVendor = false,
+    String? apiKey,
   }) {
     return McpServerConfig(
       name: name,
@@ -225,9 +234,9 @@ class McpServerConfig {
       args: args,
       env: env ??
           <String, String>{
-            // 确保 PATH 环境变量传递给子进程
             'PATH': _defaultPath(),
           },
+      apiKey: apiKey,
       isVendor: isVendor,
     );
   }
@@ -237,6 +246,8 @@ class McpServerConfig {
     required String name,
     required String url,
     Map<String, String>? env,
+    Map<String, String>? headers,
+    String? apiKey,
     bool isVendor = false,
   }) {
     return McpServerConfig(
@@ -244,6 +255,8 @@ class McpServerConfig {
       transportType: McpTransportType.sse,
       url: url,
       env: env ?? const {},
+      headers: headers ?? const {},
+      apiKey: apiKey,
       isVendor: isVendor,
     );
   }
@@ -254,12 +267,14 @@ class McpServerConfig {
     required String command,
     List<String>? args,
     Map<String, String>? env,
+    String? apiKey,
   }) {
     return McpServerConfig.stdio(
       name: name,
       command: command,
       args: args,
       env: env,
+      apiKey: apiKey,
       isVendor: true,
     );
   }
@@ -280,7 +295,12 @@ class McpServerConfig {
     final env = envRaw is Map
         ? envRaw.map((k, v) => MapEntry(k.toString(), v.toString()))
         : <String, String>{};
+    final headersRaw = typeConfig['headers'];
+    final headers = headersRaw is Map
+        ? headersRaw.map((k, v) => MapEntry(k.toString(), v.toString()))
+        : <String, String>{};
     final isVendor = typeConfig['isVendor'] as bool? ?? false;
+    final apiKey = typeConfig['apiKey'] as String?;
 
     switch (transportType) {
       case McpTransportType.stdio:
@@ -289,6 +309,7 @@ class McpServerConfig {
           command: typeConfig['command'] as String? ?? '',
           args: args,
           env: env,
+          apiKey: apiKey,
           isVendor: isVendor,
         );
       case McpTransportType.sse:
@@ -296,6 +317,8 @@ class McpServerConfig {
           name: providerName,
           url: typeConfig['url'] as String? ?? '',
           env: env,
+          headers: headers,
+          apiKey: apiKey,
           isVendor: isVendor,
         );
     }
@@ -314,6 +337,8 @@ class McpServerConfig {
       if (url != null) map['url'] = url;
     }
     if (env.isNotEmpty) map['env'] = env;
+    if (headers.isNotEmpty) map['headers'] = headers;
+    if (apiKey != null && apiKey!.isNotEmpty) map['apiKey'] = apiKey;
     if (isVendor) map['isVendor'] = true;
     return map;
   }
@@ -331,7 +356,12 @@ class McpServerConfig {
     final env = envRaw is Map
         ? envRaw.map((k, v) => MapEntry(k.toString(), v.toString()))
         : <String, String>{};
+    final headersRaw = map['headers'];
+    final headers = headersRaw is Map
+        ? headersRaw.map((k, v) => MapEntry(k.toString(), v.toString()))
+        : <String, String>{};
     final isVendor = map['isVendor'] as bool? ?? false;
+    final apiKey = map['apiKey'] as String?;
 
     switch (transportType) {
       case McpTransportType.stdio:
@@ -340,6 +370,7 @@ class McpServerConfig {
           command: map['command'] as String? ?? '',
           args: args,
           env: env,
+          apiKey: apiKey,
           isVendor: isVendor,
         );
       case McpTransportType.sse:
@@ -347,6 +378,8 @@ class McpServerConfig {
           name: name,
           url: map['url'] as String? ?? '',
           env: env,
+          headers: headers,
+          apiKey: apiKey,
           isVendor: isVendor,
         );
     }
