@@ -6,6 +6,7 @@ import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:dynamic_color/dynamic_color.dart';
+import 'dart:async';
 import 'dart:io' show exit, Platform;
 
 import 'pages/home_page.dart';
@@ -15,6 +16,7 @@ import 'pages/settings_page.dart';
 import 'providers/theme_provider.dart';
 import 'providers/update_provider.dart';
 import 'providers/notification_provider.dart';
+import 'services/app_log_service.dart';
 import 'services/auto_backup_service.dart';
 import 'services/notification_service.dart';
 import 'startup/backup_startup_check.dart';
@@ -70,6 +72,10 @@ class _ApplicationState extends ConsumerState<Application>
     if (_postStartupTasksStarted) return;
     _postStartupTasksStarted = true;
 
+    await AppLogService.info('Application', '开始执行启动后任务');
+    // 启动时清理过期日志
+    unawaited(AppLogService.cleanupOldLogs().catchError((_) {}));
+
     // 并行执行两个启动后任务：
     // 1. 检查更新
     // 2. 检查备份存储授权并自动备份
@@ -77,6 +83,7 @@ class _ApplicationState extends ConsumerState<Application>
       _checkForUpdatesOnStartup(),
       _checkBackupOnStartup(),
     ]);
+    await AppLogService.info('Application', '启动后任务执行完成');
   }
 
   /// 启动后检查备份存储：

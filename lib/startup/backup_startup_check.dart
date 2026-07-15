@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 
+import '../services/app_log_service.dart';
 import '../services/backup_location_manager.dart';
 import '../services/auto_backup_service.dart';
 
@@ -107,6 +108,8 @@ class BackupStartupCheck {
         return const BackupStartupResult(storageReady: false);
       }
 
+      await AppLogService.info('BackupStartupCheck', '存储可访问，开始检查可用空间');
+
       // ---------------------------------------------------------------
       // 步骤 2：检查可用空间
       // ---------------------------------------------------------------
@@ -130,6 +133,8 @@ class BackupStartupCheck {
         );
       }
 
+      await AppLogService.info('BackupStartupCheck', '开始执行启动后自动备份');
+
       // ---------------------------------------------------------------
       // 步骤 3：执行启动后自动备份
       // ---------------------------------------------------------------
@@ -138,6 +143,7 @@ class BackupStartupCheck {
           backupSuccess = await AutoBackupService.performAutoBackup();
         } catch (e) {
           debugPrint('[BackupStartupCheck] 自动备份异常: $e');
+          await AppLogService.error('BackupStartupCheck', '自动备份异常', e);
           backupSuccess = false;
         }
 
@@ -161,6 +167,9 @@ class BackupStartupCheck {
 
     if (backupSuccess) {
       startupBackupPerformed = true;
+      await AppLogService.info('BackupStartupCheck', '启动后自动备份成功');
+    } else {
+      await AppLogService.warning('BackupStartupCheck', '启动后自动备份未执行（可能因 1 小时规则跳过或失败）');
     }
 
     return BackupStartupResult(

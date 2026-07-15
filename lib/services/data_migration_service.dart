@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'app_log_service.dart';
 import 'auto_backup_service.dart';
 import 'backup_location_manager.dart';
 import 'manifest_database.dart';
@@ -78,11 +79,17 @@ class DataMigrationService {
   /// - 如果 [MigrationResult.restartRequired] 为 `true`，迁移完成后需要重启应用。
   static Future<MigrationResult> checkAndMigrate() async {
     final storedVersion = await getStoredFormatVersion();
+    await AppLogService.info('DataMigrationService',
+        '检查数据格式版本: 当前=$storedVersion, 最新=$currentFormatVersion');
 
     // 版本相同时不需要迁移
     if (storedVersion >= currentFormatVersion) {
+      await AppLogService.info('DataMigrationService', '数据格式版本为最新，无需迁移');
       return const MigrationResult(needsMigration: false);
     }
+
+    await AppLogService.info('DataMigrationService',
+        '需要数据格式迁移: v$storedVersion → v$currentFormatVersion');
 
     // 需要迁移：清理旧备份
     await cleanOldBackups();
@@ -101,8 +108,11 @@ class DataMigrationService {
       debugPrint(
         '[DataMigrationService] Migrated data format from v$storedVersion to v$currentFormatVersion',
       );
+      await AppLogService.info('DataMigrationService',
+          '数据格式迁移成功: v$storedVersion → v$currentFormatVersion');
     } catch (e) {
       debugPrint('[DataMigrationService] Migration failed: $e');
+      await AppLogService.error('DataMigrationService', '数据格式迁移失败', e);
       rethrow;
     }
 
@@ -217,7 +227,9 @@ class DataMigrationService {
   /// 在每次启动时自动调用，确保旧备份不会无限累积。
   static Future<void> cleanOldBackups() async {
     if (kIsWeb) return;
+    await AppLogService.info('DataMigrationService', '开始清理旧备份');
     await AutoBackupService.cleanupOldBackups();
+    await AppLogService.info('DataMigrationService', '旧备份清理完成');
   }
 
   // ================================================================

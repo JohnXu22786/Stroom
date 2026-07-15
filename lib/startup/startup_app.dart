@@ -11,6 +11,7 @@ import 'startup_check_service.dart';
 import 'startup_page.dart';
 import '../application.dart';
 import '../providers/update_provider.dart';
+import '../services/app_log_service.dart';
 import '../services/data_migration_service.dart';
 
 // ====================================================================
@@ -150,11 +151,15 @@ class _StartupAppState extends State<StartupApp>
       await Future<void>.delayed(const Duration(milliseconds: 50));
       if (!mounted) return;
 
+      await AppLogService.info('StartupApp', '开始检查数据格式版本');
       MigrationResult migrationResult;
       try {
         migrationResult = await StartupCheckService.checkFormatVersion();
+        await AppLogService.info('StartupApp',
+            '数据格式版本检查完成: needsMigration=${migrationResult.needsMigration}');
       } catch (e) {
         debugPrint('[StartupApp] checkFormatVersion failed: $e');
+        await AppLogService.error('StartupApp', '检查数据格式版本失败', e);
         migrationResult = const MigrationResult(needsMigration: false);
       }
       if (!mounted) return;
@@ -164,11 +169,15 @@ class _StartupAppState extends State<StartupApp>
       await Future<void>.delayed(const Duration(milliseconds: 50));
       if (!mounted) return;
 
+      await AppLogService.info('StartupApp', '开始验证数据格式');
       List<StartupIssue> formatIssues;
       try {
         formatIssues = await StartupCheckService.validateDataFormats();
+        await AppLogService.info('StartupApp',
+            '数据格式验证完成: 发现 ${formatIssues.length} 个问题');
       } catch (e) {
         debugPrint('[StartupApp] validateDataFormats failed: $e');
+        await AppLogService.error('StartupApp', '验证数据格式失败', e);
         formatIssues = <StartupIssue>[];
       }
       if (!mounted) return;
@@ -178,11 +187,15 @@ class _StartupAppState extends State<StartupApp>
       await Future<void>.delayed(const Duration(milliseconds: 50));
       if (!mounted) return;
 
+      await AppLogService.info('StartupApp', '开始检查数据完整性');
       List<StartupIssue> integrityIssues;
       try {
         integrityIssues = await StartupCheckService.checkDataIntegrity();
+        await AppLogService.info('StartupApp',
+            '数据完整性检查完成: 发现 ${integrityIssues.length} 个问题');
       } catch (e) {
         debugPrint('[StartupApp] checkDataIntegrity failed: $e');
+        await AppLogService.error('StartupApp', '检查数据完整性失败', e);
         integrityIssues = <StartupIssue>[];
       }
       if (!mounted) return;
