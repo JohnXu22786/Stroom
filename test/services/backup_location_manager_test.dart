@@ -76,7 +76,7 @@ void main() {
       // Documents 路径应通过验证
       final valid = BackupLocationManager.isValidBackupPath(
         'content://com.android.externalstorage.documents/tree/'
-            'primary%3ADocuments',
+        'primary%3ADocuments',
       );
       expect(valid, isTrue);
     });
@@ -85,7 +85,7 @@ void main() {
       // 子文件夹也应通过验证
       final valid = BackupLocationManager.isValidBackupPath(
         'content://com.android.externalstorage.documents/tree/'
-            'primary%3ADocuments%2FMyFolder',
+        'primary%3ADocuments%2FMyFolder',
       );
       expect(valid, isTrue);
     });
@@ -94,7 +94,7 @@ void main() {
       // 根目录应被拒绝
       final valid = BackupLocationManager.isValidBackupPath(
         'content://com.android.externalstorage.documents/tree/'
-            'primary%3A',
+        'primary%3A',
       );
       expect(valid, isFalse);
     });
@@ -122,7 +122,7 @@ void main() {
       // SD 卡根路径格式如 primary: 但 volume id 不同
       final valid = BackupLocationManager.isValidBackupPath(
         'content://com.android.externalstorage.documents/tree/'
-            'XXXX-XXXX%3A',
+        'XXXX-XXXX%3A',
       );
       expect(valid, isFalse);
     });
@@ -131,7 +131,7 @@ void main() {
       // primary%3ADocument 解码后为 "primary:Document"
       final valid = BackupLocationManager.isValidBackupPath(
         'content://com.android.externalstorage.documents/tree/'
-            'primary%3ADocument',
+        'primary%3ADocument',
       );
       expect(valid, isTrue);
     });
@@ -140,7 +140,7 @@ void main() {
       // 仅 primary: 没有子路径的情况
       final valid = BackupLocationManager.isValidBackupPath(
         'content://com.android.externalstorage.documents/tree/'
-            'primary%3A/',
+        'primary%3A/',
       );
       expect(valid, isFalse);
     });

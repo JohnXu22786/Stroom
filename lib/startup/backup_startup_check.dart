@@ -94,8 +94,7 @@ class BackupStartupCheck {
         // 请求存储访问权限
         final granted = await BackupLocationManager.requestStorageAccess();
         if (granted) {
-          storageAccessible =
-              await BackupLocationManager.isStorageAccessible();
+          storageAccessible = await BackupLocationManager.isStorageAccessible();
         }
 
         if (!storageAccessible && context.mounted) {
@@ -192,7 +191,7 @@ class BackupStartupCheck {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-              if (isAndroid) ...[
+            if (isAndroid) ...[
               const Text(
                 '为了确保您的数据安全，Stroom 需要您选择一个公开目录来存放自动备份文件。'
                 '这样即使应用被卸载或清除数据，备份文件也不会丢失。',

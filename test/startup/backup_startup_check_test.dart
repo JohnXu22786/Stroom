@@ -197,7 +197,8 @@ void main() {
                           const Text('备份存储授权'),
                         ],
                       ),
-                      content: const Text('为了确保您的数据安全，Stroom 需要您选择一个公开目录来存放自动备份文件。'),
+                      content:
+                          const Text('为了确保您的数据安全，Stroom 需要您选择一个公开目录来存放自动备份文件。'),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.of(ctx).pop(false),
