@@ -42,6 +42,12 @@ class ChatService {
   CancelToken? _cancelToken;
   StreamSubscription<AIStreamEvent>? _streamSubscription;
   StreamController<String>? _controller;
+
+  /// The stream controller for [sendStreamWithTools], stored so that
+  /// [cancel()] can close it. This ensures the caller's `await for` loop
+  /// (in ChatPage) receives a done event and can clean up the streaming
+  /// placeholder message — otherwise the spinner animation never disappears.
+  StreamController<ChatEvent>? _chatEventController;
   String _reasoningBuffer = '';
 
   /// Accumulated visible content from the current streaming round,
@@ -251,8 +257,10 @@ class ChatService {
         _cancelToken = null;
         _streamSubscription?.cancel();
         _streamSubscription = null;
+        _chatEventController = null;
       },
     );
+    _chatEventController = controller;
 
     final extraParams = _buildExtraParams(
       reasoning: reasoning,
@@ -752,6 +760,10 @@ class ChatService {
     if (_controller != null && !_controller!.isClosed) {
       _controller!.close();
     }
+    if (_chatEventController != null && !_chatEventController!.isClosed) {
+      _chatEventController!.close();
+    }
+    _chatEventController = null;
     _cleanUp();
   }
 
