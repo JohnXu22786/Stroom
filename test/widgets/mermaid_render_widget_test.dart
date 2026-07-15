@@ -190,6 +190,20 @@ void main() {
       expect(html, contains('setZoom(zoomLevel * scale, centerX, centerY)'),
           reason: 'touch handler should pass center to setZoom');
     });
+
+    // ---- Zoom position jumping fix ----
+
+    test('touchend checks e.touches.length for pinch-to-pan transition', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      // After a multi-touch gesture, if one finger remains, the handler
+      // should update pan start state to prevent position jumping.
+      expect(html, contains('e.touches.length === 1'),
+          reason: 'touchend should check if a finger remains for pinch-to-pan');
+      expect(html, contains('touchPanStartX'),
+          reason: 'touchend should update pan start X for remaining finger');
+      expect(html, contains('touchPanStartY'),
+          reason: 'touchend should update pan start Y for remaining finger');
+    });
   });
 
   group('MermaidRenderWidget - widget rendering', () {

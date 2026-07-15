@@ -3,6 +3,7 @@ import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:markdown/markdown.dart' as m;
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:flutter_highlight/themes/dracula.dart';
+import 'code_block_source_widget.dart';
 import 'html_code_block_widget.dart';
 import 'mermaid_render_widget.dart';
 
@@ -120,8 +121,9 @@ class LatexNode extends SpanNode {
 /// If [language] is `'html'`, renders the code using [HtmlCodeBlockWidget]
 /// (which shows the raw HTML source without inline rendering; the user must
 /// tap the full-screen button to render the HTML in a dialog).
-/// Otherwise, renders a syntax-highlighted code block using the configured
-/// [preConfig] theme and decoration.
+/// Otherwise, renders the code using [CodeBlockSourceView] which provides
+/// a unified code display area with line numbers and a wrap toggle (matching
+/// the HTML code block's UI form).
 Widget _buildCodeBlock(String code, String language, PreConfig preConfig) {
   if (language == 'mermaid') {
     return MermaidRenderWidget(mermaidCode: code);
@@ -131,97 +133,28 @@ Widget _buildCodeBlock(String code, String language, PreConfig preConfig) {
     return HtmlCodeBlockWidget(htmlCode: code);
   }
 
-  // Fallback: render as a syntax-highlighted code block with height
-  // constraint capped at roughly 4:3 aspect ratio (height = width * 3/4).
-  // If the content fits within the cap, the height matches the content;
-  // otherwise, scrolling is enabled for both horizontal and vertical overflow.
-  final splitRegExp = WidgetVisitor.defaultSplitRegExp;
-  var splitContents = code.trim().split(splitRegExp);
-  if (splitContents.isNotEmpty && splitContents.last.isEmpty) {
-    splitContents = splitContents.sublist(0, splitContents.length - 1);
-  }
-
-  return LayoutBuilder(
-    builder: (context, constraints) {
-      final maxWidth = constraints.maxWidth;
-      final maxAllowedHeight = maxWidth * 0.75;
-      const lineHeight = 19.5;
-      // Estimate content height: lines + approximate vertical padding
-      final estimatedPadding = preConfig.padding.vertical;
-      final contentHeight =
-          splitContents.length * lineHeight + estimatedPadding;
-      // Ensure lower bound (40) does not exceed upper bound (maxAllowedHeight)
-      // when the available width is very narrow
-      final effectiveMax = maxAllowedHeight < 40.0 ? 40.0 : maxAllowedHeight;
-      final effectiveHeight = contentHeight.clamp(40.0, effectiveMax);
-
-      return Container(
-        decoration: preConfig.decoration,
-        margin: preConfig.margin,
-        padding: EdgeInsets.zero,
-        width: double.infinity,
-        height: effectiveHeight,
-        child: ClipRRect(
-          borderRadius: _extractBorderRadius(preConfig.decoration),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.vertical,
-            child: Padding(
-              padding: preConfig.padding,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: List.generate(splitContents.length, (index) {
-                    final currentContent = splitContents[index];
-                    return Text.rich(
-                      TextSpan(
-                        children: highLightSpans(
-                          currentContent,
-                          language: language,
-                          theme: preConfig.theme,
-                          textStyle: preConfig.textStyle,
-                          styleNotMatched: preConfig.styleNotMatched,
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    },
-  );
-}
-
-/// Extracts [BorderRadiusGeometry] from a [Decoration] if it is a
-/// [BoxDecoration] with a non-null [BoxDecoration.borderRadius]; otherwise
-/// returns zero [BorderRadius].
-BorderRadiusGeometry _extractBorderRadius(Decoration decoration) {
-  if (decoration is BoxDecoration && decoration.borderRadius != null) {
-    return decoration.borderRadius!;
-  }
-  return BorderRadius.zero;
+  // Fallback: render using the unified source code display widget
+  // ([CodeBlockSourceView]) with line numbers, same as the HTML code
+  // block style.
+  return CodeBlockSourceView(code: code);
 }
 
 /// Returns a [PreConfig] for code blocks that adapts to dark/light mode.
 ///
-/// - Dark mode: uses a dark grey background (`0xff555555`) with
-///   the [draculaTheme] syntax highlighting.
-/// - Light mode: uses a light grey background (`0xffeff1f3`) with
-///   the [draculaTheme] syntax highlighting.
+/// - Dark mode: uses a dark grey background (`0xff555555`).
+/// - Light mode: uses a light grey background (`0xffeff1f3`).
 ///
 /// Mermaid code blocks (```` ```mermaid ````) are rendered using
-/// [MermaidRenderWidget] instead of syntax highlighting.
+/// [MermaidRenderWidget].
 ///
 /// HTML code blocks (```` ```html ````) are rendered using
 /// [HtmlCodeBlockWidget] to show the raw HTML source without inline
 /// rendering; the user must tap the full-screen button to render the
 /// HTML in a dialog.
 ///
-/// The [draculaTheme] is chosen for its high-contrast syntax colours
-/// which work well in both modes.
+/// All other code blocks are rendered using [CodeBlockSourceView] which
+/// provides a unified code display area with line numbers and a wrap
+/// toggle, matching the HTML code block's UI form.
 PreConfig codeBlockPreConfig({required bool isDark}) {
   final baseConfig = PreConfig(
     theme: draculaTheme,
