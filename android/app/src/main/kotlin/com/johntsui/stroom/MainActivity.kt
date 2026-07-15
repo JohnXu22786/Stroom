@@ -257,10 +257,29 @@ class MainActivity : FlutterActivity() {
     // ==================================================================
 
     /// 打开 SAF 目录选择器，引导用户选择 Documents 目录。
+    ///
+    /// Android 8.0+ (API 26+) 使用 [EXTRA_INITIAL_URI] 自动定位到
+    /// Documents 文档目录，用户无需手动查找，直接点击「允许」即可。
+    /// 低版本 Android 回退到系统默认位置（通常也是最近使用的目录）。
     private fun openSafDirectoryPicker(result: MethodChannel.Result) {
         pendingSafResult = result
         try {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+
+            // Android 8.0+ 支持初始目录定位到 Documents 文件夹
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                try {
+                    val documentsUri = DocumentsContract.buildDocumentUri(
+                        "com.android.externalstorage.documents",
+                        "primary:Documents"
+                    )
+                    intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, documentsUri)
+                    Log.i(TAG, "SAF: 设置初始目录为 Documents: $documentsUri")
+                } catch (e: Exception) {
+                    Log.w(TAG, "SAF: 设置初始目录失败，使用默认位置", e)
+                }
+            }
+
             startActivityForResult(intent, SAF_REQUEST_CODE)
         } catch (e: Exception) {
             Log.e(TAG, "SAF: 打开目录选择器失败", e)

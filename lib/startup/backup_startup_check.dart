@@ -14,17 +14,24 @@ import '../services/auto_backup_service.dart';
 //
 // 1. 检查备份存储位置是否可访问
 //    - Android: 检查 SAF URI 是否存在且有效，无效则引导用户授权
-//    - 其他平台: 检查目录是否可写
+//    - iOS: 检查应用 Documents 目录是否可写（路径固定，由系统管理）
+//    - 桌面平台: 检查 ~/Documents/StroomData/AutoBackup 是否可写
 //
-// 2. 如果存储不可用，显示引导对话框，让用户授权
+// 2. 如果存储不可用（仅 Android 需用户授权），显示引导对话框
 //    - 用户必须同意才能继续使用应用（循环直到同意）
+//    - Android SAF 目录选择器自动定位到根目录下的 Documents 文件夹
+//    - iOS/桌面路径固定，无需用户授权
 //
 // 3. 检查可用存储空间
 //    - 如果空间不足，提示用户清理
 //    - 清理后重试，直到有足够空间
 //
 // 4. 执行一次启动后自动备份
-//    - 如果备份失败（空间不足），提示用户清理后重试
+//    - 如果备份失败：
+//      - Android：不提供「跳过」，必须重新授权路径或重试
+//      - iOS / 桌面：保留「跳过」按钮（路径固定无可重新授权）
+//    - 若用户选择重新授权（Android）：清除已保存的 SAF URI，
+//      回到步骤 1 重新选择目录
 // ====================================================================
 
 /// 启动时备份检查结果。
@@ -63,77 +70,94 @@ class BackupStartupCheck {
       return const BackupStartupResult(storageReady: false);
     }
 
-    // ---------------------------------------------------------------
-    // 步骤 1：确保备份存储可访问
-    // ---------------------------------------------------------------
-    bool storageAccessible = await BackupLocationManager.isStorageAccessible();
+    bool needReAuth = false;
+    bool backupSuccess = false;
 
-    while (!storageAccessible && context.mounted) {
-      // 显示引导对话框
-      final shouldProceed = await _showStorageAccessDialog(context);
-      if (!shouldProceed || !context.mounted) {
-        // 用户选择退出应用
+    do {
+      needReAuth = false;
+      backupSuccess = false;
+
+      // ---------------------------------------------------------------
+      // 步骤 1：确保备份存储可访问
+      // ---------------------------------------------------------------
+      bool storageAccessible =
+          await BackupLocationManager.isStorageAccessible();
+
+      while (!storageAccessible && context.mounted) {
+        // 显示引导对话框
+        final shouldProceed = await _showStorageAccessDialog(context);
+        if (!shouldProceed || !context.mounted) {
+          // 用户选择退出应用
+          return const BackupStartupResult(storageReady: false);
+        }
+
+        // 请求存储访问权限
+        final granted = await BackupLocationManager.requestStorageAccess();
+        if (granted) {
+          storageAccessible = await BackupLocationManager.isStorageAccessible();
+        }
+
+        if (!storageAccessible && context.mounted) {
+          // 授权失败，提示用户重试
+          await _showAccessFailedDialog(context);
+        }
+      }
+
+      if (!context.mounted) {
         return const BackupStartupResult(storageReady: false);
       }
 
-      // 请求存储访问权限
-      final granted = await BackupLocationManager.requestStorageAccess();
-      if (granted) {
-        storageAccessible = await BackupLocationManager.isStorageAccessible();
+      // ---------------------------------------------------------------
+      // 步骤 2：检查可用空间
+      // ---------------------------------------------------------------
+      bool hasSpace = await BackupLocationManager.hasSufficientSpace();
+
+      while (!hasSpace && context.mounted) {
+        final shouldRetry = await _showStorageSpaceDialog(context);
+        if (!shouldRetry || !context.mounted) {
+          return BackupStartupResult(
+            storageReady: true,
+            autoBackupPerformed: false,
+          );
+        }
+        hasSpace = await BackupLocationManager.hasSufficientSpace();
       }
 
-      if (!storageAccessible && context.mounted) {
-        // 授权失败，提示用户重试
-        await _showAccessFailedDialog(context);
-      }
-    }
-
-    if (!context.mounted) {
-      return const BackupStartupResult(storageReady: false);
-    }
-
-    // ---------------------------------------------------------------
-    // 步骤 2：检查可用空间
-    // ---------------------------------------------------------------
-    bool hasSpace = await BackupLocationManager.hasSufficientSpace();
-
-    while (!hasSpace && context.mounted) {
-      final shouldRetry = await _showStorageSpaceDialog(context);
-      if (!shouldRetry || !context.mounted) {
+      if (!context.mounted) {
         return BackupStartupResult(
           storageReady: true,
           autoBackupPerformed: false,
         );
       }
-      hasSpace = await BackupLocationManager.hasSufficientSpace();
-    }
 
-    if (!context.mounted) {
-      return BackupStartupResult(
-        storageReady: true,
-        autoBackupPerformed: false,
-      );
-    }
+      // ---------------------------------------------------------------
+      // 步骤 3：执行启动后自动备份
+      // ---------------------------------------------------------------
+      while (!backupSuccess && context.mounted) {
+        try {
+          backupSuccess = await AutoBackupService.performAutoBackup();
+        } catch (e) {
+          debugPrint('[BackupStartupCheck] 自动备份异常: $e');
+          backupSuccess = false;
+        }
 
-    // ---------------------------------------------------------------
-    // 步骤 3：执行启动后自动备份
-    // ---------------------------------------------------------------
-    bool backupSuccess = false;
-    while (!backupSuccess && context.mounted) {
-      try {
-        backupSuccess = await AutoBackupService.performAutoBackup();
-      } catch (e) {
-        debugPrint('[BackupStartupCheck] 自动备份异常: $e');
-        backupSuccess = false;
-      }
+        if (!backupSuccess && context.mounted) {
+          final shouldRetry = await _showBackupFailedDialog(context);
+          if (!context.mounted) break;
 
-      if (!backupSuccess && context.mounted) {
-        final shouldRetry = await _showBackupFailedDialog(context);
-        if (!shouldRetry || !context.mounted) {
-          break;
+          if (!shouldRetry) {
+            // Android: 用户选择「重新授权」→ 清除 SAF URI，回到步骤 1
+            // iOS / 桌面：用户选择「跳过」→ 退出循环（iOS 路径固定无需授权）
+            if (!kIsWeb && Platform.isAndroid) {
+              await BackupLocationManager.clearStorageAccess();
+              needReAuth = true;
+            }
+            break;
+          }
+          // shouldRetry == true: 继续循环重试备份
         }
       }
-    }
+    } while (needReAuth && context.mounted);
 
     if (backupSuccess) {
       startupBackupPerformed = true;
@@ -180,8 +204,8 @@ class BackupStartupCheck {
                   const SizedBox(width: 8),
                   const Expanded(
                     child: Text(
-                      '建议选择「Documents」目录，点击下方「同意并选择目录」后，'
-                      '请在文件选择器中跳转到 Documents 文件夹并点击「允许」。',
+                      '文件选择器已自动定位到存储根目录下的「Documents」文件夹，'
+                      '点击下方「同意并选择目录」后直接点击「允许」即可。',
                       style: TextStyle(fontSize: 13),
                     ),
                   ),
@@ -236,6 +260,9 @@ class BackupStartupCheck {
   }
 
   /// 显示授权失败对话框。
+  ///
+  /// 当用户未选择正确的 Documents 目录（如选择了根目录），或
+  /// SAF 权限授予失败时显示。用户必须重新选择才能继续。
   static Future<void> _showAccessFailedDialog(BuildContext context) async {
     await showDialog<void>(
       context: context,
@@ -249,9 +276,9 @@ class BackupStartupCheck {
           ],
         ),
         content: const Text(
-          '未获得备份目录的访问权限。\n\n'
-          '请确保在文件选择器中允许访问所选目录，'
-          '否则自动备份无法正常进行。\n\n'
+          '未获得正确的备份目录访问权限。\n\n'
+          '请确保在文件选择器中选择了存储根目录下的「Documents」文件夹'
+          '（而非存储根目录本身），然后点击「允许」。\n\n'
           '点击「重试」重新选择目录。',
         ),
         actions: [
@@ -301,8 +328,12 @@ class BackupStartupCheck {
 
   /// 显示自动备份失败对话框。
   ///
-  /// 返回 true 表示用户想重试。
+  /// 返回 `true` 表示用户想重试；`false` 表示用户想重新授权路径或跳过。
+  /// - Android：不提供「跳过」按钮（有 SAF 可重新授权），必须重试或重新授权。
+  /// - iOS / 桌面：保留「跳过」按钮（路径固定，不存在重新授权问题）。
   static Future<bool> _showBackupFailedDialog(BuildContext context) async {
+    final isAndroid = !kIsWeb && Platform.isAndroid;
+
     final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -314,19 +345,30 @@ class BackupStartupCheck {
             const Text('自动备份失败'),
           ],
         ),
-        content: const Text(
-          '自动备份未能成功完成，可能是存储空间不足或设备状态异常。\n\n'
-          '请清理不必要的文件后点击「重试」，应用将再次尝试自动备份。'
-          '备份成功后即可正常使用。',
+        content: Text(
+          isAndroid
+              ? '自动备份未能成功完成。\n\n'
+                  '请确认已授权正确的「Documents」文档目录路径，\n'
+                  '点击「重新授权」返回重新选择正确的目录；\n'
+                  '或点击「重试」再次尝试备份。'
+              : '自动备份未能成功完成，可能是存储空间不足或设备状态异常。\n\n'
+                  '请清理不必要的文件后点击「重试」，应用将再次尝试自动备份。'
+                  '备份成功后即可正常使用。',
         ),
         actions: [
+          if (isAndroid)
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('重新授权'),
+            )
+          else
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('跳过'),
+            ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('重试'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('跳过'),
           ),
         ],
       ),
