@@ -137,7 +137,7 @@ void main() {
   });
 
   group('Reasoning params editing with options', () {
-    testWidgets('reasoning toggle section has a default toggle for new models',
+    testWidgets('new model shows 暂无推理开关 with add button, no default toggle',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -148,11 +148,12 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // New models now have a default reasoning toggle pre-populated
-      expect(find.text('推理开关'), findsOneWidget);
-      expect(find.text('参数名'), findsOneWidget);
-      expect(find.text('开启时值'), findsOneWidget);
-      expect(find.text('关闭时值'), findsOneWidget);
+      // New models now have NO default reasoning toggle
+      expect(find.text('暂无推理开关'), findsOneWidget);
+      expect(find.text('添加推理开关'), findsOneWidget);
+      // The toggle card fields should NOT be present
+      expect(find.text('开启时值'), findsNothing);
+      expect(find.text('关闭时值'), findsNothing);
     });
 
     testWidgets('can add reasoning param with options', (tester) async {
@@ -195,6 +196,11 @@ void main() {
       await tester.enterText(textFields.at(1), 'test-model');
       await tester.enterText(textFields.at(2), '4096');
       await tester.pump();
+
+      // Add the toggle first (no default toggle for new models)
+      await tester.tap(find.text('添加推理开关'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
 
       // Fill toggle fields so save validation can proceed
       final toggleFields = find.byType(TextFormField);
@@ -242,8 +248,12 @@ void main() {
       await tester.enterText(textFields.at(2), '4096');
       await tester.pump();
 
-      // The default toggle is already present. Fill only toggle name,
-      // leave onValue/offValue empty.
+      // Add the toggle first (no default toggle for new models)
+      await tester.tap(find.text('添加推理开关'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Fill only toggle name, leave onValue/offValue empty.
       final toggleNameField = find.byType(TextFormField).first;
       await tester.enterText(toggleNameField, 'thinking.type');
       await tester.pump();
@@ -257,7 +267,7 @@ void main() {
     });
 
     testWidgets(
-        'save with fully empty toggle (all fields empty) should succeed',
+        'save with no reasoning params at all should succeed',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -274,7 +284,7 @@ void main() {
       await tester.enterText(textFields.at(2), '4096');
       await tester.pump();
 
-      // Click save - toggle is completely empty, should be valid (optional)
+      // Click save - no reasoning params configured, should be valid
       await tester.tap(find.text('保存'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
@@ -295,15 +305,19 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       // Fill required fields
-      var textFields = find.byType(TextField);
+      final textFields = find.byType(TextField);
       await tester.enterText(textFields.at(1), 'test-model');
       await tester.enterText(textFields.at(2), '4096');
       await tester.pump();
 
-      // The default toggle is already present. Fill all toggle fields.
-      final toggleNameField = find.byType(TextFormField).first;
-      await tester.enterText(toggleNameField, 'thinking.type');
+      // Add the toggle first (no default toggle for new models)
+      await tester.tap(find.text('添加推理开关'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Fill all toggle fields
       final toggleFields = find.byType(TextFormField);
+      await tester.enterText(toggleFields.at(0), 'thinking.type');
       await tester.enterText(toggleFields.at(1), 'enabled');
       await tester.enterText(toggleFields.at(2), 'disabled');
       await tester.pump();
@@ -453,7 +467,7 @@ void main() {
   // ─────────────────────────────────────────────────────────────────────
 
   group('LlmModelConfigPage - inference section', () {
-    testWidgets('reasoning toggle section has a default toggle for new models',
+    testWidgets('new model shows 暂无推理开关 with add button, no default toggle',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -463,11 +477,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // New models now have a default reasoning toggle pre-populated
-      expect(find.text('推理开关'), findsOneWidget);
-      expect(find.text('参数名'), findsOneWidget);
-      expect(find.text('开启时值'), findsOneWidget);
-      expect(find.text('关闭时值'), findsOneWidget);
+      // New models have NO default reasoning toggle
+      expect(find.text('暂无推理开关'), findsOneWidget);
+      expect(find.text('添加推理开关'), findsOneWidget);
+      expect(find.text('开启时值'), findsNothing);
+      expect(find.text('关闭时值'), findsNothing);
     });
 
     testWidgets('can add reasoning param via "添加推理参数" button', (tester) async {
@@ -484,6 +498,11 @@ void main() {
       await tester.enterText(textFields.at(1), 'test-model');
       await tester.enterText(textFields.at(2), '4096');
       await tester.pump();
+
+      // Add toggle first (no default toggle for new models)
+      await tester.tap(find.text('添加推理开关'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
 
       // Fill toggle fields so additional params can be saved
       final toggleFields = find.byType(TextFormField);
@@ -543,7 +562,7 @@ void main() {
   // ─────────────────────────────────────────────────────────────────────
 
   group('LlmModelConfigPage - reasoning params structure', () {
-    testWidgets('shows 推理开关 card and 推理力度 card for new model', (tester) async {
+    testWidgets('new model shows no default 推理开关 or 推理力度 cards', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: LlmModelConfigPage(),
@@ -558,17 +577,13 @@ void main() {
       await tester.enterText(textFields.at(2), '4096');
       await tester.pump();
 
-      // 推理开关 card should be present
-      expect(find.text('推理开关'), findsOneWidget);
+      // No 推理开关 card (only the "暂无推理开关" text and add button)
+      expect(find.text('暂无推理开关'), findsOneWidget);
+      expect(find.text('添加推理开关'), findsOneWidget);
 
-      // Scroll to find 推理力度
-      await tester.scrollUntilVisible(
-        find.text('推理力度'),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.pump();
-      expect(find.text('推理力度'), findsOneWidget);
+      // 推理力度 should NOT be present (neither card nor add button without toggle)
+      expect(find.text('推理力度'), findsNothing);
+      expect(find.text('添加推理力度'), findsNothing);
     });
 
     testWidgets('"添加推理参数" button exists for adding extra reasoning params',
@@ -627,6 +642,11 @@ void main() {
       await tester.enterText(textFields.at(1), 'test-model');
       await tester.enterText(textFields.at(2), '4096');
       await tester.pump();
+
+      // Add toggle first (no default toggle for new models)
+      await tester.tap(find.text('添加推理开关'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
 
       // Fill toggle fields to enable save
       final toggleFields = find.byType(TextFormField);
@@ -724,7 +744,7 @@ void main() {
       await tester.enterText(textFields.at(2), '4096');
       await tester.pump();
 
-      // Click save - should succeed with empty toggle (all fields empty)
+      // Click save - should succeed with no reasoning params
       await tester.tap(find.text('保存'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
@@ -743,16 +763,230 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Scroll down to find the effort card
+      // Add the toggle first
+      await tester.tap(find.text('添加推理开关'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Now add the effort param via "添加推理力度" button
+      await tester.scrollUntilVisible(
+        find.text('添加推理力度'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pump();
+      await tester.tap(find.text('添加推理力度'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // The effort card should show helper text since toggle is not complete
       await tester.scrollUntilVisible(
         find.text('请先完整填写推理开关后再配置推理力度'),
         200,
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pump();
-
-      // The effort card should show helper text since toggle is not complete
       expect(find.text('请先完整填写推理开关后再配置推理力度'), findsOneWidget);
+    });
+
+    testWidgets('"添加推理力度" button appears only after toggle is added',
+        (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: LlmModelConfigPage(),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Without toggle, "添加推理力度" button should NOT exist
+      expect(find.text('添加推理力度'), findsNothing);
+
+      // Add toggle
+      await tester.tap(find.text('添加推理开关'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Now "添加推理力度" button should appear
+      await tester.scrollUntilVisible(
+        find.text('添加推理力度'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pump();
+      expect(find.text('添加推理力度'), findsOneWidget);
+    });
+
+    testWidgets('after adding effort via "添加推理力度", button hides and card shows',
+        (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: LlmModelConfigPage(),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Add toggle
+      await tester.tap(find.text('添加推理开关'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Click "添加推理力度"
+      await tester.scrollUntilVisible(
+        find.text('添加推理力度'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pump();
+      await tester.tap(find.text('添加推理力度'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // The "添加推理力度" button should now be hidden
+      expect(find.text('添加推理力度'), findsNothing);
+
+      // The effort card should be shown
+      await tester.scrollUntilVisible(
+        find.text('推理力度'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pump();
+      expect(find.text('推理力度'), findsOneWidget);
+    });
+
+    testWidgets('delete effort card and "添加推理力度" button reappears',
+        (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: LlmModelConfigPage(),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Add toggle
+      await tester.tap(find.text('添加推理开关'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Add effort
+      await tester.scrollUntilVisible(
+        find.text('添加推理力度'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pump();
+      await tester.tap(find.text('添加推理力度'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Delete the effort card (find its delete button)
+      await tester.scrollUntilVisible(
+        find.text('推理力度'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pump();
+
+      // Find the delete icon button on the effort card
+      final deleteButtons = find.byIcon(Icons.delete);
+      // The effort card's delete button is the second one (first is toggle's)
+      await tester.tap(deleteButtons.last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Now "添加推理力度" button should reappear
+      await tester.scrollUntilVisible(
+        find.text('添加推理力度'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pump();
+      expect(find.text('添加推理力度'), findsOneWidget);
+    });
+
+    testWidgets('deleting toggle reverts to empty state and hides effort button',
+        (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: LlmModelConfigPage(),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Add toggle
+      await tester.tap(find.text('添加推理开关'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Delete the toggle
+      final deleteButtons = find.byIcon(Icons.delete);
+      await tester.tap(deleteButtons.first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Should show "暂无推理开关" and "添加推理开关" again
+      expect(find.text('暂无推理开关'), findsOneWidget);
+      expect(find.text('添加推理开关'), findsOneWidget);
+
+      // "添加推理力度" should NOT be visible without toggle
+      expect(find.text('添加推理力度'), findsNothing);
+    });
+
+    testWidgets(
+        'adding additional params before effort still allows adding effort',
+        (tester) async {
+      // Set larger surface so all widgets are visible without scrolling.
+      // This avoids scroll-related issues in widget tests.
+      tester.view.physicalSize = const Size(800, 3000);
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: LlmModelConfigPage(),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Add toggle
+      await tester.tap(find.text('添加推理开关'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Fill toggle fields
+      final toggleFields = find.byType(TextFormField);
+      await tester.enterText(toggleFields.at(0), 'thinking.type');
+      await tester.enterText(toggleFields.at(1), 'enabled');
+      await tester.enterText(toggleFields.at(2), 'disabled');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Verify "添加推理参数" button exists in widget tree
+      expect(find.text('添加推理参数'), findsOneWidget);
+
+      // Add additional reasoning param BEFORE adding effort
+      await tester.tap(find.text('添加推理参数'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // "添加推理力度" button should still be in the widget tree
+      // (isEffortParam flag distinguishes it from the additional param)
+      expect(find.text('添加推理力度'), findsOneWidget);
+
+      // Now add effort — should succeed
+      await tester.tap(find.text('添加推理力度'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // "添加推理力度" button should be hidden (only one effort allowed)
+      expect(find.text('添加推理力度'), findsNothing);
+
+      // The effort card should now be visible
+      expect(find.text('推理力度'), findsOneWidget);
     });
   });
 

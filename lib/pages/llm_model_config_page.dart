@@ -172,24 +172,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     if (m != null) {
       _reasoningParams = m.reasoningParams.map((p) => p.copy()).toList();
     } else {
-      // New model: pre-populate with a default reasoning toggle and a default
-      // reasoning effort param. This ensures both the toggle and the effort
-      // card are available out of the box.
-      _reasoningParams = [
-        ReasoningParam(
-          paramName: '',
-          isReasoningToggle: true,
-          onValue: '',
-          offValue: '',
-          options: [],
-        ),
-        ReasoningParam(
-          paramName: '',
-          isReasoningToggle: false,
-          enabled: true,
-          options: [],
-        ),
-      ];
+      // New model: start with no reasoning params.
+      // User must explicitly add toggle, effort, and additional params
+      // via the respective add buttons.
+      _reasoningParams = [];
     }
   }
 
@@ -225,8 +211,26 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
 
   void _addReasoningParam() {
     setState(() {
-      _reasoningParams
-          .add(ReasoningParam(paramName: '', enabled: false, options: []));
+      _reasoningParams.add(ReasoningParam(
+        paramName: '',
+        enabled: false,
+        isEffortParam: false,
+        options: [],
+      ));
+    });
+  }
+
+  void _addEffortReasoningParam() {
+    setState(() {
+      _reasoningParams.add(
+        ReasoningParam(
+          paramName: '',
+          isReasoningToggle: false,
+          isEffortParam: true,
+          enabled: true,
+          options: [],
+        ),
+      );
     });
   }
 
@@ -259,12 +263,21 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
             orElse: () => null,
           );
 
-  /// Returns the single reasoning effort param (first non-toggle), or null.
-  ReasoningParam? get _effortReasoningParam =>
-      _reasoningParams.cast<ReasoningParam?>().firstWhere(
-            (p) => p != null && !p.isReasoningToggle,
-            orElse: () => null,
-          );
+  /// Returns the reasoning effort param (one with isEffortParam=true), or null.
+  /// Falls back to the first non-toggle param for backward compatibility with
+  /// existing saved data that does not have isEffortParam set.
+  ReasoningParam? get _effortReasoningParam {
+    final marked = _reasoningParams.cast<ReasoningParam?>().firstWhere(
+          (p) => p?.isEffortParam ?? false,
+          orElse: () => null,
+        );
+    if (marked != null) return marked;
+    // Fallback: first non-toggle param (backward compatible with existing data)
+    return _reasoningParams.cast<ReasoningParam?>().firstWhere(
+          (p) => p != null && !p.isReasoningToggle,
+          orElse: () => null,
+        );
+  }
 
   /// Returns additional reasoning params (non-toggle, excluding the effort one).
   List<ReasoningParam> get _additionalReasoningParams {
@@ -421,13 +434,44 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     );
   }
 
+  /// Builds the reasoning effort section. If an effort param exists, shows
+  /// the effort card (same style as toggle, editable after toggle is complete).
+  /// If no effort param exists but toggle is present, shows an
+  /// "添加推理力度" button. Hides entirely if no toggle exists.
+  Widget _buildReasoningEffortSection(ColorScheme cs) {
+    final effort = _effortReasoningParam;
+    if (effort != null) {
+      return _buildReasoningEffortCard(effort, cs);
+    }
+    // No effort param — show add button if toggle exists
+    final toggle = _toggleReasoningParam;
+    if (toggle == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        children: [
+          Center(
+            child: Text('暂无推理力度',
+                style: const TextStyle(color: Colors.grey, fontSize: 13)),
+          ),
+          const SizedBox(height: 4),
+          Center(
+            child: TextButton.icon(
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('添加推理力度', style: TextStyle(fontSize: 13)),
+              onPressed: _addEffortReasoningParam,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Builds the reasoning effort card — a single card, same style as the
   /// toggle card. Only editable after the toggle is complete. There is
-  /// always exactly one effort param (like the toggle).
-  Widget _buildReasoningEffortCard(ColorScheme cs) {
+  /// exactly one effort param.
+  Widget _buildReasoningEffortCard(ReasoningParam effort, ColorScheme cs) {
     final toggleComplete = _isToggleComplete;
-    final effort = _effortReasoningParam;
-    if (effort == null) return const SizedBox.shrink();
 
     final effortName = effort.paramName.trim();
     final isDuplicate = effortName.isNotEmpty &&
@@ -1051,8 +1095,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
             // 推理开关 — 始终在第一个位置
             _buildReasoningToggleSection(cs),
 
-            // 推理力度 — 有且只有一个 card
-            _buildReasoningEffortCard(cs),
+            // 推理力度 — 有且只有一个 card（通过「添加推理力度」按钮添加）
+            _buildReasoningEffortSection(cs),
 
             // 附加推理参数（通过「添加推理参数」按钮添加）
             if (_additionalReasoningParams.isNotEmpty)
