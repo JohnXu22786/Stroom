@@ -43,6 +43,12 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
     // a critical operation is in progress.
     final canPop = !state.isDownloading && !state.isInstalling;
 
+    // Determine header label: "最新版本" when newest is selected or
+    // only one version available, "已选择" when user picked an older version.
+    final _isNewestSelected = state.selectedVersionIndex == 0 ||
+        (state.availableVersions?.length ?? 0) <= 1;
+    final _versionLabel = _isNewestSelected ? '最新版本' : '已选择';
+
     return PopScope(
       canPop: canPop,
       child: AlertDialog(
@@ -58,7 +64,15 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('最新版本: ${state.latestVersion ?? ''}'),
+              // Version selection list (shown when multiple versions available)
+              if (state.availableVersions != null &&
+                  state.availableVersions!.length > 1) ...[
+                _buildVersionSelector(state, cs),
+                const SizedBox(height: 12),
+              ],
+              // Show selected version info
+              // Label changes to "已选择" when user picks a non-newest version
+              Text('$_versionLabel: ${state.latestVersion ?? ''}'),
               if (state.releaseNotes != null &&
                   state.releaseNotes!.isNotEmpty) ...[
                 const SizedBox(height: 12),
@@ -252,6 +266,126 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
         child: const Text('立即更新'),
       ),
     ];
+  }
+
+  /// Builds the version selection list showing all available updates.
+  /// The currently selected version is highlighted; tapping a different
+  /// version calls [UpdateNotifier.selectVersion] to update the state.
+  Widget _buildVersionSelector(UpdateState state, ColorScheme cs) {
+    final notifier = ref.read(updateProvider.notifier);
+    final versions = state.availableVersions!;
+    final selectedIndex = state.selectedVersionIndex;
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: cs.outlineVariant),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+            child: Text(
+              '选择版本',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+          ),
+          ...List.generate(versions.length, (index) {
+            final v = versions[index];
+            final isSelected = index == selectedIndex;
+            return InkWell(
+              onTap: () => notifier.selectVersion(index),
+              borderRadius: index == 0
+                  ? const BorderRadius.vertical(top: Radius.circular(10))
+                  : index == versions.length - 1
+                      ? const BorderRadius.vertical(bottom: Radius.circular(10))
+                      : null,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? cs.primaryContainer.withValues(alpha: 0.4)
+                      : null,
+                  border: index < versions.length - 1
+                      ? Border(
+                          bottom:
+                              BorderSide(color: cs.outlineVariant, width: 0.5))
+                      : null,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      isSelected
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_off,
+                      size: 18,
+                      color: isSelected ? cs.primary : cs.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                'v${v.version}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                  color: isSelected ? cs.primary : cs.onSurface,
+                                ),
+                              ),
+                              if (v.isPreRelease) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 4, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    '预览版',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.orange.shade700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              if (index == 0) ...[
+                                const SizedBox(width: 6),
+                                Text(
+                                  '最新',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: cs.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
   }
 
   /// Builds the download progress card shown in the actions area.
