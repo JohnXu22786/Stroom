@@ -51,7 +51,8 @@ enum EditorMode {
 // ============================================================================
 
 /// The height ratio of the split editor relative to the available space.
-const double _splitEditorHeightRatio = 0.45;
+/// Set to 0.5 for a 50/50 split between preview and editor.
+const double _splitEditorHeightRatio = 0.5;
 
 /// 图表制作页面 — 使用 Mermaid.js 制作和预览各种图表
 ///
@@ -438,35 +439,42 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   Widget _buildMainContent(ColorScheme cs) {
     final bool showPreview = _editorMode != EditorMode.edit;
 
-    return Stack(
-      children: [
-        // Preview — uses MermaidRenderWidget which defers WebView creation
-        // via postFrameCallback to avoid freezing the UI (same pattern as
-        // the chat page's inline Mermaid rendering).
-        if (showPreview)
-          Positioned.fill(
-            // In split mode, leave bottom space for the code editor
-            bottom: _editorMode == EditorMode.split
-                ? MediaQuery.of(context).size.height * _splitEditorHeightRatio
-                : 0,
-            child: _buildPreviewPanel(cs),
-          ),
-        // Editor overlay for edit mode (full area)
-        if (_editorMode == EditorMode.edit)
-          Positioned.fill(
-            child: _buildCodeEditor(cs),
-          ),
-        // Editor overlay for split mode (bottom portion, no overlap)
-        if (_editorMode == EditorMode.split)
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height:
-                MediaQuery.of(context).size.height * _splitEditorHeightRatio,
-            child: _buildSplitEditorPart(cs),
-          ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableHeight = constraints.maxHeight;
+        final editorHeight =
+            _editorMode == EditorMode.split
+                ? availableHeight * _splitEditorHeightRatio
+                : 0.0;
+
+        return Stack(
+          children: [
+            // Preview — uses MermaidRenderWidget which defers WebView creation
+            // via postFrameCallback to avoid freezing the UI (same pattern as
+            // the chat page's inline Mermaid rendering).
+            if (showPreview)
+              Positioned.fill(
+                // In split mode, leave bottom space for the code editor
+                bottom: editorHeight,
+                child: _buildPreviewPanel(cs),
+              ),
+            // Editor overlay for edit mode (full area)
+            if (_editorMode == EditorMode.edit)
+              Positioned.fill(
+                child: _buildCodeEditor(cs),
+              ),
+            // Editor overlay for split mode (bottom portion, no overlap)
+            if (_editorMode == EditorMode.split)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: editorHeight,
+                child: _buildSplitEditorPart(cs),
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -485,62 +493,62 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       child: MermaidRenderWidget(
         mermaidCode: _previewCode,
         expand: true,
+        showToolbar: false,
       ),
     );
   }
 
   /// Editor-only part of the split view (no InAppWebView preview).
+  /// The height is constrained by the parent [Positioned] widget so this
+  /// widget does not set its own fixed height.
   Widget _buildSplitEditorPart(ColorScheme cs) {
-    return SizedBox(
-      height: MediaQuery.of(context).size.height * _splitEditorHeightRatio,
-      child: Column(
-        children: [
-          // Divider + label
-          Container(
-            color: cs.surfaceContainerLow,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                Icon(Icons.code, size: 14, color: cs.onSurfaceVariant),
-                const SizedBox(width: 4),
-                Text(
-                  '代码',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: cs.onSurfaceVariant,
-                  ),
+    return Column(
+      children: [
+        // Divider + label
+        Container(
+          color: cs.surfaceContainerLow,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              Icon(Icons.code, size: 14, color: cs.onSurfaceVariant),
+              const SizedBox(width: 4),
+              Text(
+                '代码',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: cs.onSurfaceVariant,
                 ),
-                const Expanded(child: Divider(thickness: 0.5)),
-              ],
-            ),
+              ),
+              const Expanded(child: Divider(thickness: 0.5)),
+            ],
           ),
-          // Code editor
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-              child: TextField(
-                controller: _codeController,
-                decoration: InputDecoration(
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  contentPadding: const EdgeInsets.all(10),
-                  labelText: 'Mermaid 代码',
-                  isDense: true,
+        ),
+        // Code editor
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+            child: TextField(
+              controller: _codeController,
+              decoration: InputDecoration(
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                maxLines: null,
-                expands: true,
-                textAlignVertical: TextAlignVertical.top,
-                style: const TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 12,
-                  height: 1.4,
-                ),
+                contentPadding: const EdgeInsets.all(10),
+                labelText: 'Mermaid 代码',
+                isDense: true,
+              ),
+              maxLines: null,
+              expands: true,
+              textAlignVertical: TextAlignVertical.top,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 12,
+                height: 1.4,
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
