@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/widgets/code_block_source_widget.dart';
 import 'package:stroom/widgets/html_code_block_widget.dart';
 import 'package:stroom/widgets/markdown_extensions.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
@@ -294,25 +295,25 @@ void main() {
       expect(mermaidWidget.mermaidCode, 'graph TD\nA-->B');
     });
 
-    test('returns LayoutBuilder for non-mermaid/non-html language', () {
+    test('returns CodeBlockSourceView for non-mermaid/non-html language', () {
       final pre = codeBlockPreConfig(isDark: false);
       final builder = pre.builder!;
       final widget = builder('print("hello")', 'python');
-      expect(widget, isA<LayoutBuilder>());
+      expect(widget, isA<CodeBlockSourceView>());
     });
 
-    test('returns LayoutBuilder for empty language', () {
+    test('returns CodeBlockSourceView for empty language', () {
       final pre = codeBlockPreConfig(isDark: false);
       final builder = pre.builder!;
       final widget = builder('some code', '');
-      expect(widget, isA<LayoutBuilder>());
+      expect(widget, isA<CodeBlockSourceView>());
     });
 
-    test('returns LayoutBuilder for unknown language', () {
+    test('returns CodeBlockSourceView for unknown language', () {
       final pre = codeBlockPreConfig(isDark: false);
       final builder = pre.builder!;
       final widget = builder('some code', 'unknown_language_xyz');
-      expect(widget, isA<LayoutBuilder>());
+      expect(widget, isA<CodeBlockSourceView>());
     });
 
     test('mermaid builder works in dark mode too', () {
@@ -333,32 +334,32 @@ void main() {
       expect(htmlWidget.htmlCode, '<h1>Hello</h1>');
     });
 
-    test('returns LayoutBuilder for non-html languages (python)', () {
+    test('returns CodeBlockSourceView for non-html languages (python)', () {
       final pre = codeBlockPreConfig(isDark: false);
       final builder = pre.builder!;
       final widget = builder('print("hello")', 'python');
-      expect(widget, isA<LayoutBuilder>());
+      expect(widget, isA<CodeBlockSourceView>());
     });
 
-    test('returns LayoutBuilder for non-html languages (dart)', () {
+    test('returns CodeBlockSourceView for non-html languages (dart)', () {
       final pre = codeBlockPreConfig(isDark: false);
       final builder = pre.builder!;
       final widget = builder('void main() {}', 'dart');
-      expect(widget, isA<LayoutBuilder>());
+      expect(widget, isA<CodeBlockSourceView>());
     });
 
-    test('returns LayoutBuilder for empty language', () {
+    test('returns CodeBlockSourceView for empty language', () {
       final pre = codeBlockPreConfig(isDark: false);
       final builder = pre.builder!;
       final widget = builder('<h1>test</h1>', '');
-      expect(widget, isA<LayoutBuilder>());
+      expect(widget, isA<CodeBlockSourceView>());
     });
 
-    test('returns LayoutBuilder for unknown language', () {
+    test('returns CodeBlockSourceView for unknown language', () {
       final pre = codeBlockPreConfig(isDark: false);
       final builder = pre.builder!;
       final widget = builder('<h1>test</h1>', 'unknown_language_xyz');
-      expect(widget, isA<LayoutBuilder>());
+      expect(widget, isA<CodeBlockSourceView>());
     });
 
     test('html builder works in dark mode too', () {
