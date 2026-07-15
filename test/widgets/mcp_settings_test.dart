@@ -56,7 +56,9 @@ void main() {
       },
     );
 
-    testWidgets('tapping MCP entry navigates to MCP config page', (
+    testWidgets(
+        'tapping MCP entry navigates to MCP config page with built-in configs',
+        (
       tester,
     ) async {
       tester.view.physicalSize = const Size(1080, 4000);
@@ -75,9 +77,10 @@ void main() {
       await tester.tap(find.text('MCP供应商'));
       await tester.pumpAndSettle();
 
-      // Should navigate to ProviderConfigPage with MCP供应商 title
-      // Since we have no configs, it should show "暂无供应商配置，请点击"添加"创建"
-      expect(find.text('暂无供应商配置，请点击"添加"创建'), findsOneWidget);
+      // Should navigate to ProviderConfigPage with built-in configs visible
+      // The page should show at least some built-in MCP server names
+      expect(find.text('MCP供应商'), findsOneWidget);
+      expect(find.text('Exa'), findsOneWidget);
     });
 
     testWidgets('MCP config page allows adding a new MCP server', (
