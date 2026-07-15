@@ -18,7 +18,6 @@ import '../models/chat_event.dart';
 import '../models/chat_message.dart';
 import '../models/tool_call.dart';
 import '../services/chat_adapter.dart';
-import '../services/chat_service.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/chat_stream_provider.dart';
 import '../providers/provider_config.dart';

@@ -164,9 +164,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         label,
         style: TextStyle(
           fontSize: 9,
-          color: supported
-              ? Colors.green[700]
-              : Colors.grey[500],
+          color: supported ? Colors.green[700] : Colors.grey[500],
         ),
       ),
     );
@@ -276,18 +274,21 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                       : '（未命名）';
 
                   // Determine if this is a built-in (vendor) MCP config
-                  final mcpTypeConfig = entry.type == 'mcp' && config.models.isNotEmpty
-                      ? config.models[0].typeConfig
-                      : null;
+                  final mcpTypeConfig =
+                      entry.type == 'mcp' && config.models.isNotEmpty
+                          ? config.models[0].typeConfig
+                          : null;
                   final isVendor = mcpTypeConfig?['isVendor'] as bool? ?? false;
 
                   // For MCP entries, show transport details
                   String subtitle;
                   IconData leadIcon;
                   Color iconColor;
+                  final isHttpTool = entry.type == 'mcp'
+                      ? (mcpTypeConfig?['isHttpTool'] as bool? ?? false)
+                      : false;
 
                   if (entry.type == 'mcp') {
-                    final isHttpTool = mcpTypeConfig?['isHttpTool'] as bool? ?? false;
                     final transport =
                         mcpTypeConfig?['transport'] as String? ?? 'sse';
 
@@ -324,7 +325,10 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                     key: ValueKey('config_${widget.entryId}_$i'),
                     margin: const EdgeInsets.only(bottom: 8),
                     color: isVendor
-                        ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.15)
+                        ? Theme.of(context)
+                            .colorScheme
+                            .primaryContainer
+                            .withValues(alpha: 0.15)
                         : null,
                     child: ListTile(
                       leading: Row(
@@ -345,7 +349,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                         children: [
                           Flexible(
                             child: Text(providerName,
-                                style: const TextStyle(fontWeight: FontWeight.w600)),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600)),
                           ),
                           if (isVendor) ...[
                             const SizedBox(width: 6),
@@ -353,7 +358,10 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
@@ -392,12 +400,14 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                                 _platformBadge(
                                   context,
                                   '🖥️ 桌面',
-                                  isHttpTool || mcpTypeConfig?['transport'] == 'sse',
+                                  isHttpTool ||
+                                      mcpTypeConfig?['transport'] == 'sse',
                                 ),
                                 _platformBadge(
                                   context,
                                   '📱 移动・🌐 Web',
-                                  isHttpTool || mcpTypeConfig?['transport'] == 'sse',
+                                  isHttpTool ||
+                                      mcpTypeConfig?['transport'] == 'sse',
                                 ),
                               ],
                             ),
