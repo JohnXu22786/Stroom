@@ -347,6 +347,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         headers: {'x-api-key': ''},
         env: {},
         apiKeyHint: '请在 Exa 官网获取 API Key',
+        description: '通过 Exa MCP 接口进行网络搜索、内容提取和深度研究，支持语义搜索与关键词搜索',
       ),
       _buildMcpConfig(
         name: 'Tavily',
@@ -356,6 +357,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         env: {},
         apiKeyHint:
             '请在 Tavily 官网获取 API Key，支持 ?tavilyApiKey= 或 Authorization: Bearer',
+        description: 'AI 原生搜索引擎，专为大语言模型优化的实时网络搜索服务',
       ),
       _buildMcpConfig(
         name: 'Jina AI',
@@ -364,6 +366,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         headers: {'Authorization': 'Bearer '},
         env: {},
         apiKeyHint: '请在 Jina AI 官网获取 API Key (Bearer Token)',
+        description: '多模态 AI 服务，支持网页内容提取、Embedding 和搜索结果抓取',
       ),
       _buildMcpConfig(
         name: 'Firecrawl',
@@ -372,6 +375,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         headers: {},
         env: {},
         apiKeyHint: '请在 Firecrawl 官网获取 API Key，也可免 Key 试用（免费版有限额）',
+        description: '网页抓取与内容提取服务，可将任意网页转为干净的 Markdown 或结构化数据',
       ),
       _buildMcpConfig(
         name: 'Zhipu',
@@ -380,6 +384,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         headers: {'Authorization': 'Bearer '},
         env: {},
         apiKeyHint: '请在智谱 AI 开放平台获取 API Key (Bearer Token)',
+        description: '智谱 AI 开放平台的网页阅读器 MCP 服务，支持网页内容抓取与理解',
       ),
 
       // ================================================================
@@ -393,6 +398,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         env: {},
         isHttpTool: true,
         apiKeyHint: '请在 Brave Search 官网获取 API Key',
+        description: '隐私优先的独立搜索引擎，提供高质量网络搜索结果（需配置 API Key）',
       ),
       _buildMcpConfig(
         name: 'Bocha',
@@ -402,6 +408,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         env: {},
         isHttpTool: true,
         apiKeyHint: '请在博查 AI 开放平台获取 API Key (Bearer Token)',
+        description: '博查 AI 网络搜索服务，提供智能化的中文网页搜索结果',
       ),
       _buildMcpConfig(
         name: 'Querit',
@@ -411,6 +418,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         env: {},
         isHttpTool: true,
         apiKeyHint: '请在 Querit 官网获取 API Key (Bearer Token)',
+        description: 'Querit AI 搜索服务，提供智能搜索与内容发现能力',
       ),
       _buildMcpConfig(
         name: 'Searxng',
@@ -420,6 +428,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         env: {},
         isHttpTool: true,
         apiKeyHint: '设置 SearXNG 实例 URL（如 http://your-instance:8080），可选 API Key',
+        description: '自托管的元搜索引擎，聚合多种搜索源，注重隐私保护（需自建实例）',
       ),
     ];
   }
@@ -435,12 +444,16 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     Map<String, String>? env,
     String? apiKeyHint,
     bool isHttpTool = false,
+    String? description,
   }) {
     final typeConfig = <String, dynamic>{
       'transport': transport,
       'isVendor': true,
       'apiKeyHint': apiKeyHint,
     };
+    if (description != null && description.isNotEmpty) {
+      typeConfig['description'] = description;
+    }
     if (command != null) typeConfig['command'] = command;
     if (args != null && args.isNotEmpty) typeConfig['args'] = args;
     if (url != null) typeConfig['url'] = url;
@@ -515,6 +528,24 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
             }
             mcpEntry.configs[idx] = updatedConfig;
             changed = true;
+          }
+        } else {
+          // 补充缺失的描述信息（新添加字段）
+          final oldDesc = oldTypeConfig['description'] as String?;
+          final newDesc = newTypeConfig['description'] as String?;
+          if ((oldDesc == null || oldDesc.isEmpty) &&
+              newDesc != null &&
+              newDesc.isNotEmpty) {
+            final idx = mcpEntry.configs.indexOf(existing);
+            if (idx >= 0) {
+              final updatedConfig = existing.copy();
+              final models = updatedConfig.models;
+              if (models.isNotEmpty) {
+                models[0].typeConfig['description'] = newDesc;
+              }
+              mcpEntry.configs[idx] = updatedConfig;
+              changed = true;
+            }
           }
         }
       }
