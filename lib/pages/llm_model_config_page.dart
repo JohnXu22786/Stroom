@@ -264,20 +264,11 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           );
 
   /// Returns the reasoning effort param (one with isEffortParam=true), or null.
-  /// Falls back to the first non-toggle param for backward compatibility with
-  /// existing saved data that does not have isEffortParam set.
-  ReasoningParam? get _effortReasoningParam {
-    final marked = _reasoningParams.cast<ReasoningParam?>().firstWhere(
-          (p) => p?.isEffortParam ?? false,
-          orElse: () => null,
-        );
-    if (marked != null) return marked;
-    // Fallback: first non-toggle param (backward compatible with existing data)
-    return _reasoningParams.cast<ReasoningParam?>().firstWhere(
-          (p) => p != null && !p.isReasoningToggle,
-          orElse: () => null,
-        );
-  }
+  ReasoningParam? get _effortReasoningParam =>
+      _reasoningParams.cast<ReasoningParam?>().firstWhere(
+            (p) => p?.isEffortParam ?? false,
+            orElse: () => null,
+          );
 
   /// Returns additional reasoning params (non-toggle, excluding the effort one).
   List<ReasoningParam> get _additionalReasoningParams {
@@ -301,33 +292,24 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     if (toggle == null) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          children: [
-            Center(
-              child: Text('暂无推理开关',
-                  style: TextStyle(color: Colors.grey, fontSize: 13)),
-            ),
-            const SizedBox(height: 4),
-            Center(
-              child: TextButton.icon(
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('添加推理开关', style: TextStyle(fontSize: 13)),
-                onPressed: () {
-                  setState(() {
-                    _reasoningParams.insert(
-                        0,
-                        ReasoningParam(
-                          paramName: '',
-                          isReasoningToggle: true,
-                          onValue: '',
-                          offValue: '',
-                          options: [],
-                        ));
-                  });
-                },
-              ),
-            ),
-          ],
+        child: Center(
+          child: TextButton.icon(
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('添加推理开关', style: TextStyle(fontSize: 13)),
+            onPressed: () {
+              setState(() {
+                _reasoningParams.insert(
+                    0,
+                    ReasoningParam(
+                      paramName: '',
+                      isReasoningToggle: true,
+                      onValue: '',
+                      offValue: '',
+                      options: [],
+                    ));
+              });
+            },
+          ),
         ),
       );
     }
@@ -435,34 +417,26 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   }
 
   /// Builds the reasoning effort section. If an effort param exists, shows
-  /// the effort card (same style as toggle, editable after toggle is complete).
-  /// If no effort param exists but toggle is present, shows an
-  /// "添加推理力度" button. Hides entirely if no toggle exists.
+  /// the effort card. Otherwise, shows the "添加推理力度" button, which is
+  /// disabled (gray) when no toggle exists.
   Widget _buildReasoningEffortSection(ColorScheme cs) {
     final effort = _effortReasoningParam;
     if (effort != null) {
       return _buildReasoningEffortCard(effort, cs);
     }
-    // No effort param — show add button if toggle exists
-    final toggle = _toggleReasoningParam;
-    if (toggle == null) return const SizedBox.shrink();
+    // No effort param — show add button (always visible, disabled if no toggle)
+    final hasToggle = _toggleReasoningParam != null;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        children: [
-          Center(
-            child: Text('暂无推理力度',
-                style: const TextStyle(color: Colors.grey, fontSize: 13)),
-          ),
-          const SizedBox(height: 4),
-          Center(
-            child: TextButton.icon(
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('添加推理力度', style: TextStyle(fontSize: 13)),
-              onPressed: _addEffortReasoningParam,
-            ),
-          ),
-        ],
+      child: Center(
+        child: TextButton.icon(
+          icon:
+              Icon(Icons.add, size: 16, color: hasToggle ? null : Colors.grey),
+          label: Text('添加推理力度',
+              style: TextStyle(
+                  fontSize: 13, color: hasToggle ? null : Colors.grey)),
+          onPressed: hasToggle ? _addEffortReasoningParam : null,
+        ),
       ),
     );
   }
@@ -488,15 +462,14 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           children: [
             Row(
               children: [
-                Icon(Icons.tune,
-                    size: 18, color: toggleComplete ? cs.primary : Colors.grey),
+                Icon(Icons.tune, size: 18, color: cs.primary),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text('推理力度',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: toggleComplete ? cs.primary : Colors.grey,
+                        color: cs.primary,
                       )),
                 ),
                 _buildTypeDropdown(effort, cs),
@@ -530,9 +503,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
             Text('选项值（模型必须添加至少一个选项值）',
                 style: TextStyle(
                   fontSize: 12,
-                  color: toggleComplete
-                      ? cs.onSurfaceVariant.withValues(alpha: 0.7)
-                      : Colors.grey,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
                 )),
             const SizedBox(height: 8),
             ...List.generate(effort.options.length, (j) {
@@ -588,7 +559,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                   '请先完整填写推理开关后再配置推理力度',
                   style: TextStyle(
                     fontSize: 11,
-                    color: Colors.grey,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.7),
                   ),
                 ),
               ),
@@ -1109,9 +1080,17 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
             const SizedBox(height: 8),
             Center(
               child: TextButton.icon(
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('添加推理参数'),
-                onPressed: _addReasoningParam,
+                icon: Icon(Icons.add,
+                    size: 16,
+                    color: _toggleReasoningParam != null ? null : Colors.grey),
+                label: Text('添加推理参数',
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: _toggleReasoningParam != null
+                            ? null
+                            : Colors.grey)),
+                onPressed:
+                    _toggleReasoningParam != null ? _addReasoningParam : null,
               ),
             ),
             const SizedBox(height: 24),
