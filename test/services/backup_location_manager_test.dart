@@ -68,6 +68,85 @@ void main() {
   });
 
   // ==================================================================
+  // SAF URI 路径验证
+  // ==================================================================
+
+  group('SAF URI path validation', () {
+    test('validates Documents path as valid', () async {
+      // Documents 路径应通过验证
+      final valid = BackupLocationManager.isValidBackupPath(
+        'content://com.android.externalstorage.documents/tree/'
+            'primary%3ADocuments',
+      );
+      expect(valid, isTrue);
+    });
+
+    test('validates Documents subfolder as valid', () async {
+      // 子文件夹也应通过验证
+      final valid = BackupLocationManager.isValidBackupPath(
+        'content://com.android.externalstorage.documents/tree/'
+            'primary%3ADocuments%2FMyFolder',
+      );
+      expect(valid, isTrue);
+    });
+
+    test('rejects root URI (primary:)', () async {
+      // 根目录应被拒绝
+      final valid = BackupLocationManager.isValidBackupPath(
+        'content://com.android.externalstorage.documents/tree/'
+            'primary%3A',
+      );
+      expect(valid, isFalse);
+    });
+
+    test('rejects null or empty URI', () async {
+      expect(BackupLocationManager.isValidBackupPath(null), isFalse);
+      expect(BackupLocationManager.isValidBackupPath(''), isFalse);
+    });
+
+    test('rejects arbitrary content URI', () async {
+      final valid = BackupLocationManager.isValidBackupPath(
+        'content://com.android.contacts/data',
+      );
+      expect(valid, isFalse);
+    });
+
+    test('rejects non-content URI', () async {
+      final valid = BackupLocationManager.isValidBackupPath(
+        'file:///storage/emulated/0',
+      );
+      expect(valid, isFalse);
+    });
+
+    test('rejects SD card root URI', () async {
+      // SD 卡根路径格式如 primary: 但 volume id 不同
+      final valid = BackupLocationManager.isValidBackupPath(
+        'content://com.android.externalstorage.documents/tree/'
+            'XXXX-XXXX%3A',
+      );
+      expect(valid, isFalse);
+    });
+
+    test('decodes and validates URI with encoded characters', () async {
+      // primary%3ADocument 解码后为 "primary:Document"
+      final valid = BackupLocationManager.isValidBackupPath(
+        'content://com.android.externalstorage.documents/tree/'
+            'primary%3ADocument',
+      );
+      expect(valid, isTrue);
+    });
+
+    test('rejects URI with only primary: prefix', () async {
+      // 仅 primary: 没有子路径的情况
+      final valid = BackupLocationManager.isValidBackupPath(
+        'content://com.android.externalstorage.documents/tree/'
+            'primary%3A/',
+      );
+      expect(valid, isFalse);
+    });
+  });
+
+  // ==================================================================
   // read/write/delete file operations (non-SAF / temp dir)
   // ==================================================================
 
