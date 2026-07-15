@@ -334,10 +334,12 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     }
   }
 
-  /// 创建内置 MCP 配置列表（预置的供应商 MCP 服务）
+  /// 创建内置 MCP 配置列表（预置的供应商 MCP 服务 + HTTP 工具配置）
   List<ProviderConfigItem> _createBuiltinMcpConfigs() {
     return [
-      // == MCP Remote (SSE) ==
+      // ================================================================
+      // Remote MCP (SSE) — 有官方托管 Remote MCP 服务，全端可用
+      // ================================================================
       _buildMcpConfig(
         name: 'Exa',
         transport: 'sse',
@@ -349,70 +351,74 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       _buildMcpConfig(
         name: 'Tavily',
         transport: 'sse',
-        url: 'https://mcp.tavily.com/mcp/?tavilyApiKey=tvly-',
+        url: 'https://mcp.tavily.com/mcp/',
         headers: {},
         env: {},
-        apiKeyHint: '请在 Tavily 官网获取 API Key (tvly- 开头)',
+        apiKeyHint: '请在 Tavily 官网获取 API Key，支持 ?tavilyApiKey= 或 Authorization: Bearer',
       ),
-      // == MCP Local (stdio) ==
       _buildMcpConfig(
         name: 'Jina AI',
-        transport: 'stdio',
-        command: 'npx',
-        args: ['-y', '@jina-ai/mcp-server'],
-        env: {'JINA_API_KEY': ''},
-        apiKeyHint: '请在 Jina AI 官网获取 API Key',
+        transport: 'sse',
+        url: 'https://mcp.jina.ai/sse',
+        headers: {'Authorization': 'Bearer '},
+        env: {},
+        apiKeyHint: '请在 Jina AI 官网获取 API Key (Bearer Token)',
       ),
       _buildMcpConfig(
         name: 'Firecrawl',
-        transport: 'stdio',
-        command: 'npx',
-        args: ['-y', 'firecrawl-mcp'],
-        env: {'FIRECRAWL_API_KEY': ''},
-        apiKeyHint: '请在 Firecrawl 官网获取 API Key',
-      ),
-      _buildMcpConfig(
-        name: 'Brave Search',
-        transport: 'stdio',
-        command: 'npx',
-        args: ['-y', '@modelcontextprotocol/server-brave-search'],
-        env: {'BRAVE_API_KEY': ''},
-        apiKeyHint: '请在 Brave Search 官网获取 API Key',
-      ),
-      _buildMcpConfig(
-        name: 'Searxng',
-        transport: 'stdio',
-        command: 'npx',
-        args: ['-y', 'mcp-remote', 'http://localhost:8080'],
-        env: {},
-      ),
-      // == REST API (非 MCP 协议，配置为 API 密钥存储，需 MCP 包装器才能作为工具使用) ==
-      _buildMcpConfig(
-        name: 'Bocha',
         transport: 'sse',
-        url: 'https://api.bochaai.com/v1/web-search',
-        headers: {'Authorization': 'Bearer '},
+        url: 'https://mcp.firecrawl.dev/v2/mcp',
+        headers: {},
         env: {},
-        isRestApi: true,
-        apiKeyHint: '请在 Bocha 官网获取 API Key (Bearer Token)',
-      ),
-      _buildMcpConfig(
-        name: 'Querit',
-        transport: 'sse',
-        url: 'https://api.querit.ai/v1/search',
-        headers: {'Authorization': 'Bearer '},
-        env: {},
-        isRestApi: true,
-        apiKeyHint: '请在 Querit 官网获取 API Key (Bearer Token)',
+        apiKeyHint: '请在 Firecrawl 官网获取 API Key，也可免 Key 试用（免费版有限额）',
       ),
       _buildMcpConfig(
         name: 'Zhipu',
         transport: 'sse',
-        url: 'https://open.bigmodel.cn/api/paas/v4/web_search',
+        url: 'https://open.bigmodel.cn/api/mcp/web_reader/mcp',
         headers: {'Authorization': 'Bearer '},
         env: {},
-        isRestApi: true,
-        apiKeyHint: '请在智谱 AI 官网获取 API Key (Bearer Token)',
+        apiKeyHint: '请在智谱 AI 开放平台获取 API Key (Bearer Token)',
+      ),
+
+      // ================================================================
+      // HTTP Tools（纯 Dart 实现，无 MCP 协议，直接调 HTTP API）
+      // ================================================================
+      _buildMcpConfig(
+        name: 'Brave Search',
+        transport: 'http',
+        url: 'https://api.search.brave.com/res/v1/web/search',
+        headers: {'X-Subscription-Token': ''},
+        env: {},
+        isHttpTool: true,
+        apiKeyHint: '请在 Brave Search 官网获取 API Key',
+      ),
+      _buildMcpConfig(
+        name: 'Bocha',
+        transport: 'http',
+        url: 'https://api.bochaai.com/v1/web-search',
+        headers: {'Authorization': 'Bearer '},
+        env: {},
+        isHttpTool: true,
+        apiKeyHint: '请在博查 AI 开放平台获取 API Key (Bearer Token)',
+      ),
+      _buildMcpConfig(
+        name: 'Querit',
+        transport: 'http',
+        url: 'https://api.querit.ai/v1/search',
+        headers: {'Authorization': 'Bearer '},
+        env: {},
+        isHttpTool: true,
+        apiKeyHint: '请在 Querit 官网获取 API Key (Bearer Token)',
+      ),
+      _buildMcpConfig(
+        name: 'Searxng',
+        transport: 'http',
+        url: 'http://localhost:8080',
+        headers: {},
+        env: {},
+        isHttpTool: true,
+        apiKeyHint: '设置 SearXNG 实例 URL（如 http://your-instance:8080），可选 API Key',
       ),
     ];
   }
@@ -427,7 +433,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     Map<String, String>? headers,
     Map<String, String>? env,
     String? apiKeyHint,
-    bool isRestApi = false,
+    bool isHttpTool = false,
   }) {
     final typeConfig = <String, dynamic>{
       'transport': transport,
@@ -439,7 +445,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     if (url != null) typeConfig['url'] = url;
     if (headers != null && headers.isNotEmpty) typeConfig['headers'] = headers;
     if (env != null && env.isNotEmpty) typeConfig['env'] = env;
-    if (isRestApi) typeConfig['isRestApi'] = true;
+    if (isHttpTool) typeConfig['isHttpTool'] = true;
 
     return ProviderConfigItem(
       providerName: name,
@@ -455,7 +461,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     );
   }
 
-  /// 迁移：为已有 MCP 条目添加缺失的内置 MCP 配置
+  /// 迁移：为已有 MCP 条目添加或更新内置 MCP 配置
   Future<void> _migrateBuiltinMcpConfigs(
     SharedPreferences prefs,
     List<ProviderEntry> entries,
@@ -465,14 +471,48 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
 
     final mcpEntry = entries[mcpEntryIdx];
     final builtin = _createBuiltinMcpConfigs();
-    final existingNames =
-        mcpEntry.configs.map((c) => c.providerName).toSet();
+    final existingByName = {
+      for (final c in mcpEntry.configs) c.providerName: c,
+    };
     bool changed = false;
 
     for (final builtinConfig in builtin) {
-      if (!existingNames.contains(builtinConfig.providerName)) {
+      final existing = existingByName[builtinConfig.providerName];
+      if (existing == null) {
+        // 新增的配置
         mcpEntry.configs.add(builtinConfig);
         changed = true;
+      } else {
+        // 已有配置：检查是否需要更新（transport 或类型变化）
+        final oldTypeConfig = existing.models.isNotEmpty
+            ? existing.models[0].typeConfig
+            : <String, dynamic>{};
+        final newTypeConfig = builtinConfig.models.isNotEmpty
+            ? builtinConfig.models[0].typeConfig
+            : <String, dynamic>{};
+
+        final oldTransport = oldTypeConfig['transport'] as String?;
+        final oldIsRestApi = oldTypeConfig['isRestApi'] as bool? ?? false;
+        final oldIsHttpTool = oldTypeConfig['isHttpTool'] as bool? ?? false;
+        final newTransport = newTypeConfig['transport'] as String?;
+        final newIsHttpTool = newTypeConfig['isHttpTool'] as bool? ?? false;
+
+        // 如果 transport 变了（如 stdio→sse），或从 isRestApi 变成 isHttpTool，替换为新版
+        if (oldTransport != newTransport || oldIsRestApi || oldIsHttpTool != newIsHttpTool) {
+          final idx = mcpEntry.configs.indexOf(existing);
+          if (idx >= 0) {
+            // Preserve user's API key if they had one
+            final updatedConfig = builtinConfig.copy();
+            final oldApiKey = _extractApiKeyFromConfig(existing);
+            if (oldApiKey.isNotEmpty) {
+              updatedConfig.models[0].typeConfig['apiKey'] = oldApiKey;
+              // Also update headers/env with the old key
+              _applyApiKeyToTypeConfig(updatedConfig.models[0].typeConfig, oldApiKey);
+            }
+            mcpEntry.configs[idx] = updatedConfig;
+            changed = true;
+          }
+        }
       }
     }
 
@@ -482,6 +522,66 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         'provider_entries',
         jsonEncode(entries.map((e) => e.toMap()).toList()),
       );
+    }
+  }
+
+  /// Extract API key from an existing config
+  String _extractApiKeyFromConfig(ProviderConfigItem config) {
+    final typeConfig = config.models.isNotEmpty
+        ? config.models[0].typeConfig
+        : <String, dynamic>{};
+    // Check apiKey field first
+    final apiKey = typeConfig['apiKey'] as String?;
+    if (apiKey != null && apiKey.isNotEmpty) return apiKey;
+    // Check env values
+    final envRaw = typeConfig['env'];
+    if (envRaw is Map) {
+      for (final val in envRaw.values) {
+        final s = val.toString();
+        if (s.isNotEmpty && !s.contains('/usr/') && !s.contains('/bin')) {
+          return s;
+        }
+      }
+    }
+    // Check header values
+    final headersRaw = typeConfig['headers'];
+    if (headersRaw is Map) {
+      for (final val in headersRaw.values) {
+        final s = val.toString().trim();
+        if (s.isNotEmpty && s.length > 3) {
+          if (s.startsWith('Bearer ')) return s.substring(7).trim();
+          return s;
+        }
+      }
+    }
+    return '';
+  }
+
+  /// Apply an API key to a typeConfig (update headers/env placeholders)
+  void _applyApiKeyToTypeConfig(Map<String, dynamic> typeConfig, String apiKey) {
+    if (apiKey.isEmpty) return;
+    typeConfig['apiKey'] = apiKey;
+    // Update headers
+    final headersRaw = typeConfig['headers'];
+    if (headersRaw is Map) {
+      for (final key in headersRaw.keys.toList()) {
+        final val = headersRaw[key].toString();
+        if (val.isEmpty || val.endsWith(' ')) {
+          if (key.toLowerCase() == 'authorization') {
+            headersRaw[key] = 'Bearer $apiKey';
+          } else {
+            headersRaw[key] = apiKey;
+          }
+        }
+      }
+    }
+    // Update env
+    final envRaw = typeConfig['env'];
+    if (envRaw is Map) {
+      for (final key in envRaw.keys.toList()) {
+        final val = envRaw[key].toString();
+        if (val.isEmpty) envRaw[key] = apiKey;
+      }
     }
   }
 
