@@ -40,6 +40,15 @@ class UpdateState {
   /// When true, checks include pre-releases; when false, only stable releases.
   final bool acceptPreRelease;
 
+  /// All available versions newer than the current installed version.
+  /// Sorted descending (newest first). Null when no check has been performed
+  /// or no updates are available.
+  final List<AvailableUpdate>? availableVersions;
+
+  /// Index of the currently selected version in [availableVersions].
+  /// Defaults to 0 (newest version).
+  final int selectedVersionIndex;
+
   const UpdateState({
     this.isChecking = false,
     this.latestVersion,
@@ -54,6 +63,8 @@ class UpdateState {
     this.downloadedFilePath,
     this.isInstalling = false,
     this.acceptPreRelease = false,
+    this.availableVersions,
+    this.selectedVersionIndex = 0,
   });
 
   UpdateState copyWith({
@@ -70,6 +81,8 @@ class UpdateState {
     String? downloadedFilePath,
     bool? isInstalling,
     bool? acceptPreRelease,
+    List<AvailableUpdate>? availableVersions,
+    int? selectedVersionIndex,
   }) {
     return UpdateState(
       isChecking: isChecking ?? this.isChecking,
@@ -85,12 +98,12 @@ class UpdateState {
       downloadedFilePath: downloadedFilePath ?? this.downloadedFilePath,
       isInstalling: isInstalling ?? this.isInstalling,
       acceptPreRelease: acceptPreRelease ?? this.acceptPreRelease,
+      availableVersions: availableVersions ?? this.availableVersions,
+      selectedVersionIndex: selectedVersionIndex ?? this.selectedVersionIndex,
     );
   }
 }
 
-const String _kUpdateCheckUrl =
-    'https://api.github.com/repos/JohnXu22786/Stroom/releases/latest';
 const String _kAllReleasesUrl =
     'https://api.github.com/repos/JohnXu22786/Stroom/releases?per_page=100';
 const String _kSkippedVersionKey = 'update_skipped_version';
@@ -248,6 +261,24 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     }
   }
 
+  /// Selects a version from [availableVersions] by index and updates
+  /// the state to reflect the selected version's details.
+  ///
+  /// The [latestVersion], [releaseNotes], and [downloadUrl] fields are
+  /// updated to match the selected [AvailableUpdate]. Does nothing if
+  /// the index is out of range.
+  void selectVersion(int index) {
+    final versions = state.availableVersions;
+    if (versions == null || index < 0 || index >= versions.length) return;
+    final selected = versions[index];
+    state = state.copyWith(
+      selectedVersionIndex: index,
+      latestVersion: selected.version,
+      releaseNotes: selected.releaseNotes,
+      downloadUrl: selected.downloadUrl,
+    );
+  }
+
   /// Resets transient update state while preserving user preferences
   /// (e.g., [acceptPreRelease]).
   UpdateState _resetState() {
@@ -266,11 +297,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     state = state.copyWith(isChecking: true, error: null);
 
     try {
-      if (state.acceptPreRelease) {
-        await _checkForUpdateWithPreRelease(silent: silent);
-      } else {
-        await _checkForUpdateStable(silent: silent);
-      }
+      await _checkForUpdates(silent: silent);
     } catch (e) {
       if (!silent) {
         state = state.copyWith(
@@ -284,87 +311,19 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     }
   }
 
-  /// Checks for updates using the stable releases API (/releases/latest).
-  /// This is the original behavior — only non-prerelease releases are considered.
-  Future<void> _checkForUpdateStable({required bool silent}) async {
-    final response = await _dio.get(_kUpdateCheckUrl);
-    if (response.statusCode == 200) {
-      await _processSingleRelease(response.data as Map<String, dynamic>);
-    } else {
-      if (!silent) {
-        state = state.copyWith(
-          isChecking: false,
-          updateAvailable: false,
-          error: '检查更新失败: HTTP ${response.statusCode}',
-        );
-      } else {
-        state = _resetState();
-      }
-    }
-  }
-
-  /// Checks for updates using the full releases API (/releases).
-  /// Iterates through all returned releases (including pre-releases) to find
-  /// the latest version newer than the current installed version.
-  Future<void> _checkForUpdateWithPreRelease({required bool silent}) async {
+  /// Fetches ALL releases from GitHub (up to 100), filters those newer
+  /// than the current installed version, and populates [availableVersions].
+  ///
+  /// When [acceptPreRelease] is `false`, pre-release versions (marked by
+  /// GitHub's `prerelease` field) are excluded from the list.
+  /// When [acceptPreRelease] is `true`, all versions including pre-releases
+  /// are included.
+  ///
+  /// The resulting list is sorted descending (newest first), with the first
+  /// entry selected by default. Skipped versions are excluded.
+  Future<void> _checkForUpdates({required bool silent}) async {
     final response = await _dio.get(_kAllReleasesUrl);
-    if (response.statusCode == 200) {
-      final releases = response.data as List<dynamic>;
-      final current = Version.parse(appVersion);
-
-      Version? bestVersion;
-      String? bestTagName;
-      String? bestBody;
-      String? bestHtmlUrl;
-      List<dynamic> bestAssets = [];
-
-      for (final release in releases) {
-        final tagName = release['tag_name'] as String? ?? '';
-        final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
-        final parsed = Version.parse(versionStr);
-
-        if (parsed > current) {
-          if (bestVersion == null || parsed > bestVersion) {
-            bestVersion = parsed;
-            bestTagName = versionStr;
-            bestBody = release['body'] as String? ?? '';
-            bestHtmlUrl = release['html_url'] as String? ?? '';
-            bestAssets = release['assets'] as List<dynamic>? ?? [];
-          }
-        }
-      }
-
-      if (bestVersion != null) {
-        final prefs = await SharedPreferences.getInstance();
-        final skippedVersion = prefs.getString(_kSkippedVersionKey);
-
-        if (skippedVersion == bestTagName) {
-          state = _resetState();
-          return;
-        }
-
-        // Find direct download URL for current platform, fall back to html_url
-        final directDownloadUrl = getPlatformDownloadUrl(bestAssets);
-        final downloadUrl = directDownloadUrl ?? bestHtmlUrl;
-
-        final updateData = jsonEncode({
-          'latest_version': bestTagName,
-          'release_notes': bestBody,
-          'download_url': downloadUrl,
-        });
-        await prefs.setString(_kUpdateAvailableKey, updateData);
-
-        state = UpdateState(
-          acceptPreRelease: state.acceptPreRelease,
-          updateAvailable: true,
-          latestVersion: bestTagName,
-          releaseNotes: bestBody,
-          downloadUrl: downloadUrl,
-        );
-      } else {
-        state = _resetState();
-      }
-    } else {
+    if (response.statusCode != 200) {
       if (!silent) {
         state = state.copyWith(
           isChecking: false,
@@ -374,47 +333,75 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       } else {
         state = _resetState();
       }
+      return;
     }
-  }
 
-  /// Processes a single release from the GitHub API (/releases/latest) response.
-  Future<void> _processSingleRelease(Map<String, dynamic> data) async {
-    final tagName = data['tag_name'] as String? ?? '';
-    final latestVersion = tagName.replaceAll(RegExp(r'^v'), '');
-    final releaseNotes = data['body'] as String? ?? '';
-    final htmlUrl = data['html_url'] as String? ?? '';
-    final assets = data['assets'] as List<dynamic>? ?? [];
-
-    // Find direct download URL for current platform, fall back to html_url
-    final directDownloadUrl = getPlatformDownloadUrl(assets);
-    final downloadUrl = directDownloadUrl ?? htmlUrl;
-
+    final releases = response.data as List<dynamic>;
     final current = Version.parse(appVersion);
-    final latest = Version.parse(latestVersion);
+    final includePreRelease = state.acceptPreRelease;
 
-    final updateAvailable = latest > current;
+    final prefs = await SharedPreferences.getInstance();
+    final skippedVersion = prefs.getString(_kSkippedVersionKey);
 
-    if (updateAvailable) {
-      final prefs = await SharedPreferences.getInstance();
-      final skippedVersion = prefs.getString(_kSkippedVersionKey);
+    // Collect all available updates newer than current version
+    final List<AvailableUpdate> availableList = [];
 
-      if (skippedVersion == latestVersion) {
-        state = _resetState();
-        return;
-      }
+    for (final release in releases) {
+      final tagName = release['tag_name'] as String? ?? '';
+      final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
+      final parsed = Version.parse(versionStr);
 
+      // Skip older or equal versions
+      if (!(parsed > current)) continue;
+
+      // Skip the version the user chose to skip
+      if (versionStr == skippedVersion) continue;
+
+      // Filter out pre-releases when not accepting them
+      final isPrerelease = release['prerelease'] as bool? ?? false;
+      if (!includePreRelease && isPrerelease) continue;
+
+      // Find download URL for this release on current platform
+      final assets = release['assets'] as List<dynamic>? ?? [];
+      final htmlUrl = release['html_url'] as String? ?? '';
+      final directDownloadUrl = getPlatformDownloadUrl(assets);
+      final downloadUrl = directDownloadUrl ?? htmlUrl;
+      final body = release['body'] as String? ?? '';
+
+      availableList.add(AvailableUpdate(
+        version: versionStr,
+        releaseNotes: body,
+        downloadUrl: downloadUrl,
+        isPreRelease: isPrerelease,
+      ));
+    }
+
+    // Sort descending (newest first)
+    availableList.sort((a, b) {
+      final va = Version.parse(a.version);
+      final vb = Version.parse(b.version);
+      return vb.compareTo(va); // descending
+    });
+
+    if (availableList.isNotEmpty) {
+      final first = availableList.first;
+
+      // Persist the newest version's data for pending update detection
       final updateData = jsonEncode({
-        'latest_version': latestVersion,
-        'release_notes': releaseNotes,
-        'download_url': downloadUrl,
+        'latest_version': first.version,
+        'release_notes': first.releaseNotes,
+        'download_url': first.downloadUrl,
       });
       await prefs.setString(_kUpdateAvailableKey, updateData);
 
       state = UpdateState(
+        acceptPreRelease: state.acceptPreRelease,
         updateAvailable: true,
-        latestVersion: latestVersion,
-        releaseNotes: releaseNotes,
-        downloadUrl: downloadUrl,
+        availableVersions: availableList,
+        selectedVersionIndex: 0,
+        latestVersion: first.version,
+        releaseNotes: first.releaseNotes,
+        downloadUrl: first.downloadUrl,
       );
     } else {
       state = _resetState();

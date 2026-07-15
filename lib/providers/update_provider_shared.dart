@@ -1,3 +1,24 @@
+/// Represents an available update for a specific version.
+///
+/// Contains the version string, release notes, download URL, and whether
+/// the release is a pre-release (as marked on GitHub).
+class AvailableUpdate {
+  final String version;
+  final String releaseNotes;
+  final String downloadUrl;
+  final bool isPreRelease;
+
+  const AvailableUpdate({
+    required this.version,
+    required this.releaseNotes,
+    required this.downloadUrl,
+    this.isPreRelease = false,
+  });
+
+  @override
+  String toString() => 'AvailableUpdate($version${isPreRelease ? " preview" : ""})';
+}
+
 /// A semantic version that preserves pre-release information.
 ///
 /// Examples:
