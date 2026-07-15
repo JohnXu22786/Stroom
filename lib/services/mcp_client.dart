@@ -190,12 +190,99 @@ class McpClient {
   /// CancelToken for SSE requests
   CancelToken? _cancelToken;
 
+  /// Persistent SSE connection subscription (standard MCP SSE protocol)
+  StreamSubscription<String>? _sseSubscription;
+
+  /// Endpoint URL extracted from the SSE `event: endpoint` message
+  String? _sseEndpointUrl;
+
+  /// Completer that resolves when the SSE `event: endpoint` is received.
+  /// Recreated on each connection attempt to support retry.
+  Completer<void> _sseEndpointCompleter = Completer<void>();
+
   Future<void> _connectSse() async {
-    // SSE transport: no persistent connection needed.
-    // Each JSON-RPC request is sent as HTTP POST with SSE response.
-    // The URL is validated during construction.
-    _state = _McpClientState.connected;
-    debugPrint('MCP[${config.name}]: SSE transport initialized');
+    if (config.url == null || config.url!.isEmpty) {
+      throw ArgumentError('SSE URL is required');
+    }
+
+    // Reset state for new connection attempt (supports retry)
+    _sseEndpointUrl = null;
+    _sseEndpointCompleter = Completer<void>();
+
+    debugPrint('MCP[${config.name}]: Establishing persistent SSE connection to ${config.url}');
+
+    _cancelToken = CancelToken();
+
+    // Build headers for the SSE GET connection
+    final headers = <String, String>{
+      ...config.headers,
+    };
+    if (config.apiKey != null && config.apiKey!.isNotEmpty) {
+      headers.putIfAbsent('x-api-key', () => config.apiKey!);
+    }
+
+    try {
+      final stream = sseConnect(
+        config.url!,
+        headers,
+        cancelToken: _cancelToken,
+      );
+
+      String? currentEvent;
+
+      _sseSubscription = stream.listen(
+        (line) {
+          if (line.startsWith('event: ')) {
+            currentEvent = line.substring(7).trim();
+          } else if (line.startsWith('data: ')) {
+            final data = line.substring(6);
+            if (currentEvent == 'endpoint') {
+              // Standard MCP: server sends event: endpoint with URL to post messages
+              _sseEndpointUrl = data.trim();
+              debugPrint('MCP[${config.name}]: received endpoint URL: $_sseEndpointUrl');
+              if (!_sseEndpointCompleter.isCompleted) {
+                _sseEndpointCompleter.complete();
+              }
+            } else {
+              // JSON-RPC response through the SSE stream
+              _handleMessage(data);
+            }
+            currentEvent = null;
+          } else if (line.isEmpty) {
+            currentEvent = null;
+          }
+        },
+        onError: (Object error) {
+          debugPrint('MCP[${config.name}]: SSE connection error: $error');
+          if (!_sseEndpointCompleter.isCompleted) {
+            _sseEndpointCompleter.completeError(error);
+          }
+          _completePendingRequestsWithError(
+              Exception('SSE connection error: $error'));
+          _state = _McpClientState.disconnected;
+        },
+        onDone: () {
+          debugPrint('MCP[${config.name}]: SSE connection closed');
+          _completePendingRequestsWithError(
+              Exception('SSE connection closed unexpectedly'));
+          _state = _McpClientState.disconnected;
+        },
+        cancelOnError: false,
+      );
+
+      // Wait for the endpoint event with a 30-second timeout
+      await _sseEndpointCompleter.future.timeout(const Duration(seconds: 30));
+      _state = _McpClientState.connected;
+      debugPrint('MCP[${config.name}]: SSE transport connected, endpoint: $_sseEndpointUrl');
+    } catch (e) {
+      debugPrint('MCP[${config.name}]: SSE connect failed: $e');
+      _sseSubscription?.cancel();
+      _sseSubscription = null;
+      _cancelToken?.cancel();
+      _cancelToken = null;
+      _state = _McpClientState.disconnected;
+      rethrow;
+    }
   }
 
   Future<void> _sendInitialize() async {
@@ -227,10 +314,54 @@ class McpClient {
     }
   }
 
-  /// Send a JSON-RPC message via HTTP POST with SSE response.
-  /// Works cross-platform (iOS, Android, Desktop, Web) using the conditional
-  /// SSE client infrastructure (sse_client_io.dart for native, sse_client_web.dart for web).
+  /// Send a JSON-RPC message via HTTP POST to the MCP endpoint URL.
+  /// The response is received through the persistent SSE connection
+  /// and routed to the pending request's completer by [listTools]/[callTool].
   Future<void> _sendSseRequest(String message) async {
+    if (_sseEndpointUrl == null || _sseEndpointUrl!.isEmpty) {
+      debugPrint('MCP[${config.name}]: SSE endpoint URL not available');
+      // Fallback: try direct POST to the SSE URL (legacy compatibility)
+      await _sendSseRequestLegacy(message);
+      return;
+    }
+
+    final msgId = JsonRpcUtils.extractRequestId(message);
+
+    // Build HTTP headers for the JSON-RPC POST request
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      ...config.headers,
+    };
+
+    if (config.apiKey != null && config.apiKey!.isNotEmpty) {
+      headers.putIfAbsent('x-api-key', () => config.apiKey!);
+    }
+
+    // Resolve relative endpoint URL against the SSE URL base
+    final endpointUrl = _resolveEndpointUrl(_sseEndpointUrl!);
+
+    try {
+      await ssePost(
+        endpointUrl,
+        headers,
+        message,
+        cancelToken: _cancelToken,
+      );
+      // Response will arrive through the persistent SSE connection
+      // and be handled by _handleMessage in the _sseSubscription listener.
+    } catch (e) {
+      debugPrint('MCP[${config.name}]: POST to endpoint failed: $e');
+      if (msgId != null) {
+        final completer = _pendingRequests.remove(msgId);
+        if (completer != null && !completer.isCompleted) {
+          completer.completeError(Exception('SSE POST request failed: $e'));
+        }
+      }
+    }
+  }
+
+  /// Legacy fallback: send POST directly to SSE URL (for servers that support it).
+  Future<void> _sendSseRequestLegacy(String message) async {
     if (config.url == null || config.url!.isEmpty) {
       debugPrint('MCP[${config.name}]: SSE URL is empty');
       return;
@@ -238,35 +369,29 @@ class McpClient {
 
     final msgId = JsonRpcUtils.extractRequestId(message);
 
-    // Build HTTP headers: content-type + custom headers (e.g., x-api-key, Authorization)
     final headers = <String, String>{
       'Content-Type': 'application/json',
       ...config.headers,
     };
 
-    // If apiKey is set but not in headers, add it as x-api-key
     if (config.apiKey != null && config.apiKey!.isNotEmpty) {
       headers.putIfAbsent('x-api-key', () => config.apiKey!);
     }
 
-    _cancelToken = CancelToken();
+    final cancelToken = CancelToken();
 
     try {
-      // Use the cross-platform SSE client to send POST and receive SSE response.
-      // Timeout: 30 seconds for the stream to complete.
       final stream = sseStream(
         config.url!,
         headers,
         message,
-        cancelToken: _cancelToken,
+        cancelToken: cancelToken,
       ).timeout(const Duration(seconds: 30));
 
       await for (final line in stream) {
         if (line.startsWith('data: ')) {
           final data = line.substring(6);
           _handleMessage(data);
-          // If this was a specific request (not a notification), and the
-          // response has been handled (completer resolved), we can stop.
           if (msgId != null) {
             final completer = _pendingRequests[msgId];
             if (completer == null || completer.isCompleted) {
@@ -276,16 +401,15 @@ class McpClient {
         }
       }
     } on TimeoutException {
-      debugPrint('MCP[${config.name}]: SSE request timed out');
+      debugPrint('MCP[${config.name}]: Legacy SSE request timed out');
       if (msgId != null) {
         final completer = _pendingRequests.remove(msgId);
         if (completer != null && !completer.isCompleted) {
-          completer
-              .completeError(TimeoutException('MCP SSE request timed out'));
+          completer.completeError(TimeoutException('MCP SSE request timed out'));
         }
       }
     } catch (e) {
-      debugPrint('MCP[${config.name}]: SSE request failed: $e');
+      debugPrint('MCP[${config.name}]: Legacy SSE request failed: $e');
       if (msgId != null) {
         final completer = _pendingRequests.remove(msgId);
         if (completer != null && !completer.isCompleted) {
@@ -293,6 +417,19 @@ class McpClient {
         }
       }
     }
+  }
+
+  /// Resolve a possibly-relative endpoint URL against the SSE base URL.
+  String _resolveEndpointUrl(String endpoint) {
+    if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {
+      // Absolute URL
+      return endpoint;
+    }
+    // Relative URL: resolve against the SSE URL base
+    final uri = Uri.tryParse(config.url ?? '');
+    if (uri == null) return endpoint;
+    final resolved = uri.resolve(endpoint);
+    return resolved.toString();
   }
 
   void _handleMessage(String line) {
@@ -366,6 +503,16 @@ class McpClient {
     return await completer.future.timeout(const Duration(seconds: 30));
   }
 
+  /// Complete all pending requests with an error (e.g., on connection drop).
+  void _completePendingRequestsWithError(Exception error) {
+    for (final entry in _pendingRequests.entries) {
+      if (!entry.value.isCompleted) {
+        entry.value.completeError(error);
+      }
+    }
+    _pendingRequests.clear();
+  }
+
   /// 释放资源
   void dispose() {
     if (_state == _McpClientState.disposed) return;
@@ -376,17 +523,14 @@ class McpClient {
     _stderrSubscription?.cancel();
     _stderrSubscription = null;
 
-    // Cancel any in-flight SSE request
+    // Cancel SSE subscription and in-flight requests
+    _sseSubscription?.cancel();
+    _sseSubscription = null;
     _cancelToken?.cancel();
     _cancelToken = null;
 
     // 完成所有挂起的请求（带错误）
-    for (final entry in _pendingRequests.entries) {
-      if (!entry.value.isCompleted) {
-        entry.value.completeError(Exception('Client disposed'));
-      }
-    }
-    _pendingRequests.clear();
+    _completePendingRequestsWithError(Exception('Client disposed'));
 
     _process?.kill();
     _process = null;

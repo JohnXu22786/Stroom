@@ -143,33 +143,6 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     setState(() {});
   }
 
-  /// Build a small platform compatibility badge.
-  Widget _platformBadge(BuildContext context, String label, bool supported) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-      decoration: BoxDecoration(
-        color: supported
-            ? Colors.green.withValues(alpha: 0.1)
-            : Colors.grey.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(3),
-        border: Border.all(
-          color: supported
-              ? Colors.green.withValues(alpha: 0.3)
-              : Colors.grey.withValues(alpha: 0.15),
-          width: 0.5,
-        ),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 9,
-          color: supported ? Colors.green[700] : Colors.grey[500],
-        ),
-      ),
-    );
-  }
-
   Future<void> _openSettingsPanel(int configIndex) async {
     final entry = _entry;
     if (entry == null ||
@@ -391,26 +364,23 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                                 fontStyle: FontStyle.italic,
                               ),
                             ),
-                          // Cross-platform compatibility info
+                          // 显示描述文本（替代原来的平台标签）
                           if (entry.type == 'mcp') ...[
-                            const SizedBox(height: 4),
-                            Wrap(
-                              spacing: 4,
-                              children: [
-                                _platformBadge(
-                                  context,
-                                  '🖥️ 桌面',
-                                  isHttpTool ||
-                                      mcpTypeConfig?['transport'] == 'sse',
+                            final description =
+                                mcpTypeConfig?['description'] as String?;
+                            if (description != null &&
+                                description.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                description,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey[600],
                                 ),
-                                _platformBadge(
-                                  context,
-                                  '📱 移动・🌐 Web',
-                                  isHttpTool ||
-                                      mcpTypeConfig?['transport'] == 'sse',
-                                ),
-                              ],
-                            ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ],
                         ],
                       ),
