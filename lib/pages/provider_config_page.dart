@@ -287,16 +287,16 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   Color iconColor;
 
                   if (entry.type == 'mcp') {
-                    final isRestApi = mcpTypeConfig?['isRestApi'] as bool? ?? false;
+                    final isHttpTool = mcpTypeConfig?['isHttpTool'] as bool? ?? false;
                     final transport =
                         mcpTypeConfig?['transport'] as String? ?? 'sse';
 
-                    if (isRestApi) {
-                      // REST API endpoints (Bocha, Querit, Zhipu, etc.)
+                    if (isHttpTool) {
+                      // HTTP 工具（纯 Dart 实现，非 MCP 协议）
                       final url = mcpTypeConfig?['url'] as String? ?? '';
-                      leadIcon = Icons.api;
+                      leadIcon = Icons.http;
                       iconColor = Colors.orange;
-                      subtitle = 'REST API: ${url.isNotEmpty ? url : '(未设置)'}';
+                      subtitle = 'HTTP 工具: ${url.isNotEmpty ? url : '(未设置)'}';
                     } else if (transport == 'stdio') {
                       final cmd = mcpTypeConfig?['command'] as String? ?? '';
                       leadIcon = Icons.desktop_windows;
@@ -392,17 +392,12 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                                 _platformBadge(
                                   context,
                                   '🖥️ 桌面',
-                                  mcpTypeConfig?['transport'] != 'sse',
+                                  isHttpTool || mcpTypeConfig?['transport'] == 'sse',
                                 ),
                                 _platformBadge(
                                   context,
-                                  '📱 移动',
-                                  mcpTypeConfig?['transport'] == 'sse',
-                                ),
-                                _platformBadge(
-                                  context,
-                                  '🌐 Web',
-                                  mcpTypeConfig?['transport'] == 'sse',
+                                  '📱 移动・🌐 Web',
+                                  isHttpTool || mcpTypeConfig?['transport'] == 'sse',
                                 ),
                               ],
                             ),
