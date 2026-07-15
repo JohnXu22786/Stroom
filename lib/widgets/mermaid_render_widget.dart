@@ -38,8 +38,15 @@ class MermaidRenderWidget extends StatefulWidget {
   /// The Mermaid diagram code to render.
   final String mermaidCode;
 
-  /// Optional height constraint. If null, a default of 300 is used.
+  /// Optional height constraint. If null and [expand] is false, a default
+  /// of 300 is used.
   final double? height;
+
+  /// If true, the widget fills the available space instead of having a
+  /// fixed [height]. Used by [MermaidChartPage] to fill the preview pane.
+  ///
+  /// Defaults to false for backward compatibility (inline chat usage).
+  final bool expand;
 
   /// {@template mermaid_render_widget_test_only_show_source_code}
   /// Test-only: if true, the widget starts in source-code view mode instead of
@@ -53,6 +60,7 @@ class MermaidRenderWidget extends StatefulWidget {
     super.key,
     required this.mermaidCode,
     this.height,
+    this.expand = false,
     this.testOnlyShowSourceCode,
   });
 
@@ -420,7 +428,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveHeight = widget.height ?? 300.0;
+    final effectiveHeight = widget.expand ? null : (widget.height ?? 300.0);
     final cs = Theme.of(context).colorScheme;
     final isDark = cs.brightness == Brightness.dark;
     final code = widget.mermaidCode.trim();
@@ -675,7 +683,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   // ---------------------------------------------------------------------------
 
   Widget _buildBorderedContainer({
-    required double height,
+    required double? height,
     required ColorScheme cs,
     required Widget child,
   }) {
