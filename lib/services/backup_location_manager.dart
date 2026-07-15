@@ -170,6 +170,16 @@ class BackupLocationManager {
         if (Platform.isAndroid) {
           final uri = await _getSavedSafUri();
           if (uri == null) return false;
+
+          // 验证已保存的路径是否为有效文档路径（非根目录）
+          // 防止之前错误授权了根目录后，启动时跳过授权弹窗
+          if (!isValidBackupPath(uri)) {
+            debugPrint('[BackupLocationManager] 已保存的 SAF URI 无效（根目录）'
+                '，需要重新授权: $uri');
+            await _clearSafUri();
+            return false;
+          }
+
           return _checkSafAccess(uri);
         }
       } catch (_) {
