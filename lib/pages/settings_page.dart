@@ -357,7 +357,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             _buildListTile(
               leading: const Icon(Icons.link, color: Colors.blueGrey),
               title: '项目主页',
-              subtitle: 'GitHub',
+              subtitle: 'https://github.com/JohnXu22786/Stroom',
               trailing: const Icon(Icons.open_in_new, size: 18),
               onTap: () => _openUrl('https://github.com/JohnXu22786/Stroom'),
             ),

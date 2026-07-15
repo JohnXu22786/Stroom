@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 /// 显示根目录级别的文件夹列表（不含次级子文件夹）。
 /// 单击选中文件夹，双击进入查看子文件夹。
 /// 支持创建新文件夹后自动刷新列表。
+/// 可选的 [fileNameController] 用于在对话框中输入文件名。
 class FolderPickerDialog extends StatefulWidget {
   /// 当前选中的文件夹
   final String currentFolder;
@@ -24,6 +25,12 @@ class FolderPickerDialog extends StatefulWidget {
   /// 自定义提示文字（显示在标题下方）。若为空则使用默认提示。
   final String? hintText;
 
+  /// 可选的文件名输入控制器。设置后在对话框顶部显示文件名输入字段。
+  final TextEditingController? fileNameController;
+
+  /// 文件名输入框的提示文字
+  final String? fileNameHintText;
+
   const FolderPickerDialog({
     super.key,
     this.currentFolder = '',
@@ -32,6 +39,8 @@ class FolderPickerDialog extends StatefulWidget {
     this.onRefreshFolders,
     this.title = '选择文件夹',
     this.hintText,
+    this.fileNameController,
+    this.fileNameHintText,
   });
 
   /// 便捷方法：展示文件夹选择对话框
@@ -43,6 +52,8 @@ class FolderPickerDialog extends StatefulWidget {
     Future<Set<String>> Function()? onRefreshFolders,
     String title = '选择文件夹',
     String? hintText,
+    TextEditingController? fileNameController,
+    String? fileNameHintText,
   }) {
     return showDialog<String>(
       context: context,
@@ -53,6 +64,8 @@ class FolderPickerDialog extends StatefulWidget {
         onRefreshFolders: onRefreshFolders,
         title: title,
         hintText: hintText,
+        fileNameController: fileNameController,
+        fileNameHintText: fileNameHintText,
       ),
     );
   }
@@ -203,6 +216,33 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // 文件名输入（可选）
+            if (widget.fileNameController != null) ...[
+              Text(
+                '文件名',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: widget.fileNameController,
+                decoration: InputDecoration(
+                  hintText: widget.fileNameHintText ?? '输入文件名',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  filled: true,
+                  fillColor: cs.surface,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                ),
+                textInputAction: TextInputAction.done,
+              ),
+              const SizedBox(height: 12),
+            ],
             // 路径导航栏
             if (_isInSubFolder)
               Padding(
