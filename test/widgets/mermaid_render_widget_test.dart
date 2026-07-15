@@ -68,14 +68,13 @@ void main() {
       expect(html, contains('onMermaidError'));
     });
 
-    test('HTML reports initialize errors to Flutter', () {
+    test('HTML reports initialize and render errors to Flutter', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       expect(html, contains('onMermaidError'));
-    });
-
-    test('HTML reports render errors to Flutter', () {
-      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
-      expect(html, contains('onMermaidError'));
+      // Verify both error paths exist: mermaid.initialize() and mermaid.run().catch
+      expect(html, contains('mermaid.initialize'));
+      expect(html, contains('mermaid.run'));
+      expect(html, contains('.catch'));
     });
 
     // ---- Pan/zoom support ----
@@ -124,10 +123,13 @@ void main() {
       expect(html, contains('mouseup'));
     });
 
-    test('HTML has wheel zoom handler with Ctrl key modifier', () {
+    test('HTML has wheel zoom handler with Ctrl/Cmd key modifier', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       expect(html, contains('wheel'));
       expect(html, contains('ctrlKey'));
+      expect(html, contains('metaKey'),
+          reason:
+              'metaKey (Cmd on macOS) must be supported for cross-platform zoom');
     });
 
     test('HTML constrains zoom between 0.1 and 10', () {
