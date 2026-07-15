@@ -797,7 +797,8 @@ class ChatService {
     // First check locally registered tools
     final entry = _toolRegistries[name];
     if (entry != null) {
-      final handler = entry['handler'] as dynamic Function(Map<String, dynamic>);
+      final handler =
+          entry['handler'] as dynamic Function(Map<String, dynamic>);
       final result = handler(args);
       // Handle both sync and async handlers
       if (result is Future<String>) {

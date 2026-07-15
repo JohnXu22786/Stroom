@@ -65,11 +65,13 @@ void main() {
             ? config.models[0].typeConfig
             : <String, dynamic>{};
         expect(typeConfig['isVendor'], isTrue,
-            reason: 'Config "${config.providerName}" should be marked as vendor');
+            reason:
+                'Config "${config.providerName}" should be marked as vendor');
       }
     });
 
-    test('existing configs are not overwritten by built-in migration', () async {
+    test('existing configs are not overwritten by built-in migration',
+        () async {
       // Set up existing MCP entry with a custom config
       final savedEntries = [
         {

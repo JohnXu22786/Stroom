@@ -111,7 +111,8 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
   /// This handles legacy configs and provides a better editing experience.
   String _extractApiKeyFromEnvOrHeaders(McpServerConfig config) {
     // Prefer the explicit apiKey field if set
-    if (config.apiKey != null && config.apiKey!.isNotEmpty) return config.apiKey!;
+    if (config.apiKey != null && config.apiKey!.isNotEmpty)
+      return config.apiKey!;
 
     // Check env vars for non-empty, non-default values (stdio configs)
     const knownNonApiKeys = {'PATH', 'HOME', 'USER', 'SHELL', 'TERM'};
@@ -119,7 +120,9 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
       final val = entry.value;
       if (val.isNotEmpty && !knownNonApiKeys.contains(entry.key)) {
         // Skip common path-like values
-        if (val.contains('/usr/') || val.contains('/bin') || val.contains('/local')) {
+        if (val.contains('/usr/') ||
+            val.contains('/bin') ||
+            val.contains('/local')) {
           continue;
         }
         return val;
@@ -253,7 +256,9 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
     if (_transportType == McpTransportType.stdio) {
       // For stdio: merge apiKey into env vars
       // Load existing env from the original config if editing
-      var effectiveEnv = <String, String>{'PATH': '/usr/local/bin:/usr/bin:/bin'};
+      var effectiveEnv = <String, String>{
+        'PATH': '/usr/local/bin:/usr/bin:/bin'
+      };
       if (_isExistingConfig) {
         final entry = _entry;
         if (entry != null && widget.configIndex < entry.configs.length) {
@@ -262,7 +267,8 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
             final tc = existingConfig.models[0].typeConfig;
             final envRaw = tc['env'];
             if (envRaw is Map) {
-              effectiveEnv = envRaw.map((k, v) => MapEntry(k.toString(), v.toString()));
+              effectiveEnv =
+                  envRaw.map((k, v) => MapEntry(k.toString(), v.toString()));
             }
           }
         }
@@ -296,11 +302,13 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
             final tc = existingConfig.models[0].typeConfig;
             final headersRaw = tc['headers'];
             if (headersRaw is Map) {
-              effectiveHeaders = headersRaw.map((k, v) => MapEntry(k.toString(), v.toString()));
+              effectiveHeaders = headersRaw
+                  .map((k, v) => MapEntry(k.toString(), v.toString()));
             }
             final envRaw = tc['env'];
             if (envRaw is Map) {
-              effectiveEnv = envRaw.map((k, v) => MapEntry(k.toString(), v.toString()));
+              effectiveEnv =
+                  envRaw.map((k, v) => MapEntry(k.toString(), v.toString()));
             }
           }
         }

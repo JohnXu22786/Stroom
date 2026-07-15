@@ -90,7 +90,8 @@ class ChatAdapter {
       if (isHttpTool) {
         debugPrint('Config: initializing HTTP tool "${config.providerName}"');
         _collectHttpToolApiKey(
-          config.providerName, typeConfig,
+          config.providerName,
+          typeConfig,
           (key) => braveApiKey ??= key,
           (key) => bochaApiKey ??= key,
           (key) => queritApiKey ??= key,
@@ -218,9 +219,11 @@ class ChatAdapter {
             return '错误: 未知的 HTTP 工具 "${def.name}"';
         }
       }
+
       ChatService.registerTool(def, handler);
     }
-    debugPrint('Registered ${HttpToolService.toolDefinitions.length} HTTP tools');
+    debugPrint(
+        'Registered ${HttpToolService.toolDefinitions.length} HTTP tools');
   }
 
   /// 释放 MCP 资源
