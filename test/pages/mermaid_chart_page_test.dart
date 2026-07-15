@@ -318,8 +318,7 @@ void main() {
             widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
       );
       // Filename field should have default value '我的图表'
-      final fileNameCtrl =
-          tester.widget<TextField>(fileNameField).controller;
+      final fileNameCtrl = tester.widget<TextField>(fileNameField).controller;
       expect(fileNameCtrl?.text, '我的图表');
 
       // Change filename to a custom name
