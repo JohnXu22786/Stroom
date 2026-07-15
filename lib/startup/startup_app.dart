@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/services.dart' show SystemNavigator;
 
 import 'app_restart.dart';
-import 'backup_startup_check.dart';
 import 'startup_check_service.dart';
 import 'startup_page.dart';
 import '../application.dart';
@@ -22,7 +21,7 @@ import '../services/data_migration_service.dart';
 // 验证。所有工作完成后，切换到主应用界面。
 //
 // 流程：
-// 1. 立即显示启动页面（至少 1 秒）
+// 1. 立即显示启动页面（至少 1.5 秒）
 // 2. 清除"更新后重启"标记（如存在）
 // 3. 依次执行：数据格式版本检查 → 格式验证 → 完整性检查
 // 4. 检查完成后，如果进行了数据迁移，提示用户重启
@@ -55,14 +54,24 @@ class _StartupAppState extends State<StartupApp>
   late final Animation<double> _fadeAnimation;
   bool _isFadingOut = false;
 
-  static const int _minimumDisplayMs = 1000;
+  /// Collector for startup errors that should be displayed to the user.
+  /// When non-null after startup completes, the error is shown in the UI
+  /// instead of silently continuing.
+  String? _startupError;
+
+  /// Navigator key for the overlay [MaterialApp] that hosts [StartupPage].
+  /// Used by [_showRestartDialog] to find a valid [Navigator] ancestor.
+  final GlobalKey<NavigatorState> _overlayNavigatorKey =
+      GlobalKey<NavigatorState>();
+
+  static const int _minimumDisplayMs = 1500;
 
   @override
   void initState() {
     super.initState();
     _fadeController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 500),
+      duration: const Duration(milliseconds: 400),
     );
     _fadeAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
       CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
@@ -84,9 +93,20 @@ class _StartupAppState extends State<StartupApp>
     super.dispose();
   }
 
-  /// Runs all startup checks in parallel so the UI thread is never blocked.
-  /// Ensures a minimum 1-second display and sets [_isWorking] to false only
-  /// after all checks complete.
+  /// Runs the 5 startup checks sequentially, one by one.
+  ///
+  /// Design principle:
+  /// - Each task updates the status via [setState] immediately (synchronous)
+  ///   so the widget shows the new status on the next frame.
+  /// - Between tasks we yield briefly to let the UI render the new status.
+  /// - The 5 tasks are:
+  ///     1. Check data format version (migration if needed)
+  ///     2. Validate data formats
+  ///     3. Check data integrity
+  ///     4. Process & log results
+  ///     5. Finalize — prepare to transition to main app
+  /// - Backup storage check and auto-backup are moved to post-startup
+  ///   (they run after the main app is shown) to avoid blocking the UI.
   Future<void> _runStartupSequence() async {
     final stopwatch = Stopwatch()..start();
 
@@ -102,26 +122,34 @@ class _StartupAppState extends State<StartupApp>
         }
       } catch (_) {}
 
-      // 确保启动页的动画能先渲染一帧
-      await _yieldToFrame();
+      // Ensure the splash screen animations have rendered the first frame
+      if (!mounted) return;
+      setState(() {}); // ensure initial layout
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      if (!mounted) return;
 
       // ===============================================================
       // 依次执行所有检查，逐个进行
       // ===============================================================
       //
-      // 设计原理：
-      // 全部5个检查依次执行（而非并行），每次执行前更新状态文字，
-      // 并在每个检查之间让出一帧以确保 UI 动画流畅。
+      // 全部5个检查依次执行（而非并行）。
+      // 每步先通过 setState 更新状态文字（同步），
+      // 然后短暂等待让 UI 有机会渲染新文字，
+      // 最后执行对应的后端任务。
       //
-      // 1. 检查数据格式版本
-      // 2. 验证数据格式
-      // 3. 检查数据完整性
-      // 4. 处理检查结果
-      // 5. 检查备份存储
+      // 1. 检查数据格式版本（迁移）
+      // 2. 验证数据格式（Isolate 后台执行）
+      // 3. 检查数据完整性（Isolate 后台执行）
+      // 4. 记录检查结果日志
+      // 5. 完成启动准备 → 过渡到主应用
       // ===============================================================
 
       // ---- Task 1: 检查数据格式版本 ----
-      await _updateStatus('正在检查数据格式版本...', '1/5');
+      _setStatus('正在检查数据格式版本...', '1/5');
+      // 短暂让出，让 UI 渲染新状态
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      if (!mounted) return;
+
       MigrationResult migrationResult;
       try {
         migrationResult = await StartupCheckService.checkFormatVersion();
@@ -130,10 +158,12 @@ class _StartupAppState extends State<StartupApp>
         migrationResult = const MigrationResult(needsMigration: false);
       }
       if (!mounted) return;
-      await _yieldToFrame();
 
       // ---- Task 2: 验证数据格式 ----
-      await _updateStatus('正在验证数据格式...', '2/5');
+      _setStatus('正在验证数据格式...', '2/5');
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      if (!mounted) return;
+
       List<StartupIssue> formatIssues;
       try {
         formatIssues = await StartupCheckService.validateDataFormats();
@@ -142,10 +172,12 @@ class _StartupAppState extends State<StartupApp>
         formatIssues = <StartupIssue>[];
       }
       if (!mounted) return;
-      await _yieldToFrame();
 
       // ---- Task 3: 检查数据完整性 ----
-      await _updateStatus('正在检查数据完整性...', '3/5');
+      _setStatus('正在检查数据完整性...', '3/5');
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      if (!mounted) return;
+
       List<StartupIssue> integrityIssues;
       try {
         integrityIssues = await StartupCheckService.checkDataIntegrity();
@@ -154,14 +186,15 @@ class _StartupAppState extends State<StartupApp>
         integrityIssues = <StartupIssue>[];
       }
       if (!mounted) return;
-      await _yieldToFrame();
 
       final didMigration = migrationResult.needsMigration;
 
       // ---- Task 4: 处理检查结果 ----
-      // 汇总所有发现问题并记录日志
-      await _updateStatus('正在处理检查结果...', '4/5');
-      await _yieldToFrame();
+      _setStatus('正在处理检查结果...', '4/5');
+      // Step 4 is instant (just logging), so give more time for the UI
+      // to display this status before moving on.
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      if (!mounted) return;
 
       final allIssues = <StartupIssue>[
         ...formatIssues,
@@ -173,34 +206,59 @@ class _StartupAppState extends State<StartupApp>
         debugPrint('[StartupApp] ${issue.severity.name}: ${issue.message}');
       }
 
-      // Ensure minimum display time
+      // 收集检查过程中发现的问题，显示给用户
+      if (allIssues.isNotEmpty) {
+        final errorMessages = allIssues
+            .where((i) => i.severity == StartupIssueSeverity.error)
+            .map((i) => i.message)
+            .toList();
+        final warningMessages = allIssues
+            .where((i) => i.severity == StartupIssueSeverity.warning)
+            .map((i) => i.message)
+            .toList();
+        if (errorMessages.isNotEmpty || warningMessages.isNotEmpty) {
+          final sb = StringBuffer();
+          if (errorMessages.isNotEmpty) {
+            sb.writeln('发现 ${errorMessages.length} 个数据问题:');
+            for (final msg in errorMessages) {
+              sb.writeln('  • $msg');
+            }
+          }
+          if (warningMessages.isNotEmpty) {
+            if (sb.isNotEmpty) sb.writeln();
+            sb.writeln('${warningMessages.length} 个警告:');
+            for (final msg in warningMessages) {
+              sb.writeln('  • $msg');
+            }
+          }
+          _startupError = sb.toString().trim();
+        }
+      }
+
+      // Ensure minimum display time for pre-check tasks
       final elapsed = stopwatch.elapsedMilliseconds;
       if (elapsed < _minimumDisplayMs) {
-        await Future.delayed(
+        await Future<void>.delayed(
             Duration(milliseconds: _minimumDisplayMs - elapsed));
       }
 
       if (!mounted) return;
 
-      // ---------------------------------------------------------------
-      // Task 5: 备份存储位置与自动备份检查
-      // ---------------------------------------------------------------
-      // 此检查会引导用户完成 Android SAF 授权（如需），
-      // 并在授权后自动执行一次启动备份。如果空间不足或备份
-      // 失败，会循环提示用户直到问题解决。
-      // ---------------------------------------------------------------
-      await _updateStatus('正在检查备份存储...', '5/5');
-      // The backup check runs its own UI/dialogs; we only await completion
-      if (!mounted) return;
-      await BackupStartupCheck.runCheck(context);
-      await Future<void>.delayed(Duration.zero);
-
+      // ---- Task 5: 完成启动准备 ----
+      _setStatus('准备启动应用', '5/5');
+      await Future<void>.delayed(const Duration(milliseconds: 50));
       if (!mounted) return;
 
+      // 所有预检查完成，显示完成状态
       setState(() {
         _isWorking = false;
         _migrationPerformed = didMigration;
-        _statusMessage = didMigration ? '数据检查完成，准备启动应用' : '准备启动应用';
+        _progressDetail = null;
+        if (_startupError != null) {
+          _statusMessage = '启动完成（注意: $_startupError）';
+        } else {
+          _statusMessage = didMigration ? '数据检查完成，准备启动应用' : '准备启动应用';
+        }
       });
 
       // Wait a moment so the user can see the completion state
@@ -212,76 +270,66 @@ class _StartupAppState extends State<StartupApp>
       if (didMigration) {
         await _showRestartDialog();
       } else {
-        // Start fade-out — the main app is rendered underneath the splash
-        // via the Stack layout when _isFadingOut = true.
-        setState(() {
-          _isFadingOut = true;
-        });
-        // 让一帧渲染，使主应用出现在启动页下方，然后启动流畅的渐出动画
-        await _yieldToFrame();
-        if (!mounted) return;
-        _fadeController.forward();
+        _startFadeOut();
       }
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint('[StartupApp] Startup sequence failed: $e');
+      debugPrint('[StartupApp] Stack: $stack');
       if (!mounted) return;
+
+      // Show the actual error to the user, don't hide it
       setState(() {
         _isWorking = false;
-        _statusMessage = '启动检查失败：$e\n\n可继续使用应用';
+        _startupError = e.toString();
+        _statusMessage = '启动检查失败: ${e.toString()}';
       });
       await Future.delayed(const Duration(milliseconds: 1500));
       if (!mounted) return;
-      // Fade out before showing main app even on error
-      setState(() {
-        _isFadingOut = true;
-      });
-      await _yieldToFrame();
-      if (!mounted) return;
-      _fadeController.forward();
+      _startFadeOut();
     }
   }
 
-  /// 更新启动页面的状态文本和进度详情。
-  /// 等待下一帧被渲染后才返回，确保用户能看到状态变化。
-  /// 如果有超时（无帧被调度），则安全降级为事件循环让出。
-  Future<void> _updateStatus(String message, String detail) async {
+  /// Starts the fade-out transition to the main app.
+  ///
+  /// Uses [addPostFrameCallback] to ensure the [Stack] layout renders the
+  /// main app underneath the splash before the animation begins, producing
+  /// a buttery-smooth fade.
+  void _startFadeOut() {
+    if (!mounted || _isFadingOut) return;
+    setState(() {
+      _isFadingOut = true;
+    });
+    // Start the fade animation on the very next frame, ensuring the
+    // Application widget has rendered underneath before opacity changes.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _fadeController.forward();
+      }
+    });
+  }
+
+  /// 同步更新启动页面的状态文本和进度详情。
+  /// 调用后立即通过 setState 更新 UI，不等待帧渲染。
+  /// 调用方应在调用此方法后主动让出事件循环以让 UI 渲染。
+  void _setStatus(String message, String detail) {
     if (!mounted) return;
-    final completer = Completer<void>();
     setState(() {
       _statusMessage = message;
       _progressDetail = detail;
     });
-    // 等待下一个帧被渲染，确保用户能看到状态变化
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!completer.isCompleted) completer.complete();
-    });
-    // 超时保护：如果在 100ms 内无帧回调，则不阻塞后续流程
-    await completer.future.timeout(
-      const Duration(milliseconds: 100),
-      onTimeout: () => completer.complete(),
-    );
-  }
-
-  /// 让出到下一帧，确保动画/状态更新有机会渲染。
-  /// 超时后降级为事件循环让出，避免死锁。
-  Future<void> _yieldToFrame() async {
-    final completer = Completer<void>();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!completer.isCompleted) completer.complete();
-    });
-    // 超时保护
-    await completer.future.timeout(
-      const Duration(milliseconds: 100),
-      onTimeout: () => completer.complete(),
-    );
   }
 
   /// Shows a dialog indicating that migration was performed and the
   /// app needs to restart to use the new data format.
+  ///
+  /// Uses [_overlayNavigatorKey] to find a valid [Navigator] ancestor,
+  /// because this widget (StartupApp) lives above the Navigator in the
+  /// widget tree.
   Future<void> _showRestartDialog() async {
-    if (!mounted) return;
+    final navContext = _overlayNavigatorKey.currentContext;
+    if (navContext == null || !navContext.mounted) return;
     await showDialog<void>(
-      context: context,
+      context: navContext,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: Row(
@@ -361,6 +409,7 @@ class _StartupAppState extends State<StartupApp>
             child: MaterialApp(
               title: 'Stroom',
               debugShowCheckedModeBanner: false,
+              navigatorKey: _overlayNavigatorKey,
               theme: ThemeData(
                 useMaterial3: true,
                 colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),

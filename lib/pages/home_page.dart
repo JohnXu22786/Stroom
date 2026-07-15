@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'home_shared.dart';
 
 import '../main.dart' as main_lib;
-import '../services/auto_backup_service.dart';
 import 'assistant_selection_page.dart';
 import 'files_page_shared.dart';
 import 'topic_selection_page.dart';
@@ -41,62 +39,14 @@ class HomePage extends ConsumerStatefulWidget {
   ConsumerState<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends ConsumerState<HomePage>
-    with WidgetsBindingObserver {
+class _HomePageState extends ConsumerState<HomePage> {
   final _chatNavigatorKey = GlobalKey<NavigatorState>();
-
-  bool _autoBackupTriggered = false;
 
   @override
   void initState() {
     super.initState();
-    // 监听应用生命周期，在应用进入后台时取消正在运行的备份
-    WidgetsBinding.instance.addObserver(this);
-
-    // 在主页构建完成后触发一次后台自动备份
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _triggerAutoBackup();
-    });
-  }
-
-  /// 触发后台自动备份（仅在非 Web 平台、非测试环境下执行一次）。
-  ///
-  /// 注意：启动流程已通过 [BackupStartupCheck] 执行了自动备份，
-  /// 因此这里的触发是兜底安全措施，仅在启动备份未完成时补充执行。
-  /// [AutoBackupService.performAutoBackup] 内部的 _isRunning 检查
-  /// 可以防止与启动备份并发执行。
-  Future<void> _triggerAutoBackup() async {
-    if (_autoBackupTriggered) return;
-    if (kIsWeb) return;
-    _autoBackupTriggered = true;
-
-    // 以最小占用在后台执行备份，不阻塞前台操作
-    // 如果启动流程已执行过备份，performAutoBackup 会因 _isRunning
-    // 检查跳过或创建新的备份（旧备份会被自动清理）
-    AutoBackupService.performAutoBackup().then((success) {
-      debugPrint('[HomePage] 自动后台备份${success ? '完成' : '未完成（可能已在运行或被取消）'}');
-    });
-  }
-
-  /// 应用生命周期变化时取消后台备份。
-  ///
-  /// 当用户把应用切到后台或退出应用时，如果备份仍在进行中，
-  /// 取消本次备份以避免不完整的备份文件。备份会在下次启动时重新触发。
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached) {
-      if (AutoBackupService.isRunning) {
-        debugPrint('[HomePage] 应用进入后台，取消正在运行的自动备份');
-        AutoBackupService.cancel();
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
+    // 备份由 Application._runPostStartupTasks 在启动后自动触发。
+    // 生命周期取消备份由 Application.didChangeAppLifecycleState 统一处理。
   }
 
   /// Resets the chat tab's nested navigator so it always shows
