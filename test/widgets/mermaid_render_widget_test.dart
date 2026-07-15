@@ -198,14 +198,11 @@ void main() {
       // After a multi-touch gesture, if one finger remains, the handler
       // should update pan start state to prevent position jumping.
       expect(html, contains('e.touches.length === 1'),
-          reason:
-              'touchend should check if a finger remains for pinch-to-pan');
+          reason: 'touchend should check if a finger remains for pinch-to-pan');
       expect(html, contains('touchPanStartX'),
-          reason:
-              'touchend should update pan start X for remaining finger');
+          reason: 'touchend should update pan start X for remaining finger');
       expect(html, contains('touchPanStartY'),
-          reason:
-              'touchend should update pan start Y for remaining finger');
+          reason: 'touchend should update pan start Y for remaining finger');
     });
   });
 

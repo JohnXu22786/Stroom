@@ -64,18 +64,15 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
 
     // Adaptive height: cap at roughly 4:3 aspect ratio
     const verticalPadding = 40.0 + 12.0;
-    final lineCount =
-        widget.code.isEmpty ? 0 : widget.code.split('\n').length;
+    final lineCount = widget.code.isEmpty ? 0 : widget.code.split('\n').length;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxWidth = constraints.maxWidth;
         final maxAllowedHeight = maxWidth * 0.75;
-        final contentHeight = lineCount > 0
-            ? lineCount * lineHeight + verticalPadding
-            : 40.0;
-        final effectiveMax =
-            maxAllowedHeight < 40.0 ? 40.0 : maxAllowedHeight;
+        final contentHeight =
+            lineCount > 0 ? lineCount * lineHeight + verticalPadding : 40.0;
+        final effectiveMax = maxAllowedHeight < 40.0 ? 40.0 : maxAllowedHeight;
         final adaptiveHeight = contentHeight.clamp(40.0, effectiveMax);
 
         return _buildSizedCodeBlock(
