@@ -266,8 +266,7 @@ void main() {
       expect(find.text('推理参数错误：推理开关开启值不能为空'), findsOneWidget);
     });
 
-    testWidgets(
-        'save with no reasoning params at all should succeed',
+    testWidgets('save with no reasoning params at all should succeed',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -562,7 +561,8 @@ void main() {
   // ─────────────────────────────────────────────────────────────────────
 
   group('LlmModelConfigPage - reasoning params structure', () {
-    testWidgets('new model shows no default 推理开关 or 推理力度 cards', (tester) async {
+    testWidgets('new model shows no default 推理开关 or 推理力度 cards',
+        (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: LlmModelConfigPage(),
@@ -907,7 +907,8 @@ void main() {
       expect(find.text('添加推理力度'), findsOneWidget);
     });
 
-    testWidgets('deleting toggle reverts to empty state and hides effort button',
+    testWidgets(
+        'deleting toggle reverts to empty state and hides effort button',
         (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
