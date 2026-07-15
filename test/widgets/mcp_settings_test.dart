@@ -56,7 +56,9 @@ void main() {
       },
     );
 
-    testWidgets('tapping MCP entry navigates to MCP config page with built-in configs', (
+    testWidgets(
+        'tapping MCP entry navigates to MCP config page with built-in configs',
+        (
       tester,
     ) async {
       tester.view.physicalSize = const Size(1080, 4000);
