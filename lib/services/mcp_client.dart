@@ -147,8 +147,7 @@ class McpClient {
   Future<void> _connectStdio() async {
     // stdio 传输仅桌面端可用（iOS/Android/Web 不支持启动子进程）
     if (kIsWeb) {
-      throw UnsupportedError(
-          'stdio MCP 在 Web 平台上不可用。请使用 SSE (远程) MCP 服务器。');
+      throw UnsupportedError('stdio MCP 在 Web 平台上不可用。请使用 SSE (远程) MCP 服务器。');
     }
 
     try {
@@ -281,8 +280,8 @@ class McpClient {
       if (msgId != null) {
         final completer = _pendingRequests.remove(msgId);
         if (completer != null && !completer.isCompleted) {
-          completer.completeError(
-              TimeoutException('MCP SSE request timed out'));
+          completer
+              .completeError(TimeoutException('MCP SSE request timed out'));
         }
       }
     } catch (e) {

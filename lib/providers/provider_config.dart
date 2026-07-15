@@ -354,7 +354,8 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         url: 'https://mcp.tavily.com/mcp/',
         headers: {},
         env: {},
-        apiKeyHint: '请在 Tavily 官网获取 API Key，支持 ?tavilyApiKey= 或 Authorization: Bearer',
+        apiKeyHint:
+            '请在 Tavily 官网获取 API Key，支持 ?tavilyApiKey= 或 Authorization: Bearer',
       ),
       _buildMcpConfig(
         name: 'Jina AI',
@@ -498,7 +499,9 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         final newIsHttpTool = newTypeConfig['isHttpTool'] as bool? ?? false;
 
         // 如果 transport 变了（如 stdio→sse），或从 isRestApi 变成 isHttpTool，替换为新版
-        if (oldTransport != newTransport || oldIsRestApi || oldIsHttpTool != newIsHttpTool) {
+        if (oldTransport != newTransport ||
+            oldIsRestApi ||
+            oldIsHttpTool != newIsHttpTool) {
           final idx = mcpEntry.configs.indexOf(existing);
           if (idx >= 0) {
             // Preserve user's API key if they had one
@@ -507,7 +510,8 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
             if (oldApiKey.isNotEmpty) {
               updatedConfig.models[0].typeConfig['apiKey'] = oldApiKey;
               // Also update headers/env with the old key
-              _applyApiKeyToTypeConfig(updatedConfig.models[0].typeConfig, oldApiKey);
+              _applyApiKeyToTypeConfig(
+                  updatedConfig.models[0].typeConfig, oldApiKey);
             }
             mcpEntry.configs[idx] = updatedConfig;
             changed = true;
@@ -558,7 +562,8 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   }
 
   /// Apply an API key to a typeConfig (update headers/env placeholders)
-  void _applyApiKeyToTypeConfig(Map<String, dynamic> typeConfig, String apiKey) {
+  void _applyApiKeyToTypeConfig(
+      Map<String, dynamic> typeConfig, String apiKey) {
     if (apiKey.isEmpty) return;
     typeConfig['apiKey'] = apiKey;
     // Update headers

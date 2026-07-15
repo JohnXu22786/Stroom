@@ -3,7 +3,8 @@ import 'package:stroom/models/mcp.dart';
 
 void main() {
   group('McpServerConfig - apiKey and headers fields', () {
-    test('apiKey and headers are preserved through toMap/fromMap round-trip', () {
+    test('apiKey and headers are preserved through toMap/fromMap round-trip',
+        () {
       final config = McpServerConfig.sse(
         name: 'Exa',
         url: 'https://mcp.exa.ai/mcp',
