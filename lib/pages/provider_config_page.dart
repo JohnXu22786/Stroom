@@ -143,6 +143,35 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     setState(() {});
   }
 
+  /// Build a small platform compatibility badge.
+  Widget _platformBadge(BuildContext context, String label, bool supported) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        color: supported
+            ? Colors.green.withValues(alpha: 0.1)
+            : Colors.grey.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(
+          color: supported
+              ? Colors.green.withValues(alpha: 0.3)
+              : Colors.grey.withValues(alpha: 0.15),
+          width: 0.5,
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 9,
+          color: supported
+              ? Colors.green[700]
+              : Colors.grey[500],
+        ),
+      ),
+    );
+  }
+
   Future<void> _openSettingsPanel(int configIndex) async {
     final entry = _entry;
     if (entry == null ||
@@ -258,9 +287,17 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   Color iconColor;
 
                   if (entry.type == 'mcp') {
+                    final isRestApi = mcpTypeConfig?['isRestApi'] as bool? ?? false;
                     final transport =
                         mcpTypeConfig?['transport'] as String? ?? 'sse';
-                    if (transport == 'stdio') {
+
+                    if (isRestApi) {
+                      // REST API endpoints (Bocha, Querit, Zhipu, etc.)
+                      final url = mcpTypeConfig?['url'] as String? ?? '';
+                      leadIcon = Icons.api;
+                      iconColor = Colors.orange;
+                      subtitle = 'REST API: ${url.isNotEmpty ? url : '(未设置)'}';
+                    } else if (transport == 'stdio') {
                       final cmd = mcpTypeConfig?['command'] as String? ?? '';
                       leadIcon = Icons.desktop_windows;
                       iconColor = Colors.purple;
@@ -346,6 +383,30 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                                 fontStyle: FontStyle.italic,
                               ),
                             ),
+                          // Cross-platform compatibility info
+                          if (entry.type == 'mcp') ...[
+                            const SizedBox(height: 4),
+                            Wrap(
+                              spacing: 4,
+                              children: [
+                                _platformBadge(
+                                  context,
+                                  '🖥️ 桌面',
+                                  mcpTypeConfig?['transport'] != 'sse',
+                                ),
+                                _platformBadge(
+                                  context,
+                                  '📱 移动',
+                                  mcpTypeConfig?['transport'] == 'sse',
+                                ),
+                                _platformBadge(
+                                  context,
+                                  '🌐 Web',
+                                  mcpTypeConfig?['transport'] == 'sse',
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                       trailing: Row(

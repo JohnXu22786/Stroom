@@ -386,13 +386,14 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         args: ['-y', 'mcp-remote', 'http://localhost:8080'],
         env: {},
       ),
-      // == REST API (配置为 SSE 模式) ==
+      // == REST API (非 MCP 协议，配置为 API 密钥存储，需 MCP 包装器才能作为工具使用) ==
       _buildMcpConfig(
         name: 'Bocha',
         transport: 'sse',
         url: 'https://api.bochaai.com/v1/web-search',
         headers: {'Authorization': 'Bearer '},
         env: {},
+        isRestApi: true,
         apiKeyHint: '请在 Bocha 官网获取 API Key (Bearer Token)',
       ),
       _buildMcpConfig(
@@ -401,6 +402,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         url: 'https://api.querit.ai/v1/search',
         headers: {'Authorization': 'Bearer '},
         env: {},
+        isRestApi: true,
         apiKeyHint: '请在 Querit 官网获取 API Key (Bearer Token)',
       ),
       _buildMcpConfig(
@@ -409,6 +411,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         url: 'https://open.bigmodel.cn/api/paas/v4/web_search',
         headers: {'Authorization': 'Bearer '},
         env: {},
+        isRestApi: true,
         apiKeyHint: '请在智谱 AI 官网获取 API Key (Bearer Token)',
       ),
     ];
@@ -424,6 +427,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     Map<String, String>? headers,
     Map<String, String>? env,
     String? apiKeyHint,
+    bool isRestApi = false,
   }) {
     final typeConfig = <String, dynamic>{
       'transport': transport,
@@ -435,6 +439,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     if (url != null) typeConfig['url'] = url;
     if (headers != null && headers.isNotEmpty) typeConfig['headers'] = headers;
     if (env != null && env.isNotEmpty) typeConfig['env'] = env;
+    if (isRestApi) typeConfig['isRestApi'] = true;
 
     return ProviderConfigItem(
       providerName: name,

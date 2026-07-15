@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Process, ProcessStartMode;
 
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:dio/dio.dart' show CancelToken;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 
 import '../models/mcp.dart';
+import 'sse_client.dart';
 
 // ============================================================================
 // JSON-RPC 工具函数（纯逻辑，可直接测试）
@@ -44,6 +46,16 @@ class JsonRpcUtils {
   static String buildRequest(String method, [Map<String, dynamic>? params]) {
     return McpMessage.request(method, params).toJsonString();
   }
+
+  /// 从 JSON-RPC 消息体中提取 request ID
+  static String? extractRequestId(String message) {
+    try {
+      final parsed = jsonDecode(message) as Map<String, dynamic>;
+      return parsed['id'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 // ============================================================================
@@ -54,6 +66,15 @@ class JsonRpcUtils {
 enum _McpClientState { created, connecting, connected, disconnected, disposed }
 
 /// MCP 客户端，管理与单个 MCP 服务器的连接
+///
+/// ## 跨平台兼容性
+/// | 传输方式 | iOS | Android | Linux | Windows | macOS | Web |
+/// |----------|-----|---------|-------|---------|-------|-----|
+/// | stdio    | ❌  | ❌      | ✅    | ✅      | ✅    | ❌  |
+/// | sse      | ✅  | ✅      | ✅    | ✅      | ✅    | ✅  |
+///
+/// - **stdio**: 仅桌面端可用（需要 `dart:io` Process 启动子进程）
+/// - **sse**: 全端可用（使用 HTTP POST + SSE 响应，支持所有平台的条件导出 SSE 客户端）
 class McpClient {
   final McpServerConfig config;
 
@@ -124,6 +145,12 @@ class McpClient {
   }
 
   Future<void> _connectStdio() async {
+    // stdio 传输仅桌面端可用（iOS/Android/Web 不支持启动子进程）
+    if (kIsWeb) {
+      throw UnsupportedError(
+          'stdio MCP 在 Web 平台上不可用。请使用 SSE (远程) MCP 服务器。');
+    }
+
     try {
       _process = await Process.start(
         config.command!,
@@ -161,10 +188,15 @@ class McpClient {
     }
   }
 
+  /// CancelToken for SSE requests
+  CancelToken? _cancelToken;
+
   Future<void> _connectSse() async {
-    debugPrint(
-        'McpClient._connectSse: SSE transport not fully implemented yet');
-    _state = _McpClientState.disconnected;
+    // SSE transport: no persistent connection needed.
+    // Each JSON-RPC request is sent as HTTP POST with SSE response.
+    // The URL is validated during construction.
+    _state = _McpClientState.connected;
+    debugPrint('MCP[${config.name}]: SSE transport initialized');
   }
 
   Future<void> _sendInitialize() async {
@@ -191,8 +223,76 @@ class McpClient {
         _process?.stdin.writeln(message);
         break;
       case McpTransportType.sse:
-        debugPrint('McpClient._sendMessage: SSE send not implemented');
+        await _sendSseRequest(message);
         break;
+    }
+  }
+
+  /// Send a JSON-RPC message via HTTP POST with SSE response.
+  /// Works cross-platform (iOS, Android, Desktop, Web) using the conditional
+  /// SSE client infrastructure (sse_client_io.dart for native, sse_client_web.dart for web).
+  Future<void> _sendSseRequest(String message) async {
+    if (config.url == null || config.url!.isEmpty) {
+      debugPrint('MCP[${config.name}]: SSE URL is empty');
+      return;
+    }
+
+    final msgId = JsonRpcUtils.extractRequestId(message);
+
+    // Build HTTP headers: content-type + custom headers (e.g., x-api-key, Authorization)
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      ...config.headers,
+    };
+
+    // If apiKey is set but not in headers, add it as x-api-key
+    if (config.apiKey != null && config.apiKey!.isNotEmpty) {
+      headers.putIfAbsent('x-api-key', () => config.apiKey!);
+    }
+
+    _cancelToken = CancelToken();
+
+    try {
+      // Use the cross-platform SSE client to send POST and receive SSE response.
+      // Timeout: 30 seconds for the stream to complete.
+      final stream = sseStream(
+        config.url!,
+        headers,
+        message,
+        cancelToken: _cancelToken,
+      ).timeout(const Duration(seconds: 30));
+
+      await for (final line in stream) {
+        if (line.startsWith('data: ')) {
+          final data = line.substring(6);
+          _handleMessage(data);
+          // If this was a specific request (not a notification), and the
+          // response has been handled (completer resolved), we can stop.
+          if (msgId != null) {
+            final completer = _pendingRequests[msgId];
+            if (completer == null || completer.isCompleted) {
+              break;
+            }
+          }
+        }
+      }
+    } on TimeoutException {
+      debugPrint('MCP[${config.name}]: SSE request timed out');
+      if (msgId != null) {
+        final completer = _pendingRequests.remove(msgId);
+        if (completer != null && !completer.isCompleted) {
+          completer.completeError(
+              TimeoutException('MCP SSE request timed out'));
+        }
+      }
+    } catch (e) {
+      debugPrint('MCP[${config.name}]: SSE request failed: $e');
+      if (msgId != null) {
+        final completer = _pendingRequests.remove(msgId);
+        if (completer != null && !completer.isCompleted) {
+          completer.completeError(Exception('SSE request failed: $e'));
+        }
+      }
     }
   }
 
@@ -276,6 +376,10 @@ class McpClient {
     _stdoutSubscription = null;
     _stderrSubscription?.cancel();
     _stderrSubscription = null;
+
+    // Cancel any in-flight SSE request
+    _cancelToken?.cancel();
+    _cancelToken = null;
 
     // 完成所有挂起的请求（带错误）
     for (final entry in _pendingRequests.entries) {
