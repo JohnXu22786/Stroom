@@ -198,9 +198,11 @@ void main() {
       await tester.tap(find.byIcon(Icons.save));
       await tester.pumpAndSettle();
 
-      // Should show the folder picker dialog
-      expect(find.text('选择保存文件夹'), findsOneWidget);
+      // Should show the save dialog with filename input and folder picker
+      expect(find.text('保存图表'), findsOneWidget);
       expect(find.text('根目录'), findsOneWidget);
+      // Should show filename input field with hint text
+      expect(find.text('输入文件名（自动添加 .mmd 后缀）'), findsOneWidget);
     });
 
     testWidgets('save with empty content shows error, no folder picker',
@@ -237,14 +239,14 @@ void main() {
       await tester.tap(find.byIcon(Icons.save));
       await tester.pumpAndSettle();
 
-      expect(find.text('选择保存文件夹'), findsOneWidget);
+      expect(find.text('保存图表'), findsOneWidget);
 
       // Tap cancel
       await tester.tap(find.text('取消'));
       await tester.pumpAndSettle();
 
       // Dialog should be dismissed, no save notification
-      expect(find.text('选择保存文件夹'), findsNothing);
+      expect(find.text('保存图表'), findsNothing);
       expect(find.textContaining('已保存'), findsNothing);
     });
 
@@ -269,7 +271,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.save));
       await tester.pumpAndSettle();
 
-      expect(find.text('选择保存文件夹'), findsOneWidget);
+      expect(find.text('保存图表'), findsOneWidget);
 
       // Select 'my_charts' folder — single tap
       await tester.tap(find.text('my_charts'));
@@ -293,6 +295,99 @@ void main() {
       expect(savedRecord.folder, 'my_charts');
     });
 
+    testWidgets('save dialog shows filename input and saves with custom name',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      // Enter content
+      final textField = find.byType(TextField).first;
+      await tester.enterText(textField, 'graph TD\n  A-->B');
+      await tester.pump();
+
+      // Tap save button → save dialog appears
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+
+      expect(find.text('保存图表'), findsOneWidget);
+
+      // Find the filename TextField by its hint text
+      final fileNameField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+      );
+      // Filename field should have default value '我的图表'
+      final fileNameCtrl =
+          tester.widget<TextField>(fileNameField).controller;
+      expect(fileNameCtrl?.text, '我的图表');
+
+      // Change filename to a custom name
+      await tester.enterText(fileNameField, '自定义图表名');
+      await tester.pump();
+
+      // Select root directory
+      await tester.tap(find.text('根目录'));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      // Confirm
+      await tester.tap(find.text('确定'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Verify the record was saved with the custom name
+      final records = await TextManifest.loadRecords();
+      final savedRecord = records.lastWhere(
+        (r) => r.format == 'mmd',
+      );
+      expect(savedRecord.name, contains('自定义图表名'));
+      expect(savedRecord.folder, '');
+    });
+
+    testWidgets('save with empty filename shows error, does not save',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      // Enter content
+      final textField = find.byType(TextField).first;
+      await tester.enterText(textField, 'graph TD\n  A-->B');
+      await tester.pump();
+
+      // Tap save button → save dialog appears
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+
+      expect(find.text('保存图表'), findsOneWidget);
+
+      // Find the filename TextField and clear it
+      final fileNameField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+      );
+      await tester.enterText(fileNameField, '');
+      await tester.pump();
+
+      // Select root directory
+      await tester.tap(find.text('根目录'));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      // Confirm with empty filename
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+
+      // Should show error snackbar
+      expect(find.text('文件名不能为空'), findsOneWidget);
+      // Should NOT have saved any new mermaid record
+      final records = await TextManifest.loadRecords();
+      expect(records.where((r) => r.format == 'mmd'), isEmpty);
+    });
+
     testWidgets('confirm in root folder picker saves to root (empty folder)',
         (tester) async {
       await tester.pumpWidget(_buildTestApp());
@@ -307,7 +402,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.save));
       await tester.pumpAndSettle();
 
-      expect(find.text('选择保存文件夹'), findsOneWidget);
+      expect(find.text('保存图表'), findsOneWidget);
 
       // Select root directory
       await tester.tap(find.text('根目录'));

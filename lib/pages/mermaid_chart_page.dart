@@ -237,15 +237,21 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       return;
     }
 
-    // Show folder picker dialog first (same style as catcatch/get-web-resource)
+    // Show save dialog with filename input and folder picker
     final folders = await TextManifest.getAllFolders();
     if (!mounted) return;
 
+    // Local controller - will be garbage collected after _saveChart completes.
+    // Not explicitly disposed because the dialog's dismiss animation still
+    // references it after showDialog returns.
+    final fileNameController = TextEditingController(text: '我的图表');
     final selectedFolder = await FolderPickerDialog.show(
       context,
       availableFolders: folders,
-      title: '选择保存文件夹',
+      title: '保存图表',
       hintText: '选择或创建文件夹保存 .mmd 图表文件',
+      fileNameController: fileNameController,
+      fileNameHintText: '输入文件名（自动添加 .mmd 后缀）',
       onCreateFolder: (name) async {
         await TextManifest.addFolder(name);
         return null;
@@ -253,7 +259,18 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       onRefreshFolders: () async => TextManifest.getAllFolders(),
     );
 
+    final userFileName = fileNameController.text.trim();
+
     if (selectedFolder == null || !mounted) return;
+
+    if (userFileName.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('文件名不能为空')),
+        );
+      }
+      return;
+    }
 
     setState(() => _isSaving = true);
 
@@ -266,18 +283,20 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       final hash = computeTextHash(bytes);
       final storageFileName = '$hash.txt';
 
-      const baseName = '我的图表';
+      // Use user-provided filename (without extension for storage consistency)
+      final baseName = userFileName;
+      final saveName = '$baseName-$typeLabel';
       final records = await TextManifest.loadRecords();
-      String name = '$baseName-$typeLabel';
+      String finalName = saveName;
       int counter = 2;
-      while (records.any((r) => r.name == name)) {
-        name = '$baseName-$typeLabel ($counter)';
+      while (records.any((r) => r.name == finalName)) {
+        finalName = '$saveName ($counter)';
         counter++;
       }
 
       await TextManifest.writeText(storageFileName, content);
       await TextManifest.addRecord(TextRecord(
-        name: name,
+        name: finalName,
         hash: hash,
         format: 'mmd',
         createdAt: DateTime.now(),
@@ -291,7 +310,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                '已保存到文本储存区: ${selectedFolder.isEmpty ? "根目录" : selectedFolder}/$name.mmd'),
+                '已保存到文本储存区: ${selectedFolder.isEmpty ? "根目录" : selectedFolder}/$finalName.mmd'),
             duration: const Duration(seconds: 2),
           ),
         );
