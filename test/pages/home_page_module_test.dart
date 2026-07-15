@@ -319,4 +319,83 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+
+  group('HomePage status card visual design', () {
+    testWidgets('status card shows "查看全部 >" with greater-than character', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // The "查看全部" text should exist
+      expect(find.text('查看全部'), findsOneWidget,
+          reason: '查看全部 button text should exist');
+
+      // The ">" character should be present as a visual indicator
+      expect(find.text('>'), findsOneWidget,
+          reason:
+              'Greater-than character ">" should appear in the view-all button');
+    });
+
+    testWidgets('status card displays count numbers for all 3 statuses', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // All 3 status items should show their count (initially all "0")
+      // Use findsAtLeast(3) to ensure all three status counts are rendered,
+      // accounting for the possibility that the navigation badge also
+      // renders a "0" text (making the total ≥ 3).
+      expect(find.text('0'), findsAtLeast(3),
+          reason:
+              'All 3 status count numbers should be displayed (found fewer than 3)');
+    });
+
+    testWidgets('tapping status items navigates to task list page', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Test tapping 进行中
+      await tester.tap(find.text('进行中'));
+      await tester.pumpAndSettle();
+      expect(find.text('任务列表'), findsOneWidget,
+          reason: 'Tapping 进行中 should navigate to task list page');
+
+      // Go back to home
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+
+      // Test tapping 已完成
+      await tester.tap(find.text('已完成'));
+      await tester.pumpAndSettle();
+      expect(find.text('任务列表'), findsOneWidget,
+          reason: 'Tapping 已完成 should navigate to task list page');
+
+      // Go back to home
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+
+      // Test tapping 失败
+      await tester.tap(find.text('失败'));
+      await tester.pumpAndSettle();
+      expect(find.text('任务列表'), findsOneWidget,
+          reason: 'Tapping 失败 should navigate to task list page');
+    });
+
+    testWidgets('tapping 查看全部 navigates to task list page', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('查看全部'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('任务列表'), findsOneWidget,
+          reason: 'Tapping 查看全部 should navigate to task list page');
+    });
+  });
 }

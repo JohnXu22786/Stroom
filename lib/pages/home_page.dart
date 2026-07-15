@@ -674,7 +674,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  /// 构建状态概览卡片
+  /// 构建扁平圆角框状态卡片
   Widget _buildStatusCard(
     BuildContext context,
     int inProgressCount,
@@ -702,20 +702,20 @@ class _HomePageState extends ConsumerState<HomePage> {
             );
           },
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.symmetric(vertical: 10),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   '$count',
                   style: TextStyle(
-                    fontSize: 28,
+                    fontSize: 30,
                     fontWeight: FontWeight.bold,
                     color: cs.onSurface,
                     height: 1.1,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -727,7 +727,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                         shape: BoxShape.circle,
                       ),
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 5),
                     Text(
                       label,
                       style: TextStyle(
@@ -744,62 +744,62 @@ class _HomePageState extends ConsumerState<HomePage> {
       );
     }
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: cs.outlineVariant, width: 0.5),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
         child: Column(
           children: [
-            // "查看全部" button at top right
+            // "查看全部 >" 文字按钮 — 极简风格
             Align(
               alignment: Alignment.centerRight,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            const UnifiedTaskListPage(initialTab: 0),
-                      ),
-                    );
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          const UnifiedTaskListPage(initialTab: 0),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '查看全部',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: cs.primary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(width: 2),
-                        Icon(
-                          Icons.chevron_right,
-                          size: 16,
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 4,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '查看全部',
+                        style: TextStyle(
+                          fontSize: 12,
                           color: cs.primary,
+                          fontWeight: FontWeight.w500,
                         ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(width: 1),
+                      Text(
+                        '>',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.primary,
+                          fontWeight: FontWeight.w500,
+                          height: 1.2,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
             const SizedBox(height: 4),
-            // Status items row
+            // Status items row — 等分三列
             Row(
               children: [
                 _statusItem(
