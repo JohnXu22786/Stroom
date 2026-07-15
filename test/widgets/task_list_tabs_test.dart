@@ -108,8 +108,7 @@ Future<void> pumpTaskListPage(
 // =============================================================================
 void main() {
   group('UnifiedTaskListPage - Tabs', () {
-    testWidgets('TabBar exists with 4 tabs: 全部, 进行中, 已完成, 失败',
-        (tester) async {
+    testWidgets('TabBar exists with 4 tabs: 全部, 进行中, 已完成, 失败', (tester) async {
       await pumpTaskListPage(tester);
 
       // Should now show TabBar
@@ -117,14 +116,10 @@ void main() {
           reason: 'TabBar should exist in the page');
 
       // Check all 4 tab labels exist
-      expect(find.text('全部'), findsOneWidget,
-          reason: 'Tab "全部" should exist');
-      expect(find.text('进行中'), findsWidgets,
-          reason: 'Tab "进行中" should exist');
-      expect(find.text('已完成'), findsWidgets,
-          reason: 'Tab "已完成" should exist');
-      expect(find.text('失败'), findsWidgets,
-          reason: 'Tab "失败" should exist');
+      expect(find.text('全部'), findsOneWidget, reason: 'Tab "全部" should exist');
+      expect(find.text('进行中'), findsWidgets, reason: 'Tab "进行中" should exist');
+      expect(find.text('已完成'), findsWidgets, reason: 'Tab "已完成" should exist');
+      expect(find.text('失败'), findsWidgets, reason: 'Tab "失败" should exist');
     });
 
     testWidgets('初始 tab 参数为 0（全部）时默认显示所有任务', (tester) async {

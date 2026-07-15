@@ -184,9 +184,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                 }
                 for (final t in backgroundTasks) {
                   if (t.status == TaskStatus.completed) {
-                    ref
-                        .read(backgroundTasksProvider.notifier)
-                        .removeTask(t.id);
+                    ref.read(backgroundTasksProvider.notifier).removeTask(t.id);
                   }
                 }
               } else if (value == 'clear_failed') {
@@ -350,8 +348,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
         final lastRead = ref.watch(taskListLastReadProvider);
         if (item.isCatCatch) {
           final t = item.catCatchTask!;
-          final isUnread =
-              (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
+          final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
           return CatCatchTaskCard(
             key: ValueKey(item.id),
             task: t,
@@ -360,8 +357,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
         }
         if (item.isBackground) {
           final t = item.backgroundTask!;
-          final isUnread =
-              (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
+          final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
           return BackgroundTaskCard(
             key: ValueKey(item.id),
             task: t,
@@ -369,8 +365,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
           );
         }
         final t = item.synthesisTask!;
-        final isUnread =
-            (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
+        final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
         return SynthesisTaskCard(
           key: ValueKey(item.id),
           task: t,

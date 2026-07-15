@@ -314,7 +314,8 @@ void main() {
   // 1. unified_task_list_page_test.dart
   // ===========================================================================
   group('UnifiedTaskListPage - All tasks shown on default tab', () {
-    testWidgets('all tasks shown in one unified list on 全部 tab', (tester) async {
+    testWidgets('all tasks shown in one unified list on 全部 tab',
+        (tester) async {
       await pumpPage(tester, [
         _createCompletedTask(
             id: 'downloaded-1', downloadedFilePath: 'C:\\a.mp4'),
