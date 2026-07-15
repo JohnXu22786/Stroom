@@ -17,6 +17,7 @@ import '../services/attachment_storage.dart';
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
 import '../models/tool_call.dart';
+import '../services/app_log_service.dart';
 import '../services/chat_adapter.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/chat_stream_provider.dart';
@@ -368,11 +369,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   Future<void> _initialize() async {
+    await AppLogService.info('ChatPage', '开始初始化聊天页面');
     _configureAdapter();
     // Initialize MCP servers and discover tools
     final entriesState = ref.read(providerEntriesProvider);
     try {
+      await AppLogService.info('ChatPage',
+          '开始初始化 MCP 服务器，当前有 ${entriesState.entries.length} 个供应商配置');
       await _adapter.initializeMcpServers(entriesState);
+      await AppLogService.info('ChatPage', 'MCP 服务器初始化完成');
     } finally {
       // Do NOT auto-enable all tools. All tools default to OFF.
       // Per-conversation enabled tools are restored in _loadConversationMessages.
@@ -383,13 +388,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
       if (!mounted) return;
       _restoreSavedModelSelection(prefs);
     });
-    _loadConversationMessages();
+    await _loadConversationMessages();
     // Restore streaming state if a stream was active when the page was
     // previously disposed (user navigated away during generation and then
     // came back). This re-inserts the streaming message placeholder with
     // accumulated content so the UI shows the loading indicator and any
     // partial text that has already been received.
     _restoreStreamingState();
+    await AppLogService.info('ChatPage', '聊天页面初始化完成');
   }
 
   /// Loads the previous page of older messages and prepends them to the
@@ -469,10 +475,22 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Future<void> _loadConversationMessages() async {
     try {
       final activeId = ref.read(activeConversationIdProvider);
-      if (activeId == null) return;
+      await AppLogService.info('ChatPage',
+          '开始加载对话消息, activeConversationId=$activeId');
+      if (activeId == null) {
+        await AppLogService.warning('ChatPage',
+            'activeConversationId 为 null，跳过加载对话消息');
+        return;
+      }
 
       final convs = ref.read(conversationsProvider);
+      await AppLogService.info('ChatPage',
+          '当前共有 ${convs.length} 个对话');
       final conv = convs.where((c) => c.id == activeId).firstOrNull;
+      if (conv == null) {
+        await AppLogService.warning('ChatPage',
+            '未找到 activeConversationId=$activeId 对应的对话');
+      }
 
       // Restore per-conversation enabled MCP/built-in tool names.
       // If the conversation has saved tool preferences, use them.
@@ -513,6 +531,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // Load all messages into _history (needed for full context in API calls
       // and search), but only insert the last _pageSize messages into the
       // controller for display (lazy loading).
+      final msgCount = conv.messages.length;
+      await AppLogService.info('ChatPage',
+          '开始加载 $msgCount 条消息到 _history');
       for (final msg in conv.messages) {
         _history.add(msg);
         // Restore reasoning content from persisted ChatMessage
@@ -522,6 +543,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
       }
       _loadedUpToIndex =
           _history.length >= _pageSize ? _history.length - _pageSize : 0;
+      await AppLogService.info('ChatPage',
+          '消息加载完成: _history 共 ${_history.length} 条, '
+          'loadedUpToIndex=$_loadedUpToIndex');
       for (var i = _loadedUpToIndex; i < _history.length; i++) {
         final msg = _history[i];
         await _controller?.insertMessage(
@@ -533,9 +557,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
           ),
         );
       }
+      await AppLogService.info('ChatPage',
+          '控制器消息插入完成，共 ${_controller?.messages.length ?? 0} 条');
       if (mounted) setState(() {});
     } catch (e, s) {
       debugPrint('[ChatPage] _loadConversationMessages error: $e\n$s');
+      await AppLogService.error('ChatPage', '加载对话消息失败', e, s);
     }
   }
 
@@ -614,9 +641,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (ref.read(isStreamingProvider)) return;
 
     String? convId = ref.read(activeConversationIdProvider);
+    await AppLogService.info('ChatPage',
+        '用户发送消息, convId=$convId, text长度=${text.length}, '
+        'attachments=${attachments.length}');
     if (convId == null) {
+      await AppLogService.info('ChatPage', '无活跃对话，创建新对话');
       ref.read(conversationsProvider.notifier).createConversation();
       convId = ref.read(activeConversationIdProvider);
+      await AppLogService.info('ChatPage', '新对话已创建: $convId');
     }
 
     // Save the current enabled tools to the conversation before sending.
@@ -648,6 +680,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   Future<void> _startStreaming(String text, {String? capturedConvId}) async {
     if (ref.read(isStreamingProvider)) return;
+
+    await AppLogService.info('ChatPage',
+        '开始流式请求, capturedConvId=$capturedConvId');
     ref.read(isStreamingProvider.notifier).state = true;
     _isStreamingActive = true;
     if (mounted) setState(() {});
@@ -885,6 +920,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       streamError = e;
       if (!_cancelledByUser) {
         debugPrint('[ChatPage] streaming error: $e\n$s');
+        await AppLogService.error('ChatPage', '流式请求异常', e, s);
         final errorMsg = _formatErrorMessage(e);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1047,6 +1083,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // Use capturedConvId (set at stream start) to avoid saving to the wrong
     // conversation if the user switched conversations during background
     // streaming (e.g. navigated back and selected a different topic).
+    await AppLogService.info('ChatPage',
+        '保存流式结果: convId=$capturedConvId, '
+        'fullReply长度=${fullReply.length}, '
+        '历史消息数=${_history.length}');
     await _saveMessages(capturedConvId: capturedConvId);
 
     // Eventual cleanup: remove streaming-only map entries now that the

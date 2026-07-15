@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/assistant.dart';
 import '../models/chat_message.dart';
+import '../services/app_log_service.dart';
 import 'assistant_provider.dart';
 
 // ============================================================================
@@ -199,8 +200,11 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       if (json != null) {
         final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
         state = list.map((m) => Conversation.fromMap(m)).toList();
+        await AppLogService.info('ConversationsNotifier',
+            '加载了 ${state.length} 个对话');
       } else {
         state = [];
+        await AppLogService.info('ConversationsNotifier', '没有已保存的对话');
       }
 
       // Auto-fix conversations with null assistantId on every load.
@@ -213,10 +217,16 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       final activeId = prefs.getString('active_conversation_id');
       if (activeId != null && state.any((c) => c.id == activeId)) {
         _ref.read(activeConversationIdProvider.notifier).state = activeId;
+        await AppLogService.info('ConversationsNotifier',
+            '恢复上次活跃对话: $activeId');
+      } else {
+        await AppLogService.warning('ConversationsNotifier',
+            '未找到上次活跃对话或 activeId 为 null: activeId=$activeId');
       }
       return;
     } catch (e) {
       debugPrint('Failed to load conversations: $e');
+      await AppLogService.error('ConversationsNotifier', '加载对话失败', e);
     }
     state = [];
   }
@@ -242,8 +252,11 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
         final prefs = await SharedPreferences.getInstance();
         final json = jsonEncode(state.map((e) => e.toMap()).toList());
         await prefs.setString('conversations', json);
+        await AppLogService.debug('ConversationsNotifier',
+            '对话已持久化 (延迟保存), 共 ${state.length} 个');
       } catch (e) {
         debugPrint('Failed to persist conversations: $e');
+        await AppLogService.error('ConversationsNotifier', '持久化对话失败', e);
       }
     });
   }
@@ -255,8 +268,11 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       final prefs = await SharedPreferences.getInstance();
       final json = jsonEncode(state.map((e) => e.toMap()).toList());
       await prefs.setString('conversations', json);
+      await AppLogService.debug('ConversationsNotifier',
+          '对话已立即持久化, 共 ${state.length} 个');
     } catch (e) {
       debugPrint('Failed to persist conversations synchronously: $e');
+      await AppLogService.error('ConversationsNotifier', '立即持久化对话失败', e);
     }
   }
 
