@@ -23,6 +23,7 @@ class McpServerConfigPage extends ConsumerStatefulWidget {
 
 class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
   final _nameController = TextEditingController();
+  final _descriptionController = TextEditingController();
   final _commandController = TextEditingController();
   final _argsController = TextEditingController();
   final _urlController = TextEditingController();
@@ -34,6 +35,7 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
   bool _hasUnsavedChanges = false;
 
   String _originalName = '';
+  String _originalDescription = '';
   McpTransportType _originalTransport = McpTransportType.sse;
   String _originalCommand = '';
   String _originalArgs = '';
@@ -85,6 +87,10 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
       _urlController.text = serverConfig.url ?? '';
       _isVendor = serverConfig.isVendor;
 
+      // Load description from typeConfig
+      final desc = mcpConfig?['description'] as String? ?? '';
+      _descriptionController.text = desc;
+
       // Extract API key from apiKey field, env, or headers
       final apiKey = serverConfig.apiKey?.isNotEmpty == true
           ? serverConfig.apiKey!
@@ -93,6 +99,7 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
       _apiKeyController.text = apiKey;
 
       _originalName = serverConfig.name;
+      _originalDescription = _descriptionController.text;
       _originalTransport = serverConfig.transportType;
       _originalCommand = _commandController.text;
       _originalArgs = _argsController.text;
@@ -149,6 +156,7 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
   @override
   void dispose() {
     _nameController.dispose();
+    _descriptionController.dispose();
     _commandController.dispose();
     _argsController.dispose();
     _urlController.dispose();
@@ -165,6 +173,7 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
     }
 
     final changed = _nameController.text != _originalName ||
+        _descriptionController.text != _originalDescription ||
         _transportType != _originalTransport ||
         _commandController.text != _originalCommand ||
         _argsController.text != _originalArgs ||
@@ -182,6 +191,7 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
 
   void _discardChanges() {
     _nameController.text = _originalName;
+    _descriptionController.text = _originalDescription;
     _transportType = _originalTransport;
     _commandController.text = _originalCommand;
     _argsController.text = _originalArgs;
@@ -198,6 +208,7 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
 
   void _exitEditMode() {
     _originalName = _nameController.text;
+    _originalDescription = _descriptionController.text;
     _originalTransport = _transportType;
     _originalCommand = _commandController.text;
     _originalArgs = _argsController.text;
@@ -341,11 +352,18 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
       );
     }
 
+    // Add description to typeConfig
+    final typeConfigMap = serverConfig.toMap();
+    final description = _descriptionController.text.trim();
+    if (description.isNotEmpty) {
+      typeConfigMap['description'] = description;
+    }
+
     // Store in ProviderConfigItem with typeConfig in models[0]
     final modelConfig = ModelConfig(
       name: name,
       modelId: _transportType.value,
-      typeConfig: serverConfig.toMap(),
+      typeConfig: typeConfigMap,
     );
 
     var configs = entry.configs.map((c) => c.copy()).toList();
@@ -540,6 +558,23 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
                 prefixIcon: Icon(Icons.vpn_key, color: Colors.amber),
               ),
               obscureText: true,
+              onChanged: (_) => _checkUnsavedChanges(),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Description
+            const SectionHeader(title: '描述'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(
+                hintText: '输入此 MCP 服务器的描述信息（可选）',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.description, color: Colors.teal),
+              ),
+              maxLines: 2,
+              minLines: 1,
               onChanged: (_) => _checkUnsavedChanges(),
             ),
 
