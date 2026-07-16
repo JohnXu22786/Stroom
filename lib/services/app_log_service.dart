@@ -177,8 +177,9 @@ class AppLogService {
             '${_pad(now.hour)}:${_pad(now.minute)}:${_pad(now.second)}';
         final logLine = '[$timestamp] [${level.label}] [$source] $message\n';
         await logFile.writeAsString(logLine, mode: FileMode.append);
-      } catch (_) {
+      } catch (e) {
         // 文件写入失败不影响主流程（包括 FakeAsync zone 中不可用的情况）
+        debugPrint('[AppLogService] 写入日志文件失败: $e');
       } finally {
         completer.complete();
       }
@@ -238,11 +239,12 @@ class AppLogService {
   static Future<String?> readLogFile(String fileName) async {
     try {
       final logDir = await getLogDir();
-      final file = File(p.join(logDir.path, fileName));
+      final filePath = p.join(logDir.path, fileName);
+      final file = File(filePath);
       if (!await file.exists()) return null;
       return await file.readAsString();
     } catch (e) {
-      debugPrint('[AppLogService] 读取日志文件失败: $e');
+      debugPrint('[AppLogService] 读取日志文件失败 ($fileName): $e');
       return null;
     }
   }
