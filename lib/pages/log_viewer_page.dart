@@ -119,8 +119,7 @@ class _LogViewerPageState extends State<LogViewerPage>
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) =>
-              _LogContentPage(fileName: fileName, content: content),
+          builder: (_) => _LogContentPage(fileName: fileName, content: content),
         ),
       );
     } catch (e) {

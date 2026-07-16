@@ -164,7 +164,8 @@ void main() {
       expect(content, isNull);
     });
 
-    test('listLogFiles returns empty list when directory does not exist', () async {
+    test('listLogFiles returns empty list when directory does not exist',
+        () async {
       final logDir = await AppLogService.getLogDir();
       // Delete dir if it exists from previous tests
       if (await logDir.exists()) {
@@ -174,7 +175,8 @@ void main() {
 
       final files = await AppLogService.listLogFiles();
       expect(files, isEmpty,
-          reason: 'When log directory does not exist, listLogFiles should return empty list');
+          reason:
+              'When log directory does not exist, listLogFiles should return empty list');
 
       // Cleanup
       AppLogService.clearLogDirCache();
@@ -193,7 +195,8 @@ void main() {
       // An empty file should return empty string, not null
       // (the file exists, it's just empty)
       expect(content, isNotNull,
-          reason: 'readLogFile should not return null for an existing but empty file');
+          reason:
+              'readLogFile should not return null for an existing but empty file');
       expect(content, isEmpty,
           reason: 'An empty file should return empty string, not null');
 
@@ -324,7 +327,8 @@ void main() {
       final yDateStr =
           '${yesterday.year}-${_pad(yesterday.month)}-${_pad(yesterday.day)}';
       final yesterdayFile = File('${logDir.path}/app_$yDateStr.log');
-      await yesterdayFile.writeAsString('[yesterday] [INFO] [Test] Yesterday log\n');
+      await yesterdayFile
+          .writeAsString('[yesterday] [INFO] [Test] Yesterday log\n');
 
       // Create today's log as well
       await AppLogService.info('Test', 'Today log');
@@ -346,7 +350,8 @@ void main() {
       if (await logDir.exists()) await logDir.delete(recursive: true);
     });
 
-    test('readLogFile handles yesterday log when no today log exists', () async {
+    test('readLogFile handles yesterday log when no today log exists',
+        () async {
       final logDir = await AppLogService.getLogDir();
       if (!await logDir.exists()) {
         await logDir.create(recursive: true);
@@ -357,7 +362,8 @@ void main() {
       final yDateStr =
           '${yesterday.year}-${_pad(yesterday.month)}-${_pad(yesterday.day)}';
       final yesterdayFile = File('${logDir.path}/app_$yDateStr.log');
-      await yesterdayFile.writeAsString('[yesterday] [INFO] [Test] Only yesterday\n');
+      await yesterdayFile
+          .writeAsString('[yesterday] [INFO] [Test] Only yesterday\n');
 
       AppLogService.clearLogDirCache();
       final files = await AppLogService.listLogFiles();
@@ -365,7 +371,8 @@ void main() {
 
       final content = await AppLogService.readLogFile('app_$yDateStr.log');
       expect(content, isNotNull,
-          reason: 'Yesterday log should be readable even when today log does not exist');
+          reason:
+              'Yesterday log should be readable even when today log does not exist');
 
       // Cleanup
       AppLogService.clearLogDirCache();
