@@ -17,6 +17,7 @@ import 'manifest_database.dart';
 import 'storage_service.dart';
 import '../utils/app_version.dart';
 import '../utils/web_file_store.dart';
+import 'app_log_service.dart';
 
 /// Exception thrown when a backup operation is cancelled.
 class BackupCancelledException implements Exception {
@@ -44,6 +45,8 @@ class BackupService {
     void Function(double progress)? onProgress,
     bool Function()? isCancelled,
   }) async {
+    await AppLogService.info(
+        'BackupService', 'createBackup: outputPath=$outputPath');
     if (kIsWeb) {
       throw UnsupportedError(
           'createBackup is not available on web. Use exportBackup instead.');
@@ -57,6 +60,7 @@ class BackupService {
       throw const BackupCancelledException();
     }
     await File(outputPath).writeAsBytes(bytes);
+    await AppLogService.info('BackupService', 'createBackup: success');
     return outputPath;
   }
 
@@ -64,6 +68,8 @@ class BackupService {
     String zipPath, {
     void Function(double progress)? onProgress,
   }) async {
+    await AppLogService.info(
+        'BackupService', 'restoreBackup: zipPath=$zipPath');
     if (kIsWeb) {
       throw UnsupportedError(
           'restoreBackup is not available on web. Use importBackup instead.');
@@ -171,6 +177,7 @@ class BackupService {
     final archive = Archive();
 
     // 1. manifest.json
+    debugPrint('[BackupService] _buildBackupBytes: building manifest');
     final manifest = {
       'version': 1,
       'createdAt': DateTime.now().toIso8601String(),
@@ -182,6 +189,7 @@ class BackupService {
     checkCancelled();
 
     // 2. 数据库（按存储格式：根目录 stroom_manifest.json）
+    debugPrint('[BackupService] _buildBackupBytes: reading database');
     final imageRecords = await ManifestDatabase.getAllImageRecords();
     final audioRecords = await ManifestDatabase.getAllAudioRecords();
     final videoRecords = await ManifestDatabase.getAllVideoRecords();
@@ -213,6 +221,7 @@ class BackupService {
     checkCancelled();
 
     // 3. SharedPreferences
+    debugPrint('[BackupService] _buildBackupBytes: reading preferences');
     final prefs = await SharedPreferences.getInstance();
     final prefData = <String, dynamic>{};
     for (final key in prefs.getKeys()) {
@@ -225,6 +234,7 @@ class BackupService {
     checkCancelled();
 
     // 4. 任务文件（按存储格式：synthesis/tasks.json, catcatch/tasks.json）
+    debugPrint('[BackupService] _buildBackupBytes: adding task files');
     // 在测试模式下跳过文件系统操作以避免平台通道挂起
     if (!kIsWeb && !WebFileStore.isTestMode) {
       final appDir = await AppStorage.directory;
@@ -241,6 +251,7 @@ class BackupService {
     checkCancelled();
 
     // 5. 二进制文件（按存储格式：pictures/, tts_audio/, videos/, texts/, attachments/）
+    debugPrint('[BackupService] _buildBackupBytes: adding binary files');
     for (var i = 0; i < imageRecords.length; i++) {
       final record = imageRecords[i];
       final hash = record['hash'] as String?;
@@ -327,6 +338,7 @@ class BackupService {
     checkCancelled();
 
     // 6. 编码 — 在后台隔离中执行，不阻塞主 UI 线程
+    debugPrint('[BackupService] _buildBackupBytes: encoding archive');
     final files = _extractArchiveFiles(archive);
     onProgress?.call(0.9);
     await _yieldToEventLoop();
@@ -349,6 +361,7 @@ class BackupService {
     try {
       archive = ZipDecoder().decodeBytes(bytes);
     } catch (e) {
+      debugPrint('[BackupService] _restoreFromBytes: 备份文件解压失败: $e');
       throw Exception('无效的备份文件：无法解压 ($e)');
     }
     onProgress?.call(0.1);
@@ -365,6 +378,9 @@ class BackupService {
       if (fileIndex % 50 == 0) await _yieldToEventLoop();
     }
 
+    debugPrint(
+        '[BackupService] _restoreFromBytes: archive decoded (${fileMap.length} files)');
+
     // 验证 manifest
     final manifestJson = fileMap['manifest.json'];
     if (manifestJson == null) {
@@ -379,6 +395,7 @@ class BackupService {
     onProgress?.call(0.15);
     await _yieldToEventLoop();
 
+    debugPrint('[BackupService] _restoreFromBytes: restoring database');
     // 恢复数据库（兼容新旧格式）
     final dbJson = fileMap['stroom_manifest.json'] ??
         fileMap['database/manifest_data.json'];
@@ -388,6 +405,7 @@ class BackupService {
     onProgress?.call(0.4);
     await _yieldToEventLoop();
 
+    debugPrint('[BackupService] _restoreFromBytes: restoring preferences');
     // 恢复 SharedPreferences
     final prefJson = fileMap['preferences.json'];
     if (prefJson != null) {
@@ -396,6 +414,7 @@ class BackupService {
     onProgress?.call(0.55);
     await _yieldToEventLoop();
 
+    debugPrint('[BackupService] _restoreFromBytes: restoring binary files');
     // 恢复二进制文件和任务文件（兼容新旧两种路径格式）
     // 新格式: pictures/, tts_audio/, videos/, texts/, attachments/, synthesis/, catcatch/
     // 旧格式: files/pictures/, files/tts_audio/, ..., tasks/synthesis_tasks.json
@@ -509,6 +528,11 @@ class BackupService {
         (data[ManifestTables.videoFolders] as List<dynamic>?)?.cast<String>() ??
             <String>[];
 
+    debugPrint('[BackupService] _restoreDatabaseFromJson: '
+        'image(${imageRecords.length}) audio(${audioRecords.length}) '
+        'video(${videoRecords.length}) text(${textRecords.length}) '
+        'folders(${folders.length})');
+
     await ManifestDatabase.clearAllData();
 
     for (final record in imageRecords) {
@@ -588,6 +612,8 @@ class BackupService {
         debugPrint('恢复偏好设置 ${entry.key} 失败: $e');
       }
     }
+    await AppLogService.info('BackupService',
+        '_restorePreferencesFromJson: restored ${backupPrefs.length} keys');
   }
 
   // ================================================================
@@ -601,6 +627,7 @@ class BackupService {
     BuildContext context, {
     void Function(double progress)? onProgress,
   }) async {
+    await AppLogService.info('BackupService', 'exportBackup: start');
     try {
       final dateStr =
           DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
@@ -619,7 +646,9 @@ class BackupService {
           SnackBar(content: Text('备份已保存到: $outputPath')),
         );
       }
+      await AppLogService.info('BackupService', 'exportBackup: success');
     } catch (e) {
+      await AppLogService.error('BackupService', 'exportBackup: 失败', e);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('备份失败: $e'), backgroundColor: Colors.red),
@@ -632,6 +661,7 @@ class BackupService {
   ///
   /// 返回 `true` 表示恢复成功，`false` 表示用户取消或失败。
   static Future<bool> importBackup(BuildContext context) async {
+    await AppLogService.info('BackupService', 'importBackup: start');
     try {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
@@ -649,8 +679,10 @@ class BackupService {
       }
 
       // 恢复成功 — 让调用方处理倒计时和重启
+      await AppLogService.info('BackupService', 'importBackup: success');
       return true;
     } catch (e) {
+      await AppLogService.error('BackupService', 'importBackup: 失败', e);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('恢复失败: $e'), backgroundColor: Colors.red),

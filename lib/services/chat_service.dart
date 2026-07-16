@@ -15,6 +15,7 @@ import '../providers/provider_config.dart';
 import 'attachment_storage.dart';
 import 'chat_service_shared.dart';
 import 'mcp_client.dart';
+import 'app_log_service.dart';
 
 // ====================================================================
 // ChatService — AI 聊天服务抽象层
@@ -148,6 +149,8 @@ class ChatService {
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
   }) {
+    AppLogService.info(
+        'ChatService', 'sendStream 开始: ${userMessage.length} 字符');
     cancel();
     _isCancelledByUser = false;
     _reasoningBuffer = '';
@@ -246,6 +249,8 @@ class ChatService {
     Map<String, String> reasoningParamValues = const {},
     List<ToolDefinition> tools = const [],
   }) {
+    AppLogService.info(
+        'ChatService', 'sendStreamWithTools 开始: ${userMessage.length} 字符');
     _isCancelledByUser = false;
     _reasoningBuffer = '';
     _contentBuffer = '';
@@ -373,7 +378,10 @@ class ChatService {
             Map<String, dynamic> parsedArgs = {};
             try {
               parsedArgs = Map<String, dynamic>.from(jsonDecode(rawArgs));
-            } catch (_) {}
+            } catch (e) {
+              AppLogService.warning(
+                  'ChatService', '解析工具调用参数失败: $name, 参数: $rawArgs: $e');
+            }
 
             final toolCallData = ToolCallData(
               id: toolCallId,
@@ -682,7 +690,9 @@ class ChatService {
                   'type': 'text',
                   'text': '以下为文件 ${att.fileName} 的内容:\n$truncated',
                 });
-              } catch (_) {
+              } catch (e) {
+                AppLogService.warning(
+                    'ChatService', '读取附件文件失败: ${att.fileName}: $e');
                 parts.add({
                   'type': 'text',
                   'text': '[${att.fileName} - 无法读取文件内容]',

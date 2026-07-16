@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:path_provider/path_provider.dart';
+import 'app_log_service.dart';
 
 /// Static utility that provides a cached, resilient path to the application
 /// documents directory.
@@ -26,6 +27,7 @@ class AppStorage {
   ///
   /// The result is cached after the first successful resolution.
   static Future<String> get directory async {
+    await AppLogService.info('AppStorage', '获取应用文档目录');
     if (_resolved != null) return _resolved!;
 
     try {
@@ -54,8 +56,8 @@ class AppStorage {
       if (Platform.environment['FLUTTER_TEST'] == 'true') {
         return _safeTempPath();
       }
-    } catch (_) {
-      // Platform.environment unavailable
+    } catch (e) {
+      AppLogService.warning('AppStorage', '检查 FLUTTER_TEST 环境变量失败: $e');
     }
 
     // Check for Windows desktop
@@ -63,8 +65,8 @@ class AppStorage {
       if (Platform.isWindows) {
         return _safeCwdPath('stroom_data');
       }
-    } catch (_) {
-      // Platform.isWindows unavailable
+    } catch (e) {
+      AppLogService.warning('AppStorage', '检查 Platform.isWindows 失败: $e');
     }
 
     return _safeTempPath();
@@ -74,7 +76,8 @@ class AppStorage {
   static String _safeTempPath() {
     try {
       return Directory.systemTemp.path;
-    } catch (_) {
+    } catch (e) {
+      AppLogService.warning('AppStorage', '获取系统临时目录失败，使用 /tmp 回退: $e');
       return '/tmp';
     }
   }
@@ -83,7 +86,8 @@ class AppStorage {
   static String _safeCwdPath(String subDir) {
     try {
       return '${Directory.current.path}/$subDir';
-    } catch (_) {
+    } catch (e) {
+      AppLogService.warning('AppStorage', '获取当前工作目录失败，使用 /tmp 回退: $e');
       return '/tmp/$subDir';
     }
   }

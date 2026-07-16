@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import '../providers/chat_api_provider.dart';
 
 import '../utils/http_utils.dart';
+import 'app_log_service.dart';
 
 // ============================================================================
 // OCR Config
@@ -151,6 +152,8 @@ class OcrService {
     required Uint8List imageBytes,
     String imageFormat = 'jpeg',
   }) async {
+    await AppLogService.info(
+        'OcrService', '开始 OCR 识别: 格式=$imageFormat, 大小=${imageBytes.length} 字节');
     final stopwatch = Stopwatch()..start();
 
     final base64Image = base64Encode(imageBytes);
@@ -189,6 +192,8 @@ class OcrService {
 
       final text = _extractText(response.data);
 
+      await AppLogService.info('OcrService',
+          'OCR 识别完成: ${stopwatch.elapsedMilliseconds}ms, 文本长度=${text.length}');
       return OcrResult(
         text: text,
         processingTimeMs: stopwatch.elapsedMilliseconds,
@@ -208,6 +213,8 @@ class OcrService {
   Future<OcrResult> recognizeBatch({
     required List<(Uint8List bytes, String format)> imageBytesList,
   }) async {
+    await AppLogService.info(
+        'OcrService', '开始批量 OCR 识别: ${imageBytesList.length} 张图片');
     if (imageBytesList.isEmpty) {
       throw ArgumentError('imageBytesList must not be empty');
     }
@@ -258,6 +265,8 @@ class OcrService {
 
       final text = _extractText(response.data);
 
+      await AppLogService.info('OcrService',
+          '批量 OCR 识别完成: ${stopwatch.elapsedMilliseconds}ms, 文本长度=${text.length}');
       return OcrResult(
         text: text,
         processingTimeMs: stopwatch.elapsedMilliseconds,
