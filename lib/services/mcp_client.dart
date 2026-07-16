@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 
 import '../models/mcp.dart';
 import 'sse_client.dart';
+import 'app_log_service.dart';
 
 // ============================================================================
 // JSON-RPC 工具函数（纯逻辑，可直接测试）
@@ -120,6 +121,8 @@ class McpClient {
 
   /// 连接到 MCP 服务器
   Future<bool> connect() async {
+    await AppLogService.info('McpClient',
+        '连接 MCP 服务器: ${config.name} (${config.transportType.name})');
     if (_state == _McpClientState.disposed) return false;
     if (_state == _McpClientState.connected) return true;
 
@@ -136,10 +139,12 @@ class McpClient {
       // 发送 initialize 请求
       await _sendInitialize();
       _state = _McpClientState.connected;
+      await AppLogService.info('McpClient', 'MCP 服务器连接成功: ${config.name}');
       return true;
     } catch (e) {
       debugPrint('McpClient.connect failed for ${config.name}: $e');
       _state = _McpClientState.disconnected;
+      await AppLogService.error('McpClient', 'MCP 服务器连接失败: ${config.name}', e);
       return false;
     }
   }
@@ -289,6 +294,7 @@ class McpClient {
   }
 
   Future<void> _sendInitialize() async {
+    await AppLogService.info('McpClient', '发送 initialize 请求: ${config.name}');
     final request = JsonRpcUtils.buildRequest('initialize', {
       'protocolVersion': '2024-11-05',
       'capabilities': {},
@@ -302,6 +308,7 @@ class McpClient {
     // 发送 notifications/initialized 通知
     final notification = JsonRpcUtils.buildRequest('notifications/initialized');
     await _sendMessage(notification);
+    await AppLogService.info('McpClient', 'initialize 完成: ${config.name}');
   }
 
   Future<void> _sendMessage(String message) async {
@@ -457,6 +464,7 @@ class McpClient {
 
   /// 列出 MCP 服务器上所有可用的工具
   Future<List<McpTool>> listTools() async {
+    await AppLogService.info('McpClient', '列出 MCP 工具: ${config.name}');
     if (_state != _McpClientState.connected) {
       final connected = await connect();
       if (!connected) return [];
@@ -465,15 +473,19 @@ class McpClient {
     try {
       final result = await _sendRequest('tools/list');
       _cachedTools = JsonRpcUtils.extractTools(result);
+      await AppLogService.info('McpClient',
+          'MCP 工具列表获取完成: ${config.name}, 共 ${_cachedTools.length} 个工具');
       return List.from(_cachedTools);
     } catch (e) {
       debugPrint('McpClient.listTools failed: $e');
+      await AppLogService.error('McpClient', '列出 MCP 工具失败: ${config.name}', e);
       return [];
     }
   }
 
   /// 调用 MCP 服务器上的工具
   Future<String> callTool(String name, Map<String, dynamic> arguments) async {
+    await AppLogService.info('McpClient', '调用 MCP 工具: $name (${config.name})');
     if (_state != _McpClientState.connected) {
       final connected = await connect();
       if (!connected) {
@@ -489,9 +501,11 @@ class McpClient {
       final response = JsonRpcUtils.extractCallResult(result);
       if (response == null) return 'Error: No response from MCP tool "$name"';
       if (response.isError) return 'Error: ${response.text}';
+      await AppLogService.info('McpClient', 'MCP 工具调用完成: $name');
       return response.text;
     } catch (e) {
       debugPrint('McpClient.callTool failed: $e');
+      await AppLogService.error('McpClient', '调用 MCP 工具失败: $name', e);
       return 'Error: ${e.toString()}';
     }
   }
@@ -519,6 +533,7 @@ class McpClient {
 
   /// 释放资源
   void dispose() {
+    AppLogService.info('McpClient', '释放 MCP 客户端: ${config.name}');
     if (_state == _McpClientState.disposed) return;
     _state = _McpClientState.disposed;
 
@@ -539,6 +554,7 @@ class McpClient {
     _process?.kill();
     _process = null;
     _cachedTools = [];
+    AppLogService.info('McpClient', 'MCP 客户端已释放: ${config.name}');
   }
 }
 

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import '../providers/chat_api_provider.dart';
 import '../utils/audio_utils.dart';
+import 'app_log_service.dart';
 import '../utils/http_utils.dart';
 
 // ============================================================================
@@ -159,6 +160,8 @@ class AsrService {
     required Uint8List audioBytes,
     String audioFormat = 'wav',
   }) async {
+    await AppLogService.info(
+        'AsrService', '开始转写: 格式=$audioFormat, 大小=${audioBytes.length} 字节');
     if (config.host.isEmpty) {
       throw Exception('API 地址未配置');
     }
@@ -223,6 +226,8 @@ class AsrService {
 
       final text = _extractText(response.data);
 
+      await AppLogService.info('AsrService',
+          '转写完成: ${stopwatch.elapsedMilliseconds}ms, 文本长度=${text.length}');
       return AsrResult(
         text: text,
         processingTimeMs: stopwatch.elapsedMilliseconds,

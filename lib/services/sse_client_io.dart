@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
+import 'app_log_service.dart';
 
 /// 原生平台的 SSE 流式客户端
 /// 使用 Dio ResponseType.stream（在原生平台有效）
@@ -14,6 +15,7 @@ Stream<String> sseStream(
   /// Callback invoked with the initial HTTP response headers, if available.
   void Function(Map<String, List<String>> headers)? onResponseHeaders,
 }) async* {
+  AppLogService.info('SseClient', 'SSE 请求开始: $url');
   final dio = Dio(BaseOptions(
     headers: headers,
     connectTimeout: const Duration(seconds: 10),
@@ -43,6 +45,7 @@ Stream<String> sseStream(
         yield line;
       }
     }
+    AppLogService.info('SseClient', 'SSE 流结束: $url');
   } on DioException catch (_) {
     // Rethrow the original DioException so that upstream code
     // (chat_api_provider.dart) can capture response data and status code.

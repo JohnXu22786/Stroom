@@ -7,6 +7,7 @@ import '../utils/file_record.dart';
 import '../utils/web_file_store.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/manifest_operations_shared.dart';
+import 'app_log_service.dart';
 import 'manifest_database.dart';
 
 // ====================================================================
@@ -137,6 +138,8 @@ class ManifestOperations<T extends FileRecord> {
   // ---- Load / Persist ---------------------------------------------------
 
   Future<List<T>> loadRecords() async {
+    await AppLogService.info(
+        'ManifestOperations($manifestKey)', 'loadRecords called');
     if (_cache != null && !_dirty) return _cache!;
 
     try {
@@ -147,20 +150,34 @@ class ManifestOperations<T extends FileRecord> {
               .toSet();
     } catch (e) {
       debugPrint('ManifestOperations($manifestKey).loadRecords error: $e');
+      await AppLogService.error(
+          'ManifestOperations($manifestKey)', 'loadRecords failed', e);
       _cache = [];
       _folderCache = {};
     }
     _dirty = false;
+    await AppLogService.info('ManifestOperations($manifestKey)',
+        'loadRecords completed [count=${_cache?.length}]');
     return _cache!;
   }
 
   // ---- CRUD -------------------------------------------------------------
 
   Future<void> addRecord(T record) async {
-    await loadRecords();
-    await _dbInsertRecord(toMap(record));
-    _cache!.add(record);
-    await _ensureFolderPathTracked(folderOf(record));
+    await AppLogService.info('ManifestOperations($manifestKey)',
+        'addRecord called [id=${record.id}, type=${record.runtimeType}]');
+    try {
+      await loadRecords();
+      await _dbInsertRecord(toMap(record));
+      _cache!.add(record);
+      await _ensureFolderPathTracked(folderOf(record));
+      await AppLogService.info(
+          'ManifestOperations($manifestKey)', 'addRecord completed');
+    } catch (e, st) {
+      await AppLogService.error(
+          'ManifestOperations($manifestKey)', 'addRecord failed', e, st);
+      rethrow;
+    }
   }
 
   Future<void> _deleteEntityFiles(T record) async {
@@ -172,6 +189,8 @@ class ManifestOperations<T extends FileRecord> {
       // Guard against names without extension
       final dotIndex = name.lastIndexOf('.');
       if (dotIndex == -1) return;
+      await AppLogService.info('ManifestOperations($manifestKey)',
+          '_deleteEntityFiles deleting file [$name]');
       if (kIsWeb) {
         await WebFileStore.delete(_webKey(name));
       } else {
@@ -186,6 +205,8 @@ class ManifestOperations<T extends FileRecord> {
         _cache!.where((x) => hashOf(x) == hashOf(record)).length;
     if (hashRefCount <= 1) {
       final thumbName = '${hashOf(record)}_thumb$thumbnailExtension';
+      await AppLogService.info('ManifestOperations($manifestKey)',
+          '_deleteEntityFiles deleting thumbnail [$thumbName]');
       if (kIsWeb) {
         await WebFileStore.delete(_webKey(thumbName));
       } else {
@@ -197,108 +218,169 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   Future<void> deleteRecord(String id) async {
-    await loadRecords();
-    final index = _cache!.indexWhere((r) => r.id == id);
-    if (index == -1) return;
-    final record = _cache![index];
-    await _deleteEntityFiles(record);
-    _cache!.removeAt(index);
-    await _dbDeleteRecord(id);
+    await AppLogService.info(
+        'ManifestOperations($manifestKey)', 'deleteRecord called [id=$id]');
+    try {
+      await loadRecords();
+      final index = _cache!.indexWhere((r) => r.id == id);
+      if (index == -1) return;
+      final record = _cache![index];
+      await _deleteEntityFiles(record);
+      _cache!.removeAt(index);
+      await _dbDeleteRecord(id);
+      await AppLogService.info(
+          'ManifestOperations($manifestKey)', 'deleteRecord completed');
+    } catch (e, st) {
+      await AppLogService.error(
+          'ManifestOperations($manifestKey)', 'deleteRecord failed', e, st);
+      rethrow;
+    }
   }
 
   /// Batch delete: partition list, delete files, then replace cache.
   Future<void> deleteRecords(List<String> ids) async {
-    await loadRecords();
-    final idSet = ids.toSet();
-    final toDelete = <T>[];
-    final remaining = <T>[];
-    for (final r in _cache!) {
-      if (idSet.contains(r.id)) {
-        toDelete.add(r);
-      } else {
-        remaining.add(r);
-      }
-    }
-    if (toDelete.isEmpty) return;
-
-    // Pre-compute storage name counts and hash counts across all records before deletion
-    final storageCount = <String, int>{};
-    final hashCount = <String, int>{};
-    for (final r in _cache!) {
-      final sn = storageNameOf(r);
-      storageCount[sn] = (storageCount[sn] ?? 0) + 1;
-      final h = hashOf(r);
-      hashCount[h] = (hashCount[h] ?? 0) + 1;
-    }
-
-    for (final r in toDelete) {
-      final sn = storageNameOf(r);
-      storageCount[sn] = (storageCount[sn] ?? 1) - 1;
-      if (storageCount[sn]! <= 0) {
-        final name = storageNameOf(r);
-        // Guard against names without extension
-        final dotIndex = name.lastIndexOf('.');
-        if (dotIndex == -1) continue;
-        if (kIsWeb) {
-          await WebFileStore.delete(_webKey(name));
+    await AppLogService.info('ManifestOperations($manifestKey)',
+        'deleteRecords called [count=${ids.length}]');
+    try {
+      await loadRecords();
+      final idSet = ids.toSet();
+      final toDelete = <T>[];
+      final remaining = <T>[];
+      for (final r in _cache!) {
+        if (idSet.contains(r.id)) {
+          toDelete.add(r);
         } else {
-          final dir = await _storageDir;
-          final file = File(p.join(dir, name));
-          if (await file.exists()) await file.delete();
-        }
-        await onExtraDelete?.call(r);
-      }
-      // Thumbnail deletion: keyed by hash, not storageName
-      final h = hashOf(r);
-      hashCount[h] = (hashCount[h] ?? 1) - 1;
-      if (hashCount[h]! <= 0) {
-        final thumbName = '${hashOf(r)}_thumb$thumbnailExtension';
-        if (kIsWeb) {
-          await WebFileStore.delete(_webKey(thumbName));
-        } else {
-          final dir = await _storageDir;
-          final thumbFile = File(p.join(dir, thumbName));
-          if (await thumbFile.exists()) await thumbFile.delete();
+          remaining.add(r);
         }
       }
+      if (toDelete.isEmpty) return;
+
+      // Pre-compute storage name counts and hash counts across all records before deletion
+      final storageCount = <String, int>{};
+      final hashCount = <String, int>{};
+      for (final r in _cache!) {
+        final sn = storageNameOf(r);
+        storageCount[sn] = (storageCount[sn] ?? 0) + 1;
+        final h = hashOf(r);
+        hashCount[h] = (hashCount[h] ?? 0) + 1;
+      }
+
+      for (final r in toDelete) {
+        final sn = storageNameOf(r);
+        storageCount[sn] = (storageCount[sn] ?? 1) - 1;
+        if (storageCount[sn]! <= 0) {
+          final name = storageNameOf(r);
+          // Guard against names without extension
+          final dotIndex = name.lastIndexOf('.');
+          if (dotIndex == -1) continue;
+          if (kIsWeb) {
+            await WebFileStore.delete(_webKey(name));
+          } else {
+            final dir = await _storageDir;
+            final file = File(p.join(dir, name));
+            if (await file.exists()) await file.delete();
+          }
+          await onExtraDelete?.call(r);
+        }
+        // Thumbnail deletion: keyed by hash, not storageName
+        final h = hashOf(r);
+        hashCount[h] = (hashCount[h] ?? 1) - 1;
+        if (hashCount[h]! <= 0) {
+          final thumbName = '${hashOf(r)}_thumb$thumbnailExtension';
+          if (kIsWeb) {
+            await WebFileStore.delete(_webKey(thumbName));
+          } else {
+            final dir = await _storageDir;
+            final thumbFile = File(p.join(dir, thumbName));
+            if (await thumbFile.exists()) await thumbFile.delete();
+          }
+        }
+      }
+      _cache = remaining;
+      await _dbDeleteRecords(ids);
+      await AppLogService.info(
+          'ManifestOperations($manifestKey)', 'deleteRecords completed');
+    } catch (e, st) {
+      await AppLogService.error(
+          'ManifestOperations($manifestKey)', 'deleteRecords failed', e, st);
+      rethrow;
     }
-    _cache = remaining;
-    await _dbDeleteRecords(ids);
   }
 
   Future<void> updateRecord(T updated) async {
-    await loadRecords();
-    final index = _cache!.indexWhere((r) => r.id == updated.id);
-    if (index != -1) {
-      _cache![index] = updated;
-      await _dbUpdateRecord(updated.id, toMap(updated));
+    await AppLogService.info('ManifestOperations($manifestKey)',
+        'updateRecord called [id=${updated.id}]');
+    try {
+      await loadRecords();
+      final index = _cache!.indexWhere((r) => r.id == updated.id);
+      if (index != -1) {
+        _cache![index] = updated;
+        await _dbUpdateRecord(updated.id, toMap(updated));
+      }
+      await AppLogService.info(
+          'ManifestOperations($manifestKey)', 'updateRecord completed');
+    } catch (e, st) {
+      await AppLogService.error(
+          'ManifestOperations($manifestKey)', 'updateRecord failed', e, st);
+      rethrow;
     }
   }
 
   Future<void> renameRecord(String id, String newName) async {
-    await loadRecords();
-    final index = _cache!.indexWhere((r) => r.id == id);
-    if (index != -1) {
-      _cache![index] = copyName(_cache![index], newName);
-      await _dbUpdateRecord(id, toMap(_cache![index]));
+    await AppLogService.info('ManifestOperations($manifestKey)',
+        'renameRecord called [id=$id, newName=$newName]');
+    try {
+      await loadRecords();
+      final index = _cache!.indexWhere((r) => r.id == id);
+      if (index != -1) {
+        _cache![index] = copyName(_cache![index], newName);
+        await _dbUpdateRecord(id, toMap(_cache![index]));
+      }
+      await AppLogService.info(
+          'ManifestOperations($manifestKey)', 'renameRecord completed');
+    } catch (e, st) {
+      await AppLogService.error(
+          'ManifestOperations($manifestKey)', 'renameRecord failed', e, st);
+      rethrow;
     }
   }
 
   Future<void> moveRecord(String id, String targetFolder) async {
-    await loadRecords();
-    final index = _cache!.indexWhere((r) => r.id == id);
-    if (index != -1) {
-      _cache![index] = copyFolder(_cache![index], targetFolder);
-      await _dbUpdateRecord(id, toMap(_cache![index]));
-      await _ensureFolderPathTracked(targetFolder);
+    await AppLogService.info('ManifestOperations($manifestKey)',
+        'moveRecord called [id=$id, targetFolder=$targetFolder]');
+    try {
+      await loadRecords();
+      final index = _cache!.indexWhere((r) => r.id == id);
+      if (index != -1) {
+        _cache![index] = copyFolder(_cache![index], targetFolder);
+        await _dbUpdateRecord(id, toMap(_cache![index]));
+        await _ensureFolderPathTracked(targetFolder);
+      }
+      await AppLogService.info(
+          'ManifestOperations($manifestKey)', 'moveRecord completed');
+    } catch (e, st) {
+      await AppLogService.error(
+          'ManifestOperations($manifestKey)', 'moveRecord failed', e, st);
+      rethrow;
     }
   }
 
   Future<T?> getRecord(String id) async {
-    await loadRecords();
+    await AppLogService.info(
+        'ManifestOperations($manifestKey)', 'getRecord called [id=$id]');
     try {
-      return _cache!.firstWhere((r) => r.id == id);
-    } catch (_) {
+      await loadRecords();
+      final result = _cache!.firstWhere((r) => r.id == id);
+      await AppLogService.info('ManifestOperations($manifestKey)',
+          'getRecord completed [found=true]');
+      return result;
+    } on StateError {
+      await AppLogService.warning('ManifestOperations($manifestKey)',
+          'getRecord: record not found for id=$id');
+      return null;
+    } catch (e, st) {
+      await AppLogService.error(
+          'ManifestOperations($manifestKey)', 'getRecord failed', e, st);
       return null;
     }
   }
@@ -309,214 +391,356 @@ class ManifestOperations<T extends FileRecord> {
   bool get _useWebFileStore => kIsWeb || WebFileStore.isTestMode;
 
   Future<String> writeFile(String fileName, Uint8List data) async {
-    if (_useWebFileStore) {
-      await WebFileStore.write(_webKey(fileName), data);
-      return fileName;
+    await AppLogService.info('ManifestOperations($manifestKey)',
+        'writeFile called [fileName=$fileName, size=${data.length}]');
+    try {
+      if (_useWebFileStore) {
+        await WebFileStore.write(_webKey(fileName), data);
+        await AppLogService.info(
+            'ManifestOperations($manifestKey)', 'writeFile completed');
+        return fileName;
+      }
+      final dir = await _storageDir;
+      final filePath = p.join(dir, fileName);
+      await File(filePath).writeAsBytes(data);
+      await AppLogService.info('ManifestOperations($manifestKey)',
+          'writeFile completed [path=$filePath]');
+      return filePath;
+    } catch (e, st) {
+      await AppLogService.error(
+          'ManifestOperations($manifestKey)', 'writeFile failed', e, st);
+      rethrow;
     }
-    final dir = await _storageDir;
-    final filePath = p.join(dir, fileName);
-    await File(filePath).writeAsBytes(data);
-    return filePath;
   }
 
   Future<Uint8List?> readFile(String fileName) async {
-    if (_useWebFileStore) {
-      return WebFileStore.read(_webKey(fileName));
+    await AppLogService.info('ManifestOperations($manifestKey)',
+        'readFile called [fileName=$fileName]');
+    try {
+      if (_useWebFileStore) {
+        final result = await WebFileStore.read(_webKey(fileName));
+        await AppLogService.info('ManifestOperations($manifestKey)',
+            'readFile completed [found=${result != null}]');
+        return result;
+      }
+      final dir = await _storageDir;
+      final filePath = p.join(dir, fileName);
+      final file = File(filePath);
+      if (await file.exists()) {
+        final result = await file.readAsBytes();
+        await AppLogService.info('ManifestOperations($manifestKey)',
+            'readFile completed [found=true]');
+        return result;
+      }
+      await AppLogService.info('ManifestOperations($manifestKey)',
+          'readFile completed [found=false]');
+      return null;
+    } catch (e, st) {
+      await AppLogService.error(
+          'ManifestOperations($manifestKey)', 'readFile failed', e, st);
+      return null;
     }
-    final dir = await _storageDir;
-    final filePath = p.join(dir, fileName);
-    final file = File(filePath);
-    if (await file.exists()) return await file.readAsBytes();
-    return null;
   }
 
   Future<bool> fileExists(String fileName) async {
-    if (_useWebFileStore) return WebFileStore.exists(_webKey(fileName));
-    final dir = await _storageDir;
-    return await File(p.join(dir, fileName)).exists();
+    await AppLogService.info('ManifestOperations($manifestKey)',
+        'fileExists called [fileName=$fileName]');
+    try {
+      if (_useWebFileStore) {
+        final result = await WebFileStore.exists(_webKey(fileName));
+        await AppLogService.info('ManifestOperations($manifestKey)',
+            'fileExists completed [$result]');
+        return result;
+      }
+      final dir = await _storageDir;
+      final result = await File(p.join(dir, fileName)).exists();
+      await AppLogService.info(
+          'ManifestOperations($manifestKey)', 'fileExists completed [$result]');
+      return result;
+    } catch (e, st) {
+      await AppLogService.error(
+          'ManifestOperations($manifestKey)', 'fileExists failed', e, st);
+      return false;
+    }
   }
 
   Future<bool> deleteFile(String fileName) async {
-    if (_useWebFileStore) {
-      await WebFileStore.delete(_webKey(fileName));
-      return true;
+    await AppLogService.info('ManifestOperations($manifestKey)',
+        'deleteFile called [fileName=$fileName]');
+    try {
+      if (_useWebFileStore) {
+        await WebFileStore.delete(_webKey(fileName));
+        await AppLogService.info(
+            'ManifestOperations($manifestKey)', 'deleteFile completed [true]');
+        return true;
+      }
+      final dir = await _storageDir;
+      final file = File(p.join(dir, fileName));
+      if (await file.exists()) {
+        await file.delete();
+        await AppLogService.info(
+            'ManifestOperations($manifestKey)', 'deleteFile completed [true]');
+        return true;
+      }
+      await AppLogService.info(
+          'ManifestOperations($manifestKey)', 'deleteFile completed [false]');
+      return false;
+    } catch (e, st) {
+      await AppLogService.error(
+          'ManifestOperations($manifestKey)', 'deleteFile failed', e, st);
+      return false;
     }
-    final dir = await _storageDir;
-    final file = File(p.join(dir, fileName));
-    if (await file.exists()) {
-      await file.delete();
-      return true;
-    }
-    return false;
   }
 
   /// Get the storage directory path (Native only).
   Future<String> get storageDirPath async {
+    await AppLogService.info(
+        'ManifestOperations($manifestKey)', 'storageDirPath called');
     if (_useWebFileStore) return '';
     return _storageDir;
   }
 
   /// Get a file's absolute path on disk (Native only).
   Future<String?> readFilePath(String fileName) async {
-    if (_useWebFileStore) {
-      final exists = await WebFileStore.exists(_webKey(fileName));
-      return exists ? _webKey(fileName) : null;
+    await AppLogService.info('ManifestOperations($manifestKey)',
+        'readFilePath called [fileName=$fileName]');
+    try {
+      if (_useWebFileStore) {
+        final exists = await WebFileStore.exists(_webKey(fileName));
+        final result = exists ? _webKey(fileName) : null;
+        await AppLogService.info('ManifestOperations($manifestKey)',
+            'readFilePath completed [found=$exists]');
+        return result;
+      }
+      final dir = await _storageDir;
+      final filePath = p.join(dir, fileName);
+      if (await File(filePath).exists()) {
+        await AppLogService.info('ManifestOperations($manifestKey)',
+            'readFilePath completed [found=true]');
+        return filePath;
+      }
+      await AppLogService.info('ManifestOperations($manifestKey)',
+          'readFilePath completed [found=false]');
+      return null;
+    } catch (e, st) {
+      await AppLogService.error(
+          'ManifestOperations($manifestKey)', 'readFilePath failed', e, st);
+      return null;
     }
-    final dir = await _storageDir;
-    final filePath = p.join(dir, fileName);
-    if (await File(filePath).exists()) return filePath;
-    return null;
   }
 
   // ---- Folder management ------------------------------------------------
 
   Future<List<String>> loadFolders() async {
-    await loadRecords();
-    return List.unmodifiable(_folderCache.toList());
+    await AppLogService.info(
+        'ManifestOperations($manifestKey)', 'loadFolders called');
+    try {
+      await loadRecords();
+      await AppLogService.info('ManifestOperations($manifestKey)',
+          'loadFolders completed [count=${_folderCache.length}]');
+      return List.unmodifiable(_folderCache.toList());
+    } catch (e, st) {
+      await AppLogService.error(
+          'ManifestOperations($manifestKey)', 'loadFolders failed', e, st);
+      rethrow;
+    }
   }
 
   Future<void> addFolder(String folderName) async {
-    await loadRecords();
-    final name = folderName.trim();
-    if (name.isEmpty) return;
-    final baseName = FolderPathUtils.getFolderBaseName(name);
-    final err = FolderPathUtils.validateFolderName(baseName);
-    if (err != null) return;
-    if (!_folderCache.contains(name)) {
-      _folderCache.add(name);
-      await ManifestDatabase.insertFolder(name, recordTable: tableName);
+    await AppLogService.info('ManifestOperations($manifestKey)',
+        'addFolder called [folderName=$folderName]');
+    try {
+      await loadRecords();
+      final name = folderName.trim();
+      if (name.isEmpty) return;
+      final baseName = FolderPathUtils.getFolderBaseName(name);
+      final err = FolderPathUtils.validateFolderName(baseName);
+      if (err != null) return;
+      if (!_folderCache.contains(name)) {
+        _folderCache.add(name);
+        await ManifestDatabase.insertFolder(name, recordTable: tableName);
+      }
+      await AppLogService.info(
+          'ManifestOperations($manifestKey)', 'addFolder completed');
+    } catch (e, st) {
+      await AppLogService.error(
+          'ManifestOperations($manifestKey)', 'addFolder failed', e, st);
+      rethrow;
     }
   }
 
   Future<void> addFolderPath(String folderPath) async {
-    await loadRecords();
-    if (!_folderCache.contains(folderPath)) {
-      _folderCache.add(folderPath);
-      await ManifestDatabase.insertFolder(folderPath, recordTable: tableName);
+    await AppLogService.info('ManifestOperations($manifestKey)',
+        'addFolderPath called [folderPath=$folderPath]');
+    try {
+      await loadRecords();
+      if (!_folderCache.contains(folderPath)) {
+        _folderCache.add(folderPath);
+        await ManifestDatabase.insertFolder(folderPath, recordTable: tableName);
+      }
+      await AppLogService.info(
+          'ManifestOperations($manifestKey)', 'addFolderPath completed');
+    } catch (e, st) {
+      await AppLogService.error(
+          'ManifestOperations($manifestKey)', 'addFolderPath failed', e, st);
+      rethrow;
     }
   }
 
   Future<void> removeFolder(String folderName) async {
-    await loadRecords();
+    await AppLogService.info('ManifestOperations($manifestKey)',
+        'removeFolder called [folderName=$folderName]');
+    try {
+      await loadRecords();
 
-    final allPaths = <String>{..._folderCache};
-    for (final r in _cache ?? []) {
-      final f = folderOf(r);
-      if (f.isNotEmpty) allPaths.add(f);
-    }
-    final descendants =
-        FolderPathUtils.getAllDescendantFolderPaths(folderName, allPaths);
+      final allPaths = <String>{..._folderCache};
+      for (final r in _cache ?? []) {
+        final f = folderOf(r);
+        if (f.isNotEmpty) allPaths.add(f);
+      }
+      final descendants =
+          FolderPathUtils.getAllDescendantFolderPaths(folderName, allPaths);
 
-    // Collect all records to delete
-    final idsToDelete = <String>[];
-    final toRemoveRecords = <T>[];
+      // Collect all records to delete
+      final idsToDelete = <String>[];
+      final toRemoveRecords = <T>[];
 
-    for (final child in descendants) {
-      _folderCache.remove(child);
-      final childRecords = _cache!.where((r) => folderOf(r) == child).toList();
-      toRemoveRecords.addAll(childRecords);
-      for (final record in childRecords) {
+      for (final child in descendants) {
+        _folderCache.remove(child);
+        final childRecords =
+            _cache!.where((r) => folderOf(r) == child).toList();
+        toRemoveRecords.addAll(childRecords);
+        for (final record in childRecords) {
+          idsToDelete.add(record.id);
+        }
+        await ManifestDatabase.deleteFolder(child, recordTable: tableName);
+      }
+
+      _folderCache.remove(folderName);
+
+      final folderRecords =
+          _cache!.where((r) => folderOf(r) == folderName).toList();
+      toRemoveRecords.addAll(folderRecords);
+      for (final record in folderRecords) {
         idsToDelete.add(record.id);
       }
-      await ManifestDatabase.deleteFolder(child, recordTable: tableName);
-    }
+      await ManifestDatabase.deleteFolder(folderName, recordTable: tableName);
 
-    _folderCache.remove(folderName);
-
-    final folderRecords =
-        _cache!.where((r) => folderOf(r) == folderName).toList();
-    toRemoveRecords.addAll(folderRecords);
-    for (final record in folderRecords) {
-      idsToDelete.add(record.id);
-    }
-    await ManifestDatabase.deleteFolder(folderName, recordTable: tableName);
-
-    // Pre-count storage names and hash counts across ALL records before deletion
-    final storageNameCount = <String, int>{};
-    final hashCount = <String, int>{};
-    for (final r in _cache!) {
-      final sn = storageNameOf(r);
-      storageNameCount[sn] = (storageNameCount[sn] ?? 0) + 1;
-      final h = hashOf(r);
-      hashCount[h] = (hashCount[h] ?? 0) + 1;
-    }
-
-    // Decrement per record being deleted; only delete file when count reaches 0
-    for (final r in toRemoveRecords) {
-      final sn = storageNameOf(r);
-      storageNameCount[sn] = (storageNameCount[sn] ?? 1) - 1;
-      if (storageNameCount[sn]! <= 0) {
-        final name = storageNameOf(r);
-        // Guard against names without extension
-        final dotIndex = name.lastIndexOf('.');
-        if (dotIndex == -1) continue;
-        if (kIsWeb) {
-          await WebFileStore.delete(_webKey(name));
-        } else {
-          final dir = await _storageDir;
-          final file = File(p.join(dir, name));
-          if (await file.exists()) await file.delete();
-        }
-        await onExtraDelete?.call(r);
+      // Pre-count storage names and hash counts across ALL records before deletion
+      final storageNameCount = <String, int>{};
+      final hashCount = <String, int>{};
+      for (final r in _cache!) {
+        final sn = storageNameOf(r);
+        storageNameCount[sn] = (storageNameCount[sn] ?? 0) + 1;
+        final h = hashOf(r);
+        hashCount[h] = (hashCount[h] ?? 0) + 1;
       }
-      // Thumbnail deletion: keyed by hash, not storageName
-      final h = hashOf(r);
-      hashCount[h] = (hashCount[h] ?? 1) - 1;
-      if (hashCount[h]! <= 0) {
-        final thumbName = '${hashOf(r)}_thumb$thumbnailExtension';
-        if (kIsWeb) {
-          await WebFileStore.delete(_webKey(thumbName));
-        } else {
-          final dir = await _storageDir;
-          final thumbFile = File(p.join(dir, thumbName));
-          if (await thumbFile.exists()) await thumbFile.delete();
+
+      // Decrement per record being deleted; only delete file when count reaches 0
+      for (final r in toRemoveRecords) {
+        final sn = storageNameOf(r);
+        storageNameCount[sn] = (storageNameCount[sn] ?? 1) - 1;
+        if (storageNameCount[sn]! <= 0) {
+          final name = storageNameOf(r);
+          // Guard against names without extension
+          final dotIndex = name.lastIndexOf('.');
+          if (dotIndex == -1) continue;
+          if (kIsWeb) {
+            await WebFileStore.delete(_webKey(name));
+          } else {
+            final dir = await _storageDir;
+            final file = File(p.join(dir, name));
+            if (await file.exists()) await file.delete();
+          }
+          await onExtraDelete?.call(r);
+        }
+        // Thumbnail deletion: keyed by hash, not storageName
+        final h = hashOf(r);
+        hashCount[h] = (hashCount[h] ?? 1) - 1;
+        if (hashCount[h]! <= 0) {
+          final thumbName = '${hashOf(r)}_thumb$thumbnailExtension';
+          if (kIsWeb) {
+            await WebFileStore.delete(_webKey(thumbName));
+          } else {
+            final dir = await _storageDir;
+            final thumbFile = File(p.join(dir, thumbName));
+            if (await thumbFile.exists()) await thumbFile.delete();
+          }
         }
       }
-    }
 
-    _cache!.removeWhere((r) => idsToDelete.contains(r.id));
+      _cache!.removeWhere((r) => idsToDelete.contains(r.id));
 
-    // Delete records from DB
-    if (idsToDelete.isNotEmpty) {
-      await _dbDeleteRecords(idsToDelete);
+      // Delete records from DB
+      if (idsToDelete.isNotEmpty) {
+        await _dbDeleteRecords(idsToDelete);
+      }
+      await AppLogService.info('ManifestOperations($manifestKey)',
+          'removeFolder completed [recordsDeleted=${idsToDelete.length}]');
+    } catch (e, st) {
+      await AppLogService.error(
+          'ManifestOperations($manifestKey)', 'removeFolder failed', e, st);
+      rethrow;
     }
   }
 
   Future<Set<String>> getAllFolders() async {
-    await loadRecords();
-    final folders = <String>{};
-    folders.addAll(_folderCache);
-    for (final r in _cache ?? []) {
-      final f = folderOf(r);
-      if (f.isNotEmpty) folders.add(f);
+    await AppLogService.info(
+        'ManifestOperations($manifestKey)', 'getAllFolders called');
+    try {
+      await loadRecords();
+      final folders = <String>{};
+      folders.addAll(_folderCache);
+      for (final r in _cache ?? []) {
+        final f = folderOf(r);
+        if (f.isNotEmpty) folders.add(f);
+      }
+      await AppLogService.info('ManifestOperations($manifestKey)',
+          'getAllFolders completed [count=${folders.length}]');
+      return folders;
+    } catch (e, st) {
+      await AppLogService.error(
+          'ManifestOperations($manifestKey)', 'getAllFolders failed', e, st);
+      rethrow;
     }
-    return folders;
   }
 
   Future<void> removeFolderFromCache(String folderPath) async {
-    await loadRecords();
-    final prefix = folderPath.isEmpty ? '' : '$folderPath/';
-    final toRemove = <String>[];
-    for (final f in _folderCache) {
-      if (f == folderPath || f.startsWith(prefix)) {
-        toRemove.add(f);
+    await AppLogService.info('ManifestOperations($manifestKey)',
+        'removeFolderFromCache called [folderPath=$folderPath]');
+    try {
+      await loadRecords();
+      final prefix = folderPath.isEmpty ? '' : '$folderPath/';
+      final toRemove = <String>[];
+      for (final f in _folderCache) {
+        if (f == folderPath || f.startsWith(prefix)) {
+          toRemove.add(f);
+        }
       }
-    }
-    for (final f in toRemove) {
-      _folderCache.remove(f);
-      await ManifestDatabase.deleteFolder(f, recordTable: tableName);
-    }
+      for (final f in toRemove) {
+        _folderCache.remove(f);
+        await ManifestDatabase.deleteFolder(f, recordTable: tableName);
+      }
 
-    // Move records in the removed folder path to root
-    final folderPrefix = folderPath.isEmpty ? '' : '$folderPath/';
-    for (var i = 0; i < (_cache?.length ?? 0); i++) {
-      final r = _cache![i];
-      final f = folderOf(r);
-      if (f == folderPath ||
-          (folderPrefix.isNotEmpty && f.startsWith(folderPrefix))) {
-        _cache![i] = copyFolder(r, '');
-        await _dbUpdateRecord(r.id, {...toMap(r), 'folder': ''});
+      // Move records in the removed folder path to root
+      final folderPrefix = folderPath.isEmpty ? '' : '$folderPath/';
+      var movedCount = 0;
+      for (var i = 0; i < (_cache?.length ?? 0); i++) {
+        final r = _cache![i];
+        final f = folderOf(r);
+        if (f == folderPath ||
+            (folderPrefix.isNotEmpty && f.startsWith(folderPrefix))) {
+          _cache![i] = copyFolder(r, '');
+          await _dbUpdateRecord(r.id, {...toMap(r), 'folder': ''});
+          movedCount++;
+        }
       }
+      await AppLogService.info('ManifestOperations($manifestKey)',
+          'removeFolderFromCache completed [recordsMoved=$movedCount]');
+    } catch (e, st) {
+      await AppLogService.error('ManifestOperations($manifestKey)',
+          'removeFolderFromCache failed', e, st);
+      rethrow;
     }
   }
 
@@ -542,6 +766,8 @@ class ManifestOperations<T extends FileRecord> {
   // See git history for the deleted implementation.
 
   void invalidateCache() {
+    AppLogService.info(
+        'ManifestOperations($manifestKey)', 'invalidateCache called');
     _dirty = true;
     _cache = null;
   }
