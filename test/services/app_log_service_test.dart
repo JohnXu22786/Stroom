@@ -10,11 +10,11 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
-    // The app_log_service_test tests file-based logging, so ensure file I/O is enabled
-    AppLogService.enableFileLogging();
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     WebFileStore.enableTestMode();
+    // Must enable file logging AFTER WebFileStore test mode (which disables it by default)
+    AppLogService.enableFileLogging();
   });
 
   // ==================================================================

@@ -448,7 +448,6 @@ class AutoBackupService {
       ..sort((a, b) => b.key.compareTo(a.key));
 
     // 额外保留最多 2 个非 24h 内的不同使用日的最后一个备份
-    // 总数不超过 5 个
     for (final entry in sortedDays) {
       if (keepList.length >= 5) break;
       if (keptUsageDays.contains(entry.key)) continue; // 已在保留列表中
@@ -456,17 +455,28 @@ class AutoBackupService {
       keptUsageDays.add(entry.key);
     }
 
-    // 如果仍有超出 5 个的，删除最旧的
-    if (keepList.length > 5) {
-      keepList.sort((a, b) => a.modified.compareTo(b.modified));
-      while (keepList.length > 5) {
-        final oldest = keepList.removeAt(0);
-        deleteList.add(oldest);
+    final keepPaths = keepList.map((e) => e.path).toSet();
+
+    // 如果 keepList 仍未满 5 个，从 beyond24h 中按时间顺序补充
+    if (keepList.length < 5) {
+      for (final info in beyond24h) {
+        if (keepList.length >= 5) break;
+        if (keepPaths.contains(info.path)) continue; // 已在保留列表中
+        final dayKey =
+            '${info.modified.year}-${info.modified.month}-${info.modified.day}';
+        if (keptUsageDays.contains(dayKey)) {
+          // 该日期已经有代表，但可以添加额外的（非当天的最后一个）
+          keepList.add(info);
+        } else {
+          // 该日期没有代表，先添加这个
+          keepList.add(info);
+          keptUsageDays.add(dayKey);
+        }
+        keepPaths.add(info.path);
       }
     }
 
     // 标记所有不在 keepList 中的为删除
-    final keepPaths = keepList.map((e) => e.path).toSet();
     final deletePaths = deleteList.map((e) => e.path).toSet();
     for (final info in infos) {
       if (!keepPaths.contains(info.path) && !deletePaths.contains(info.path)) {
@@ -479,13 +489,16 @@ class AutoBackupService {
     if (finalKeepCount > 5) {
       // 需要额外删除
       final toRemove = finalKeepCount - 5;
-      // 从 keepList 中移除最旧的
-      keepList.sort((a, b) => a.modified.compareTo(b.modified));
-      for (var i = 0; i < toRemove && i < keepList.length; i++) {
-        if (!deletePaths.contains(keepList[i].path)) {
-          deleteList.add(keepList[i]);
-          deletePaths.add(keepList[i].path);
-        }
+      // 从 infos 中最旧的开始删除
+      final sortedByOldest = List<_BackupFileInfo>.from(infos)
+        ..sort((a, b) => a.modified.compareTo(b.modified));
+      for (final info in sortedByOldest) {
+        if (toRemove <= 0) break;
+        if (!deletePaths.contains(info.path) && !keepPaths.contains(info.path))
+          continue; // 已经在标记循环中处理
+        if (deletePaths.contains(info.path)) continue;
+        deleteList.add(info);
+        deletePaths.add(info.path);
       }
     }
 

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as p;
 
 import 'data_migration_service.dart';
+import '../utils/web_file_store.dart';
 
 // ====================================================================
 // AppLogService — 应用日志服务
@@ -41,16 +42,28 @@ enum LogLevel {
 class AppLogService {
   AppLogService._();
 
-  /// 当为 true 时，只输出到控制台，不写文件。
-  /// 用于测试环境中避免文件 I/O 问题。
-  /// 可通过 [enableFileLogging] / [disableFileLogging] 控制。
-  static bool _skipFileIo = false;
+  /// 是否已手动设置过（true=禁用, false=启用）。
+  /// 未设置时保持 null，由 [_shouldSkipFileIo] 根据测试环境自动判断。
+  static bool? _manualFileLogging;
 
-  /// 启用文件日志写入（默认启用）。
-  static void enableFileLogging() => _skipFileIo = false;
+  /// 启用文件日志写入。
+  static void enableFileLogging() => _manualFileLogging = false;
 
   /// 禁用文件日志写入（仅控制台输出，用于测试）。
-  static void disableFileLogging() => _skipFileIo = true;
+  static void disableFileLogging() => _manualFileLogging = true;
+
+  /// 是否应该跳过文件 I/O。
+  /// - Web 平台始终跳过。
+  /// - 手动设置的值优先。
+  /// - 测试模式（WebFileStore.isTestMode）下默认跳过。
+  /// - 生产环境默认写入文件。
+  static bool get _shouldSkipFileIo {
+    if (kIsWeb) return true;
+    if (_manualFileLogging != null) return _manualFileLogging!;
+    // 测试模式下默认只输出到控制台
+    if (WebFileStore.isTestMode) return true;
+    return false;
+  }
 
   /// 日志文件保留天数。
   static const int _retentionDays = 3;
@@ -100,8 +113,8 @@ class AppLogService {
   /// 核心日志写入方法。
   static Future<void> _writeLog(
       LogLevel level, String source, String message) async {
-    // _skipFileIo 模式下只输出到控制台（如 testWidgets 的 FakeAsync zone 中）
-    if (kIsWeb || _skipFileIo) {
+    // _shouldSkipFileIo 模式下只输出到控制台（测试 / Web / 手动禁用）
+    if (_shouldSkipFileIo) {
       debugPrint('[AppLog] [${level.label}] [$source] $message');
       return;
     }
@@ -111,7 +124,6 @@ class AppLogService {
       if (!await logDir.exists()) {
         await logDir.create(recursive: true);
       }
-
       final now = DateTime.now();
       final dateStr = '${now.year}-${_pad(now.month)}-${_pad(now.day)}';
       final logFile = File(p.join(logDir.path, 'app_$dateStr.log'));
