@@ -137,29 +137,65 @@ class Conversation {
           'enabledMcpToolNames': enabledMcpToolNames.toList(),
       };
 
-  factory Conversation.fromMap(Map<String, dynamic> map) => Conversation(
-        id: map['id'] as String?,
-        title: map['title'] as String? ?? '',
-        createdAt: map['createdAt'] != null
-            ? DateTime.parse(map['createdAt'] as String)
-            : null,
-        updatedAt: map['updatedAt'] != null
-            ? DateTime.parse(map['updatedAt'] as String)
-            : null,
-        messages: (map['messages'] as List?)
-                ?.map((e) =>
-                    ChatMessage.fromMap(Map<String, dynamic>.from(e as Map)))
-                .toList() ??
-            [],
-        isPinned: map['isPinned'] as bool? ?? false,
-        sortOrder: map['sortOrder'] as int? ?? 0,
-        assistantId: map['assistantId'] as String?,
-        draftText: map['draftText'] as String? ?? '',
-        enabledMcpToolNames: (map['enabledMcpToolNames'] as List?)
-                ?.map((e) => e.toString())
-                .toSet() ??
-            {},
-      );
+  factory Conversation.fromMap(Map<String, dynamic> map) {
+    // Defensive DateTime parsing for createdAt
+    DateTime? createdAt;
+    final createdAtRaw = map['createdAt'];
+    if (createdAtRaw != null && createdAtRaw is String) {
+      try {
+        createdAt = DateTime.parse(createdAtRaw);
+      } catch (_) {
+        createdAt = DateTime.now();
+      }
+    }
+
+    // Defensive DateTime parsing for updatedAt
+    DateTime? updatedAt;
+    final updatedAtRaw = map['updatedAt'];
+    if (updatedAtRaw != null && updatedAtRaw is String) {
+      try {
+        updatedAt = DateTime.parse(updatedAtRaw);
+      } catch (_) {
+        updatedAt = DateTime.now();
+      }
+    }
+
+    // Defensive message parsing: skip invalid entries so a single corrupt
+    // message does not prevent loading the entire conversation.
+    List<ChatMessage> messages = [];
+    final messagesRaw = map['messages'];
+    if (messagesRaw is List) {
+      for (final e in messagesRaw) {
+        if (e is Map) {
+          try {
+            messages.add(ChatMessage.fromMap(Map<String, dynamic>.from(e)));
+          } catch (_) {
+            // Skip corrupt message — log is optional to avoid noise
+          }
+        }
+      }
+    }
+
+    // Defensive enabledMcpToolNames parsing
+    Set<String> enabledMcpToolNames = {};
+    final toolsRaw = map['enabledMcpToolNames'];
+    if (toolsRaw is List) {
+      enabledMcpToolNames = toolsRaw.map((e) => e.toString()).toSet();
+    }
+
+    return Conversation(
+      id: map['id'] as String?,
+      title: map['title'] as String? ?? '',
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      messages: messages,
+      isPinned: map['isPinned'] as bool? ?? false,
+      sortOrder: map['sortOrder'] as int? ?? 0,
+      assistantId: map['assistantId'] as String?,
+      draftText: map['draftText'] as String? ?? '',
+      enabledMcpToolNames: enabledMcpToolNames,
+    );
+  }
 
   @override
   String toString() => 'Conversation(id: $id, title: $title)';
@@ -197,11 +233,38 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final json = prefs.getString('conversations');
-      if (json != null) {
-        final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
-        state = list.map((m) => Conversation.fromMap(m)).toList();
-        await AppLogService.info(
-            'ConversationsNotifier', '加载了 ${state.length} 个对话');
+      if (json != null && json.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(json);
+          if (decoded is List) {
+            final conversations = <Conversation>[];
+            for (final item in decoded) {
+              if (item is Map) {
+                try {
+                  conversations.add(
+                      Conversation.fromMap(Map<String, dynamic>.from(item)));
+                } catch (e) {
+                  debugPrint(
+                      'ConversationsNotifier: 跳过损坏的对话条目: $e');
+                  await AppLogService.warning(
+                      'ConversationsNotifier', '跳过损坏的对话条目: $e');
+                }
+              }
+            }
+            state = conversations;
+            await AppLogService.info(
+                'ConversationsNotifier', '加载了 ${state.length} 个对话');
+          } else {
+            state = [];
+            await AppLogService.info(
+                'ConversationsNotifier', '对话数据格式无效');
+          }
+        } catch (e) {
+          debugPrint('Failed to decode conversations JSON: $e');
+          await AppLogService.error(
+              'ConversationsNotifier', '解析对话 JSON 失败', e);
+          state = [];
+        }
       } else {
         state = [];
         await AppLogService.info('ConversationsNotifier', '没有已保存的对话');
@@ -211,24 +274,36 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       // This is more reliable than the old one-time migration flag:
       // it catches conversations that were created without assistantId
       // even after the old migration had already "run".
-      await assignNullAssistantConversations(prefs, state);
+      try {
+        await assignNullAssistantConversations(prefs, state);
+      } catch (e) {
+        debugPrint('Failed to auto-fix null assistant conversations: $e');
+        await AppLogService.error(
+            'ConversationsNotifier', '修复空 assistantId 失败', e);
+      }
 
       // Restore last active conversation
-      final activeId = prefs.getString('active_conversation_id');
-      if (activeId != null && state.any((c) => c.id == activeId)) {
-        _ref.read(activeConversationIdProvider.notifier).state = activeId;
-        await AppLogService.info(
-            'ConversationsNotifier', '恢复上次活跃对话: $activeId');
-      } else {
-        await AppLogService.warning('ConversationsNotifier',
-            '未找到上次活跃对话或 activeId 为 null: activeId=$activeId');
+      try {
+        final activeId = prefs.getString('active_conversation_id');
+        if (activeId != null && state.any((c) => c.id == activeId)) {
+          _ref.read(activeConversationIdProvider.notifier).state = activeId;
+          await AppLogService.info(
+              'ConversationsNotifier', '恢复上次活跃对话: $activeId');
+        } else {
+          await AppLogService.warning('ConversationsNotifier',
+              '未找到上次活跃对话或 activeId 为 null: activeId=$activeId');
+        }
+      } catch (e) {
+        debugPrint('Failed to restore active conversation: $e');
+        await AppLogService.error(
+            'ConversationsNotifier', '恢复活跃对话失败', e);
       }
       return;
     } catch (e) {
       debugPrint('Failed to load conversations: $e');
       await AppLogService.error('ConversationsNotifier', '加载对话失败', e);
+      state = [];
     }
-    state = [];
   }
 
   Future<void> _persistActiveId() async {

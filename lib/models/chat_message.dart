@@ -46,19 +46,30 @@ class Attachment {
         // It is a transient in-memory cache tied to conversation lifecycle.
       };
 
-  factory Attachment.fromMap(Map<String, dynamic> map) => Attachment(
-        id: map['id'] as String?,
-        fileName: (map['fileName'] as String?) ?? '',
-        mimeType: (map['mimeType'] as String?) ?? '',
-        fileType: (map['fileType'] as String?) ?? '',
-        hash: (map['hash'] as String?) ?? '',
-        storagePath: (map['storagePath'] as String?) ?? '',
-        fileSize: (map['fileSize'] as int?) ?? 0,
-        createdAt: map['createdAt'] != null
-            ? DateTime.parse(map['createdAt'] as String)
-            : null,
-        thumbnailPath: map['thumbnailPath'] as String?,
-      );
+  factory Attachment.fromMap(Map<String, dynamic> map) {
+    // Defensive DateTime parsing
+    DateTime? createdAt;
+    final createdAtRaw = map['createdAt'];
+    if (createdAtRaw != null && createdAtRaw is String) {
+      try {
+        createdAt = DateTime.parse(createdAtRaw);
+      } catch (_) {
+        createdAt = DateTime.now();
+      }
+    }
+
+    return Attachment(
+      id: map['id'] as String?,
+      fileName: (map['fileName'] as String?) ?? '',
+      mimeType: (map['mimeType'] as String?) ?? '',
+      fileType: (map['fileType'] as String?) ?? '',
+      hash: (map['hash'] as String?) ?? '',
+      storagePath: (map['storagePath'] as String?) ?? '',
+      fileSize: (map['fileSize'] as int?) ?? 0,
+      createdAt: createdAt,
+      thumbnailPath: map['thumbnailPath'] as String?,
+    );
+  }
 
   Attachment copyWith({
     String? id,
@@ -135,20 +146,44 @@ class ChatMessage {
     if (roleStr != 'user' && roleStr != 'assistant') {
       roleStr = 'user';
     }
+
+    // Defensive DateTime parsing: invalid/null dates fall back to now
+    DateTime? createdAt;
+    final createdAtRaw = map['createdAt'];
+    if (createdAtRaw != null && createdAtRaw is String) {
+      try {
+        createdAt = DateTime.parse(createdAtRaw);
+      } catch (_) {
+        // Invalid date format — fall back to current time
+        createdAt = DateTime.now();
+      }
+    }
+
+    // Defensive attachment parsing: skip invalid entries so a single corrupt
+    // attachment does not prevent loading the entire message.
+    List<Attachment> attachments = [];
+    final attachmentsRaw = map['attachments'];
+    if (attachmentsRaw is List) {
+      for (final e in attachmentsRaw) {
+        if (e is Map) {
+          try {
+            attachments.add(
+                Attachment.fromMap(Map<String, dynamic>.from(e)));
+          } catch (_) {
+            // Skip corrupt attachment entry
+          }
+        }
+      }
+    }
+
     return ChatMessage(
       id: map['id'] as String?,
       role: roleStr,
       content: (map['content'] as String?) ?? '',
-      createdAt: map['createdAt'] != null
-          ? DateTime.parse(map['createdAt'] as String)
-          : null,
-      attachments: (map['attachments'] as List?)
-              ?.map((e) =>
-                  Attachment.fromMap(Map<String, dynamic>.from(e as Map)))
-              .toList() ??
-          [],
-      isStreaming: map['isStreaming'] as bool? ?? false,
-      isError: map['isError'] as bool? ?? false,
+      createdAt: createdAt,
+      attachments: attachments,
+      isStreaming: map['isStreaming'] is bool ? map['isStreaming'] : false,
+      isError: map['isError'] is bool ? map['isError'] : false,
       reasoningContent: map['reasoningContent'] as String?,
       rawRequest: map['rawRequest'] as Map<String, dynamic>?,
       rawResponse: map['rawResponse'] as Map<String, dynamic>?,
