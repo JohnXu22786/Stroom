@@ -30,7 +30,10 @@ Dio _createMockDio(String jsonResponse, {int statusCode = 200}) {
 
 /// Build a GitHub releases API response for the given tag.
 String _githubRelease(String tagName,
-    {String body = '', String? htmlUrl, List<Map<String, String>>? assets}) {
+    {String body = '',
+    String? htmlUrl,
+    List<Map<String, String>>? assets,
+    String publishedAt = '2024-01-15T10:00:00Z'}) {
   htmlUrl ??= 'https://github.com/JohnXu22786/Stroom/releases/tag/$tagName';
   final assetsJson = assets != null
       ? ',\n  "assets": [${assets.map((a) => '{\n      "name": "${a['name']}",\n      "browser_download_url": "${a['browser_download_url']}"\n    }').join(',\n    ')}]'
@@ -38,6 +41,7 @@ String _githubRelease(String tagName,
   return '''
 {
   "tag_name": "$tagName",
+  "published_at": "$publishedAt",
   "body": "$body",
   "html_url": "$htmlUrl"$assetsJson
 }
