@@ -1292,11 +1292,11 @@ void main() {
 
   group('UpdateNotifier - Version matching with hotfix suffixes', () {
     test(
-        'current version with hotfix suffix found by base version match → correct cutoffDate, v39 excluded',
+        'exact match with date-based comparison correctly excludes v39 published before cutoff',
         () async {
       SharedPreferences.setMockInitialValues({});
-      // App version is "0.2.13-hotfix" but GitHub tag is "v0.2.13"
-      // Fuzzy matching should find it by base version (0.2.13)
+      // Current app version "0.2.13" exactly matches tag "v0.2.13"
+      // Date-based comparison correctly excludes v39.0.0 published before cutoff
       final releases = _githubReleases([
         ('v0.2.14', false, 'Version 0.2.14', '2024-07-20T10:00:00Z'),
         ('v0.2.13', false, 'Current base version', '2024-06-15T10:00:00Z'),
@@ -1316,13 +1316,14 @@ void main() {
     });
 
     test(
-        'app version with suffix (e.g. "0.2.13-hotfix") matches GitHub tag "v0.2.13" by base version',
+        'base-version skip: hotfix tag with same base as current version is excluded via fallback',
         () async {
       SharedPreferences.setMockInitialValues({});
-      // Simulate the case where the app has a version suffix (hotfix)
-      // but GitHub only has the base version tag.
-      // For this test, we use a version string with suffix that should
-      // fuzzy-match to a tag with the same base version.
+      // GitHub has "v0.2.13-hotfix" (a hotfix build of 0.2.13) but the
+      // current app version is "0.2.13" with no suffix. Exact match fails
+      // ("0.2.13" != "0.2.13-hotfix"), so we fall back to version comparison.
+      // The base-version skip prevents the hotfix from being offered as an
+      // update (same major.minor.patch = same version, different build).
       final dio = _createMockDioForList('''
 [
   {
@@ -1352,12 +1353,11 @@ void main() {
 
       await notifier.checkForUpdate();
 
-      // Current version 0.2.13 - not in releases (only 0.2.13-hotfix exists)
-      // Fuzzy match should find 0.2.13-hotfix by base version (0,2,13)
-      // cutoffDate = 2024-07-10
-      // v0.2.14 at 2024-07-20 > cutoff → included
-      // v0.2.13-hotfix at 2024-07-10 → not after cutoff → excluded
-      // v0.2.12 at 2024-06-01 < cutoff → excluded
+      // Current version 0.2.13 - not in releases by exact match
+      // Fallback to version comparison. v0.2.13-hotfix has the same base
+      // (0,2,13) as the current version → excluded by base-version skip.
+      // v0.2.14 (0,2,14) > (0,2,13) → included
+      // v0.2.12 (0,2,12) < (0,2,13) → excluded
       expect(notifier.state.updateAvailable, true);
       expect(notifier.state.availableVersions!.length, 1);
       expect(notifier.state.availableVersions![0].version, '0.2.14');

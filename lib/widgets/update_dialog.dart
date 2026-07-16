@@ -281,7 +281,8 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
     final showAll = state.acceptPreRelease;
 
     // Count visible items first for proper border calculations.
-    final visibleCount = versions.where((v) => showAll || !v.isPreRelease).length;
+    final visibleCount =
+        versions.where((v) => showAll || !v.isPreRelease).length;
 
     // Build the visible list items, skipping pre-releases when toggle is off.
     final List<Widget> items = [];
@@ -302,16 +303,13 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                 ? const BorderRadius.vertical(bottom: Radius.circular(10))
                 : null,
         child: Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: isSelected
-                ? cs.primaryContainer.withValues(alpha: 0.4)
-                : null,
+            color:
+                isSelected ? cs.primaryContainer.withValues(alpha: 0.4) : null,
             border: !isLast
                 ? Border(
-                    bottom:
-                        BorderSide(color: cs.outlineVariant, width: 0.5))
+                    bottom: BorderSide(color: cs.outlineVariant, width: 0.5))
                 : null,
           ),
           child: Row(

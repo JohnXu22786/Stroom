@@ -349,9 +349,6 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     // won't re-prompt the user about that older major version.
     DateTime? cutoffDate;
     Version? currentVersion;
-    bool exactMatchFound = false;
-
-    // First pass: exact string match
     for (final release in releases) {
       final tagName = release['tag_name'] as String? ?? '';
       final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
@@ -361,34 +358,9 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
           cutoffDate = DateTime.tryParse(publishedAtStr);
         }
         currentVersion = Version.parse(versionStr);
-        exactMatchFound = true;
         break;
       }
     }
-
-    // Second pass: fuzzy match by base version (major.minor.patch)
-    // This handles cases where the app version has a pre-release/hotfix suffix
-    // that doesn't exactly match any GitHub tag (e.g., app "0.2.13-hotfix"
-    // matching tag "v0.2.13", or app "0.2.13" matching tag "v0.2.13-hotfix").
-    if (!exactMatchFound) {
-      final currentParsed = Version.parse(currentVersionStr);
-      for (final release in releases) {
-        final tagName = release['tag_name'] as String? ?? '';
-        final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
-        final candidateParsed = Version.parse(versionStr);
-        if (candidateParsed.major == currentParsed.major &&
-            candidateParsed.minor == currentParsed.minor &&
-            candidateParsed.patch == currentParsed.patch) {
-          final publishedAtStr = release['published_at'] as String?;
-          if (publishedAtStr != null) {
-            cutoffDate = DateTime.tryParse(publishedAtStr);
-          }
-          currentVersion = currentParsed;
-          break;
-        }
-      }
-    }
-
     // Fall back to version-based comparison when the current version is not
     // found in the releases list (e.g., very old version or custom build).
     currentVersion ??= Version.parse(currentVersionStr);
@@ -410,8 +382,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       // does NOT re-prompt about "v39.0.0" (same base).
       if (versionStr == currentVersionStr ||
           (parsed.major == currentVersion.major &&
-           parsed.minor == currentVersion.minor &&
-           parsed.patch == currentVersion.patch)) continue;
+              parsed.minor == currentVersion.minor &&
+              parsed.patch == currentVersion.patch)) continue;
 
       // Date-based comparison (when we found the current version's publish date)
       if (cutoffDate != null) {
@@ -466,8 +438,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
 
       // Only show dialog if at least one version matches the display filter
       // (e.g., hide dialog when only pre-releases exist and toggle is off).
-      final hasVisibleVersion = state.acceptPreRelease ||
-          availableList.any((v) => !v.isPreRelease);
+      final hasVisibleVersion =
+          state.acceptPreRelease || availableList.any((v) => !v.isPreRelease);
 
       if (hasVisibleVersion) {
         final first = availableList[defaultIndex];
