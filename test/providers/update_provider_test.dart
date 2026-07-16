@@ -85,7 +85,10 @@ Dio _createNon200Dio(int statusCode) {
 
 /// Build a GitHub releases API response for the given tag.
 String _githubRelease(String tagName,
-    {String body = '', String? htmlUrl, List<Map<String, String>>? assets}) {
+    {String body = '',
+    String? htmlUrl,
+    List<Map<String, String>>? assets,
+    String publishedAt = '2024-01-15T10:00:00Z'}) {
   htmlUrl ??= 'https://github.com/JohnXu22786/Stroom/releases/tag/$tagName';
   final assetsJson = assets != null
       ? ',\n  "assets": [${assets.map((a) => '{\n      "name": "${a['name']}",\n      "browser_download_url": "${a['browser_download_url']}"\n    }').join(',\n    ')}]'
@@ -93,6 +96,7 @@ String _githubRelease(String tagName,
   return '''
 {
   "tag_name": "$tagName",
+  "published_at": "$publishedAt",
   "body": "$body",
   "html_url": "$htmlUrl"$assetsJson
 }
@@ -132,13 +136,14 @@ List<Map<String, String>> _allPlatformAssets(String tagName) {
 }
 
 /// Build a list of GitHub releases API response (for /releases endpoint).
-/// Each entry is a (tagName, isPrerelease, body) tuple.
-String _githubReleases(List<(String, bool, String)> releases) {
+/// Each entry is a (tagName, isPrerelease, body, publishedAt) tuple.
+String _githubReleases(List<(String, bool, String, String)> releases) {
   final items = releases.map((r) {
-    final (tagName, isPrerelease, body) = r;
+    final (tagName, isPrerelease, body, publishedAt) = r;
     return '''{
     "tag_name": "$tagName",
     "prerelease": $isPrerelease,
+    "published_at": "$publishedAt",
     "body": "$body",
     "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/$tagName"
   }''';
@@ -659,8 +664,8 @@ void main() {
         () async {
       SharedPreferences.setMockInitialValues({});
       final releases = _githubReleases([
-        ('v0.2.15-alpha', true, 'Alpha test'),
-        ('v0.2.14', false, 'Stable release'),
+        ('v0.2.15-alpha', true, 'Alpha test', '2024-06-15T10:00:00Z'),
+        ('v0.2.14', false, 'Stable release', '2024-06-10T10:00:00Z'),
       ]);
       final dio = _createMockDioForList(releases);
       final notifier = UpdateNotifier(dio: dio);
@@ -696,7 +701,7 @@ void main() {
         () async {
       SharedPreferences.setMockInitialValues({});
       final releases = _githubReleases([
-        ('v0.2.12-alpha', true, 'Older alpha'),
+        ('v0.2.12-alpha', true, 'Older alpha', '2024-01-10T10:00:00Z'),
       ]);
       final dio = _createMockDioForList(releases);
       final notifier = UpdateNotifier(dio: dio);
@@ -715,9 +720,9 @@ void main() {
         () async {
       SharedPreferences.setMockInitialValues({});
       final releases = _githubReleases([
-        ('v0.2.15-beta', true, 'Beta'),
-        ('v0.2.15-alpha', true, 'Alpha'),
-        ('v0.2.14', false, 'Stable'),
+        ('v0.2.15-beta', true, 'Beta', '2024-07-20T10:00:00Z'),
+        ('v0.2.15-alpha', true, 'Alpha', '2024-07-15T10:00:00Z'),
+        ('v0.2.14', false, 'Stable', '2024-07-10T10:00:00Z'),
       ]);
       final dio = _createMockDioForList(releases);
       final notifier = UpdateNotifier(dio: dio);
@@ -997,11 +1002,11 @@ void main() {
         () async {
       SharedPreferences.setMockInitialValues({});
       final releases = _githubReleases([
-        ('v0.2.16', false, 'Version 0.2.16'),
-        ('v0.2.15-alpha', true, 'Alpha 0.2.15'),
-        ('v0.2.15', false, 'Version 0.2.15'),
-        ('v0.2.14', false, 'Version 0.2.14'),
-        ('v0.2.12', false, 'Older version'),
+        ('v0.2.16', false, 'Version 0.2.16', '2024-08-01T10:00:00Z'),
+        ('v0.2.15-alpha', true, 'Alpha 0.2.15', '2024-07-25T10:00:00Z'),
+        ('v0.2.15', false, 'Version 0.2.15', '2024-07-20T10:00:00Z'),
+        ('v0.2.14', false, 'Version 0.2.14', '2024-07-15T10:00:00Z'),
+        ('v0.2.12', false, 'Older version', '2024-07-10T10:00:00Z'),
       ]);
       final dio = _createMockDioForList(releases);
       final notifier = UpdateNotifier(dio: dio);
@@ -1027,10 +1032,10 @@ void main() {
         () async {
       SharedPreferences.setMockInitialValues({});
       final releases = _githubReleases([
-        ('v0.2.16', false, 'Version 0.2.16'),
-        ('v0.2.15-alpha', true, 'Alpha 0.2.15'),
-        ('v0.2.15', false, 'Version 0.2.15'),
-        ('v0.2.14', false, 'Version 0.2.14'),
+        ('v0.2.16', false, 'Version 0.2.16', '2024-08-01T10:00:00Z'),
+        ('v0.2.15-alpha', true, 'Alpha 0.2.15', '2024-07-25T10:00:00Z'),
+        ('v0.2.15', false, 'Version 0.2.15', '2024-07-20T10:00:00Z'),
+        ('v0.2.14', false, 'Version 0.2.14', '2024-07-15T10:00:00Z'),
       ]);
       final dio = _createMockDioForList(releases);
       final notifier = UpdateNotifier(dio: dio);
@@ -1055,8 +1060,8 @@ void main() {
     test('no update when no versions are newer than current', () async {
       SharedPreferences.setMockInitialValues({});
       final releases = _githubReleases([
-        ('v0.2.12', false, 'Older'),
-        ('v0.2.11', false, 'Even older'),
+        ('v0.2.12', false, 'Older', '2024-07-10T10:00:00Z'),
+        ('v0.2.11', false, 'Even older', '2024-07-05T10:00:00Z'),
       ]);
       final dio = _createMockDioForList(releases);
       final notifier = UpdateNotifier(dio: dio);
@@ -1084,9 +1089,9 @@ void main() {
         'update_skipped_version': '0.2.15',
       });
       final releases = _githubReleases([
-        ('v0.2.16', false, 'Version 0.2.16'),
-        ('v0.2.15', false, 'Version 0.2.15'),
-        ('v0.2.14', false, 'Version 0.2.14'),
+        ('v0.2.16', false, 'Version 0.2.16', '2024-08-01T10:00:00Z'),
+        ('v0.2.15', false, 'Version 0.2.15', '2024-07-25T10:00:00Z'),
+        ('v0.2.14', false, 'Version 0.2.14', '2024-07-20T10:00:00Z'),
       ]);
       final dio = _createMockDioForList(releases);
       final notifier = UpdateNotifier(dio: dio);
@@ -1106,9 +1111,9 @@ void main() {
         'update_skipped_version': '0.2.15-alpha',
       });
       final releases = _githubReleases([
-        ('v0.2.16', false, 'Version 0.2.16'),
-        ('v0.2.15-alpha', true, 'Alpha 0.2.15'),
-        ('v0.2.14', false, 'Version 0.2.14'),
+        ('v0.2.16', false, 'Version 0.2.16', '2024-08-01T10:00:00Z'),
+        ('v0.2.15-alpha', true, 'Alpha 0.2.15', '2024-07-25T10:00:00Z'),
+        ('v0.2.14', false, 'Version 0.2.14', '2024-07-20T10:00:00Z'),
       ]);
       final dio = _createMockDioForList(releases);
       final notifier = UpdateNotifier(dio: dio);
@@ -1188,8 +1193,8 @@ void main() {
         () async {
       SharedPreferences.setMockInitialValues({});
       final releases = _githubReleases([
-        ('v0.2.16-beta', true, 'Beta'),
-        ('v0.2.15-rc', true, 'RC'),
+        ('v0.2.16-beta', true, 'Beta', '2024-08-01T10:00:00Z'),
+        ('v0.2.15-rc', true, 'RC', '2024-07-20T10:00:00Z'),
       ]);
       final dio = _createMockDioForList(releases);
       final notifier = UpdateNotifier(dio: dio);
@@ -1221,8 +1226,8 @@ void main() {
         () async {
       SharedPreferences.setMockInitialValues({});
       final releases = _githubReleases([
-        ('v0.2.15-alpha', true, 'Alpha'),
-        ('v0.2.13', false, 'Stable same as current version'),
+        ('v0.2.15-alpha', true, 'Alpha', '2024-07-01T10:00:00Z'),
+        ('v0.2.13', false, 'Stable same as current version', '2024-06-15T10:00:00Z'),
       ]);
       final dio = _createMockDioForList(releases);
       final notifier = UpdateNotifier(dio: dio);
@@ -1230,8 +1235,231 @@ void main() {
 
       await notifier.checkForUpdate();
 
-      // 0.2.13 is not newer (equals current appVersion), 0.2.15-alpha is prerelease
-      // → no update should be found
+      // 0.2.15-alpha was published after 0.2.13, but it's a prerelease and
+      // acceptPreRelease=false → no update should be found
+      expect(notifier.state.updateAvailable, false);
+      expect(notifier.state.availableVersions, isNull);
+    });
+  });
+
+  group('UpdateNotifier - Date-based comparison', () {
+    test(
+        'uses published_at date to filter releases when current version is found in releases list',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      // Current version (0.2.13) is in the list with published_at 2024-06-15
+      // Only releases published after that date should be included
+      final releases = _githubReleases([
+        ('v0.2.16', false, 'Version 0.2.16', '2024-08-01T10:00:00Z'),
+        ('v0.2.15', false, 'Version 0.2.15', '2024-07-20T10:00:00Z'),
+        ('v0.2.13', false, 'Current version', '2024-06-15T10:00:00Z'),
+        ('v0.2.12', false, 'Older version', '2024-06-10T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // Should include 0.2.16 and 0.2.15 (published after 0.2.13)
+      // Should NOT include 0.2.12 (published before 0.2.13)
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions, isNotNull);
+      expect(notifier.state.availableVersions!.length, 2);
+      expect(notifier.state.availableVersions![0].version, '0.2.16');
+      expect(notifier.state.availableVersions![1].version, '0.2.15');
+      expect(notifier.state.latestVersion, '0.2.16');
+    });
+
+    test(
+        'releases published after current version cutoff are included',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      // Current version 0.2.13 at 2024-06-15
+      // Both v39.0.0 and v0.2.14 were published after cutoff → included
+      final releases = _githubReleases([
+        ('v39.0.0', false, 'Version 39', '2024-07-01T10:00:00Z'),
+        ('v0.2.14', false, 'Version 0.2.14', '2024-06-20T10:00:00Z'),
+        ('v0.2.13', false, 'Current', '2024-06-15T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 2);
+      expect(notifier.state.availableVersions![0].version, '39.0.0');
+      expect(notifier.state.availableVersions![1].version, '0.2.14');
+    });
+
+    test(
+        'higher version number published before current version cutoff is excluded',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      // This is the key bug fix scenario: v39.0.0 is a higher version number
+      // but was published BEFORE the current version's cutoff date → excluded
+      // The current version 0.2.13 has cutoff 2024-06-15
+      // v39.0.0 at 2024-06-10 is BEFORE cutoff → excluded
+      // v0.2.14 at 2024-06-20 is AFTER cutoff → included
+      // v0.2.12 at 2024-06-10 is BEFORE cutoff → excluded
+      final releases = _githubReleases([
+        ('v39.0.0', false, 'Version 39', '2024-06-10T10:00:00Z'),
+        ('v0.2.14', false, 'Version 0.2.14', '2024-06-20T10:00:00Z'),
+        ('v0.2.13', false, 'Current', '2024-06-15T10:00:00Z'),
+        ('v0.2.12', false, 'Old', '2024-06-10T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // v39.0.0 at 2024-06-10 → before cutoff → excluded!
+      // v0.2.14 at 2024-06-20 → after cutoff → included
+      // v0.2.12 at 2024-06-10 → before cutoff → excluded
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 1);
+      expect(notifier.state.availableVersions![0].version, '0.2.14');
+    });
+
+    test(
+        'falls back to version comparison when current version is not in releases list',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      // Current version 0.2.13 is NOT in the list
+      // Should fall back to version-based comparison
+      final releases = _githubReleases([
+        ('v0.2.16', false, 'Version 0.2.16', '2024-08-01T10:00:00Z'),
+        ('v0.2.14', false, 'Version 0.2.14', '2024-07-01T10:00:00Z'),
+        ('v0.2.12', false, 'Version 0.2.12', '2024-06-01T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // Fallback: 0.2.16 and 0.2.14 > 0.2.13 → included
+      // 0.2.12 < 0.2.13 → excluded
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 2);
+      expect(notifier.state.availableVersions![0].version, '0.2.16');
+      expect(notifier.state.availableVersions![1].version, '0.2.14');
+    });
+
+    test(
+        'falls back to version comparison when current version has no published_at',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final dio = _createMockDioForList('''
+[
+  {
+    "tag_name": "v0.2.14",
+    "body": "New version",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.14"
+  },
+  {
+    "tag_name": "v0.2.13",
+    "body": "Current version (no published_at)",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.13"
+  }
+]
+''');
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // Current version 0.2.13 found but has no published_at → fallback
+      // 0.2.14 > 0.2.13 → included
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.latestVersion, '0.2.14');
+    });
+
+    test(
+        'no update when no releases published after current version date',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final releases = _githubReleases([
+        ('v0.2.12', false, 'Older', '2024-06-10T10:00:00Z'),
+        ('v0.2.13', false, 'Current', '2024-06-15T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // All remaining releases published before or at the same time as current
+      expect(notifier.state.updateAvailable, false);
+      expect(notifier.state.availableVersions, isNull);
+    });
+
+    test(
+        'pre-release toggle works with date-based filtering',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final releases = _githubReleases([
+        ('v0.2.16-alpha', true, 'Alpha', '2024-08-01T10:00:00Z'),
+        ('v0.2.15', false, 'Stable', '2024-07-20T10:00:00Z'),
+        ('v0.2.13', false, 'Current', '2024-06-15T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = notifier.state.copyWith(acceptPreRelease: false);
+
+      await notifier.checkForUpdate();
+
+      // acceptPreRelease=false: only v0.2.15 is included (stable, after cutoff)
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 1);
+      expect(notifier.state.availableVersions![0].version, '0.2.15');
+      expect(notifier.state.availableVersions![0].isPreRelease, false);
+    });
+
+    test(
+        'release at same timestamp as current version is excluded (isAfter exclusive)',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final releases = _githubReleases([
+        ('v0.2.14', false, 'Same timestamp', '2024-06-15T10:00:00Z'),
+        ('v0.2.13', false, 'Current', '2024-06-15T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // v0.2.14 has the SAME timestamp as current (2024-06-15T10:00:00Z)
+      // isAfter returns false for same timestamp → excluded
+      expect(notifier.state.updateAvailable, false);
+      expect(notifier.state.availableVersions, isNull);
+    });
+
+    test(
+        'non-current release without published_at is skipped in date mode',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      // Create a raw JSON list where v0.2.14 has no published_at
+      // while the current version v0.2.13 does have it
+      final dio = _createMockDioForList('''
+[
+  {
+    "tag_name": "v0.2.14",
+    "body": "No published_at",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.14"
+  },
+  {
+    "tag_name": "v0.2.13",
+    "body": "Current with published_at",
+    "published_at": "2024-06-15T10:00:00Z",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.13"
+  }
+]
+''');
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // Current version 0.2.13 found with published_at → date mode
+      // v0.2.14 has no published_at → skipped (null check)
+      // No releases pass the filter → no update
       expect(notifier.state.updateAvailable, false);
       expect(notifier.state.availableVersions, isNull);
     });

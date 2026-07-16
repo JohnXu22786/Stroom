@@ -337,11 +337,34 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     }
 
     final releases = response.data as List<dynamic>;
-    final current = Version.parse(appVersion);
+    final currentVersionStr = appVersion;
     final includePreRelease = state.acceptPreRelease;
 
     final prefs = await SharedPreferences.getInstance();
     final skippedVersion = prefs.getString(_kSkippedVersionKey);
+
+    // Find the current version's release in the GitHub list to get its
+    // published_at date. This enables date-based comparison: only releases
+    // published AFTER the current version's release date are shown, regardless
+    // of version number. This way, a hotfix published after a major version
+    // won't re-prompt the user about that older major version.
+    DateTime? cutoffDate;
+    Version? currentVersion;
+    for (final release in releases) {
+      final tagName = release['tag_name'] as String? ?? '';
+      final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
+      if (versionStr == currentVersionStr) {
+        final publishedAtStr = release['published_at'] as String?;
+        if (publishedAtStr != null) {
+          cutoffDate = DateTime.tryParse(publishedAtStr);
+        }
+        currentVersion = Version.parse(versionStr);
+        break;
+      }
+    }
+    // Fall back to version-based comparison when the current version is not
+    // found in the releases list (e.g., very old version or custom build).
+    currentVersion ??= Version.parse(currentVersionStr);
 
     // Collect all available updates newer than current version
     final List<AvailableUpdate> availableList = [];
@@ -349,10 +372,22 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     for (final release in releases) {
       final tagName = release['tag_name'] as String? ?? '';
       final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
-      final parsed = Version.parse(versionStr);
 
-      // Skip older or equal versions
-      if (!(parsed > current)) continue;
+      // Skip the current version itself
+      if (versionStr == currentVersionStr) continue;
+
+      // Date-based comparison (when we found the current version's publish date)
+      if (cutoffDate != null) {
+        final publishedAtStr = release['published_at'] as String?;
+        if (publishedAtStr == null) continue;
+        final publishedAt = DateTime.tryParse(publishedAtStr);
+        if (publishedAt == null || !publishedAt.isAfter(cutoffDate)) continue;
+      } else {
+        // Fall back to version-based comparison when the current version
+        // is not in the releases list or has no published_at field.
+        final parsed = Version.parse(versionStr);
+        if (!(parsed > currentVersion!)) continue;
+      }
 
       // Skip the version the user chose to skip
       if (versionStr == skippedVersion) continue;
