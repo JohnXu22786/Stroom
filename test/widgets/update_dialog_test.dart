@@ -77,7 +77,9 @@ Dio _createMockDio(String jsonResponse) {
 
 /// Build a GitHub releases API response for the given tag.
 String _githubRelease(String tagName,
-    {String body = '', String? htmlUrl, String publishedAt = '2024-01-15T10:00:00Z'}) {
+    {String body = '',
+    String? htmlUrl,
+    String publishedAt = '2024-01-15T10:00:00Z'}) {
   htmlUrl ??= 'https://github.com/JohnXu22786/Stroom/releases/tag/$tagName';
   return '''
 {

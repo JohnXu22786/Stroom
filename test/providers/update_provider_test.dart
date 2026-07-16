@@ -1228,7 +1228,12 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       final releases = _githubReleases([
         ('v0.2.15-alpha', true, 'Alpha', '2024-07-01T10:00:00Z'),
-        ('v0.2.13', false, 'Stable same as current version', '2024-06-15T10:00:00Z'),
+        (
+          'v0.2.13',
+          false,
+          'Stable same as current version',
+          '2024-06-15T10:00:00Z'
+        ),
       ]);
       final dio = _createMockDioForList(releases);
       final notifier = UpdateNotifier(dio: dio);
@@ -1419,8 +1424,7 @@ void main() {
       expect(notifier.state.latestVersion, '0.2.16');
     });
 
-    test(
-        'releases published after current version cutoff are included',
+    test('releases published after current version cutoff are included',
         () async {
       SharedPreferences.setMockInitialValues({});
       // Current version 0.2.13 at 2024-06-15
@@ -1522,8 +1526,7 @@ void main() {
       expect(notifier.state.latestVersion, '0.2.14');
     });
 
-    test(
-        'no update when no releases published after current version date',
+    test('no update when no releases published after current version date',
         () async {
       SharedPreferences.setMockInitialValues({});
       final releases = _githubReleases([
@@ -1540,9 +1543,7 @@ void main() {
       expect(notifier.state.availableVersions, isNull);
     });
 
-    test(
-        'pre-release toggle works with date-based filtering',
-        () async {
+    test('pre-release toggle works with date-based filtering', () async {
       SharedPreferences.setMockInitialValues({});
       final releases = _githubReleases([
         ('v0.2.16-alpha', true, 'Alpha', '2024-08-01T10:00:00Z'),
@@ -1586,8 +1587,7 @@ void main() {
       expect(notifier.state.availableVersions, isNull);
     });
 
-    test(
-        'non-current release without published_at is skipped in date mode',
+    test('non-current release without published_at is skipped in date mode',
         () async {
       SharedPreferences.setMockInitialValues({});
       // Create a raw JSON list where v0.2.14 has no published_at
