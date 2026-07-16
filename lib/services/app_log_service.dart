@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
@@ -120,12 +119,11 @@ class AppLogService {
     // 手动禁用或 Web 平台时跳过文件写入
     if (_shouldSkipFileIo) return;
 
-    // 文件写入以 fire-and-forget 方式执行，不阻塞主流程
-    // 这在 FakeAsync zone 中也能正常工作（写入失败静默忽略）
-    unawaited(_writeLogToFile(level, source, message));
+    await _writeLogToFile(level, source, message);
   }
 
-  /// 将日志写入文件（fire-and-forget，允许静默失败）。
+  /// 将日志写入文件。
+  /// 在非 Skip 模式下由 _writeLog 同步等待调用。
   static Future<void> _writeLogToFile(
       LogLevel level, String source, String message) async {
     try {
