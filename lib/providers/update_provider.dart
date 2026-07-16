@@ -338,7 +338,6 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
 
     final releases = response.data as List<dynamic>;
     final currentVersionStr = appVersion;
-    final includePreRelease = state.acceptPreRelease;
 
     final prefs = await SharedPreferences.getInstance();
     final skippedVersion = prefs.getString(_kSkippedVersionKey);
@@ -350,6 +349,9 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     // won't re-prompt the user about that older major version.
     DateTime? cutoffDate;
     Version? currentVersion;
+    bool exactMatchFound = false;
+
+    // First pass: exact string match
     for (final release in releases) {
       final tagName = release['tag_name'] as String? ?? '';
       final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
@@ -359,22 +361,57 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
           cutoffDate = DateTime.tryParse(publishedAtStr);
         }
         currentVersion = Version.parse(versionStr);
+        exactMatchFound = true;
         break;
       }
     }
+
+    // Second pass: fuzzy match by base version (major.minor.patch)
+    // This handles cases where the app version has a pre-release/hotfix suffix
+    // that doesn't exactly match any GitHub tag (e.g., app "0.2.13-hotfix"
+    // matching tag "v0.2.13", or app "0.2.13" matching tag "v0.2.13-hotfix").
+    if (!exactMatchFound) {
+      final currentParsed = Version.parse(currentVersionStr);
+      for (final release in releases) {
+        final tagName = release['tag_name'] as String? ?? '';
+        final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
+        final candidateParsed = Version.parse(versionStr);
+        if (candidateParsed.major == currentParsed.major &&
+            candidateParsed.minor == currentParsed.minor &&
+            candidateParsed.patch == currentParsed.patch) {
+          final publishedAtStr = release['published_at'] as String?;
+          if (publishedAtStr != null) {
+            cutoffDate = DateTime.tryParse(publishedAtStr);
+          }
+          currentVersion = currentParsed;
+          break;
+        }
+      }
+    }
+
     // Fall back to version-based comparison when the current version is not
     // found in the releases list (e.g., very old version or custom build).
     currentVersion ??= Version.parse(currentVersionStr);
 
-    // Collect all available updates newer than current version
+    // Collect all available updates newer than current version.
+    // The acceptPreRelease toggle only controls the default SELECTION and
+    // DISPLAY in the dialog — ALL versions (including pre-releases) are
+    // always collected here.
     final List<AvailableUpdate> availableList = [];
 
     for (final release in releases) {
       final tagName = release['tag_name'] as String? ?? '';
       final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
+      final parsed = Version.parse(versionStr);
 
-      // Skip the current version itself
-      if (versionStr == currentVersionStr) continue;
+      // Skip the current version itself: either exact string match or
+      // same base version (major.minor.patch). The base version check
+      // handles pre-release/hotfix suffixes so that e.g., "39-hotfix"
+      // does NOT re-prompt about "v39.0.0" (same base).
+      if (versionStr == currentVersionStr ||
+          (parsed.major == currentVersion.major &&
+           parsed.minor == currentVersion.minor &&
+           parsed.patch == currentVersion.patch)) continue;
 
       // Date-based comparison (when we found the current version's publish date)
       if (cutoffDate != null) {
@@ -385,16 +422,11 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       } else {
         // Fall back to version-based comparison when the current version
         // is not in the releases list or has no published_at field.
-        final parsed = Version.parse(versionStr);
-        if (!(parsed > currentVersion!)) continue;
+        if (!(parsed > currentVersion)) continue;
       }
 
       // Skip the version the user chose to skip
       if (versionStr == skippedVersion) continue;
-
-      // Filter out pre-releases when not accepting them
-      final isPrerelease = release['prerelease'] as bool? ?? false;
-      if (!includePreRelease && isPrerelease) continue;
 
       // Find download URL for this release on current platform
       final assets = release['assets'] as List<dynamic>? ?? [];
@@ -402,6 +434,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       final directDownloadUrl = getPlatformDownloadUrl(assets);
       final downloadUrl = directDownloadUrl ?? htmlUrl;
       final body = release['body'] as String? ?? '';
+      final isPrerelease = release['prerelease'] as bool? ?? false;
 
       availableList.add(AvailableUpdate(
         version: versionStr,
@@ -419,25 +452,46 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     });
 
     if (availableList.isNotEmpty) {
-      final first = availableList.first;
+      // Determine default selection index based on display filter.
+      // When acceptPreRelease=false, skip pre-releases and select first stable.
+      int defaultIndex = 0;
+      if (!state.acceptPreRelease) {
+        for (int i = 0; i < availableList.length; i++) {
+          if (!availableList[i].isPreRelease) {
+            defaultIndex = i;
+            break;
+          }
+        }
+      }
 
-      // Persist the newest version's data for pending update detection
-      final updateData = jsonEncode({
-        'latest_version': first.version,
-        'release_notes': first.releaseNotes,
-        'download_url': first.downloadUrl,
-      });
-      await prefs.setString(_kUpdateAvailableKey, updateData);
+      // Only show dialog if at least one version matches the display filter
+      // (e.g., hide dialog when only pre-releases exist and toggle is off).
+      final hasVisibleVersion = state.acceptPreRelease ||
+          availableList.any((v) => !v.isPreRelease);
 
-      state = UpdateState(
-        acceptPreRelease: state.acceptPreRelease,
-        updateAvailable: true,
-        availableVersions: availableList,
-        selectedVersionIndex: 0,
-        latestVersion: first.version,
-        releaseNotes: first.releaseNotes,
-        downloadUrl: first.downloadUrl,
-      );
+      if (hasVisibleVersion) {
+        final first = availableList[defaultIndex];
+
+        // Persist the newly selected version's data for pending update detection
+        final updateData = jsonEncode({
+          'latest_version': first.version,
+          'release_notes': first.releaseNotes,
+          'download_url': first.downloadUrl,
+        });
+        await prefs.setString(_kUpdateAvailableKey, updateData);
+
+        state = UpdateState(
+          acceptPreRelease: state.acceptPreRelease,
+          updateAvailable: true,
+          availableVersions: availableList,
+          selectedVersionIndex: defaultIndex,
+          latestVersion: first.version,
+          releaseNotes: first.releaseNotes,
+          downloadUrl: first.downloadUrl,
+        );
+      } else {
+        state = _resetState();
+      }
     } else {
       state = _resetState();
     }

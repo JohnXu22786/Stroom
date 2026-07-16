@@ -271,10 +271,112 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
   /// Builds the version selection list showing all available updates.
   /// The currently selected version is highlighted; tapping a different
   /// version calls [UpdateNotifier.selectVersion] to update the state.
+  ///
+  /// When [state.acceptPreRelease] is `false`, pre-release versions are
+  /// hidden from the list (the toggle controls display, not data).
   Widget _buildVersionSelector(UpdateState state, ColorScheme cs) {
     final notifier = ref.read(updateProvider.notifier);
     final versions = state.availableVersions!;
     final selectedIndex = state.selectedVersionIndex;
+    final showAll = state.acceptPreRelease;
+
+    // Count visible items first for proper border calculations.
+    final visibleCount = versions.where((v) => showAll || !v.isPreRelease).length;
+
+    // Build the visible list items, skipping pre-releases when toggle is off.
+    final List<Widget> items = [];
+    int displayIdx = 0;
+    for (int realIdx = 0; realIdx < versions.length; realIdx++) {
+      final v = versions[realIdx];
+      // Hide pre-releases when the toggle is off (display filter only).
+      if (!showAll && v.isPreRelease) continue;
+      displayIdx++;
+
+      final isSelected = realIdx == selectedIndex;
+      final isLast = displayIdx == visibleCount;
+      items.add(InkWell(
+        onTap: () => notifier.selectVersion(realIdx),
+        borderRadius: displayIdx == 1
+            ? const BorderRadius.vertical(top: Radius.circular(10))
+            : isLast
+                ? const BorderRadius.vertical(bottom: Radius.circular(10))
+                : null,
+        child: Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? cs.primaryContainer.withValues(alpha: 0.4)
+                : null,
+            border: !isLast
+                ? Border(
+                    bottom:
+                        BorderSide(color: cs.outlineVariant, width: 0.5))
+                : null,
+          ),
+          child: Row(
+            children: [
+              Icon(
+                isSelected
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_off,
+                size: 18,
+                color: isSelected ? cs.primary : cs.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'v${v.version}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: isSelected ? cs.primary : cs.onSurface,
+                          ),
+                        ),
+                        if (v.isPreRelease) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              '预览版',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.orange.shade700,
+                              ),
+                            ),
+                          ),
+                        ],
+                        if (realIdx == 0) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            '最新',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: cs.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ));
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -297,92 +399,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
               ),
             ),
           ),
-          ...List.generate(versions.length, (index) {
-            final v = versions[index];
-            final isSelected = index == selectedIndex;
-            return InkWell(
-              onTap: () => notifier.selectVersion(index),
-              borderRadius: index == 0
-                  ? const BorderRadius.vertical(top: Radius.circular(10))
-                  : index == versions.length - 1
-                      ? const BorderRadius.vertical(bottom: Radius.circular(10))
-                      : null,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? cs.primaryContainer.withValues(alpha: 0.4)
-                      : null,
-                  border: index < versions.length - 1
-                      ? Border(
-                          bottom:
-                              BorderSide(color: cs.outlineVariant, width: 0.5))
-                      : null,
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      isSelected
-                          ? Icons.radio_button_checked
-                          : Icons.radio_button_off,
-                      size: 18,
-                      color: isSelected ? cs.primary : cs.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                'v${v.version}',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                  color: isSelected ? cs.primary : cs.onSurface,
-                                ),
-                              ),
-                              if (v.isPreRelease) ...[
-                                const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 4, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange.withValues(alpha: 0.2),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    '预览版',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.orange.shade700,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                              if (index == 0) ...[
-                                const SizedBox(width: 6),
-                                Text(
-                                  '最新',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: cs.primary,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
+          ...items,
         ],
       ),
     );
