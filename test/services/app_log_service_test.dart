@@ -432,6 +432,53 @@ void main() {
       AppLogService.clearLogDirCache();
     });
   });
+
+  // ==================================================================
+  // readLogFile robustness — handles various content types
+  // ==================================================================
+
+  group('AppLogService — readLogFile robustness', () {
+    test('readLogFile reads a plain text file successfully', () async {
+      // Create a file, then verify it's readable
+      final logDir = await AppLogService.getLogDir();
+      if (!await logDir.exists()) {
+        await logDir.create(recursive: true);
+      }
+      final testFile = File('${logDir.path}/app_readable_test.log');
+      await testFile.writeAsString('readable content');
+      AppLogService.clearLogDirCache();
+
+      // Should be readable without issue
+      final content = await AppLogService.readLogFile('app_readable_test.log');
+      expect(content, isNotNull);
+      expect(content, 'readable content');
+
+      // Cleanup
+      await testFile.delete();
+      AppLogService.clearLogDirCache();
+      if (await logDir.exists()) await logDir.delete(recursive: true);
+    });
+
+    test('readLogFile handles file with special characters', () async {
+      final logDir = await AppLogService.getLogDir();
+      if (!await logDir.exists()) {
+        await logDir.create(recursive: true);
+      }
+      final testFile = File('${logDir.path}/app_special_test.log');
+      await testFile.writeAsString('[INFO] 测试中文日志内容 ñáéíóú \n');
+      AppLogService.clearLogDirCache();
+
+      final content = await AppLogService.readLogFile('app_special_test.log');
+      expect(content, isNotNull);
+      expect(content, contains('测试中文日志内容'));
+      expect(content, contains('ñáéíóú'));
+
+      // Cleanup
+      await testFile.delete();
+      AppLogService.clearLogDirCache();
+      if (await logDir.exists()) await logDir.delete(recursive: true);
+    });
+  });
 }
 
 String _pad(int n) => n.toString().padLeft(2, '0');

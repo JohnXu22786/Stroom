@@ -29,7 +29,7 @@ class _LogViewerPageState extends State<LogViewerPage>
   bool _isLoading = true;
   Timer? _retryTimer;
   int _retryCount = 0;
-  static const int _maxRetries = 6;
+  static const Duration _maxRetryDelay = Duration(seconds: 60);
 
   @override
   void initState() {
@@ -53,12 +53,19 @@ class _LogViewerPageState extends State<LogViewerPage>
   }
 
   /// Schedule a retry to load log files after a delay.
+  ///
+  /// Uses exponential backoff capped at [_maxRetryDelay] (60s).
+  /// Retries continue indefinitely so that the page auto-refreshes
+  /// when logs are eventually generated.
   void _scheduleRetry() {
     _retryTimer?.cancel();
-    if (_retryCount >= _maxRetries) return;
     _retryCount++;
-    // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s
-    final delay = Duration(seconds: 1 << (_retryCount - 1));
+    // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s, 60s, 60s, ...
+    final delay = Duration(
+      seconds: _retryCount <= 6
+          ? (1 << (_retryCount - 1)) // 1, 2, 4, 8, 16, 32
+          : _maxRetryDelay.inSeconds, // cap at 60s
+    );
     _retryTimer = Timer(delay, () {
       if (mounted) {
         _loadLogFiles();
@@ -102,16 +109,33 @@ class _LogViewerPageState extends State<LogViewerPage>
         final logDir = await AppLogService.getLogDir();
         if (!mounted) return;
         final filePath = p.join(logDir.path, fileName);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('无法读取日志文件: $fileName'),
-            action: SnackBarAction(
-              label: '刷新',
-              onPressed: _loadLogFiles,
+        final file = File(filePath);
+        final fileExists = await file.exists();
+
+        String errorMsg;
+        if (fileExists) {
+          errorMsg = '日志文件 "$fileName" 存在但无法读取，可能文件已损坏';
+          debugPrint('[LogViewer] 文件存在但无法读取: $filePath');
+        } else {
+          errorMsg = '日志文件 "$fileName" 不存在，可能已被清理';
+          debugPrint('[LogViewer] 文件不存在: $filePath');
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMsg),
+              duration: const Duration(seconds: 3),
+              action: SnackBarAction(
+                label: '刷新',
+                onPressed: () {
+                  _retryCount = 0;
+                  _loadLogFiles();
+                },
+              ),
             ),
-          ),
-        );
-        debugPrint('[LogViewer] 无法读取日志文件: $filePath');
+          );
+        }
         return;
       }
 
@@ -213,14 +237,14 @@ class _LogViewerPageState extends State<LogViewerPage>
           ),
           const SizedBox(height: 8),
           Text(
-            _retryCount > 0 && _retryCount < _maxRetries
-                ? '自动刷新中 (${_retryCount + 1}/$_maxRetries)...'
+            _retryCount > 0
+                ? '自动刷新中 (第 $_retryCount 次)...'
                 : '应用运行后将自动生成日志',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
-          if (_retryCount > 0 && _retryCount < _maxRetries)
+          if (_retryCount > 0)
             Padding(
               padding: const EdgeInsets.only(top: 16),
               child: SizedBox(
