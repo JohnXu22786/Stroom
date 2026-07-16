@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
@@ -113,12 +114,20 @@ class AppLogService {
   /// 核心日志写入方法。
   static Future<void> _writeLog(
       LogLevel level, String source, String message) async {
-    // _shouldSkipFileIo 模式下只输出到控制台（测试 / Web / 手动禁用）
-    if (_shouldSkipFileIo) {
-      debugPrint('[AppLog] [${level.label}] [$source] $message');
-      return;
-    }
+    // 先输出到控制台（所有场景）
+    debugPrint('[AppLog] [${level.label}] [$source] $message');
 
+    // 手动禁用或 Web 平台时跳过文件写入
+    if (_shouldSkipFileIo) return;
+
+    // 文件写入以 fire-and-forget 方式执行，不阻塞主流程
+    // 这在 FakeAsync zone 中也能正常工作（写入失败静默忽略）
+    unawaited(_writeLogToFile(level, source, message));
+  }
+
+  /// 将日志写入文件（fire-and-forget，允许静默失败）。
+  static Future<void> _writeLogToFile(
+      LogLevel level, String source, String message) async {
     try {
       final logDir = await getLogDir();
       if (!await logDir.exists()) {
@@ -127,19 +136,12 @@ class AppLogService {
       final now = DateTime.now();
       final dateStr = '${now.year}-${_pad(now.month)}-${_pad(now.day)}';
       final logFile = File(p.join(logDir.path, 'app_$dateStr.log'));
-
       final timestamp = '${now.year}-${_pad(now.month)}-${_pad(now.day)} '
           '${_pad(now.hour)}:${_pad(now.minute)}:${_pad(now.second)}';
-
       final logLine = '[$timestamp] [${level.label}] [$source] $message\n';
-
       await logFile.writeAsString(logLine, mode: FileMode.append);
-
-      // 同时也输出到 debug 控制台
-      debugPrint('[AppLog] $logLine');
-    } catch (e) {
-      // 日志写入失败不应影响主流程，仅输出到控制台
-      debugPrint('[AppLogService] 日志写入失败: $e');
+    } catch (_) {
+      // 文件写入失败不影响主流程（包括 FakeAsync zone 中不可用的情况）
     }
   }
 
