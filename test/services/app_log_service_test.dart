@@ -166,6 +166,24 @@ void main() {
   });
 
   // ==================================================================
+  // Log directory caching — avoids BackupLocationManager recursion
+  // ==================================================================
+
+  group('AppLogService — directory caching', () {
+    test('getLogDir returns the same instance on repeated calls', () async {
+      AppLogService.enableFileLogging();
+      final dir1 = await AppLogService.getLogDir();
+      final dir2 = await AppLogService.getLogDir();
+
+      expect(dir1.path, equals(dir2.path),
+          reason: 'Repeated calls should return same directory');
+
+      // Cleanup
+      if (await dir1.exists()) await dir1.delete(recursive: true);
+    });
+  });
+
+  // ==================================================================
   // Log retention — cleanup old logs
   // ==================================================================
 

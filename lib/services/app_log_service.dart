@@ -87,6 +87,11 @@ class AppLogService {
   /// 日志子目录名。
   static const String _logDirName = 'logs';
 
+  /// 缓存日志目录，避免每次写入都重新解析备份路径。
+  /// 解析路径会触发 BackupLocationManager，而它可能又调用 AppLogService，
+  /// 造成递归 Future 链。缓存切断这个循环。
+  static Directory? _cachedLogDir;
+
   // ================================================================
   // 日志写入方法
   // ================================================================
@@ -186,12 +191,22 @@ class AppLogService {
   /// 获取日志目录。
   ///
   /// 日志目录位于自动备份目录下的 logs/ 子目录。
+  /// 结果会被缓存，避免重复解析备份路径（该路径会触发 BackupLocationManager，
+  /// 从而产生递归的 AppLogService 调用）。
   static Future<Directory> getLogDir() async {
+    if (_cachedLogDir != null) return _cachedLogDir!;
     if (kIsWeb) {
-      return Directory('/tmp/stroom_logs');
+      _cachedLogDir = Directory('/tmp/stroom_logs');
+      return _cachedLogDir!;
     }
     final backupRoot = await DataMigrationService.getExternalBackupRootPath();
-    return Directory(p.join(backupRoot, _logDirName));
+    _cachedLogDir = Directory(p.join(backupRoot, _logDirName));
+    return _cachedLogDir!;
+  }
+
+  /// 清空日志目录缓存（仅用于测试）。
+  static void clearLogDirCache() {
+    _cachedLogDir = null;
   }
 
   /// 列出所有日志文件。

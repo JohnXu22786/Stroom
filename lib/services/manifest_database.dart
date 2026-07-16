@@ -239,12 +239,8 @@ class ManifestDatabase {
   }
 
   static Future<void> _migrateOldVideoRecords(Database db) async {
-    await AppLogService.info(
-        'ManifestDatabase', '_migrateOldVideoRecords called');
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool('migrated_video_records') == true) {
-      await AppLogService.info('ManifestDatabase',
-          '_migrateOldVideoRecords completed (already migrated)');
       return;
     }
     final videoFormats = [
@@ -267,8 +263,6 @@ class ManifestDatabase {
     );
     if (rows.isEmpty) {
       await prefs.setBool('migrated_video_records', true);
-      await AppLogService.info('ManifestDatabase',
-          '_migrateOldVideoRecords completed (no video records to migrate)');
       return;
     }
     final batch = db.batch();
@@ -295,17 +289,11 @@ class ManifestDatabase {
     }
     await batch.commit(noResult: true);
     await prefs.setBool('migrated_video_records', true);
-    await AppLogService.info('ManifestDatabase',
-        '_migrateOldVideoRecords completed [migrated ${rows.length} records]');
   }
 
   static Future<void> _migrateOldVideoRecordsJson() async {
-    await AppLogService.info(
-        'ManifestDatabase', '_migrateOldVideoRecordsJson called');
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool('migrated_video_records') == true) {
-      await AppLogService.info('ManifestDatabase',
-          '_migrateOldVideoRecordsJson completed (already migrated)');
       return;
     }
     final audioList =
@@ -314,8 +302,6 @@ class ManifestDatabase {
         _webData![ManifestTables.videoRecords] as List<dynamic>? ?? [];
     if (videoList.isNotEmpty) {
       await prefs.setBool('migrated_video_records', true);
-      await AppLogService.info('ManifestDatabase',
-          '_migrateOldVideoRecordsJson completed (video records already exist)');
       return;
     }
     final videoFormats = {
@@ -342,8 +328,6 @@ class ManifestDatabase {
     }
     if (toMigrate.isEmpty) {
       await prefs.setBool('migrated_video_records', true);
-      await AppLogService.info('ManifestDatabase',
-          '_migrateOldVideoRecordsJson completed (no video records to migrate)');
       return;
     }
     for (final record in toMigrate) {
@@ -363,8 +347,6 @@ class ManifestDatabase {
     _webData![ManifestTables.videoRecords] = videoList;
     await _saveWebData();
     await prefs.setBool('migrated_video_records', true);
-    await AppLogService.info('ManifestDatabase',
-        '_migrateOldVideoRecordsJson completed [migrated ${toMigrate.length} records]');
   }
 
   /// v1→v2 migration: migrate legacy shared folders to per-type tables,
@@ -388,13 +370,9 @@ class ManifestDatabase {
   /// tables, then drop the legacy table. Idempotent — safe to call multiple
   /// times.
   static Future<void> migrateLegacyFoldersToPerType() async {
-    await AppLogService.info(
-        'ManifestDatabase', 'migrateLegacyFoldersToPerType called');
     if (_useJsonStore) {
       await _loadWebData();
       await _migrateLegacyFoldersJsonV2();
-      await AppLogService.info('ManifestDatabase',
-          'migrateLegacyFoldersToPerType completed (JSON mode)');
       return;
     }
     // For SQLite, the onUpgrade path in _initDatabase already copies
@@ -441,8 +419,6 @@ class ManifestDatabase {
       debugPrint(
           '[ManifestDatabase] migrateLegacyFoldersToPerType SQLite error: $e');
     }
-    await AppLogService.info(
-        'ManifestDatabase', 'migrateLegacyFoldersToPerType completed');
   }
 
   /// Internal: migrate legacy folders in JSON/web mode (v2 format).
@@ -504,19 +480,14 @@ class ManifestDatabase {
 
   /// 获取所有图片记录
   static Future<List<Map<String, dynamic>>> getAllImageRecords() async {
-    await AppLogService.info('ManifestDatabase', 'getAllImageRecords called');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
         final list = data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
-        await AppLogService.info('ManifestDatabase',
-            'getAllImageRecords completed [count=${list.length}]');
         return list.cast<Map<String, dynamic>>();
       }
       final db = await database;
       final rows = await db.query(ManifestTables.imageRecords);
-      await AppLogService.info('ManifestDatabase',
-          'getAllImageRecords completed [count=${rows.length}]');
       return rows.map(dbRowToRecord).toList();
     } catch (e, stackTrace) {
       await AppLogService.error(
@@ -527,15 +498,12 @@ class ManifestDatabase {
 
   /// 插入一条图片记录
   static Future<void> insertImageRecord(Map<String, dynamic> record) async {
-    await AppLogService.info('ManifestDatabase', 'insertImageRecord called');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
         final list = data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
         list.add(record);
         await _saveWebData();
-        await AppLogService.info(
-            'ManifestDatabase', 'insertImageRecord completed');
         return;
       }
       final db = await database;
@@ -544,8 +512,6 @@ class ManifestDatabase {
         recordToDbRow(record),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      await AppLogService.info(
-          'ManifestDatabase', 'insertImageRecord completed');
     } catch (e, stackTrace) {
       await AppLogService.error(
           'ManifestDatabase', 'insertImageRecord failed', e, stackTrace);
@@ -556,8 +522,6 @@ class ManifestDatabase {
   /// 更新一条图片记录
   static Future<void> updateImageRecord(
       String id, Map<String, dynamic> updates) async {
-    await AppLogService.info(
-        'ManifestDatabase', 'updateImageRecord called [id=$id]');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
@@ -567,8 +531,6 @@ class ManifestDatabase {
           (list[index] as Map<String, dynamic>).addAll(updates);
           await _saveWebData();
         }
-        await AppLogService.info(
-            'ManifestDatabase', 'updateImageRecord completed [id=$id]');
         return;
       }
       final db = await database;
@@ -578,8 +540,6 @@ class ManifestDatabase {
         where: 'id = ?',
         whereArgs: [id],
       );
-      await AppLogService.info(
-          'ManifestDatabase', 'updateImageRecord completed [id=$id]');
     } catch (e, stackTrace) {
       await AppLogService.error('ManifestDatabase',
           'updateImageRecord failed [id=$id]', e, stackTrace);
@@ -589,16 +549,12 @@ class ManifestDatabase {
 
   /// 删除一条图片记录
   static Future<void> deleteImageRecord(String id) async {
-    await AppLogService.info(
-        'ManifestDatabase', 'deleteImageRecord called [id=$id]');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
         final list = data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
         list.removeWhere((r) => (r as Map)['id'] == id);
         await _saveWebData();
-        await AppLogService.info(
-            'ManifestDatabase', 'deleteImageRecord completed [id=$id]');
         return;
       }
       final db = await database;
@@ -607,8 +563,6 @@ class ManifestDatabase {
         where: 'id = ?',
         whereArgs: [id],
       );
-      await AppLogService.info(
-          'ManifestDatabase', 'deleteImageRecord completed [id=$id]');
     } catch (e, stackTrace) {
       await AppLogService.error('ManifestDatabase',
           'deleteImageRecord failed [id=$id]', e, stackTrace);
@@ -618,8 +572,6 @@ class ManifestDatabase {
 
   /// 批量删除图片记录
   static Future<void> deleteImageRecords(List<String> ids) async {
-    await AppLogService.info(
-        'ManifestDatabase', 'deleteImageRecords called [count=${ids.length}]');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
@@ -627,8 +579,6 @@ class ManifestDatabase {
         final idSet = ids.toSet();
         list.removeWhere((r) => idSet.contains((r as Map)['id']));
         await _saveWebData();
-        await AppLogService.info('ManifestDatabase',
-            'deleteImageRecords completed [count=${ids.length}]');
         return;
       }
       final db = await database;
@@ -638,8 +588,6 @@ class ManifestDatabase {
         where: 'id IN ($placeholders)',
         whereArgs: ids,
       );
-      await AppLogService.info('ManifestDatabase',
-          'deleteImageRecords completed [count=${ids.length}]');
     } catch (e, stackTrace) {
       await AppLogService.error(
           'ManifestDatabase', 'deleteImageRecords failed', e, stackTrace);
@@ -653,19 +601,14 @@ class ManifestDatabase {
 
   /// 获取所有音频记录
   static Future<List<Map<String, dynamic>>> getAllAudioRecords() async {
-    await AppLogService.info('ManifestDatabase', 'getAllAudioRecords called');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
         final list = data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
-        await AppLogService.info('ManifestDatabase',
-            'getAllAudioRecords completed [count=${list.length}]');
         return list.cast<Map<String, dynamic>>();
       }
       final db = await database;
       final rows = await db.query(ManifestTables.audioRecords);
-      await AppLogService.info('ManifestDatabase',
-          'getAllAudioRecords completed [count=${rows.length}]');
       return rows.map(dbRowToRecord).toList();
     } catch (e, stackTrace) {
       await AppLogService.error(
@@ -676,15 +619,12 @@ class ManifestDatabase {
 
   /// 插入一条音频记录
   static Future<void> insertAudioRecord(Map<String, dynamic> record) async {
-    await AppLogService.info('ManifestDatabase', 'insertAudioRecord called');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
         final list = data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
         list.add(record);
         await _saveWebData();
-        await AppLogService.info(
-            'ManifestDatabase', 'insertAudioRecord completed');
         return;
       }
       final db = await database;
@@ -693,8 +633,6 @@ class ManifestDatabase {
         recordToDbRow(record),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      await AppLogService.info(
-          'ManifestDatabase', 'insertAudioRecord completed');
     } catch (e, stackTrace) {
       await AppLogService.error(
           'ManifestDatabase', 'insertAudioRecord failed', e, stackTrace);
@@ -705,8 +643,6 @@ class ManifestDatabase {
   /// 更新一条音频记录
   static Future<void> updateAudioRecord(
       String id, Map<String, dynamic> updates) async {
-    await AppLogService.info(
-        'ManifestDatabase', 'updateAudioRecord called [id=$id]');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
@@ -716,8 +652,6 @@ class ManifestDatabase {
           (list[index] as Map<String, dynamic>).addAll(updates);
           await _saveWebData();
         }
-        await AppLogService.info(
-            'ManifestDatabase', 'updateAudioRecord completed [id=$id]');
         return;
       }
       final db = await database;
@@ -727,8 +661,6 @@ class ManifestDatabase {
         where: 'id = ?',
         whereArgs: [id],
       );
-      await AppLogService.info(
-          'ManifestDatabase', 'updateAudioRecord completed [id=$id]');
     } catch (e, stackTrace) {
       await AppLogService.error('ManifestDatabase',
           'updateAudioRecord failed [id=$id]', e, stackTrace);
@@ -738,16 +670,12 @@ class ManifestDatabase {
 
   /// 删除一条音频记录
   static Future<void> deleteAudioRecord(String id) async {
-    await AppLogService.info(
-        'ManifestDatabase', 'deleteAudioRecord called [id=$id]');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
         final list = data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
         list.removeWhere((r) => (r as Map)['id'] == id);
         await _saveWebData();
-        await AppLogService.info(
-            'ManifestDatabase', 'deleteAudioRecord completed [id=$id]');
         return;
       }
       final db = await database;
@@ -756,8 +684,6 @@ class ManifestDatabase {
         where: 'id = ?',
         whereArgs: [id],
       );
-      await AppLogService.info(
-          'ManifestDatabase', 'deleteAudioRecord completed [id=$id]');
     } catch (e, stackTrace) {
       await AppLogService.error('ManifestDatabase',
           'deleteAudioRecord failed [id=$id]', e, stackTrace);
@@ -767,8 +693,6 @@ class ManifestDatabase {
 
   /// 批量删除音频记录
   static Future<void> deleteAudioRecords(List<String> ids) async {
-    await AppLogService.info(
-        'ManifestDatabase', 'deleteAudioRecords called [count=${ids.length}]');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
@@ -776,8 +700,6 @@ class ManifestDatabase {
         final idSet = ids.toSet();
         list.removeWhere((r) => idSet.contains((r as Map)['id']));
         await _saveWebData();
-        await AppLogService.info('ManifestDatabase',
-            'deleteAudioRecords completed [count=${ids.length}]');
         return;
       }
       final db = await database;
@@ -787,8 +709,6 @@ class ManifestDatabase {
         where: 'id IN ($placeholders)',
         whereArgs: ids,
       );
-      await AppLogService.info('ManifestDatabase',
-          'deleteAudioRecords completed [count=${ids.length}]');
     } catch (e, stackTrace) {
       await AppLogService.error(
           'ManifestDatabase', 'deleteAudioRecords failed', e, stackTrace);
