@@ -24,6 +24,7 @@ void main() {
   group('AppLogService — log file creation', () {
     test('log file is created at correct path', () async {
       await AppLogService.info('TestSource', 'Test message');
+      await AppLogService.flush();
 
       final logDir = await AppLogService.getLogDir();
       expect(await logDir.exists(), isTrue);
@@ -41,6 +42,7 @@ void main() {
     test('creates one file per day', () async {
       await AppLogService.info('TestSource', 'Message 1');
       await AppLogService.info('TestSource', 'Message 2');
+      await AppLogService.flush();
 
       final logDir = await AppLogService.getLogDir();
       final entries = await logDir.list().toList();
@@ -63,6 +65,7 @@ void main() {
   group('AppLogService — log content format', () {
     test('log entry contains timestamp, level, source, and message', () async {
       await AppLogService.info('TestSource', 'Hello world');
+      await AppLogService.flush();
 
       final content = await AppLogService.readTodayLog();
       expect(content, isNotNull);
@@ -83,6 +86,7 @@ void main() {
       } catch (e, s) {
         await AppLogService.error('TestSource', 'Error occurred', e, s);
       }
+      await AppLogService.flush();
 
       final content = await AppLogService.readTodayLog();
       expect(content, contains('[ERROR]'));
@@ -96,6 +100,7 @@ void main() {
 
     test('warning log has correct format', () async {
       await AppLogService.warning('TestSource', 'Warning message');
+      await AppLogService.flush();
 
       final content = await AppLogService.readTodayLog();
       expect(content, contains('[WARN]'));
@@ -108,6 +113,7 @@ void main() {
 
     test('debug log has correct format', () async {
       await AppLogService.debug('TestSource', 'Debug message');
+      await AppLogService.flush();
 
       final content = await AppLogService.readTodayLog();
       expect(content, contains('[DEBUG]'));
@@ -126,6 +132,7 @@ void main() {
   group('AppLogService — list and read logs', () {
     test('listLogFiles returns available log files', () async {
       await AppLogService.info('TestSource', 'Test');
+      await AppLogService.flush();
 
       final files = await AppLogService.listLogFiles();
       expect(files, isNotEmpty);
@@ -138,6 +145,7 @@ void main() {
 
     test('readLogFile returns correct content for specific file', () async {
       await AppLogService.info('TestSource', 'Specific file test');
+      await AppLogService.flush();
 
       final files = await AppLogService.listLogFiles();
       expect(files, isNotEmpty);
@@ -164,6 +172,7 @@ void main() {
   group('AppLogService — log retention', () {
     test('cleanup removes logs older than 3 days', () async {
       await AppLogService.info('TestSource', 'Today log');
+      await AppLogService.flush();
 
       // Create old log files manually (simulating past dates)
       final logDir = await AppLogService.getLogDir();

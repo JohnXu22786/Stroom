@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
@@ -119,28 +120,45 @@ class AppLogService {
     // 手动禁用或 Web 平台时跳过文件写入
     if (_shouldSkipFileIo) return;
 
-    await _writeLogToFile(level, source, message);
+    // 文件写入以 fire-and-forget 方式执行，绝不阻塞主流程。
+    // 在 testWidgets 的 FakeAsync zone 中，即使 _shouldSkipFileIo=false，
+    // 文件 I/O 也会永远挂起，所以必须不等待。
+    _writeLogToFile(level, source, message);
   }
 
-  /// 将日志写入文件。
-  /// 在非 Skip 模式下由 _writeLog 同步等待调用。
-  static Future<void> _writeLogToFile(
-      LogLevel level, String source, String message) async {
-    try {
-      final logDir = await getLogDir();
-      if (!await logDir.exists()) {
-        await logDir.create(recursive: true);
+  /// 用于测试同步的 Completer，完成时表示所有待写入日志已刷新。
+  static Completer<void>? _flushCompleter;
+
+  /// 等待所有待写入日志完成（仅用于测试）。
+  static Future<void> flush() async {
+    await _flushCompleter?.future;
+  }
+
+  /// 将日志写入文件（fire-and-forget，不阻塞调用方）。
+  static void _writeLogToFile(LogLevel level, String source, String message) {
+    // 使用 Future 构造避免 async/await，确保即使在没有微任务调度的
+    // FakeAsync zone 中也不会挂起调用方。
+    final completer = Completer<void>();
+    _flushCompleter = completer;
+    Future(() async {
+      try {
+        final logDir = await getLogDir();
+        if (!await logDir.exists()) {
+          await logDir.create(recursive: true);
+        }
+        final now = DateTime.now();
+        final dateStr = '${now.year}-${_pad(now.month)}-${_pad(now.day)}';
+        final logFile = File(p.join(logDir.path, 'app_$dateStr.log'));
+        final timestamp = '${now.year}-${_pad(now.month)}-${_pad(now.day)} '
+            '${_pad(now.hour)}:${_pad(now.minute)}:${_pad(now.second)}';
+        final logLine = '[$timestamp] [${level.label}] [$source] $message\n';
+        await logFile.writeAsString(logLine, mode: FileMode.append);
+      } catch (_) {
+        // 文件写入失败不影响主流程（包括 FakeAsync zone 中不可用的情况）
+      } finally {
+        completer.complete();
       }
-      final now = DateTime.now();
-      final dateStr = '${now.year}-${_pad(now.month)}-${_pad(now.day)}';
-      final logFile = File(p.join(logDir.path, 'app_$dateStr.log'));
-      final timestamp = '${now.year}-${_pad(now.month)}-${_pad(now.day)} '
-          '${_pad(now.hour)}:${_pad(now.minute)}:${_pad(now.second)}';
-      final logLine = '[$timestamp] [${level.label}] [$source] $message\n';
-      await logFile.writeAsString(logLine, mode: FileMode.append);
-    } catch (_) {
-      // 文件写入失败不影响主流程（包括 FakeAsync zone 中不可用的情况）
-    }
+    });
   }
 
   // ================================================================
