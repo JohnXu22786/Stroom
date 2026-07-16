@@ -475,21 +475,20 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Future<void> _loadConversationMessages() async {
     try {
       final activeId = ref.read(activeConversationIdProvider);
-      await AppLogService.info('ChatPage',
-          '开始加载对话消息, activeConversationId=$activeId');
+      await AppLogService.info(
+          'ChatPage', '开始加载对话消息, activeConversationId=$activeId');
       if (activeId == null) {
-        await AppLogService.warning('ChatPage',
-            'activeConversationId 为 null，跳过加载对话消息');
+        await AppLogService.warning(
+            'ChatPage', 'activeConversationId 为 null，跳过加载对话消息');
         return;
       }
 
       final convs = ref.read(conversationsProvider);
-      await AppLogService.info('ChatPage',
-          '当前共有 ${convs.length} 个对话');
+      await AppLogService.info('ChatPage', '当前共有 ${convs.length} 个对话');
       final conv = convs.where((c) => c.id == activeId).firstOrNull;
       if (conv == null) {
-        await AppLogService.warning('ChatPage',
-            '未找到 activeConversationId=$activeId 对应的对话');
+        await AppLogService.warning(
+            'ChatPage', '未找到 activeConversationId=$activeId 对应的对话');
       }
 
       // Restore per-conversation enabled MCP/built-in tool names.
@@ -532,8 +531,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // and search), but only insert the last _pageSize messages into the
       // controller for display (lazy loading).
       final msgCount = conv.messages.length;
-      await AppLogService.info('ChatPage',
-          '开始加载 $msgCount 条消息到 _history');
+      await AppLogService.info('ChatPage', '开始加载 $msgCount 条消息到 _history');
       for (final msg in conv.messages) {
         _history.add(msg);
         // Restore reasoning content from persisted ChatMessage
@@ -543,9 +541,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
       }
       _loadedUpToIndex =
           _history.length >= _pageSize ? _history.length - _pageSize : 0;
-      await AppLogService.info('ChatPage',
+      await AppLogService.info(
+          'ChatPage',
           '消息加载完成: _history 共 ${_history.length} 条, '
-          'loadedUpToIndex=$_loadedUpToIndex');
+              'loadedUpToIndex=$_loadedUpToIndex');
       for (var i = _loadedUpToIndex; i < _history.length; i++) {
         final msg = _history[i];
         await _controller?.insertMessage(
@@ -557,8 +556,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
           ),
         );
       }
-      await AppLogService.info('ChatPage',
-          '控制器消息插入完成，共 ${_controller?.messages.length ?? 0} 条');
+      await AppLogService.info(
+          'ChatPage', '控制器消息插入完成，共 ${_controller?.messages.length ?? 0} 条');
       if (mounted) setState(() {});
     } catch (e, s) {
       debugPrint('[ChatPage] _loadConversationMessages error: $e\n$s');
@@ -641,9 +640,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (ref.read(isStreamingProvider)) return;
 
     String? convId = ref.read(activeConversationIdProvider);
-    await AppLogService.info('ChatPage',
+    await AppLogService.info(
+        'ChatPage',
         '用户发送消息, convId=$convId, text长度=${text.length}, '
-        'attachments=${attachments.length}');
+            'attachments=${attachments.length}');
     if (convId == null) {
       await AppLogService.info('ChatPage', '无活跃对话，创建新对话');
       ref.read(conversationsProvider.notifier).createConversation();
@@ -681,8 +681,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Future<void> _startStreaming(String text, {String? capturedConvId}) async {
     if (ref.read(isStreamingProvider)) return;
 
-    await AppLogService.info('ChatPage',
-        '开始流式请求, capturedConvId=$capturedConvId');
+    await AppLogService.info(
+        'ChatPage', '开始流式请求, capturedConvId=$capturedConvId');
     ref.read(isStreamingProvider.notifier).state = true;
     _isStreamingActive = true;
     if (mounted) setState(() {});
@@ -1083,10 +1083,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // Use capturedConvId (set at stream start) to avoid saving to the wrong
     // conversation if the user switched conversations during background
     // streaming (e.g. navigated back and selected a different topic).
-    await AppLogService.info('ChatPage',
+    await AppLogService.info(
+        'ChatPage',
         '保存流式结果: convId=$capturedConvId, '
-        'fullReply长度=${fullReply.length}, '
-        '历史消息数=${_history.length}');
+            'fullReply长度=${fullReply.length}, '
+            '历史消息数=${_history.length}');
     await _saveMessages(capturedConvId: capturedConvId);
 
     // Eventual cleanup: remove streaming-only map entries now that the

@@ -264,7 +264,8 @@ class _LogContentPageState extends State<_LogContentPage> {
           ),
         ],
       ),
-      body: _showRaw ? _buildRawView(theme) : _buildStructuredView(theme, lines),
+      body:
+          _showRaw ? _buildRawView(theme) : _buildStructuredView(theme, lines),
     );
   }
 
@@ -291,7 +292,8 @@ class _LogContentPageState extends State<_LogContentPage> {
         if (line.trim().isEmpty) return const SizedBox.shrink();
 
         // 解析日志行格式: [timestamp] [LEVEL] [Source] message
-        final levelMatch = RegExp(r'\[(DEBUG|INFO|WARN|ERROR)\]').firstMatch(line);
+        final levelMatch =
+            RegExp(r'\[(DEBUG|INFO|WARN|ERROR)\]').firstMatch(line);
         Color? levelColor;
         IconData? levelIcon;
         if (levelMatch != null) {

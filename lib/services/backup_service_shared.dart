@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'storage_service.dart';
 import '../utils/web_file_store.dart';
+import 'app_log_service.dart';
 
 void addStringToArchive(Archive archive, String name, String content) {
   final bytes = utf8.encode(content);
@@ -17,6 +18,8 @@ void addStringToArchive(Archive archive, String name, String content) {
 
 Future<void> addTaskFileToArchive(
     Archive archive, String archiveName, String sourcePath) async {
+  debugPrint(
+      '[BackupServiceShared] addTaskFileToArchive: $archiveName <- $sourcePath');
   if (WebFileStore.isTestMode) {
     addStringToArchive(archive, archiveName, '[]');
     return;
@@ -37,6 +40,7 @@ Future<void> addTaskFileToArchive(
 
 Future<void> addFileToArchive(
     Archive archive, String archiveName, String subDir, String fileName) async {
+  debugPrint('[BackupServiceShared] addFileToArchive: $archiveName');
   try {
     final data = await readBackupFile(subDir, fileName);
     if (data != null) {
@@ -48,27 +52,41 @@ Future<void> addFileToArchive(
 }
 
 Future<Uint8List?> readBackupFile(String subDir, String fileName) async {
-  if (kIsWeb || WebFileStore.isTestMode) {
-    return WebFileStore.read('$subDir/$fileName');
-  } else {
-    final appDir = await AppStorage.directory;
-    final file = File(p.join(appDir, subDir, fileName));
-    if (await file.exists()) {
-      return await file.readAsBytes();
+  try {
+    if (kIsWeb || WebFileStore.isTestMode) {
+      return WebFileStore.read('$subDir/$fileName');
+    } else {
+      final appDir = await AppStorage.directory;
+      final file = File(p.join(appDir, subDir, fileName));
+      if (await file.exists()) {
+        return await file.readAsBytes();
+      }
+      return null;
     }
+  } catch (e) {
+    await AppLogService.error(
+        'BackupServiceShared', 'readBackupFile($subDir/$fileName) 失败', e);
+    debugPrint('读取备份文件 $subDir/$fileName 失败: $e');
     return null;
   }
 }
 
 Future<void> writeBackupFile(
     String subDir, String fileName, Uint8List data) async {
-  if (kIsWeb || WebFileStore.isTestMode) {
-    await WebFileStore.write('$subDir/$fileName', data);
-  } else {
-    final appDir = await AppStorage.directory;
-    final dir = Directory(p.join(appDir, subDir));
-    await dir.create(recursive: true);
-    await File(p.join(dir.path, fileName)).writeAsBytes(data);
+  try {
+    if (kIsWeb || WebFileStore.isTestMode) {
+      await WebFileStore.write('$subDir/$fileName', data);
+    } else {
+      final appDir = await AppStorage.directory;
+      final dir = Directory(p.join(appDir, subDir));
+      await dir.create(recursive: true);
+      await File(p.join(dir.path, fileName)).writeAsBytes(data);
+    }
+  } catch (e) {
+    await AppLogService.error(
+        'BackupServiceShared', 'writeBackupFile($subDir/$fileName) 失败', e);
+    debugPrint('写入备份文件 $subDir/$fileName 失败: $e');
+    rethrow;
   }
 }
 
@@ -103,5 +121,7 @@ Future<Set<String>> collectAttachmentPaths() async {
   } catch (e) {
     debugPrint('收集附件路径失败: $e');
   }
+  debugPrint(
+      '[BackupServiceShared] collectAttachmentPaths: ${paths.length} paths found');
   return paths;
 }

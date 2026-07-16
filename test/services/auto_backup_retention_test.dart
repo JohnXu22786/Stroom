@@ -34,8 +34,7 @@ void main() {
 
       // Create a recent backup (within last hour)
       final now = DateTime.now();
-      final timeStr =
-          '${now.year}-${_pad(now.month)}-${_pad(now.day)}T'
+      final timeStr = '${now.year}-${_pad(now.month)}-${_pad(now.day)}T'
           '${_pad(now.hour)}-${_pad(now.minute)}-${_pad(now.second)}';
       final recentFile = File('${dir.path}/backup_$timeStr.zip');
       await recentFile.writeAsString('recent_backup');
@@ -52,7 +51,8 @@ void main() {
           .where((f) => f.path.endsWith('.zip'))
           .toList();
       expect(zips.length, equals(1),
-          reason: 'Should not create a new backup when one exists within 1 hour');
+          reason:
+              'Should not create a new backup when one exists within 1 hour');
 
       // Cleanup
       await dir.delete(recursive: true);
@@ -123,8 +123,7 @@ void main() {
       // 4 recent files: 2h, 4h, 6h, 8h ago (all within 24h)
       for (int i = 0; i < 4; i++) {
         final t = now.subtract(Duration(hours: 2 * (i + 1)));
-        final timeStr =
-            '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
+        final timeStr = '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
             '${_pad(t.hour)}-${_pad(t.minute)}-${_pad(t.second)}';
         final file = File('${dir.path}/backup_$timeStr.zip');
         await file.writeAsString('recent_$i');
@@ -132,8 +131,7 @@ void main() {
       // 3 old files on 3 different days (48h, 72h, 96h ago)
       for (int i = 0; i < 3; i++) {
         final t = now.subtract(Duration(hours: 24 * (i + 2)));
-        final timeStr =
-            '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
+        final timeStr = '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
             '${_pad(t.hour)}-${_pad(t.minute)}-${_pad(t.second)}';
         final file = File('${dir.path}/backup_$timeStr.zip');
         await file.writeAsString('old_$i');
@@ -147,8 +145,7 @@ void main() {
           .whereType<File>()
           .where((f) => f.path.endsWith('.zip'))
           .toList();
-      expect(zips.length, equals(5),
-          reason: 'Should keep max 5 backups total');
+      expect(zips.length, equals(5), reason: 'Should keep max 5 backups total');
 
       // Cleanup
       await dir.delete(recursive: true);
@@ -165,8 +162,7 @@ void main() {
       final now = DateTime.now();
       for (int i = 0; i < 3; i++) {
         final t = now.subtract(Duration(hours: 2 * (i + 1)));
-        final timeStr =
-            '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
+        final timeStr = '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
             '${_pad(t.hour)}-${_pad(t.minute)}-${_pad(t.second)}';
         final file = File('${dir.path}/backup_$timeStr.zip');
         await file.writeAsString('backup_$i');
@@ -195,8 +191,7 @@ void main() {
       final now = DateTime.now();
       for (int i = 0; i < 6; i++) {
         final t = now.subtract(Duration(hours: i)); // 0,1,2,3,4,5 hours ago
-        final timeStr =
-            '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
+        final timeStr = '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
             '${_pad(t.hour)}-${_pad(t.minute)}-${_pad(t.second)}';
         final file = File('${dir.path}/backup_$timeStr.zip');
         await file.writeAsString('recent_$i');
@@ -226,16 +221,14 @@ void main() {
       final now = DateTime.now();
       for (int i = 0; i < 3; i++) {
         final t = now.subtract(Duration(hours: 2 * (i + 1)));
-        final timeStr =
-            '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
+        final timeStr = '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
             '${_pad(t.hour)}-${_pad(t.minute)}-${_pad(t.second)}';
         final file = File('${dir.path}/backup_$timeStr.zip');
         await file.writeAsString('zip_$i');
       }
       for (int i = 0; i < 5; i++) {
         final t = now.subtract(Duration(days: 2 * (i + 1)));
-        final timeStr =
-            '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
+        final timeStr = '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
             '${_pad(t.hour)}-${_pad(t.minute)}-${_pad(t.second)}';
         final d = Directory('${dir.path}/backup_$timeStr');
         await d.create(recursive: true);
@@ -251,8 +244,7 @@ void main() {
         if (e is File && e.path.endsWith('.zip')) count++;
         if (e is Directory && e.path.contains('backup_')) count++;
       }
-      expect(count, lessThan(8),
-          reason: 'Should reduce total count from 8');
+      expect(count, lessThan(8), reason: 'Should reduce total count from 8');
 
       // Cleanup
       await dir.delete(recursive: true);

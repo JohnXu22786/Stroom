@@ -41,6 +41,17 @@ enum LogLevel {
 class AppLogService {
   AppLogService._();
 
+  /// 当为 true 时，只输出到控制台，不写文件。
+  /// 用于测试环境中避免文件 I/O 问题。
+  /// 可通过 [enableFileLogging] / [disableFileLogging] 控制。
+  static bool _skipFileIo = false;
+
+  /// 启用文件日志写入（默认启用）。
+  static void enableFileLogging() => _skipFileIo = false;
+
+  /// 禁用文件日志写入（仅控制台输出，用于测试）。
+  static void disableFileLogging() => _skipFileIo = true;
+
   /// 日志文件保留天数。
   static const int _retentionDays = 3;
 
@@ -89,7 +100,11 @@ class AppLogService {
   /// 核心日志写入方法。
   static Future<void> _writeLog(
       LogLevel level, String source, String message) async {
-    if (kIsWeb) return; // Web 平台不支持本地文件写入
+    // _skipFileIo 模式下只输出到控制台（如 testWidgets 的 FakeAsync zone 中）
+    if (kIsWeb || _skipFileIo) {
+      debugPrint('[AppLog] [${level.label}] [$source] $message');
+      return;
+    }
 
     try {
       final logDir = await getLogDir();
@@ -98,12 +113,10 @@ class AppLogService {
       }
 
       final now = DateTime.now();
-      final dateStr =
-          '${now.year}-${_pad(now.month)}-${_pad(now.day)}';
+      final dateStr = '${now.year}-${_pad(now.month)}-${_pad(now.day)}';
       final logFile = File(p.join(logDir.path, 'app_$dateStr.log'));
 
-      final timestamp =
-          '${now.year}-${_pad(now.month)}-${_pad(now.day)} '
+      final timestamp = '${now.year}-${_pad(now.month)}-${_pad(now.day)} '
           '${_pad(now.hour)}:${_pad(now.minute)}:${_pad(now.second)}';
 
       final logLine = '[$timestamp] [${level.label}] [$source] $message\n';
@@ -174,8 +187,7 @@ class AppLogService {
   /// 读取今天的日志内容。
   static Future<String?> readTodayLog() async {
     final now = DateTime.now();
-    final dateStr =
-        '${now.year}-${_pad(now.month)}-${_pad(now.day)}';
+    final dateStr = '${now.year}-${_pad(now.month)}-${_pad(now.day)}';
     return readLogFile('app_$dateStr.log');
   }
 
@@ -191,8 +203,7 @@ class AppLogService {
       if (!await logDir.exists()) return;
 
       final entries = await logDir.list().toList();
-      final cutoff = DateTime.now()
-          .subtract(Duration(days: _retentionDays));
+      final cutoff = DateTime.now().subtract(Duration(days: _retentionDays));
 
       for (final entry in entries) {
         if (entry is! File) continue;
@@ -200,8 +211,8 @@ class AppLogService {
 
         // 从文件名提取日期: app_YYYY-MM-DD.log
         final fileName = p.basename(entry.path);
-        final dateMatch = RegExp(r'app_(\d{4}-\d{2}-\d{2})\.log')
-            .firstMatch(fileName);
+        final dateMatch =
+            RegExp(r'app_(\d{4}-\d{2}-\d{2})\.log').firstMatch(fileName);
         if (dateMatch == null) continue;
 
         try {

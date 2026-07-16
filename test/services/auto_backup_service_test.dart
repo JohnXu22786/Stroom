@@ -28,8 +28,7 @@ void main() {
   // ==================================================================
 
   group('cleanupOldBackups', () {
-    test('keeps max 5 total when 7 files exist across multiple days',
-        () async {
+    test('keeps max 5 total when 7 files exist across multiple days', () async {
       final root = await DataMigrationService.getExternalBackupRootPath();
       final dir = Directory(root);
       if (!await dir.exists()) {
@@ -46,8 +45,7 @@ void main() {
       final days = [0, 0, 0, 1, 2, 5, 8]; // 0 = today
       for (int i = 0; i < 7; i++) {
         final t = now.subtract(Duration(days: days[i], hours: 2 * i));
-        final timeStr =
-            '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
+        final timeStr = '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
             '${_pad(t.hour)}-${_pad(t.minute)}-${_pad(t.second)}';
         final file = File('${dir.path}/backup_$timeStr.zip');
         await file.writeAsString('dummy_$i');
@@ -78,8 +76,7 @@ void main() {
       // Create 2 files with different timestamps
       for (int i = 0; i < 2; i++) {
         final t = now.subtract(Duration(hours: 2, seconds: i * 5));
-        final timeStr =
-            '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
+        final timeStr = '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
             '${_pad(t.hour)}-${_pad(t.minute)}-${_pad(t.second)}';
         final file = File('${dir.path}/backup_$timeStr.zip');
         await file.writeAsString('dummy_$i');
@@ -114,8 +111,7 @@ void main() {
       final days = [0, 0, 0, 0, 0, 1, 1, 2, 2, 5];
       for (int i = 0; i < 10; i++) {
         final t = now.subtract(Duration(days: days[i], hours: 2 * i));
-        final timeStr =
-            '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
+        final timeStr = '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
             '${_pad(t.hour)}-${_pad(t.minute)}-${_pad(t.second)}';
         final file = File('${dir.path}/backup_$timeStr.zip');
         await file.writeAsString('dummy_$i');
@@ -146,16 +142,14 @@ void main() {
       // 3 recent zips (today, within 24h) + 5 old dirs (older, spanning different days)
       for (int i = 0; i < 3; i++) {
         final t = now.subtract(Duration(hours: 2 * (i + 1)));
-        final timeStr =
-            '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
+        final timeStr = '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
             '${_pad(t.hour)}-${_pad(t.minute)}-${_pad(t.second)}';
         final file = File('${dir.path}/backup_$timeStr.zip');
         await file.writeAsString('dummy_$i');
       }
       for (int i = 0; i < 5; i++) {
         final t = now.subtract(Duration(days: 2 * (i + 1)));
-        final timeStr =
-            '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
+        final timeStr = '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
             '${_pad(t.hour)}-${_pad(t.minute)}-${_pad(t.second)}';
         final d = Directory('${dir.path}/backup_$timeStr');
         await d.create(recursive: true);

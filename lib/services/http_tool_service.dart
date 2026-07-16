@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
+import 'app_log_service.dart';
 
 import '../models/tool_call.dart';
 
@@ -132,6 +133,8 @@ class HttpToolService {
   static Future<String> handleBraveSearch(Map<String, dynamic> args) async {
     final query = (args['query'] as String?) ?? '';
     final count = (args['count'] as num?)?.toInt() ?? 10;
+    await AppLogService.info(
+        'HttpToolService', 'Brave 搜索: query=$query, count=$count');
 
     if (_braveApiKey.isEmpty) {
       return '错误: Brave Search API Key 未配置，请在设置页面配置。';
@@ -160,6 +163,7 @@ class HttpToolService {
       return '错误: Brave Search 请求失败 (HTTP ${response.statusCode})';
     } catch (e) {
       debugPrint('Brave Search error: $e');
+      await AppLogService.error('HttpToolService', 'Brave 搜索失败: $query', e);
       return '错误: Brave Search 请求失败: $e';
     }
   }
@@ -168,6 +172,8 @@ class HttpToolService {
   static Future<String> handleBochaSearch(Map<String, dynamic> args) async {
     final query = (args['query'] as String?) ?? '';
     final count = (args['count'] as num?)?.toInt() ?? 10;
+    await AppLogService.info(
+        'HttpToolService', 'Bocha 搜索: query=$query, count=$count');
 
     if (_bochaApiKey.isEmpty) {
       return '错误: Bocha API Key 未配置，请在设置页面配置。';
@@ -197,6 +203,7 @@ class HttpToolService {
       return '错误: Bocha 请求失败 (HTTP ${response.statusCode})';
     } catch (e) {
       debugPrint('Bocha search error: $e');
+      await AppLogService.error('HttpToolService', 'Bocha 搜索失败: $query', e);
       return '错误: Bocha 请求失败: $e';
     }
   }
@@ -205,6 +212,8 @@ class HttpToolService {
   static Future<String> handleQueritSearch(Map<String, dynamic> args) async {
     final query = (args['query'] as String?) ?? '';
     final count = (args['count'] as num?)?.toInt() ?? 10;
+    await AppLogService.info(
+        'HttpToolService', 'Querit 搜索: query=$query, count=$count');
 
     if (_queritApiKey.isEmpty) {
       return '错误: Querit API Key 未配置，请在设置页面配置。';
@@ -233,6 +242,7 @@ class HttpToolService {
       return '错误: Querit 请求失败 (HTTP ${response.statusCode})';
     } catch (e) {
       debugPrint('Querit search error: $e');
+      await AppLogService.error('HttpToolService', 'Querit 搜索失败: $query', e);
       return '错误: Querit 请求失败: $e';
     }
   }
@@ -241,6 +251,8 @@ class HttpToolService {
   static Future<String> handleSearxngSearch(Map<String, dynamic> args) async {
     final query = (args['query'] as String?) ?? '';
     final count = (args['count'] as num?)?.toInt() ?? 10;
+    await AppLogService.info(
+        'HttpToolService', 'SearXNG 搜索: query=$query, count=$count');
 
     if (_searxngUrl.isEmpty || _searxngUrl == 'http://localhost:8080') {
       return '错误: SearXNG 实例 URL 未配置，请在设置页面配置。';
@@ -272,6 +284,7 @@ class HttpToolService {
       return '错误: SearXNG 请求失败 (HTTP ${response.statusCode})';
     } catch (e) {
       debugPrint('Searxng search error: $e');
+      await AppLogService.error('HttpToolService', 'SearXNG 搜索失败: $query', e);
       return '错误: SearXNG 请求失败: $e';
     }
   }

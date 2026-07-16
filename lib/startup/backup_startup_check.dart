@@ -169,7 +169,8 @@ class BackupStartupCheck {
       startupBackupPerformed = true;
       await AppLogService.info('BackupStartupCheck', '启动后自动备份成功');
     } else {
-      await AppLogService.warning('BackupStartupCheck', '启动后自动备份未执行（可能因 1 小时规则跳过或失败）');
+      await AppLogService.warning(
+          'BackupStartupCheck', '启动后自动备份未执行（可能因 1 小时规则跳过或失败）');
     }
 
     return BackupStartupResult(

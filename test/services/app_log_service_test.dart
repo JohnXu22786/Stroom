@@ -10,6 +10,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
+    // The app_log_service_test tests file-based logging, so ensure file I/O is enabled
+    AppLogService.enableFileLogging();
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     WebFileStore.enableTestMode();
@@ -27,8 +29,7 @@ void main() {
       expect(await logDir.exists(), isTrue);
 
       final today = DateTime.now();
-      final dateStr =
-          '${today.year}-${_pad(today.month)}-${_pad(today.day)}';
+      final dateStr = '${today.year}-${_pad(today.month)}-${_pad(today.day)}';
       final logFile = File('${logDir.path}/app_$dateStr.log');
       expect(await logFile.exists(), isTrue,
           reason: 'Log file should exist at expected path');
@@ -60,8 +61,7 @@ void main() {
   // ==================================================================
 
   group('AppLogService — log content format', () {
-    test('log entry contains timestamp, level, source, and message',
-        () async {
+    test('log entry contains timestamp, level, source, and message', () async {
       await AppLogService.info('TestSource', 'Hello world');
 
       final content = await AppLogService.readTodayLog();
@@ -201,8 +201,7 @@ void main() {
 
       // Today's file should be kept
       final today = DateTime.now();
-      final todayStr =
-          '${today.year}-${_pad(today.month)}-${_pad(today.day)}';
+      final todayStr = '${today.year}-${_pad(today.month)}-${_pad(today.day)}';
       final todayFile = File('${logDir.path}/app_$todayStr.log');
       expect(await todayFile.exists(), isTrue,
           reason: 'Today log should be kept');

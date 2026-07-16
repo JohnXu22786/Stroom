@@ -173,8 +173,8 @@ class _StartupAppState extends State<StartupApp>
       List<StartupIssue> formatIssues;
       try {
         formatIssues = await StartupCheckService.validateDataFormats();
-        await AppLogService.info('StartupApp',
-            '数据格式验证完成: 发现 ${formatIssues.length} 个问题');
+        await AppLogService.info(
+            'StartupApp', '数据格式验证完成: 发现 ${formatIssues.length} 个问题');
       } catch (e) {
         debugPrint('[StartupApp] validateDataFormats failed: $e');
         await AppLogService.error('StartupApp', '验证数据格式失败', e);
@@ -191,8 +191,8 @@ class _StartupAppState extends State<StartupApp>
       List<StartupIssue> integrityIssues;
       try {
         integrityIssues = await StartupCheckService.checkDataIntegrity();
-        await AppLogService.info('StartupApp',
-            '数据完整性检查完成: 发现 ${integrityIssues.length} 个问题');
+        await AppLogService.info(
+            'StartupApp', '数据完整性检查完成: 发现 ${integrityIssues.length} 个问题');
       } catch (e) {
         debugPrint('[StartupApp] checkDataIntegrity failed: $e');
         await AppLogService.error('StartupApp', '检查数据完整性失败', e);

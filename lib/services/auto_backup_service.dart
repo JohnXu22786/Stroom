@@ -101,7 +101,8 @@ class AutoBackupService {
       // 检查失败不阻止备份
     }
 
-    await AppLogService.info('AutoBackupService', '开始执行自动备份 (isPreMigration=$isPreMigration)');
+    await AppLogService.info(
+        'AutoBackupService', '开始执行自动备份 (isPreMigration=$isPreMigration)');
     if (_cancelRequested) {
       _isRunning = false;
       _cancelRequested = false;
@@ -127,7 +128,8 @@ class AutoBackupService {
         safTempPath = p.join(sysTempDir, tmpFileName);
 
         debugPrint('[AutoBackupService] 开始 $backupType 备份(SAF)');
-        await AppLogService.info('AutoBackupService', '开始 $backupType 备份(SAF): $zipFileName');
+        await AppLogService.info(
+            'AutoBackupService', '开始 $backupType 备份(SAF): $zipFileName');
 
         await BackupService.createBackup(
           outputPath: safTempPath,
@@ -140,15 +142,15 @@ class AutoBackupService {
         }
 
         // 读取临时文件并通过 SAF 写入公共目录
-        final bytes = await File(safTempPath!).readAsBytes();
+        final bytes = await File(safTempPath).readAsBytes();
         await BackupLocationManager.writeBackupFile(zipFileName, bytes);
 
         // 清理旧备份
         await _cleanupOldBackupsSaf();
 
         debugPrint('[AutoBackupService] $backupType 备份完成(SAF): $zipFileName');
-        await AppLogService.info('AutoBackupService',
-            '$backupType 备份完成(SAF): $zipFileName');
+        await AppLogService.info(
+            'AutoBackupService', '$backupType 备份完成(SAF): $zipFileName');
         return true;
       } else {
         // ============================================================
@@ -193,8 +195,8 @@ class AutoBackupService {
         await _cleanupOldBackups(backupRoot);
 
         debugPrint('[AutoBackupService] $backupType 备份完成: $zipPath');
-        await AppLogService.info('AutoBackupService',
-            '$backupType 备份完成: $zipPath');
+        await AppLogService.info(
+            'AutoBackupService', '$backupType 备份完成: $zipPath');
         return true;
       }
     } on BackupCancelledException {
@@ -208,7 +210,7 @@ class AutoBackupService {
     } finally {
       // 清理 SAF 遗留的系统临时文件（无论成功失败）
       if (safTempPath != null) {
-        await _deleteSystemTempFile(safTempPath!);
+        await _deleteSystemTempFile(safTempPath);
       }
       _isRunning = false;
       _cancelRequested = false;
@@ -274,9 +276,8 @@ class AutoBackupService {
   static DateTime? _extractTimestampFromFilename(String fileName) {
     try {
       // backup_2024-01-01T12-00-00.zip
-      final match =
-          RegExp(r'^backup_(\d{4}-\d{2}-\d{2})T(\d{2}-\d{2}-\d{2})')
-              .firstMatch(fileName);
+      final match = RegExp(r'^backup_(\d{4}-\d{2}-\d{2})T(\d{2}-\d{2}-\d{2})')
+          .firstMatch(fileName);
       if (match == null) return null;
       // 日期部分保留连字符，时间部分将连字符替换为冒号
       final datePart = match.group(1)!; // 2024-01-01
@@ -392,8 +393,6 @@ class AutoBackupService {
     if (infos.length <= 3) return [];
 
     final now = DateTime.now();
-    final oneDay = Duration(days: 1);
-    final oneHour = Duration(hours: 1);
 
     // 步骤 1: 从最新的开始，挑选需要保留的
     final keepList = <_BackupFileInfo>[];
@@ -546,7 +545,8 @@ class AutoBackupService {
       final toDelete = _selectBackupsToDelete(infos);
 
       if (toDelete.isEmpty) {
-        debugPrint('[AutoBackupService] 清理旧备份(SAF): 无需删除 (共 ${infos.length} 个)');
+        debugPrint(
+            '[AutoBackupService] 清理旧备份(SAF): 无需删除 (共 ${infos.length} 个)');
         return;
       }
 

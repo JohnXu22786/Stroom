@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'app_log_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 const _serviceName = 'com.johntsui.stroom.background_service';
@@ -9,6 +10,7 @@ const _serviceTitle = 'Stroom';
 const _serviceContent = '后台任务运行中…';
 
 Future<void> initializeBackgroundService() async {
+  await AppLogService.info('BackgroundService', '初始化后台服务');
   // ====================================================================
   // 在配置背景服务之前，先创建 Android 通知渠道。
   //
@@ -22,6 +24,7 @@ Future<void> initializeBackgroundService() async {
     await _createNotificationChannel();
   } catch (e) {
     debugPrint('[BackgroundService] Failed to create notification channel: $e');
+    await AppLogService.error('BackgroundService', '创建通知渠道失败', e);
   }
 
   try {
@@ -46,9 +49,11 @@ Future<void> initializeBackgroundService() async {
         foregroundServiceNotificationId: 4521,
       ),
     );
+    await AppLogService.info('BackgroundService', '后台服务配置完成');
   } catch (e) {
     debugPrint(
         '[BackgroundService] Failed to configure background service: $e');
+    await AppLogService.error('BackgroundService', '配置后台服务失败', e);
   }
 }
 
@@ -102,23 +107,29 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 }
 
 Future<void> startBackgroundService() async {
+  await AppLogService.info('BackgroundService', '启动后台服务');
   try {
     final service = FlutterBackgroundService();
     if (!await service.isRunning()) {
       await service.startService();
+      await AppLogService.info('BackgroundService', '后台服务已启动');
     }
   } catch (e) {
     debugPrint('[BackgroundService] Failed to start background service: $e');
+    await AppLogService.error('BackgroundService', '启动后台服务失败', e);
   }
 }
 
 Future<void> stopBackgroundService() async {
+  await AppLogService.info('BackgroundService', '停止后台服务');
   try {
     final service = FlutterBackgroundService();
     if (await service.isRunning()) {
       service.invoke('stopService');
+      await AppLogService.info('BackgroundService', '后台服务已停止');
     }
   } catch (e) {
     debugPrint('[BackgroundService] Failed to stop background service: $e');
+    await AppLogService.error('BackgroundService', '停止后台服务失败', e);
   }
 }
