@@ -71,46 +71,43 @@ class ChatAdapter {
   List<ToolDefinition> get mcpToolDefinitions =>
       List.unmodifiable(_mcpToolDefinitions);
 
-  /// 初始化 MCP 客户端 + HTTP 工具并配置 ChatService
-  Future<void> initializeMcpServers(ProviderEntriesState entriesState) async {
+  /// 初始化内置工具（HTTP 工具），与 MCP SSE 服务器初始化独立。
+  ///
+  /// 此方法确保 HTTP 工具（如 brave_web_search、bocha_web_search 等）
+  /// 始终被注册，不受 MCP 服务器连接状态影响。
+  /// 即使 MCP 条目不存在或为空，也会尝试注册已缓存的工具。
+  void initializeBuiltinTools(ProviderEntriesState entriesState) {
     final mcpEntry =
         entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
-    if (mcpEntry == null || mcpEntry.configs.isEmpty) return;
 
-    // Build MCP server configs + collect HTTP tool API keys
-    final mcpConfigs = <McpServerConfig>[];
     String? braveApiKey, bochaApiKey, queritApiKey, searxngUrl, searxngApiKey;
 
-    for (final config in mcpEntry.configs) {
-      final typeConfig =
-          config.models.isNotEmpty ? config.models[0].typeConfig : null;
+    if (mcpEntry != null && mcpEntry.configs.isNotEmpty) {
+      for (final config in mcpEntry.configs) {
+        final typeConfig =
+            config.models.isNotEmpty ? config.models[0].typeConfig : null;
 
-      // Check if this is an HTTP tool (pure Dart, not MCP)
-      final isHttpTool = typeConfig?['isHttpTool'] as bool? ?? false;
-      if (isHttpTool) {
-        debugPrint('Config: initializing HTTP tool "${config.providerName}"');
-        _collectHttpToolApiKey(
-          config.providerName,
-          typeConfig,
-          (key) => braveApiKey ??= key,
-          (key) => bochaApiKey ??= key,
-          (key) => queritApiKey ??= key,
-          (url) => searxngUrl ??= url,
-          (key) => searxngApiKey ??= key,
-        );
-        continue;
-      }
-
-      final serverConfig = McpServerConfig.fromProviderConfig(
-        providerName: config.providerName,
-        typeConfig: typeConfig,
-      );
-      if (serverConfig != null) {
-        mcpConfigs.add(serverConfig);
+        // Collect API keys from HTTP tool configs
+        final isHttpTool = typeConfig?['isHttpTool'] as bool? ?? false;
+        if (isHttpTool) {
+          debugPrint(
+              'BuiltinTools: collecting API key for "${config.providerName}"');
+          _collectHttpToolApiKey(
+            config.providerName,
+            typeConfig,
+            (key) => braveApiKey ??= key,
+            (key) => bochaApiKey ??= key,
+            (key) => queritApiKey ??= key,
+            (url) => searxngUrl ??= url,
+            (key) => searxngApiKey ??= key,
+          );
+        }
       }
     }
 
-    // Initialize HttpToolService with collected API keys
+    // Always update API keys and register HTTP tools, even if no configs
+    // were found. This ensures previously registered tools remain available
+    // and new API keys take effect.
     HttpToolService.updateApiKeys(
       braveApiKey: braveApiKey,
       bochaApiKey: bochaApiKey,
@@ -124,8 +121,38 @@ class ChatAdapter {
 
     // Set McpClientManager on ChatService for tool routing
     ChatService.setMcpClientManager(_mcpClientManager);
+  }
 
-    // Create clients and discover tools
+  /// 初始化 MCP 客户端（SSE / stdio）并发现工具。
+  ///
+  /// 仅处理非 HTTP 工具的 MCP 服务器配置。HTTP 工具由 [initializeBuiltinTools] 独立处理。
+  /// MCP 服务器连接失败不会影响已注册的内置工具。
+  Future<void> initializeMcpServers(ProviderEntriesState entriesState) async {
+    final mcpEntry =
+        entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
+    if (mcpEntry == null || mcpEntry.configs.isEmpty) return;
+
+    // Build MCP server configs (skip HTTP tools — handled by initializeBuiltinTools)
+    final mcpConfigs = <McpServerConfig>[];
+
+    for (final config in mcpEntry.configs) {
+      final typeConfig =
+          config.models.isNotEmpty ? config.models[0].typeConfig : null;
+
+      // Skip HTTP tools (pure Dart, not MCP)
+      final isHttpTool = typeConfig?['isHttpTool'] as bool? ?? false;
+      if (isHttpTool) continue;
+
+      final serverConfig = McpServerConfig.fromProviderConfig(
+        providerName: config.providerName,
+        typeConfig: typeConfig,
+      );
+      if (serverConfig != null) {
+        mcpConfigs.add(serverConfig);
+      }
+    }
+
+    // Create clients and discover tools from MCP servers
     final allTools = <ToolDefinition>[];
     for (final mcpConfig in mcpConfigs) {
       try {
