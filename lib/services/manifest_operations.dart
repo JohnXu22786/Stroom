@@ -138,8 +138,6 @@ class ManifestOperations<T extends FileRecord> {
   // ---- Load / Persist ---------------------------------------------------
 
   Future<List<T>> loadRecords() async {
-    await AppLogService.info(
-        'ManifestOperations($manifestKey)', 'loadRecords called');
     if (_cache != null && !_dirty) return _cache!;
 
     try {
@@ -156,23 +154,17 @@ class ManifestOperations<T extends FileRecord> {
       _folderCache = {};
     }
     _dirty = false;
-    await AppLogService.info('ManifestOperations($manifestKey)',
-        'loadRecords completed [count=${_cache?.length}]');
     return _cache!;
   }
 
   // ---- CRUD -------------------------------------------------------------
 
   Future<void> addRecord(T record) async {
-    await AppLogService.info('ManifestOperations($manifestKey)',
-        'addRecord called [id=${record.id}, type=${record.runtimeType}]');
     try {
       await loadRecords();
       await _dbInsertRecord(toMap(record));
       _cache!.add(record);
       await _ensureFolderPathTracked(folderOf(record));
-      await AppLogService.info(
-          'ManifestOperations($manifestKey)', 'addRecord completed');
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'addRecord failed', e, st);
@@ -189,8 +181,7 @@ class ManifestOperations<T extends FileRecord> {
       // Guard against names without extension
       final dotIndex = name.lastIndexOf('.');
       if (dotIndex == -1) return;
-      await AppLogService.info('ManifestOperations($manifestKey)',
-          '_deleteEntityFiles deleting file [$name]');
+      debugPrint('ManifestOperations($manifestKey) deleting file [$name]');
       if (kIsWeb) {
         await WebFileStore.delete(_webKey(name));
       } else {
@@ -205,8 +196,8 @@ class ManifestOperations<T extends FileRecord> {
         _cache!.where((x) => hashOf(x) == hashOf(record)).length;
     if (hashRefCount <= 1) {
       final thumbName = '${hashOf(record)}_thumb$thumbnailExtension';
-      await AppLogService.info('ManifestOperations($manifestKey)',
-          '_deleteEntityFiles deleting thumbnail [$thumbName]');
+      debugPrint(
+          'ManifestOperations($manifestKey) deleting thumbnail [$thumbName]');
       if (kIsWeb) {
         await WebFileStore.delete(_webKey(thumbName));
       } else {
@@ -218,8 +209,6 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   Future<void> deleteRecord(String id) async {
-    await AppLogService.info(
-        'ManifestOperations($manifestKey)', 'deleteRecord called [id=$id]');
     try {
       await loadRecords();
       final index = _cache!.indexWhere((r) => r.id == id);
@@ -228,8 +217,6 @@ class ManifestOperations<T extends FileRecord> {
       await _deleteEntityFiles(record);
       _cache!.removeAt(index);
       await _dbDeleteRecord(id);
-      await AppLogService.info(
-          'ManifestOperations($manifestKey)', 'deleteRecord completed');
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'deleteRecord failed', e, st);
@@ -239,8 +226,6 @@ class ManifestOperations<T extends FileRecord> {
 
   /// Batch delete: partition list, delete files, then replace cache.
   Future<void> deleteRecords(List<String> ids) async {
-    await AppLogService.info('ManifestOperations($manifestKey)',
-        'deleteRecords called [count=${ids.length}]');
     try {
       await loadRecords();
       final idSet = ids.toSet();
@@ -298,8 +283,6 @@ class ManifestOperations<T extends FileRecord> {
       }
       _cache = remaining;
       await _dbDeleteRecords(ids);
-      await AppLogService.info(
-          'ManifestOperations($manifestKey)', 'deleteRecords completed');
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'deleteRecords failed', e, st);
@@ -308,8 +291,6 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   Future<void> updateRecord(T updated) async {
-    await AppLogService.info('ManifestOperations($manifestKey)',
-        'updateRecord called [id=${updated.id}]');
     try {
       await loadRecords();
       final index = _cache!.indexWhere((r) => r.id == updated.id);
@@ -317,8 +298,6 @@ class ManifestOperations<T extends FileRecord> {
         _cache![index] = updated;
         await _dbUpdateRecord(updated.id, toMap(updated));
       }
-      await AppLogService.info(
-          'ManifestOperations($manifestKey)', 'updateRecord completed');
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'updateRecord failed', e, st);
@@ -327,8 +306,6 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   Future<void> renameRecord(String id, String newName) async {
-    await AppLogService.info('ManifestOperations($manifestKey)',
-        'renameRecord called [id=$id, newName=$newName]');
     try {
       await loadRecords();
       final index = _cache!.indexWhere((r) => r.id == id);
@@ -336,8 +313,6 @@ class ManifestOperations<T extends FileRecord> {
         _cache![index] = copyName(_cache![index], newName);
         await _dbUpdateRecord(id, toMap(_cache![index]));
       }
-      await AppLogService.info(
-          'ManifestOperations($manifestKey)', 'renameRecord completed');
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'renameRecord failed', e, st);
@@ -346,8 +321,6 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   Future<void> moveRecord(String id, String targetFolder) async {
-    await AppLogService.info('ManifestOperations($manifestKey)',
-        'moveRecord called [id=$id, targetFolder=$targetFolder]');
     try {
       await loadRecords();
       final index = _cache!.indexWhere((r) => r.id == id);
@@ -356,8 +329,6 @@ class ManifestOperations<T extends FileRecord> {
         await _dbUpdateRecord(id, toMap(_cache![index]));
         await _ensureFolderPathTracked(targetFolder);
       }
-      await AppLogService.info(
-          'ManifestOperations($manifestKey)', 'moveRecord completed');
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'moveRecord failed', e, st);
@@ -366,19 +337,13 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   Future<T?> getRecord(String id) async {
-    await AppLogService.info(
-        'ManifestOperations($manifestKey)', 'getRecord called [id=$id]');
     try {
       await loadRecords();
-      final result = _cache!.firstWhere((r) => r.id == id);
-      await AppLogService.info('ManifestOperations($manifestKey)',
-          'getRecord completed [found=true]');
-      return result;
+      return _cache!.firstWhere((r) => r.id == id);
     } on StateError {
-      await AppLogService.warning('ManifestOperations($manifestKey)',
-          'getRecord: record not found for id=$id');
       return null;
     } catch (e, st) {
+      debugPrint('ManifestOperations($manifestKey).getRecord error: $e');
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'getRecord failed', e, st);
       return null;
@@ -391,22 +356,17 @@ class ManifestOperations<T extends FileRecord> {
   bool get _useWebFileStore => kIsWeb || WebFileStore.isTestMode;
 
   Future<String> writeFile(String fileName, Uint8List data) async {
-    await AppLogService.info('ManifestOperations($manifestKey)',
-        'writeFile called [fileName=$fileName, size=${data.length}]');
     try {
       if (_useWebFileStore) {
         await WebFileStore.write(_webKey(fileName), data);
-        await AppLogService.info(
-            'ManifestOperations($manifestKey)', 'writeFile completed');
         return fileName;
       }
       final dir = await _storageDir;
       final filePath = p.join(dir, fileName);
       await File(filePath).writeAsBytes(data);
-      await AppLogService.info('ManifestOperations($manifestKey)',
-          'writeFile completed [path=$filePath]');
       return filePath;
     } catch (e, st) {
+      debugPrint('ManifestOperations($manifestKey).writeFile error: $e');
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'writeFile failed', e, st);
       rethrow;
@@ -414,28 +374,19 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   Future<Uint8List?> readFile(String fileName) async {
-    await AppLogService.info('ManifestOperations($manifestKey)',
-        'readFile called [fileName=$fileName]');
     try {
       if (_useWebFileStore) {
-        final result = await WebFileStore.read(_webKey(fileName));
-        await AppLogService.info('ManifestOperations($manifestKey)',
-            'readFile completed [found=${result != null}]');
-        return result;
+        return WebFileStore.read(_webKey(fileName));
       }
       final dir = await _storageDir;
       final filePath = p.join(dir, fileName);
       final file = File(filePath);
       if (await file.exists()) {
-        final result = await file.readAsBytes();
-        await AppLogService.info('ManifestOperations($manifestKey)',
-            'readFile completed [found=true]');
-        return result;
+        return await file.readAsBytes();
       }
-      await AppLogService.info('ManifestOperations($manifestKey)',
-          'readFile completed [found=false]');
       return null;
     } catch (e, st) {
+      debugPrint('ManifestOperations($manifestKey).readFile error: $e');
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'readFile failed', e, st);
       return null;
@@ -443,21 +394,14 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   Future<bool> fileExists(String fileName) async {
-    await AppLogService.info('ManifestOperations($manifestKey)',
-        'fileExists called [fileName=$fileName]');
     try {
       if (_useWebFileStore) {
-        final result = await WebFileStore.exists(_webKey(fileName));
-        await AppLogService.info('ManifestOperations($manifestKey)',
-            'fileExists completed [$result]');
-        return result;
+        return WebFileStore.exists(_webKey(fileName));
       }
       final dir = await _storageDir;
-      final result = await File(p.join(dir, fileName)).exists();
-      await AppLogService.info(
-          'ManifestOperations($manifestKey)', 'fileExists completed [$result]');
-      return result;
+      return await File(p.join(dir, fileName)).exists();
     } catch (e, st) {
+      debugPrint('ManifestOperations($manifestKey).fileExists error: $e');
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'fileExists failed', e, st);
       return false;
@@ -465,27 +409,20 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   Future<bool> deleteFile(String fileName) async {
-    await AppLogService.info('ManifestOperations($manifestKey)',
-        'deleteFile called [fileName=$fileName]');
     try {
       if (_useWebFileStore) {
         await WebFileStore.delete(_webKey(fileName));
-        await AppLogService.info(
-            'ManifestOperations($manifestKey)', 'deleteFile completed [true]');
         return true;
       }
       final dir = await _storageDir;
       final file = File(p.join(dir, fileName));
       if (await file.exists()) {
         await file.delete();
-        await AppLogService.info(
-            'ManifestOperations($manifestKey)', 'deleteFile completed [true]');
         return true;
       }
-      await AppLogService.info(
-          'ManifestOperations($manifestKey)', 'deleteFile completed [false]');
       return false;
     } catch (e, st) {
+      debugPrint('ManifestOperations($manifestKey).deleteFile error: $e');
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'deleteFile failed', e, st);
       return false;
@@ -494,35 +431,25 @@ class ManifestOperations<T extends FileRecord> {
 
   /// Get the storage directory path (Native only).
   Future<String> get storageDirPath async {
-    await AppLogService.info(
-        'ManifestOperations($manifestKey)', 'storageDirPath called');
     if (_useWebFileStore) return '';
     return _storageDir;
   }
 
   /// Get a file's absolute path on disk (Native only).
   Future<String?> readFilePath(String fileName) async {
-    await AppLogService.info('ManifestOperations($manifestKey)',
-        'readFilePath called [fileName=$fileName]');
     try {
       if (_useWebFileStore) {
         final exists = await WebFileStore.exists(_webKey(fileName));
-        final result = exists ? _webKey(fileName) : null;
-        await AppLogService.info('ManifestOperations($manifestKey)',
-            'readFilePath completed [found=$exists]');
-        return result;
+        return exists ? _webKey(fileName) : null;
       }
       final dir = await _storageDir;
       final filePath = p.join(dir, fileName);
       if (await File(filePath).exists()) {
-        await AppLogService.info('ManifestOperations($manifestKey)',
-            'readFilePath completed [found=true]');
         return filePath;
       }
-      await AppLogService.info('ManifestOperations($manifestKey)',
-          'readFilePath completed [found=false]');
       return null;
     } catch (e, st) {
+      debugPrint('ManifestOperations($manifestKey).readFilePath error: $e');
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'readFilePath failed', e, st);
       return null;
@@ -532,12 +459,8 @@ class ManifestOperations<T extends FileRecord> {
   // ---- Folder management ------------------------------------------------
 
   Future<List<String>> loadFolders() async {
-    await AppLogService.info(
-        'ManifestOperations($manifestKey)', 'loadFolders called');
     try {
       await loadRecords();
-      await AppLogService.info('ManifestOperations($manifestKey)',
-          'loadFolders completed [count=${_folderCache.length}]');
       return List.unmodifiable(_folderCache.toList());
     } catch (e, st) {
       await AppLogService.error(
@@ -547,8 +470,6 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   Future<void> addFolder(String folderName) async {
-    await AppLogService.info('ManifestOperations($manifestKey)',
-        'addFolder called [folderName=$folderName]');
     try {
       await loadRecords();
       final name = folderName.trim();
@@ -560,8 +481,6 @@ class ManifestOperations<T extends FileRecord> {
         _folderCache.add(name);
         await ManifestDatabase.insertFolder(name, recordTable: tableName);
       }
-      await AppLogService.info(
-          'ManifestOperations($manifestKey)', 'addFolder completed');
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'addFolder failed', e, st);
@@ -570,16 +489,12 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   Future<void> addFolderPath(String folderPath) async {
-    await AppLogService.info('ManifestOperations($manifestKey)',
-        'addFolderPath called [folderPath=$folderPath]');
     try {
       await loadRecords();
       if (!_folderCache.contains(folderPath)) {
         _folderCache.add(folderPath);
         await ManifestDatabase.insertFolder(folderPath, recordTable: tableName);
       }
-      await AppLogService.info(
-          'ManifestOperations($manifestKey)', 'addFolderPath completed');
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'addFolderPath failed', e, st);
@@ -588,8 +503,6 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   Future<void> removeFolder(String folderName) async {
-    await AppLogService.info('ManifestOperations($manifestKey)',
-        'removeFolder called [folderName=$folderName]');
     try {
       await loadRecords();
 
@@ -675,8 +588,6 @@ class ManifestOperations<T extends FileRecord> {
       if (idsToDelete.isNotEmpty) {
         await _dbDeleteRecords(idsToDelete);
       }
-      await AppLogService.info('ManifestOperations($manifestKey)',
-          'removeFolder completed [recordsDeleted=${idsToDelete.length}]');
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'removeFolder failed', e, st);
@@ -685,8 +596,6 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   Future<Set<String>> getAllFolders() async {
-    await AppLogService.info(
-        'ManifestOperations($manifestKey)', 'getAllFolders called');
     try {
       await loadRecords();
       final folders = <String>{};
@@ -695,8 +604,6 @@ class ManifestOperations<T extends FileRecord> {
         final f = folderOf(r);
         if (f.isNotEmpty) folders.add(f);
       }
-      await AppLogService.info('ManifestOperations($manifestKey)',
-          'getAllFolders completed [count=${folders.length}]');
       return folders;
     } catch (e, st) {
       await AppLogService.error(
@@ -706,8 +613,6 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   Future<void> removeFolderFromCache(String folderPath) async {
-    await AppLogService.info('ManifestOperations($manifestKey)',
-        'removeFolderFromCache called [folderPath=$folderPath]');
     try {
       await loadRecords();
       final prefix = folderPath.isEmpty ? '' : '$folderPath/';
@@ -724,7 +629,6 @@ class ManifestOperations<T extends FileRecord> {
 
       // Move records in the removed folder path to root
       final folderPrefix = folderPath.isEmpty ? '' : '$folderPath/';
-      var movedCount = 0;
       for (var i = 0; i < (_cache?.length ?? 0); i++) {
         final r = _cache![i];
         final f = folderOf(r);
@@ -732,11 +636,8 @@ class ManifestOperations<T extends FileRecord> {
             (folderPrefix.isNotEmpty && f.startsWith(folderPrefix))) {
           _cache![i] = copyFolder(r, '');
           await _dbUpdateRecord(r.id, {...toMap(r), 'folder': ''});
-          movedCount++;
         }
       }
-      await AppLogService.info('ManifestOperations($manifestKey)',
-          'removeFolderFromCache completed [recordsMoved=$movedCount]');
     } catch (e, st) {
       await AppLogService.error('ManifestOperations($manifestKey)',
           'removeFolderFromCache failed', e, st);
@@ -766,8 +667,6 @@ class ManifestOperations<T extends FileRecord> {
   // See git history for the deleted implementation.
 
   void invalidateCache() {
-    AppLogService.info(
-        'ManifestOperations($manifestKey)', 'invalidateCache called');
     _dirty = true;
     _cache = null;
   }
