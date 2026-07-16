@@ -56,13 +56,28 @@ class AppLogService {
   /// 是否应该跳过文件 I/O。
   /// - Web 平台始终跳过。
   /// - 手动设置的值优先。
-  /// - 测试模式（WebFileStore.isTestMode）下默认跳过。
+  /// - 测试模式（WebFileStore.isTestMode 或 FLUTTER_TEST 环境变量）下默认跳过。
   /// - 生产环境默认写入文件。
+  static bool _cachedIsTestEnv = false;
+  static bool _isTestEnvChecked = false;
+
+  /// Lazily determine whether we are running in a test environment.
+  static bool get _isTestEnv {
+    if (_isTestEnvChecked) return _cachedIsTestEnv;
+    _isTestEnvChecked = true;
+    try {
+      if (Platform.environment['FLUTTER_TEST'] == 'true') {
+        _cachedIsTestEnv = true;
+      }
+    } catch (_) {}
+    return _cachedIsTestEnv;
+  }
+
   static bool get _shouldSkipFileIo {
     if (kIsWeb) return true;
     if (_manualFileLogging != null) return _manualFileLogging!;
     // 测试模式下默认只输出到控制台
-    if (WebFileStore.isTestMode) return true;
+    if (WebFileStore.isTestMode || _isTestEnv) return true;
     return false;
   }
 
@@ -135,7 +150,11 @@ class AppLogService {
   }
 
   /// 将日志写入文件（fire-and-forget，不阻塞调用方）。
+  /// 在 _shouldSkipFileIo 为 true 时完全跳过（不创建 Future/timer），
+  /// 避免在 testWidgets 的 FakeAsync zone 中产生未决计时器。
   static void _writeLogToFile(LogLevel level, String source, String message) {
+    if (_shouldSkipFileIo) return;
+
     // 使用 Future 构造避免 async/await，确保即使在没有微任务调度的
     // FakeAsync zone 中也不会挂起调用方。
     final completer = Completer<void>();
@@ -160,7 +179,6 @@ class AppLogService {
       }
     });
   }
-
   // ================================================================
   // 日志文件管理
   // ================================================================
