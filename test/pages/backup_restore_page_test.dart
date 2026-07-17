@@ -32,12 +32,20 @@ void main() {
       await tester.pumpWidget(createTestApp());
       await tester.pump();
 
-      // Should find section headers
+      // Should find section headers (import section is below export section in scroll)
       expect(find.text('导出备份'), findsAtLeast(1));
+
+      // Scroll down to find the import section header
+      await tester.scrollUntilVisible(
+        find.text('导入恢复'),
+        200.0,
+        scrollable: find.byType(Scrollable),
+      );
+      await tester.pump();
       expect(find.text('导入恢复'), findsOneWidget);
     });
 
-    testWidgets('import card shows overwrite label when scrolled to',
+    testWidgets('import card shows selection heading when scrolled to',
         (tester) async {
       await tester.pumpWidget(createTestApp());
       await tester.pump();
@@ -50,8 +58,8 @@ void main() {
       );
       await tester.pump();
 
-      // The import card should show overwrite label
-      expect(find.text('将覆盖现有数据'), findsOneWidget);
+      // The import card should show selection heading
+      expect(find.text('选择要恢复的数据类别'), findsOneWidget);
     });
 
     testWidgets('export and import buttons exist', (tester) async {
