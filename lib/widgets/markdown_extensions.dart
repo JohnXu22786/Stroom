@@ -254,7 +254,8 @@ Widget _wrapTableWithHorizontalScroll(Widget child) {
   );
 }
 
-MarkdownConfig buildMarkdownConfig({required bool isDark, bool isStreaming = false}) {
+MarkdownConfig buildMarkdownConfig(
+    {required bool isDark, bool isStreaming = false}) {
   final base =
       isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig;
   return base.copy(configs: [

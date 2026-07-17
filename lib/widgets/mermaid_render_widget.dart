@@ -83,10 +83,10 @@ class MermaidRenderWidget extends StatefulWidget {
   ///
   /// This is the single source of truth for the Mermaid HTML/JS template.
   /// Both [MermaidRenderWidget] and [MermaidChartPage] use this method.
-  static String buildMermaidHtml(String mermaidCode, {bool withJsGestures = true}) {
+  static String buildMermaidHtml(String mermaidCode,
+      {bool withJsGestures = true}) {
     final escaped = _escapeMermaidCode(mermaidCode);
-    final gestureScript =
-        withJsGestures ? _mermaidGestureJs : '';
+    final gestureScript = withJsGestures ? _mermaidGestureJs : '';
     return _mermaidHtmlTemplate
         .replaceFirst('GESTURE_SCRIPT_PLACEHOLDER', gestureScript)
         .replaceFirst('MERMAID_CODE_PLACEHOLDER', escaped);
@@ -516,8 +516,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     // (details.scale is 1.0 for single-pointer drag, changes for pinch)
     final hasZoom = details.scale != 1.0;
     if (hasZoom) {
-      _zoomLevel =
-          (_gestureStartZoom * details.scale).clamp(0.1, 10.0);
+      _zoomLevel = (_gestureStartZoom * details.scale).clamp(0.1, 10.0);
     }
 
     // Batch pan and zoom in a single evaluateJavascript call to avoid

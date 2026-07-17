@@ -219,10 +219,11 @@ void main() {
           reason: 'default should include touch handlers');
     });
 
-    test('buildMermaidHtml with withJsGestures: false omits JS gesture handlers',
+    test(
+        'buildMermaidHtml with withJsGestures: false omits JS gesture handlers',
         () {
-      final html =
-          MermaidRenderWidget.buildMermaidHtml('graph TD', withJsGestures: false);
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD',
+          withJsGestures: false);
       expect(html, isNot(contains('mousedown')),
           reason: 'should omit mouse drag handlers');
       expect(html, isNot(contains('wheel')),
