@@ -20,7 +20,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 //   备份文件存入 Documents/Stroom/AutoBackups。
 // - iOS: 使用应用的 Documents 目录（通过 UIFileSharingEnabled 暴露
 //   在文件 App 中）。
-// - Desktop (Win/Mac/Linux): 统一使用 ~/Documents/StroomData/AutoBackup。
+// - Desktop (Win/Mac/Linux): 统一使用 ~/Documents/Stroom/AutoBackups。
 // - Web: 不支持本地自动备份，所有操作返回空/跳过。
 // ====================================================================
 
@@ -76,12 +76,12 @@ class BackupLocationManager {
       }
     }
 
-    // Desktop: ~/Documents/StroomData/AutoBackup
+    // Desktop: ~/Documents/Stroom/AutoBackups
     try {
       if (Platform.isWindows) {
         final userProfile = Platform.environment['USERPROFILE'];
         if (userProfile != null && userProfile.isNotEmpty) {
-          return p.join(userProfile, 'Documents', 'StroomData', 'AutoBackup');
+          return p.join(userProfile, 'Documents', _backupDirName);
         }
       }
     } catch (e) {
@@ -92,7 +92,7 @@ class BackupLocationManager {
       if (Platform.isMacOS || Platform.isLinux) {
         final home = Platform.environment['HOME'];
         if (home != null && home.isNotEmpty) {
-          return p.join(home, 'Documents', 'StroomData', 'AutoBackup');
+          return p.join(home, 'Documents', _backupDirName);
         }
       }
     } catch (e) {
@@ -142,7 +142,7 @@ class BackupLocationManager {
       if (Platform.isWindows) {
         final userProfile = Platform.environment['USERPROFILE'];
         if (userProfile != null && userProfile.isNotEmpty) {
-          return p.join(userProfile, 'Documents', 'StroomData', 'AutoBackup');
+          return p.join(userProfile, 'Documents', _backupDirName);
         }
       }
     } catch (e) {
@@ -153,7 +153,7 @@ class BackupLocationManager {
       if (Platform.isMacOS || Platform.isLinux) {
         final home = Platform.environment['HOME'];
         if (home != null && home.isNotEmpty) {
-          return p.join(home, 'Documents', 'StroomData', 'AutoBackup');
+          return p.join(home, 'Documents', _backupDirName);
         }
       }
     } catch (e) {

@@ -133,9 +133,9 @@ class DataMigrationService {
   /// 备份位置不在应用数据目录内，以防止应用数据被删除时备份也丢失。
   ///
   /// 位置策略（所有位置均对用户可见/可访问）：
-  /// - Windows: %USERPROFILE%\Documents\StroomData\AutoBackup\
-  /// - macOS:   ~/Documents/StroomData/AutoBackup/
-  /// - Linux:   ~/Documents/StroomData/AutoBackup/
+  /// - Windows: %USERPROFILE%\Documents\Stroom\AutoBackups\
+  /// - macOS:   ~/Documents/Stroom/AutoBackups/
+  /// - Linux:   ~/Documents/Stroom/AutoBackups/
   /// - Android: 通过 SAF 选择 Documents 目录（优先），
   ///   用户选择后调用 takePersistableUriPermission 固化权限。
   /// - iOS:     <app_group>/Documents/Stroom/AutoBackups/（通过文件 App 可访问）
