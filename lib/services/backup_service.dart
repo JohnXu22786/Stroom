@@ -34,6 +34,11 @@ class BackupCancelledException implements Exception {
 //
 // 用于手动操作时选择要备份或恢复的数据类别。
 // 自动备份时始终使用全量选择。
+//
+// 【重要】该类字段变更说明：
+// - v1: conversations(聊天记录和设置) + attachments(附件)
+// - v2: 将 conversations 拆分为 chatRecordsAndAttachments(聊天记录和附件)
+//       和 settings(设置)，attachments 合并到 chatRecordsAndAttachments
 // ====================================================================
 
 /// 备份/恢复的选择项。
@@ -41,8 +46,11 @@ class BackupCancelledException implements Exception {
 /// 每个 bool 字段表示是否包含对应的数据类别。
 /// 所有字段默认为 `true`（全量）。
 class BackupSelection {
-  /// 聊天记录配置（Preferences + 数据库记录）
-  final bool conversations;
+  /// 聊天记录和附件（聊天相关Preferences + 附件文件）
+  final bool chatRecordsAndAttachments;
+
+  /// 设置（设置相关Preferences）
+  final bool settings;
 
   /// 图片文件（pictures/）
   final bool pictures;
@@ -59,17 +67,14 @@ class BackupSelection {
   /// 任务文件（synthesis/ + catcatch/）
   final bool tasks;
 
-  /// 附件文件（attachments/）
-  final bool attachments;
-
   const BackupSelection({
-    this.conversations = true,
+    this.chatRecordsAndAttachments = true,
+    this.settings = true,
     this.pictures = true,
     this.audio = true,
     this.videos = true,
     this.texts = true,
     this.tasks = true,
-    this.attachments = true,
   });
 
   /// 全量选择（所有类别）。
@@ -78,13 +83,13 @@ class BackupSelection {
   /// 根据选择结果返回包含的类别名称列表（用于 UI 显示）。
   List<String> get selectedLabels {
     final labels = <String>[];
-    if (conversations) labels.add('聊天记录和设置');
+    if (chatRecordsAndAttachments) labels.add('聊天记录和附件');
+    if (settings) labels.add('设置');
     if (pictures) labels.add('图片');
     if (audio) labels.add('音频');
     if (videos) labels.add('视频');
     if (texts) labels.add('文本');
     if (tasks) labels.add('任务');
-    if (attachments) labels.add('附件');
     return labels;
   }
 }
@@ -145,6 +150,19 @@ class BackupService {
   // ================================================================
   // 核心：在内存中构建备份归档
   // ================================================================
+
+  /// 判断 SharedPreferences 键是否为聊天相关键。
+  ///
+  /// 聊天键包括：对话数据、活跃对话ID、助手配置、每模型聊天设置等。
+  /// 所有非 `flutter.*` 前缀的其他键归类为"设置"。
+  static bool _isChatPrefKey(String key) {
+    return key == 'conversations' ||
+        key == 'active_conversation_id' ||
+        key == 'assistants' ||
+        key == 'per_model_chat_settings' ||
+        key == 'selected_model_index' ||
+        key == 'model_order';
+  }
 
   /// 短暂的延迟以让出事件循环，确保 UI 可以处理帧渲染。
   /// 这是防止导出备份时页面冻结的关键机制。
@@ -228,6 +246,11 @@ class BackupService {
   ///
   /// [selection] 控制哪些数据类别包含在归档中。默认全量。
   /// 自动备份始终使用全量选择。
+  ///
+  /// 备份格式版本：
+  /// - v1: preferences.json（聊天+设置合并）+ attachments/ 分开
+  /// - v2: chat_data.json（聊天记录）+ settings.json（设置）+
+  ///       attachments/ 作为聊天记录和附件的一部分
   static Future<Uint8List> _buildBackupBytes({
     void Function(double progress)? onProgress,
     bool Function()? isCancelled,
@@ -247,7 +270,7 @@ class BackupService {
     // 1. manifest.json（始终包含）
     debugPrint('[BackupService] _buildBackupBytes: building manifest');
     final manifest = {
-      'version': 1,
+      'version': 2,
       'createdAt': DateTime.now().toIso8601String(),
       'appVersion': appVersion,
     };
@@ -303,16 +326,40 @@ class BackupService {
     await _yieldToEventLoop();
     checkCancelled();
 
-    // 3. SharedPreferences（仅在选中 conversations 时包含）
-    if (selection.conversations) {
+    // 3. SharedPreferences — 拆分聊天记录和设置
+    // chatRecordsAndAttachments → chat_data.json（聊天相关键）
+    // settings → settings.json（设置相关键）
+    bool hasChatData = false;
+    bool hasSettingsData = false;
+    final chatData = <String, dynamic>{};
+    final settingsData = <String, dynamic>{};
+
+    if (selection.chatRecordsAndAttachments || selection.settings) {
       debugPrint('[BackupService] _buildBackupBytes: reading preferences');
       final prefs = await SharedPreferences.getInstance();
-      final prefData = <String, dynamic>{};
       for (final key in prefs.getKeys()) {
         if (key.startsWith('flutter.')) continue;
-        prefData[key] = prefs.get(key);
+        if (_isChatPrefKey(key)) {
+          if (selection.chatRecordsAndAttachments) {
+            chatData[key] = prefs.get(key);
+            hasChatData = true;
+          }
+        } else {
+          if (selection.settings) {
+            settingsData[key] = prefs.get(key);
+            hasSettingsData = true;
+          }
+        }
       }
-      addStringToArchive(archive, 'preferences.json', jsonEncode(prefData));
+    }
+
+    if (hasChatData) {
+      addStringToArchive(
+          archive, 'chat_data.json', jsonEncode(chatData));
+    }
+    if (hasSettingsData) {
+      addStringToArchive(
+          archive, 'settings.json', jsonEncode(settingsData));
     }
     onProgress?.call(0.25);
     await _yieldToEventLoop();
@@ -414,7 +461,7 @@ class BackupService {
     await _yieldToEventLoop();
     checkCancelled();
 
-    if (selection.attachments) {
+    if (selection.chatRecordsAndAttachments) {
       final attachmentPaths = await collectAttachmentPaths();
       final pathList = attachmentPaths.toList();
       for (var i = 0; i < pathList.length; i++) {
@@ -449,6 +496,11 @@ class BackupService {
   /// 从字节数据恢复备份（双平台通用）。
   ///
   /// [selection] 控制只恢复哪些数据类别。默认全量恢复。
+  ///
+  /// 兼容 v1 和 v2 备份格式：
+  /// - v1: preferences.json（聊天+设置合并），attachments/ 分开
+  /// - v2: chat_data.json（聊天记录）+ settings.json（设置），
+  ///       attachments/ 作为聊天记录和附件的一部分
   static Future<void> _restoreFromBytes(
     Uint8List bytes, {
     void Function(double progress)? onProgress,
@@ -481,7 +533,7 @@ class BackupService {
     debugPrint(
         '[BackupService] _restoreFromBytes: archive decoded (${fileMap.length} files)');
 
-    // 验证 manifest
+    // 验证 manifest（兼容 v1 和 v2）
     final manifestJson = fileMap['manifest.json'];
     if (manifestJson == null) {
       throw Exception('无效的备份文件：缺少 manifest.json');
@@ -489,15 +541,14 @@ class BackupService {
     final manifest =
         jsonDecode(utf8.decode(manifestJson)) as Map<String, dynamic>;
     final version = manifest['version'] as int? ?? 0;
-    if (version != 1) {
-      throw Exception('不支持的备份版本: $version');
+    if (version != 1 && version != 2) {
+      throw Exception('不支持的备份版本: $version (仅支持 v1 和 v2)');
     }
+    final isV1Format = version == 1;
     onProgress?.call(0.15);
     await _yieldToEventLoop();
 
-    // 恢复数据库记录（兼容新旧格式）
-    // 数据库记录（media metadata）不属于"聊天记录和设置"，
-    // 各自受对应的 selection 标志控制（pictures, audio 等）
+    // 恢复数据库记录
     debugPrint('[BackupService] _restoreFromBytes: restoring database');
     final dbJson = fileMap['stroom_manifest.json'] ??
         fileMap['database/manifest_data.json'];
@@ -507,12 +558,44 @@ class BackupService {
     onProgress?.call(0.4);
     await _yieldToEventLoop();
 
-    // 恢复 SharedPreferences（受 conversations 标志控制）
-    if (selection.conversations) {
-      debugPrint('[BackupService] _restoreFromBytes: restoring preferences');
-      final prefJson = fileMap['preferences.json'];
-      if (prefJson != null) {
-        await _restorePreferencesFromJson(utf8.decode(prefJson));
+    // 恢复 SharedPreferences（兼容 v1/v2 格式）
+    // 注意：必须将要恢复的所有数据合并后一次性调用 _restorePreferencesFromJson，
+    // 因为该方法会清除现有所有非 flutter.* 键。分两次调用会导致先恢复的数据被后一次清除。
+    if (isV1Format) {
+      // v1 格式：preferences.json 包含所有键（聊天+设置合并）
+      // 如果用户选中 chatRecordsAndAttachments 或 settings，恢复完整文件
+      if (selection.chatRecordsAndAttachments || selection.settings) {
+        debugPrint(
+            '[BackupService] _restoreFromBytes: restoring v1 preferences');
+        final prefJson = fileMap['preferences.json'];
+        if (prefJson != null) {
+          await _restorePreferencesFromJson(utf8.decode(prefJson));
+        }
+      }
+    } else {
+      // v2 格式：chat_data.json + settings.json 分开，合并后一次性恢复
+      final mergedPrefs = <String, dynamic>{};
+      if (selection.chatRecordsAndAttachments) {
+        debugPrint(
+            '[BackupService] _restoreFromBytes: merging chat_data.json');
+        final chatJson = fileMap['chat_data.json'];
+        if (chatJson != null) {
+          final chatData =
+              jsonDecode(utf8.decode(chatJson)) as Map<String, dynamic>;
+          mergedPrefs.addAll(chatData);
+        }
+      }
+      if (selection.settings) {
+        debugPrint('[BackupService] _restoreFromBytes: merging settings.json');
+        final settingsJson = fileMap['settings.json'];
+        if (settingsJson != null) {
+          final settingsData =
+              jsonDecode(utf8.decode(settingsJson)) as Map<String, dynamic>;
+          mergedPrefs.addAll(settingsData);
+        }
+      }
+      if (mergedPrefs.isNotEmpty) {
+        await _restorePreferencesFromJson(jsonEncode(mergedPrefs));
       }
     }
     onProgress?.call(0.55);
@@ -536,10 +619,15 @@ class BackupService {
       'manifest.json',
       'stroom_manifest.json',
       'database/manifest_data.json',
-      'preferences.json'
+      'preferences.json',
+      'chat_data.json',
+      'settings.json',
     };
 
     // 根据 selection 决定哪些目录需要恢复
+    // v1 格式：attachments 由旧的 conversations 标志控制（因为 v1 的
+    // conversations 包含了设置+聊天记录，不包含附件），但为了兼容，
+    // v1 导入时 attachments 由 chatRecordsAndAttachments 控制
     bool shouldRestoreDir(String dir) {
       switch (dir) {
         case 'pictures':
@@ -554,7 +642,7 @@ class BackupService {
         case 'catcatch':
           return selection.tasks;
         case 'attachments':
-          return selection.attachments;
+          return selection.chatRecordsAndAttachments;
         default:
           return false;
       }

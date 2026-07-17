@@ -59,7 +59,7 @@ void main() {
       }
 
       // ===============================================================
-      // Build an old-format backup archive
+      // Build an old-format backup archive (v1 with preferences.json)
       // ===============================================================
       final archive = Archive();
 
@@ -85,6 +85,7 @@ void main() {
           utf8.encode(jsonEncode(dbData)).length,
           utf8.encode(jsonEncode(dbData))));
 
+      // Old format: preferences.json (with chat_configs)
       archive.addFile(ArchiveFile(
           'preferences.json',
           utf8.encode(jsonEncode(prefData)).length,
@@ -176,7 +177,7 @@ void main() {
       }
 
       // ===============================================================
-      // Build backup
+      // Build backup (v1 format with preferences.json)
       // ===============================================================
       final archive = Archive();
       archive.addFile(ArchiveFile(
@@ -271,12 +272,12 @@ void main() {
         prefData[key] = prefs.get(key);
       }
 
-      // Build backup
+      // Build backup (v2 format with chat_data.json and settings.json)
       final archive = Archive();
       archive.addFile(ArchiveFile(
           'manifest.json',
-          utf8.encode(jsonEncode({'version': 1})).length,
-          utf8.encode(jsonEncode({'version': 1}))));
+          utf8.encode(jsonEncode({'version': 2})).length,
+          utf8.encode(jsonEncode({'version': 2}))));
 
       archive.addFile(ArchiveFile(
           'stroom_manifest.json',
@@ -303,8 +304,9 @@ void main() {
             'video_folders': []
           }))));
 
+      // New format settings.json
       archive.addFile(ArchiveFile(
-          'preferences.json',
+          'settings.json',
           utf8.encode(jsonEncode(prefData)).length,
           utf8.encode(jsonEncode(prefData))));
 
@@ -324,7 +326,67 @@ void main() {
     });
 
     test('restore without preferences skips migration gracefully', () async {
-      // Build a backup WITHOUT preferences.json
+      // Build a backup WITHOUT any preference files
+      final archive = Archive();
+      archive.addFile(ArchiveFile(
+          'manifest.json',
+          utf8.encode(jsonEncode({'version': 2})).length,
+          utf8.encode(jsonEncode({'version': 2}))));
+
+      archive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          utf8
+              .encode(jsonEncode({
+                'image_records': [],
+                'audio_records': [],
+                'video_records': [],
+                'text_records': [],
+                'folders': []
+              }))
+              .length,
+          utf8.encode(jsonEncode({
+            'image_records': [],
+            'audio_records': [],
+            'video_records': [],
+            'text_records': [],
+            'folders': []
+          }))));
+
+      // NO preference files
+
+      final encoded = ZipEncoder().encode(archive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      await ManifestDatabase.clearAllData();
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': DataMigrationService.currentFormatVersion,
+      });
+      await BackupService.restoreFromBytesForTest(backupBytes);
+
+      // Should not throw and version should remain current
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt('data_format_version'),
+          equals(DataMigrationService.currentFormatVersion));
+    });
+
+    test('v1 backup with preferences.json still imports correctly', () async {
+      // ===============================================================
+      // Build an old-format (v1) backup with preferences.json
+      // ===============================================================
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([
+          {'id': 'test_llm', 'type': 'llm', 'name': 'Test LLM', 'configs': []}
+        ]),
+        'data_format_version': DataMigrationService.currentFormatVersion,
+      });
+
+      final prefs = await SharedPreferences.getInstance();
+      final prefData = <String, dynamic>{};
+      for (final key in prefs.getKeys()) {
+        if (key.startsWith('flutter.')) continue;
+        prefData[key] = prefs.get(key);
+      }
+
       final archive = Archive();
       archive.addFile(ArchiveFile(
           'manifest.json',
@@ -350,21 +412,25 @@ void main() {
             'folders': []
           }))));
 
-      // NO preferences.json — migration will see whatever prefs exist
+      archive.addFile(ArchiveFile(
+          'preferences.json',
+          utf8.encode(jsonEncode(prefData)).length,
+          utf8.encode(jsonEncode(prefData))));
 
       final encoded = ZipEncoder().encode(archive);
       final backupBytes = Uint8List.fromList(encoded);
 
+      // Restore
       await ManifestDatabase.clearAllData();
-      SharedPreferences.setMockInitialValues({
-        'data_format_version': DataMigrationService.currentFormatVersion,
-      });
+      SharedPreferences.setMockInitialValues({});
       await BackupService.restoreFromBytesForTest(backupBytes);
 
-      // Should not throw and version should remain current
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getInt('data_format_version'),
-          equals(DataMigrationService.currentFormatVersion));
+      // Verify data was restored
+      final restoredPrefs = await SharedPreferences.getInstance();
+      expect(restoredPrefs.getString('provider_entries'), isNotNull);
+      final entries = jsonDecode(restoredPrefs.getString('provider_entries')!) as List;
+      expect(entries.length, equals(1));
+      expect(entries[0]['id'], equals('test_llm'));
     });
   });
 }
