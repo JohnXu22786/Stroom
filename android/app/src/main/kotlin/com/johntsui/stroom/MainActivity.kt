@@ -39,7 +39,7 @@ class MainActivity : FlutterActivity() {
         if (requestCode == SAF_REQUEST_CODE) {
             if (resultCode == Activity.RESULT_OK && data?.data != null) {
                 val uri = data.data!!
-                // 立即固化权限
+                // 立即固化权限 — 必须成功才能持久化 URI
                 try {
                     contentResolver.takePersistableUriPermission(
                         uri,
@@ -47,10 +47,13 @@ class MainActivity : FlutterActivity() {
                                 Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                     )
                     Log.i(TAG, "SAF: 权限已固化: $uri")
+                    pendingSafResult?.success(uri.toString())
                 } catch (e: SecurityException) {
                     Log.w(TAG, "SAF: 无法固化权限: $uri", e)
+                    // 固化失败时返回 null，避免 Dart 侧保存一个无效 URI
+                    // 否则下次启动时权限丢失，导致授权弹窗反复出现
+                    pendingSafResult?.success(null)
                 }
-                pendingSafResult?.success(uri.toString())
             } else {
                 Log.i(TAG, "SAF: 用户取消了目录选择")
                 pendingSafResult?.success(null)
@@ -290,8 +293,9 @@ class MainActivity : FlutterActivity() {
 
     /// 检查 SAF URI 是否仍然可访问。
     ///
-    /// 通过尝试创建临时文件并删除来验证权限是否仍有效，
-    /// 比仅检查 listFiles 更可靠（空目录也可能返回空数组）。
+    /// 在 Stroom/AutoBackups 子目录中尝试创建临时文件并删除来验证权限是否仍有效，
+    /// 因为文件实际会写入该子目录。在某些 Android 版本上，在 Documents 根目录
+    /// 直接创建文件可能失败，但在其子目录中创建文件却能正常工作。
     private fun checkSafAccess(uriStr: String, result: MethodChannel.Result) {
         try {
             val uri = Uri.parse(uriStr)
@@ -302,9 +306,16 @@ class MainActivity : FlutterActivity() {
                 return
             }
 
-            // 尝试创建临时测试文件
+            // 首先找到或创建 Stroom/AutoBackups 子目录
+            val backupDir = getOrCreateBackupDir(documentFile)
+            if (backupDir == null) {
+                result.success(false)
+                return
+            }
+
+            // 在 Stroom/AutoBackups 子目录中创建临时测试文件
             val testFileName = ".saf_access_test_${System.currentTimeMillis()}.tmp"
-            val testFile = documentFile.createFile("application/octet-stream", testFileName)
+            val testFile = backupDir.createFile("application/octet-stream", testFileName)
             if (testFile != null) {
                 // 写入一些测试数据
                 val outStream = contentResolver.openOutputStream(testFile.uri)
@@ -319,6 +330,21 @@ class MainActivity : FlutterActivity() {
             Log.e(TAG, "SAF: 访问检查失败", e)
             result.success(false)
         }
+    }
+
+    /// 在 treeDocument 下找到或创建 Stroom/AutoBackups 嵌套目录。
+    ///
+    /// SAF 的 findFile/createDirectory 只支持一级子目录，因此需要
+    /// 先处理 Stroom 目录，再在其下处理 AutoBackups 目录。
+    /// 返回 AutoBackups 的 DocumentFile，如果任何一级创建失败返回 null。
+    private fun getOrCreateBackupDir(treeDocument: DocumentFile): DocumentFile? {
+        val stroomDir = treeDocument.findFile("Stroom")
+            ?: treeDocument.createDirectory("Stroom")
+        if (stroomDir == null) return null
+
+        val autoBackupsDir = stroomDir.findFile("AutoBackups")
+            ?: stroomDir.createDirectory("AutoBackups")
+        return autoBackupsDir
     }
 
     /// 通过 SAF 将字节写入文件。
@@ -337,9 +363,8 @@ class MainActivity : FlutterActivity() {
                 return
             }
 
-            // 获取或创建备份子目录
-            val backupDir = treeDocument.findFile("StroomBackups")
-                ?: treeDocument.createDirectory("StroomBackups")
+            // 获取或创建 Stroom/AutoBackups 嵌套子目录
+            val backupDir = getOrCreateBackupDir(treeDocument)
             if (backupDir == null) {
                 result.error("CREATE_DIR_FAILED", "无法创建备份目录", null)
                 return
@@ -381,7 +406,7 @@ class MainActivity : FlutterActivity() {
                 result.success(null)
                 return
             }
-            val backupDir = treeDocument.findFile("StroomBackups")
+            val backupDir = getOrCreateBackupDir(treeDocument)
                 ?: run {
                     result.success(null)
                     return
@@ -414,7 +439,7 @@ class MainActivity : FlutterActivity() {
                 result.success(null)
                 return
             }
-            val backupDir = treeDocument.findFile("StroomBackups")
+            val backupDir = getOrCreateBackupDir(treeDocument)
                 ?: run {
                     result.success(null)
                     return
@@ -446,7 +471,7 @@ class MainActivity : FlutterActivity() {
                 result.error("TREE_DOC_FAILED", "无法访问目录", null)
                 return
             }
-            val backupDir = treeDocument.findFile("StroomBackups")
+            val backupDir = getOrCreateBackupDir(treeDocument)
                 ?: run {
                     result.error("DIR_NOT_FOUND", "备份目录不存在", null)
                     return
@@ -507,7 +532,7 @@ class MainActivity : FlutterActivity() {
                 result.success(emptyList<String>())
                 return
             }
-            val backupDir = treeDocument.findFile("StroomBackups")
+            val backupDir = getOrCreateBackupDir(treeDocument)
                 ?: run {
                     result.success(emptyList<String>())
                     return

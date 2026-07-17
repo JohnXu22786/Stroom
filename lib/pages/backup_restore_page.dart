@@ -21,6 +21,44 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   String? _externalBackupPath;
   Timer? _restartTimer;
 
+  // 导出选择（默认全选）
+  bool _exportConversations = true;
+  bool _exportPictures = true;
+  bool _exportAudio = true;
+  bool _exportVideos = true;
+  bool _exportTexts = true;
+  bool _exportTasks = true;
+  bool _exportAttachments = true;
+
+  // 导入选择（默认全选）
+  bool _importConversations = true;
+  bool _importPictures = true;
+  bool _importAudio = true;
+  bool _importVideos = true;
+  bool _importTexts = true;
+  bool _importTasks = true;
+  bool _importAttachments = true;
+
+  BackupSelection get _exportSelection => BackupSelection(
+        conversations: _exportConversations,
+        pictures: _exportPictures,
+        audio: _exportAudio,
+        videos: _exportVideos,
+        texts: _exportTexts,
+        tasks: _exportTasks,
+        attachments: _exportAttachments,
+      );
+
+  BackupSelection get _importSelection => BackupSelection(
+        conversations: _importConversations,
+        pictures: _importPictures,
+        audio: _importAudio,
+        videos: _importVideos,
+        texts: _importTexts,
+        tasks: _importTasks,
+        attachments: _importAttachments,
+      );
+
   @override
   void initState() {
     super.initState();
@@ -44,12 +82,30 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
 
   Future<void> _onExport() async {
     if (_isExporting) return; // 防止重复点击
+    final selection = _exportSelection;
+    if (!selection.conversations &&
+        !selection.pictures &&
+        !selection.audio &&
+        !selection.videos &&
+        !selection.texts &&
+        !selection.tasks &&
+        !selection.attachments) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('请至少选择一项要备份的数据类别'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
     setState(() => _isExporting = true);
     try {
-      // 显示不可关闭的进度弹窗（showDialog 在 finally 中通过 Navigator.pop 关闭）
+      // 显示不可关闭的进度弹窗
       final progressNotifier = ValueNotifier<String>('正在准备数据...');
-      final progressValue =
-          ValueNotifier<double?>(null); // null = indeterminate
+      final progressValue = ValueNotifier<double?>(null);
 
       showDialog<void>(
         context: context,
@@ -93,8 +149,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         ),
       );
 
-      // 等待一个微任务让对话框渲染完毕，然后再开始耗时的导出操作
-      // 防止对话框还未显示就进入耗时操作导致的"冻结感"
+      // 等待一个微任务让对话框渲染完毕
       await Future<void>.delayed(Duration.zero);
       if (!mounted) return;
 
@@ -125,9 +180,9 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
             progressNotifier.value = '已完成';
           }
         },
+        selection: selection,
       );
     } finally {
-      // 关闭进度弹窗
       if (mounted) {
         Navigator.of(context, rootNavigator: true).pop();
       }
@@ -136,28 +191,95 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   }
 
   Future<void> _onImport() async {
+    final selection = _importSelection;
+    if (!selection.conversations &&
+        !selection.pictures &&
+        !selection.audio &&
+        !selection.videos &&
+        !selection.texts &&
+        !selection.tasks &&
+        !selection.attachments) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('请至少选择一项要恢复的数据类别'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    final restoreWarnings = <String>[];
+    if (selection.conversations) {
+      restoreWarnings.add('聊天记录和设置将被覆盖');
+    }
+    if (selection.pictures) restoreWarnings.add('图片将被覆盖');
+    if (selection.audio) restoreWarnings.add('音频将被覆盖');
+    if (selection.videos) restoreWarnings.add('视频将被覆盖');
+    if (selection.texts) restoreWarnings.add('文本将被覆盖');
+    if (selection.tasks) restoreWarnings.add('任务将被覆盖');
+    if (selection.attachments) restoreWarnings.add('附件将被覆盖');
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('确认恢复'),
-        content: const Column(
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('恢复将覆盖所有现有数据。'),
-            SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.warning_amber_rounded,
-                    color: Colors.orange, size: 20),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '导入完成后应用将自动重启，请确保已保存当前工作。',
-                    style: TextStyle(fontSize: 13, color: Colors.grey),
-                  ),
+            const Text('将从选中的备份文件恢复以下数据类别：'),
+            const SizedBox(height: 12),
+            ...restoreWarnings.map(
+              (w) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        color: Colors.orange, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(w, style: const TextStyle(fontSize: 13))),
+                  ],
                 ),
-              ],
+              ),
+            ),
+            if (restoreWarnings.length < 7) ...[
+              const SizedBox(height: 12),
+              const Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.blue, size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '未选中的类别将保持不变，不会被覆盖。',
+                      style: TextStyle(fontSize: 13, color: Colors.grey),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded,
+                      color: Colors.orange, size: 16),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '导入完成后应用将自动重启，请确保已保存当前工作。',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -179,9 +301,11 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     setState(() => _isImporting = true);
     try {
       if (!mounted) return;
-      final success = await BackupService.importBackup(context);
+      final success = await BackupService.importBackup(
+        context,
+        selection: selection,
+      );
       if (success && mounted) {
-        // 显示倒计时重启弹窗
         await _showRestartCountdown();
       }
     } finally {
@@ -194,14 +318,12 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
 
     final countdown = ValueNotifier<int>(5);
 
-    // 启动倒计时（与对话框同时运行）
     _restartTimer?.cancel();
     _restartTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       countdown.value--;
       if (countdown.value <= 0) {
         timer.cancel();
         _restartTimer = null;
-        // 关闭对话框
         if (mounted) {
           Navigator.of(context, rootNavigator: true).pop();
         }
@@ -209,7 +331,6 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       }
     });
 
-    // 显示对话框（阻塞直到用户关闭或倒计时结束）
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -252,7 +373,6 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       ),
     );
 
-    // 对话框关闭后取消计时器（如尚未触发重启）
     _restartTimer?.cancel();
     _restartTimer = null;
   }
@@ -264,6 +384,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // 提示信息
           const Card(
             child: Padding(
               padding: EdgeInsets.all(16),
@@ -273,7 +394,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                   SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      '导出将打包所有数据（照片、音频、视频、对话、配置等）为一个 .zip 文件。导入将覆盖当前所有数据。',
+                      '手动导出时可选择要备份的数据类别；导入时也可选择性恢复部分数据。'
+                      '自动备份始终为全量备份。',
                     ),
                   ),
                 ],
@@ -351,93 +473,212 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
             ),
           ),
           const SizedBox(height: 24),
+          // === 导出备份区域 ===
           _buildSectionHeader('导出备份'),
+          _buildSelectionCard(
+            title: '选择要备份的数据类别',
+            conversations: _exportConversations,
+            pictures: _exportPictures,
+            audio: _exportAudio,
+            videos: _exportVideos,
+            texts: _exportTexts,
+            tasks: _exportTasks,
+            attachments: _exportAttachments,
+            onConversationsChanged: (v) =>
+                setState(() => _exportConversations = v ?? false),
+            onPicturesChanged: (v) =>
+                setState(() => _exportPictures = v ?? false),
+            onAudioChanged: (v) =>
+                setState(() => _exportAudio = v ?? false),
+            onVideosChanged: (v) =>
+                setState(() => _exportVideos = v ?? false),
+            onTextsChanged: (v) =>
+                setState(() => _exportTexts = v ?? false),
+            onTasksChanged: (v) =>
+                setState(() => _exportTasks = v ?? false),
+            onAttachmentsChanged: (v) =>
+                setState(() => _exportAttachments = v ?? false),
+          ),
+          const SizedBox(height: 12),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  const Text('将所有数据打包为 .zip 文件'),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _isExporting ? null : _onExport,
-                      icon: _isExporting
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.backup),
-                      label: Text(_isExporting ? '正在导出...' : '导出备份'),
-                    ),
-                  ),
-                ],
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _isExporting ? null : _onExport,
+                  icon: _isExporting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.backup),
+                  label: Text(_isExporting ? '正在导出...' : '导出备份'),
+                ),
               ),
             ),
           ),
           const SizedBox(height: 24),
+          // === 导入恢复区域 ===
           _buildSectionHeader('导入恢复'),
+          _buildSelectionCard(
+            title: '选择要恢复的数据类别',
+            conversations: _importConversations,
+            pictures: _importPictures,
+            audio: _importAudio,
+            videos: _importVideos,
+            texts: _importTexts,
+            tasks: _importTasks,
+            attachments: _importAttachments,
+            onConversationsChanged: (v) =>
+                setState(() => _importConversations = v ?? false),
+            onPicturesChanged: (v) =>
+                setState(() => _importPictures = v ?? false),
+            onAudioChanged: (v) =>
+                setState(() => _importAudio = v ?? false),
+            onVideosChanged: (v) =>
+                setState(() => _importVideos = v ?? false),
+            onTextsChanged: (v) =>
+                setState(() => _importTexts = v ?? false),
+            onTasksChanged: (v) =>
+                setState(() => _importTasks = v ?? false),
+            onAttachmentsChanged: (v) =>
+                setState(() => _importAttachments = v ?? false),
+          ),
+          const SizedBox(height: 12),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
-                    children: [
-                      Expanded(
-                        child: Text('从 .zip 备份文件恢复所有数据，将覆盖当前所有数据'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.orange.shade200),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.warning_amber_rounded,
-                            size: 14, color: Colors.orange.shade700),
-                        const SizedBox(width: 4),
-                        Text(
-                          '将覆盖现有数据',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.orange.shade800,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _isImporting ? null : _onImport,
-                      icon: _isImporting
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.restore),
-                      label: Text(_isImporting ? '正在恢复...' : '选择备份文件并恢复'),
-                    ),
-                  ),
-                ],
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _isImporting ? null : _onImport,
+                  icon: _isImporting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.restore),
+                  label:
+                      Text(_isImporting ? '正在恢复...' : '选择备份文件并恢复'),
+                ),
               ),
             ),
           ),
+          const SizedBox(height: 24),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSelectionCard({
+    required String title,
+    required bool conversations,
+    required bool pictures,
+    required bool audio,
+    required bool videos,
+    required bool texts,
+    required bool tasks,
+    required bool attachments,
+    required ValueChanged<bool?> onConversationsChanged,
+    required ValueChanged<bool?> onPicturesChanged,
+    required ValueChanged<bool?> onAudioChanged,
+    required ValueChanged<bool?> onVideosChanged,
+    required ValueChanged<bool?> onTextsChanged,
+    required ValueChanged<bool?> onTasksChanged,
+    required ValueChanged<bool?> onAttachmentsChanged,
+  }) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+            CheckboxListTile(
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              title: const Text('聊天记录和设置',
+                  style: TextStyle(fontSize: 14)),
+              subtitle: const Text('对话记录、应用设置、媒体库索引',
+                  style: TextStyle(fontSize: 12)),
+              value: conversations,
+              onChanged: onConversationsChanged,
+              controlAffinity: ListTileControlAffinity.leading,
+            ),
+            CheckboxListTile(
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              title: const Text('图片', style: TextStyle(fontSize: 14)),
+              subtitle:
+                  const Text('照片和缩略图', style: TextStyle(fontSize: 12)),
+              value: pictures,
+              onChanged: onPicturesChanged,
+              controlAffinity: ListTileControlAffinity.leading,
+            ),
+            CheckboxListTile(
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              title: const Text('音频', style: TextStyle(fontSize: 14)),
+              subtitle:
+                  const Text('语音合成和录音', style: TextStyle(fontSize: 12)),
+              value: audio,
+              onChanged: onAudioChanged,
+              controlAffinity: ListTileControlAffinity.leading,
+            ),
+            CheckboxListTile(
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              title: const Text('视频', style: TextStyle(fontSize: 14)),
+              subtitle:
+                  const Text('视频文件', style: TextStyle(fontSize: 12)),
+              value: videos,
+              onChanged: onVideosChanged,
+              controlAffinity: ListTileControlAffinity.leading,
+            ),
+            CheckboxListTile(
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              title: const Text('文本', style: TextStyle(fontSize: 14)),
+              subtitle:
+                  const Text('文本文档', style: TextStyle(fontSize: 12)),
+              value: texts,
+              onChanged: onTextsChanged,
+              controlAffinity: ListTileControlAffinity.leading,
+            ),
+            CheckboxListTile(
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              title: const Text('任务', style: TextStyle(fontSize: 14)),
+              subtitle:
+                  const Text('后台任务记录', style: TextStyle(fontSize: 12)),
+              value: tasks,
+              onChanged: onTasksChanged,
+              controlAffinity: ListTileControlAffinity.leading,
+            ),
+            CheckboxListTile(
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              title: const Text('附件', style: TextStyle(fontSize: 14)),
+              subtitle:
+                  const Text('聊天中的文件附件', style: TextStyle(fontSize: 12)),
+              value: attachments,
+              onChanged: onAttachmentsChanged,
+              controlAffinity: ListTileControlAffinity.leading,
+            ),
+          ],
+        ),
       ),
     );
   }

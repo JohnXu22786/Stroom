@@ -31,10 +31,10 @@ void main() {
 
     test('contains expected directory name', () async {
       final path = await BackupLocationManager.getDisplayPath();
-      // 应该包含 StroomData 或 AutoBackup 或 StroomBackups
+      // 应该包含 StroomData 或 AutoBackup(s) 等有意义的名称
       final hasExpectedName = path.contains('StroomData') ||
           path.contains('AutoBackup') ||
-          path.contains('StroomBackups') ||
+          path.contains('AutoBackups') ||
           path.contains('temp') ||
           path.contains('tmp');
       expect(hasExpectedName, isTrue,
