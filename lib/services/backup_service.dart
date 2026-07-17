@@ -354,12 +354,10 @@ class BackupService {
     }
 
     if (hasChatData) {
-      addStringToArchive(
-          archive, 'chat_data.json', jsonEncode(chatData));
+      addStringToArchive(archive, 'chat_data.json', jsonEncode(chatData));
     }
     if (hasSettingsData) {
-      addStringToArchive(
-          archive, 'settings.json', jsonEncode(settingsData));
+      addStringToArchive(archive, 'settings.json', jsonEncode(settingsData));
     }
     onProgress?.call(0.25);
     await _yieldToEventLoop();
@@ -576,8 +574,7 @@ class BackupService {
       // v2 格式：chat_data.json + settings.json 分开，合并后一次性恢复
       final mergedPrefs = <String, dynamic>{};
       if (selection.chatRecordsAndAttachments) {
-        debugPrint(
-            '[BackupService] _restoreFromBytes: merging chat_data.json');
+        debugPrint('[BackupService] _restoreFromBytes: merging chat_data.json');
         final chatJson = fileMap['chat_data.json'];
         if (chatJson != null) {
           final chatData =

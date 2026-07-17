@@ -402,8 +402,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                           ? const SizedBox(
                               width: 20,
                               height: 20,
-                              child:
-                                  CircularProgressIndicator(strokeWidth: 2),
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.backup),
                       label: Text(_isExporting ? '正在导出...' : '导出备份'),
@@ -417,12 +416,10 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                           ? const SizedBox(
                               width: 20,
                               height: 20,
-                              child:
-                                  CircularProgressIndicator(strokeWidth: 2),
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.restore),
-                      label:
-                          Text(_isImporting ? '正在恢复...' : '选择备份文件并恢复'),
+                      label: Text(_isImporting ? '正在恢复...' : '选择备份文件并恢复'),
                     ),
                   ),
                 ],

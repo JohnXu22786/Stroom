@@ -428,7 +428,8 @@ void main() {
       // Verify data was restored
       final restoredPrefs = await SharedPreferences.getInstance();
       expect(restoredPrefs.getString('provider_entries'), isNotNull);
-      final entries = jsonDecode(restoredPrefs.getString('provider_entries')!) as List;
+      final entries =
+          jsonDecode(restoredPrefs.getString('provider_entries')!) as List;
       expect(entries.length, equals(1));
       expect(entries[0]['id'], equals('test_llm'));
     });

@@ -215,7 +215,8 @@ void main() {
           reason: 'text_records should be empty');
     });
 
-    testWidgets('backup with chatRecordsAndAttachments includes chat_data.json and no settings.json',
+    testWidgets(
+        'backup with chatRecordsAndAttachments includes chat_data.json and no settings.json',
         (WidgetTester t) async {
       SharedPreferences.setMockInitialValues({
         'conversations': '[]',
@@ -245,7 +246,8 @@ void main() {
       expect(fileNames, isNot(contains('settings.json')));
     });
 
-    testWidgets('backup with settings-only includes settings.json and no chat_data.json',
+    testWidgets(
+        'backup with settings-only includes settings.json and no chat_data.json',
         (WidgetTester t) async {
       SharedPreferences.setMockInitialValues({
         'conversations': '[]',
@@ -430,7 +432,8 @@ void main() {
           reason: 'Old image record must be replaced during full restore');
     });
 
-    testWidgets('restore old v1 backup with preferences.json maps keys correctly',
+    testWidgets(
+        'restore old v1 backup with preferences.json maps keys correctly',
         (WidgetTester t) async {
       // Set up old format preferences with chat and settings keys
       SharedPreferences.setMockInitialValues({
@@ -468,9 +471,7 @@ void main() {
             'folders': <String>[],
           }))));
       archive.addFile(ArchiveFile(
-          'preferences.json',
-          0,
-          utf8.encode(jsonEncode(prefData))));
+          'preferences.json', 0, utf8.encode(jsonEncode(prefData))));
 
       final encoded = ZipEncoder().encode(archive);
       final backupBytes = Uint8List.fromList(encoded);
@@ -488,7 +489,8 @@ void main() {
           reason: 'Settings key should be restored from v1 backup');
     });
 
-    testWidgets('full v2 restore merges chat_data.json and settings.json correctly',
+    testWidgets(
+        'full v2 restore merges chat_data.json and settings.json correctly',
         (WidgetTester t) async {
       // Regression test: _restorePreferencesFromJson clears all keys on each call,
       // so separate calls for chat_data.json and settings.json would lose data.
