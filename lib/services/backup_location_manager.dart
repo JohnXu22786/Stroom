@@ -17,6 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 // - Android: 使用 SAF（Storage Access Framework）获取一个公开目录
 //   （优先 Documents），调用 takePersistableUriPermission 固化权限，
 //   所有文件操作通过 MethodChannel 转发到原生层。
+//   备份文件存入 Documents/Stroom/AutoBackups。
 // - iOS: 使用应用的 Documents 目录（通过 UIFileSharingEnabled 暴露
 //   在文件 App 中）。
 // - Desktop (Win/Mac/Linux): 统一使用 ~/Documents/StroomData/AutoBackup。
@@ -33,8 +34,9 @@ class BackupLocationManager {
   static const MethodChannel _safChannel =
       MethodChannel('com.johntsui.stroom/saf');
 
-  /// 备份目录名（所有平台统一）。
-  static const String _backupDirName = 'StroomBackups';
+  /// 备份目录路径（所有平台统一，相对于用户选择的 Documents 目录）。
+  /// 使用 Stroom/AutoBackups 两级目录结构，便于用户识别和管理。
+  static const String _backupDirName = 'Stroom/AutoBackups';
 
   // ================================================================
   // 路径解析
@@ -126,7 +128,7 @@ class BackupLocationManager {
         if (Platform.isAndroid) {
           final uri = await _getSavedSafUri();
           if (uri != null) {
-            return 'Documents/StroomBackups (点击重新选择目录)';
+            return 'Documents/Stroom/AutoBackups (点击重新选择目录)';
           }
           return '尚未选择备份目录，请在启动流程中授权';
         }
@@ -170,7 +172,7 @@ class BackupLocationManager {
     }
 
     final fallback = await getBackupRootPath();
-    return fallback ?? '/tmp/StroomBackups';
+    return fallback ?? '/tmp/Stroom/AutoBackups';
   }
 
   // ================================================================

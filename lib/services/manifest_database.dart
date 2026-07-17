@@ -1222,6 +1222,69 @@ class ManifestDatabase {
   // 工具方法
   // ==================================================================
 
+  /// 清除指定记录类型的所有数据。
+  ///
+  /// [tableName] 为记录表名，如 'image_records', 'audio_records' 等。
+  /// 不会影响其他记录类型或文件夹数据。
+  static Future<void> clearRecords(String tableName) async {
+    await AppLogService.info(
+        'ManifestDatabase', 'clearRecords called [table=$tableName]');
+    try {
+      final validTables = {
+        ManifestTables.imageRecords,
+        ManifestTables.audioRecords,
+        ManifestTables.videoRecords,
+        ManifestTables.textRecords,
+      };
+      if (!validTables.contains(tableName)) {
+        throw ArgumentError('Invalid record table: $tableName');
+      }
+      if (_useJsonStore) {
+        final data = await _loadWebData();
+        data[tableName] = <dynamic>[];
+        await _saveWebData();
+      } else {
+        final db = await database;
+        await db.delete(tableName);
+      }
+      await AppLogService.info(
+          'ManifestDatabase', 'clearRecords completed [table=$tableName]');
+    } catch (e, stackTrace) {
+      await AppLogService.error(
+          'ManifestDatabase', 'clearRecords failed', e, stackTrace);
+      rethrow;
+    }
+  }
+
+  /// 清除指定记录类型的文件夹数据。
+  ///
+  /// [recordTable] 指定记录表名，用于选择对应的文件夹表。
+  /// 为 null 时抛出 ArgumentError。
+  static Future<void> clearFolders({String? recordTable}) async {
+    await AppLogService.info(
+        'ManifestDatabase', 'clearFolders called [recordTable=$recordTable]');
+    try {
+      if (recordTable == null) {
+        throw ArgumentError('recordTable is required');
+      }
+      final folderTable = ManifestTables.folderTableFor(recordTable);
+      if (_useJsonStore) {
+        final data = await _loadWebData();
+        data[folderTable] = <dynamic>[];
+        await _saveWebData();
+      } else {
+        final db = await database;
+        await db.delete(folderTable);
+      }
+      await AppLogService.info('ManifestDatabase',
+          'clearFolders completed [recordTable=$recordTable]');
+    } catch (e, stackTrace) {
+      await AppLogService.error(
+          'ManifestDatabase', 'clearFolders failed', e, stackTrace);
+      rethrow;
+    }
+  }
+
   /// 清除所有数据（双模式通用）。
   ///
   /// 在 Native 模式下删除 SQLite 数据库文件；

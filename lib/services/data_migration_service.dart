@@ -138,7 +138,7 @@ class DataMigrationService {
   /// - Linux:   ~/Documents/StroomData/AutoBackup/
   /// - Android: 通过 SAF 选择 Documents 目录（优先），
   ///   用户选择后调用 takePersistableUriPermission 固化权限。
-  /// - iOS:     <app_group>/Documents/StroomBackups/（通过文件 App 可访问）
+  /// - iOS:     <app_group>/Documents/Stroom/AutoBackups/（通过文件 App 可访问）
   /// - 测试环境: Directory.systemTemp/stroom_backup_test/
   ///
   /// 注意：此方法委托给 [BackupLocationManager.getBackupRootPath]。
@@ -165,16 +165,16 @@ class DataMigrationService {
 
     // 兜底：系统临时目录
     try {
-      return '${Directory.systemTemp.path}/StroomBackups';
+      return '${Directory.systemTemp.path}/Stroom/AutoBackups';
     } catch (_) {
-      return '/tmp/StroomBackups';
+      return '/tmp/Stroom/AutoBackups';
     }
   }
 
   /// 创建当前数据的完整 ZIP 备份。
   ///
   /// 使用 [AutoBackupService] 创建包含所有应用数据的完整备份
-  /// 到 StroomBackups 目录。备份文件格式为：
+  /// 到 Stroom/AutoBackups 目录。备份文件格式为：
   ///   backup_YYYY-MM-DDTHH-MM-SS.zip
   ///
   /// 返回备份文件路径，如果备份失败返回 `null`。

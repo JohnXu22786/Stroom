@@ -36,9 +36,10 @@ void main() {
 
     test('backup root contains backup directory name', () async {
       final backupRoot = await DataMigrationService.getExternalBackupRootPath();
-      // Should contain either StroomBackups or stroom_backup_test
+      // Should contain either Stroom/AutoBackups or stroom_backup_test
       expect(
-        backupRoot.contains('StroomBackups') ||
+        backupRoot.contains('AutoBackups') ||
+            backupRoot.contains('AutoBackup') ||
             backupRoot.contains('stroom_backup_test'),
         isTrue,
         reason: 'Backup root should reference backup directory name',

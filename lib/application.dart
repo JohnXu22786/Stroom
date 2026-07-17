@@ -101,7 +101,14 @@ class _ApplicationState extends ConsumerState<Application>
       // 长时间异步后检查 mounted 状态
       if (!mounted) return;
 
-      if (result.storageReady && result.autoBackupPerformed) {
+      if (!result.storageReady) {
+        // 用户点击了"退出应用"或授权失败 — 真正退出应用
+        debugPrint('[Application] 备份存储未就绪，退出应用');
+        _exitApp();
+        return;
+      }
+
+      if (result.autoBackupPerformed) {
         debugPrint('[Application] 启动后备份检查完成: 已就绪');
       }
     } catch (e, stack) {
