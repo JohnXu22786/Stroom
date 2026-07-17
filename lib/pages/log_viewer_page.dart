@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -22,14 +23,54 @@ class LogViewerPage extends StatefulWidget {
   State<LogViewerPage> createState() => _LogViewerPageState();
 }
 
-class _LogViewerPageState extends State<LogViewerPage> {
+class _LogViewerPageState extends State<LogViewerPage>
+    with WidgetsBindingObserver {
   List<String> _logFiles = [];
   bool _isLoading = true;
+  Timer? _retryTimer;
+  int _retryCount = 0;
+  static const Duration _maxRetryDelay = Duration(seconds: 60);
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadLogFiles();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _retryTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadLogFiles();
+    }
+  }
+
+  /// Schedule a retry to load log files after a delay.
+  ///
+  /// Uses exponential backoff capped at [_maxRetryDelay] (60s).
+  /// Retries continue indefinitely so that the page auto-refreshes
+  /// when logs are eventually generated.
+  void _scheduleRetry() {
+    _retryTimer?.cancel();
+    _retryCount++;
+    // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s, 60s, 60s, ...
+    final delay = Duration(
+      seconds: _retryCount <= 6
+          ? (1 << (_retryCount - 1)) // 1, 2, 4, 8, 16, 32
+          : _maxRetryDelay.inSeconds, // cap at 60s
+    );
+    _retryTimer = Timer(delay, () {
+      if (mounted) {
+        _loadLogFiles();
+      }
+    });
   }
 
   Future<void> _loadLogFiles() async {
@@ -42,9 +83,16 @@ class _LogViewerPageState extends State<LogViewerPage> {
           _isLoading = false;
         });
       }
+      // If no files found, schedule a retry (auto-refresh)
+      if (files.isEmpty && mounted) {
+        _scheduleRetry();
+      } else {
+        _retryCount = 0; // Reset retry count on success
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
+        _scheduleRetry(); // Retry on error too
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('加载日志文件列表失败: $e')),
         );
@@ -53,22 +101,58 @@ class _LogViewerPageState extends State<LogViewerPage> {
   }
 
   Future<void> _viewLogFile(String fileName) async {
-    final content = await AppLogService.readLogFile(fileName);
-    if (!mounted) return;
+    try {
+      final content = await AppLogService.readLogFile(fileName);
+      if (!mounted) return;
 
-    if (content == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('无法读取日志文件')),
+      if (content == null) {
+        final logDir = await AppLogService.getLogDir();
+        if (!mounted) return;
+        final filePath = p.join(logDir.path, fileName);
+        final file = File(filePath);
+        final fileExists = await file.exists();
+
+        String errorMsg;
+        if (fileExists) {
+          errorMsg = '日志文件 "$fileName" 存在但无法读取，可能文件已损坏';
+          debugPrint('[LogViewer] 文件存在但无法读取: $filePath');
+        } else {
+          errorMsg = '日志文件 "$fileName" 不存在，可能已被清理';
+          debugPrint('[LogViewer] 文件不存在: $filePath');
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMsg),
+              duration: const Duration(seconds: 3),
+              action: SnackBarAction(
+                label: '刷新',
+                onPressed: () {
+                  _retryCount = 0;
+                  _loadLogFiles();
+                },
+              ),
+            ),
+          );
+        }
+        return;
+      }
+
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => _LogContentPage(fileName: fileName, content: content),
+        ),
       );
-      return;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('读取日志文件失败: $e')),
+        );
+      }
     }
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => _LogContentPage(fileName: fileName, content: content),
-      ),
-    );
   }
 
   Future<void> _deleteLogFile(String fileName) async {
@@ -105,7 +189,10 @@ class _LogViewerPageState extends State<LogViewerPage> {
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: '刷新',
-            onPressed: _loadLogFiles,
+            onPressed: () {
+              _retryCount = 0; // Reset retry count on manual refresh
+              _loadLogFiles();
+            },
           ),
           IconButton(
             icon: const Icon(Icons.delete_sweep),
@@ -113,11 +200,10 @@ class _LogViewerPageState extends State<LogViewerPage> {
             onPressed: () async {
               await AppLogService.cleanupOldLogs();
               await _loadLogFiles();
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('旧日志已清理')),
-                );
-              }
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('旧日志已清理')),
+              );
             },
           ),
         ],
@@ -126,7 +212,13 @@ class _LogViewerPageState extends State<LogViewerPage> {
           ? const Center(child: CircularProgressIndicator())
           : _logFiles.isEmpty
               ? _buildEmptyState(theme)
-              : _buildLogFileList(theme),
+              : RefreshIndicator(
+                  onRefresh: () async {
+                    _retryCount = 0;
+                    await _loadLogFiles();
+                  },
+                  child: _buildLogFileList(theme),
+                ),
     );
   }
 
@@ -145,11 +237,23 @@ class _LogViewerPageState extends State<LogViewerPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            '应用运行后将自动生成日志',
+            _retryCount > 0 ? '自动刷新中 (第 $_retryCount 次)...' : '应用运行后将自动生成日志',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
+          if (_retryCount > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ),
         ],
       ),
     );

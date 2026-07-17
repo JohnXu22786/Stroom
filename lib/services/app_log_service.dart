@@ -177,8 +177,9 @@ class AppLogService {
             '${_pad(now.hour)}:${_pad(now.minute)}:${_pad(now.second)}';
         final logLine = '[$timestamp] [${level.label}] [$source] $message\n';
         await logFile.writeAsString(logLine, mode: FileMode.append);
-      } catch (_) {
+      } catch (e) {
         // 文件写入失败不影响主流程（包括 FakeAsync zone 中不可用的情况）
+        debugPrint('[AppLogService] 写入日志文件失败: $e');
       } finally {
         completer.complete();
       }
@@ -234,15 +235,32 @@ class AppLogService {
   /// 读取指定日志文件的内容。
   ///
   /// [fileName] 是文件名（如 `app_2024-01-01.log`）。
-  /// 如果文件不存在返回 `null`。
+  /// 如果文件不存在返回 `null`。文件存在但因 I/O 错误无法读取也返回 `null`，
+  /// 但会记录更详细的错误信息到控制台。
   static Future<String?> readLogFile(String fileName) async {
     try {
       final logDir = await getLogDir();
-      final file = File(p.join(logDir.path, fileName));
-      if (!await file.exists()) return null;
+      final filePath = p.join(logDir.path, fileName);
+      final file = File(filePath);
+      if (!await file.exists()) {
+        debugPrint('[AppLogService] 日志文件不存在: $filePath');
+        return null;
+      }
       return await file.readAsString();
     } catch (e) {
-      debugPrint('[AppLogService] 读取日志文件失败: $e');
+      debugPrint('[AppLogService] 读取日志文件失败 ($fileName): $e');
+      // 如果是因为文件损坏或其他 I/O 错误，记录更详细的信息
+      try {
+        final logDir = await getLogDir();
+        final filePath = p.join(logDir.path, fileName);
+        final file = File(filePath);
+        if (await file.exists()) {
+          final fileSize = await file.length();
+          debugPrint('[AppLogService] 文件存在，大小: $fileSize 字节, 路径: $filePath');
+        }
+      } catch (_) {
+        // 静默处理诊断失败的情况
+      }
       return null;
     }
   }

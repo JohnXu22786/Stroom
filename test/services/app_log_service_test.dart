@@ -163,6 +163,75 @@ void main() {
       final content = await AppLogService.readLogFile('nonexistent.log');
       expect(content, isNull);
     });
+
+    test('listLogFiles returns empty list when directory does not exist',
+        () async {
+      final logDir = await AppLogService.getLogDir();
+      // Delete dir if it exists from previous tests
+      if (await logDir.exists()) {
+        await logDir.delete(recursive: true);
+      }
+      AppLogService.clearLogDirCache();
+
+      final files = await AppLogService.listLogFiles();
+      expect(files, isEmpty,
+          reason:
+              'When log directory does not exist, listLogFiles should return empty list');
+
+      // Cleanup
+      AppLogService.clearLogDirCache();
+    });
+
+    test('readLogFile returns null for empty log file', () async {
+      final logDir = await AppLogService.getLogDir();
+      if (!await logDir.exists()) {
+        await logDir.create(recursive: true);
+      }
+      final emptyFile = File('${logDir.path}/app_empty_test.log');
+      await emptyFile.writeAsString('');
+      AppLogService.clearLogDirCache();
+
+      final content = await AppLogService.readLogFile('app_empty_test.log');
+      // An empty file should return empty string, not null
+      // (the file exists, it's just empty)
+      expect(content, isNotNull,
+          reason:
+              'readLogFile should not return null for an existing but empty file');
+      expect(content, isEmpty,
+          reason: 'An empty file should return empty string, not null');
+
+      // Cleanup
+      await emptyFile.delete();
+      AppLogService.clearLogDirCache();
+      if (await logDir.exists()) await logDir.delete(recursive: true);
+    });
+
+    test('listLogFiles filters out non-log files', () async {
+      final logDir = await AppLogService.getLogDir();
+      if (!await logDir.exists()) {
+        await logDir.create(recursive: true);
+      }
+
+      // Create a log file
+      await AppLogService.info('TestSource', 'Log entry');
+      await AppLogService.flush();
+
+      // Create a non-log file in the same directory
+      final nonLogFile = File('${logDir.path}/readme.txt');
+      await nonLogFile.writeAsString('Not a log file');
+
+      AppLogService.clearLogDirCache();
+      final files = await AppLogService.listLogFiles();
+      expect(files.every((f) => f.endsWith('.log')), isTrue,
+          reason: 'listLogFiles should only return .log files');
+      expect(files.any((f) => f == 'readme.txt'), isFalse,
+          reason: 'Non-log files should be filtered out');
+
+      // Cleanup
+      await nonLogFile.delete();
+      AppLogService.clearLogDirCache();
+      if (await logDir.exists()) await logDir.delete(recursive: true);
+    });
   });
 
   // ==================================================================
@@ -239,6 +308,175 @@ void main() {
 
     test('cleanup is idempotent when no logs exist', () async {
       await AppLogService.cleanupOldLogs(); // Should not throw
+    });
+  });
+
+  // ==================================================================
+  // Cross-date boundary — reading logs from different dates
+  // ==================================================================
+
+  group('AppLogService — cross-date log reading', () {
+    test('readLogFile works for yesterday log file', () async {
+      final logDir = await AppLogService.getLogDir();
+      if (!await logDir.exists()) {
+        await logDir.create(recursive: true);
+      }
+
+      // Simulate yesterday's log file
+      final yesterday = DateTime.now().subtract(const Duration(days: 1));
+      final yDateStr =
+          '${yesterday.year}-${_pad(yesterday.month)}-${_pad(yesterday.day)}';
+      final yesterdayFile = File('${logDir.path}/app_$yDateStr.log');
+      await yesterdayFile
+          .writeAsString('[yesterday] [INFO] [Test] Yesterday log\n');
+
+      // Create today's log as well
+      await AppLogService.info('Test', 'Today log');
+      await AppLogService.flush();
+
+      AppLogService.clearLogDirCache();
+      final files = await AppLogService.listLogFiles();
+      expect(files, contains('app_$yDateStr.log'),
+          reason: 'Yesterday log file should appear in file list');
+
+      // Read yesterday's log
+      final content = await AppLogService.readLogFile('app_$yDateStr.log');
+      expect(content, isNotNull,
+          reason: 'Yesterday\'s log file should be readable by filename');
+      expect(content, contains('Yesterday log'));
+
+      // Cleanup
+      AppLogService.clearLogDirCache();
+      if (await logDir.exists()) await logDir.delete(recursive: true);
+    });
+
+    test('readLogFile handles yesterday log when no today log exists',
+        () async {
+      final logDir = await AppLogService.getLogDir();
+      if (!await logDir.exists()) {
+        await logDir.create(recursive: true);
+      }
+
+      // Only yesterday's log exists (no today log)
+      final yesterday = DateTime.now().subtract(const Duration(days: 1));
+      final yDateStr =
+          '${yesterday.year}-${_pad(yesterday.month)}-${_pad(yesterday.day)}';
+      final yesterdayFile = File('${logDir.path}/app_$yDateStr.log');
+      await yesterdayFile
+          .writeAsString('[yesterday] [INFO] [Test] Only yesterday\n');
+
+      AppLogService.clearLogDirCache();
+      final files = await AppLogService.listLogFiles();
+      expect(files, contains('app_$yDateStr.log'));
+
+      final content = await AppLogService.readLogFile('app_$yDateStr.log');
+      expect(content, isNotNull,
+          reason:
+              'Yesterday log should be readable even when today log does not exist');
+
+      // Cleanup
+      AppLogService.clearLogDirCache();
+      if (await logDir.exists()) await logDir.delete(recursive: true);
+    });
+
+    test('reading a non-existent previous day file returns null', () async {
+      final logDir = await AppLogService.getLogDir();
+      if (!await logDir.exists()) {
+        await logDir.create(recursive: true);
+      }
+
+      // Create today's log
+      await AppLogService.info('Test', 'Today log');
+      await AppLogService.flush();
+
+      // Try to read a log from 30 days ago (which doesn't exist)
+      final longAgo = DateTime.now().subtract(const Duration(days: 30));
+      final laDateStr =
+          '${longAgo.year}-${_pad(longAgo.month)}-${_pad(longAgo.day)}';
+      final content = await AppLogService.readLogFile('app_$laDateStr.log');
+      expect(content, isNull,
+          reason: 'Non-existent previous day log should return null');
+
+      // Cleanup
+      AppLogService.clearLogDirCache();
+      if (await logDir.exists()) await logDir.delete(recursive: true);
+    });
+  });
+
+  // ==================================================================
+  // Sequential list and read consistency
+  // ==================================================================
+
+  group('AppLogService — sequential list and read consistency', () {
+    test('listLogFiles and readLogFile remain reliable on repeated calls',
+        () async {
+      // Write a log
+      await AppLogService.info('Test', 'Consistency check');
+      await AppLogService.flush();
+
+      // List and read multiple times — should always work
+      for (int i = 0; i < 5; i++) {
+        final files = await AppLogService.listLogFiles();
+        expect(files, isNotEmpty,
+            reason: 'Files should be available on attempt $i');
+
+        final content = await AppLogService.readLogFile(files.first);
+        expect(content, isNotNull,
+            reason: 'File should be readable on attempt $i');
+        expect(content, contains('Consistency check'));
+      }
+
+      // Cleanup
+      final logDir = await AppLogService.getLogDir();
+      if (await logDir.exists()) await logDir.delete(recursive: true);
+      AppLogService.clearLogDirCache();
+    });
+  });
+
+  // ==================================================================
+  // readLogFile robustness — handles various content types
+  // ==================================================================
+
+  group('AppLogService — readLogFile robustness', () {
+    test('readLogFile reads a plain text file successfully', () async {
+      // Create a file, then verify it's readable
+      final logDir = await AppLogService.getLogDir();
+      if (!await logDir.exists()) {
+        await logDir.create(recursive: true);
+      }
+      final testFile = File('${logDir.path}/app_readable_test.log');
+      await testFile.writeAsString('readable content');
+      AppLogService.clearLogDirCache();
+
+      // Should be readable without issue
+      final content = await AppLogService.readLogFile('app_readable_test.log');
+      expect(content, isNotNull);
+      expect(content, 'readable content');
+
+      // Cleanup
+      await testFile.delete();
+      AppLogService.clearLogDirCache();
+      if (await logDir.exists()) await logDir.delete(recursive: true);
+    });
+
+    test('readLogFile handles file with special characters', () async {
+      final logDir = await AppLogService.getLogDir();
+      if (!await logDir.exists()) {
+        await logDir.create(recursive: true);
+      }
+      final testFile = File('${logDir.path}/app_special_test.log');
+      await testFile.writeAsString('[INFO] 测试中文日志内容 ñáéíóú \n');
+      AppLogService.clearLogDirCache();
+
+      final content = await AppLogService.readLogFile('app_special_test.log');
+      expect(content, isNotNull);
+      expect(content, contains('测试中文日志内容'));
+      expect(content, contains('ñáéíóú'));
+
+      // Cleanup
+      await testFile.delete();
+      AppLogService.clearLogDirCache();
+      if (await logDir.exists()) await logDir.delete(recursive: true);
     });
   });
 }
