@@ -254,41 +254,45 @@ void main() {
       final backupArchive = Archive();
       // manifest.json
       backupArchive.addFile(ArchiveFile(
-          'manifest.json', 0, utf8.encode(jsonEncode({
-        'version': 1,
-        'createdAt': DateTime.now().toIso8601String(),
-        'appVersion': 'test',
-      }))));
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 1,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
       // stroom_manifest.json with both image and audio records
       backupArchive.addFile(ArchiveFile(
-          'stroom_manifest.json', 0, utf8.encode(jsonEncode({
-        'image_records': [
-          {
-            'id': 'img_restore_1',
-            'name': 'restored_img',
-            'hash': 'restored_img_hash',
-            'format': 'jpg',
-            'createdAt': DateTime.now().toIso8601String(),
-            'size': 200,
-            'folder': '',
-            'width': 200,
-            'height': 200,
-          },
-        ],
-        'audio_records': [
-          {
-            'id': 'aud_restore_1',
-            'name': 'restored_aud',
-            'hash': 'restored_aud_hash',
-            'format': 'wav',
-            'createdAt': DateTime.now().toIso8601String(),
-            'size': 200,
-            'folder': '',
-            'duration': 2.0,
-          },
-        ],
-        'folders': <String>[],
-      }))));
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': [
+              {
+                'id': 'img_restore_1',
+                'name': 'restored_img',
+                'hash': 'restored_img_hash',
+                'format': 'jpg',
+                'createdAt': DateTime.now().toIso8601String(),
+                'size': 200,
+                'folder': '',
+                'width': 200,
+                'height': 200,
+              },
+            ],
+            'audio_records': [
+              {
+                'id': 'aud_restore_1',
+                'name': 'restored_aud',
+                'hash': 'restored_aud_hash',
+                'format': 'wav',
+                'createdAt': DateTime.now().toIso8601String(),
+                'size': 200,
+                'folder': '',
+                'duration': 2.0,
+              },
+            ],
+            'folders': <String>[],
+          }))));
       final encoded = ZipEncoder().encode(backupArchive);
       final backupBytes = Uint8List.fromList(encoded);
 
@@ -343,31 +347,35 @@ void main() {
       // Build a backup archive with different records
       final backupArchive = Archive();
       backupArchive.addFile(ArchiveFile(
-          'manifest.json', 0, utf8.encode(jsonEncode({
-        'version': 1,
-        'createdAt': DateTime.now().toIso8601String(),
-        'appVersion': 'test',
-      }))));
-      backupArchive.addFile(ArchiveFile(
-          'stroom_manifest.json', 0, utf8.encode(jsonEncode({
-        'image_records': [
-          {
-            'id': 'img_new_1',
-            'name': 'new_img',
-            'hash': 'new_img_hash',
-            'format': 'jpg',
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 1,
             'createdAt': DateTime.now().toIso8601String(),
-            'size': 200,
-            'folder': '',
-            'width': 200,
-            'height': 200,
-          },
-        ],
-        'audio_records': <Map<String, dynamic>>[],
-        'video_records': <Map<String, dynamic>>[],
-        'text_records': <Map<String, dynamic>>[],
-        'folders': <String>[],
-      }))));
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': [
+              {
+                'id': 'img_new_1',
+                'name': 'new_img',
+                'hash': 'new_img_hash',
+                'format': 'jpg',
+                'createdAt': DateTime.now().toIso8601String(),
+                'size': 200,
+                'folder': '',
+                'width': 200,
+                'height': 200,
+              },
+            ],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
       final encoded = ZipEncoder().encode(backupArchive);
       final backupBytes = Uint8List.fromList(encoded);
 
@@ -479,30 +487,34 @@ void main() {
       // Build backup with video records
       final backupArchive = Archive();
       backupArchive.addFile(ArchiveFile(
-          'manifest.json', 0, utf8.encode(jsonEncode({
-        'version': 1,
-        'createdAt': DateTime.now().toIso8601String(),
-        'appVersion': 'test',
-      }))));
-      backupArchive.addFile(ArchiveFile(
-          'stroom_manifest.json', 0, utf8.encode(jsonEncode({
-        'image_records': <Map<String, dynamic>>[],
-        'audio_records': <Map<String, dynamic>>[],
-        'video_records': [
-          {
-            'id': 'vid_restore_1',
-            'name': 'restored_vid',
-            'hash': 'restored_vid_hash',
-            'format': 'mp4',
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 1,
             'createdAt': DateTime.now().toIso8601String(),
-            'size': 500,
-            'folder': '',
-            'duration': 10.0,
-          },
-        ],
-        'text_records': <Map<String, dynamic>>[],
-        'folders': <String>[],
-      }))));
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': <Map<String, dynamic>>[],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': [
+              {
+                'id': 'vid_restore_1',
+                'name': 'restored_vid',
+                'hash': 'restored_vid_hash',
+                'format': 'mp4',
+                'createdAt': DateTime.now().toIso8601String(),
+                'size': 500,
+                'folder': '',
+                'duration': 10.0,
+              },
+            ],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
       final encoded = ZipEncoder().encode(backupArchive);
       final backupBytes = Uint8List.fromList(encoded);
 
@@ -589,7 +601,8 @@ void main() {
       expect((dbJson['audio_records'] as List<dynamic>).length, equals(1));
     });
 
-    testWidgets('restoreFromBytesForTest with default selection is full restore',
+    testWidgets(
+        'restoreFromBytesForTest with default selection is full restore',
         (WidgetTester t) async {
       // Add pre-existing data
       await ManifestDatabase.insertImageRecord({
@@ -607,31 +620,35 @@ void main() {
       // Build a backup with different data
       final backupArchive = Archive();
       backupArchive.addFile(ArchiveFile(
-          'manifest.json', 0, utf8.encode(jsonEncode({
-        'version': 1,
-        'createdAt': DateTime.now().toIso8601String(),
-        'appVersion': 'test',
-      }))));
-      backupArchive.addFile(ArchiveFile(
-          'stroom_manifest.json', 0, utf8.encode(jsonEncode({
-        'image_records': [
-          {
-            'id': 'img_new_2',
-            'name': 'new_img_2',
-            'hash': 'new_img_hash_2',
-            'format': 'jpg',
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 1,
             'createdAt': DateTime.now().toIso8601String(),
-            'size': 200,
-            'folder': '',
-            'width': 200,
-            'height': 200,
-          },
-        ],
-        'audio_records': <Map<String, dynamic>>[],
-        'video_records': <Map<String, dynamic>>[],
-        'text_records': <Map<String, dynamic>>[],
-        'folders': <String>[],
-      }))));
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': [
+              {
+                'id': 'img_new_2',
+                'name': 'new_img_2',
+                'hash': 'new_img_hash_2',
+                'format': 'jpg',
+                'createdAt': DateTime.now().toIso8601String(),
+                'size': 200,
+                'folder': '',
+                'width': 200,
+                'height': 200,
+              },
+            ],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
       final encoded = ZipEncoder().encode(backupArchive);
       final backupBytes = Uint8List.fromList(encoded);
 

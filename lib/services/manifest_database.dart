@@ -1261,8 +1261,8 @@ class ManifestDatabase {
   /// [recordTable] 指定记录表名，用于选择对应的文件夹表。
   /// 为 null 时抛出 ArgumentError。
   static Future<void> clearFolders({String? recordTable}) async {
-    await AppLogService.info('ManifestDatabase',
-        'clearFolders called [recordTable=$recordTable]');
+    await AppLogService.info(
+        'ManifestDatabase', 'clearFolders called [recordTable=$recordTable]');
     try {
       if (recordTable == null) {
         throw ArgumentError('recordTable is required');
@@ -1276,8 +1276,8 @@ class ManifestDatabase {
         final db = await database;
         await db.delete(folderTable);
       }
-      await AppLogService.info(
-          'ManifestDatabase', 'clearFolders completed [recordTable=$recordTable]');
+      await AppLogService.info('ManifestDatabase',
+          'clearFolders completed [recordTable=$recordTable]');
     } catch (e, stackTrace) {
       await AppLogService.error(
           'ManifestDatabase', 'clearFolders failed', e, stackTrace);

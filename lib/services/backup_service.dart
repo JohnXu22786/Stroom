@@ -138,7 +138,8 @@ class BackupService {
           'restoreBackup is not available on web. Use importBackup instead.');
     }
     final bytes = await File(zipPath).readAsBytes();
-    await _restoreFromBytes(bytes, onProgress: onProgress, selection: selection);
+    await _restoreFromBytes(bytes,
+        onProgress: onProgress, selection: selection);
   }
 
   // ================================================================
@@ -501,8 +502,7 @@ class BackupService {
     final dbJson = fileMap['stroom_manifest.json'] ??
         fileMap['database/manifest_data.json'];
     if (dbJson != null) {
-      await _restoreDatabaseFromJson(utf8.decode(dbJson),
-          selection: selection);
+      await _restoreDatabaseFromJson(utf8.decode(dbJson), selection: selection);
     }
     onProgress?.call(0.4);
     await _yieldToEventLoop();
@@ -785,8 +785,8 @@ class BackupService {
       final defaultName = 'stroom_backup_$dateStr.zip';
 
       // 在内存中构建归档（传递进度回调）
-      final bytes = await _buildBackupBytes(
-          onProgress: onProgress, selection: selection);
+      final bytes =
+          await _buildBackupBytes(onProgress: onProgress, selection: selection);
 
       final outputPath = await FilePicker.saveFile(
         fileName: defaultName,

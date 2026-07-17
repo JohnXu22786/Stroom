@@ -239,7 +239,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                     Icon(Icons.warning_amber_rounded,
                         color: Colors.orange, size: 18),
                     const SizedBox(width: 8),
-                    Expanded(child: Text(w, style: const TextStyle(fontSize: 13))),
+                    Expanded(
+                        child: Text(w, style: const TextStyle(fontSize: 13))),
                   ],
                 ),
               ),
@@ -488,14 +489,10 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                 setState(() => _exportConversations = v ?? false),
             onPicturesChanged: (v) =>
                 setState(() => _exportPictures = v ?? false),
-            onAudioChanged: (v) =>
-                setState(() => _exportAudio = v ?? false),
-            onVideosChanged: (v) =>
-                setState(() => _exportVideos = v ?? false),
-            onTextsChanged: (v) =>
-                setState(() => _exportTexts = v ?? false),
-            onTasksChanged: (v) =>
-                setState(() => _exportTasks = v ?? false),
+            onAudioChanged: (v) => setState(() => _exportAudio = v ?? false),
+            onVideosChanged: (v) => setState(() => _exportVideos = v ?? false),
+            onTextsChanged: (v) => setState(() => _exportTexts = v ?? false),
+            onTasksChanged: (v) => setState(() => _exportTasks = v ?? false),
             onAttachmentsChanged: (v) =>
                 setState(() => _exportAttachments = v ?? false),
           ),
@@ -535,14 +532,10 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                 setState(() => _importConversations = v ?? false),
             onPicturesChanged: (v) =>
                 setState(() => _importPictures = v ?? false),
-            onAudioChanged: (v) =>
-                setState(() => _importAudio = v ?? false),
-            onVideosChanged: (v) =>
-                setState(() => _importVideos = v ?? false),
-            onTextsChanged: (v) =>
-                setState(() => _importTexts = v ?? false),
-            onTasksChanged: (v) =>
-                setState(() => _importTasks = v ?? false),
+            onAudioChanged: (v) => setState(() => _importAudio = v ?? false),
+            onVideosChanged: (v) => setState(() => _importVideos = v ?? false),
+            onTextsChanged: (v) => setState(() => _importTexts = v ?? false),
+            onTasksChanged: (v) => setState(() => _importTasks = v ?? false),
             onAttachmentsChanged: (v) =>
                 setState(() => _importAttachments = v ?? false),
           ),
@@ -561,8 +554,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.restore),
-                  label:
-                      Text(_isImporting ? '正在恢复...' : '选择备份文件并恢复'),
+                  label: Text(_isImporting ? '正在恢复...' : '选择备份文件并恢复'),
                 ),
               ),
             ),
@@ -609,10 +601,9 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
             CheckboxListTile(
               dense: true,
               visualDensity: VisualDensity.compact,
-              title: const Text('聊天记录和设置',
-                  style: TextStyle(fontSize: 14)),
-              subtitle: const Text('对话记录、应用设置、媒体库索引',
-                  style: TextStyle(fontSize: 12)),
+              title: const Text('聊天记录和设置', style: TextStyle(fontSize: 14)),
+              subtitle:
+                  const Text('对话记录、应用设置、媒体库索引', style: TextStyle(fontSize: 12)),
               value: conversations,
               onChanged: onConversationsChanged,
               controlAffinity: ListTileControlAffinity.leading,
@@ -621,8 +612,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
               dense: true,
               visualDensity: VisualDensity.compact,
               title: const Text('图片', style: TextStyle(fontSize: 14)),
-              subtitle:
-                  const Text('照片和缩略图', style: TextStyle(fontSize: 12)),
+              subtitle: const Text('照片和缩略图', style: TextStyle(fontSize: 12)),
               value: pictures,
               onChanged: onPicturesChanged,
               controlAffinity: ListTileControlAffinity.leading,
@@ -631,8 +621,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
               dense: true,
               visualDensity: VisualDensity.compact,
               title: const Text('音频', style: TextStyle(fontSize: 14)),
-              subtitle:
-                  const Text('语音合成和录音', style: TextStyle(fontSize: 12)),
+              subtitle: const Text('语音合成和录音', style: TextStyle(fontSize: 12)),
               value: audio,
               onChanged: onAudioChanged,
               controlAffinity: ListTileControlAffinity.leading,
@@ -641,8 +630,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
               dense: true,
               visualDensity: VisualDensity.compact,
               title: const Text('视频', style: TextStyle(fontSize: 14)),
-              subtitle:
-                  const Text('视频文件', style: TextStyle(fontSize: 12)),
+              subtitle: const Text('视频文件', style: TextStyle(fontSize: 12)),
               value: videos,
               onChanged: onVideosChanged,
               controlAffinity: ListTileControlAffinity.leading,
@@ -651,8 +639,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
               dense: true,
               visualDensity: VisualDensity.compact,
               title: const Text('文本', style: TextStyle(fontSize: 14)),
-              subtitle:
-                  const Text('文本文档', style: TextStyle(fontSize: 12)),
+              subtitle: const Text('文本文档', style: TextStyle(fontSize: 12)),
               value: texts,
               onChanged: onTextsChanged,
               controlAffinity: ListTileControlAffinity.leading,
@@ -661,8 +648,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
               dense: true,
               visualDensity: VisualDensity.compact,
               title: const Text('任务', style: TextStyle(fontSize: 14)),
-              subtitle:
-                  const Text('后台任务记录', style: TextStyle(fontSize: 12)),
+              subtitle: const Text('后台任务记录', style: TextStyle(fontSize: 12)),
               value: tasks,
               onChanged: onTasksChanged,
               controlAffinity: ListTileControlAffinity.leading,
@@ -671,8 +657,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
               dense: true,
               visualDensity: VisualDensity.compact,
               title: const Text('附件', style: TextStyle(fontSize: 14)),
-              subtitle:
-                  const Text('聊天中的文件附件', style: TextStyle(fontSize: 12)),
+              subtitle: const Text('聊天中的文件附件', style: TextStyle(fontSize: 12)),
               value: attachments,
               onChanged: onAttachmentsChanged,
               controlAffinity: ListTileControlAffinity.leading,
