@@ -301,9 +301,19 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
           ),
         ],
       ),
-      body: filteredTasks.isEmpty
-          ? _buildEmptyState(context)
-          : _buildTaskList(filteredTasks),
+      body: Column(
+        children: [
+          // 最近任务 header — 显示最近3次启动的任务数量，每个数字带未读角标
+          _buildRecentTasksHeader(
+              catcatchTasks, synthesisTasks, backgroundTasks),
+          // 任务列表
+          Expanded(
+            child: filteredTasks.isEmpty
+                ? _buildEmptyState(context)
+                : _buildTaskList(filteredTasks),
+          ),
+        ],
+      ),
     );
   }
 
@@ -313,6 +323,100 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
     if (tabIndex == 0) return allTasks; // 全部 — no filter
     final targetTab = TaskTab.values[tabIndex];
     return allTasks.where((item) => _taskTab(item) == targetTab).toList();
+  }
+
+  /// 构建"最近任务"头部区域
+  /// 显示最近3次启动产生的任务数量，每个数字右上角有未读角标
+  Widget _buildRecentTasksHeader(
+    List<catcatch.CatCatchTask> catcatchTasks,
+    List<SynthesisTask> synthesisTasks,
+    List<BackgroundTask> backgroundTasks,
+  ) {
+    final launches = ref.watch(appLaunchTimestampsProvider);
+    final lastRead = ref.watch(taskListLastReadProvider);
+
+    final sessions = computeRecentTaskCounts(
+      launches: launches,
+      catcatchTasks: catcatchTasks,
+      synthesisTasks: synthesisTasks,
+      backgroundTasks: backgroundTasks,
+      unreadThreshold: lastRead,
+    );
+
+    if (sessions.isEmpty) return const SizedBox.shrink();
+
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // "最近任务" 标签 — 低调不招摇
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              '最近任务',
+              style: TextStyle(
+                fontSize: 12,
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          // 3个数字（每个启动会话一个）
+          Row(
+            children: [
+              for (int i = 0; i < sessions.length; i++) ...[
+                if (i > 0) const SizedBox(width: 16),
+                _buildSessionBadge(
+                  count: sessions[i]['total'] ?? 0,
+                  unread: sessions[i]['unread'] ?? 0,
+                  colorScheme: colorScheme,
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 构建单个会话数字 + 未读角标
+  Widget _buildSessionBadge({
+    required int count,
+    required int unread,
+    required ColorScheme colorScheme,
+  }) {
+    return Badge(
+      isLabelVisible: unread > 0,
+      label: Text(
+        '+$unread',
+        style: const TextStyle(fontSize: 10),
+      ),
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: colorScheme.onSurface,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildEmptyState(BuildContext context) {

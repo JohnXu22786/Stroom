@@ -281,7 +281,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   /// 构建侧边栏导航（用于桌面端）
-  Widget _buildNavigationRail(BuildContext context, int activeTaskCount) {
+  Widget _buildNavigationRail(BuildContext context) {
     final selectedPage = ref.watch(selectedPageProvider);
 
     return NavigationRail(
@@ -307,18 +307,10 @@ class _HomePageState extends ConsumerState<HomePage> {
       labelType: NavigationRailLabelType.all,
       destinations: [
         NavigationRailDestination(
-          icon: Badge(
-            isLabelVisible: activeTaskCount > 0,
-            label: Text('$activeTaskCount'),
-            child: Icon(_getPageIcon(AppPage.home)),
-          ),
-          selectedIcon: Badge(
-            isLabelVisible: activeTaskCount > 0,
-            label: Text('$activeTaskCount'),
-            child: Icon(
-              _getPageIcon(AppPage.home),
-              color: Theme.of(context).colorScheme.primary,
-            ),
+          icon: Icon(_getPageIcon(AppPage.home)),
+          selectedIcon: Icon(
+            _getPageIcon(AppPage.home),
+            color: Theme.of(context).colorScheme.primary,
           ),
           label: Text(_getPageTitle(AppPage.home)),
         ),
@@ -351,7 +343,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   /// 构建底部导航栏（用于移动端）
-  Widget _buildBottomNavigationBar(BuildContext context, int activeTaskCount) {
+  Widget _buildBottomNavigationBar(BuildContext context) {
     final selectedPage = ref.watch(selectedPageProvider);
 
     return NavigationBar(
@@ -375,11 +367,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       },
       destinations: [
         NavigationDestination(
-          icon: Badge(
-            isLabelVisible: activeTaskCount > 0,
-            label: Text('$activeTaskCount'),
-            child: Icon(_getPageIcon(AppPage.home)),
-          ),
+          icon: Icon(_getPageIcon(AppPage.home)),
           label: _getPageTitle(AppPage.home),
         ),
         NavigationDestination(
@@ -833,35 +821,6 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     final isMobile = _isMobile(context);
     final selectedPage = ref.watch(selectedPageProvider);
-    final catcatchTasks = ref.watch(catcatchTasksProvider);
-    final synthesisTasks = ref.watch(taskListProvider);
-    final backgroundTasks = ref.watch(backgroundTasksProvider);
-    final lastRead = ref.watch(taskListLastReadProvider);
-    final activeTaskCount = catcatchTasks
-            .where(
-              (t) =>
-                  t.status.name != 'completed' &&
-                  ((t.statusChangedAt ?? t.createdAt).isAfter(lastRead) ||
-                      (t.status.name == 'running' &&
-                          t.steps.any(
-                            (s) => s.type.name == 'userSelecting' && s.running,
-                          ))),
-            )
-            .length +
-        synthesisTasks
-            .where(
-              (t) =>
-                  t.status.name != 'completed' &&
-                  (t.statusChangedAt ?? t.createdAt).isAfter(lastRead),
-            )
-            .length +
-        backgroundTasks
-            .where(
-              (t) =>
-                  t.status != TaskStatus.completed &&
-                  (t.statusChangedAt ?? t.createdAt).isAfter(lastRead),
-            )
-            .length;
 
     ref.listen(catcatchTasksProvider, (prev, next) {
       if (!mounted) return;
@@ -919,7 +878,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         body: Row(
           children: [
             // 桌面端显示侧边栏导航
-            if (!isMobile) _buildNavigationRail(context, activeTaskCount),
+            if (!isMobile) _buildNavigationRail(context),
             // 页面内容区域，使用IndexedStack保持各页面状态
             Expanded(
               child: IndexedStack(
@@ -931,9 +890,8 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
           ],
         ),
-        bottomNavigationBar: isMobile
-            ? _buildBottomNavigationBar(context, activeTaskCount)
-            : null,
+        bottomNavigationBar:
+            isMobile ? _buildBottomNavigationBar(context) : null,
       ),
     );
   }
