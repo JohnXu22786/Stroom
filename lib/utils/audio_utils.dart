@@ -129,6 +129,20 @@ String detectAudioFormat(Uint8List data) {
     return 'wav';
   }
 
+  // AAC ADTS: 12-bit sync (0xFFF), MPEG-4/2, layer=00
+  // Must be checked BEFORE MP3 (both start with 0xFFFx but differ in layer bits).
+  // MP3 Layer III has layer=01, AAC has layer=00.
+  if (data.length >= 4 && data[0] == 0xFF && (data[1] & 0xF0) == 0xF0) {
+    final header = (data[0] << 24) |
+        (data[1] << 16) |
+        (data[2] << 8) |
+        data[3];
+    final layer = (header >> 17) & 0x3;
+    if (layer == 0) {
+      return 'aac';
+    }
+  }
+
   // MP3: "ID3" tag
   if (data[0] == _magicMp3Id3[0] &&
       data[1] == _magicMp3Id3[1] &&
@@ -136,8 +150,8 @@ String detectAudioFormat(Uint8List data) {
     return 'mp3';
   }
 
-  // MP3: MPEG sync (0xFFFx)
-  if (data.length >= 2 && data[0] == 0xFF && (data[1] & 0xF0) == 0xF0) {
+  // MP3: MPEG sync (0xFFFx) — remaining after AAC check
+  if (data.length >= 2 && data[0] == 0xFF && (data[1] & 0xE0) == 0xE0) {
     return 'mp3';
   }
 

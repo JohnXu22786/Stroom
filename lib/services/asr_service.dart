@@ -6,6 +6,12 @@ import '../utils/audio_utils.dart';
 import 'app_log_service.dart';
 import '../utils/http_utils.dart';
 
+// Formati supportati dal Whisper API (OpenAI-compatible).
+const _asrSupportedFormats = {
+  'flac', 'mp3', 'mp4', 'mpeg', 'mpga',
+  'm4a', 'ogg', 'opus', 'wav', 'webm',
+};
+
 // ============================================================================
 // ASR Config
 // ============================================================================
@@ -156,6 +162,11 @@ class AsrService {
   /// The request is sent as multipart/form-data (standard OpenAI STT convention)
   /// with the audio file as a binary part. This is compatible with OpenAI,
   /// OpenRouter, aihubmix, and other OpenAI-compatible providers.
+  ///
+  /// The audio is validated via [ensureValidAudioFormat] first: if the actual
+  /// content format differs from [audioFormat], the detected format is used.
+  /// If the detected format is not supported by the Whisper API, an error is
+  /// thrown before sending.
   Future<AsrResult> transcribe({
     required Uint8List audioBytes,
     String audioFormat = 'wav',
@@ -169,16 +180,27 @@ class AsrService {
       throw Exception('音频数据为空');
     }
 
+    // Validate and fix format — detect actual content format, convert PCM→WAV
+    final (fixedBytes, actualFormat) =
+        ensureValidAudioFormat(audioBytes, requestedFormat: audioFormat);
+    if (!_asrSupportedFormats.contains(actualFormat)) {
+      throw Exception(
+        '不支持的音频格式: $actualFormat。'
+        'Whisper API 支持的格式: ${_asrSupportedFormats.join(", ")}。'
+        '请将音频转换为 WAV/MP3 格式后重试。',
+      );
+    }
+
     final stopwatch = Stopwatch()..start();
 
-    final fileName = 'audio.$audioFormat';
-    final mimeTypeString = getMimeType(audioFormat);
+    final fileName = 'audio.$actualFormat';
+    final mimeTypeString = getMimeType(actualFormat);
     final mimeType = mimeTypeString.contains('/')
         ? DioMediaType.parse(mimeTypeString)
         : null;
     final formData = FormData.fromMap({
       'file': MultipartFile.fromBytes(
-        audioBytes,
+        fixedBytes,
         filename: fileName,
         contentType: mimeType,
       ),
@@ -189,9 +211,8 @@ class AsrService {
     });
 
     // Capture request diagnostics (for error details dialog).
-    // This is a summary only — the actual binary data is sent via FormData.
     lastRequestBody = {
-      'file': '$fileName (${audioBytes.length} bytes, $mimeTypeString)',
+      'file': '$fileName (${fixedBytes.length} bytes, $mimeTypeString)',
       'model': config.model,
       'response_format': 'json',
       if (config.language != null && config.language!.isNotEmpty)
@@ -207,12 +228,13 @@ class AsrService {
     lastResponseHeaders = null;
 
     try {
+      // ⚠️  Do NOT set contentType manually — Dio auto-generates the proper
+      //     Content-Type with boundary when sending FormData. Setting it
+      //     explicitly (e.g., contentType: 'multipart/form-data') strips the
+      //     boundary parameter, which all OpenAI-compatible servers reject.
       final response = await _dio.post(
         config.transcribeUrl,
         data: formData,
-        options: Options(
-          contentType: 'multipart/form-data',
-        ),
       );
 
       stopwatch.stop();
