@@ -512,14 +512,15 @@ void main() {
       final list = adapter.mcpToolDefinitions;
       expect(list, isA<List<ToolDefinition>>());
       // Attempting to modify should throw
-      expect(() => list.add(const ToolDefinition(
-        name: 'x', description: '', parameters: {'type': 'object'})),
-        throws);
+      expect(
+          () => list.add(const ToolDefinition(
+              name: 'x', description: '', parameters: {'type': 'object'})),
+          throws);
     });
 
     test(
-      'McpServerConfig.fromProviderConfig creates SSE config '
-      'from built-in typeConfig', () {
+        'McpServerConfig.fromProviderConfig creates SSE config '
+        'from built-in typeConfig', () {
       // Simulate a built-in SSE MCP provider's typeConfig
       final typeConfig = <String, dynamic>{
         'transport': 'sse',
@@ -541,8 +542,8 @@ void main() {
     });
 
     test(
-      'McpServerConfig.fromProviderConfig creates SSE config '
-      'from user-added typeConfig', () {
+        'McpServerConfig.fromProviderConfig creates SSE config '
+        'from user-added typeConfig', () {
       // Simulate a user-added SSE MCP provider's typeConfig
       final typeConfig = <String, dynamic>{
         'transport': 'sse',
@@ -562,8 +563,8 @@ void main() {
     });
 
     test(
-      'McpServerConfig.fromProviderConfig returns null '
-      'for empty typeConfig', () {
+        'McpServerConfig.fromProviderConfig returns null '
+        'for empty typeConfig', () {
       final config = McpServerConfig.fromProviderConfig(
         providerName: 'Empty',
         typeConfig: <String, dynamic>{},
@@ -573,8 +574,8 @@ void main() {
     });
 
     test(
-      'McpServerConfig.fromProviderConfig returns null '
-      'for null typeConfig', () {
+        'McpServerConfig.fromProviderConfig returns null '
+        'for null typeConfig', () {
       final config = McpServerConfig.fromProviderConfig(
         providerName: 'Null',
         typeConfig: null,
@@ -584,8 +585,8 @@ void main() {
     });
 
     test(
-      'McpServerConfig.fromProviderConfig returns null '
-      'for typeConfig without transport field', () {
+        'McpServerConfig.fromProviderConfig returns null '
+        'for typeConfig without transport field', () {
       final config = McpServerConfig.fromProviderConfig(
         providerName: 'No transport',
         typeConfig: {'url': 'http://example.com'},
@@ -628,8 +629,8 @@ void main() {
       expect(names, contains('vendor_independent_tool'));
     });
 
-    test(
-      'HttpToolService.toolDefinitions contain expected HTTP tool names', () {
+    test('HttpToolService.toolDefinitions contain expected HTTP tool names',
+        () {
       final names = HttpToolService.toolDefinitions.map((d) => d.name).toSet();
       expect(names, contains('brave_web_search'));
       expect(names, contains('bocha_web_search'));
@@ -643,8 +644,7 @@ void main() {
   // ====================================================================
 
   group('MCP initialization handles all transport types uniformly', () {
-    test(
-      'fromProviderConfig handles stdio transport correctly', () {
+    test('fromProviderConfig handles stdio transport correctly', () {
       final typeConfig = <String, dynamic>{
         'transport': 'stdio',
         'command': 'npx',
@@ -663,8 +663,8 @@ void main() {
     });
 
     test(
-      'fromProviderConfig returns SSE config for unknown transport '
-      '(fromValue fallback)', () {
+        'fromProviderConfig returns SSE config for unknown transport '
+        '(fromValue fallback)', () {
       // Transport 'http' is not in McpTransportType, so fromValue
       // falls back to SSE. HTTP tools are caught by isHttpTool check
       // before reaching fromProviderConfig in the real flow.
@@ -684,8 +684,7 @@ void main() {
       expect(config!.transportType, equals(McpTransportType.sse));
     });
 
-    test(
-      'McpServerConfig round-trip through toMap preserves transport', () {
+    test('McpServerConfig round-trip through toMap preserves transport', () {
       final original = McpServerConfig.sse(
         name: 'Test SSE',
         url: 'https://mcp.test.com/sse',
