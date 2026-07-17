@@ -1765,10 +1765,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final markdownConfig = buildMarkdownConfig(isDark: isDark);
+    final isStreaming = ref.watch(isStreamingProvider);
+    final markdownConfig = buildMarkdownConfig(
+      isDark: isDark,
+      isStreaming: isStreaming,
+    );
     final adapterConfigured = _adapter.isConfigured;
     final controller = _controller;
-    final isStreaming = ref.watch(isStreamingProvider);
 
     // Reactively load messages when the active conversation changes
     ref.listen(activeConversationIdProvider, (prev, next) {

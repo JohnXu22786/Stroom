@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:stroom/pages/chat/dialogs/mermaid_preview_dialog.dart';
 import 'code_block_source_widget.dart';
@@ -74,19 +76,42 @@ class MermaidRenderWidget extends StatefulWidget {
   /// Builds a complete HTML document with mermaid.js that renders the
   /// given [mermaidCode] as a diagram.
   ///
+  /// If [withJsGestures] is true (default), the generated HTML includes
+  /// JavaScript handlers for mouse and touch pan/zoom gestures. Set to
+  /// false to omit these handlers (e.g., when the parent Flutter widget
+  /// handles gestures and communicates via [InAppWebViewController]).
+  ///
   /// This is the single source of truth for the Mermaid HTML/JS template.
   /// Both [MermaidRenderWidget] and [MermaidChartPage] use this method.
-  static String buildMermaidHtml(String mermaidCode) {
-    final escaped = mermaidCode
+  static String buildMermaidHtml(String mermaidCode, {bool withJsGestures = true}) {
+    final escaped = _escapeMermaidCode(mermaidCode);
+    final gestureScript =
+        withJsGestures ? _mermaidGestureJs : '';
+    return _mermaidHtmlTemplate
+        .replaceFirst('GESTURE_SCRIPT_PLACEHOLDER', gestureScript)
+        .replaceFirst('MERMAID_CODE_PLACEHOLDER', escaped);
+  }
+
+  /// Shared HTML-escaping logic for mermaid code.
+  static String _escapeMermaidCode(String code) {
+    return code
         .replaceAll('&', '&amp;')
         .replaceAll('<', '&lt;')
         .replaceAll('>', '&gt;');
-    return _mermaidHtmlTemplate.replaceFirst(
-      'MERMAID_CODE_PLACEHOLDER',
-      escaped,
-    );
   }
 
+  /// Builds an HTML document for inline rendering, including touch-only JS
+  /// gesture handlers for mobile support. Mouse/trackpad gestures are
+  /// handled at the Flutter level to prevent parent scroll view interference.
+  static String _buildInlineMermaidHtml(String mermaidCode) {
+    final escaped = _escapeMermaidCode(mermaidCode);
+    return _mermaidHtmlTemplate
+        .replaceFirst('GESTURE_SCRIPT_PLACEHOLDER', _mermaidTouchGestureJs)
+        .replaceFirst('MERMAID_CODE_PLACEHOLDER', escaped);
+  }
+
+  /// Core HTML/CSS/JS template. [GESTURE_SCRIPT_PLACEHOLDER] is replaced
+  /// with [_mermaidGestureJs] or an empty string based on [withJsGestures].
   static const _mermaidHtmlTemplate = '''
 <!DOCTYPE html>
 <html>
@@ -147,11 +172,6 @@ MERMAID_CODE_PLACEHOLDER
     var zoomLevel = 1;
     var panX = 0;
     var panY = 0;
-    var isDragging = false;
-    var dragStartX = 0;
-    var dragStartY = 0;
-    var panStartX = 0;
-    var panStartY = 0;
 
     function updateTransform() {
       var container = document.getElementById('diagram-container');
@@ -176,7 +196,6 @@ MERMAID_CODE_PLACEHOLDER
       var oldZoom = zoomLevel;
       zoomLevel = Math.max(0.1, Math.min(10, level));
       if (centerX !== undefined && centerY !== undefined) {
-        // Adjust pan so that (centerX, centerY) stays fixed on screen.
         panX = centerX - (centerX - panX) * (zoomLevel / oldZoom);
         panY = centerY - (centerY - panY) * (zoomLevel / oldZoom);
       }
@@ -194,6 +213,38 @@ MERMAID_CODE_PLACEHOLDER
       panY = y;
       updateTransform();
     };
+
+GESTURE_SCRIPT_PLACEHOLDER
+
+    // Initialize mermaid
+    try {
+      mermaid.initialize({
+        theme: 'default',
+        securityLevel: 'loose',
+        fontFamily: 'sans-serif',
+      });
+      mermaid.run({
+        nodes: [document.getElementById('mermaid-code')],
+      }).catch(function(err) {
+        reportError('Mermaid render error: ' + err.message);
+      });
+    } catch(e) {
+      reportError('Mermaid initialize error: ' + e.message);
+    }
+  </script>
+</body>
+</html>
+''';
+
+  /// JavaScript snippet for mouse + touch pan/zoom gesture handlers.
+  /// Injected into [_mermaidHtmlTemplate] when [withJsGestures] is true
+  /// (used for full-screen dialogs where there is no parent scroll view).
+  static const _mermaidGestureJs = '''
+    var isDragging = false;
+    var dragStartX = 0;
+    var dragStartY = 0;
+    var panStartX = 0;
+    var panStartY = 0;
 
     // Drag-to-pan with mouse
     document.addEventListener('mousedown', function(e) {
@@ -220,7 +271,7 @@ MERMAID_CODE_PLACEHOLDER
       isDragging = false;
     });
 
-    // Zoom with Ctrl/Meta + MouseWheel — zooms towards the cursor position.
+    // Zoom with Ctrl/Meta + MouseWheel
     document.addEventListener('wheel', function(e) {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
@@ -264,7 +315,6 @@ MERMAID_CODE_PLACEHOLDER
         );
         var scale = dist / lastTouchDist;
         lastTouchDist = dist;
-        // Compute the midpoint of the two touches in viewport coordinates
         var midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
         var midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
         var rect = document.getElementById('viewport').getBoundingClientRect();
@@ -277,10 +327,6 @@ MERMAID_CODE_PLACEHOLDER
 
     document.addEventListener('touchend', function(e) {
       lastTouchDist = 0;
-      // When lifting one finger after a multi-touch gesture (e.g. pinch),
-      // update the pan start state to the remaining finger's current
-      // position. This prevents a sudden position jump when the user
-      // transitions from a two-finger pinch to a one-finger pan.
       if (e.touches.length === 1) {
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
@@ -288,25 +334,64 @@ MERMAID_CODE_PLACEHOLDER
         touchPanStartY = panY;
       }
     });
+''';
 
-    // Initialize mermaid
-    try {
-      mermaid.initialize({
-        theme: 'default',
-        securityLevel: 'loose',
-        fontFamily: 'sans-serif',
-      });
-      mermaid.run({
-        nodes: [document.getElementById('mermaid-code')],
-      }).catch(function(err) {
-        reportError('Mermaid render error: ' + err.message);
-      });
-    } catch(e) {
-      reportError('Mermaid initialize error: ' + e.message);
-    }
-  </script>
-</body>
-</html>
+  /// JavaScript snippet for touch-only pan/zoom gesture handlers.
+  /// Used for inline Mermaid rendering where Flutter handles mouse
+  /// gestures (to prevent parent scroll view interference) and JS
+  /// handles touch gestures for mobile support.
+  static const _mermaidTouchGestureJs = '''
+    // Touch events for mobile pan
+    var touchStartX, touchStartY;
+    var touchPanStartX, touchPanStartY;
+    var lastTouchDist = 0;
+
+    document.addEventListener('touchstart', function(e) {
+      if (e.touches.length === 1) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchPanStartX = panX;
+        touchPanStartY = panY;
+      } else if (e.touches.length === 2) {
+        lastTouchDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+      }
+    });
+
+    document.addEventListener('touchmove', function(e) {
+      if (e.touches.length === 1) {
+        panX = touchPanStartX + (e.touches[0].clientX - touchStartX);
+        panY = touchPanStartY + (e.touches[0].clientY - touchStartY);
+        updateTransform();
+        e.preventDefault();
+      } else if (e.touches.length === 2) {
+        var dist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        var scale = dist / lastTouchDist;
+        lastTouchDist = dist;
+        var midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        var midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        var rect = document.getElementById('viewport').getBoundingClientRect();
+        var centerX = midX - rect.left;
+        var centerY = midY - rect.top;
+        window.setZoom(zoomLevel * scale, centerX, centerY);
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    document.addEventListener('touchend', function(e) {
+      lastTouchDist = 0;
+      if (e.touches.length === 1) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchPanStartX = panX;
+        touchPanStartY = panY;
+      }
+    });
 ''';
 
   @override
@@ -324,6 +409,16 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
 
   /// Current zoom level tracked on the Flutter side.
   double _zoomLevel = 1.0;
+
+  /// Pan offset tracked on the Flutter side for mouse/trackpad gesture
+  /// handling (desktop). Updated by [_onScaleUpdate] and sent to JS via
+  /// [InAppWebViewController.evaluateJavascript].
+  double _panX = 0;
+  double _panY = 0;
+
+  /// Values captured at the start of a scale gesture, used to compute
+  /// cumulative zoom and relative pan deltas.
+  double _gestureStartZoom = 1.0;
 
   @override
   void initState() {
@@ -351,6 +446,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       _errorMessage = null;
       _showSourceCode = false;
       _zoomLevel = 1.0;
+      _panX = 0;
+      _panY = 0;
       _loadMermaidCode();
     }
   }
@@ -375,7 +472,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       return;
     }
 
-    final html = MermaidRenderWidget.buildMermaidHtml(code);
+    // Inline rendering includes touch-only JS gesture handlers (mobile).
+    // Mouse/trackpad gestures are handled at the Flutter level for better
+    // integration with the parent scroll view gesture arena.
+    final html = MermaidRenderWidget._buildInlineMermaidHtml(code);
     ctrl.loadData(
       data: html,
       mimeType: 'text/html',
@@ -389,6 +489,105 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       _isReady = false;
     });
     _loadMermaidCode();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Gesture handling (mouse/trackpad pan and zoom at the Flutter level)
+  // ---------------------------------------------------------------------------
+
+  /// Captures the current zoom level at the start of a scale gesture.
+  void _onScaleStart(ScaleStartDetails details) {
+    _gestureStartZoom = _zoomLevel;
+  }
+
+  /// Handles mouse drag (pan) and touchpad pinch (zoom). The scale gesture
+  /// recognizer claims the pointer event in Flutter's gesture arena,
+  /// naturally preventing the parent scroll view from responding while
+  /// the user interacts with the Mermaid diagram.
+  void _onScaleUpdate(ScaleUpdateDetails details) {
+    final ctrl = _webViewController;
+    if (ctrl == null) return;
+
+    // Pan: accumulate focal point delta for continuous drag
+    _panX += details.focalPointDelta.dx;
+    _panY += details.focalPointDelta.dy;
+
+    // Zoom: compute new zoom level from cumulative scale factor
+    // (details.scale is 1.0 for single-pointer drag, changes for pinch)
+    final hasZoom = details.scale != 1.0;
+    if (hasZoom) {
+      _zoomLevel =
+          (_gestureStartZoom * details.scale).clamp(0.1, 10.0);
+    }
+
+    // Batch pan and zoom in a single evaluateJavascript call to avoid
+    // multiple expensive platform channel round-trips per gesture frame
+    // and prevent race conditions between separate setPan/setZoom calls.
+    final jsBuf = StringBuffer();
+    jsBuf.write('window.setPan($_panX, $_panY);');
+    if (hasZoom) {
+      jsBuf.write('window.setZoom($_zoomLevel);');
+    }
+    ctrl.evaluateJavascript(source: jsBuf.toString());
+  }
+
+  /// Handles mouse wheel zoom with Ctrl/Meta modifier.
+  /// Absorbs the scroll event at the Flutter level to prevent the parent
+  /// chat scroll view from scrolling while the user zooms the diagram.
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+
+    // Check for Ctrl/Meta modifier key
+    final ctrlOrMeta = HardwareKeyboard.instance.logicalKeysPressed.any(
+      (k) =>
+          k == LogicalKeyboardKey.controlLeft ||
+          k == LogicalKeyboardKey.controlRight ||
+          k == LogicalKeyboardKey.metaLeft ||
+          k == LogicalKeyboardKey.metaRight,
+    );
+    if (!ctrlOrMeta) return;
+
+    // Compute zoom center relative to this widget's render box
+    final renderBox = context.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.hasSize) return;
+    final localPos = renderBox.globalToLocal(event.position);
+    final centerX = localPos.dx.clamp(0.0, renderBox.size.width);
+    final centerY = localPos.dy.clamp(0.0, renderBox.size.height);
+
+    final delta = event.scrollDelta.dy > 0 ? -0.1 : 0.1;
+    final newZoom = (_zoomLevel + delta).clamp(0.1, 10.0);
+    if (newZoom != _zoomLevel) {
+      _zoomLevel = newZoom;
+      _webViewController?.evaluateJavascript(
+        source: 'window.setZoom($newZoom, $centerX, $centerY)',
+      );
+    }
+  }
+
+  /// Wraps the rendered diagram [child] in gesture detectors that provide
+  /// pan and zoom for mouse/trackpad input (desktop), while being
+  /// transparent to touch input (JS handlers in the WebView handle touch
+  /// on mobile).
+  ///
+  /// The [GestureDetector] with [onScaleStart]/[onScaleUpdate] handles
+  /// single-finger drag (pan) and touchpad pinch (zoom). Flutter's gesture
+  /// arena resolves conflicts with the parent scroll view, so the diagram
+  /// pans/zooms instead of the chat list scrolling.
+  ///
+  /// The [Listener] with [onPointerSignal] handles Ctrl/MouseWheel zoom.
+  /// Known limitation: the parent scroll view may also receive the wheel
+  /// event on desktop, causing simultaneous chat scrolling and diagram zoom.
+  Widget _buildGestureWrapper(Widget child) {
+    return Listener(
+      onPointerSignal: _onPointerSignal,
+      child: GestureDetector(
+        onScaleStart: _onScaleStart,
+        onScaleUpdate: _onScaleUpdate,
+        // Don't use HitTestBehavior.opaque — let the WebView receive
+        // touch events for JS gesture handlers (mobile).
+        child: child,
+      ),
+    );
   }
 
   Future<void> _zoomIn() async {
@@ -430,7 +629,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     if (code.isEmpty) {
       return _emptyPlaceholderHtml;
     }
-    return MermaidRenderWidget.buildMermaidHtml(code);
+    // Inline rendering uses touch-only JS gesture handlers for mobile.
+    return MermaidRenderWidget._buildInlineMermaidHtml(code);
   }
 
   @override
@@ -475,52 +675,55 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       cs: cs,
       child: Stack(
         children: [
-          // The WebView — kept alive once created
-          InAppWebView(
-            key: const Key('mermaid_render_webview'),
-            initialSettings: InAppWebViewSettings(
-              javaScriptEnabled: true,
-              transparentBackground: true,
+          // The WebView — wrapped in gesture handler for desktop
+          // pan/zoom, kept alive once created.
+          _buildGestureWrapper(
+            InAppWebView(
+              key: const Key('mermaid_render_webview'),
+              initialSettings: InAppWebViewSettings(
+                javaScriptEnabled: true,
+                transparentBackground: true,
+              ),
+              initialData: InAppWebViewInitialData(
+                data: _getInitialHtml(),
+                mimeType: 'text/html',
+                encoding: 'utf8',
+              ),
+              onWebViewCreated: (ctrl) {
+                _webViewController = ctrl;
+                ctrl.addJavaScriptHandler(
+                  handlerName: 'onMermaidError',
+                  callback: (args) {
+                    if (mounted) {
+                      final msg = args.isNotEmpty ? args[0].toString() : '未知错误';
+                      setState(() => _errorMessage = msg);
+                    }
+                  },
+                );
+                ctrl.addJavaScriptHandler(
+                  handlerName: 'onZoomChanged',
+                  callback: (args) {
+                    if (mounted && args.isNotEmpty) {
+                      final level = double.tryParse(args[0].toString()) ?? 1.0;
+                      setState(() => _zoomLevel = level);
+                    }
+                  },
+                );
+              },
+              onLoadStop: (ctrl, url) {
+                if (mounted && !_isReady) {
+                  setState(() => _isReady = true);
+                }
+              },
+              onReceivedError: (controller, request, error) {
+                if (mounted && !_isReady) {
+                  setState(() {
+                    _isReady = true;
+                    _errorMessage = '页面加载失败: ${error.description}';
+                  });
+                }
+              },
             ),
-            initialData: InAppWebViewInitialData(
-              data: _getInitialHtml(),
-              mimeType: 'text/html',
-              encoding: 'utf8',
-            ),
-            onWebViewCreated: (ctrl) {
-              _webViewController = ctrl;
-              ctrl.addJavaScriptHandler(
-                handlerName: 'onMermaidError',
-                callback: (args) {
-                  if (mounted) {
-                    final msg = args.isNotEmpty ? args[0].toString() : '未知错误';
-                    setState(() => _errorMessage = msg);
-                  }
-                },
-              );
-              ctrl.addJavaScriptHandler(
-                handlerName: 'onZoomChanged',
-                callback: (args) {
-                  if (mounted && args.isNotEmpty) {
-                    final level = double.tryParse(args[0].toString()) ?? 1.0;
-                    setState(() => _zoomLevel = level);
-                  }
-                },
-              );
-            },
-            onLoadStop: (ctrl, url) {
-              if (mounted && !_isReady) {
-                setState(() => _isReady = true);
-              }
-            },
-            onReceivedError: (controller, request, error) {
-              if (mounted && !_isReady) {
-                setState(() {
-                  _isReady = true;
-                  _errorMessage = '页面加载失败: ${error.description}';
-                });
-              }
-            },
           ),
 
           // Loading overlay
