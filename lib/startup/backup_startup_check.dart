@@ -16,7 +16,7 @@ import '../services/auto_backup_service.dart';
 // 1. 检查备份存储位置是否可访问
 //    - Android: 检查 SAF URI 是否存在且有效，无效则引导用户授权
 //    - iOS: 检查应用 Documents 目录是否可写（路径固定，由系统管理）
-//    - 桌面平台: 检查 ~/Documents/StroomData/AutoBackup 是否可写
+//    - 桌面平台: 检查 ~/Documents/Stroom/AutoBackups 是否可写
 //
 // 2. 如果存储不可用（仅 Android 需用户授权），显示引导对话框
 //    - 用户必须同意才能继续使用应用（循环直到同意）
