@@ -237,9 +237,7 @@ class _LogViewerPageState extends State<LogViewerPage>
           ),
           const SizedBox(height: 8),
           Text(
-            _retryCount > 0
-                ? '自动刷新中 (第 $_retryCount 次)...'
-                : '应用运行后将自动生成日志',
+            _retryCount > 0 ? '自动刷新中 (第 $_retryCount 次)...' : '应用运行后将自动生成日志',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
