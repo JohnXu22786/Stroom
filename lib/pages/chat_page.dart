@@ -371,8 +371,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Future<void> _initialize() async {
     await AppLogService.info('ChatPage', '开始初始化聊天页面');
     _configureAdapter();
-    // Initialize MCP servers and discover tools
+    // Initialize built-in tools (HTTP tools) first — independent of MCP
+    // server connectivity. This ensures HTTP tools (brave_web_search,
+    // bocha_web_search, querit_search, searxng_search) are always
+    // available in the tool list even if MCP servers are unreachable.
     final entriesState = ref.read(providerEntriesProvider);
+    _adapter.initializeBuiltinTools(entriesState);
+    // Then discover MCP server tools (SSE / stdio) dynamically.
+    // MCP discovery failures don't affect already-registered built-in tools.
     try {
       await AppLogService.info('ChatPage',
           '开始初始化 MCP 服务器，当前有 ${entriesState.entries.length} 个供应商配置');

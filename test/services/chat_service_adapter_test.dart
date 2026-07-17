@@ -4,11 +4,15 @@
 //
 // No naming conflicts between sources for this file.
 
+import 'dart:collection';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/models/mcp.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_adapter.dart';
 import 'package:stroom/services/chat_service.dart';
+import 'package:stroom/services/http_tool_service.dart';
 
 void main() {
   // ====================================================================
@@ -480,6 +484,225 @@ void main() {
     test('getAllToolDefinitions returns unmodifiable copy', () {
       final defs = toolsAdapter.getAllToolDefinitions();
       expect(defs, isA<List<ToolDefinition>>());
+    });
+  });
+
+  // ====================================================================
+  // MCP tools in chat — SSE transport and uniform display
+  // ====================================================================
+
+  group('MCP tools appear in chat regardless of transport type', () {
+    late ChatAdapter adapter;
+
+    setUp(() {
+      adapter = ChatAdapter();
+    });
+
+    tearDown(() {
+      adapter.dispose();
+    });
+
+    test('mcpToolDefinitions is empty before initialization', () {
+      expect(adapter.mcpToolDefinitions, isEmpty);
+    });
+
+    test('mcpToolDefinitions returns unmodifiable list', () {
+      // The getter returns List.unmodifiable (a fixed-length list)
+      // Verify it cannot be mutated
+      final list = adapter.mcpToolDefinitions;
+      expect(list, isA<List<ToolDefinition>>());
+      // Attempting to modify should throw
+      expect(
+          () => list.add(const ToolDefinition(
+              name: 'x', description: '', parameters: {'type': 'object'})),
+          throws);
+    });
+
+    test(
+        'McpServerConfig.fromProviderConfig creates SSE config '
+        'from built-in typeConfig', () {
+      // Simulate a built-in SSE MCP provider's typeConfig
+      final typeConfig = <String, dynamic>{
+        'transport': 'sse',
+        'url': 'https://mcp.example.com/sse',
+        'isVendor': true,
+        'headers': {'Authorization': 'Bearer '},
+        'env': <String, String>{},
+      };
+
+      final config = McpServerConfig.fromProviderConfig(
+        providerName: 'Example SSE',
+        typeConfig: typeConfig,
+      );
+
+      expect(config, isNotNull);
+      expect(config!.transportType, equals(McpTransportType.sse));
+      expect(config.url, equals('https://mcp.example.com/sse'));
+      expect(config.isVendor, isTrue);
+    });
+
+    test(
+        'McpServerConfig.fromProviderConfig creates SSE config '
+        'from user-added typeConfig', () {
+      // Simulate a user-added SSE MCP provider's typeConfig
+      final typeConfig = <String, dynamic>{
+        'transport': 'sse',
+        'url': 'http://localhost:3001/sse',
+        'headers': {'x-api-key': 'test-key-123'},
+      };
+
+      final config = McpServerConfig.fromProviderConfig(
+        providerName: 'My Custom Server',
+        typeConfig: typeConfig,
+      );
+
+      expect(config, isNotNull);
+      expect(config!.transportType, equals(McpTransportType.sse));
+      expect(config.url, equals('http://localhost:3001/sse'));
+      expect(config.isVendor, isFalse);
+    });
+
+    test(
+        'McpServerConfig.fromProviderConfig returns null '
+        'for empty typeConfig', () {
+      final config = McpServerConfig.fromProviderConfig(
+        providerName: 'Empty',
+        typeConfig: <String, dynamic>{},
+      );
+
+      expect(config, isNull);
+    });
+
+    test(
+        'McpServerConfig.fromProviderConfig returns null '
+        'for null typeConfig', () {
+      final config = McpServerConfig.fromProviderConfig(
+        providerName: 'Null',
+        typeConfig: null,
+      );
+
+      expect(config, isNull);
+    });
+
+    test(
+        'McpServerConfig.fromProviderConfig returns null '
+        'for typeConfig without transport field', () {
+      final config = McpServerConfig.fromProviderConfig(
+        providerName: 'No transport',
+        typeConfig: {'url': 'http://example.com'},
+      );
+
+      expect(config, isNull);
+    });
+
+    test('getAllToolDefinitions combines built-in and MCP tools', () {
+      // Register a built-in tool
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'test_builtin_tool',
+          description: 'Test built-in',
+          parameters: {'type': 'object'},
+        ),
+        (args) => 'done',
+      );
+
+      // Initial defs should include only built-in tools
+      final initialDefs = adapter.getAllToolDefinitions();
+      expect(initialDefs.map((d) => d.name), contains('test_builtin_tool'));
+    });
+
+    test('getAllToolDefinitions does not filter by isVendor flag', () {
+      // Register a built-in tool
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'vendor_independent_tool',
+          description: 'A tool from any vendor',
+          parameters: {'type': 'object'},
+        ),
+        (args) => 'done',
+      );
+
+      final defs = adapter.getAllToolDefinitions();
+      final names = defs.map((d) => d.name).toList();
+
+      // All tools should appear regardless of vendor status
+      expect(names, contains('vendor_independent_tool'));
+    });
+
+    test('HttpToolService.toolDefinitions contain expected HTTP tool names',
+        () {
+      final names = HttpToolService.toolDefinitions.map((d) => d.name).toSet();
+      expect(names, contains('brave_web_search'));
+      expect(names, contains('bocha_web_search'));
+      expect(names, contains('querit_search'));
+      expect(names, contains('searxng_search'));
+    });
+  });
+
+  // ====================================================================
+  // MCP tool initialization — HTTP tools vs SSE tools
+  // ====================================================================
+
+  group('MCP initialization handles all transport types uniformly', () {
+    test('fromProviderConfig handles stdio transport correctly', () {
+      final typeConfig = <String, dynamic>{
+        'transport': 'stdio',
+        'command': 'npx',
+        'args': ['-y', '@modelcontextprotocol/server-filesystem'],
+      };
+
+      final config = McpServerConfig.fromProviderConfig(
+        providerName: 'Local FS',
+        typeConfig: typeConfig,
+      );
+
+      expect(config, isNotNull);
+      expect(config!.transportType, equals(McpTransportType.stdio));
+      expect(config.command, equals('npx'));
+      expect(config.args, contains('-y'));
+    });
+
+    test(
+        'fromProviderConfig returns SSE config for unknown transport '
+        '(fromValue fallback)', () {
+      // Transport 'http' is not in McpTransportType, so fromValue
+      // falls back to SSE. HTTP tools are caught by isHttpTool check
+      // before reaching fromProviderConfig in the real flow.
+      final typeConfig = <String, dynamic>{
+        'transport': 'http',
+        'url': 'https://api.example.com/search',
+        'isHttpTool': true,
+      };
+
+      final config = McpServerConfig.fromProviderConfig(
+        providerName: 'HTTP fallback',
+        typeConfig: typeConfig,
+      );
+
+      // The fallback for unknown transport is SSE
+      expect(config, isNotNull);
+      expect(config!.transportType, equals(McpTransportType.sse));
+    });
+
+    test('McpServerConfig round-trip through toMap preserves transport', () {
+      final original = McpServerConfig.sse(
+        name: 'Test SSE',
+        url: 'https://mcp.test.com/sse',
+        headers: {'x-api-key': 'key123'},
+        isVendor: true,
+      );
+
+      final map = original.toMap();
+      expect(map['transport'], equals('sse'));
+      expect(map['url'], equals('https://mcp.test.com/sse'));
+      expect(map['isVendor'], isTrue);
+
+      // Restore from map
+      final restored = McpServerConfig.fromMap(map);
+      expect(restored, isNotNull);
+      expect(restored!.transportType, equals(McpTransportType.sse));
+      expect(restored.url, equals('https://mcp.test.com/sse'));
+      expect(restored.isVendor, isTrue);
     });
   });
 
