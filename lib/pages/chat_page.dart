@@ -1801,6 +1801,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
       (_, __) => _persistCurrentReasoningSettings(),
     );
     ref.listen(
+      reasoningEffortEnabledProvider,
+      (_, __) => _persistCurrentReasoningSettings(),
+    );
+    ref.listen(
       reasoningEffortProvider,
       (_, __) => _persistCurrentReasoningSettings(),
     );
@@ -2883,6 +2887,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
           final allSettings = _loadPerModelSettingsMap(prefs);
           allSettings[oldModelName] = {
             'reasoningEnabled': ref.read(reasoningEnabledProvider),
+            'reasoningEffortEnabled': ref.read(reasoningEffortEnabledProvider),
             'reasoningEffort': ref.read(reasoningEffortProvider),
             'reasoningParamValues': ref.read(reasoningParamValuesProvider),
           };
@@ -2941,6 +2946,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       final allSettings = _loadPerModelSettingsMap(prefs);
       allSettings[modelName] = {
         'reasoningEnabled': ref.read(reasoningEnabledProvider),
+        'reasoningEffortEnabled': ref.read(reasoningEffortEnabledProvider),
         'reasoningEffort': ref.read(reasoningEffortProvider),
         'reasoningParamValues': ref.read(reasoningParamValuesProvider),
       };
@@ -3033,6 +3039,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
           'reasoningParamValues': Map<String, dynamic> rpv,
         }) {
       ref.read(reasoningEnabledProvider.notifier).state = re;
+      // Restore reasoning effort enabled state (with default false)
+      final bool ree = modelSettings['reasoningEffortEnabled'] as bool? ?? false;
+      ref.read(reasoningEffortEnabledProvider.notifier).state = ree;
       // Validate reasoningEffort against known values
       const validEfforts = {'low', 'medium', 'high'};
       ref.read(reasoningEffortProvider.notifier).state =
@@ -3044,6 +3053,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     } else {
       // No saved settings for this model — use defaults
       ref.read(reasoningEnabledProvider.notifier).state = false;
+      ref.read(reasoningEffortEnabledProvider.notifier).state = false;
       ref.read(reasoningEffortProvider.notifier).state = 'medium';
       ref.read(reasoningParamValuesProvider.notifier).state = {};
     }

@@ -330,18 +330,41 @@ void showToolsPanel({
 /// current model. Each param has a [paramName] and [options] (user-defined list
 /// of selectable values). When [reasoningParams] is empty, the panel shows a
 /// disabled state.
+///
+/// The panel is organized in three sections:
+/// 1. A global "推理" toggle (controls the reasoning toggle param on/off).
+/// 2. A "推理力度" section (if an [isEffortParam] exists) with its own toggle
+///    and option chips for the effort param's values.
+/// 3. Additional reasoning params (non-toggle, non-effort) displayed as chips.
 void showReasoningPanel({
   required BuildContext context,
   required bool reasoningEnabled,
+  required bool reasoningEffortEnabled,
   required Map<String, String> reasoningParamSelections,
   required List<ReasoningParam> reasoningParams,
   required ValueChanged<bool> onReasoningToggle,
+  required ValueChanged<bool> onReasoningEffortToggle,
   required void Function(String paramName, String value)
       onReasoningParamChanged,
 }) {
   var localEnabled = reasoningEnabled;
+  var localEffortEnabled = reasoningEffortEnabled;
   var localSelections = Map<String, String>.from(reasoningParamSelections);
+
+  // Find the effort param (the one marked as isEffortParam=true)
+  final ReasoningParam? effortParam = reasoningParams.cast<ReasoningParam?>().firstWhere(
+    (p) => p?.isEffortParam ?? false,
+    orElse: () => null,
+  );
+
+  // Non-toggle, non-effort params shown as generic param sections
+  final displayParams = reasoningParams.where(
+    (p) => !p.isReasoningToggle && !p.isEffortParam,
+  ).toList();
+
   final hasParams = reasoningParams.isNotEmpty;
+  final hasNonToggleParams = reasoningParams.any((p) => !p.isReasoningToggle);
+
   showModalBottomSheet(
     context: context,
     shape: const RoundedRectangleBorder(
@@ -395,7 +418,7 @@ void showReasoningPanel({
                     ],
                   ),
                   const SizedBox(height: 16),
-                  // Reasoning toggle
+                  // ── Section 1: Reasoning toggle ──
                   Container(
                     decoration: BoxDecoration(
                       color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
@@ -428,12 +451,77 @@ void showReasoningPanel({
                       ],
                     ),
                   ),
-                  // Reasoning param option chips (only when enabled and params exist)
-                  if (localEnabled && hasParams) ...[
+                  // ── Section 2: Reasoning effort (力度) ──
+                  if (localEnabled && effortParam != null) ...[
                     const SizedBox(height: 12),
-                    ...reasoningParams.map((param) {
-                      final currentValue = localSelections[param.paramName] ??
-                          (param.options.isNotEmpty ? param.options.first : '');
+                    Container(
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 4),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '推理力度',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                color: cs.onSurface,
+                              ),
+                            ),
+                          ),
+                          Switch(
+                            value: localEffortEnabled,
+                            activeThumbColor: cs.primary,
+                            onChanged: (value) {
+                              setState(() => localEffortEnabled = value);
+                              onReasoningEffortToggle(value);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (localEffortEnabled) ...[
+                      const SizedBox(height: 12),
+                      // Effort param options
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: effortParam.options.map((option) {
+                          final currentValue =
+                              localSelections[effortParam.paramName] ??
+                                  (effortParam.options.isNotEmpty
+                                      ? effortParam.options.first
+                                      : '');
+                          final isSelected = currentValue == option;
+                          return _OptionChip(
+                            label: option,
+                            selected: isSelected,
+                            onTap: () {
+                              setState(() {
+                                localSelections[effortParam.paramName] = option;
+                              });
+                              onReasoningParamChanged(
+                                  effortParam.paramName, option);
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ],
+                  // ── Section 3: Additional reasoning param chips ──
+                  if (localEnabled && displayParams.isNotEmpty) ...[
+                    if (localEffortEnabled || effortParam == null)
+                      const SizedBox(height: 12),
+                    ...displayParams.map((param) {
+                      final currentValue =
+                          localSelections[param.paramName] ??
+                              (param.options.isNotEmpty
+                                  ? param.options.first
+                                  : '');
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: Column(
@@ -458,7 +546,8 @@ void showReasoningPanel({
                                   selected: isSelected,
                                   onTap: () {
                                     setState(() {
-                                      localSelections[param.paramName] = option;
+                                      localSelections[param.paramName] =
+                                          option;
                                     });
                                     onReasoningParamChanged(
                                         param.paramName, option);
@@ -471,8 +560,8 @@ void showReasoningPanel({
                       );
                     }),
                   ],
-                  // No params state
-                  if (!hasParams)
+                  // No non-toggle params state
+                  if (hasParams && !hasNonToggleParams && effortParam == null)
                     Padding(
                       padding: const EdgeInsets.only(top: 16),
                       child: Center(
