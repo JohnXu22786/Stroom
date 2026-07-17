@@ -9,6 +9,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
 import '../utils/audio_separation.dart';
+import '../utils/audio_utils.dart' show detectAudioFormat;
 import '../providers/tts_state_provider.dart';
 import '../providers/background_task_provider.dart';
 import '../utils/file_manifest.dart';
@@ -802,7 +803,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
         displayName ?? '音频分离_${p.basenameWithoutExtension(effectiveVideoName)}';
 
     final hash = computeAudioHash(audioBytes);
-    final format = 'mp3';
+    final format = detectAudioFormat(audioBytes);
 
     // 保存音频文件
     await FileManifest.writeFile('$hash.$format', audioBytes);

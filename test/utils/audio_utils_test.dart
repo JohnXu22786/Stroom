@@ -16,6 +16,31 @@ void main() {
       final data = Uint8List.fromList([0x00, 0x01, 0x02]);
       expect(detectAudioFormat(data), equals('pcm'));
     });
+
+    test('detects AAC ADTS and does not confuse with MP3', () {
+      // AAC ADTS frame header: sync=0xFFF, MPEG-4, layer=00
+      // Byte 2: profile(1)<<6 | freqIdx(4)<<2 | chanConfig_h(2)
+      // Byte 3: chanConfig_l<<6 | frameLen_h<<2  ...
+      final data = Uint8List.fromList([
+        0xFF, 0xF1, // sync (12 bits) + ID(0=MPEG4) + layer(00) + protect(1)
+        0x50, 0x80, // profile, freq, channels, frame length
+      ]);
+      expect(detectAudioFormat(data), equals('aac'));
+    });
+
+    test('detects regular MP3 sync (not confused with AAC)', () {
+      // MPEG1 Layer3: sync=0xFFF, version=11, layer=01
+      final data = Uint8List.fromList([0xFF, 0xFB, 0x90, 0x00]);
+      expect(detectAudioFormat(data), equals('mp3'));
+    });
+
+    test('detects MP3 with ID3 tag', () {
+      final data = Uint8List.fromList([
+        0x49, 0x44, 0x33, // ID3
+        0x03, 0x00, 0x00, // version, flags
+      ]);
+      expect(detectAudioFormat(data), equals('mp3'));
+    });
   });
 
   group('getMimeType', () {
