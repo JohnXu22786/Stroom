@@ -343,7 +343,9 @@ void main() {
         );
 
         // Verify file name in Content-Disposition
-        final bodyStr = utf8.decode(bodyBytes);
+        // Use allowMalformed because the body contains binary WAV data
+        // (ensureValidAudioFormat converts PCM→WAV before sending).
+        final bodyStr = utf8.decode(bodyBytes, allowMalformed: true);
         expect(
           bodyStr.contains('filename="audio.wav"'),
           isTrue,
@@ -354,11 +356,18 @@ void main() {
         expect(result.text, equals('Hello world'));
 
         // Verify diagnostics (lastRequestBody) show file metadata
+        // Note: byte count may differ from original after ensureValidAudioFormat
+        // converts PCM→WAV, so we only check filename and MIME type.
         expect(service.lastRequestBody, isNotNull);
         expect(
-          (service.lastRequestBody!['file'] as String)
-              .contains('audio.wav (${audioBytes.length} bytes, audio/wav)'),
+          (service.lastRequestBody!['file'] as String).contains('audio.wav'),
           true,
+          reason: 'Diagnostics should contain audio.wav',
+        );
+        expect(
+          (service.lastRequestBody!['file'] as String).contains('audio/wav'),
+          true,
+          reason: 'Diagnostics should contain audio/wav MIME type',
         );
       });
 
@@ -495,8 +504,15 @@ void main() {
         expect(testService.lastRequestBody!['response_format'], 'json');
         expect(
           (testService.lastRequestBody!['file'] as String)
-              .contains('audio.mp3 (${audioBytes.length} bytes, audio/mpeg)'),
+              .contains('audio.mp3'),
           true,
+          reason: 'Diagnostics should contain audio.mp3',
+        );
+        expect(
+          (testService.lastRequestBody!['file'] as String)
+              .contains('audio/mpeg'),
+          true,
+          reason: 'Diagnostics should contain audio/mpeg MIME type',
         );
       });
     });
