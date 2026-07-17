@@ -48,8 +48,7 @@ void main() {
         'attachments': <dynamic>[],
       };
 
-      final msg = ChatMessage.fromMap(
-          Map<String, dynamic>.from(map as Map));
+      final msg = ChatMessage.fromMap(Map<String, dynamic>.from(map as Map));
       expect(msg.content, '');
     });
 
@@ -212,7 +211,8 @@ void main() {
       expect(msg.isError, false);
     });
 
-    test('handles entire conversation message list with corrupt entries - partial protection',
+    test(
+        'handles entire conversation message list with corrupt entries - partial protection',
         () {
       // This tests what happens when a conversation has some bad messages
       // The conversation itself should still be loadable

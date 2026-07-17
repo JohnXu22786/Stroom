@@ -167,8 +167,7 @@ class ChatMessage {
       for (final e in attachmentsRaw) {
         if (e is Map) {
           try {
-            attachments.add(
-                Attachment.fromMap(Map<String, dynamic>.from(e)));
+            attachments.add(Attachment.fromMap(Map<String, dynamic>.from(e)));
           } catch (_) {
             // Skip corrupt attachment entry
           }

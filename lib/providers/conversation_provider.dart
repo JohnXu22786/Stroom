@@ -244,8 +244,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
                   conversations.add(
                       Conversation.fromMap(Map<String, dynamic>.from(item)));
                 } catch (e) {
-                  debugPrint(
-                      'ConversationsNotifier: 跳过损坏的对话条目: $e');
+                  debugPrint('ConversationsNotifier: 跳过损坏的对话条目: $e');
                   await AppLogService.warning(
                       'ConversationsNotifier', '跳过损坏的对话条目: $e');
                 }
@@ -256,13 +255,11 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
                 'ConversationsNotifier', '加载了 ${state.length} 个对话');
           } else {
             state = [];
-            await AppLogService.info(
-                'ConversationsNotifier', '对话数据格式无效');
+            await AppLogService.info('ConversationsNotifier', '对话数据格式无效');
           }
         } catch (e) {
           debugPrint('Failed to decode conversations JSON: $e');
-          await AppLogService.error(
-              'ConversationsNotifier', '解析对话 JSON 失败', e);
+          await AppLogService.error('ConversationsNotifier', '解析对话 JSON 失败', e);
           state = [];
         }
       } else {
@@ -295,8 +292,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
         }
       } catch (e) {
         debugPrint('Failed to restore active conversation: $e');
-        await AppLogService.error(
-            'ConversationsNotifier', '恢复活跃对话失败', e);
+        await AppLogService.error('ConversationsNotifier', '恢复活跃对话失败', e);
       }
       return;
     } catch (e) {
