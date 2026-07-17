@@ -27,7 +27,7 @@ import 'data_migration_service.dart';
 // 各平台存储位置由 [BackupLocationManager] 统一管理：
 // - Android: 通过 SAF 选择 Documents 目录
 // - iOS: 应用 Documents 目录（通过文件 App 可访问）
-// - Desktop: ~/Documents/StroomData/AutoBackup
+// - Desktop: ~/Documents/Stroom/AutoBackups
 // - Web: 不支持
 //
 // 备份保留策略：
