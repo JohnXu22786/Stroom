@@ -3040,7 +3040,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
         }) {
       ref.read(reasoningEnabledProvider.notifier).state = re;
       // Restore reasoning effort enabled state (with default false)
-      final bool ree = modelSettings['reasoningEffortEnabled'] as bool? ?? false;
+      final bool ree =
+          modelSettings['reasoningEffortEnabled'] as bool? ?? false;
       ref.read(reasoningEffortEnabledProvider.notifier).state = ree;
       // Validate reasoningEffort against known values
       const validEfforts = {'low', 'medium', 'high'};

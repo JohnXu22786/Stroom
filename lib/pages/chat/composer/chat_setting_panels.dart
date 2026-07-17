@@ -352,15 +352,18 @@ void showReasoningPanel({
   var localSelections = Map<String, String>.from(reasoningParamSelections);
 
   // Find the effort param (the one marked as isEffortParam=true)
-  final ReasoningParam? effortParam = reasoningParams.cast<ReasoningParam?>().firstWhere(
-    (p) => p?.isEffortParam ?? false,
-    orElse: () => null,
-  );
+  final ReasoningParam? effortParam =
+      reasoningParams.cast<ReasoningParam?>().firstWhere(
+            (p) => p?.isEffortParam ?? false,
+            orElse: () => null,
+          );
 
   // Non-toggle, non-effort params shown as generic param sections
-  final displayParams = reasoningParams.where(
-    (p) => !p.isReasoningToggle && !p.isEffortParam,
-  ).toList();
+  final displayParams = reasoningParams
+      .where(
+        (p) => !p.isReasoningToggle && !p.isEffortParam,
+      )
+      .toList();
 
   final hasParams = reasoningParams.isNotEmpty;
   final hasNonToggleParams = reasoningParams.any((p) => !p.isReasoningToggle);
@@ -456,7 +459,8 @@ void showReasoningPanel({
                     const SizedBox(height: 12),
                     Container(
                       decoration: BoxDecoration(
-                        color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                        color:
+                            cs.surfaceContainerHighest.withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       padding: const EdgeInsets.symmetric(
@@ -517,11 +521,8 @@ void showReasoningPanel({
                     if (localEffortEnabled || effortParam == null)
                       const SizedBox(height: 12),
                     ...displayParams.map((param) {
-                      final currentValue =
-                          localSelections[param.paramName] ??
-                              (param.options.isNotEmpty
-                                  ? param.options.first
-                                  : '');
+                      final currentValue = localSelections[param.paramName] ??
+                          (param.options.isNotEmpty ? param.options.first : '');
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: Column(
@@ -546,8 +547,7 @@ void showReasoningPanel({
                                   selected: isSelected,
                                   onTap: () {
                                     setState(() {
-                                      localSelections[param.paramName] =
-                                          option;
+                                      localSelections[param.paramName] = option;
                                     });
                                     onReasoningParamChanged(
                                         param.paramName, option);

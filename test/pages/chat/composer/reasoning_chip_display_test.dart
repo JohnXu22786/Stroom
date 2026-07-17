@@ -78,8 +78,7 @@ void main() {
       expect(find.text('推理'), findsNothing);
     });
 
-    testWidgets('shows 推理 when effort toggle is OFF',
-        (tester) async {
+    testWidgets('shows 推理 when effort toggle is OFF', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
         reasoningEnabled: true,
@@ -111,8 +110,7 @@ void main() {
       expect(find.text('推理'), findsOneWidget);
     });
 
-    testWidgets('shows 推理 in gray when reasoning disabled',
-        (tester) async {
+    testWidgets('shows 推理 in gray when reasoning disabled', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
         reasoningEnabled: false,
@@ -126,7 +124,8 @@ void main() {
       expect(find.text('推理'), findsOneWidget);
     });
 
-    testWidgets('chip color is purple when reasoning enabled with params and effort',
+    testWidgets(
+        'chip color is purple when reasoning enabled with params and effort',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
@@ -168,8 +167,7 @@ void main() {
       expect(settingsChip.color, Colors.purple);
     });
 
-    testWidgets('chip color is grey when reasoning disabled',
-        (tester) async {
+    testWidgets('chip color is grey when reasoning disabled', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
         reasoningEnabled: false,
@@ -206,8 +204,7 @@ void main() {
       expect(find.text('推理'), findsNothing);
     });
 
-    testWidgets('shows low effort value when set',
-        (tester) async {
+    testWidgets('shows low effort value when set', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
         reasoningEnabled: true,
@@ -222,8 +219,7 @@ void main() {
       expect(find.text('medium'), findsNothing);
     });
 
-    testWidgets(
-        'shows reasoning_effort value specifically, not other params',
+    testWidgets('shows reasoning_effort value specifically, not other params',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
@@ -262,8 +258,7 @@ void main() {
       expect(find.text('enabled'), findsNothing);
     });
 
-    testWidgets(
-        'shows 推理 when no effort param exists (isEffortParam=false)',
+    testWidgets('shows 推理 when no effort param exists (isEffortParam=false)',
         (tester) async {
       SharedPreferences.setMockInitialValues({});
       await tester.binding.setSurfaceSize(const Size(1200, 2000));

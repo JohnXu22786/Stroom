@@ -166,8 +166,7 @@ void main() {
       expect(find.text('high'), findsOneWidget);
     });
 
-    testWidgets(
-        'tapping effort option calls onReasoningParamChanged',
+    testWidgets('tapping effort option calls onReasoningParamChanged',
         (tester) async {
       String? changedParamName;
       String? changedValue;
@@ -402,7 +401,8 @@ void main() {
       expect(find.text('min'), findsOneWidget);
     });
 
-    testWidgets('true/false boolean options display correctly for non-effort param',
+    testWidgets(
+        'true/false boolean options display correctly for non-effort param',
         (tester) async {
       final reasoningParams = [
         ReasoningParam(

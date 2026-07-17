@@ -490,10 +490,11 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         // Sync reasoningEffortProvider when an effort param changes
         // so the effort value is available for API calls (chat_page sends
         // it via ChatAdapter.sendStreamWithTools).
-        final effortParam = widget.reasoningParams.cast<ReasoningParam?>().firstWhere(
-          (p) => p?.isEffortParam ?? false,
-          orElse: () => null,
-        );
+        final effortParam =
+            widget.reasoningParams.cast<ReasoningParam?>().firstWhere(
+                  (p) => p?.isEffortParam ?? false,
+                  orElse: () => null,
+                );
         if (effortParam != null && paramName == effortParam.paramName) {
           ref.read(reasoningEffortProvider.notifier).state = value;
         }
@@ -888,10 +889,11 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     final reasoningParamValues = ref.watch(reasoningParamValuesProvider);
 
     // Find the effort param (isEffortParam=true) from widget.reasoningParams
-    final effortParam = widget.reasoningParams.cast<ReasoningParam?>().firstWhere(
-      (p) => p?.isEffortParam ?? false,
-      orElse: () => null,
-    );
+    final effortParam =
+        widget.reasoningParams.cast<ReasoningParam?>().firstWhere(
+              (p) => p?.isEffortParam ?? false,
+              orElse: () => null,
+            );
 
     // Determine reasoning chip label and color based on reasoning state.
     // When reasoning is enabled AND effort toggle is on AND a value has been
