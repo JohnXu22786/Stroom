@@ -11,6 +11,7 @@ import '../providers/tts_state_provider.dart';
 import '../providers/background_task_provider.dart';
 import '../providers/text_provider.dart';
 import '../services/asr_service.dart';
+import '../utils/audio_utils.dart';
 import '../utils/data_sanitizer.dart';
 import '../utils/file_manifest.dart';
 import '../utils/text_manifest.dart';
@@ -538,7 +539,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            '${audio.format.toUpperCase()}  |  ${_formatFileSize(audio.bytes.length)}',
+                            '${formatDisplayName(audio.format)}  |  ${_formatFileSize(audio.bytes.length)}',
                             style: TextStyle(
                               fontSize: 11,
                               color: cs.onSurfaceVariant,
@@ -927,7 +928,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         subtitleBuilder: (record) => Row(
           children: [
             Text(
-              record.format.toUpperCase(),
+              formatDisplayName(record.format),
               style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
             const SizedBox(width: 6),

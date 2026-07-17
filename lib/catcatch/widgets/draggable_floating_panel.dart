@@ -1,6 +1,8 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 
+import '../../utils/audio_utils.dart';
+
 // =============================================================================
 // Draggable Floating Panel
 // =============================================================================
@@ -389,7 +391,7 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        _extractExtension(url).toUpperCase(),
+                        formatDisplayName(_extractExtension(url)),
                         style: TextStyle(
                           fontSize: 9,
                           color: _colorForUrl(url),
@@ -428,7 +430,7 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
           Expanded(
             child: Text(
               _selectedIndex != null
-                  ? '已选: ${_extractExtension(widget.detectedUrls[_selectedIndex!]).toUpperCase()}'
+                  ? '已选: ${formatDisplayName(_extractExtension(widget.detectedUrls[_selectedIndex!]))}'
                   : '选择资源后确认',
               style: TextStyle(
                 fontSize: 10,
