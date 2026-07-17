@@ -133,10 +133,7 @@ String detectAudioFormat(Uint8List data) {
   // Must be checked BEFORE MP3 (both start with 0xFFFx but differ in layer bits).
   // MP3 Layer III has layer=01, AAC has layer=00.
   if (data.length >= 4 && data[0] == 0xFF && (data[1] & 0xF0) == 0xF0) {
-    final header = (data[0] << 24) |
-        (data[1] << 16) |
-        (data[2] << 8) |
-        data[3];
+    final header = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
     final layer = (header >> 17) & 0x3;
     if (layer == 0) {
       return 'aac';

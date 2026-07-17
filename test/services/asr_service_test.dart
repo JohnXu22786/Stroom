@@ -503,12 +503,14 @@ void main() {
         expect(testService.lastRequestBody!['model'], 'whisper-1');
         expect(testService.lastRequestBody!['response_format'], 'json');
         expect(
-          (testService.lastRequestBody!['file'] as String).contains('audio.mp3'),
+          (testService.lastRequestBody!['file'] as String)
+              .contains('audio.mp3'),
           true,
           reason: 'Diagnostics should contain audio.mp3',
         );
         expect(
-          (testService.lastRequestBody!['file'] as String).contains('audio/mpeg'),
+          (testService.lastRequestBody!['file'] as String)
+              .contains('audio/mpeg'),
           true,
           reason: 'Diagnostics should contain audio/mpeg MIME type',
         );

@@ -8,8 +8,16 @@ import '../utils/http_utils.dart';
 
 // Formati supportati dal Whisper API (OpenAI-compatible).
 const _asrSupportedFormats = {
-  'flac', 'mp3', 'mp4', 'mpeg', 'mpga',
-  'm4a', 'ogg', 'opus', 'wav', 'webm',
+  'flac',
+  'mp3',
+  'mp4',
+  'mpeg',
+  'mpga',
+  'm4a',
+  'ogg',
+  'opus',
+  'wav',
+  'webm',
 };
 
 // ============================================================================
