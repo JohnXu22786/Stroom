@@ -1,12 +1,12 @@
 /// Utility functions for sanitizing data for display.
 ///
-/// Prevents UI freezes by hiding large base64-encoded content (e.g., images)
-/// and truncating oversized strings.
+/// Prevents UI freezes by hiding large base64-encoded content (e.g., images,
+/// video, documents) and truncating oversized strings.
 class DataSanitizer {
   DataSanitizer._();
 
   /// Recursively sanitize [data] for display by hiding base64 content
-  /// (images, etc.) to prevent UI freezes when rendering large encoded data.
+  /// (images, video, documents, etc.) to prevent UI freezes when rendering large encoded data.
   static dynamic sanitizeForDisplay(dynamic data) {
     if (data is Map) {
       final result = <String, dynamic>{};
@@ -23,12 +23,13 @@ class DataSanitizer {
   }
 
   /// Replace long base64 strings with a placeholder showing only length.
-  /// Detects data URIs for images and standalone base64 strings longer than 300 chars.
+  /// Detects data URIs (any MIME type) and standalone base64 strings longer than 300 chars.
   static String sanitizeBase64String(String value) {
-    // Data URI pattern: data:image/<type>;base64,<data>
-    // Supports types like png, jpeg, svg+xml, webp, etc.
+    // Data URI pattern: data:<type>/<subtype>;base64,<data>
+    // Matches all data URIs with a base64 payload (image, video, audio, application, etc.)
+    // Supports types like png, jpeg, svg+xml, webp, mp4, webm, pdf, octet-stream, etc.
     final dataUriPattern =
-        RegExp(r'^data:image/[a-zA-Z][a-zA-Z0-9+\-.]*;base64,');
+        RegExp(r'^data:[a-zA-Z][a-zA-Z0-9+\-.]*/[a-zA-Z][a-zA-Z0-9+\-.]*;base64,');
     if (dataUriPattern.hasMatch(value)) {
       final commaIndex = value.indexOf(',');
       final prefix = value.substring(0, commaIndex + 1);

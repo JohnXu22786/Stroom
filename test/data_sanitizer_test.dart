@@ -29,11 +29,12 @@ void main() {
       expect(DataSanitizer.sanitizeBase64String(short), short);
     });
 
-    test('mixed content string with non-base64 chars passes through', () {
+    test('data URI with application/json type is hidden with placeholder', () {
       const mixed = 'data:application/json;base64,{some data here}';
-      // This doesn't match image data URI pattern and is long enough
-      // but contains non-base64 chars ({, }, space)
-      expect(DataSanitizer.sanitizeBase64String(mixed), mixed);
+      final result = DataSanitizer.sanitizeBase64String(mixed);
+      expect(result, startsWith('data:application/json;base64,'));
+      expect(result, contains('[base64 data:'));
+      expect(result, contains('bytes hidden]'));
     });
 
     test('empty string passes through', () {
@@ -84,20 +85,45 @@ void main() {
       expect(result, contains('[base64 data:'));
     });
 
-    test(
-        'non-image data URI (application/pdf) is not hidden by image regex but returns without freeze',
+    test('data URI with video/mp4 type is hidden with placeholder', () {
+      const longB64 = 'VBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUl'
+          'EQVR42mNk+P1fPQAIaAMONeFfTAAAAABJRU5ErkJggg==';
+      final dataUri = 'data:video/mp4;base64,$longB64';
+      final result = DataSanitizer.sanitizeBase64String(dataUri);
+      expect(result, startsWith('data:video/mp4;base64,'));
+      expect(result, contains('[base64 data:'));
+      expect(result, contains('bytes hidden]'));
+      // The original base64 portion should NOT appear in full
+      expect(result, isNot(contains('VBORw0KGgo')));
+    });
+
+    test('data URI with video/webm type is also hidden', () {
+      const longB64 = 'VBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUl'
+          'EQVR42mNk+P1fPQAIaAMONeFfTAAAAABJRU5ErkJggg==';
+      final dataUri = 'data:video/webm;base64,$longB64';
+      final result = DataSanitizer.sanitizeBase64String(dataUri);
+      expect(result, contains('[base64 data:'));
+    });
+
+    test('data URI with video/quicktime type is also hidden', () {
+      const longB64 = 'VBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUl'
+          'EQVR42mNk+P1fPQAIaAMONeFfTAAAAABJRU5ErkJggg==';
+      final dataUri = 'data:video/quicktime;base64,$longB64';
+      final result = DataSanitizer.sanitizeBase64String(dataUri);
+      expect(result, contains('[base64 data:'));
+    });
+
+    test('data URI with application/pdf type is hidden with placeholder',
         () {
-      // Non-image data URIs don't match the ^data:image/... regex.
-      // The pure base64 check also won't match because the prefix
-      // 'data:application/pdf;base64,' contains non-base64 characters.
-      // Important: the function returns the string as-is (no freeze/crash).
       final longB64 =
           'aGVsbG8gd29ybGQgaGVsbG8gd29ybGQ=' * 20; // >300 chars base64
       final dataUri = 'data:application/pdf;base64,$longB64';
       final result = DataSanitizer.sanitizeBase64String(dataUri);
-      // The prefix is preserved; the full string is returned (not hidden)
       expect(result, startsWith('data:application/pdf;base64,'));
-      expect(result, contains(longB64));
+      expect(result, contains('[base64 data:'));
+      expect(result, contains('bytes hidden]'));
+      // The original base64 portion should NOT appear in full
+      expect(result, isNot(contains(longB64)));
     });
 
     test('multi-line base64 with embedded newlines is detected', () {
