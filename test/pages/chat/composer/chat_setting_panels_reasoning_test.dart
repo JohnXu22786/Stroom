@@ -328,7 +328,7 @@ void main() {
                   onPressed: () {
                     showReasoningPanel(
                       context: context,
-                      reasoningEnabled: false,
+                      reasoningEnabled: true,
                       reasoningEffortEnabled: false,
                       reasoningParamSelections: {},
                       reasoningParams: const [],
