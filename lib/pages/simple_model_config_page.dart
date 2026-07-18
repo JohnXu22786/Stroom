@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../providers/provider_config.dart';
 
@@ -68,7 +69,8 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
       return;
     }
 
-    // 验证自定义参数：参数名和默认值不能为空，参数名不能重复
+    // 验证自定义参数：参数名和默认值不能为空，参数名不能重复，
+    // JSON 类型的默认值必须是合法 JSON
     final seenNames = <String>{};
     for (int i = 0; i < _customParams.length; i++) {
       final param = _customParams[i];
@@ -90,6 +92,20 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
           ),
         );
         return;
+      }
+      // JSON 类型的默认值必须是合法 JSON
+      if (param.type == 'json' && param.defaultValue.trim().isNotEmpty) {
+        try {
+          jsonDecode(param.defaultValue.trim());
+        } catch (_) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('参数 "$name" 的默认值不是合法 JSON：${param.defaultValue}'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
       }
     }
 
