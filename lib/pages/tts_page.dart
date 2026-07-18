@@ -669,7 +669,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         ),
         child: Center(
           child: Text(
-            file.format.toUpperCase(),
+            formatDisplayName(file.format),
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 12,

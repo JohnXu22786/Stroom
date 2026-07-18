@@ -343,8 +343,7 @@ void main() {
         );
 
         // Verify file name in Content-Disposition
-        // Use allowMalformed because the body contains binary WAV data
-        // (ensureValidAudioFormat converts PCM→WAV before sending).
+        // Use allowMalformed because the body contains binary audio data.
         final bodyStr = utf8.decode(bodyBytes, allowMalformed: true);
         expect(
           bodyStr.contains('filename="audio.wav"'),
@@ -355,9 +354,7 @@ void main() {
         // Verify the transcription still works
         expect(result.text, equals('Hello world'));
 
-        // Verify diagnostics (lastRequestBody) show file metadata
-        // Note: byte count may differ from original after ensureValidAudioFormat
-        // converts PCM→WAV, so we only check filename and MIME type.
+        // Verify diagnostics (lastRequestBody) show file metadata.
         expect(service.lastRequestBody, isNotNull);
         expect(
           (service.lastRequestBody!['file'] as String).contains('audio.wav'),

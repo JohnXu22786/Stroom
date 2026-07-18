@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../catcatch/models/media_resource.dart';
 import '../../catcatch/providers/catcatch_provider.dart';
 import '../../catcatch/models/catcatch_task.dart' as catcatch;
+import '../../utils/audio_utils.dart';
 import '../catcatch_page.dart';
 import 'task_utils.dart';
 import 'media_preview_sheet.dart';
@@ -897,7 +898,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     Row(
                       children: [
                         Text(
-                          '${formatSize(media.size)} · ${media.mimeType ?? media.ext.toUpperCase()}',
+                          '${formatSize(media.size)} · ${media.mimeType ?? formatDisplayName(media.ext)}',
                           style: Theme.of(context)
                               .textTheme
                               .bodySmall
