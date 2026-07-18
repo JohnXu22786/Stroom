@@ -55,6 +55,80 @@ void main() {
     });
   });
 
+  group('formatDisplayName', () {
+    test('maps AAC to M4A (consumer-friendly name)', () {
+      // Regression: raw AAC ADTS format should display as "M4A" because
+      // "AAC" is a codec name unfamiliar to most users, while "M4A" is
+      // the widely recognized consumer audio format name.
+      expect(formatDisplayName('aac'), equals('M4A'));
+    });
+
+    test('returns same uppercase for wav', () {
+      expect(formatDisplayName('wav'), equals('WAV'));
+    });
+
+    test('returns same uppercase for mp3', () {
+      expect(formatDisplayName('mp3'), equals('MP3'));
+    });
+
+    test('returns same uppercase for m4a', () {
+      expect(formatDisplayName('m4a'), equals('M4A'));
+    });
+
+    test('returns same uppercase for flac', () {
+      expect(formatDisplayName('flac'), equals('FLAC'));
+    });
+
+    test('returns same uppercase for ogg', () {
+      expect(formatDisplayName('ogg'), equals('OGG'));
+    });
+
+    test('returns same uppercase for opus', () {
+      expect(formatDisplayName('opus'), equals('OPUS'));
+    });
+
+    test('returns same uppercase for webm', () {
+      expect(formatDisplayName('webm'), equals('WEBM'));
+    });
+
+    test('returns same uppercase for weba', () {
+      expect(formatDisplayName('weba'), equals('WEBA'));
+    });
+
+    test('returns same uppercase for wma', () {
+      expect(formatDisplayName('wma'), equals('WMA'));
+    });
+
+    test('returns same uppercase for mp4', () {
+      expect(formatDisplayName('mp4'), equals('MP4'));
+    });
+
+    test('returns same uppercase for mpeg', () {
+      expect(formatDisplayName('mpeg'), equals('MPEG'));
+    });
+
+    test('returns same uppercase for pcm', () {
+      expect(formatDisplayName('pcm'), equals('PCM'));
+    });
+
+    test('is case-insensitive - AAC upper', () {
+      expect(formatDisplayName('AAC'), equals('M4A'));
+    });
+
+    test('is case-insensitive - Aac mixed', () {
+      expect(formatDisplayName('Aac'), equals('M4A'));
+    });
+
+    test('handles empty string', () {
+      expect(formatDisplayName(''), equals(''));
+    });
+
+    test('handles unknown format by uppercasing', () {
+      expect(formatDisplayName('unknown'), equals('UNKNOWN'));
+      expect(formatDisplayName('custom'), equals('CUSTOM'));
+    });
+  });
+
   group('ensureValidAudioFormat', () {
     test('converts PCM to WAV when requested format is wav', () {
       // Fake PCM data

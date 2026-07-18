@@ -168,13 +168,9 @@ class AsrService {
   /// Returns [AsrResult] with the transcribed text.
   ///
   /// The request is sent as multipart/form-data (standard OpenAI STT convention)
-  /// with the audio file as a binary part. This is compatible with OpenAI,
-  /// OpenRouter, aihubmix, and other OpenAI-compatible providers.
-  ///
-  /// The audio is validated via [ensureValidAudioFormat] first: if the actual
-  /// content format differs from [audioFormat], the detected format is used.
-  /// If the detected format is not supported by the Whisper API, an error is
-  /// thrown before sending.
+  /// with the audio file as a binary part. The labeled [audioFormat] is used
+  /// directly for the filename and MIME type — no auto-detection or conversion
+  /// is performed.
   Future<AsrResult> transcribe({
     required Uint8List audioBytes,
     String audioFormat = 'wav',
@@ -188,12 +184,10 @@ class AsrService {
       throw Exception('音频数据为空');
     }
 
-    // Validate and fix format — detect actual content format, convert PCM→WAV
-    final (fixedBytes, actualFormat) =
-        ensureValidAudioFormat(audioBytes, requestedFormat: audioFormat);
-    if (!_asrSupportedFormats.contains(actualFormat)) {
+    final fmt = audioFormat.toLowerCase();
+    if (!_asrSupportedFormats.contains(fmt)) {
       throw Exception(
-        '不支持的音频格式: $actualFormat。'
+        '不支持的音频格式: $fmt。'
         'Whisper API 支持的格式: ${_asrSupportedFormats.join(", ")}。'
         '请将音频转换为 WAV/MP3 格式后重试。',
       );
@@ -201,14 +195,14 @@ class AsrService {
 
     final stopwatch = Stopwatch()..start();
 
-    final fileName = 'audio.$actualFormat';
-    final mimeTypeString = getMimeType(actualFormat);
+    final fileName = 'audio.$fmt';
+    final mimeTypeString = getMimeType(fmt);
     final mimeType = mimeTypeString.contains('/')
         ? DioMediaType.parse(mimeTypeString)
         : null;
     final formData = FormData.fromMap({
       'file': MultipartFile.fromBytes(
-        fixedBytes,
+        audioBytes,
         filename: fileName,
         contentType: mimeType,
       ),
@@ -220,7 +214,7 @@ class AsrService {
 
     // Capture request diagnostics (for error details dialog).
     lastRequestBody = {
-      'file': '$fileName (${fixedBytes.length} bytes, $mimeTypeString)',
+      'file': '$fileName (${audioBytes.length} bytes, $mimeTypeString)',
       'model': config.model,
       'response_format': 'json',
       if (config.language != null && config.language!.isNotEmpty)
