@@ -462,10 +462,12 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
 
   void _showReasoningPanel() {
     final reasoningEnabled = ref.read(reasoningEnabledProvider);
+    final reasoningEffortEnabled = ref.read(reasoningEffortEnabledProvider);
     final reasoningParamValues = ref.read(reasoningParamValuesProvider);
     showReasoningPanel(
       context: context,
       reasoningEnabled: reasoningEnabled,
+      reasoningEffortEnabled: reasoningEffortEnabled,
       reasoningParamSelections: reasoningParamValues,
       reasoningParams: widget.reasoningParams,
       onReasoningToggle: (value) {
@@ -474,16 +476,26 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
           (prefs) => prefs.setBool('reasoning_enabled', value),
         );
       },
+      onReasoningEffortToggle: (value) {
+        ref.read(reasoningEffortEnabledProvider.notifier).state = value;
+        // Effort toggle state is auto-persisted via the ref.listen in
+        // chat_page.dart's _persistCurrentReasoningSettings mechanism.
+      },
       onReasoningParamChanged: (paramName, value) {
         final current = Map<String, String>.from(
           ref.read(reasoningParamValuesProvider),
         );
         current[paramName] = value;
         ref.read(reasoningParamValuesProvider.notifier).state = current;
-        // Sync reasoningEffortProvider when reasoning_effort changes
+        // Sync reasoningEffortProvider when an effort param changes
         // so the effort value is available for API calls (chat_page sends
         // it via ChatAdapter.sendStreamWithTools).
-        if (paramName == 'reasoning_effort') {
+        final effortParam =
+            widget.reasoningParams.cast<ReasoningParam?>().firstWhere(
+                  (p) => p?.isEffortParam ?? false,
+                  orElse: () => null,
+                );
+        if (effortParam != null && paramName == effortParam.paramName) {
           ref.read(reasoningEffortProvider.notifier).state = value;
         }
         SharedPreferences.getInstance().then(
@@ -873,18 +885,26 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     final hasAttachments = _pendingAttachments.isNotEmpty;
     final cs = Theme.of(context).colorScheme;
     final reasoningEnabled = ref.watch(reasoningEnabledProvider);
+    final reasoningEffortEnabled = ref.watch(reasoningEffortEnabledProvider);
     final reasoningParamValues = ref.watch(reasoningParamValuesProvider);
 
+    // Find the effort param (isEffortParam=true) from widget.reasoningParams
+    final effortParam =
+        widget.reasoningParams.cast<ReasoningParam?>().firstWhere(
+              (p) => p?.isEffortParam ?? false,
+              orElse: () => null,
+            );
+
     // Determine reasoning chip label and color based on reasoning state.
-    // When reasoning is enabled:
-    //   - If the user has selected a reasoning effort value in the model's
-    //     "推理力度" panel, show that value (e.g. "high", "low").
-    //   - Otherwise, show "推理" in purple (on state).
-    // When reasoning is disabled: show gray "推理".
+    // When reasoning is enabled AND effort toggle is on AND a value has been
+    // selected for the effort param: show that value (e.g. "high", "low").
+    // Otherwise: show "推理" (purple when enabled, grey when disabled).
     final String reasoningLabel;
     if (reasoningEnabled &&
-        reasoningParamValues.containsKey('reasoning_effort')) {
-      reasoningLabel = reasoningParamValues['reasoning_effort']!;
+        reasoningEffortEnabled &&
+        effortParam != null &&
+        reasoningParamValues.containsKey(effortParam.paramName)) {
+      reasoningLabel = reasoningParamValues[effortParam.paramName]!;
     } else {
       reasoningLabel = '推理';
     }
