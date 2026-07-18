@@ -76,6 +76,9 @@ class _ApplicationState extends ConsumerState<Application>
     // 启动时清理过期日志
     unawaited(AppLogService.cleanupOldLogs().catchError((_) {}));
 
+    // 启动时清理残留的更新安装包文件
+    await ref.read(updateProvider.notifier).cleanupStaleInstallerFiles();
+
     // 并行执行两个启动后任务：
     // 1. 检查更新
     // 2. 检查备份存储授权并自动备份

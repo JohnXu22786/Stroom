@@ -548,6 +548,58 @@ void main() {
       }
       expect(find.text('下载完成'), findsOneWidget);
     });
+
+    testWidgets('shows "打开安装包" button when download complete with no error',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = _setupNotifier(
+        state: UpdateState(
+          updateAvailable: true,
+          latestVersion: '0.2.14',
+          downloadUrl:
+              'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.exe',
+          downloadComplete: true,
+          isDownloading: false,
+          isInstalling: false,
+          downloadError: null,
+          downloadedFilePath: '/tmp/test.exe',
+        ),
+      ).notifier;
+
+      await _showDialog(tester: tester, notifier: notifier);
+
+      // Verify both buttons are shown
+      expect(find.text('下载完成'), findsOneWidget);
+      expect(find.text('关闭'), findsOneWidget);
+      expect(find.text('打开安装包'), findsOneWidget);
+    });
+
+    testWidgets('tapping "打开安装包" calls retryInstall', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = _setupNotifier(
+        state: UpdateState(
+          updateAvailable: true,
+          latestVersion: '0.2.14',
+          downloadUrl:
+              'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.exe',
+          downloadComplete: true,
+          isDownloading: false,
+          isInstalling: false,
+          downloadError: null,
+          downloadedFilePath: '/tmp/test.exe',
+        ),
+      ).notifier;
+
+      await _showDialog(tester: tester, notifier: notifier);
+
+      // Tap "打开安装包" button
+      await tester.tap(find.text('打开安装包'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // After tapping, isInstalling should be true (retryInstall sets it)
+      expect(notifier.state.isInstalling, true);
+    });
   });
 
   group('UpdateDialog - Multi-version selection', () {
