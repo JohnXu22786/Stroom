@@ -23,7 +23,10 @@ import 'gallery_shared.dart';
 import 'gallery_viewer_page.dart';
 
 class GalleryPage extends ConsumerStatefulWidget {
-  const GalleryPage({super.key});
+  final int tabIndex;
+  final bool isActiveTab;
+
+  const GalleryPage({super.key, this.tabIndex = 0, this.isActiveTab = true});
 
   @override
   ConsumerState<GalleryPage> createState() => _GalleryPageState();
@@ -726,9 +729,13 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     final navigateToParentSignal = ref.watch(
       filesPageNavigateToParentSignalProvider,
     );
+    final tabResetSignal =
+        ref.watch(fileTabFolderResetSignalProvider(widget.tabIndex));
 
     return FileManagerView<ImageRecord>(
+      tabResetSignal: tabResetSignal,
       navigateToParentSignal: navigateToParentSignal,
+      isActiveTab: widget.isActiveTab,
       sortedRecords: sortedRecords,
       folders: folders,
       sortConfig: sortConfig,

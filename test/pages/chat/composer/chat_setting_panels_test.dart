@@ -142,7 +142,6 @@ void main() {
 
     testWidgets('model panel fires onModelsReordered callback on drag',
         (tester) async {
-      List<String>? reorderedModels;
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -155,8 +154,7 @@ void main() {
                       models: ['GPT-4o', 'Claude 3', 'Gemini'],
                       selectedModelIndex: 0,
                       onModelSelected: (_) {},
-                      onModelsReordered: (models) =>
-                          reorderedModels = List<String>.from(models),
+                      onModelsReordered: (models) => List<String>.from(models),
                     );
                   },
                   child: const Text('Open'),
@@ -349,6 +347,7 @@ void main() {
                     showReasoningPanel(
                       context: context,
                       reasoningEnabled: true,
+                      reasoningEffortEnabled: false,
                       reasoningParamSelections: {'reasoning_effort': 'medium'},
                       reasoningParams: [
                         ReasoningParam(
@@ -357,6 +356,7 @@ void main() {
                         ),
                       ],
                       onReasoningToggle: (_) {},
+                      onReasoningEffortToggle: (_) {},
                       onReasoningParamChanged: (_, __) {},
                     );
                   },
@@ -372,10 +372,11 @@ void main() {
 
       expect(find.text('推理设置'), findsOneWidget);
       expect(find.text('推理'), findsOneWidget);
-      expect(find.byType(Switch), findsOneWidget);
+      // Now there are 2 switches: reasoning toggle + effort section
+      expect(find.byType(Switch), findsWidgets);
     });
 
-    testWidgets('option chips appear when reasoning is enabled',
+    testWidgets('option chips appear when reasoning and effort are enabled',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -387,14 +388,17 @@ void main() {
                     showReasoningPanel(
                       context: context,
                       reasoningEnabled: true,
+                      reasoningEffortEnabled: true,
                       reasoningParamSelections: {'reasoning_effort': 'medium'},
                       reasoningParams: [
                         ReasoningParam(
                           paramName: 'reasoning_effort',
+                          isEffortParam: true,
                           options: ['low', 'medium', 'high'],
                         ),
                       ],
                       onReasoningToggle: (_) {},
+                      onReasoningEffortToggle: (_) {},
                       onReasoningParamChanged: (_, __) {},
                     );
                   },
@@ -408,6 +412,7 @@ void main() {
 
       await openPanel(tester);
 
+      // Effort options should appear when effort is enabled
       expect(find.text('low'), findsOneWidget);
       expect(find.text('medium'), findsOneWidget);
       expect(find.text('high'), findsOneWidget);
@@ -425,14 +430,17 @@ void main() {
                     showReasoningPanel(
                       context: context,
                       reasoningEnabled: false,
+                      reasoningEffortEnabled: false,
                       reasoningParamSelections: {},
                       reasoningParams: [
                         ReasoningParam(
                           paramName: 'reasoning_effort',
+                          isEffortParam: true,
                           options: ['low', 'medium', 'high'],
                         ),
                       ],
                       onReasoningToggle: (_) {},
+                      onReasoningEffortToggle: (_) {},
                       onReasoningParamChanged: (_, __) {},
                     );
                   },
@@ -463,6 +471,7 @@ void main() {
                     showReasoningPanel(
                       context: context,
                       reasoningEnabled: true,
+                      reasoningEffortEnabled: false,
                       reasoningParamSelections: {},
                       reasoningParams: [
                         ReasoningParam(
@@ -471,6 +480,7 @@ void main() {
                         ),
                       ],
                       onReasoningToggle: (v) => toggleValue = v,
+                      onReasoningEffortToggle: (_) {},
                       onReasoningParamChanged: (_, __) {},
                     );
                   },
@@ -484,7 +494,8 @@ void main() {
 
       await openPanel(tester);
 
-      await tester.tap(find.byType(Switch));
+      // Tap the first switch (reasoning toggle)
+      await tester.tap(find.byType(Switch).first);
       await tester.pump();
 
       expect(toggleValue, false);

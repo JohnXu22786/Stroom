@@ -122,4 +122,106 @@ void main() {
       expect(find.text('Stroom'), findsOneWidget);
     });
   });
+
+  group('StartupPage - fade-out animation pattern', () {
+    testWidgets('AnimatedBuilder with Opacity renders without error',
+        (tester) async {
+      // Simulate the fade-out pattern used in StartupApp
+      final controller = AnimationController(
+        vsync: tester,
+        duration: const Duration(milliseconds: 500),
+      );
+
+      final animation = Tween<double>(begin: 1.0, end: 0.0).animate(
+        CurvedAnimation(parent: controller, curve: Curves.easeOut),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AnimatedBuilder(
+            animation: animation,
+            builder: (context, child) {
+              return Opacity(
+                opacity: animation.value,
+                child: child,
+              );
+            },
+            child: wrapStartupPage(isWorking: false),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Initial state: fully visible
+      expect(find.text('Stroom'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      // Start fade-out
+      controller.forward();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.takeException(), isNull);
+
+      // Continue animating
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(tester.takeException(), isNull);
+
+      // Complete
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(tester.takeException(), isNull);
+
+      // Dispose to prevent ticker leak
+      controller.dispose();
+    });
+
+    testWidgets('fade-out animation completes without errors', (tester) async {
+      final controller = AnimationController(
+        vsync: tester,
+        duration: const Duration(milliseconds: 500),
+      );
+
+      final animation = Tween<double>(begin: 1.0, end: 0.0).animate(
+        CurvedAnimation(parent: controller, curve: Curves.easeOut),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Stack(
+            children: [
+              // Simulate pre-warmed Application widget (placeholder)
+              const SizedBox(key: ValueKey('app_ready')),
+              // Splash page fading out
+              AnimatedBuilder(
+                animation: animation,
+                builder: (context, child) {
+                  return Opacity(
+                    opacity: animation.value,
+                    child: child,
+                  );
+                },
+                child: wrapStartupPage(isWorking: false),
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Stroom'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      controller.forward();
+      // Pump through animation frames manually instead of pumpAndSettle
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // After animation completes
+      expect(tester.takeException(), isNull);
+
+      // Dispose to prevent ticker leak
+      controller.dispose();
+    });
+  });
 }

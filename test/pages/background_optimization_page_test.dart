@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/pages/background_optimization_page.dart';
-import 'package:stroom/pages/platform_tutorial_page.dart';
 
 /// Builds the test app wrapping BackgroundOptimizationPage.
 Widget _buildTestApp() {

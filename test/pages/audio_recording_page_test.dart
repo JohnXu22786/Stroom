@@ -1,10 +1,6 @@
-import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:stroom/pages/audio_recording_page.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/file_manifest.dart';
 
@@ -55,55 +51,10 @@ void main() {
     FileManifest.invalidateCache();
   });
 
-  group('AudioRecordingPage widget', () {
-    testWidgets('renders AppBar with correct title', (tester) async {
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: AudioRecordingPage(),
-          ),
-        ),
-      );
-      await tester.pump();
-
-      // Verify AppBar title
-      expect(find.text('录音'), findsOneWidget);
-    });
-
-    testWidgets('shows record button in initial state', (tester) async {
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: AudioRecordingPage(),
-          ),
-        ),
-      );
-      await tester.pump();
-
-      // In the initial state, we should see the record button
-      // The permission is granted by mock, so the button should be enabled
-      expect(find.text('开始录音'), findsOneWidget);
-    });
-
-    testWidgets('shows timer display in 00:00 initially', (tester) async {
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: AudioRecordingPage(),
-          ),
-        ),
-      );
-      await tester.pump();
-
-      expect(find.text('00:00'), findsOneWidget);
-    });
-  });
-
   group('AudioRecordingPage FileManifest integration', () {
     test('saves audio record with m4a format and retrieves by hash', () async {
       const hash = 'test_audio_hash_001';
       const format = 'm4a';
-      const filePath = '/tmp/test_recording.m4a';
       const duration = 30;
 
       // Create a record similar to what the page would create

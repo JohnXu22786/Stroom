@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../catcatch/models/catcatch_task.dart' as catcatch;
 import '../catcatch/providers/catcatch_provider.dart';
 import '../providers/task_provider.dart';
 import '../providers/background_task_provider.dart';
@@ -25,18 +26,82 @@ export 'unified_task_list/task_utils.dart'
         loadTaskListLastRead,
         formatRelativeTime;
 
+/// Task tab categories.
+enum TaskTab { all, inProgress, completed, failed }
+
+/// Map a [UnifiedTaskItem] to its [TaskTab] category.
+TaskTab _taskTab(UnifiedTaskItem item) {
+  if (item.isCatCatch) {
+    final t = item.catCatchTask!;
+    switch (t.status) {
+      case catcatch.TaskStatus.running:
+      case catcatch.TaskStatus.paused:
+      case catcatch.TaskStatus.waiting:
+        return TaskTab.inProgress;
+      case catcatch.TaskStatus.completed:
+        return TaskTab.completed;
+      case catcatch.TaskStatus.failed:
+        return TaskTab.failed;
+    }
+  } else {
+    final TaskStatus status;
+    if (item.isBackground) {
+      status = item.backgroundTask!.status;
+    } else {
+      status = item.synthesisTask!.status;
+    }
+    switch (status) {
+      case TaskStatus.running:
+      case TaskStatus.paused:
+      case TaskStatus.waiting:
+        return TaskTab.inProgress;
+      case TaskStatus.completed:
+        return TaskTab.completed;
+      case TaskStatus.failed:
+        return TaskTab.failed;
+    }
+  }
+}
+
+/// Tab labels and their icons for the task list.
+const _taskTabData = [
+  _TabData('全部', Icons.list),
+  _TabData('进行中', Icons.play_circle_outline),
+  _TabData('已完成', Icons.check_circle_outline),
+  _TabData('失败', Icons.error_outline),
+];
+
+class _TabData {
+  final String label;
+  final IconData icon;
+  const _TabData(this.label, this.icon);
+}
+
 class UnifiedTaskListPage extends ConsumerStatefulWidget {
-  const UnifiedTaskListPage({super.key});
+  final int initialTab;
+
+  const UnifiedTaskListPage({super.key, this.initialTab = 0});
 
   @override
   ConsumerState<UnifiedTaskListPage> createState() =>
       _UnifiedTaskListPageState();
 }
 
-class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage> {
+class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(
+      length: 4,
+      vsync: this,
+      initialIndex: widget.initialTab.clamp(0, 3),
+    );
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final now = DateTime.now();
@@ -44,6 +109,12 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage> {
         persistTaskListLastRead(now);
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   @override
@@ -79,10 +150,23 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage> {
         ),
     ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
+    // Filter tasks based on selected tab
+    final filteredTasks = _filteredTasks(allTasks, _tabController.index);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('任务列表'),
         centerTitle: true,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: TabBar(
+            controller: _tabController,
+            tabs: [
+              for (final tab in _taskTabData)
+                Tab(text: tab.label, icon: Icon(tab.icon, size: 18)),
+            ],
+          ),
+        ),
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
@@ -217,9 +301,121 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage> {
           ),
         ],
       ),
-      body: allTasks.isEmpty
-          ? _buildEmptyState(context)
-          : _buildTaskList(allTasks),
+      body: Column(
+        children: [
+          // 最近任务 header — 显示最近3次启动的任务数量，每个数字带未读角标
+          _buildRecentTasksHeader(
+              catcatchTasks, synthesisTasks, backgroundTasks),
+          // 任务列表
+          Expanded(
+            child: filteredTasks.isEmpty
+                ? _buildEmptyState(context)
+                : _buildTaskList(filteredTasks),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Filter [allTasks] by the currently selected tab.
+  List<UnifiedTaskItem> _filteredTasks(
+      List<UnifiedTaskItem> allTasks, int tabIndex) {
+    if (tabIndex == 0) return allTasks; // 全部 — no filter
+    final targetTab = TaskTab.values[tabIndex];
+    return allTasks.where((item) => _taskTab(item) == targetTab).toList();
+  }
+
+  /// 构建"最近任务"头部区域
+  /// 显示最近3次启动产生的任务数量，每个数字右上角有未读角标
+  Widget _buildRecentTasksHeader(
+    List<catcatch.CatCatchTask> catcatchTasks,
+    List<SynthesisTask> synthesisTasks,
+    List<BackgroundTask> backgroundTasks,
+  ) {
+    final launches = ref.watch(appLaunchTimestampsProvider);
+    final lastRead = ref.watch(taskListLastReadProvider);
+
+    final sessions = computeRecentTaskCounts(
+      launches: launches,
+      catcatchTasks: catcatchTasks,
+      synthesisTasks: synthesisTasks,
+      backgroundTasks: backgroundTasks,
+      unreadThreshold: lastRead,
+    );
+
+    if (sessions.isEmpty) return const SizedBox.shrink();
+
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // "最近任务" 标签 — 低调不招摇
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              '最近任务',
+              style: TextStyle(
+                fontSize: 12,
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          // 3个数字（每个启动会话一个）
+          Row(
+            children: [
+              for (int i = 0; i < sessions.length; i++) ...[
+                if (i > 0) const SizedBox(width: 16),
+                _buildSessionBadge(
+                  count: sessions[i]['total'] ?? 0,
+                  unread: sessions[i]['unread'] ?? 0,
+                  colorScheme: colorScheme,
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 构建单个会话数字 + 未读角标
+  Widget _buildSessionBadge({
+    required int count,
+    required int unread,
+    required ColorScheme colorScheme,
+  }) {
+    return Badge(
+      isLabelVisible: unread > 0,
+      label: Text(
+        '+$unread',
+        style: const TextStyle(fontSize: 10),
+      ),
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: colorScheme.onSurface,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -247,26 +443,38 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage> {
     );
   }
 
-  Widget _buildTaskList(List<UnifiedTaskItem> allTasks) {
+  Widget _buildTaskList(List<UnifiedTaskItem> tasks) {
     return ListView.builder(
       padding: const EdgeInsets.only(top: 8, bottom: 24),
-      itemCount: allTasks.length,
+      itemCount: tasks.length,
       itemBuilder: (_, i) {
-        final item = allTasks[i];
+        final item = tasks[i];
         final lastRead = ref.watch(taskListLastReadProvider);
         if (item.isCatCatch) {
           final t = item.catCatchTask!;
           final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
-          return CatCatchTaskCard(task: t, isUnread: isUnread);
+          return CatCatchTaskCard(
+            key: ValueKey(item.id),
+            task: t,
+            isUnread: isUnread,
+          );
         }
         if (item.isBackground) {
           final t = item.backgroundTask!;
           final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
-          return BackgroundTaskCard(task: t, isUnread: isUnread);
+          return BackgroundTaskCard(
+            key: ValueKey(item.id),
+            task: t,
+            isUnread: isUnread,
+          );
         }
         final t = item.synthesisTask!;
         final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
-        return SynthesisTaskCard(task: t, isUnread: isUnread);
+        return SynthesisTaskCard(
+          key: ValueKey(item.id),
+          task: t,
+          isUnread: isUnread,
+        );
       },
     );
   }

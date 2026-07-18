@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
@@ -18,8 +17,8 @@ import '../services/attachment_storage.dart';
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
 import '../models/tool_call.dart';
+import '../services/app_log_service.dart';
 import '../services/chat_adapter.dart';
-import '../services/chat_service.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/chat_stream_provider.dart';
 import '../providers/provider_config.dart';
@@ -147,8 +146,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Whether there are more older messages to load.
   bool get _hasMoreMessages => _loadedUpToIndex > 0;
 
-  static bool _toolsRegistered = false;
-
   /// Returns true if [text] ends with an unclosed LaTeX math delimiter.
   ///
   /// Checks for:
@@ -194,27 +191,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _chatScrollController = ScrollController();
     _chatScrollController.addListener(_onChatScroll);
 
-    if (!_toolsRegistered) {
-      _toolsRegistered = true;
-      ChatService.registerTool(
-        const ToolDefinition(
-          name: 'calculator',
-          description: 'Evaluate a math expression and return the result',
-          parameters: {
-            'type': 'object',
-            'properties': {
-              'expression': {
-                'type': 'string',
-                'description': 'A math expression to evaluate e.g. 2 + 2',
-              },
-            },
-            'required': ['expression'],
-          },
-        ),
-        _executeCalculator,
-      );
-    }
-
     WidgetsBinding.instance.addPostFrameCallback((_) => _initialize());
     // If initialSearchQuery is provided, activate search mode after init
     if (widget.initialSearchQuery != null &&
@@ -225,32 +201,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
         _isSearching = true;
         _performSearch(widget.initialSearchQuery!);
       });
-    }
-  }
-
-  String _executeCalculator(Map<String, dynamic> args) {
-    try {
-      final expr = (args['expression'] as String?) ?? '';
-      final sanitized = expr.replaceAll(' ', '');
-      final double result;
-      if (sanitized.contains('+')) {
-        final parts = sanitized.split('+');
-        result = parts.map((p) => double.parse(p)).reduce((a, b) => a + b);
-      } else if (sanitized.contains('*')) {
-        final parts = sanitized.split('*');
-        result = parts.map((p) => double.parse(p)).reduce((a, b) => a * b);
-      } else if (sanitized.contains('/')) {
-        final nums = sanitized.split('/').map((p) => double.parse(p)).toList();
-        result = nums.reduce((a, b) => a / b);
-      } else if (sanitized.contains('-')) {
-        final parts = sanitized.split('-');
-        result = parts.map((p) => double.parse(p)).reduce((a, b) => a - b);
-      } else {
-        result = double.parse(sanitized);
-      }
-      return result.toString();
-    } catch (e) {
-      return 'Error: $e';
     }
   }
 
@@ -419,12 +369,25 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   Future<void> _initialize() async {
+    await AppLogService.info('ChatPage', '开始初始化聊天页面');
     _configureAdapter();
-    // Initialize MCP servers and discover tools
+    // Initialize built-in tools (HTTP tools) first — independent of MCP
+    // server connectivity. This ensures HTTP tools (brave_web_search,
+    // bocha_web_search, querit_search, searxng_search) are always
+    // available in the tool list even if MCP servers are unreachable.
     final entriesState = ref.read(providerEntriesProvider);
+    _adapter.initializeBuiltinTools(entriesState);
+    // Then discover MCP server tools (SSE / stdio) dynamically.
+    // MCP discovery failures don't affect already-registered built-in tools.
     try {
+      await AppLogService.info('ChatPage',
+          '开始初始化 MCP 服务器，当前有 ${entriesState.entries.length} 个供应商配置');
       await _adapter.initializeMcpServers(entriesState);
+      await AppLogService.info('ChatPage', 'MCP 服务器初始化完成');
     } finally {
+      // Rebuild UI so the tool panel reflects the newly discovered MCP tools.
+      // Must check mounted because the async gap may outlive the widget.
+      if (mounted) setState(() {});
       // Do NOT auto-enable all tools. All tools default to OFF.
       // Per-conversation enabled tools are restored in _loadConversationMessages.
       // Using finally ensures MCP discovery errors don't prevent the rest.
@@ -434,13 +397,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
       if (!mounted) return;
       _restoreSavedModelSelection(prefs);
     });
-    _loadConversationMessages();
+    await _loadConversationMessages();
     // Restore streaming state if a stream was active when the page was
     // previously disposed (user navigated away during generation and then
     // came back). This re-inserts the streaming message placeholder with
     // accumulated content so the UI shows the loading indicator and any
     // partial text that has already been received.
     _restoreStreamingState();
+    await AppLogService.info('ChatPage', '聊天页面初始化完成');
   }
 
   /// Loads the previous page of older messages and prepends them to the
@@ -520,16 +484,41 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Future<void> _loadConversationMessages() async {
     try {
       final activeId = ref.read(activeConversationIdProvider);
-      if (activeId == null) return;
+      await AppLogService.info(
+          'ChatPage', '开始加载对话消息, activeConversationId=$activeId');
+      if (activeId == null) {
+        await AppLogService.warning(
+            'ChatPage', 'activeConversationId 为 null，跳过加载对话消息');
+        return;
+      }
 
       final convs = ref.read(conversationsProvider);
+      await AppLogService.info('ChatPage', '当前共有 ${convs.length} 个对话');
       final conv = convs.where((c) => c.id == activeId).firstOrNull;
+      if (conv == null) {
+        await AppLogService.warning(
+            'ChatPage', '未找到 activeConversationId=$activeId 对应的对话');
+      }
 
       // Restore per-conversation enabled MCP/built-in tool names.
       // If the conversation has saved tool preferences, use them.
-      // Otherwise, all tools are OFF by default.
+      // Otherwise, default to ALL available tools enabled so that built-in
+      // remote SSE MCP providers (and user-added MCPs) are immediately
+      // visible in the chat page's tool list without requiring the user to
+      // manually toggle each one on. Users can still opt-out specific tools
+      // via the "可用工具" panel — the toggled-off state is then persisted
+      // into conv.enabledMcpToolNames + conv.hasExplicitEnabledMcpTools on
+      // the next save.
+      final convEnabled = (conv != null)
+          ? Set<String>.from(conv.enabledMcpToolNames)
+          : <String>{};
+      final hasExplicitPrefs = conv?.hasExplicitEnabledMcpTools ?? false;
       ref.read(enabledToolNamesProvider.notifier).state =
-          (conv != null) ? Set<String>.from(conv.enabledMcpToolNames) : {};
+          resolveEnabledToolNames(
+        allTools: _adapter.getAllToolDefinitions(),
+        savedEnabledNames: convEnabled,
+        hasExplicitSavedPrefs: hasExplicitPrefs,
+      );
       if (conv == null || conv.messages.isEmpty) {
         if (mounted) setState(() {});
         return;
@@ -564,6 +553,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // Load all messages into _history (needed for full context in API calls
       // and search), but only insert the last _pageSize messages into the
       // controller for display (lazy loading).
+      final msgCount = conv.messages.length;
+      await AppLogService.info('ChatPage', '开始加载 $msgCount 条消息到 _history');
       for (final msg in conv.messages) {
         _history.add(msg);
         // Restore reasoning content from persisted ChatMessage
@@ -573,6 +564,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
       }
       _loadedUpToIndex =
           _history.length >= _pageSize ? _history.length - _pageSize : 0;
+      await AppLogService.info(
+          'ChatPage',
+          '消息加载完成: _history 共 ${_history.length} 条, '
+              'loadedUpToIndex=$_loadedUpToIndex');
       for (var i = _loadedUpToIndex; i < _history.length; i++) {
         final msg = _history[i];
         await _controller?.insertMessage(
@@ -584,9 +579,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
           ),
         );
       }
+      await AppLogService.info(
+          'ChatPage', '控制器消息插入完成，共 ${_controller?.messages.length ?? 0} 条');
       if (mounted) setState(() {});
     } catch (e, s) {
       debugPrint('[ChatPage] _loadConversationMessages error: $e\n$s');
+      await AppLogService.error('ChatPage', '加载对话消息失败', e, s);
     }
   }
 
@@ -665,9 +663,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (ref.read(isStreamingProvider)) return;
 
     String? convId = ref.read(activeConversationIdProvider);
+    await AppLogService.info(
+        'ChatPage',
+        '用户发送消息, convId=$convId, text长度=${text.length}, '
+            'attachments=${attachments.length}');
     if (convId == null) {
+      await AppLogService.info('ChatPage', '无活跃对话，创建新对话');
       ref.read(conversationsProvider.notifier).createConversation();
       convId = ref.read(activeConversationIdProvider);
+      await AppLogService.info('ChatPage', '新对话已创建: $convId');
     }
 
     // Save the current enabled tools to the conversation before sending.
@@ -699,6 +703,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   Future<void> _startStreaming(String text, {String? capturedConvId}) async {
     if (ref.read(isStreamingProvider)) return;
+
+    await AppLogService.info(
+        'ChatPage', '开始流式请求, capturedConvId=$capturedConvId');
     ref.read(isStreamingProvider.notifier).state = true;
     _isStreamingActive = true;
     if (mounted) setState(() {});
@@ -936,8 +943,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
       streamError = e;
       if (!_cancelledByUser) {
         debugPrint('[ChatPage] streaming error: $e\n$s');
+        await AppLogService.error('ChatPage', '流式请求异常', e, s);
         final errorMsg = _formatErrorMessage(e);
-        if (context.mounted) {
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(errorMsg.replaceAll('错误: ', '').split('\n')[0]),
@@ -962,19 +970,18 @@ class _ChatPageState extends ConsumerState<ChatPage>
         final url = _adapter.lastRequestUrl;
         if (reqBody != null || headers != null || url != null) {
           rawRequestCapture = {};
-          if (url != null) rawRequestCapture!['url'] = url;
-          if (headers != null) rawRequestCapture!['headers'] = headers;
-          if (reqBody != null) rawRequestCapture!['body'] = reqBody;
+          if (url != null) rawRequestCapture['url'] = url;
+          if (headers != null) rawRequestCapture['headers'] = headers;
+          if (reqBody != null) rawRequestCapture['body'] = reqBody;
         }
         final respData = _adapter.lastResponseData;
         final statusCode = _adapter.lastResponseStatusCode;
         final respHeaders = _adapter.lastResponseHeaders;
         if (respData != null || statusCode != null || respHeaders != null) {
           rawResponseCapture = {};
-          if (statusCode != null)
-            rawResponseCapture!['statusCode'] = statusCode;
-          if (respHeaders != null) rawResponseCapture!['headers'] = respHeaders;
-          if (respData != null) rawResponseCapture!['data'] = respData;
+          if (statusCode != null) rawResponseCapture['statusCode'] = statusCode;
+          if (respHeaders != null) rawResponseCapture['headers'] = respHeaders;
+          if (respData != null) rawResponseCapture['data'] = respData;
         } else if (streamError is Exception) {
           // For network errors with no HTTP response, capture error string
           rawResponseCapture = {'error': streamError.toString()};
@@ -1099,6 +1106,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // Use capturedConvId (set at stream start) to avoid saving to the wrong
     // conversation if the user switched conversations during background
     // streaming (e.g. navigated back and selected a different topic).
+    await AppLogService.info(
+        'ChatPage',
+        '保存流式结果: convId=$capturedConvId, '
+            'fullReply长度=${fullReply.length}, '
+            '历史消息数=${_history.length}');
     await _saveMessages(capturedConvId: capturedConvId);
 
     // Eventual cleanup: remove streaming-only map entries now that the
@@ -1531,8 +1543,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
   }
 
-  /// Video preview — opens a dialog with a video player powered by
-  /// [media_kit]. The user can play/pause the video file.
+  /// Video preview — opens a dialog with a Chewie + fvp video player.
   Future<void> _showVideoPreview(Attachment att, Uint8List data) async {
     // Save bytes to a temp file for the video player
     String? filePath;
@@ -1597,8 +1608,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   void _scrollToCurrentMatch() {
-    if (_currentMatchIndex < 0 || _currentMatchIndex >= _searchMatches.length)
+    if (_currentMatchIndex < 0 || _currentMatchIndex >= _searchMatches.length) {
       return;
+    }
     final match = _searchMatches[_currentMatchIndex];
     final key = _messageKeys[match.messageId];
     if (key?.currentContext != null) {
@@ -1770,10 +1782,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final markdownConfig = buildMarkdownConfig(isDark: isDark);
+    final isStreaming = ref.watch(isStreamingProvider);
+    final markdownConfig = buildMarkdownConfig(
+      isDark: isDark,
+      isStreaming: isStreaming,
+    );
     final adapterConfigured = _adapter.isConfigured;
     final controller = _controller;
-    final isStreaming = ref.watch(isStreamingProvider);
 
     // Reactively load messages when the active conversation changes
     ref.listen(activeConversationIdProvider, (prev, next) {
@@ -1784,12 +1799,44 @@ class _ChatPageState extends ConsumerState<ChatPage>
       }
     });
 
-    // Re-configure adapter when provider entries change (e.g. after load completes)
+    // Reactively load messages when conversations data finishes loading
+    // (e.g., after async _load() in ConversationsNotifier completes).
+    //
+    // Fixes the race condition where _loadConversationMessages() runs before
+    // conversation data is available, leaving the chat page blank with
+    // "no message yet" even though all data exists in SharedPreferences.
+    //
+    // Uses _history.isEmpty to only trigger on data arrival (not on every
+    // subsequent save/update), avoiding redundant reloads.
+    ref.listen(conversationsProvider, (prev, next) {
+      if (prev != next && _history.isEmpty) {
+        final activeId = ref.read(activeConversationIdProvider);
+        if (activeId != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _loadConversationMessages();
+          });
+        }
+      }
+    });
+
+    // Re-configure adapter when provider entries change (e.g. after load completes).
+    // Also re-initialize built-in and MCP tools: if ProviderEntriesNotifier.load()
+    // hasn't completed when _initialize() first runs, the MCP entry is empty and
+    // no MCP servers are initialized. This listener ensures that once the data
+    // finishes loading, MCP servers are discovered and their tools appear in the
+    // chat page's tool list.
     ref.listen(providerEntriesProvider, (prev, next) {
       if (prev != next) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
           if (!mounted) return;
           _configureAdapter();
+          // Re-initialize built-in and MCP tools with the updated provider data.
+          // This is safe to call multiple times — initializeMcpServers disposes
+          // old clients before creating new ones.
+          final entriesState = ref.read(providerEntriesProvider);
+          _adapter.initializeBuiltinTools(entriesState);
+          await _adapter.initializeMcpServers(entriesState);
+          if (mounted) setState(() {});
           // _configureAdapter resets the adapter to model 0. Restore the
           // saved model selection so the adapter and reasoning params
           // stay in sync with the persisted choice.
@@ -1803,6 +1850,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // Auto-save reasoning settings when they change (per-model persistence)
     ref.listen(
       reasoningEnabledProvider,
+      (_, __) => _persistCurrentReasoningSettings(),
+    );
+    ref.listen(
+      reasoningEffortEnabledProvider,
       (_, __) => _persistCurrentReasoningSettings(),
     );
     ref.listen(
@@ -2081,7 +2132,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                   ),
                   color: Theme.of(
                     context,
-                  ).colorScheme.errorContainer.withOpacity(0.3),
+                  ).colorScheme.errorContainer.withValues(alpha: 0.3),
                   child: Row(
                     children: [
                       Icon(
@@ -2257,7 +2308,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                         color: (isDark
                                                 ? Colors.red[900]
                                                 : Colors.red[50])!
-                                            .withOpacity(0.7),
+                                            .withValues(alpha: 0.7),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Column(
@@ -2789,7 +2840,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 onModelSelected: _onModelSelected,
                 onModelsReordered: _onModelsReordered,
                 reasoningParams: _adapter.reasoningParams,
-                hasReasoningParams: _adapter.hasReasoningParams,
                 editingMessageId: _editingMessageId,
                 editingMessageText: _editingMessageText,
                 editingMessageAttachments: _editingMessageAttachments,
@@ -2888,6 +2938,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
           final allSettings = _loadPerModelSettingsMap(prefs);
           allSettings[oldModelName] = {
             'reasoningEnabled': ref.read(reasoningEnabledProvider),
+            'reasoningEffortEnabled': ref.read(reasoningEffortEnabledProvider),
             'reasoningEffort': ref.read(reasoningEffortProvider),
             'reasoningParamValues': ref.read(reasoningParamValuesProvider),
           };
@@ -2946,6 +2997,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       final allSettings = _loadPerModelSettingsMap(prefs);
       allSettings[modelName] = {
         'reasoningEnabled': ref.read(reasoningEnabledProvider),
+        'reasoningEffortEnabled': ref.read(reasoningEffortEnabledProvider),
         'reasoningEffort': ref.read(reasoningEffortProvider),
         'reasoningParamValues': ref.read(reasoningParamValuesProvider),
       };
@@ -3038,6 +3090,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
           'reasoningParamValues': Map<String, dynamic> rpv,
         }) {
       ref.read(reasoningEnabledProvider.notifier).state = re;
+      // Restore reasoning effort enabled state (with default false)
+      final bool ree =
+          modelSettings['reasoningEffortEnabled'] as bool? ?? false;
+      ref.read(reasoningEffortEnabledProvider.notifier).state = ree;
       // Validate reasoningEffort against known values
       const validEfforts = {'low', 'medium', 'high'};
       ref.read(reasoningEffortProvider.notifier).state =
@@ -3049,6 +3105,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     } else {
       // No saved settings for this model — use defaults
       ref.read(reasoningEnabledProvider.notifier).state = false;
+      ref.read(reasoningEffortEnabledProvider.notifier).state = false;
       ref.read(reasoningEffortProvider.notifier).state = 'medium';
       ref.read(reasoningParamValuesProvider.notifier).state = {};
     }

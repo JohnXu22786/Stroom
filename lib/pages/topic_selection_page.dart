@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../models/assistant.dart';
 import '../pages/assistant_selection_page.dart';
 import '../providers/assistant_provider.dart';
 import '../providers/conversation_provider.dart';
 import '../widgets/llm/assistant_avatar.dart';
 import '../widgets/search_panel.dart';
 import '../widgets/topic_item.dart';
-import '../utils/conversation_utils.dart';
 import '../services/attachment_storage.dart';
 
 /// Merged page: after selecting an assistant, choose or create a conversation.
@@ -234,7 +232,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.chat_bubble_outline,
-              size: 48, color: cs.onSurfaceVariant.withOpacity(0.4)),
+              size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
           const SizedBox(height: 16),
           Text(
             '暂无对话',
@@ -243,7 +241,8 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
           const SizedBox(height: 8),
           Text('创建一个新对话开始对话',
               style: TextStyle(
-                  fontSize: 13, color: cs.onSurfaceVariant.withOpacity(0.7))),
+                  fontSize: 13,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
         ],
       ),
     );
@@ -293,7 +292,8 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.error_outline,
-                      size: 48, color: cs.onSurfaceVariant.withOpacity(0.4)),
+                      size: 48,
+                      color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
                   const SizedBox(height: 16),
                   Text('未选择助手', style: TextStyle(color: cs.onSurfaceVariant)),
                   const SizedBox(height: 16),
@@ -315,7 +315,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                   margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: cs.primaryContainer.withOpacity(0.3),
+                    color: cs.primaryContainer.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: cs.primaryContainer,
@@ -375,14 +375,14 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                       Icon(
                         Icons.drag_indicator,
                         size: 16,
-                        color: cs.onSurfaceVariant.withOpacity(0.5),
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.5),
                       ),
                       const SizedBox(width: 4),
                       Text(
                         '长按拖拽即可调整对话顺序',
                         style: TextStyle(
                           fontSize: 12,
-                          color: cs.onSurfaceVariant.withOpacity(0.5),
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.5),
                         ),
                       ),
                     ],
@@ -398,7 +398,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                               horizontal: 12, vertical: 8),
                           itemCount: sorted.length,
                           buildDefaultDragHandles: false,
-                          onReorder: (oldIndex, newIndex) {
+                          onReorderItem: (oldIndex, newIndex) {
                             final convs = ref.read(conversationsProvider);
                             final item = sorted[oldIndex];
                             final realOld =

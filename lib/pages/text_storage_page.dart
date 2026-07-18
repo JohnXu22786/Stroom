@@ -21,7 +21,11 @@ import 'text_storage_shared.dart';
 
 /// 文本储存区页面 - 管理文本文件，支持导入、创建、预览和导出
 class TextStoragePage extends ConsumerStatefulWidget {
-  const TextStoragePage({super.key});
+  final int tabIndex;
+  final bool isActiveTab;
+
+  const TextStoragePage(
+      {super.key, this.tabIndex = 0, this.isActiveTab = true});
 
   @override
   ConsumerState<TextStoragePage> createState() => _TextStoragePageState();
@@ -211,6 +215,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     if (result != null && mounted) {
       await ref.read(textRecordsProvider.notifier).loadRecords();
       await ref.read(textFolderListProvider.notifier).loadFolders();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('文本已保存'), duration: Duration(seconds: 2)),
       );
@@ -656,9 +661,13 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
 
     final navigateToParentSignal =
         ref.watch(filesPageNavigateToParentSignalProvider);
+    final tabResetSignal =
+        ref.watch(fileTabFolderResetSignalProvider(widget.tabIndex));
 
     return FileManagerView<TextRecord>(
+      tabResetSignal: tabResetSignal,
       navigateToParentSignal: navigateToParentSignal,
+      isActiveTab: widget.isActiveTab,
       sortedRecords: sortedRecords,
       folders: folders,
       sortConfig: sortConfig,

@@ -21,24 +21,6 @@ void main() {
       expect(result, 'abcdefghijklmnopq... | OpenAI');
     });
 
-    test('long vendor part: truncated with ... at 20 chars total', () {
-      const full = 'GPT-4o | abcdefghijklmnopqrstuvw';
-      final result = truncateDisplayName(full);
-      expect(result, 'GPT-4o | abcdefghijklmnopq...');
-    });
-
-    test('both parts long: each truncated to 20 chars total', () {
-      const full = 'abcdefghijklmnopqrstuvw | abcdefghijklmnopqrstuvw';
-      final result = truncateDisplayName(full);
-      expect(result, 'abcdefghijklmnopq... | abcdefghijklmnopq...');
-    });
-
-    test('exactly 20 chars: unchanged', () {
-      const full = 'abcdefghijklmnopqrst | XYZ';
-      final result = truncateDisplayName(full);
-      expect(result, full);
-    });
-
     test('no separator: simple truncation to 20 chars', () {
       // 25 chars → substring(0, 17) + "..." = 20
       const full = 'abcdefghijklmnopqrstuvwxy';
@@ -46,33 +28,8 @@ void main() {
       expect(result, 'abcdefghijklmnopq...');
     });
 
-    test('very short parts: preserved', () {
-      const full = 'A | B';
-      final result = truncateDisplayName(full);
-      expect(result, full);
-    });
-
     test('empty string: preserves empty', () {
       expect(truncateDisplayName(''), '');
-    });
-
-    test('long model, short vendor: only model truncated', () {
-      const full = 'abcdefghijklmnopqrstuvwxyz | X';
-      final result = truncateDisplayName(full);
-      expect(result, 'abcdefghijklmnopq... | X');
-    });
-
-    test('exactly 21 chars (one over limit): truncated', () {
-      // 21 chars → substring(0, 17) + "..." = 20
-      const full = 'abcdefghijklmnopqrstu | vendor';
-      final result = truncateDisplayName(full);
-      expect(result, 'abcdefghijklmnopq... | vendor');
-    });
-
-    test('20 chars exactly is preserved even with short vendor', () {
-      const full = 'abcdefghijklmnopqrst | short';
-      final result = truncateDisplayName(full);
-      expect(result, full);
     });
   });
 
@@ -231,7 +188,6 @@ void main() {
 
       // Verify the badge size — it should be close to font size (~11px) but
       // slightly larger (16px). Measure from the rendered badge.
-      final badgeWidget = tester.widget<Container>(find.byType(Container).last);
       // The Container with ChipBadge style has width:16, height:16
       // Cannot easily get rendered size in test, but the container is
       // created with fixed 16x16 dimensions

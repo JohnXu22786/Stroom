@@ -62,8 +62,8 @@ void main() {
 
       await tester.pump();
 
-      // The hint text about duration filtering should be visible
-      expect(find.text('按时长筛选视频资源，不匹配的将不会出现在结果列表中'), findsOneWidget);
+      // The hint text about duration filtering should be visible (new optional text)
+      expect(find.text('可选：按时长筛选视频资源。留空则展示全部资源供选择'), findsOneWidget);
     });
 
     testWidgets('Empty fields show 00:00:00 preview', (tester) async {
@@ -100,7 +100,7 @@ void main() {
       await tester.pump();
 
       // Both hints should be on the page
-      final durationHint = find.text('按时长筛选视频资源，不匹配的将不会出现在结果列表中');
+      final durationHint = find.text('可选：按时长筛选视频资源。留空则展示全部资源供选择');
       final loginHint = find.text('使用右上角按钮，在应用内浏览器登录，以获得需要登录才能获得的资源');
 
       expect(durationHint, findsOneWidget);
@@ -139,6 +139,96 @@ void main() {
       await tester.pump();
 
       expect(find.text('00:00:00'), findsOneWidget);
+    });
+
+    testWidgets('Empty duration fields (all zero) do NOT show snackbar error', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+      );
+      await tester.pump();
+
+      // Should NOT find the old duration-required snackbar anywhere
+      expect(find.text('请输入视频时长'), findsNothing);
+    });
+
+    testWidgets('Start button is present and labeled correctly',
+        (tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+      );
+      await tester.pump();
+
+      // Should have the start button with correct label
+      expect(find.text('开始分析'), findsOneWidget);
+    });
+
+    // ====================================================================
+    // Clear button tests
+    // ====================================================================
+
+    testWidgets('Clear button NOT visible when URL field is empty', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+      );
+      await tester.pump();
+
+      // URL field should be empty initially
+      expect(find.byIcon(Icons.clear), findsNothing);
+    });
+
+    testWidgets('Clear button visible when URL field has text', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+      );
+      await tester.pump();
+
+      // Enter text into URL field
+      final urlField = find.byType(TextFormField).first;
+      await tester.enterText(urlField, 'https://example.com/video.mp4');
+      await tester.pump();
+
+      // Clear button should appear
+      expect(find.byIcon(Icons.clear), findsOneWidget);
+    });
+
+    testWidgets('Clear button clears all 4 input fields', (tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+      );
+      await tester.pump();
+
+      // Fill URL field
+      final urlField = find.byType(TextFormField).at(0);
+      await tester.enterText(urlField, 'https://example.com/video.mp4');
+
+      // Fill time fields
+      await tester.enterText(find.byType(TextFormField).at(1), '1'); // hours
+      await tester.enterText(find.byType(TextFormField).at(2), '30'); // minutes
+      await tester.enterText(find.byType(TextFormField).at(3), '15'); // seconds
+      await tester.pump();
+
+      // Verify all fields have text
+      expect(find.text('01:30:15'), findsOneWidget);
+      expect(find.byIcon(Icons.clear), findsOneWidget);
+
+      // Tap clear button
+      await tester.tap(find.byIcon(Icons.clear));
+      await tester.pump();
+
+      // Verify URL field is cleared
+      expect(find.text('https://example.com/video.mp4'), findsNothing);
+
+      // Verify time fields are cleared - preview should reset to 00:00:00
+      expect(find.text('00:00:00'), findsOneWidget);
+
+      // Clear button should disappear
+      expect(find.byIcon(Icons.clear), findsNothing);
     });
   });
 }

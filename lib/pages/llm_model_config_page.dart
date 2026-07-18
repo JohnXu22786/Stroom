@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../providers/provider_config.dart';
 import 'llm_model_config_shared.dart';
@@ -55,7 +56,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           _enableFrequencyPenalty ||
           _enablePresencePenalty ||
           _enableMaxTokens ||
-          _enableSeed) return true;
+          _enableSeed) {
+        return true;
+      }
       if (_maxTokensController.text.isNotEmpty) return true;
       if (_seedController.text.isNotEmpty) return true;
       if (_temperature != 0.7) return true;
@@ -68,41 +71,63 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     if (_nameController.text != m.name) return true;
     if (_modelIdController.text != m.modelId) return true;
     if (_contextController.text !=
-        ((m.typeConfig['context'] as num?)?.toInt()?.toString() ?? ''))
+        ((m.typeConfig['context'] as num?)?.toInt().toString() ?? '')) {
       return true;
+    }
     // LLM params
     if (((m.typeConfig['temperature'] as num?)?.toDouble() ?? 0.7) !=
-        _temperature) return true;
-    if (((m.typeConfig['topP'] as num?)?.toDouble() ?? 1.0) != _topP)
+        _temperature) {
       return true;
+    }
+    if (((m.typeConfig['topP'] as num?)?.toDouble() ?? 1.0) != _topP) {
+      return true;
+    }
     if (((m.typeConfig['frequencyPenalty'] as num?)?.toDouble() ?? 0.0) !=
-        _frequencyPenalty) return true;
+        _frequencyPenalty) {
+      return true;
+    }
     if (((m.typeConfig['presencePenalty'] as num?)?.toDouble() ?? 0.0) !=
-        _presencePenalty) return true;
+        _presencePenalty) {
+      return true;
+    }
     if ((m.typeConfig['enableTemperature'] as bool? ?? false) !=
-        _enableTemperature) return true;
-    if ((m.typeConfig['enableTopP'] as bool? ?? false) != _enableTopP)
+        _enableTemperature) {
       return true;
+    }
+    if ((m.typeConfig['enableTopP'] as bool? ?? false) != _enableTopP) {
+      return true;
+    }
     if ((m.typeConfig['enableFrequencyPenalty'] as bool? ?? false) !=
-        _enableFrequencyPenalty) return true;
+        _enableFrequencyPenalty) {
+      return true;
+    }
     if ((m.typeConfig['enablePresencePenalty'] as bool? ?? false) !=
-        _enablePresencePenalty) return true;
-    if ((m.typeConfig['enableMaxTokens'] as bool? ?? false) != _enableMaxTokens)
+        _enablePresencePenalty) {
       return true;
-    if ((m.typeConfig['enableSeed'] as bool? ?? false) != _enableSeed)
+    }
+    if ((m.typeConfig['enableMaxTokens'] as bool? ?? false) !=
+        _enableMaxTokens) {
       return true;
+    }
+    if ((m.typeConfig['enableSeed'] as bool? ?? false) != _enableSeed) {
+      return true;
+    }
     if ((m.typeConfig['maxTokens']?.toString() ?? '') !=
-        _maxTokensController.text) return true;
-    if ((m.typeConfig['seed']?.toString() ?? '') != _seedController.text)
+        _maxTokensController.text) {
       return true;
+    }
+    if ((m.typeConfig['seed']?.toString() ?? '') != _seedController.text) {
+      return true;
+    }
     // Custom params and reasoning params (simple check via serialization)
     final originalCustom = m.customParams.map((p) => p.toMap()).toList();
     final currentCustom = _customParams.map((p) => p.toMap()).toList();
     if (originalCustom.toString() != currentCustom.toString()) return true;
     final originalReasoning = m.reasoningParams.map((p) => p.toMap()).toList();
     final currentReasoning = _reasoningParams.map((p) => p.toMap()).toList();
-    if (originalReasoning.toString() != currentReasoning.toString())
+    if (originalReasoning.toString() != currentReasoning.toString()) {
       return true;
+    }
     return false;
   }
 
@@ -148,24 +173,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     if (m != null) {
       _reasoningParams = m.reasoningParams.map((p) => p.copy()).toList();
     } else {
-      // New model: pre-populate with a default reasoning toggle and a default
-      // reasoning effort param. This ensures both the toggle and the effort
-      // card are available out of the box.
-      _reasoningParams = [
-        ReasoningParam(
-          paramName: '',
-          isReasoningToggle: true,
-          onValue: '',
-          offValue: '',
-          options: [],
-        ),
-        ReasoningParam(
-          paramName: '',
-          isReasoningToggle: false,
-          enabled: true,
-          options: [],
-        ),
-      ];
+      // New model: start with no reasoning params.
+      // User must explicitly add toggle, effort, and additional params
+      // via the respective add buttons.
+      _reasoningParams = [];
     }
   }
 
@@ -201,8 +212,26 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
 
   void _addReasoningParam() {
     setState(() {
-      _reasoningParams
-          .add(ReasoningParam(paramName: '', enabled: false, options: []));
+      _reasoningParams.add(ReasoningParam(
+        paramName: '',
+        enabled: false,
+        isEffortParam: false,
+        options: [],
+      ));
+    });
+  }
+
+  void _addEffortReasoningParam() {
+    setState(() {
+      _reasoningParams.add(
+        ReasoningParam(
+          paramName: '',
+          isReasoningToggle: false,
+          isEffortParam: true,
+          enabled: true,
+          options: [],
+        ),
+      );
     });
   }
 
@@ -235,10 +264,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
             orElse: () => null,
           );
 
-  /// Returns the single reasoning effort param (first non-toggle), or null.
+  /// Returns the reasoning effort param (one with isEffortParam=true), or null.
   ReasoningParam? get _effortReasoningParam =>
       _reasoningParams.cast<ReasoningParam?>().firstWhere(
-            (p) => p != null && !p.isReasoningToggle,
+            (p) => p?.isEffortParam ?? false,
             orElse: () => null,
           );
 
@@ -264,33 +293,24 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     if (toggle == null) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          children: [
-            Center(
-              child: Text('暂无推理开关',
-                  style: TextStyle(color: Colors.grey, fontSize: 13)),
-            ),
-            const SizedBox(height: 4),
-            Center(
-              child: TextButton.icon(
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('添加推理开关', style: TextStyle(fontSize: 13)),
-                onPressed: () {
-                  setState(() {
-                    _reasoningParams.insert(
-                        0,
-                        ReasoningParam(
-                          paramName: '',
-                          isReasoningToggle: true,
-                          onValue: '',
-                          offValue: '',
-                          options: [],
-                        ));
-                  });
-                },
-              ),
-            ),
-          ],
+        child: Center(
+          child: TextButton.icon(
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('添加推理开关', style: TextStyle(fontSize: 13)),
+            onPressed: () {
+              setState(() {
+                _reasoningParams.insert(
+                    0,
+                    ReasoningParam(
+                      paramName: '',
+                      isReasoningToggle: true,
+                      onValue: '',
+                      offValue: '',
+                      options: [],
+                    ));
+              });
+            },
+          ),
         ),
       );
     }
@@ -388,7 +408,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
               '关闭时发送「${toggle.offValue ?? ''}」',
               style: TextStyle(
                 fontSize: 11,
-                color: cs.onSurfaceVariant.withOpacity(0.7),
+                color: cs.onSurfaceVariant.withValues(alpha: 0.7),
               ),
             ),
           ],
@@ -397,13 +417,36 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     );
   }
 
+  /// Builds the reasoning effort section. If an effort param exists, shows
+  /// the effort card. Otherwise, shows the "添加推理力度" button, which is
+  /// disabled (gray) when no toggle exists.
+  Widget _buildReasoningEffortSection(ColorScheme cs) {
+    final effort = _effortReasoningParam;
+    if (effort != null) {
+      return _buildReasoningEffortCard(effort, cs);
+    }
+    // No effort param — show add button (always visible, disabled if no toggle)
+    final hasToggle = _toggleReasoningParam != null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Center(
+        child: TextButton.icon(
+          icon:
+              Icon(Icons.add, size: 16, color: hasToggle ? null : Colors.grey),
+          label: Text('添加推理力度',
+              style: TextStyle(
+                  fontSize: 13, color: hasToggle ? null : Colors.grey)),
+          onPressed: hasToggle ? _addEffortReasoningParam : null,
+        ),
+      ),
+    );
+  }
+
   /// Builds the reasoning effort card — a single card, same style as the
   /// toggle card. Only editable after the toggle is complete. There is
-  /// always exactly one effort param (like the toggle).
-  Widget _buildReasoningEffortCard(ColorScheme cs) {
+  /// exactly one effort param.
+  Widget _buildReasoningEffortCard(ReasoningParam effort, ColorScheme cs) {
     final toggleComplete = _isToggleComplete;
-    final effort = _effortReasoningParam;
-    if (effort == null) return const SizedBox.shrink();
 
     final effortName = effort.paramName.trim();
     final isDuplicate = effortName.isNotEmpty &&
@@ -420,15 +463,14 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           children: [
             Row(
               children: [
-                Icon(Icons.tune,
-                    size: 18, color: toggleComplete ? cs.primary : Colors.grey),
+                Icon(Icons.tune, size: 18, color: cs.primary),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text('推理力度',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: toggleComplete ? cs.primary : Colors.grey,
+                        color: cs.primary,
                       )),
                 ),
                 _buildTypeDropdown(effort, cs),
@@ -462,9 +504,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
             Text('选项值（模型必须添加至少一个选项值）',
                 style: TextStyle(
                   fontSize: 12,
-                  color: toggleComplete
-                      ? cs.onSurfaceVariant.withOpacity(0.7)
-                      : Colors.grey,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
                 )),
             const SizedBox(height: 8),
             ...List.generate(effort.options.length, (j) {
@@ -520,7 +560,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                   '请先完整填写推理开关后再配置推理力度',
                   style: TextStyle(
                     fontSize: 11,
-                    color: Colors.grey,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.7),
                   ),
                 ),
               ),
@@ -598,12 +638,6 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                 const SizedBox(width: 4),
                 _buildTypeDropdown(param, cs),
                 const SizedBox(width: 4),
-                Switch(
-                  value: param.enabled,
-                  onChanged: (v) {
-                    setState(() => param.enabled = v);
-                  },
-                ),
                 IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                   onPressed: () => _removeReasoningParam(actualIndex),
@@ -620,10 +654,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                 )),
             const SizedBox(height: 4),
             Text(
-              '这些选项将按顺序显示在推理面板中供选择',
+              '这些选项将按顺序显示在推理面板中供选择。启用/禁用开关在推理面板中操作。',
               style: TextStyle(
                 fontSize: 11,
-                color: cs.onSurfaceVariant.withOpacity(0.7),
+                color: cs.onSurfaceVariant.withValues(alpha: 0.7),
               ),
             ),
             const SizedBox(height: 8),
@@ -708,7 +742,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       return;
     }
 
-    // 验证自定义参数：参数名和默认值不能为空，参数名不能重复
+    // 验证自定义参数：参数名和默认值不能为空，参数名不能重复，
+    // 且 JSON 类型的默认值必须是合法 JSON
     final seenNames = <String>{};
     for (int i = 0; i < _customParams.length; i++) {
       final param = _customParams[i];
@@ -730,6 +765,20 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           ),
         );
         return;
+      }
+      // JSON 类型的默认值必须是合法 JSON
+      if (param.type == 'json' && param.defaultValue.trim().isNotEmpty) {
+        try {
+          jsonDecode(param.defaultValue.trim());
+        } catch (_) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('参数 "$name" 的默认值不是合法 JSON：${param.defaultValue}'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
       }
     }
 
@@ -788,8 +837,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     final reasoningSeenNames = <String>{};
     for (int i = 0; i < _reasoningParams.length; i++) {
       final name = _reasoningParams[i].paramName.trim();
-      if (name.isEmpty)
+      if (name.isEmpty) {
         continue; // Empty names are caught by validationError above
+      }
       if (!reasoningSeenNames.add(name)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1026,8 +1076,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
             // 推理开关 — 始终在第一个位置
             _buildReasoningToggleSection(cs),
 
-            // 推理力度 — 有且只有一个 card
-            _buildReasoningEffortCard(cs),
+            // 推理力度 — 有且只有一个 card（通过「添加推理力度」按钮添加）
+            _buildReasoningEffortSection(cs),
 
             // 附加推理参数（通过「添加推理参数」按钮添加）
             if (_additionalReasoningParams.isNotEmpty)
@@ -1040,9 +1090,17 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
             const SizedBox(height: 8),
             Center(
               child: TextButton.icon(
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('添加推理参数'),
-                onPressed: _addReasoningParam,
+                icon: Icon(Icons.add,
+                    size: 16,
+                    color: _toggleReasoningParam != null ? null : Colors.grey),
+                label: Text('添加推理参数',
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: _toggleReasoningParam != null
+                            ? null
+                            : Colors.grey)),
+                onPressed:
+                    _toggleReasoningParam != null ? _addReasoningParam : null,
               ),
             ),
             const SizedBox(height: 24),

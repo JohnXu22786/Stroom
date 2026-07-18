@@ -1,10 +1,12 @@
 /// Web thumbnail generation (web platform).
 /// Uses dart:js_interop for blob URL creation.
+library;
+
 import 'dart:js_interop';
 import 'dart:typed_data';
 
 /// Generate a thumbnail from video bytes by creating a blob URL
-/// and using media_kit's Player to take a screenshot.
+/// and using VideoPlayerController to capture a frame.
 Future<Uint8List?> generateThumbnailFromBytes(Uint8List videoBytes) async {
   try {
     final jsBytes = videoBytes.map((b) => b.toJS).toList().toJS;

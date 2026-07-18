@@ -1,21 +1,22 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Directory;
+import 'dart:io' show Directory, File;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart'
     show
         debugDefaultTargetPlatformOverride,
         defaultTargetPlatform,
         TargetPlatform;
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/providers/update_provider.dart';
 
-/// Creates a mock [Dio] that intercepts all requests and returns [jsonResponse].
+/// Creates a mock [Dio] that intercepts all requests and returns [jsonResponse]
+/// wrapped in a list (matching the [/releases] array response).
 ///
-/// The [jsonResponse] string is pre-parsed into a [Map] before setting it on the
-/// response, simulating real Dio's JSON auto-parsing behavior (ResponseType.json).
+/// The [jsonResponse] string is pre-parsed into a [List] before setting it on the
+/// response, simulating the new unified update check that always calls
+/// the [/releases?per_page=100] endpoint.
 Dio _createMockDio(String jsonResponse) {
   final dio = Dio(BaseOptions());
   dio.interceptors.add(InterceptorsWrapper(
@@ -24,7 +25,7 @@ Dio _createMockDio(String jsonResponse) {
         Response(
           requestOptions: options,
           statusCode: 200,
-          data: jsonDecode(jsonResponse) as Map<String, dynamic>,
+          data: jsonDecode('[$jsonResponse]') as List<dynamic>,
         ),
       );
     },
@@ -84,7 +85,10 @@ Dio _createNon200Dio(int statusCode) {
 
 /// Build a GitHub releases API response for the given tag.
 String _githubRelease(String tagName,
-    {String body = '', String? htmlUrl, List<Map<String, String>>? assets}) {
+    {String body = '',
+    String? htmlUrl,
+    List<Map<String, String>>? assets,
+    String publishedAt = '2024-01-15T10:00:00Z'}) {
   htmlUrl ??= 'https://github.com/JohnXu22786/Stroom/releases/tag/$tagName';
   final assetsJson = assets != null
       ? ',\n  "assets": [${assets.map((a) => '{\n      "name": "${a['name']}",\n      "browser_download_url": "${a['browser_download_url']}"\n    }').join(',\n    ')}]'
@@ -92,6 +96,7 @@ String _githubRelease(String tagName,
   return '''
 {
   "tag_name": "$tagName",
+  "published_at": "$publishedAt",
   "body": "$body",
   "html_url": "$htmlUrl"$assetsJson
 }
@@ -131,13 +136,14 @@ List<Map<String, String>> _allPlatformAssets(String tagName) {
 }
 
 /// Build a list of GitHub releases API response (for /releases endpoint).
-/// Each entry is a (tagName, isPrerelease, body) tuple.
-String _githubReleases(List<(String, bool, String)> releases) {
+/// Each entry is a (tagName, isPrerelease, body, publishedAt) tuple.
+String _githubReleases(List<(String, bool, String, String)> releases) {
   final items = releases.map((r) {
-    final (tagName, isPrerelease, body) = r;
+    final (tagName, isPrerelease, body, publishedAt) = r;
     return '''{
     "tag_name": "$tagName",
     "prerelease": $isPrerelease,
+    "published_at": "$publishedAt",
     "body": "$body",
     "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/$tagName"
   }''';
@@ -658,8 +664,8 @@ void main() {
         () async {
       SharedPreferences.setMockInitialValues({});
       final releases = _githubReleases([
-        ('v0.2.15-alpha', true, 'Alpha test'),
-        ('v0.2.14', false, 'Stable release'),
+        ('v0.2.15-alpha', true, 'Alpha test', '2024-06-15T10:00:00Z'),
+        ('v0.2.14', false, 'Stable release', '2024-06-10T10:00:00Z'),
       ]);
       final dio = _createMockDioForList(releases);
       final notifier = UpdateNotifier(dio: dio);
@@ -674,8 +680,7 @@ void main() {
       expect(notifier.state.acceptPreRelease, true);
     });
 
-    test(
-        'checkForUpdate with acceptPreRelease=false uses /releases/latest for non-prerelease',
+    test('checkForUpdate with acceptPreRelease=false finds stable updates',
         () async {
       SharedPreferences.setMockInitialValues({});
       final dio = _createMockDio(_githubRelease('v0.2.14'));
@@ -687,6 +692,8 @@ void main() {
       // 0.2.14 > installed 0.2.13
       expect(notifier.state.updateAvailable, true);
       expect(notifier.state.latestVersion, '0.2.14');
+      expect(notifier.state.availableVersions, isNotNull);
+      expect(notifier.state.availableVersions!.length, 1);
     });
 
     test(
@@ -694,7 +701,7 @@ void main() {
         () async {
       SharedPreferences.setMockInitialValues({});
       final releases = _githubReleases([
-        ('v0.2.12-alpha', true, 'Older alpha'),
+        ('v0.2.12-alpha', true, 'Older alpha', '2024-01-10T10:00:00Z'),
       ]);
       final dio = _createMockDioForList(releases);
       final notifier = UpdateNotifier(dio: dio);
@@ -713,9 +720,9 @@ void main() {
         () async {
       SharedPreferences.setMockInitialValues({});
       final releases = _githubReleases([
-        ('v0.2.15-beta', true, 'Beta'),
-        ('v0.2.15-alpha', true, 'Alpha'),
-        ('v0.2.14', false, 'Stable'),
+        ('v0.2.15-beta', true, 'Beta', '2024-07-20T10:00:00Z'),
+        ('v0.2.15-alpha', true, 'Alpha', '2024-07-15T10:00:00Z'),
+        ('v0.2.14', false, 'Stable', '2024-07-10T10:00:00Z'),
       ]);
       final dio = _createMockDioForList(releases);
       final notifier = UpdateNotifier(dio: dio);
@@ -986,6 +993,777 @@ void main() {
 
       // The error should be cleared first (even if install later fails with a new error)
       expect(notifier.state.downloadError, isNot(contains('之前的错误')));
+    });
+  });
+
+  group('UpdateNotifier - Multi-version support', () {
+    test(
+        'checkForUpdate with acceptPreRelease=false populates availableVersions with all versions, selects first stable',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final releases = _githubReleases([
+        ('v0.2.16', false, 'Version 0.2.16', '2024-08-01T10:00:00Z'),
+        ('v0.2.15-alpha', true, 'Alpha 0.2.15', '2024-07-25T10:00:00Z'),
+        ('v0.2.15', false, 'Version 0.2.15', '2024-07-20T10:00:00Z'),
+        ('v0.2.14', false, 'Version 0.2.14', '2024-07-15T10:00:00Z'),
+        ('v0.2.12', false, 'Older version', '2024-07-10T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = notifier.state.copyWith(acceptPreRelease: false);
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions, isNotNull);
+      // All versions (including pre-release) are in availableVersions
+      expect(notifier.state.availableVersions!.length, 4);
+      // Should be sorted descending (newest first, stable before pre-release of same base)
+      expect(notifier.state.availableVersions![0].version, '0.2.16');
+      expect(notifier.state.availableVersions![1].version, '0.2.15');
+      expect(notifier.state.availableVersions![2].version, '0.2.15-alpha');
+      expect(notifier.state.availableVersions![3].version, '0.2.14');
+      // Selected version defaults to newest stable (index 0, v0.2.16)
+      expect(notifier.state.latestVersion, '0.2.16');
+      expect(notifier.state.selectedVersionIndex, 0);
+    });
+
+    test(
+        'checkForUpdate with acceptPreRelease=true includes pre-release versions in availableVersions',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final releases = _githubReleases([
+        ('v0.2.16', false, 'Version 0.2.16', '2024-08-01T10:00:00Z'),
+        ('v0.2.15-alpha', true, 'Alpha 0.2.15', '2024-07-25T10:00:00Z'),
+        ('v0.2.15', false, 'Version 0.2.15', '2024-07-20T10:00:00Z'),
+        ('v0.2.14', false, 'Version 0.2.14', '2024-07-15T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = notifier.state.copyWith(acceptPreRelease: true);
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions, isNotNull);
+      expect(notifier.state.availableVersions!.length, 4);
+      // Sorted descending: same base version, stable sorts before pre-release
+      expect(notifier.state.availableVersions![0].version, '0.2.16');
+      expect(notifier.state.availableVersions![1].version,
+          '0.2.15'); // stable before pre-release
+      expect(notifier.state.availableVersions![2].version, '0.2.15-alpha');
+      expect(notifier.state.availableVersions![3].version, '0.2.14');
+      // The prerelease flag from GitHub should be preserved
+      expect(notifier.state.availableVersions![2].isPreRelease, true);
+      expect(notifier.state.availableVersions![0].isPreRelease, false);
+    });
+
+    test('no update when no versions are newer than current', () async {
+      SharedPreferences.setMockInitialValues({});
+      final releases = _githubReleases([
+        ('v0.2.12', false, 'Older', '2024-07-10T10:00:00Z'),
+        ('v0.2.11', false, 'Even older', '2024-07-05T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.updateAvailable, false);
+      expect(notifier.state.availableVersions, isNull);
+      expect(notifier.state.latestVersion, isNull);
+    });
+
+    test('availableVersions is null when no releases found at all', () async {
+      SharedPreferences.setMockInitialValues({});
+      final dio = _createMockDioForList('[]');
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.updateAvailable, false);
+      expect(notifier.state.availableVersions, isNull);
+    });
+
+    test('skipped versions are excluded from availableVersions', () async {
+      SharedPreferences.setMockInitialValues({
+        'update_skipped_version': '0.2.15',
+      });
+      final releases = _githubReleases([
+        ('v0.2.16', false, 'Version 0.2.16', '2024-08-01T10:00:00Z'),
+        ('v0.2.15', false, 'Version 0.2.15', '2024-07-25T10:00:00Z'),
+        ('v0.2.14', false, 'Version 0.2.14', '2024-07-20T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 2);
+      expect(notifier.state.availableVersions![0].version, '0.2.16');
+      expect(notifier.state.availableVersions![1].version, '0.2.14');
+      expect(notifier.state.latestVersion, '0.2.16');
+    });
+
+    test('skipped pre-release version is excluded with acceptPreRelease=true',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'update_skipped_version': '0.2.15-alpha',
+      });
+      final releases = _githubReleases([
+        ('v0.2.16', false, 'Version 0.2.16', '2024-08-01T10:00:00Z'),
+        ('v0.2.15-alpha', true, 'Alpha 0.2.15', '2024-07-25T10:00:00Z'),
+        ('v0.2.14', false, 'Version 0.2.14', '2024-07-20T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = notifier.state.copyWith(acceptPreRelease: true);
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 2);
+      expect(notifier.state.availableVersions![0].version, '0.2.16');
+      expect(notifier.state.availableVersions![1].version, '0.2.14');
+    });
+
+    test('selectVersion updates latestVersion, releaseNotes, downloadUrl',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = UpdateNotifier(dio: Dio(BaseOptions()));
+      notifier.state = UpdateState(
+        updateAvailable: true,
+        availableVersions: [
+          AvailableUpdate(
+            version: '0.2.16',
+            releaseNotes: 'Version 0.2.16 notes',
+            downloadUrl: 'https://example.com/v0.2.16.zip',
+            isPreRelease: false,
+          ),
+          AvailableUpdate(
+            version: '0.2.15',
+            releaseNotes: 'Version 0.2.15 notes',
+            downloadUrl: 'https://example.com/v0.2.15.zip',
+            isPreRelease: false,
+          ),
+        ],
+        selectedVersionIndex: 0,
+        latestVersion: '0.2.16',
+        releaseNotes: 'Version 0.2.16 notes',
+        downloadUrl: 'https://example.com/v0.2.16.zip',
+      );
+
+      notifier.selectVersion(1);
+
+      expect(notifier.state.selectedVersionIndex, 1);
+      expect(notifier.state.latestVersion, '0.2.15');
+      expect(notifier.state.releaseNotes, 'Version 0.2.15 notes');
+      expect(notifier.state.downloadUrl, 'https://example.com/v0.2.15.zip');
+    });
+
+    test('selectVersion with invalid index does nothing', () async {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = UpdateNotifier(dio: Dio(BaseOptions()));
+      notifier.state = UpdateState(
+        updateAvailable: true,
+        availableVersions: [
+          AvailableUpdate(
+            version: '0.2.16',
+            releaseNotes: 'Notes',
+            downloadUrl: 'https://example.com/zip',
+            isPreRelease: false,
+          ),
+        ],
+        selectedVersionIndex: 0,
+        latestVersion: '0.2.16',
+        releaseNotes: 'Notes',
+        downloadUrl: 'https://example.com/zip',
+      );
+
+      notifier.selectVersion(5); // Invalid index
+      expect(notifier.state.selectedVersionIndex, 0);
+      expect(notifier.state.latestVersion, '0.2.16');
+
+      notifier.selectVersion(-1); // Negative index
+      expect(notifier.state.selectedVersionIndex, 0);
+      expect(notifier.state.latestVersion, '0.2.16');
+    });
+
+    test('AvailableUpdate isPreRelease reflects GitHub prerelease field',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final releases = _githubReleases([
+        ('v0.2.16-beta', true, 'Beta', '2024-08-01T10:00:00Z'),
+        ('v0.2.15-rc', true, 'RC', '2024-07-20T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = notifier.state.copyWith(acceptPreRelease: true);
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.availableVersions!.length, 2);
+      expect(notifier.state.availableVersions![0].isPreRelease, true);
+      expect(notifier.state.availableVersions![1].isPreRelease, true);
+    });
+
+    test('AvailableUpdate stores downloadUrl correctly', () async {
+      final update = AvailableUpdate(
+        version: '0.2.16',
+        releaseNotes: 'Notes',
+        downloadUrl:
+            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.16/test.zip',
+        isPreRelease: false,
+      );
+
+      expect(update.version, '0.2.16');
+      expect(update.downloadUrl, contains('releases/download'));
+      expect(update.isPreRelease, false);
+    });
+
+    test(
+        'checkForUpdate with acceptPreRelease=false: no update when only prerelease is newer',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final releases = _githubReleases([
+        ('v0.2.15-alpha', true, 'Alpha', '2024-07-01T10:00:00Z'),
+        (
+          'v0.2.13',
+          false,
+          'Stable same as current version',
+          '2024-06-15T10:00:00Z'
+        ),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = notifier.state.copyWith(acceptPreRelease: false);
+
+      await notifier.checkForUpdate();
+
+      // The prerelease (v0.2.15-alpha) exists in data, but since acceptPreRelease=false
+      // and there are no stable versions → no visible update → no dialog
+      expect(notifier.state.updateAvailable, false);
+      expect(notifier.state.availableVersions, isNull);
+    });
+
+    test(
+        'acceptPreRelease=false: selectedVersionIndex defaults to first stable when newest is prerelease',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final releases = _githubReleases([
+        ('v0.2.16-alpha', true, 'Alpha', '2024-08-01T10:00:00Z'),
+        ('v0.2.15', false, 'Stable', '2024-07-20T10:00:00Z'),
+        ('v0.2.13', false, 'Current', '2024-06-15T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = notifier.state.copyWith(acceptPreRelease: false);
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 2);
+      // Sorted: v0.2.16-alpha (index 0), v0.2.15 (index 1)
+      expect(notifier.state.availableVersions![0].version, '0.2.16-alpha');
+      expect(notifier.state.availableVersions![1].version, '0.2.15');
+      // Default should be v0.2.15 (first stable, index 1)
+      expect(notifier.state.selectedVersionIndex, 1);
+      expect(notifier.state.latestVersion, '0.2.15');
+    });
+
+    test(
+        'acceptPreRelease=true: selectedVersionIndex defaults to 0 (newest, may be prerelease)',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final releases = _githubReleases([
+        ('v0.2.16-alpha', true, 'Alpha', '2024-08-01T10:00:00Z'),
+        ('v0.2.15', false, 'Stable', '2024-07-20T10:00:00Z'),
+        ('v0.2.13', false, 'Current', '2024-06-15T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = notifier.state.copyWith(acceptPreRelease: true);
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 2);
+      // Newest is v0.2.16-alpha → should be default selection
+      expect(notifier.state.selectedVersionIndex, 0);
+      expect(notifier.state.latestVersion, '0.2.16-alpha');
+    });
+  });
+
+  group('UpdateNotifier - Version matching with hotfix suffixes', () {
+    test(
+        'exact match with date-based comparison correctly excludes v39 published before cutoff',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      // Current app version "0.2.13" exactly matches tag "v0.2.13"
+      // Date-based comparison correctly excludes v39.0.0 published before cutoff
+      final releases = _githubReleases([
+        ('v0.2.14', false, 'Version 0.2.14', '2024-07-20T10:00:00Z'),
+        ('v0.2.13', false, 'Current base version', '2024-06-15T10:00:00Z'),
+        ('v39.0.0', false, 'Version 39', '2024-06-10T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      // Override appVersion via default; simulate hotfix version
+      await notifier.checkForUpdate();
+
+      // The cutover from GitHub API might use exact match of '0.2.13'
+      // which is the DEFAULT appVersion. The test uses default appVersion.
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 1);
+      expect(notifier.state.availableVersions![0].version, '0.2.14');
+    });
+
+    test(
+        'base-version skip: hotfix tag with same base as current version is excluded via fallback',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      // GitHub has "v0.2.13-hotfix" (a hotfix build of 0.2.13) but the
+      // current app version is "0.2.13" with no suffix. Exact match fails
+      // ("0.2.13" != "0.2.13-hotfix"), so we fall back to version comparison.
+      // The base-version skip prevents the hotfix from being offered as an
+      // update (same major.minor.patch = same version, different build).
+      final dio = _createMockDioForList('''
+[
+  {
+    "tag_name": "v0.2.14",
+    "prerelease": false,
+    "published_at": "2024-07-20T10:00:00Z",
+    "body": "Newer version",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.14"
+  },
+  {
+    "tag_name": "v0.2.13-hotfix",
+    "prerelease": true,
+    "published_at": "2024-07-10T10:00:00Z",
+    "body": "Hotfix",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.13-hotfix"
+  },
+  {
+    "tag_name": "v0.2.12",
+    "prerelease": false,
+    "published_at": "2024-06-01T10:00:00Z",
+    "body": "Older",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.12"
+  }
+]
+''');
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // Current version 0.2.13 - not in releases by exact match
+      // Fallback to version comparison. v0.2.13-hotfix has the same base
+      // (0,2,13) as the current version → excluded by base-version skip.
+      // v0.2.14 (0,2,14) > (0,2,13) → included
+      // v0.2.12 (0,2,12) < (0,2,13) → excluded
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 1);
+      expect(notifier.state.availableVersions![0].version, '0.2.14');
+    });
+
+    test(
+        'version comparison fallback handles pre-release suffix (same base versions compared as equal)',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      // Current version "0.2.13-hotfix" not found in releases at all
+      // Fallback to version comparison: should NOT treat 0.2.13 > 0.2.13-hotfix
+      final dio = _createMockDioForList('''
+[
+  {
+    "tag_name": "v0.2.14",
+    "prerelease": false,
+    "published_at": "2024-07-20T10:00:00Z",
+    "body": "Newer",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.14"
+  }
+]
+''');
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // 0.2.14 > 0.2.13 → included (valid)
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 1);
+      expect(notifier.state.availableVersions![0].version, '0.2.14');
+    });
+  });
+
+  group('UpdateNotifier - Date-based comparison', () {
+    test(
+        'uses published_at date to filter releases when current version is found in releases list',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      // Current version (0.2.13) is in the list with published_at 2024-06-15
+      // Only releases published after that date should be included
+      final releases = _githubReleases([
+        ('v0.2.16', false, 'Version 0.2.16', '2024-08-01T10:00:00Z'),
+        ('v0.2.15', false, 'Version 0.2.15', '2024-07-20T10:00:00Z'),
+        ('v0.2.13', false, 'Current version', '2024-06-15T10:00:00Z'),
+        ('v0.2.12', false, 'Older version', '2024-06-10T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // Should include 0.2.16 and 0.2.15 (published after 0.2.13)
+      // Should NOT include 0.2.12 (published before 0.2.13)
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions, isNotNull);
+      expect(notifier.state.availableVersions!.length, 2);
+      expect(notifier.state.availableVersions![0].version, '0.2.16');
+      expect(notifier.state.availableVersions![1].version, '0.2.15');
+      expect(notifier.state.latestVersion, '0.2.16');
+    });
+
+    test('releases published after current version cutoff are included',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      // Current version 0.2.13 at 2024-06-15
+      // Both v39.0.0 and v0.2.14 were published after cutoff → included
+      final releases = _githubReleases([
+        ('v39.0.0', false, 'Version 39', '2024-07-01T10:00:00Z'),
+        ('v0.2.14', false, 'Version 0.2.14', '2024-06-20T10:00:00Z'),
+        ('v0.2.13', false, 'Current', '2024-06-15T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 2);
+      expect(notifier.state.availableVersions![0].version, '39.0.0');
+      expect(notifier.state.availableVersions![1].version, '0.2.14');
+    });
+
+    test(
+        'higher version number published before current version cutoff is excluded',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      // This is the key bug fix scenario: v39.0.0 is a higher version number
+      // but was published BEFORE the current version's cutoff date → excluded
+      // The current version 0.2.13 has cutoff 2024-06-15
+      // v39.0.0 at 2024-06-10 is BEFORE cutoff → excluded
+      // v0.2.14 at 2024-06-20 is AFTER cutoff → included
+      // v0.2.12 at 2024-06-10 is BEFORE cutoff → excluded
+      final releases = _githubReleases([
+        ('v39.0.0', false, 'Version 39', '2024-06-10T10:00:00Z'),
+        ('v0.2.14', false, 'Version 0.2.14', '2024-06-20T10:00:00Z'),
+        ('v0.2.13', false, 'Current', '2024-06-15T10:00:00Z'),
+        ('v0.2.12', false, 'Old', '2024-06-10T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // v39.0.0 at 2024-06-10 → before cutoff → excluded!
+      // v0.2.14 at 2024-06-20 → after cutoff → included
+      // v0.2.12 at 2024-06-10 → before cutoff → excluded
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 1);
+      expect(notifier.state.availableVersions![0].version, '0.2.14');
+    });
+
+    test(
+        'falls back to version comparison when current version is not in releases list',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      // Current version 0.2.13 is NOT in the list
+      // Should fall back to version-based comparison
+      final releases = _githubReleases([
+        ('v0.2.16', false, 'Version 0.2.16', '2024-08-01T10:00:00Z'),
+        ('v0.2.14', false, 'Version 0.2.14', '2024-07-01T10:00:00Z'),
+        ('v0.2.12', false, 'Version 0.2.12', '2024-06-01T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // Fallback: 0.2.16 and 0.2.14 > 0.2.13 → included
+      // 0.2.12 < 0.2.13 → excluded
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 2);
+      expect(notifier.state.availableVersions![0].version, '0.2.16');
+      expect(notifier.state.availableVersions![1].version, '0.2.14');
+    });
+
+    test(
+        'falls back to version comparison when current version has no published_at',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final dio = _createMockDioForList('''
+[
+  {
+    "tag_name": "v0.2.14",
+    "body": "New version",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.14"
+  },
+  {
+    "tag_name": "v0.2.13",
+    "body": "Current version (no published_at)",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.13"
+  }
+]
+''');
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // Current version 0.2.13 found but has no published_at → fallback
+      // 0.2.14 > 0.2.13 → included
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.latestVersion, '0.2.14');
+    });
+
+    test('no update when no releases published after current version date',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final releases = _githubReleases([
+        ('v0.2.12', false, 'Older', '2024-06-10T10:00:00Z'),
+        ('v0.2.13', false, 'Current', '2024-06-15T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // All remaining releases published before or at the same time as current
+      expect(notifier.state.updateAvailable, false);
+      expect(notifier.state.availableVersions, isNull);
+    });
+
+    test('pre-release toggle works with date-based filtering', () async {
+      SharedPreferences.setMockInitialValues({});
+      final releases = _githubReleases([
+        ('v0.2.16-alpha', true, 'Alpha', '2024-08-01T10:00:00Z'),
+        ('v0.2.15', false, 'Stable', '2024-07-20T10:00:00Z'),
+        ('v0.2.13', false, 'Current', '2024-06-15T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = notifier.state.copyWith(acceptPreRelease: false);
+
+      await notifier.checkForUpdate();
+
+      // availableVersions always includes all versions (pre-release + stable)
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 2);
+      expect(notifier.state.availableVersions![0].version, '0.2.16-alpha');
+      expect(notifier.state.availableVersions![0].isPreRelease, true);
+      expect(notifier.state.availableVersions![1].version, '0.2.15');
+      expect(notifier.state.availableVersions![1].isPreRelease, false);
+      // Default selection is first stable version (v0.2.15)
+      expect(notifier.state.selectedVersionIndex, 1);
+      expect(notifier.state.latestVersion, '0.2.15');
+    });
+
+    test(
+        'release at same timestamp as current version is excluded (isAfter exclusive)',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final releases = _githubReleases([
+        ('v0.2.14', false, 'Same timestamp', '2024-06-15T10:00:00Z'),
+        ('v0.2.13', false, 'Current', '2024-06-15T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // v0.2.14 has the SAME timestamp as current (2024-06-15T10:00:00Z)
+      // isAfter returns false for same timestamp → excluded
+      expect(notifier.state.updateAvailable, false);
+      expect(notifier.state.availableVersions, isNull);
+    });
+
+    test('non-current release without published_at is skipped in date mode',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      // Create a raw JSON list where v0.2.14 has no published_at
+      // while the current version v0.2.13 does have it
+      final dio = _createMockDioForList('''
+[
+  {
+    "tag_name": "v0.2.14",
+    "body": "No published_at",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.14"
+  },
+  {
+    "tag_name": "v0.2.13",
+    "body": "Current with published_at",
+    "published_at": "2024-06-15T10:00:00Z",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.13"
+  }
+]
+''');
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // Current version 0.2.13 found with published_at → date mode
+      // v0.2.14 has no published_at → skipped (null check)
+      // No releases pass the filter → no update
+      expect(notifier.state.updateAvailable, false);
+      expect(notifier.state.availableVersions, isNull);
+    });
+  });
+
+  group('UpdateNotifier - Cleanup downloaded file', () {
+    late String tempDir;
+
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      tempDir =
+          Directory.systemTemp.createTempSync('stroom_test_cleanup_').path;
+    });
+
+    tearDown(() {
+      try {
+        Directory(tempDir).deleteSync(recursive: true);
+      } catch (_) {}
+    });
+
+    test('cleanupDownloadedFile deletes the downloaded file when it exists',
+        () async {
+      final dio = Dio(BaseOptions());
+      final notifier = UpdateNotifier(dio: dio);
+
+      // Create a real file to clean up
+      final testFile = File('$tempDir/test_cleanup.apk');
+      await testFile.writeAsBytes([1, 2, 3]);
+      expect(await testFile.exists(), true);
+
+      notifier.state = UpdateState(
+        downloadComplete: true,
+        downloadedFilePath: testFile.path,
+      );
+
+      await notifier.cleanupDownloadedFile();
+
+      expect(await testFile.exists(), false);
+    });
+
+    test('cleanupDownloadedFile handles non-existent file gracefully',
+        () async {
+      final dio = Dio(BaseOptions());
+      final notifier = UpdateNotifier(dio: dio);
+
+      notifier.state = UpdateState(
+        downloadComplete: true,
+        downloadedFilePath: '$tempDir/nonexistent_file.zip',
+      );
+
+      // Should not throw
+      await notifier.cleanupDownloadedFile();
+    });
+
+    test('cleanupDownloadedFile handles null downloadedFilePath', () async {
+      final dio = Dio(BaseOptions());
+      final notifier = UpdateNotifier(dio: dio);
+
+      // No downloadedFilePath set
+      await notifier.cleanupDownloadedFile();
+      // Should not throw
+    });
+
+    test('cleanupStaleInstallerFiles cleans up persisted file path', () async {
+      // Set up SharedPreferences with a stored file path
+      final testFile = File('$tempDir/stale_installer.exe');
+      await testFile.writeAsBytes([1, 2, 3]);
+      expect(await testFile.exists(), true);
+
+      SharedPreferences.setMockInitialValues({
+        'update_downloaded_file_path': testFile.path,
+      });
+
+      final dio = Dio(BaseOptions());
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.cleanupStaleInstallerFiles();
+
+      // File should be deleted
+      expect(await testFile.exists(), false);
+
+      // SharedPreferences key should be removed
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.containsKey('update_downloaded_file_path'), false);
+    });
+
+    test('cleanupStaleInstallerFiles handles non-existent persisted path',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'update_downloaded_file_path': '$tempDir/nonexistent_stale.zip',
+      });
+
+      final dio = Dio(BaseOptions());
+      final notifier = UpdateNotifier(dio: dio);
+
+      // Should not throw
+      await notifier.cleanupStaleInstallerFiles();
+
+      // Key should be removed even if file doesn't exist
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.containsKey('update_downloaded_file_path'), false);
+    });
+
+    test('cleanupStaleInstallerFiles does nothing when no path is persisted',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+
+      final dio = Dio(BaseOptions());
+      final notifier = UpdateNotifier(dio: dio);
+
+      // Should not throw
+      await notifier.cleanupStaleInstallerFiles();
+    });
+
+    test('downloadFilePathKey getter returns correct key', () {
+      expect(downloadFilePathKey, equals('update_downloaded_file_path'));
+    });
+
+    test('downloadUpdate persists downloaded file path to SharedPreferences',
+        () async {
+      final dio = Dio(BaseOptions());
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: <int>[1, 2, 3],
+            ),
+          );
+        },
+      ));
+
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = UpdateState(
+        updateAvailable: true,
+        latestVersion: '0.2.14',
+        downloadUrl:
+            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test_cleanup.zip',
+        releaseNotes: '',
+      );
+
+      await notifier.downloadUpdate(downloadDir: tempDir);
+
+      // File path should be persisted in SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      final persistedPath = prefs.getString('update_downloaded_file_path');
+      expect(persistedPath, isNotNull);
+      expect(persistedPath, isNotEmpty);
+      expect(persistedPath, contains('test_cleanup.zip'));
     });
   });
 

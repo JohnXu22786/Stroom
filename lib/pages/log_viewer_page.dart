@@ -1,0 +1,536 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
+
+import '../services/app_log_service.dart';
+
+// ====================================================================
+// LogViewerPage — 应用日志查看器
+// ====================================================================
+//
+// 在应用内直接查看自动备份目录中的日志文件。
+// 列出所有日志文件，点击查看内容。
+// ====================================================================
+
+/// 应用日志查看页面。
+class LogViewerPage extends StatefulWidget {
+  const LogViewerPage({super.key});
+
+  @override
+  State<LogViewerPage> createState() => _LogViewerPageState();
+}
+
+class _LogViewerPageState extends State<LogViewerPage>
+    with WidgetsBindingObserver {
+  List<String> _logFiles = [];
+  bool _isLoading = true;
+  Timer? _retryTimer;
+  int _retryCount = 0;
+  static const Duration _maxRetryDelay = Duration(seconds: 60);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _loadLogFiles();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _retryTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadLogFiles();
+    }
+  }
+
+  /// Schedule a retry to load log files after a delay.
+  ///
+  /// Uses exponential backoff capped at [_maxRetryDelay] (60s).
+  /// Retries continue indefinitely so that the page auto-refreshes
+  /// when logs are eventually generated.
+  void _scheduleRetry() {
+    _retryTimer?.cancel();
+    _retryCount++;
+    // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s, 60s, 60s, ...
+    final delay = Duration(
+      seconds: _retryCount <= 6
+          ? (1 << (_retryCount - 1)) // 1, 2, 4, 8, 16, 32
+          : _maxRetryDelay.inSeconds, // cap at 60s
+    );
+    _retryTimer = Timer(delay, () {
+      if (mounted) {
+        _loadLogFiles();
+      }
+    });
+  }
+
+  Future<void> _loadLogFiles() async {
+    setState(() => _isLoading = true);
+    try {
+      final files = await AppLogService.listLogFiles();
+      if (mounted) {
+        setState(() {
+          _logFiles = files.reversed.toList(); // 最新的在前
+          _isLoading = false;
+        });
+      }
+      // If no files found, schedule a retry (auto-refresh)
+      if (files.isEmpty && mounted) {
+        _scheduleRetry();
+      } else {
+        _retryCount = 0; // Reset retry count on success
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _scheduleRetry(); // Retry on error too
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('加载日志文件列表失败: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _viewLogFile(String fileName) async {
+    try {
+      final content = await AppLogService.readLogFile(fileName);
+      if (!mounted) return;
+
+      if (content == null) {
+        final logDir = await AppLogService.getLogDir();
+        if (!mounted) return;
+        final filePath = p.join(logDir.path, fileName);
+        final file = File(filePath);
+        final fileExists = await file.exists();
+
+        String errorMsg;
+        if (fileExists) {
+          errorMsg = '日志文件 "$fileName" 存在但无法读取，可能文件已损坏';
+          debugPrint('[LogViewer] 文件存在但无法读取: $filePath');
+        } else {
+          errorMsg = '日志文件 "$fileName" 不存在，可能已被清理';
+          debugPrint('[LogViewer] 文件不存在: $filePath');
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMsg),
+              duration: const Duration(seconds: 3),
+              action: SnackBarAction(
+                label: '刷新',
+                onPressed: () {
+                  _retryCount = 0;
+                  _loadLogFiles();
+                },
+              ),
+            ),
+          );
+        }
+        return;
+      }
+
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => _LogContentPage(fileName: fileName, content: content),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('读取日志文件失败: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteLogFile(String fileName) async {
+    try {
+      final logDir = await AppLogService.getLogDir();
+      final file = File(p.join(logDir.path, fileName));
+      if (await file.exists()) {
+        await file.delete();
+        await _loadLogFiles();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('已删除: $fileName')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('删除失败: $e')),
+        );
+      }
+    }
+  }
+
+  /// 导出日志文件：复制文件路径到剪贴板，方便用户用系统资源管理器打开。
+  /// 这是最简单、最通用的"导出"方式——文件本身就在用户机器上，
+  /// 无需另存为。
+  Future<void> _exportLogFile(String fileName) async {
+    try {
+      final logDir = await AppLogService.getLogDir();
+      final filePath = p.join(logDir.path, fileName);
+      final file = File(filePath);
+      if (!await file.exists()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('日志文件 "$fileName" 不存在')),
+          );
+        }
+        return;
+      }
+
+      await Clipboard.setData(ClipboardData(text: filePath));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已复制路径: $filePath')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导出失败: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('应用日志'),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: '刷新',
+            onPressed: () {
+              _retryCount = 0; // Reset retry count on manual refresh
+              _loadLogFiles();
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_sweep),
+            tooltip: '清理旧日志',
+            onPressed: () async {
+              await AppLogService.cleanupOldLogs();
+              await _loadLogFiles();
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('旧日志已清理')),
+              );
+            },
+          ),
+        ],
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _logFiles.isEmpty
+              ? _buildEmptyState(theme)
+              : RefreshIndicator(
+                  onRefresh: () async {
+                    _retryCount = 0;
+                    await _loadLogFiles();
+                  },
+                  child: _buildLogFileList(theme),
+                ),
+    );
+  }
+
+  Widget _buildEmptyState(ThemeData theme) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.article_outlined, size: 64, color: theme.disabledColor),
+          const SizedBox(height: 16),
+          Text(
+            kIsWeb ? 'Web 平台不支持本地日志' : '暂无日志文件',
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _retryCount > 0 ? '自动刷新中 (第 $_retryCount 次)...' : '应用运行后将自动生成日志',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          if (_retryCount > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLogFileList(ThemeData theme) {
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: _logFiles.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final fileName = _logFiles[index];
+        return ListTile(
+          leading: Icon(
+            Icons.article,
+            color: theme.colorScheme.primary,
+          ),
+          title: Text(
+            fileName,
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
+          subtitle: Text(
+            _getFileDateLabel(fileName),
+            style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: Icon(Icons.ios_share,
+                    color: theme.colorScheme.primary, size: 20),
+                tooltip: '导出',
+                onPressed: () => _exportLogFile(fileName),
+              ),
+              IconButton(
+                icon: Icon(Icons.delete_outline,
+                    color: theme.colorScheme.error, size: 20),
+                tooltip: '删除',
+                onPressed: () => _confirmDelete(fileName),
+              ),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+          onTap: () => _viewLogFile(fileName),
+        );
+      },
+    );
+  }
+
+  /// 解析文件名的时间戳，返回人类友好的展示标签。
+  ///
+  /// 新格式：app_YYYY-MM-DD-HH.log → 2024-01-01 14:00
+  /// 兼容旧格式：app_YYYY-MM-DD.log → 2024-01-01
+  String _getFileDateLabel(String fileName) {
+    final hourMatch =
+        RegExp(r'app_(\d{4}-\d{2}-\d{2})-(\d{2})\.log').firstMatch(fileName);
+    if (hourMatch != null) {
+      return '${hourMatch.group(1)} ${hourMatch.group(2)}:00';
+    }
+    final dayMatch =
+        RegExp(r'app_(\d{4}-\d{2}-\d{2})\.log').firstMatch(fileName);
+    if (dayMatch != null) {
+      return dayMatch.group(1)!;
+    }
+    return '';
+  }
+
+  void _confirmDelete(String fileName) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('确认删除'),
+        content: Text('确定要删除日志文件 "$fileName" 吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _deleteLogFile(fileName);
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ====================================================================
+// 日志内容查看子页面
+// ====================================================================
+
+class _LogContentPage extends StatefulWidget {
+  final String fileName;
+  final String content;
+
+  const _LogContentPage({
+    required this.fileName,
+    required this.content,
+  });
+
+  @override
+  State<_LogContentPage> createState() => _LogContentPageState();
+}
+
+class _LogContentPageState extends State<_LogContentPage> {
+  bool _showRaw = false;
+  final ScrollController _rawScrollController = ScrollController();
+  final ScrollController _structuredScrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    // 在第一帧渲染完成后自动滚动到底部，
+    // 这样最新的日志（位于文件末尾）能直接展示给用户。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom();
+    });
+  }
+
+  @override
+  void dispose() {
+    _rawScrollController.dispose();
+    _structuredScrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToBottom() {
+    if (!mounted) return;
+    final controller =
+        _showRaw ? _rawScrollController : _structuredScrollController;
+    if (!controller.hasClients) return;
+    controller.jumpTo(controller.position.maxScrollExtent);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final lines = widget.content.split('\n');
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.fileName),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: Icon(_showRaw ? Icons.format_list_bulleted : Icons.code),
+            tooltip: _showRaw ? '结构化视图' : '原始视图',
+            onPressed: () {
+              setState(() => _showRaw = !_showRaw);
+              // 切换视图后保持滚到底部的行为
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _scrollToBottom();
+              });
+            },
+          ),
+        ],
+      ),
+      body:
+          _showRaw ? _buildRawView(theme) : _buildStructuredView(theme, lines),
+    );
+  }
+
+  Widget _buildRawView(ThemeData theme) {
+    return SingleChildScrollView(
+      controller: _rawScrollController,
+      padding: const EdgeInsets.all(12),
+      child: SelectableText(
+        widget.content,
+        style: TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 12,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStructuredView(ThemeData theme, List<String> lines) {
+    return ListView.builder(
+      controller: _structuredScrollController,
+      padding: const EdgeInsets.all(8),
+      itemCount: lines.length,
+      itemBuilder: (context, index) {
+        final line = lines[index];
+        if (line.trim().isEmpty) return const SizedBox.shrink();
+
+        // 解析日志行格式: [timestamp] [LEVEL] [Source] message
+        final levelMatch =
+            RegExp(r'\[(DEBUG|INFO|WARN|ERROR)\]').firstMatch(line);
+        Color? levelColor;
+        IconData? levelIcon;
+        if (levelMatch != null) {
+          switch (levelMatch.group(1)!) {
+            case 'ERROR':
+              levelColor = Colors.red;
+              levelIcon = Icons.error_outline;
+              break;
+            case 'WARN':
+              levelColor = Colors.orange;
+              levelIcon = Icons.warning_amber_rounded;
+              break;
+            case 'INFO':
+              levelColor = Colors.blue;
+              levelIcon = Icons.info_outline;
+              break;
+            case 'DEBUG':
+              levelColor = Colors.grey;
+              levelIcon = Icons.bug_report_outlined;
+              break;
+          }
+        }
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 1),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (levelIcon != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2, right: 6),
+                  child: Icon(levelIcon, size: 16, color: levelColor),
+                ),
+              Expanded(
+                child: SelectableText(
+                  line,
+                  style: TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                    color: levelColor ?? theme.colorScheme.onSurface,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}

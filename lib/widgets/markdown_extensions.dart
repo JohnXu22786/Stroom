@@ -3,6 +3,7 @@ import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:markdown/markdown.dart' as m;
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:flutter_highlight/themes/dracula.dart';
+import 'code_block_source_widget.dart';
 import 'html_code_block_widget.dart';
 import 'mermaid_render_widget.dart';
 
@@ -114,14 +115,77 @@ class LatexNode extends SpanNode {
   }
 }
 
+/// A simple loading placeholder shown while a mermaid code block is still
+/// being generated during streaming. The markdown parser strips the
+/// backtick fences from the code content, so we cannot detect completion
+/// by checking for closing backticks. Instead, during streaming we always
+/// show this loading widget — the actual mermaid diagram renders after
+/// streaming completes (when [isStreaming] becomes false).
+class _MermaidLoadingWidget extends StatelessWidget {
+  const _MermaidLoadingWidget();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      height: 100,
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.5),
+          width: 0.5,
+        ),
+      ),
+      child: const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(height: 8),
+            Text(
+              '正在生成...',
+              style: TextStyle(fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Builds a code block widget for the given [code] and [language].
 ///
 /// If [language] is `'mermaid'`, renders the code using [MermaidRenderWidget].
-/// If [language] is `'html'`, renders the code using [HtmlCodeBlockWidget].
-/// Otherwise, renders a syntax-highlighted code block using the configured
-/// [preConfig] theme and decoration.
-Widget _buildCodeBlock(String code, String language, PreConfig preConfig) {
-  if (language == 'mermaid') {
+/// During streaming, shows a [_MermaidLoadingWidget] with a spinning
+/// indicator and "正在生成..." text. The actual Mermaid diagram renders
+/// after streaming completes. This avoids repeatedly reloading the WebView
+/// on each incremental streaming update.
+/// If [language] is `'html'`, renders the code using [HtmlCodeBlockWidget]
+/// (which shows the raw HTML source without inline rendering; the user must
+/// tap the full-screen button to render the HTML in a dialog).
+/// Otherwise, renders the code using [CodeBlockSourceView] which provides
+/// a unified code display area with line numbers and a wrap toggle (matching
+/// the HTML code block's UI form).
+Widget _buildCodeBlock(
+  String code,
+  String language,
+  PreConfig preConfig, {
+  bool isStreaming = false,
+}) {
+  if (language.toLowerCase() == 'mermaid') {
+    // During streaming, show a loading animation instead of repeatedly
+    // reloading the WebView on each incremental update. The Mermaid
+    // diagram renders after the entire streaming session completes.
+    // Note: The markdown parser strips backtick fences from the code
+    // content, so we cannot detect individual codeblock completion here.
+    if (isStreaming) {
+      return const _MermaidLoadingWidget();
+    }
     return MermaidRenderWidget(mermaidCode: code);
   }
 
@@ -129,59 +193,29 @@ Widget _buildCodeBlock(String code, String language, PreConfig preConfig) {
     return HtmlCodeBlockWidget(htmlCode: code);
   }
 
-  // Fallback: render as a syntax-highlighted code block (replicating the
-  // default behaviour from CodeBlockNode.build() but without access to
-  // visitor.richTextBuilder / visitor.splitRegExp).
-  final splitRegExp = WidgetVisitor.defaultSplitRegExp;
-  var splitContents = code.trim().split(splitRegExp);
-  if (splitContents.isNotEmpty && splitContents.last.isEmpty) {
-    splitContents = splitContents.sublist(0, splitContents.length - 1);
-  }
-
-  return Container(
-    decoration: preConfig.decoration,
-    margin: preConfig.margin,
-    padding: preConfig.padding,
-    width: double.infinity,
-    child: SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: List.generate(splitContents.length, (index) {
-          final currentContent = splitContents[index];
-          return Text.rich(
-            TextSpan(
-              children: highLightSpans(
-                currentContent,
-                language: language,
-                theme: preConfig.theme,
-                textStyle: preConfig.textStyle,
-                styleNotMatched: preConfig.styleNotMatched,
-              ),
-            ),
-          );
-        }),
-      ),
-    ),
-  );
+  // Fallback: render using the unified source code display widget
+  // ([CodeBlockSourceView]) with line numbers, same as the HTML code
+  // block style.
+  return CodeBlockSourceView(code: code);
 }
 
 /// Returns a [PreConfig] for code blocks that adapts to dark/light mode.
 ///
-/// - Dark mode: uses a dark grey background (`0xff555555`) with
-///   the [draculaTheme] syntax highlighting.
-/// - Light mode: uses a light grey background (`0xffeff1f3`) with
-///   the [draculaTheme] syntax highlighting.
+/// - Dark mode: uses a dark grey background (`0xff555555`).
+/// - Light mode: uses a light grey background (`0xffeff1f3`).
 ///
 /// Mermaid code blocks (```` ```mermaid ````) are rendered using
-/// [MermaidRenderWidget] instead of syntax highlighting.
+/// [MermaidRenderWidget].
 ///
 /// HTML code blocks (```` ```html ````) are rendered using
-/// [HtmlCodeBlockWidget] to provide a live preview of the HTML content.
+/// [HtmlCodeBlockWidget] to show the raw HTML source without inline
+/// rendering; the user must tap the full-screen button to render the
+/// HTML in a dialog.
 ///
-/// The [draculaTheme] is chosen for its high-contrast syntax colours
-/// which work well in both modes.
-PreConfig codeBlockPreConfig({required bool isDark}) {
+/// All other code blocks are rendered using [CodeBlockSourceView] which
+/// provides a unified code display area with line numbers and a wrap
+/// toggle, matching the HTML code block's UI form.
+PreConfig codeBlockPreConfig({required bool isDark, bool isStreaming = false}) {
   final baseConfig = PreConfig(
     theme: draculaTheme,
     decoration: BoxDecoration(
@@ -199,7 +233,8 @@ PreConfig codeBlockPreConfig({required bool isDark}) {
     textStyle: baseConfig.textStyle,
     styleNotMatched: baseConfig.styleNotMatched,
     language: baseConfig.language,
-    builder: (code, language) => _buildCodeBlock(code, language, baseConfig),
+    builder: (code, language) =>
+        _buildCodeBlock(code, language, baseConfig, isStreaming: isStreaming),
   );
 }
 
@@ -266,11 +301,12 @@ Widget _wrapTableWithHorizontalScroll(Widget child) {
   );
 }
 
-MarkdownConfig buildMarkdownConfig({required bool isDark}) {
+MarkdownConfig buildMarkdownConfig(
+    {required bool isDark, bool isStreaming = false}) {
   final base =
       isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig;
   return base.copy(configs: [
-    codeBlockPreConfig(isDark: isDark),
+    codeBlockPreConfig(isDark: isDark, isStreaming: isStreaming),
     TableConfig(
       wrapper: _wrapTableWithHorizontalScroll,
     ),

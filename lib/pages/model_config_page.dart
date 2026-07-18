@@ -87,10 +87,13 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     if (_customParams.length != _initialCustomParams.length) return true;
     for (int i = 0; i < _customParams.length; i++) {
       if (i >= _initialCustomParams.length) return true;
-      if (_customParams[i].paramName != _initialCustomParams[i].paramName)
+      if (_customParams[i].paramName != _initialCustomParams[i].paramName) {
         return true;
-      if (_customParams[i].defaultValue != _initialCustomParams[i].defaultValue)
+      }
+      if (_customParams[i].defaultValue !=
+          _initialCustomParams[i].defaultValue) {
         return true;
+      }
       if (_customParams[i].type != _initialCustomParams[i].type) return true;
     }
     return false;
@@ -439,8 +442,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   Future<void> _playTestAudio() async {
     final entry = _entry;
     if (entry == null) return;
-    if (widget.configIndex < 0 || widget.configIndex >= entry.configs.length)
+    if (widget.configIndex < 0 || widget.configIndex >= entry.configs.length) {
       return;
+    }
 
     setState(() {
       _isTestingAudio = true;
@@ -656,7 +660,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       return;
     }
 
-    // 验证自定义参数：每个参数都必须有参数名和默认值，且参数名不能重复
+    // 验证自定义参数：每个参数都必须有参数名和默认值，且参数名不能重复，
+    // JSON 类型的默认值必须是合法 JSON
     final seenNames = <String>{};
     for (int i = 0; i < _customParams.length; i++) {
       final param = _customParams[i];
@@ -678,6 +683,20 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           ),
         );
         return;
+      }
+      // JSON 类型的默认值必须是合法 JSON
+      if (param.type == 'json' && param.defaultValue.trim().isNotEmpty) {
+        try {
+          jsonDecode(param.defaultValue.trim());
+        } catch (_) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('参数 "$name" 的默认值不是合法 JSON：${param.defaultValue}'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
       }
     }
 

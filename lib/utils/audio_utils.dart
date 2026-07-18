@@ -69,22 +69,29 @@ Uint8List pcmToWav(
 }
 
 /// 获取MIME类型
+///
+/// 支持 OpenAI STT API 所列的全部格式：
+/// flac, mp3, mp4, mpeg, mpga, m4a, ogg, opus, wav, webm
 String getMimeType(String format) {
   switch (format.toLowerCase()) {
     case 'wav':
       return 'audio/wav';
     case 'mp3':
+    case 'mpga':
+    case 'mpeg':
       return 'audio/mpeg';
     case 'flac':
       return 'audio/flac';
     case 'ogg':
+    case 'opus':
       return 'audio/ogg';
     case 'aac':
       return 'audio/aac';
     case 'm4a':
+    case 'mp4':
       return 'audio/mp4';
-    case 'opus':
-      return 'audio/ogg';
+    case 'webm':
+      return 'audio/webm';
     case 'wma':
       return 'audio/x-ms-wma';
     case 'pcm':
@@ -92,6 +99,35 @@ String getMimeType(String format) {
     default:
       return 'audio/wav';
   }
+}
+
+/// 获取音频格式的常用显示名称。
+///
+/// 将内部格式标识符映射为用户友好的显示名称，以便在 UI 中展示。
+/// 例如：'aac'（原始 AAC ADTS 格式）映射为 'M4A'，
+/// 因为 M4A 是更广泛被用户认知的消费级音频格式名称。
+/// 其他格式标识符直接转换为大写字母展示。
+String formatDisplayName(String format) {
+  switch (format.toLowerCase()) {
+    case 'aac':
+      // AAC 是编码格式名，不够常用；M4A 是更普及的消费级格式名
+      return 'M4A';
+    default:
+      return format.toUpperCase();
+  }
+}
+
+/// 将内部检测到的格式标识符规范化为最终保存使用的格式 / 扩展名。
+///
+/// 某些检测到的格式（如原始 ADTS 封装的 AAC）从用户体验角度应当用更
+/// 通用的容器名保存。目前唯一的映射：
+/// - 'aac' → 'm4a' （ADTS 原始流在用户视角下等同于 .m4a 容器中的 AAC）
+///
+/// 其他格式保持原样（wav/mp3/flac/ogg/opus/webm/weba/wma/mp4/mpeg/m4a/pcm）。
+String normalizeAudioFormat(String format) {
+  final lower = format.toLowerCase();
+  if (lower == 'aac') return 'm4a';
+  return lower;
 }
 
 // ===========================================================================
@@ -122,6 +158,17 @@ String detectAudioFormat(Uint8List data) {
     return 'wav';
   }
 
+  // AAC ADTS: 12-bit sync (0xFFF), MPEG-4/2, layer=00
+  // Must be checked BEFORE MP3 (both start with 0xFFFx but differ in layer bits).
+  // MP3 Layer III has layer=01, AAC has layer=00.
+  if (data.length >= 4 && data[0] == 0xFF && (data[1] & 0xF0) == 0xF0) {
+    final header = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
+    final layer = (header >> 17) & 0x3;
+    if (layer == 0) {
+      return 'aac';
+    }
+  }
+
   // MP3: "ID3" tag
   if (data[0] == _magicMp3Id3[0] &&
       data[1] == _magicMp3Id3[1] &&
@@ -129,8 +176,8 @@ String detectAudioFormat(Uint8List data) {
     return 'mp3';
   }
 
-  // MP3: MPEG sync (0xFFFx)
-  if (data.length >= 2 && data[0] == 0xFF && (data[1] & 0xF0) == 0xF0) {
+  // MP3: MPEG sync (0xFFFx) — remaining after AAC check
+  if (data.length >= 2 && data[0] == 0xFF && (data[1] & 0xE0) == 0xE0) {
     return 'mp3';
   }
 

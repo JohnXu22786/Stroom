@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'home_shared.dart';
 
 import '../main.dart' as main_lib;
-import '../services/auto_backup_service.dart';
 import 'assistant_selection_page.dart';
 import 'files_page_shared.dart';
 import 'topic_selection_page.dart';
-import 'catcatch_page.dart' hide showMediaPreview;
+import 'catcatch_page.dart';
 import 'unified_task_list_page.dart';
 import '../catcatch/providers/catcatch_provider.dart';
 import '../catcatch/models/catcatch_task.dart' as catcatch_task;
@@ -45,32 +43,11 @@ class HomePage extends ConsumerStatefulWidget {
 class _HomePageState extends ConsumerState<HomePage> {
   final _chatNavigatorKey = GlobalKey<NavigatorState>();
 
-  bool _autoBackupTriggered = false;
-
   @override
   void initState() {
     super.initState();
-    // 在主页构建完成后触发一次后台自动备份
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _triggerAutoBackup();
-    });
-  }
-
-  /// 触发后台自动备份（仅在非 Web 平台、非测试环境下执行一次）。
-  Future<void> _triggerAutoBackup() async {
-    if (_autoBackupTriggered) return;
-    if (kIsWeb) return;
-    _autoBackupTriggered = true;
-
-    // 以最小占用在后台执行备份，不阻塞前台操作
-    AutoBackupService.performAutoBackup().then((success) {
-      debugPrint('[HomePage] 自动后台备份${success ? '完成' : '未完成（可能已在运行或被取消）'}');
-    });
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
+    // 备份由 Application._runPostStartupTasks 在启动后自动触发。
+    // 生命周期取消备份由 Application.didChangeAppLifecycleState 统一处理。
   }
 
   /// Resets the chat tab's nested navigator so it always shows
@@ -305,7 +282,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   /// 构建侧边栏导航（用于桌面端）
-  Widget _buildNavigationRail(BuildContext context, int activeTaskCount) {
+  Widget _buildNavigationRail(BuildContext context) {
     final selectedPage = ref.watch(selectedPageProvider);
 
     return NavigationRail(
@@ -331,18 +308,10 @@ class _HomePageState extends ConsumerState<HomePage> {
       labelType: NavigationRailLabelType.all,
       destinations: [
         NavigationRailDestination(
-          icon: Badge(
-            isLabelVisible: activeTaskCount > 0,
-            label: Text('$activeTaskCount'),
-            child: Icon(_getPageIcon(AppPage.home)),
-          ),
-          selectedIcon: Badge(
-            isLabelVisible: activeTaskCount > 0,
-            label: Text('$activeTaskCount'),
-            child: Icon(
-              _getPageIcon(AppPage.home),
-              color: Theme.of(context).colorScheme.primary,
-            ),
+          icon: Icon(_getPageIcon(AppPage.home)),
+          selectedIcon: Icon(
+            _getPageIcon(AppPage.home),
+            color: Theme.of(context).colorScheme.primary,
           ),
           label: Text(_getPageTitle(AppPage.home)),
         ),
@@ -375,7 +344,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   /// 构建底部导航栏（用于移动端）
-  Widget _buildBottomNavigationBar(BuildContext context, int activeTaskCount) {
+  Widget _buildBottomNavigationBar(BuildContext context) {
     final selectedPage = ref.watch(selectedPageProvider);
 
     return NavigationBar(
@@ -399,11 +368,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       },
       destinations: [
         NavigationDestination(
-          icon: Badge(
-            isLabelVisible: activeTaskCount > 0,
-            label: Text('$activeTaskCount'),
-            child: Icon(_getPageIcon(AppPage.home)),
-          ),
+          icon: Icon(_getPageIcon(AppPage.home)),
           label: _getPageTitle(AppPage.home),
         ),
         NavigationDestination(
@@ -476,32 +441,33 @@ class _HomePageState extends ConsumerState<HomePage> {
     final catcatchTasks = ref.watch(catcatchTasksProvider);
     final synthesisTasks = ref.watch(taskListProvider);
     final backgroundTasks = ref.watch(backgroundTasksProvider);
-    final lastRead = ref.watch(taskListLastReadProvider);
-    final activeTaskCount = catcatchTasks
-            .where(
-              (t) =>
-                  t.status.name != 'completed' &&
-                  ((t.statusChangedAt ?? t.createdAt).isAfter(lastRead) ||
-                      (t.status.name == 'running' &&
-                          t.steps.any(
-                            (s) => s.type.name == 'userSelecting' && s.running,
-                          ))),
-            )
-            .length +
-        synthesisTasks
-            .where(
-              (t) =>
-                  t.status.name != 'completed' &&
-                  (t.statusChangedAt ?? t.createdAt).isAfter(lastRead),
-            )
-            .length +
-        backgroundTasks
-            .where(
-              (t) =>
-                  t.status != TaskStatus.completed &&
-                  (t.statusChangedAt ?? t.createdAt).isAfter(lastRead),
-            )
-            .length;
+
+    // --- Compute status counts for the status card ---
+    int inProgressCount = 0;
+    int completedCount = 0;
+    int failedCount = 0;
+
+    void countCatchStatusName(String statusName) {
+      if (statusName == 'running' ||
+          statusName == 'paused' ||
+          statusName == 'waiting') {
+        inProgressCount++;
+      } else if (statusName == 'completed') {
+        completedCount++;
+      } else if (statusName == 'failed') {
+        failedCount++;
+      }
+    }
+
+    for (final t in catcatchTasks) {
+      countCatchStatusName(t.status.name);
+    }
+    for (final t in synthesisTasks) {
+      countCatchStatusName(t.status.name);
+    }
+    for (final t in backgroundTasks) {
+      countCatchStatusName(t.status.name);
+    }
 
     return SafeArea(
       top: true,
@@ -510,8 +476,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header — notification button integrated into the row
-            // so it never overlaps or causes overflow on small screens.
+            // Header — no notification button (replaced by status card)
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
               child: Row(
@@ -529,25 +494,6 @@ class _HomePageState extends ConsumerState<HomePage> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(20),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const UnifiedTaskListPage(),
-                        ),
-                      );
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.all(10),
-                      child: Badge(
-                        isLabelVisible: activeTaskCount > 0,
-                        label: Text('$activeTaskCount'),
-                        child: const Icon(Icons.pending_actions, size: 22),
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -556,7 +502,11 @@ class _HomePageState extends ConsumerState<HomePage> {
               '选择一个功能模块开始使用',
               style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+            // Status card — shows task counts by status
+            _buildStatusCard(
+                context, inProgressCount, completedCount, failedCount),
+            const SizedBox(height: 16),
             // Module grid
             Expanded(
               child: GridView(
@@ -727,6 +677,158 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
+  /// 构建扁平圆角框状态卡片
+  Widget _buildStatusCard(
+    BuildContext context,
+    int inProgressCount,
+    int completedCount,
+    int failedCount,
+  ) {
+    final cs = Theme.of(context).colorScheme;
+
+    Widget _statusItem({
+      required int count,
+      required String label,
+      required Color dotColor,
+      required int tabIndex,
+    }) {
+      return Expanded(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => UnifiedTaskListPage(initialTab: tabIndex),
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '$count',
+                  style: TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                    color: cs.onSurface,
+                    height: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: dotColor,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+        child: Column(
+          children: [
+            // "查看全部 >" 文字按钮 — 极简风格
+            Align(
+              alignment: Alignment.centerRight,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const UnifiedTaskListPage(initialTab: 0),
+                    ),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 4,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '查看全部',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.primary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(width: 1),
+                      Text(
+                        '>',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.primary,
+                          fontWeight: FontWeight.w500,
+                          height: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            // Status items row — 等分三列
+            Row(
+              children: [
+                _statusItem(
+                  count: inProgressCount,
+                  label: '进行中',
+                  dotColor: const Color(0xFFFF9800), // orange
+                  tabIndex: 1,
+                ),
+                _statusItem(
+                  count: completedCount,
+                  label: '已完成',
+                  dotColor: const Color(0xFF4CAF50), // green
+                  tabIndex: 2,
+                ),
+                _statusItem(
+                  count: failedCount,
+                  label: '失败',
+                  dotColor: const Color(0xFFF44336), // red
+                  tabIndex: 3,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // 在启动时消费 catcatchStartupProvider，触发 restoreUnfinishedTasks
@@ -734,35 +836,6 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     final isMobile = _isMobile(context);
     final selectedPage = ref.watch(selectedPageProvider);
-    final catcatchTasks = ref.watch(catcatchTasksProvider);
-    final synthesisTasks = ref.watch(taskListProvider);
-    final backgroundTasks = ref.watch(backgroundTasksProvider);
-    final lastRead = ref.watch(taskListLastReadProvider);
-    final activeTaskCount = catcatchTasks
-            .where(
-              (t) =>
-                  t.status.name != 'completed' &&
-                  ((t.statusChangedAt ?? t.createdAt).isAfter(lastRead) ||
-                      (t.status.name == 'running' &&
-                          t.steps.any(
-                            (s) => s.type.name == 'userSelecting' && s.running,
-                          ))),
-            )
-            .length +
-        synthesisTasks
-            .where(
-              (t) =>
-                  t.status.name != 'completed' &&
-                  (t.statusChangedAt ?? t.createdAt).isAfter(lastRead),
-            )
-            .length +
-        backgroundTasks
-            .where(
-              (t) =>
-                  t.status != TaskStatus.completed &&
-                  (t.statusChangedAt ?? t.createdAt).isAfter(lastRead),
-            )
-            .length;
 
     ref.listen(catcatchTasksProvider, (prev, next) {
       if (!mounted) return;
@@ -820,7 +893,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         body: Row(
           children: [
             // 桌面端显示侧边栏导航
-            if (!isMobile) _buildNavigationRail(context, activeTaskCount),
+            if (!isMobile) _buildNavigationRail(context),
             // 页面内容区域，使用IndexedStack保持各页面状态
             Expanded(
               child: IndexedStack(
@@ -832,9 +905,8 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
           ],
         ),
-        bottomNavigationBar: isMobile
-            ? _buildBottomNavigationBar(context, activeTaskCount)
-            : null,
+        bottomNavigationBar:
+            isMobile ? _buildBottomNavigationBar(context) : null,
       ),
     );
   }

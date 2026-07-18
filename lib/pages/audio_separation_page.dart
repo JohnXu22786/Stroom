@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -8,6 +9,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
 import '../utils/audio_separation.dart';
+import '../utils/audio_utils.dart' show detectAudioFormat, normalizeAudioFormat;
 import '../providers/tts_state_provider.dart';
 import '../providers/background_task_provider.dart';
 import '../utils/file_manifest.dart';
@@ -21,7 +23,10 @@ import 'chat/composer/video_album_picker_dialog.dart';
 /// 允许用户选择视频文件，提取音频并保存到音频库。
 /// 桌面端使用 FFmpeg 进行音频提取，Web 端暂不支持。
 class AudioSeparationPage extends ConsumerStatefulWidget {
-  const AudioSeparationPage({super.key});
+  const AudioSeparationPage({super.key, this.retryData});
+
+  /// Retry data to pre-populate the form (video files, etc.).
+  final Map<String, dynamic>? retryData;
 
   @override
   ConsumerState<AudioSeparationPage> createState() =>
@@ -48,7 +53,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   // 选中的视频文件列表（支持多选）
   final List<SelectedVideo> _selectedVideos = [];
 
-  bool _isProcessing = false;
+  final bool _isProcessing = false;
   bool _hasError = false;
   String _errorMessage = '';
   bool _engineChecked = false;
@@ -62,6 +67,34 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   void initState() {
     super.initState();
     _checkEngine();
+    _applyRetryData();
+  }
+
+  /// Pre-populate form from retry data if available.
+  void _applyRetryData() {
+    final data = widget.retryData;
+    if (data == null) return;
+
+    final videosData = data['videos'] as List<dynamic>?;
+    if (videosData != null) {
+      for (final videoData in videosData) {
+        if (videoData is Map) {
+          final bytesStr = videoData['bytes'] as String?;
+          if (bytesStr != null) {
+            try {
+              final bytes = base64Decode(bytesStr);
+              _selectedVideos.add(SelectedVideo(
+                bytes: bytes,
+                name: videoData['name'] as String? ?? 'video',
+                format: videoData['format'] as String? ?? 'mp4',
+              ));
+            } catch (e) {
+              debugPrint('Failed to decode retry video: $e');
+            }
+          }
+        }
+      }
+    }
   }
 
   Future<void> _checkEngine() async {
@@ -271,7 +304,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  '未检测到 media_kit 引擎',
+                  '未检测到音频分离引擎',
                   style: TextStyle(fontSize: 12, color: Colors.orange[800]),
                 ),
               ),
@@ -662,58 +695,101 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     if (!_engineAvailable) {
       setState(() {
         _hasError = true;
-        _errorMessage = '音频分离引擎不可用，请检查 media_kit 组件。';
+        _errorMessage = '音频分离引擎不可用。';
       });
       return;
     }
 
-    // Check engine for each video before proceeding
     final videosToProcess = List<SelectedVideo>.from(_selectedVideos);
 
-    // Pop back to home page immediately so user can see task progress
+    // Capture notifier references BEFORE Navigator.pop — after the widget is
+    // disposed, ConsumerState.ref may become unreliable for read() calls.
+    final bgNotifier = ref.read(backgroundTasksProvider.notifier);
+    final audioRecordsNotifier = ref.read(audioRecordsProvider.notifier);
+
+    // Add ALL tasks to the task list first so they appear simultaneously.
+    // Each video gets its own background task with a unique title.
+    final taskIds = <String>[];
+    for (final video in videosToProcess) {
+      final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
+
+      // Build retry data: encode only the current video bytes as base64
+      // so they can be restored on retry (each task handles one file)
+      final retryData = <String, dynamic>{
+        'type': 'audioSeparation',
+        'videos': [
+          <String, dynamic>{
+            'bytes': base64Encode(video.bytes),
+            'name': video.name,
+            'format': video.format,
+          },
+        ],
+      };
+
+      final taskId = bgNotifier.addTask(
+        type: BackgroundTaskType.audioSeparation,
+        title: title,
+        retryData: retryData,
+      );
+      taskIds.add(taskId);
+    }
+
+    // Pop back to home page so user can see ALL task progress
     if (mounted) {
       Navigator.pop(context);
     }
 
-    // Process each video as a separate background task
+    // Now process each video sequentially
     for (int i = 0; i < videosToProcess.length; i++) {
       final video = videosToProcess[i];
+      final taskId = taskIds[i];
       final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
-      final taskId = ref
-          .read(backgroundTasksProvider.notifier)
-          .addTask(type: BackgroundTaskType.audioSeparation, title: title);
 
       try {
+        // Step 0: 分离音频 - mark as running
+        bgNotifier.updateStep(taskId, 0, running: true);
+
         final audioBytes = await _engine.extractAudio(
           videoBytes: video.bytes,
           videoFormat: video.format,
           onProgress: (progress) {
-            ref
-                .read(backgroundTasksProvider.notifier)
-                .setResult(taskId, '正在提取音频... $progress%');
+            bgNotifier.setResult(taskId, '正在提取音频... $progress%');
           },
         );
 
-        // 保存到音频库
-        await _saveAudioToLibrary(
+        // Step 0: 分离音频 - mark as completed
+        bgNotifier.updateStep(taskId, 0, completed: true);
+
+        // Step 1: 保存到文件 - mark as running
+        bgNotifier.updateStep(taskId, 1, running: true);
+
+        // 保存到音频库 (返回文件路径)
+        final filePath = await _saveAudioToLibrary(
           audioBytes,
+          audioRecordsNotifier: audioRecordsNotifier,
           displayName: title,
           videoName: video.name,
         );
 
-        // Mark task as completed
-        ref.read(backgroundTasksProvider.notifier).completeTask(taskId);
+        // Step 1: 保存到文件 - mark as completed
+        bgNotifier.updateStep(taskId, 1, completed: true);
+
+        // Mark task as completed with file path
+        bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
       } catch (e) {
-        // Mark task as failed (widget may be gone, but notifier is independent)
-        ref
-            .read(backgroundTasksProvider.notifier)
-            .failTask(taskId, error: '音频提取失败: $e');
+        // Mark task as failed (notifier is independent of widget lifecycle)
+        bgNotifier.failTask(taskId, error: '音频提取失败: $e');
       }
     }
+
+    // Fire-and-forget: refresh the audio library list after all tasks complete
+    unawaited(audioRecordsNotifier.loadRecords());
   }
 
-  Future<void> _saveAudioToLibrary(
+  /// 保存音频到音频库，并返回保存的文件路径。如果获取路径失败则返回 null。
+  Future<String?> _saveAudioToLibrary(
     Uint8List audioBytes, {
+    AudioRecordsNotifier? audioRecordsNotifier,
     String? displayName,
     String? videoName,
   }) async {
@@ -727,7 +803,11 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
         displayName ?? '音频分离_${p.basenameWithoutExtension(effectiveVideoName)}';
 
     final hash = computeAudioHash(audioBytes);
-    final format = 'mp3';
+    // 检测原始格式（可能为 'aac'）后规范化为面向用户的扩展名（如 'm4a'），
+    // 这样保存的文件以 .m4a 命名、AudioRecord.format 也为 'm4a'，与显示名
+    // (M4A) 保持一致。
+    final detectedFormat = detectAudioFormat(audioBytes);
+    final format = normalizeAudioFormat(detectedFormat);
 
     // 保存音频文件
     await FileManifest.writeFile('$hash.$format', audioBytes);
@@ -744,8 +824,19 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     );
 
     await FileManifest.addRecord(record);
+
+    // 获取文件路径用于"打开文件"按钮
+    final filePath = await FileManifest.readFilePath('$hash.$format');
+
     // Fire-and-forget: refresh the audio library list asynchronously
-    unawaited(ref.read(audioRecordsProvider.notifier).loadRecords());
+    // Use captured notifier if provided (safer after widget dispose)
+    if (audioRecordsNotifier != null) {
+      unawaited(audioRecordsNotifier.loadRecords());
+    } else {
+      unawaited(ref.read(audioRecordsProvider.notifier).loadRecords());
+    }
+
+    return filePath;
   }
 
   void _goToAudioLibrary() {

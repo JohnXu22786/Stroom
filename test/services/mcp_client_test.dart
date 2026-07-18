@@ -11,7 +11,7 @@ void main() {
       final msg = JsonRpcUtils.parseResponse(json);
       expect(msg, isNotNull);
       expect(msg!.id, equals('1'));
-      expect(msg!.result, isNotNull);
+      expect(msg.result, isNotNull);
     });
 
     test('returns null for invalid JSON', () {

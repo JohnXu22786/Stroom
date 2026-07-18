@@ -7,8 +7,6 @@ import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/utils/video_manifest.dart';
-import 'package:stroom/services/manifest_database_shared.dart'
-    show utf8Encode, ManifestTables;
 import 'package:stroom/utils/web_file_store.dart';
 
 void main() {

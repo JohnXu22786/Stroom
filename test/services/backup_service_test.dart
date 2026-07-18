@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/services/app_log_service.dart';
 import 'package:stroom/services/backup_service.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
@@ -12,6 +13,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() async {
+    // Disable file logging for testWidgets (FakeAsync zone doesn't support file I/O)
+    AppLogService.disableFileLogging();
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     TextManifest.invalidateCache();
@@ -496,7 +499,7 @@ void main() {
 
       final manifest = jsonDecode(utf8.decode(manifestData!));
       expect(manifest, isA<Map<String, dynamic>>());
-      expect((manifest as Map<String, dynamic>)['version'], equals(1));
+      expect((manifest as Map<String, dynamic>)['version'], equals(2));
     });
   });
 }

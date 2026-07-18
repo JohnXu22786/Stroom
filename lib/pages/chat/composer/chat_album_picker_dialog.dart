@@ -193,7 +193,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                 child: Row(
                   children: [
                     Icon(Icons.folder,
-                        size: 14, color: cs.primary.withOpacity(0.7)),
+                        size: 14, color: cs.primary.withValues(alpha: 0.7)),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
@@ -264,7 +264,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
             Icon(
               _isRoot ? Icons.folder_outlined : Icons.folder_open_outlined,
               size: 48,
-              color: cs.onSurfaceVariant.withOpacity(0.4),
+              color: cs.onSurfaceVariant.withValues(alpha: 0.4),
             ),
             const SizedBox(height: 12),
             Text(
@@ -340,7 +340,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                 height: 44,
                 margin: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.amber.withOpacity(0.15),
+                  color: Colors.amber.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Center(

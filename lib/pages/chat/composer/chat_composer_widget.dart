@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -22,7 +21,6 @@ import 'package:stroom/pages/extended_image_editor_page.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'chat_setting_panels.dart';
-import 'chat_album_picker_dialog.dart';
 import 'chat_file_picker_dialog.dart';
 import 'composer_shared.dart';
 
@@ -40,7 +38,6 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   final String initialDraftText;
   final ValueChanged<List<String>>? onModelsReordered;
   final List<ReasoningParam> reasoningParams;
-  final bool hasReasoningParams;
 
   // ── Edit mode support ──
   /// When non-null, the composer enters edit mode for the given message.
@@ -77,7 +74,6 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     this.initialDraftText = '',
     this.onModelsReordered,
     this.reasoningParams = const [],
-    this.hasReasoningParams = false,
     this.editingMessageId,
     this.editingMessageText,
     this.editingMessageAttachments,
@@ -464,10 +460,12 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
 
   void _showReasoningPanel() {
     final reasoningEnabled = ref.read(reasoningEnabledProvider);
+    final reasoningEffortEnabled = ref.read(reasoningEffortEnabledProvider);
     final reasoningParamValues = ref.read(reasoningParamValuesProvider);
     showReasoningPanel(
       context: context,
       reasoningEnabled: reasoningEnabled,
+      reasoningEffortEnabled: reasoningEffortEnabled,
       reasoningParamSelections: reasoningParamValues,
       reasoningParams: widget.reasoningParams,
       onReasoningToggle: (value) {
@@ -476,18 +474,49 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
           (prefs) => prefs.setBool('reasoning_enabled', value),
         );
       },
+      onReasoningEffortToggle: (value) {
+        ref.read(reasoningEffortEnabledProvider.notifier).state = value;
+        // Effort toggle state is auto-persisted via the ref.listen in
+        // chat_page.dart's _persistCurrentReasoningSettings mechanism.
+      },
       onReasoningParamChanged: (paramName, value) {
         final current = Map<String, String>.from(
           ref.read(reasoningParamValuesProvider),
         );
         current[paramName] = value;
         ref.read(reasoningParamValuesProvider.notifier).state = current;
-        // Sync reasoningEffortProvider when reasoning_effort changes
+        // Sync reasoningEffortProvider when an effort param changes
         // so the effort value is available for API calls (chat_page sends
         // it via ChatAdapter.sendStreamWithTools).
-        if (paramName == 'reasoning_effort') {
+        final effortParam =
+            widget.reasoningParams.cast<ReasoningParam?>().firstWhere(
+                  (p) => p?.isEffortParam ?? false,
+                  orElse: () => null,
+                );
+        if (effortParam != null && paramName == effortParam.paramName) {
           ref.read(reasoningEffortProvider.notifier).state = value;
         }
+        SharedPreferences.getInstance().then(
+          (prefs) => prefs.setString('reasoning_params', current.toString()),
+        );
+      },
+    );
+  }
+
+  void _showCustomParamsPanel() {
+    final reasoningParamValues = ref.read(reasoningParamValuesProvider);
+    final reasoningEnabled = ref.read(reasoningEnabledProvider);
+    showCustomReasoningParamsPanel(
+      context: context,
+      reasoningEnabled: reasoningEnabled,
+      reasoningParamSelections: reasoningParamValues,
+      reasoningParams: widget.reasoningParams,
+      onReasoningParamChanged: (paramName, value) {
+        final current = Map<String, String>.from(
+          ref.read(reasoningParamValuesProvider),
+        );
+        current[paramName] = value;
+        ref.read(reasoningParamValuesProvider.notifier).state = current;
         SharedPreferences.getInstance().then(
           (prefs) => prefs.setString('reasoning_params', current.toString()),
         );
@@ -676,13 +705,14 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
 
     // Immediately compute base64 for the attachment so it's cached
     // and ready to send without waiting for conversion.
-    // Only cache for images (which need base64 for API calls) and
-    // text files (which may be sent inline).
+    // Cache for images, audio, video which need base64 for API calls
+    // (image_url, input_audio, video_url formats respectively).
+    // Also cache text files which may be sent inline.
     final String? base64Data;
-    if (fileType == 'image') {
+    if (fileType == 'image' || fileType == 'audio' || fileType == 'video') {
       base64Data = base64Encode(bytes);
     } else {
-      // For non-image files, base64 is not needed for API calls
+      // For document files, base64 may not be needed for API calls
       base64Data = null;
     }
 
@@ -874,18 +904,26 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     final hasAttachments = _pendingAttachments.isNotEmpty;
     final cs = Theme.of(context).colorScheme;
     final reasoningEnabled = ref.watch(reasoningEnabledProvider);
+    final reasoningEffortEnabled = ref.watch(reasoningEffortEnabledProvider);
     final reasoningParamValues = ref.watch(reasoningParamValuesProvider);
 
+    // Find the effort param (isEffortParam=true) from widget.reasoningParams
+    final effortParam =
+        widget.reasoningParams.cast<ReasoningParam?>().firstWhere(
+              (p) => p?.isEffortParam ?? false,
+              orElse: () => null,
+            );
+
     // Determine reasoning chip label and color based on reasoning state.
-    // When reasoning is enabled:
-    //   - If the user has selected a reasoning effort value in the model's
-    //     "推理力度" panel, show that value (e.g. "high", "low").
-    //   - Otherwise, show "推理" in purple (on state).
-    // When reasoning is disabled: show gray "推理".
+    // When reasoning is enabled AND effort toggle is on AND a value has been
+    // selected for the effort param: show that value (e.g. "high", "low").
+    // Otherwise: show "推理" (purple when enabled, grey when disabled).
     final String reasoningLabel;
     if (reasoningEnabled &&
-        reasoningParamValues.containsKey('reasoning_effort')) {
-      reasoningLabel = reasoningParamValues['reasoning_effort']!;
+        reasoningEffortEnabled &&
+        effortParam != null &&
+        reasoningParamValues.containsKey(effortParam.paramName)) {
+      reasoningLabel = reasoningParamValues[effortParam.paramName]!;
     } else {
       reasoningLabel = '推理';
     }
@@ -912,7 +950,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                   scrollDirection: Axis.horizontal,
                   buildDefaultDragHandles: false,
                   itemCount: _pendingAttachments.length,
-                  onReorder: _onReorderPendingAttachment,
+                  onReorderItem: _onReorderPendingAttachment,
                   itemBuilder: (ctx, i) {
                     final att = _pendingAttachments[i];
                     return ReorderableDelayedDragStartListener(
@@ -974,11 +1012,21 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                         icon: Icons.psychology_outlined,
                         label: reasoningLabel,
                         color: reasoningColor,
-                        onTap: widget.hasReasoningParams
-                            ? _showReasoningPanel
-                            : null,
-                        enabled: widget.hasReasoningParams,
+                        onTap: _showReasoningPanel,
+                        enabled: true,
                       ),
+                      // Custom reasoning params button (non-toggle, non-effort)
+                      if (widget.reasoningParams
+                          .where(
+                              (p) => !p.isReasoningToggle && !p.isEffortParam)
+                          .isNotEmpty)
+                        _SettingsChip(
+                          icon: Icons.tune,
+                          label: '自定义参数',
+                          color: Colors.blue,
+                          onTap: _showCustomParamsPanel,
+                          enabled: true,
+                        ),
                     ],
                   );
                 },
@@ -996,10 +1044,10 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                 ),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: cs.primary.withOpacity(0.1),
+                    color: cs.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: cs.primary.withOpacity(0.3),
+                      color: cs.primary.withValues(alpha: 0.3),
                       width: 1,
                     ),
                   ),
@@ -1080,7 +1128,8 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                           borderSide: BorderSide.none,
                         ),
                         filled: true,
-                        fillColor: cs.surfaceContainerHigh.withOpacity(0.8),
+                        fillColor:
+                            cs.surfaceContainerHigh.withValues(alpha: 0.8),
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16,
                           vertical: 10,

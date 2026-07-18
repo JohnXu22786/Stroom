@@ -1,6 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -8,6 +8,14 @@ import '../catcatch/engine/js_hook_script.dart';
 import '../catcatch/widgets/draggable_floating_panel.dart';
 
 const _scriptsKey = 'browser_user_scripts';
+
+/// Desktop user agent string for desktop-mode browsing.
+const _desktopUserAgent =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+/// Mobile user agent string for mobile-mode browsing.
+const _mobileUserAgent =
+    'Mozilla/5.0 (Linux; Android 13; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
 
 class UserScript {
   final String name;
@@ -44,6 +52,9 @@ class _BrowserPageState extends State<BrowserPage> {
   double _progress = 0;
   List<UserScript> _scripts = [];
 
+  /// Whether to use desktop user agent.
+  bool _isDesktopMode = false;
+
   // ===========================================================================
   // CatCatch sniffing state
   // ===========================================================================
@@ -53,6 +64,12 @@ class _BrowserPageState extends State<BrowserPage> {
 
   /// Whether the cat-catch hook has been injected for the current page.
   bool _catCatchHookInjected = false;
+
+  /// Whether the cat-catch floating panel is currently visible.
+  /// The panel persists its visibility state across page navigations
+  /// and is only hidden when the user manually closes it or toggles
+  /// the show/hide button in the bottom bar.
+  bool _catCatchPanelVisible = true;
 
   @override
   void initState() {
@@ -64,6 +81,16 @@ class _BrowserPageState extends State<BrowserPage> {
   @override
   void dispose() {
     _urlController.dispose();
+
+    // Privacy mode: delete all cookies when browser is closed.
+    // This ensures no history/cookies persist after the browser exits.
+    // Fire-and-forget is acceptable for cleanup operations during dispose.
+    try {
+      unawaited(CookieManager.instance().deleteAllCookies());
+    } catch (_) {
+      // Silently ignore errors during dispose
+    }
+
     super.dispose();
   }
 
@@ -156,6 +183,8 @@ class _BrowserPageState extends State<BrowserPage> {
   }
 
   /// Reset detected URLs for a new page load.
+  /// The panel visibility is NOT reset here — it persists across page
+  /// navigations until the user manually closes it.
   void _resetDetection() {
     setState(() {
       _detectedUrls.clear();
@@ -190,7 +219,8 @@ class _BrowserPageState extends State<BrowserPage> {
               borderSide: BorderSide.none,
             ),
             filled: true,
-            fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.5),
+            fillColor:
+                colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             suffixIcon: IconButton(
@@ -221,11 +251,16 @@ class _BrowserPageState extends State<BrowserPage> {
                   initialUrlRequest: URLRequest(url: WebUri(widget.initialUrl)),
                   initialSettings: InAppWebViewSettings(
                     javaScriptEnabled: true,
-                    domStorageEnabled: true,
+                    // Privacy: disable persistent DOM storage.
+                    // All data stays in memory and is discarded when the
+                    // browser closes.
+                    domStorageEnabled: false,
                     mixedContentMode:
                         MixedContentMode.MIXED_CONTENT_COMPATIBILITY_MODE,
                     useWideViewPort: true,
                     supportZoom: true,
+                    userAgent:
+                        _isDesktopMode ? _desktopUserAgent : _mobileUserAgent,
                   ),
                   onWebViewCreated: (controller) {
                     _webViewController = controller;
@@ -283,21 +318,22 @@ class _BrowserPageState extends State<BrowserPage> {
           ),
 
           // --- Draggable Floating Panel ---
-          if (_isLoading || _detectedUrls.isNotEmpty || !_catCatchHookInjected)
-            Positioned(
-              top: 8,
-              right: 8,
-              child: DraggableFloatingPanel(
-                detectedUrls: _detectedUrls,
-                onConfirmCapture: _onConfirmCapture,
-                onClose: () {
-                  setState(() {
-                    _detectedUrls.clear();
-                  });
-                },
-                initialPosition: const Offset(8, 8),
-              ),
-            ),
+          // Visibility is controlled by the parent via [visible] so that
+          // the panel persists across page navigations until the user
+          // manually closes or toggles it.
+          DraggableFloatingPanel(
+            key: const ValueKey('catcatch_panel'),
+            visible: _catCatchPanelVisible,
+            detectedUrls: _detectedUrls,
+            onConfirmCapture: _onConfirmCapture,
+            onClose: () {
+              setState(() {
+                _catCatchPanelVisible = false;
+                _detectedUrls.clear();
+              });
+            },
+            initialPosition: const Offset(8, 8),
+          ),
         ],
       ),
       bottomNavigationBar: BottomAppBar(
@@ -315,6 +351,54 @@ class _BrowserPageState extends State<BrowserPage> {
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: () => _webViewController?.reload(),
+            ),
+            // Desktop / Mobile UA toggle
+            IconButton(
+              icon: Icon(
+                _isDesktopMode ? Icons.phone_android : Icons.desktop_windows,
+                size: 20,
+              ),
+              tooltip: _isDesktopMode ? '切换到手机版' : '切换到电脑版',
+              onPressed: () async {
+                setState(() {
+                  _isDesktopMode = !_isDesktopMode;
+                });
+                // Apply the new user agent while preserving other settings
+                final currentSettings = await _webViewController?.getSettings();
+                final ua =
+                    _isDesktopMode ? _desktopUserAgent : _mobileUserAgent;
+                if (currentSettings != null) {
+                  await _webViewController?.setSettings(
+                    settings: InAppWebViewSettings(
+                      userAgent: ua,
+                      javaScriptEnabled:
+                          currentSettings.javaScriptEnabled ?? true,
+                      domStorageEnabled:
+                          currentSettings.domStorageEnabled ?? false,
+                      mixedContentMode: currentSettings.mixedContentMode ??
+                          MixedContentMode.MIXED_CONTENT_COMPATIBILITY_MODE,
+                      useWideViewPort: currentSettings.useWideViewPort ?? true,
+                      supportZoom: currentSettings.supportZoom ?? true,
+                    ),
+                  );
+                }
+                _webViewController?.reload();
+              },
+            ),
+            // CatCatch panel show/hide toggle
+            IconButton(
+              icon: Icon(
+                Icons.pets,
+                color: _catCatchPanelVisible
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              tooltip: _catCatchPanelVisible ? '隐藏嗅探面板' : '显示嗅探面板',
+              onPressed: () {
+                setState(() {
+                  _catCatchPanelVisible = !_catCatchPanelVisible;
+                });
+              },
             ),
           ],
         ),

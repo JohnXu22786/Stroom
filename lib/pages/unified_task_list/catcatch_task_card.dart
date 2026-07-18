@@ -4,7 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../catcatch/models/media_resource.dart';
 import '../../catcatch/providers/catcatch_provider.dart';
 import '../../catcatch/models/catcatch_task.dart' as catcatch;
-import '../catcatch_page.dart' hide showMediaPreview;
+import '../../utils/audio_utils.dart';
+import '../catcatch_page.dart';
 import 'task_utils.dart';
 import 'media_preview_sheet.dart';
 
@@ -87,6 +88,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
       case catcatch.TaskStatus.paused:
         statusColor = Colors.orange;
         statusIcon = Icons.pause_circle;
+        break;
+      case catcatch.TaskStatus.waiting:
+        statusColor = Colors.purple;
+        statusIcon = Icons.hourglass_empty;
         break;
     }
 
@@ -893,7 +898,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     Row(
                       children: [
                         Text(
-                          '${formatSize(media.size)} · ${media.mimeType ?? media.ext.toUpperCase()}',
+                          '${formatSize(media.size)} · ${media.mimeType ?? formatDisplayName(media.ext)}',
                           style: Theme.of(context)
                               .textTheme
                               .bodySmall
@@ -1119,7 +1124,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     icon: Icons.folder_open,
                     label: '打开文件',
                     color: Colors.green,
-                    onPressed: () => openFile(task.downloadedFilePath!),
+                    onPressed: () =>
+                        openFile(task.downloadedFilePath!, context),
                   ),
                 _actionButton(
                   icon: Icons.delete_outline,

@@ -2,8 +2,23 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import '../providers/chat_api_provider.dart';
-
+import '../utils/audio_utils.dart';
+import 'app_log_service.dart';
 import '../utils/http_utils.dart';
+
+// Formati supportati dal Whisper API (OpenAI-compatible).
+const _asrSupportedFormats = {
+  'flac',
+  'mp3',
+  'mp4',
+  'mpeg',
+  'mpga',
+  'm4a',
+  'ogg',
+  'opus',
+  'wav',
+  'webm',
+};
 
 // ============================================================================
 // ASR Config
@@ -15,8 +30,12 @@ import '../utils/http_utils.dart';
 /// The user provides the full endpoint URL (e.g. https://api.openai.com/v1/audio/transcriptions),
 /// which is used directly without appending any path. The request is sent as:
 ///   POST {host}
-///   Content-Type: multipart/form-data
-///   Body: file, model, language (optional), response_format=json
+///   Content-Type: multipart/form-data (with boundary)
+///   Body: file (binary), model, language (optional), response_format=json
+///
+/// This follows the standard OpenAI STT multipart/form-data convention,
+/// which is compatible with OpenAI, OpenRouter, aihubmix, and other
+/// OpenAI-compatible providers.
 class AsrConfig {
   final String model;
   final String apiKey;
@@ -77,7 +96,8 @@ class AsrResult {
 /// An ASR service that uses an OpenAI-compatible audio/transcriptions API
 /// to transcribe audio into text.
 ///
-/// The API is called with a multipart/form-data POST request containing:
+/// The API is called with a multipart/form-data POST request (standard OpenAI
+/// STT convention) containing:
 /// - `file`: the audio file data
 /// - `model`: the Whisper model ID (default: whisper-1)
 /// - `language` (optional): ISO language code
@@ -146,10 +166,17 @@ class AsrService {
   /// [audioBytes] - The raw audio data (e.g., WAV, MP3, M4A, etc.).
   /// [audioFormat] - The audio file extension/format (e.g., 'wav', 'mp3', 'm4a').
   /// Returns [AsrResult] with the transcribed text.
+  ///
+  /// The request is sent as multipart/form-data (standard OpenAI STT convention)
+  /// with the audio file as a binary part. The labeled [audioFormat] is used
+  /// directly for the filename and MIME type — no auto-detection or conversion
+  /// is performed.
   Future<AsrResult> transcribe({
     required Uint8List audioBytes,
     String audioFormat = 'wav',
   }) async {
+    await AppLogService.info(
+        'AsrService', '开始转写: 格式=$audioFormat, 大小=${audioBytes.length} 字节');
     if (config.host.isEmpty) {
       throw Exception('API 地址未配置');
     }
@@ -157,20 +184,37 @@ class AsrService {
       throw Exception('音频数据为空');
     }
 
+    final fmt = audioFormat.toLowerCase();
+    if (!_asrSupportedFormats.contains(fmt)) {
+      throw Exception(
+        '不支持的音频格式: $fmt。'
+        'Whisper API 支持的格式: ${_asrSupportedFormats.join(", ")}。'
+        '请将音频转换为 WAV/MP3 格式后重试。',
+      );
+    }
+
     final stopwatch = Stopwatch()..start();
 
-    final fileName = 'audio.$audioFormat';
+    final fileName = 'audio.$fmt';
+    final mimeTypeString = getMimeType(fmt);
+    final mimeType = mimeTypeString.contains('/')
+        ? DioMediaType.parse(mimeTypeString)
+        : null;
     final formData = FormData.fromMap({
-      'file': MultipartFile.fromBytes(audioBytes, filename: fileName),
+      'file': MultipartFile.fromBytes(
+        audioBytes,
+        filename: fileName,
+        contentType: mimeType,
+      ),
       'model': config.model,
       'response_format': 'json',
       if (config.language != null && config.language!.isNotEmpty)
         'language': config.language,
-    }, ListFormat.multi, false);
+    });
 
-    // Capture request diagnostics
+    // Capture request diagnostics (for error details dialog).
     lastRequestBody = {
-      'file': 'audio.$audioFormat (${audioBytes.length} bytes)',
+      'file': '$fileName (${audioBytes.length} bytes, $mimeTypeString)',
       'model': config.model,
       'response_format': 'json',
       if (config.language != null && config.language!.isNotEmpty)
@@ -186,6 +230,10 @@ class AsrService {
     lastResponseHeaders = null;
 
     try {
+      // ⚠️  Do NOT set contentType manually — Dio auto-generates the proper
+      //     Content-Type with boundary when sending FormData. Setting it
+      //     explicitly (e.g., contentType: 'multipart/form-data') strips the
+      //     boundary parameter, which all OpenAI-compatible servers reject.
       final response = await _dio.post(
         config.transcribeUrl,
         data: formData,
@@ -202,6 +250,8 @@ class AsrService {
 
       final text = _extractText(response.data);
 
+      await AppLogService.info('AsrService',
+          '转写完成: ${stopwatch.elapsedMilliseconds}ms, 文本长度=${text.length}');
       return AsrResult(
         text: text,
         processingTimeMs: stopwatch.elapsedMilliseconds,
@@ -223,7 +273,7 @@ class AsrService {
       lastResponseData = null;
     }
     lastResponseStatusCode = e.response?.statusCode;
-    lastResponseHeaders = e.response?.headers?.map;
+    lastResponseHeaders = e.response?.headers.map;
   }
 
   /// Extract text from the standard OpenAI transcription response.

@@ -22,6 +22,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+          pub-cache: true
       - run: flutter pub get
       - name: Run all tests with coverage
         run: flutter test --coverage
@@ -43,11 +45,22 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+          pub-cache: true
       - run: flutter pub get
       - name: Install xvfb for headless display
         run: sudo apt-get install -y xvfb
       - name: Run integration tests
-        run: xvfb-run flutter test integration_test/
+        run: |
+          mkdir -p test-reports
+          xvfb-run flutter test -d linux integration_test/ --reporter expanded 2>&1 | tee test-reports/integration-test.log
+      - name: Upload integration test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-reports
+          path: test-reports/
+          retention-days: 7
 
   # ── Linux Build ──────────────────────────────────────────────────────────
   build-linux:
@@ -58,6 +71,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+          pub-cache: true
       - name: Install Linux dependencies
         run: |
           sudo apt-get update -y
@@ -75,6 +90,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+          pub-cache: true
       - run: flutter pub get
       - run: flutter build web --release
 
@@ -91,6 +108,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+          pub-cache: true
       - uses: actions/cache@v4
         with:
           path: ~/.gradle
@@ -112,10 +131,13 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+          pub-cache: true
       - run: flutter pub get
       - run: flutter build windows --release
 
   # ── macOS ARM64 Build ─────────────────────────────────────────────────────
+  # Uses macos-15 (Apple Silicon ARM64). Builds native arm64 binary.
   build-macos-arm64:
     name: Build macOS ARM64
     runs-on: macos-15
@@ -124,6 +146,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+          pub-cache: true
       - run: flutter create --platforms=macos .
       - run: flutter pub get
       - name: Clean SwiftPM cache
@@ -133,17 +157,26 @@ jobs:
       - name: Configure CocoaPods
         run: |
           pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
-      - run: flutter build macos --release
+      - name: Build macOS ARM64
+        run: flutter build macos --release
+        env:
+          FLUTTER_XCODE_ARCHS: arm64
 
   # ── macOS x64 Build ───────────────────────────────────────────────────────
+  # GitHub no longer provides Intel (x86_64) macOS runners (macos-13 removed).
+  # All macOS runners are now Apple Silicon (ARM64).
+  # x86_64 is cross-compiled on ARM64 via Xcode's cross-compilation support.
+  # This is the same approach Flutter uses for universal builds.
   build-macos-x64:
     name: Build macOS x64
-    runs-on: macos-13
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+          pub-cache: true
       - run: flutter create --platforms=macos .
       - run: flutter pub get
       - name: Clean SwiftPM cache
@@ -153,7 +186,10 @@ jobs:
       - name: Configure CocoaPods
         run: |
           pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
-      - run: flutter build macos --release
+      - name: Build macOS x64
+        run: flutter build macos --release
+        env:
+          FLUTTER_XCODE_ARCHS: x86_64
 
   # ── iOS Build ────────────────────────────────────────────────────────────
   build-ios:
@@ -164,6 +200,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+          pub-cache: true
       - run: flutter create --platforms=ios .
       - run: flutter pub get
       - name: Clean SwiftPM cache

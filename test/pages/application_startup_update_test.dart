@@ -8,7 +8,8 @@ import 'package:stroom/application.dart';
 import 'package:stroom/providers/update_provider.dart';
 import 'package:stroom/providers/theme_provider.dart';
 
-/// Creates a mock [Dio] that returns the given [jsonResponse].
+/// Creates a mock [Dio] that returns the given [jsonResponse] wrapped in
+/// a list (matching the [/releases] array response from the unified endpoint).
 Dio _createMockDio(String jsonResponse, {int statusCode = 200}) {
   final dio = Dio(BaseOptions());
   dio.interceptors.add(InterceptorsWrapper(
@@ -18,7 +19,7 @@ Dio _createMockDio(String jsonResponse, {int statusCode = 200}) {
           requestOptions: options,
           statusCode: statusCode,
           data: statusCode == 200
-              ? jsonDecode(jsonResponse) as Map<String, dynamic>
+              ? jsonDecode('[$jsonResponse]') as List<dynamic>
               : jsonResponse,
         ),
       );
@@ -29,7 +30,10 @@ Dio _createMockDio(String jsonResponse, {int statusCode = 200}) {
 
 /// Build a GitHub releases API response for the given tag.
 String _githubRelease(String tagName,
-    {String body = '', String? htmlUrl, List<Map<String, String>>? assets}) {
+    {String body = '',
+    String? htmlUrl,
+    List<Map<String, String>>? assets,
+    String publishedAt = '2024-01-15T10:00:00Z'}) {
   htmlUrl ??= 'https://github.com/JohnXu22786/Stroom/releases/tag/$tagName';
   final assetsJson = assets != null
       ? ',\n  "assets": [${assets.map((a) => '{\n      "name": "${a['name']}",\n      "browser_download_url": "${a['browser_download_url']}"\n    }').join(',\n    ')}]'
@@ -37,6 +41,7 @@ String _githubRelease(String tagName,
   return '''
 {
   "tag_name": "$tagName",
+  "published_at": "$publishedAt",
   "body": "$body",
   "html_url": "$htmlUrl"$assetsJson
 }

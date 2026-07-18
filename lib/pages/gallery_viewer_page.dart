@@ -105,11 +105,11 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
 
   Widget _buildSvgPage(Uint8List bytes) {
     return PhotoView.customChild(
-      child: SvgPicture.memory(bytes, fit: BoxFit.contain),
       minScale: PhotoViewComputedScale.contained,
       maxScale: PhotoViewComputedScale.covered * 3,
       initialScale: PhotoViewComputedScale.contained,
       backgroundDecoration: const BoxDecoration(color: Colors.black),
+      child: SvgPicture.memory(bytes, fit: BoxFit.contain),
     );
   }
 

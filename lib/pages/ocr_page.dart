@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -12,50 +11,64 @@ import '../providers/provider_config.dart';
 import '../providers/background_task_provider.dart';
 import '../providers/text_provider.dart';
 import '../services/ocr_service.dart';
-import '../services/storage_service.dart';
 import '../utils/data_sanitizer.dart';
-import '../utils/image_manifest.dart';
 import '../utils/text_manifest.dart';
 import '../widgets/folder_picker_dialog.dart';
 import 'chat/composer/chat_album_picker_dialog.dart';
 import 'extended_image_editor_page.dart';
 import 'image_editor_page.dart';
 import 'ocr/ocr_shared.dart';
+import 'provider_config_page.dart';
 export 'ocr/ocr_shared.dart';
 
 // ============================================================================
-// Provider: Get the first configured OCR config from provider entries
+// Helper: Pair model config with its source provider info
 // ============================================================================
 
-/// Reads the first OCR provider config from the provider entries.
-/// Returns null if none is configured.
-OcrConfig? _resolveOcrConfig(WidgetRef ref) {
+/// Pair of model config with its source provider info for display and
+/// request building.
+class _ModelOption {
+  final ModelConfig model;
+  final String providerName;
+  final String host;
+  final String apiKey;
+  const _ModelOption(this.model, this.providerName, this.host, this.apiKey);
+}
+
+/// Collect all available models with their source provider info from ALL
+/// configured OCR provider configs (not just the first one).
+/// Only includes configs with valid host and API key.
+List<_ModelOption> _getOcrModelOptions(WidgetRef ref) {
+  final state = ref.read(providerEntriesProvider);
+  final result = <_ModelOption>[];
+  for (final entry in state.entries) {
+    if (entry.type == 'ocr') {
+      for (final config in entry.configs) {
+        if (config.host.isNotEmpty && config.key.isNotEmpty) {
+          for (final model in config.models) {
+            result.add(_ModelOption(
+              model,
+              config.providerName,
+              config.host,
+              config.key,
+            ));
+          }
+        }
+      }
+    }
+  }
+  return result;
+}
+
+/// Get the first OCR entry ID for navigation to its config page.
+String? _getFirstOcrEntryId(WidgetRef ref) {
   final state = ref.read(providerEntriesProvider);
   for (final entry in state.entries) {
-    if (entry.type == 'ocr' && entry.configs.isNotEmpty) {
-      final config = entry.configs.first;
-      if (config.host.isNotEmpty && config.key.isNotEmpty) {
-        final model =
-            config.models.isNotEmpty ? config.models.first.modelId : 'gpt-4o';
-        return OcrConfig(host: config.host, apiKey: config.key, model: model);
-      }
+    if (entry.type == 'ocr') {
+      return entry.id;
     }
   }
   return null;
-}
-
-/// Collect all available model names from the first OCR provider config.
-List<ModelConfig> _getOcrModels(WidgetRef ref) {
-  final state = ref.read(providerEntriesProvider);
-  for (final entry in state.entries) {
-    if (entry.type == 'ocr' && entry.configs.isNotEmpty) {
-      final config = entry.configs.first;
-      if (config.host.isNotEmpty && config.key.isNotEmpty) {
-        return config.models;
-      }
-    }
-  }
-  return [];
 }
 
 // ============================================================================
@@ -65,11 +78,14 @@ List<ModelConfig> _getOcrModels(WidgetRef ref) {
 /// Main OCR page — allows taking photos or selecting from gallery,
 /// then performing OCR and saving results to text storage.
 class OcrPage extends ConsumerStatefulWidget {
-  const OcrPage({super.key, this.testImages});
+  const OcrPage({super.key, this.testImages, this.retryData});
 
   /// Test-only: pre-populate images for widget testing.
   @visibleForTesting
   final List<SelectedImage>? testImages;
+
+  /// Retry data to pre-populate the form (images, model, etc.).
+  final Map<String, dynamic>? retryData;
 
   @override
   ConsumerState<OcrPage> createState() => _OcrPageState();
@@ -104,6 +120,38 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     super.initState();
     if (widget.testImages != null) {
       _selectedImages.addAll(widget.testImages!);
+    }
+    _applyRetryData();
+  }
+
+  /// Pre-populate form from retry data if available.
+  void _applyRetryData() {
+    final data = widget.retryData;
+    if (data == null) return;
+
+    final imagesData = data['images'] as List<dynamic>?;
+    if (imagesData != null) {
+      for (final imgData in imagesData) {
+        if (imgData is Map) {
+          final bytesStr = imgData['bytes'] as String?;
+          if (bytesStr != null) {
+            try {
+              final bytes = base64Decode(bytesStr);
+              _selectedImages.add(SelectedImage(
+                bytes: bytes,
+                format: imgData['format'] as String? ?? 'jpeg',
+                sourceName: imgData['name'] as String?,
+              ));
+            } catch (e) {
+              debugPrint('Failed to decode retry image: $e');
+            }
+          }
+        }
+      }
+    }
+
+    if (data['modelIndex'] is int) {
+      _selectedModelIndex = data['modelIndex'] as int;
     }
   }
 
@@ -171,10 +219,72 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   // ==================================================================
 
   Widget _buildModelSelector(ColorScheme cs) {
-    final models = _getOcrModels(ref);
-    if (models.isEmpty) return const SizedBox.shrink();
+    final modelOptions = _getOcrModelOptions(ref);
 
-    final clampedIndex = _selectedModelIndex.clamp(0, models.length - 1);
+    // No models configured — show configure prompt (like TTS page)
+    if (modelOptions.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: cs.errorContainer.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: cs.error.withValues(alpha: 0.3),
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, size: 20, color: cs.error),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '识别模型',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              TextButton(
+                onPressed: () {
+                  final entryId = _getFirstOcrEntryId(ref);
+                  if (entryId != null) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ProviderConfigPage(entryId: entryId),
+                      ),
+                    );
+                  } else {
+                    Navigator.pushNamed(context, '/settings');
+                  }
+                },
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  foregroundColor: cs.error,
+                ),
+                child: const Text(
+                  '去配置',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final clampedIndex = _selectedModelIndex.clamp(0, modelOptions.length - 1);
     if (clampedIndex != _selectedModelIndex) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) setState(() => _selectedModelIndex = clampedIndex);
@@ -245,15 +355,21 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                       color: cs.onSurface,
                     ),
                     onChanged: (idx) {
-                      if (idx == null || idx >= models.length) return;
+                      if (idx == null || idx >= modelOptions.length) return;
                       setState(() => _selectedModelIndex = idx);
                     },
-                    items: List.generate(models.length, (i) {
-                      final model = models[i];
+                    items: List.generate(modelOptions.length, (i) {
+                      final opt = modelOptions[i];
+                      final modelName = opt.model.name.isNotEmpty
+                          ? opt.model.name
+                          : opt.model.modelId;
+                      final displayText = opt.providerName.isNotEmpty
+                          ? '$modelName | ${opt.providerName}'
+                          : modelName;
                       return DropdownMenuItem<int>(
                         value: i,
                         child: Text(
-                          model.name.isNotEmpty ? model.name : model.modelId,
+                          displayText,
                           overflow: TextOverflow.ellipsis,
                         ),
                       );
@@ -589,7 +705,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           padding: const EdgeInsets.all(8),
           buildDefaultDragHandles: false,
           itemCount: _selectedImages.length,
-          onReorder: _onReorder,
+          onReorderItem: _onReorder,
           proxyDecorator: (child, index, animation) {
             return Material(
               elevation: 4,
@@ -1035,37 +1151,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     }
   }
 
-  /// Select an in-app image record and read its bytes.
-  Future<void> _selectFromAppAlbum(ImageRecord record) async {
-    try {
-      final bytes = await ImageManifest.readFile(record.storagePath);
-      if (bytes == null || bytes.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('无法读取图片文件')));
-        }
-        return;
-      }
-
-      setState(() {
-        _selectedImages.add(
-          SelectedImage(
-            bytes: bytes,
-            format: record.format,
-            // Can use record.name but this method is less used; keep simple
-          ),
-        );
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('读取图片失败: $e')));
-      }
-    }
-  }
-
   // ==================================================================
   // Image Reorder & Preview
   // ==================================================================
@@ -1261,31 +1346,27 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   Future<void> _startOcr() async {
     if (_selectedImages.isEmpty) return;
 
-    final ocrConfig = _resolveOcrConfig(ref);
-    if (ocrConfig == null) {
+    final modelOptions = _getOcrModelOptions(ref);
+    if (modelOptions.isEmpty || _selectedModelIndex >= modelOptions.length) {
       setState(() {
-        _errorMessage = '请先在设置中配置 OCR 供应商';
+        _errorMessage = '请先在设置中配置 OCR 供应商和模型';
       });
       return;
     }
+
+    // Build config from the selected model's own source config,
+    // ensuring host/API key match the model's provider.
+    final selectedOption = modelOptions[_selectedModelIndex];
+    final effectiveConfig = OcrConfig(
+      host: selectedOption.host,
+      apiKey: selectedOption.apiKey,
+      model: selectedOption.model.modelId,
+    );
 
     // Capture notifier references BEFORE Navigator.pop — after the widget is
     // disposed, ConsumerState.ref becomes null and ref.read() would throw.
     final bgNotifier = ref.read(backgroundTasksProvider.notifier);
     final textNotifier = ref.read(textRecordsProvider.notifier);
-
-    // Resolve model BEFORE pop — ref is still valid here
-    bool useCustomModel;
-    OcrConfig effectiveConfig;
-    final models = _getOcrModels(ref);
-    if (_selectedModelIndex < models.length) {
-      final selectedModel = models[_selectedModelIndex];
-      effectiveConfig = ocrConfig.copyWith(model: selectedModel.modelId);
-      useCustomModel = true;
-    } else {
-      effectiveConfig = ocrConfig;
-      useCustomModel = false;
-    }
 
     // Create a background task for tracking
     final timestamp = _currentTimestamp();
@@ -1295,8 +1376,26 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final title = allHaveSourceNames
         ? 'OCR_${_selectedImages.first.sourceName!}'
         : 'OCR_$timestamp';
-    final taskId =
-        bgNotifier.addTask(type: BackgroundTaskType.ocr, title: title);
+
+    // Build retry data: encode images as base64 so they can be restored on retry
+    final retryImages = _selectedImages.map((img) {
+      return <String, dynamic>{
+        'bytes': base64Encode(img.bytes),
+        'format': img.format,
+        'name': img.sourceName,
+      };
+    }).toList();
+    final retryData = <String, dynamic>{
+      'type': 'ocr',
+      'images': retryImages,
+      'modelIndex': _selectedModelIndex,
+    };
+
+    final taskId = bgNotifier.addTask(
+      type: BackgroundTaskType.ocr,
+      title: title,
+      retryData: retryData,
+    );
 
     // Pop back to home page immediately so user can see task progress
     if (mounted) {
@@ -1592,17 +1691,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (lower.endsWith('.gif')) return 'gif';
     if (lower.endsWith('.webp')) return 'webp';
     return 'jpeg';
-  }
-
-  String _formatFileSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) {
-      return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    }
-    if (bytes < 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
   String _pad(int n) => n.toString().padLeft(2, '0');

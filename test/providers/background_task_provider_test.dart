@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/task_provider.dart';
@@ -257,7 +256,7 @@ void main() {
     test('addTask initializes task with default steps for the type', () {
       final notifier = BackgroundTaskNotifier();
 
-      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR');
+      notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR');
 
       // Steps are auto-initialized based on task type
       expect(notifier.state[0].steps.length, 5,
@@ -324,7 +323,7 @@ void main() {
       final notifier = BackgroundTaskNotifier();
 
       final id1 = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR');
-      final id2 = notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR');
+      notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR');
 
       notifier.setSteps(id1, [
         BgTaskStep(label: '连接服务器', status: BgStepStatus.completed),
@@ -345,7 +344,7 @@ void main() {
     test('addTask initializes task without result', () {
       final notifier = BackgroundTaskNotifier();
 
-      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR');
+      notifier.addTask(type: BackgroundTaskType.ocr, title: '测试OCR');
 
       expect(notifier.state[0].result, isNull);
     });
@@ -449,13 +448,13 @@ void main() {
       expect(notifier.state[0].steps[4].label, '保存文件');
     });
 
-    test('AudioSeparation task has 1 default step (single processing step)',
-        () {
+    test('AudioSeparation task has 2 default steps (分离音频, 保存到文件)', () {
       final notifier = BackgroundTaskNotifier();
       notifier.addTask(type: BackgroundTaskType.audioSeparation, title: '音频分离');
-      expect(notifier.state[0].steps.length, 1,
-          reason: 'AudioSeparation should have 1 step (正在分离音频...)');
-      expect(notifier.state[0].steps[0].label, '正在分离音频...');
+      expect(notifier.state[0].steps.length, 2,
+          reason: 'AudioSeparation should have 2 steps (分离音频, 保存到文件)');
+      expect(notifier.state[0].steps[0].label, '分离音频');
+      expect(notifier.state[0].steps[1].label, '保存到文件');
     });
 
     // ==================================================================
@@ -503,6 +502,192 @@ void main() {
       expect(notifier.state[0].error, 'OCR失败');
       expect(notifier.state[0].rawRequest, rawRequest);
       expect(notifier.state[0].rawResponse, rawResponse);
+    });
+
+    // ==================================================================
+    // Waiting status tests
+    // ==================================================================
+
+    test('addTask with startImmediately=false creates waiting task', () {
+      final notifier = BackgroundTaskNotifier();
+
+      final id = notifier.addTask(
+        type: BackgroundTaskType.asr,
+        title: '等待中ASR',
+        startImmediately: false,
+      );
+
+      expect(notifier.state.length, 1);
+      expect(notifier.state[0].id, id);
+      expect(notifier.state[0].status, TaskStatus.waiting);
+      expect(
+          notifier.state[0].steps
+              .every((s) => s.status == BgStepStatus.pending),
+          isTrue,
+          reason: '等待中的任务所有步骤应为 pending');
+    });
+
+    test('startTask transitions waiting task to running', () {
+      final notifier = BackgroundTaskNotifier();
+
+      final id = notifier.addTask(
+        type: BackgroundTaskType.asr,
+        title: '将要启动的任务',
+        startImmediately: false,
+      );
+      expect(notifier.state[0].status, TaskStatus.waiting);
+
+      notifier.startTask(id);
+
+      expect(notifier.state[0].status, TaskStatus.running);
+      expect(notifier.state[0].statusChangedAt, isNotNull);
+    });
+
+    test('startTask on non-existent id does nothing', () {
+      final notifier = BackgroundTaskNotifier();
+
+      notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
+
+      expect(() => notifier.startTask('non-existent'), returnsNormally);
+      expect(notifier.state.length, 1);
+      expect(notifier.state[0].status, TaskStatus.running);
+    });
+
+    test('startTask on already running task does nothing', () {
+      final notifier = BackgroundTaskNotifier();
+
+      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
+      expect(notifier.state[0].status, TaskStatus.running);
+
+      notifier.startTask(id);
+
+      expect(notifier.state[0].status, TaskStatus.running);
+    });
+
+    test('toMap/fromMap round-trip preserves waiting status', () {
+      final task = BackgroundTask(
+        id: 'waiting-id',
+        type: BackgroundTaskType.asr,
+        title: '等待转写',
+        status: TaskStatus.waiting,
+        createdAt: DateTime(2025, 6, 1),
+      );
+
+      final map = task.toMap();
+      final restored = BackgroundTask.fromMap(map);
+
+      expect(restored.status, TaskStatus.waiting);
+      expect(restored.title, '等待转写');
+    });
+
+    test('startTask on paused task does nothing', () {
+      final notifier = BackgroundTaskNotifier();
+      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
+      // Add a paused task directly
+      notifier.state = [
+        notifier.state[0],
+        BackgroundTask(
+          id: 'paused-id',
+          type: BackgroundTaskType.asr,
+          title: '已暂停任务',
+          status: TaskStatus.paused,
+          createdAt: DateTime(2025, 6, 1),
+        ),
+      ];
+
+      notifier.startTask('paused-id');
+
+      expect(notifier.state[1].status, TaskStatus.paused,
+          reason: '已暂停的任务调用 startTask 不应改变状态');
+    });
+
+    test('startTask on completed task does nothing', () {
+      final notifier = BackgroundTaskNotifier();
+      notifier.state = [
+        BackgroundTask(
+          id: 'completed-id',
+          type: BackgroundTaskType.ocr,
+          title: '已完成任务',
+          status: TaskStatus.completed,
+          createdAt: DateTime(2025, 6, 1),
+        ),
+      ];
+
+      notifier.startTask('completed-id');
+
+      expect(notifier.state[0].status, TaskStatus.completed,
+          reason: '已完成的任务调用 startTask 不应改变状态');
+    });
+
+    test('startTask on failed task does nothing', () {
+      final notifier = BackgroundTaskNotifier();
+      notifier.state = [
+        BackgroundTask(
+          id: 'failed-id',
+          type: BackgroundTaskType.asr,
+          title: '失败任务',
+          status: TaskStatus.failed,
+          createdAt: DateTime(2025, 6, 1),
+          error: '之前失败的错误',
+        ),
+      ];
+
+      notifier.startTask('failed-id');
+
+      expect(notifier.state[0].status, TaskStatus.failed,
+          reason: '失败的任务调用 startTask 不应改变状态');
+      expect(notifier.state[0].error, '之前失败的错误',
+          reason: 'startTask 不应清除失败任务的错误信息');
+    });
+
+    test('consecutive startTask calls are idempotent', () {
+      final notifier = BackgroundTaskNotifier();
+
+      final id = notifier.addTask(
+        type: BackgroundTaskType.asr,
+        title: '幂等测试',
+        startImmediately: false,
+      );
+      expect(notifier.state[0].status, TaskStatus.waiting);
+
+      // First startTask transitions waiting -> running
+      notifier.startTask(id);
+      expect(notifier.state[0].status, TaskStatus.running);
+
+      // Second startTask should be a no-op
+      final firstChangedAt = notifier.state[0].statusChangedAt;
+      notifier.startTask(id);
+      expect(notifier.state[0].status, TaskStatus.running);
+      expect(notifier.state[0].statusChangedAt, firstChangedAt,
+          reason: '第二次 startTask 不应更新 statusChangedAt');
+    });
+
+    test('startTask preserves steps and other fields of waiting task', () {
+      final notifier = BackgroundTaskNotifier();
+
+      final id = notifier.addTask(
+        type: BackgroundTaskType.asr,
+        title: '待启动任务',
+        startImmediately: false,
+      );
+
+      // Verify initial steps
+      final initialSteps = notifier.state[0].steps;
+      expect(initialSteps.length, 5);
+      expect(
+          initialSteps.every((s) => s.status == BgStepStatus.pending), isTrue);
+
+      notifier.startTask(id);
+
+      // Steps should remain unchanged after startTask
+      expect(notifier.state[0].steps.length, initialSteps.length);
+      expect(
+          notifier.state[0].steps
+              .every((s) => s.status == BgStepStatus.pending),
+          isTrue,
+          reason: 'startTask 不应修改步骤状态');
+      expect(notifier.state[0].title, '待启动任务');
+      expect(notifier.state[0].type, BackgroundTaskType.asr);
     });
   });
 }

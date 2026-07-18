@@ -29,7 +29,7 @@ class AssistantAvatar extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: cs.primaryContainer.withOpacity(0.3),
+        color: cs.primaryContainer.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(borderRadius),
       ),
       clipBehavior: Clip.antiAlias,

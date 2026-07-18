@@ -52,7 +52,8 @@ Future<void> _showDialog({
   return (notifier: notifier, container: container);
 }
 
-/// Creates a mock [Dio] that returns the given [jsonResponse].
+/// Creates a mock [Dio] that returns the given [jsonResponse] wrapped in
+/// a list (matching the [/releases] array response from the unified endpoint).
 Dio _createMockDio(String jsonResponse) {
   final dio = Dio(BaseOptions());
   dio.interceptors.add(InterceptorsWrapper(
@@ -63,7 +64,7 @@ Dio _createMockDio(String jsonResponse) {
           Response(
             requestOptions: options,
             statusCode: 200,
-            data: jsonDecode(jsonResponse) as Map<String, dynamic>,
+            data: jsonDecode('[$jsonResponse]') as List<dynamic>,
           ),
         );
       } else {
@@ -75,11 +76,15 @@ Dio _createMockDio(String jsonResponse) {
 }
 
 /// Build a GitHub releases API response for the given tag.
-String _githubRelease(String tagName, {String body = '', String? htmlUrl}) {
+String _githubRelease(String tagName,
+    {String body = '',
+    String? htmlUrl,
+    String publishedAt = '2024-01-15T10:00:00Z'}) {
   htmlUrl ??= 'https://github.com/JohnXu22786/Stroom/releases/tag/$tagName';
   return '''
 {
   "tag_name": "$tagName",
+  "published_at": "$publishedAt",
   "body": "$body",
   "html_url": "$htmlUrl"
 }
@@ -542,6 +547,249 @@ void main() {
         await tester.pump(const Duration(milliseconds: 100));
       }
       expect(find.text('下载完成'), findsOneWidget);
+    });
+
+    testWidgets('shows "打开安装包" button when download complete with no error',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = _setupNotifier(
+        state: UpdateState(
+          updateAvailable: true,
+          latestVersion: '0.2.14',
+          downloadUrl:
+              'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.exe',
+          downloadComplete: true,
+          isDownloading: false,
+          isInstalling: false,
+          downloadError: null,
+          downloadedFilePath: '/tmp/test.exe',
+        ),
+      ).notifier;
+
+      await _showDialog(tester: tester, notifier: notifier);
+
+      // Verify both buttons are shown
+      expect(find.text('下载完成'), findsOneWidget);
+      expect(find.text('关闭'), findsOneWidget);
+      expect(find.text('打开安装包'), findsOneWidget);
+    });
+
+    testWidgets('tapping "打开安装包" calls retryInstall', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = _setupNotifier(
+        state: UpdateState(
+          updateAvailable: true,
+          latestVersion: '0.2.14',
+          downloadUrl:
+              'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.exe',
+          downloadComplete: true,
+          isDownloading: false,
+          isInstalling: false,
+          downloadError: null,
+          downloadedFilePath: '/tmp/test.exe',
+        ),
+      ).notifier;
+
+      await _showDialog(tester: tester, notifier: notifier);
+
+      // Tap "打开安装包" button
+      await tester.tap(find.text('打开安装包'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // After tapping, isInstalling should be true (retryInstall sets it)
+      expect(notifier.state.isInstalling, true);
+    });
+  });
+
+  group('UpdateDialog - Multi-version selection', () {
+    testWidgets('shows version selection list when multiple versions available',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final container = ProviderContainer(
+        overrides: [
+          updateProvider
+              .overrideWith((ref) => UpdateNotifier(dio: Dio(BaseOptions()))),
+        ],
+      );
+      final notifier = container.read(updateProvider.notifier);
+      notifier.state = UpdateState(
+        updateAvailable: true,
+        availableVersions: [
+          AvailableUpdate(
+            version: '0.2.16',
+            releaseNotes: 'Version 0.2.16',
+            downloadUrl: 'https://example.com/v0.2.16.zip',
+            isPreRelease: false,
+          ),
+          AvailableUpdate(
+            version: '0.2.15',
+            releaseNotes: 'Version 0.2.15',
+            downloadUrl: 'https://example.com/v0.2.15.zip',
+            isPreRelease: false,
+          ),
+        ],
+        selectedVersionIndex: 0,
+        latestVersion: '0.2.16',
+        releaseNotes: 'Version 0.2.16',
+        downloadUrl: 'https://example.com/v0.2.16.zip',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            updateProvider.overrideWith((ref) => notifier),
+          ],
+          child: MaterialApp(
+            home: Builder(
+              builder: (context) {
+                Future.microtask(() {
+                  showDialog(
+                    context: context,
+                    builder: (_) => const UpdateDialog(),
+                  );
+                });
+                return const SizedBox();
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Should show version selection items (prefixed with 'v' in the list)
+      expect(find.text('v0.2.16'), findsOneWidget);
+      expect(find.text('v0.2.15'), findsOneWidget);
+      // Should show the currently selected version in header
+      expect(find.textContaining('0.2.16'), findsWidgets);
+    });
+
+    testWidgets('tapping a version in list selects it and updates display',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final container = ProviderContainer(
+        overrides: [
+          updateProvider
+              .overrideWith((ref) => UpdateNotifier(dio: Dio(BaseOptions()))),
+        ],
+      );
+      final notifier = container.read(updateProvider.notifier);
+      notifier.state = UpdateState(
+        updateAvailable: true,
+        availableVersions: [
+          AvailableUpdate(
+            version: '0.2.16',
+            releaseNotes: 'Version 0.2.16 notes',
+            downloadUrl: 'https://example.com/v0.2.16.zip',
+            isPreRelease: false,
+          ),
+          AvailableUpdate(
+            version: '0.2.15',
+            releaseNotes: 'Version 0.2.15 notes',
+            downloadUrl: 'https://example.com/v0.2.15.zip',
+            isPreRelease: false,
+          ),
+        ],
+        selectedVersionIndex: 0,
+        latestVersion: '0.2.16',
+        releaseNotes: 'Version 0.2.16 notes',
+        downloadUrl: 'https://example.com/v0.2.16.zip',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            updateProvider.overrideWith((ref) => notifier),
+          ],
+          child: MaterialApp(
+            home: Builder(
+              builder: (context) {
+                Future.microtask(() {
+                  showDialog(
+                    context: context,
+                    builder: (_) => const UpdateDialog(),
+                  );
+                });
+                return const SizedBox();
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // The header should show the first version (0.2.16)
+      expect(find.textContaining('0.2.16'), findsWidgets);
+
+      // Tap the second version in the list (shown as 'v0.2.15')
+      await tester.tap(find.text('v0.2.15'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Now the header should show the newly selected version (0.2.15)
+      expect(notifier.state.selectedVersionIndex, 1);
+      expect(notifier.state.latestVersion, '0.2.15');
+    });
+
+    testWidgets('single version dialog still works (backward compat)',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final container = ProviderContainer(
+        overrides: [
+          updateProvider
+              .overrideWith((ref) => UpdateNotifier(dio: Dio(BaseOptions()))),
+        ],
+      );
+      final notifier = container.read(updateProvider.notifier);
+      notifier.state = UpdateState(
+        updateAvailable: true,
+        availableVersions: [
+          AvailableUpdate(
+            version: '0.2.14',
+            releaseNotes: 'Bug fixes',
+            downloadUrl: 'https://example.com/v0.2.14.zip',
+            isPreRelease: false,
+          ),
+        ],
+        selectedVersionIndex: 0,
+        latestVersion: '0.2.14',
+        releaseNotes: 'Bug fixes',
+        downloadUrl: 'https://example.com/v0.2.14.zip',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            updateProvider.overrideWith((ref) => notifier),
+          ],
+          child: MaterialApp(
+            home: Builder(
+              builder: (context) {
+                Future.microtask(() {
+                  showDialog(
+                    context: context,
+                    builder: (_) => const UpdateDialog(),
+                  );
+                });
+                return const SizedBox();
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Should show all standard elements
+      expect(find.text('发现新版本'), findsOneWidget);
+      expect(find.textContaining('0.2.14'), findsWidgets);
+      expect(find.text('Bug fixes'), findsOneWidget);
+      // The selection list should exist even with single item
+      expect(find.text('立即更新'), findsOneWidget);
+      expect(find.text('跳过此版本'), findsOneWidget);
+      expect(find.text('稍后提醒'), findsOneWidget);
     });
   });
 }

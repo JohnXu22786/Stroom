@@ -12,6 +12,7 @@ import 'provider_config_page.dart';
 import 'backup_restore_page.dart';
 import 'background_optimization_page.dart';
 import 'notification_settings_page.dart';
+import 'log_viewer_page.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -44,6 +45,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           const SizedBox(height: 24),
           _buildSectionHeader('数据备份'),
           _buildBackupSection(),
+          const SizedBox(height: 24),
+          _buildSectionHeader('日志'),
+          _buildLogSection(),
           const SizedBox(height: 24),
           _buildSectionHeader('关于'),
           _buildAboutSection(),
@@ -231,6 +235,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
+  Widget _buildLogSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: _buildListTile(
+          leading: const Icon(Icons.article, color: Colors.blueGrey),
+          title: '应用日志',
+          subtitle: '查看应用运行日志',
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const LogViewerPage()),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   // ================================================================
   // 关于
   // ================================================================
@@ -303,7 +327,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         .read(updateProvider.notifier)
                         .setAcceptPreRelease(value);
                   },
-                  activeColor: Colors.orange,
+                  activeThumbColor: Colors.orange,
                 ),
                 onTap: () {},
               ),
@@ -357,7 +381,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             _buildListTile(
               leading: const Icon(Icons.link, color: Colors.blueGrey),
               title: '项目主页',
-              subtitle: 'GitHub',
+              subtitle: 'https://github.com/JohnXu22786/Stroom',
               trailing: const Icon(Icons.open_in_new, size: 18),
               onTap: () => _openUrl('https://github.com/JohnXu22786/Stroom'),
             ),
@@ -365,7 +389,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             _buildListTile(
               leading: const Icon(Icons.description, color: Colors.brown),
               title: '开源协议',
-              subtitle: 'GNU General Public License v3.0',
+              subtitle: 'GNU Affero General Public License v3.0',
               trailing: const Icon(Icons.open_in_new, size: 18),
               onTap: () => _openUrl(
                 'https://github.com/JohnXu22786/Stroom/blob/main/LICENSE',

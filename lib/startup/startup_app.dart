@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show exit, Platform;
 
 import 'package:flutter/material.dart';
@@ -10,6 +11,8 @@ import 'startup_check_service.dart';
 import 'startup_page.dart';
 import '../application.dart';
 import '../providers/update_provider.dart';
+import '../services/app_log_service.dart';
+import '../services/data_migration_service.dart';
 
 // ====================================================================
 // StartupApp — 应用启动入口
@@ -19,7 +22,7 @@ import '../providers/update_provider.dart';
 // 验证。所有工作完成后，切换到主应用界面。
 //
 // 流程：
-// 1. 立即显示启动页面（至少 1 秒）
+// 1. 立即显示启动页面（至少 1.5 秒）
 // 2. 清除"更新后重启"标记（如存在）
 // 3. 依次执行：数据格式版本检查 → 格式验证 → 完整性检查
 // 4. 检查完成后，如果进行了数据迁移，提示用户重启
@@ -52,14 +55,24 @@ class _StartupAppState extends State<StartupApp>
   late final Animation<double> _fadeAnimation;
   bool _isFadingOut = false;
 
-  static const int _minimumDisplayMs = 1000;
+  /// Collector for startup errors that should be displayed to the user.
+  /// When non-null after startup completes, the error is shown in the UI
+  /// instead of silently continuing.
+  String? _startupError;
+
+  /// Navigator key for the overlay [MaterialApp] that hosts [StartupPage].
+  /// Used by [_showRestartDialog] to find a valid [Navigator] ancestor.
+  final GlobalKey<NavigatorState> _overlayNavigatorKey =
+      GlobalKey<NavigatorState>();
+
+  static const int _minimumDisplayMs = 1500;
 
   @override
   void initState() {
     super.initState();
     _fadeController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 500),
+      duration: const Duration(milliseconds: 400),
     );
     _fadeAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
       CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
@@ -81,17 +94,26 @@ class _StartupAppState extends State<StartupApp>
     super.dispose();
   }
 
-  /// Runs all startup checks, ensuring a minimum 1-second display.
+  /// Runs the 5 startup checks sequentially, one by one.
+  ///
+  /// Design principle:
+  /// - Each task updates the status via [setState] immediately (synchronous)
+  ///   so the widget shows the new status on the next frame.
+  /// - Between tasks we yield briefly to let the UI render the new status.
+  /// - The 5 tasks are:
+  ///     1. Check data format version (migration if needed)
+  ///     2. Validate data formats
+  ///     3. Check data integrity
+  ///     4. Process & log results
+  ///     5. Finalize — prepare to transition to main app
+  /// - Backup storage check and auto-backup are moved to post-startup
+  ///   (they run after the main app is shown) to avoid blocking the UI.
   Future<void> _runStartupSequence() async {
     final stopwatch = Stopwatch()..start();
 
     try {
       // ---------------------------------------------------------------
       // 清除"更新后重启"标记
-      // ---------------------------------------------------------------
-      // 如果 SharedPreferences 中存在 pending_update_restart 标记，
-      // 说明应用是在 APK 安装/更新后被系统重新启动的（冷启动）。
-      // 清除此标记，确保后续启动路径一致，避免标记残留。
       // ---------------------------------------------------------------
       try {
         if (await hasPendingUpdateRestart()) {
@@ -100,20 +122,92 @@ class _StartupAppState extends State<StartupApp>
           await clearPendingUpdateRestart();
         }
       } catch (_) {}
-      // In-memory flag is always clear on cold start, no action needed.
 
-      // Update status as we go
-      await _updateStatus('正在检查数据格式版本...', '1/4');
-      final migrationResult = await StartupCheckService.checkFormatVersion();
+      // Ensure the splash screen animations have rendered the first frame
+      if (!mounted) return;
+      setState(() {}); // ensure initial layout
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      if (!mounted) return;
+
+      // ===============================================================
+      // 依次执行所有检查，逐个进行
+      // ===============================================================
+      //
+      // 全部5个检查依次执行（而非并行）。
+      // 每步先通过 setState 更新状态文字（同步），
+      // 然后短暂等待让 UI 有机会渲染新文字，
+      // 最后执行对应的后端任务。
+      //
+      // 1. 检查数据格式版本（迁移）
+      // 2. 验证数据格式（Isolate 后台执行）
+      // 3. 检查数据完整性（Isolate 后台执行）
+      // 4. 记录检查结果日志
+      // 5. 完成启动准备 → 过渡到主应用
+      // ===============================================================
+
+      // ---- Task 1: 检查数据格式版本 ----
+      _setStatus('正在检查数据格式版本...', '1/5');
+      // 短暂让出，让 UI 渲染新状态
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      if (!mounted) return;
+
+      await AppLogService.info('StartupApp', '开始检查数据格式版本');
+      MigrationResult migrationResult;
+      try {
+        migrationResult = await StartupCheckService.checkFormatVersion();
+        await AppLogService.info('StartupApp',
+            '数据格式版本检查完成: needsMigration=${migrationResult.needsMigration}');
+      } catch (e) {
+        debugPrint('[StartupApp] checkFormatVersion failed: $e');
+        await AppLogService.error('StartupApp', '检查数据格式版本失败', e);
+        migrationResult = const MigrationResult(needsMigration: false);
+      }
+      if (!mounted) return;
+
+      // ---- Task 2: 验证数据格式 ----
+      _setStatus('正在验证数据格式...', '2/5');
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      if (!mounted) return;
+
+      await AppLogService.info('StartupApp', '开始验证数据格式');
+      List<StartupIssue> formatIssues;
+      try {
+        formatIssues = await StartupCheckService.validateDataFormats();
+        await AppLogService.info(
+            'StartupApp', '数据格式验证完成: 发现 ${formatIssues.length} 个问题');
+      } catch (e) {
+        debugPrint('[StartupApp] validateDataFormats failed: $e');
+        await AppLogService.error('StartupApp', '验证数据格式失败', e);
+        formatIssues = <StartupIssue>[];
+      }
+      if (!mounted) return;
+
+      // ---- Task 3: 检查数据完整性 ----
+      _setStatus('正在检查数据完整性...', '3/5');
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      if (!mounted) return;
+
+      await AppLogService.info('StartupApp', '开始检查数据完整性');
+      List<StartupIssue> integrityIssues;
+      try {
+        integrityIssues = await StartupCheckService.checkDataIntegrity();
+        await AppLogService.info(
+            'StartupApp', '数据完整性检查完成: 发现 ${integrityIssues.length} 个问题');
+      } catch (e) {
+        debugPrint('[StartupApp] checkDataIntegrity failed: $e');
+        await AppLogService.error('StartupApp', '检查数据完整性失败', e);
+        integrityIssues = <StartupIssue>[];
+      }
+      if (!mounted) return;
+
       final didMigration = migrationResult.needsMigration;
 
-      await _updateStatus('正在验证数据格式...', '2/4');
-      final formatIssues = await StartupCheckService.validateDataFormats();
-
-      await _updateStatus('正在检查数据完整性...', '3/4');
-      final integrityIssues = await StartupCheckService.checkDataIntegrity();
-
-      await _updateStatus('正在准备应用...', '4/4');
+      // ---- Task 4: 处理检查结果 ----
+      _setStatus('正在处理检查结果...', '4/5');
+      // Step 4 is instant (just logging), so give more time for the UI
+      // to display this status before moving on.
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      if (!mounted) return;
 
       final allIssues = <StartupIssue>[
         ...formatIssues,
@@ -125,19 +219,59 @@ class _StartupAppState extends State<StartupApp>
         debugPrint('[StartupApp] ${issue.severity.name}: ${issue.message}');
       }
 
-      // Ensure minimum display time
+      // 收集检查过程中发现的问题，显示给用户
+      if (allIssues.isNotEmpty) {
+        final errorMessages = allIssues
+            .where((i) => i.severity == StartupIssueSeverity.error)
+            .map((i) => i.message)
+            .toList();
+        final warningMessages = allIssues
+            .where((i) => i.severity == StartupIssueSeverity.warning)
+            .map((i) => i.message)
+            .toList();
+        if (errorMessages.isNotEmpty || warningMessages.isNotEmpty) {
+          final sb = StringBuffer();
+          if (errorMessages.isNotEmpty) {
+            sb.writeln('发现 ${errorMessages.length} 个数据问题:');
+            for (final msg in errorMessages) {
+              sb.writeln('  • $msg');
+            }
+          }
+          if (warningMessages.isNotEmpty) {
+            if (sb.isNotEmpty) sb.writeln();
+            sb.writeln('${warningMessages.length} 个警告:');
+            for (final msg in warningMessages) {
+              sb.writeln('  • $msg');
+            }
+          }
+          _startupError = sb.toString().trim();
+        }
+      }
+
+      // Ensure minimum display time for pre-check tasks
       final elapsed = stopwatch.elapsedMilliseconds;
       if (elapsed < _minimumDisplayMs) {
-        await Future.delayed(
+        await Future<void>.delayed(
             Duration(milliseconds: _minimumDisplayMs - elapsed));
       }
 
       if (!mounted) return;
 
+      // ---- Task 5: 完成启动准备 ----
+      _setStatus('准备启动应用', '5/5');
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      if (!mounted) return;
+
+      // 所有预检查完成，显示完成状态
       setState(() {
         _isWorking = false;
         _migrationPerformed = didMigration;
-        _statusMessage = didMigration ? '数据检查完成，准备启动应用' : '准备启动应用';
+        _progressDetail = null;
+        if (_startupError != null) {
+          _statusMessage = '启动完成（注意: $_startupError）';
+        } else {
+          _statusMessage = didMigration ? '数据检查完成，准备启动应用' : '准备启动应用';
+        }
       });
 
       // Wait a moment so the user can see the completion state
@@ -149,46 +283,66 @@ class _StartupAppState extends State<StartupApp>
       if (didMigration) {
         await _showRestartDialog();
       } else {
-        // Start fade-out animation before transitioning to main app
-        setState(() {
-          _isFadingOut = true;
-        });
-        _fadeController.forward();
+        _startFadeOut();
       }
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint('[StartupApp] Startup sequence failed: $e');
+      debugPrint('[StartupApp] Stack: $stack');
       if (!mounted) return;
+
+      // Show the actual error to the user, don't hide it
       setState(() {
         _isWorking = false;
-        _statusMessage = '启动检查失败，可继续使用应用';
+        _startupError = e.toString();
+        _statusMessage = '启动检查失败: ${e.toString()}';
       });
       await Future.delayed(const Duration(milliseconds: 1500));
       if (!mounted) return;
-      // Fade out before showing main app even on error
-      setState(() {
-        _isFadingOut = true;
-      });
-      _fadeController.forward();
+      _startFadeOut();
     }
   }
 
-  /// Updates the status message and progress detail on the startup page.
-  Future<void> _updateStatus(String message, String detail) async {
+  /// Starts the fade-out transition to the main app.
+  ///
+  /// Uses [addPostFrameCallback] to ensure the [Stack] layout renders the
+  /// main app underneath the splash before the animation begins, producing
+  /// a buttery-smooth fade.
+  void _startFadeOut() {
+    if (!mounted || _isFadingOut) return;
+    setState(() {
+      _isFadingOut = true;
+    });
+    // Start the fade animation on the very next frame, ensuring the
+    // Application widget has rendered underneath before opacity changes.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _fadeController.forward();
+      }
+    });
+  }
+
+  /// 同步更新启动页面的状态文本和进度详情。
+  /// 调用后立即通过 setState 更新 UI，不等待帧渲染。
+  /// 调用方应在调用此方法后主动让出事件循环以让 UI 渲染。
+  void _setStatus(String message, String detail) {
     if (!mounted) return;
     setState(() {
       _statusMessage = message;
       _progressDetail = detail;
     });
-    // Small delay so the user can see each status update
-    await Future.delayed(const Duration(milliseconds: 400));
   }
 
   /// Shows a dialog indicating that migration was performed and the
   /// app needs to restart to use the new data format.
+  ///
+  /// Uses [_overlayNavigatorKey] to find a valid [Navigator] ancestor,
+  /// because this widget (StartupApp) lives above the Navigator in the
+  /// widget tree.
   Future<void> _showRestartDialog() async {
-    if (!mounted) return;
+    final navContext = _overlayNavigatorKey.currentContext;
+    if (navContext == null || !navContext.mounted) return;
     await showDialog<void>(
-      context: context,
+      context: navContext,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: Row(
@@ -238,42 +392,51 @@ class _StartupAppState extends State<StartupApp>
 
   @override
   Widget build(BuildContext context) {
-    // When startup checks are complete and fade-out is done,
-    // show the main application
-    if (_checkingComplete) {
-      // Use a key to force rebuild the Application widget fresh
-      // Wrap with an error boundary so that if the Application widget's
-      // provider initialization crashes due to residual data format issues,
-      // the app shows a recoverable error instead of crashing entirely.
-      return const _AppErrorBoundary(
-        key: ValueKey('app_error_boundary'),
-        child: Application(key: ValueKey('app_ready')),
-      );
-    }
+    // 单一布局策略：Stack 中包含主应用（始终存在于 Widget 树中）和
+    // 启动页（启动检查完成后移除）两层。
+    //
+    // 设计原理：
+    // - Application 从第一次 build 起就存在于 Widget 树中，
+    //   确保其在渐出开始时已经完全初始化，消除渐出卡顿。
+    // - 启动页始终覆盖在主应用之上，通过在渐出过程中降低透明度
+    //   来让主应用自然显示出来。
+    // - 渐出完成后移除启动页，只显示主应用。
+    return Stack(
+      textDirection: TextDirection.ltr,
+      children: [
+        // 主应用（始终存在，确保启动时完全初始化）
+        const _AppErrorBoundary(
+          key: ValueKey('app_fade_boundary'),
+          child: Application(key: ValueKey('app_ready')),
+        ),
 
-    // Wrap the startup page with fade-out animation
-    return AnimatedBuilder(
-      animation: _fadeAnimation,
-      builder: (context, child) {
-        return Opacity(
-          opacity: _isFadingOut ? _fadeAnimation.value : 1.0,
-          child: child,
-        );
-      },
-      child: MaterialApp(
-        title: 'Stroom',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        ),
-        home: StartupPage(
-          isWorking: _isWorking,
-          statusMessage: _statusMessage,
-          progressDetail: _progressDetail,
-          migrationPerformed: _migrationPerformed,
-        ),
-      ),
+        // 启动页覆盖层（检查完成后移除）
+        if (!_checkingComplete)
+          AnimatedBuilder(
+            animation: _fadeAnimation,
+            builder: (context, child) {
+              return Opacity(
+                opacity: _isFadingOut ? _fadeAnimation.value : 1.0,
+                child: child,
+              );
+            },
+            child: MaterialApp(
+              title: 'Stroom',
+              debugShowCheckedModeBanner: false,
+              navigatorKey: _overlayNavigatorKey,
+              theme: ThemeData(
+                useMaterial3: true,
+                colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+              ),
+              home: StartupPage(
+                isWorking: _isWorking,
+                statusMessage: _statusMessage,
+                progressDetail: _progressDetail,
+                migrationPerformed: _migrationPerformed,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

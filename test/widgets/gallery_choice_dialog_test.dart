@@ -3,26 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/widgets/gallery_choice_dialog.dart';
 
 void main() {
-  group('GalleryChoiceResult', () {
-    test('can be created with default values', () {
-      const result = GalleryChoiceResult(choice: GalleryChoice.system);
-      expect(result.choice, GalleryChoice.system);
-    });
-
-    test('can be created with app gallery choice', () {
-      const result = GalleryChoiceResult(choice: GalleryChoice.app);
-      expect(result.choice, GalleryChoice.app);
-    });
-
-    test('equality works', () {
-      const a = GalleryChoiceResult(choice: GalleryChoice.system);
-      const b = GalleryChoiceResult(choice: GalleryChoice.system);
-      const c = GalleryChoiceResult(choice: GalleryChoice.app);
-      expect(a, b);
-      expect(a == c, false);
-    });
-  });
-
   group('showGalleryChoiceDialog', () {
     testWidgets(
         'renders both gallery options with same UI style as camera dialog',

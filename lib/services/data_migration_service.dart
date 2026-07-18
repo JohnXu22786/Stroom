@@ -2,11 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'app_log_service.dart';
 import 'auto_backup_service.dart';
+import 'backup_location_manager.dart';
 import 'manifest_database.dart';
 
 /// The key used in SharedPreferences to store the data format version.
@@ -79,11 +79,17 @@ class DataMigrationService {
   /// - 如果 [MigrationResult.restartRequired] 为 `true`，迁移完成后需要重启应用。
   static Future<MigrationResult> checkAndMigrate() async {
     final storedVersion = await getStoredFormatVersion();
+    await AppLogService.info('DataMigrationService',
+        '检查数据格式版本: 当前=$storedVersion, 最新=$currentFormatVersion');
 
     // 版本相同时不需要迁移
     if (storedVersion >= currentFormatVersion) {
+      await AppLogService.info('DataMigrationService', '数据格式版本为最新，无需迁移');
       return const MigrationResult(needsMigration: false);
     }
+
+    await AppLogService.info('DataMigrationService',
+        '需要数据格式迁移: v$storedVersion → v$currentFormatVersion');
 
     // 需要迁移：清理旧备份
     await cleanOldBackups();
@@ -102,8 +108,11 @@ class DataMigrationService {
       debugPrint(
         '[DataMigrationService] Migrated data format from v$storedVersion to v$currentFormatVersion',
       );
+      await AppLogService.info('DataMigrationService',
+          '数据格式迁移成功: v$storedVersion → v$currentFormatVersion');
     } catch (e) {
       debugPrint('[DataMigrationService] Migration failed: $e');
+      await AppLogService.error('DataMigrationService', '数据格式迁移失败', e);
       rethrow;
     }
 
@@ -119,26 +128,23 @@ class DataMigrationService {
   // 备份管理
   // ================================================================
 
-  /// 备份目录名称
-  static const String _backupRootName = 'StroomBackups';
-
   /// 获取外部备份根目录路径。
   ///
   /// 备份位置不在应用数据目录内，以防止应用数据被删除时备份也丢失。
   ///
   /// 位置策略（所有位置均对用户可见/可访问）：
-  /// - Windows: %USERPROFILE%\Documents\StroomBackups\
-  /// - macOS:   ~/Documents/StroomBackups/
-  /// - Linux:   ~/Documents/StroomBackups/
-  /// - Android: /storage/emulated/0/Android/data/<package>/files/StroomBackups/
-  ///   （应用内完全可读写；Android 10 及以下可通过 Files 应用直接访问；
-  ///    Android 11+ 部分文件管理器受限，但相比旧路径 /data/data/... 完全不可访问已是重大改进）
-  /// - iOS:     <app_group>/Documents/StroomBackups/（通过 Files 应用可访问）
+  /// - Windows: %USERPROFILE%\Documents\Stroom\AutoBackups\
+  /// - macOS:   ~/Documents/Stroom/AutoBackups/
+  /// - Linux:   ~/Documents/Stroom/AutoBackups/
+  /// - Android: 通过 SAF 选择 Documents 目录（优先），
+  ///   用户选择后调用 takePersistableUriPermission 固化权限。
+  /// - iOS:     <app_group>/Documents/Stroom/AutoBackups/（通过文件 App 可访问）
   /// - 测试环境: Directory.systemTemp/stroom_backup_test/
+  ///
+  /// 注意：此方法委托给 [BackupLocationManager.getBackupRootPath]。
+  /// 在 Android 上如果 SAF URI 尚未配置，会返回 null。
   static Future<String> getExternalBackupRootPath() async {
     if (kIsWeb) {
-      // Web 平台使用 IndexedDB 路径前缀
-      // 注意：Web 不支持文件系统外部备份，此路径用于标记用途
       return '/stroom_backups';
     }
 
@@ -151,65 +157,24 @@ class DataMigrationService {
       debugPrint('[DataMigrationService] Error checking test env: $e');
     }
 
-    // Windows
-    try {
-      if (Platform.isWindows) {
-        final userProfile = Platform.environment['USERPROFILE'];
-        if (userProfile != null && userProfile.isNotEmpty) {
-          return p.join(userProfile, 'Documents', _backupRootName);
-        }
-      }
-    } catch (e) {
-      debugPrint(
-          '[DataMigrationService] Error resolving Windows backup path: $e');
+    // 委托给 BackupLocationManager
+    final path = await BackupLocationManager.getBackupRootPath();
+    if (path != null) {
+      return path;
     }
 
-    // macOS / Linux
+    // 兜底：系统临时目录
     try {
-      if (Platform.isMacOS || Platform.isLinux) {
-        final home = Platform.environment['HOME'];
-        if (home != null && home.isNotEmpty) {
-          return p.join(home, 'Documents', _backupRootName);
-        }
-      }
-    } catch (e) {
-      debugPrint('[DataMigrationService] Error resolving Unix backup path: $e');
-    }
-
-    // Android: 使用外部存储目录。
-    // 旧路径 /data/data/... 在 Android 11+ 上完全不可访问。
-    // 新路径 Android/data/<package>/files/... 无需额外权限，
-    // 应用内完全可读写，Android 10 及以下可通过 Files 应用直接访问。
-    try {
-      if (Platform.isAndroid) {
-        final extDir = await getExternalStorageDirectory();
-        if (extDir != null) {
-          return p.join(extDir.path, _backupRootName);
-        }
-      }
-    } catch (e) {
-      debugPrint(
-          '[DataMigrationService] Error resolving Android backup path: $e');
-    }
-
-    // iOS / Fallback: 使用 documents 目录。
-    // iOS 上可通过 Files 应用直接访问，无需额外处理。
-    try {
-      final docsDir = await getApplicationDocumentsDirectory();
-      return p.join(docsDir.path, _backupRootName);
+      return '${Directory.systemTemp.path}/Stroom/AutoBackups';
     } catch (_) {
-      try {
-        return '${Directory.systemTemp.path}/$_backupRootName';
-      } catch (_) {
-        return '/tmp/$_backupRootName';
-      }
+      return '/tmp/Stroom/AutoBackups';
     }
   }
 
   /// 创建当前数据的完整 ZIP 备份。
   ///
   /// 使用 [AutoBackupService] 创建包含所有应用数据的完整备份
-  /// 到 StroomBackups 目录。备份文件格式为：
+  /// 到 Stroom/AutoBackups 目录。备份文件格式为：
   ///   backup_YYYY-MM-DDTHH-MM-SS.zip
   ///
   /// 返回备份文件路径，如果备份失败返回 `null`。
@@ -262,7 +227,9 @@ class DataMigrationService {
   /// 在每次启动时自动调用，确保旧备份不会无限累积。
   static Future<void> cleanOldBackups() async {
     if (kIsWeb) return;
+    await AppLogService.info('DataMigrationService', '开始清理旧备份');
     await AutoBackupService.cleanupOldBackups();
+    await AppLogService.info('DataMigrationService', '旧备份清理完成');
   }
 
   // ================================================================

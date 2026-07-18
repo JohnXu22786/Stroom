@@ -5,7 +5,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform, debugPrint;
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -41,6 +40,15 @@ class UpdateState {
   /// When true, checks include pre-releases; when false, only stable releases.
   final bool acceptPreRelease;
 
+  /// All available versions newer than the current installed version.
+  /// Sorted descending (newest first). Null when no check has been performed
+  /// or no updates are available.
+  final List<AvailableUpdate>? availableVersions;
+
+  /// Index of the currently selected version in [availableVersions].
+  /// Defaults to 0 (newest version).
+  final int selectedVersionIndex;
+
   const UpdateState({
     this.isChecking = false,
     this.latestVersion,
@@ -55,6 +63,8 @@ class UpdateState {
     this.downloadedFilePath,
     this.isInstalling = false,
     this.acceptPreRelease = false,
+    this.availableVersions,
+    this.selectedVersionIndex = 0,
   });
 
   UpdateState copyWith({
@@ -71,6 +81,8 @@ class UpdateState {
     String? downloadedFilePath,
     bool? isInstalling,
     bool? acceptPreRelease,
+    List<AvailableUpdate>? availableVersions,
+    int? selectedVersionIndex,
   }) {
     return UpdateState(
       isChecking: isChecking ?? this.isChecking,
@@ -86,18 +98,19 @@ class UpdateState {
       downloadedFilePath: downloadedFilePath ?? this.downloadedFilePath,
       isInstalling: isInstalling ?? this.isInstalling,
       acceptPreRelease: acceptPreRelease ?? this.acceptPreRelease,
+      availableVersions: availableVersions ?? this.availableVersions,
+      selectedVersionIndex: selectedVersionIndex ?? this.selectedVersionIndex,
     );
   }
 }
 
-const String _kUpdateCheckUrl =
-    'https://api.github.com/repos/JohnXu22786/Stroom/releases/latest';
 const String _kAllReleasesUrl =
     'https://api.github.com/repos/JohnXu22786/Stroom/releases?per_page=100';
 const String _kSkippedVersionKey = 'update_skipped_version';
 const String _kUpdateAvailableKey = 'update_available_data';
 const String _kAcceptPreReleaseKey = 'update_accept_pre_release';
 const String _kPendingUpdateRestartKey = 'pending_update_restart';
+const String _kDownloadedFilePathKey = 'update_downloaded_file_path';
 
 /// In-memory flag that survives as long as the Dart isolate is alive.
 /// Set to `true` right before the APK installer is launched on Android.
@@ -115,6 +128,10 @@ bool _pendingRestartInMemory = false;
 /// Exported so that [main.dart] and [startup_app.dart] can check and clear
 /// it during cold-start without importing the notifier.
 String get pendingUpdateRestartKey => _kPendingUpdateRestartKey;
+
+/// The SharedPreferences key used to persist the downloaded installer file
+/// path for cleanup on next app startup.
+String get downloadFilePathKey => _kDownloadedFilePathKey;
 
 /// Returns `true` if a pending-update-restart flag was found in
 /// SharedPreferences.  The caller should clear the flag after handling it.
@@ -249,6 +266,24 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     }
   }
 
+  /// Selects a version from [availableVersions] by index and updates
+  /// the state to reflect the selected version's details.
+  ///
+  /// The [latestVersion], [releaseNotes], and [downloadUrl] fields are
+  /// updated to match the selected [AvailableUpdate]. Does nothing if
+  /// the index is out of range.
+  void selectVersion(int index) {
+    final versions = state.availableVersions;
+    if (versions == null || index < 0 || index >= versions.length) return;
+    final selected = versions[index];
+    state = state.copyWith(
+      selectedVersionIndex: index,
+      latestVersion: selected.version,
+      releaseNotes: selected.releaseNotes,
+      downloadUrl: selected.downloadUrl,
+    );
+  }
+
   /// Resets transient update state while preserving user preferences
   /// (e.g., [acceptPreRelease]).
   UpdateState _resetState() {
@@ -267,11 +302,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     state = state.copyWith(isChecking: true, error: null);
 
     try {
-      if (state.acceptPreRelease) {
-        await _checkForUpdateWithPreRelease(silent: silent);
-      } else {
-        await _checkForUpdateStable(silent: silent);
-      }
+      await _checkForUpdates(silent: silent);
     } catch (e) {
       if (!silent) {
         state = state.copyWith(
@@ -285,13 +316,19 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     }
   }
 
-  /// Checks for updates using the stable releases API (/releases/latest).
-  /// This is the original behavior — only non-prerelease releases are considered.
-  Future<void> _checkForUpdateStable({required bool silent}) async {
-    final response = await _dio.get(_kUpdateCheckUrl);
-    if (response.statusCode == 200) {
-      await _processSingleRelease(response.data as Map<String, dynamic>);
-    } else {
+  /// Fetches ALL releases from GitHub (up to 100), filters those newer
+  /// than the current installed version, and populates [availableVersions].
+  ///
+  /// When [acceptPreRelease] is `false`, pre-release versions (marked by
+  /// GitHub's `prerelease` field) are excluded from the list.
+  /// When [acceptPreRelease] is `true`, all versions including pre-releases
+  /// are included.
+  ///
+  /// The resulting list is sorted descending (newest first), with the first
+  /// entry selected by default. Skipped versions are excluded.
+  Future<void> _checkForUpdates({required bool silent}) async {
+    final response = await _dio.get(_kAllReleasesUrl);
+    if (response.statusCode != 200) {
       if (!silent) {
         state = state.copyWith(
           isChecking: false,
@@ -301,122 +338,137 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       } else {
         state = _resetState();
       }
+      return;
     }
-  }
 
-  /// Checks for updates using the full releases API (/releases).
-  /// Iterates through all returned releases (including pre-releases) to find
-  /// the latest version newer than the current installed version.
-  Future<void> _checkForUpdateWithPreRelease({required bool silent}) async {
-    final response = await _dio.get(_kAllReleasesUrl);
-    if (response.statusCode == 200) {
-      final releases = response.data as List<dynamic>;
-      final current = Version.parse(appVersion);
+    final releases = response.data as List<dynamic>;
+    final currentVersionStr = appVersion;
 
-      Version? bestVersion;
-      String? bestTagName;
-      String? bestBody;
-      String? bestHtmlUrl;
-      List<dynamic> bestAssets = [];
+    final prefs = await SharedPreferences.getInstance();
+    final skippedVersion = prefs.getString(_kSkippedVersionKey);
 
-      for (final release in releases) {
-        final tagName = release['tag_name'] as String? ?? '';
-        final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
-        final parsed = Version.parse(versionStr);
+    // Find the current version's release in the GitHub list to get its
+    // published_at date. This enables date-based comparison: only releases
+    // published AFTER the current version's release date are shown, regardless
+    // of version number. This way, a hotfix published after a major version
+    // won't re-prompt the user about that older major version.
+    DateTime? cutoffDate;
+    Version? currentVersion;
+    for (final release in releases) {
+      final tagName = release['tag_name'] as String? ?? '';
+      final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
+      if (versionStr == currentVersionStr) {
+        final publishedAtStr = release['published_at'] as String?;
+        if (publishedAtStr != null) {
+          cutoffDate = DateTime.tryParse(publishedAtStr);
+        }
+        currentVersion = Version.parse(versionStr);
+        break;
+      }
+    }
+    // Fall back to version-based comparison when the current version is not
+    // found in the releases list (e.g., very old version or custom build).
+    currentVersion ??= Version.parse(currentVersionStr);
 
-        if (parsed > current) {
-          if (bestVersion == null || parsed > bestVersion) {
-            bestVersion = parsed;
-            bestTagName = versionStr;
-            bestBody = release['body'] as String? ?? '';
-            bestHtmlUrl = release['html_url'] as String? ?? '';
-            bestAssets = release['assets'] as List<dynamic>? ?? [];
+    // Collect all available updates newer than current version.
+    // The acceptPreRelease toggle only controls the default SELECTION and
+    // DISPLAY in the dialog — ALL versions (including pre-releases) are
+    // always collected here.
+    final List<AvailableUpdate> availableList = [];
+
+    for (final release in releases) {
+      final tagName = release['tag_name'] as String? ?? '';
+      final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
+      final parsed = Version.parse(versionStr);
+
+      // Skip the current version itself: either exact string match or
+      // same base version (major.minor.patch). The base version check
+      // handles pre-release/hotfix suffixes so that e.g., "39-hotfix"
+      // does NOT re-prompt about "v39.0.0" (same base).
+      if (versionStr == currentVersionStr ||
+          (parsed.major == currentVersion.major &&
+              parsed.minor == currentVersion.minor &&
+              parsed.patch == currentVersion.patch)) continue;
+
+      // Date-based comparison (when we found the current version's publish date)
+      if (cutoffDate != null) {
+        final publishedAtStr = release['published_at'] as String?;
+        if (publishedAtStr == null) continue;
+        final publishedAt = DateTime.tryParse(publishedAtStr);
+        if (publishedAt == null || !publishedAt.isAfter(cutoffDate)) continue;
+      } else {
+        // Fall back to version-based comparison when the current version
+        // is not in the releases list or has no published_at field.
+        if (!(parsed > currentVersion)) continue;
+      }
+
+      // Skip the version the user chose to skip
+      if (versionStr == skippedVersion) continue;
+
+      // Find download URL for this release on current platform
+      final assets = release['assets'] as List<dynamic>? ?? [];
+      final htmlUrl = release['html_url'] as String? ?? '';
+      final directDownloadUrl = getPlatformDownloadUrl(assets);
+      final downloadUrl = directDownloadUrl ?? htmlUrl;
+      final body = release['body'] as String? ?? '';
+      final isPrerelease = release['prerelease'] as bool? ?? false;
+
+      availableList.add(AvailableUpdate(
+        version: versionStr,
+        releaseNotes: body,
+        downloadUrl: downloadUrl,
+        isPreRelease: isPrerelease,
+      ));
+    }
+
+    // Sort descending (newest first)
+    availableList.sort((a, b) {
+      final va = Version.parse(a.version);
+      final vb = Version.parse(b.version);
+      return vb.compareTo(va); // descending
+    });
+
+    if (availableList.isNotEmpty) {
+      // Determine default selection index based on display filter.
+      // When acceptPreRelease=false, skip pre-releases and select first stable.
+      int defaultIndex = 0;
+      if (!state.acceptPreRelease) {
+        for (int i = 0; i < availableList.length; i++) {
+          if (!availableList[i].isPreRelease) {
+            defaultIndex = i;
+            break;
           }
         }
       }
 
-      if (bestVersion != null) {
-        final prefs = await SharedPreferences.getInstance();
-        final skippedVersion = prefs.getString(_kSkippedVersionKey);
+      // Only show dialog if at least one version matches the display filter
+      // (e.g., hide dialog when only pre-releases exist and toggle is off).
+      final hasVisibleVersion =
+          state.acceptPreRelease || availableList.any((v) => !v.isPreRelease);
 
-        if (skippedVersion == bestTagName) {
-          state = _resetState();
-          return;
-        }
+      if (hasVisibleVersion) {
+        final first = availableList[defaultIndex];
 
-        // Find direct download URL for current platform, fall back to html_url
-        final directDownloadUrl = getPlatformDownloadUrl(bestAssets);
-        final downloadUrl = directDownloadUrl ?? bestHtmlUrl;
-
+        // Persist the newly selected version's data for pending update detection
         final updateData = jsonEncode({
-          'latest_version': bestTagName,
-          'release_notes': bestBody,
-          'download_url': downloadUrl,
+          'latest_version': first.version,
+          'release_notes': first.releaseNotes,
+          'download_url': first.downloadUrl,
         });
         await prefs.setString(_kUpdateAvailableKey, updateData);
 
         state = UpdateState(
           acceptPreRelease: state.acceptPreRelease,
           updateAvailable: true,
-          latestVersion: bestTagName,
-          releaseNotes: bestBody,
-          downloadUrl: downloadUrl,
+          availableVersions: availableList,
+          selectedVersionIndex: defaultIndex,
+          latestVersion: first.version,
+          releaseNotes: first.releaseNotes,
+          downloadUrl: first.downloadUrl,
         );
       } else {
         state = _resetState();
       }
-    } else {
-      if (!silent) {
-        state = state.copyWith(
-          isChecking: false,
-          updateAvailable: false,
-          error: '检查更新失败: HTTP ${response.statusCode}',
-        );
-      } else {
-        state = _resetState();
-      }
-    }
-  }
-
-  /// Processes a single release from the GitHub API (/releases/latest) response.
-  Future<void> _processSingleRelease(Map<String, dynamic> data) async {
-    final tagName = data['tag_name'] as String? ?? '';
-    final latestVersion = tagName.replaceAll(RegExp(r'^v'), '');
-    final releaseNotes = data['body'] as String? ?? '';
-    final htmlUrl = data['html_url'] as String? ?? '';
-    final assets = data['assets'] as List<dynamic>? ?? [];
-
-    // Find direct download URL for current platform, fall back to html_url
-    final directDownloadUrl = getPlatformDownloadUrl(assets);
-    final downloadUrl = directDownloadUrl ?? htmlUrl;
-
-    final current = Version.parse(appVersion);
-    final latest = Version.parse(latestVersion);
-
-    final updateAvailable = latest > current;
-
-    if (updateAvailable) {
-      final prefs = await SharedPreferences.getInstance();
-      final skippedVersion = prefs.getString(_kSkippedVersionKey);
-
-      if (skippedVersion == latestVersion) {
-        state = _resetState();
-        return;
-      }
-
-      final updateData = jsonEncode({
-        'latest_version': latestVersion,
-        'release_notes': releaseNotes,
-        'download_url': downloadUrl,
-      });
-      await prefs.setString(_kUpdateAvailableKey, updateData);
-
-      state = UpdateState(
-        updateAvailable: true,
-        latestVersion: latestVersion,
-        releaseNotes: releaseNotes,
-        downloadUrl: downloadUrl,
-      );
     } else {
       state = _resetState();
     }
@@ -528,6 +580,9 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
           isInstalling: true,
         );
 
+        // 持久化文件路径，以便下次启动时清理残留安装包
+        await _saveDownloadedFilePath();
+
         // 自动安装：下载完成后立即安装，无需用户点击安装按钮
         try {
           await installDownloadedFile();
@@ -630,6 +685,9 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   /// ### 全部桌面端
   /// - .zip → 解压后走自更新流程（替换文件并重启）
   /// - 其他类型 → [launchUrl] 以系统默认方式打开
+  ///
+  /// 启动安装程序后，会尝试清理下载的安装包文件。如果文件被占用，
+  /// 将在下次启动时通过 [cleanupStaleInstallerFiles] 清理。
   Future<void> _installOnDesktop(String filePath) async {
     final fileName = filePath.split(Platform.pathSeparator).last.toLowerCase();
 
@@ -637,6 +695,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       if (fileName.endsWith('.exe') || fileName.endsWith('.msi')) {
         // Windows: 直接启动安装程序
         await Process.start(filePath, [], runInShell: true);
+        // 启动后尝试清理安装包
+        await cleanupDownloadedFile();
         return;
       }
     } else if (Platform.isMacOS) {
@@ -644,6 +704,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         // macOS: 挂载 dmg 或启动 pkg 安装器
         final uri = Uri.file(filePath);
         await launchUrl(uri, mode: LaunchMode.externalApplication);
+        // 启动后尝试清理安装包
+        await cleanupDownloadedFile();
         return;
       }
     } else if (Platform.isLinux) {
@@ -651,17 +713,22 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         // Linux AppImage: 加执行权限后直接运行
         await Process.run('chmod', ['+x', filePath]);
         await Process.run(filePath, []);
+        // 启动后尝试清理安装包
+        await cleanupDownloadedFile();
         return;
       }
       if (fileName.endsWith('.deb') || fileName.endsWith('.rpm')) {
         // Linux 包: 通过系统默认打开（会调起包管理器）
         final uri = Uri.file(filePath);
         await launchUrl(uri, mode: LaunchMode.externalApplication);
+        // 启动后尝试清理安装包
+        await cleanupDownloadedFile();
         return;
       }
     }
 
     // .zip：自更新流程（解压 → 替换 → 重启）
+    // 安装包将在下次启动时通过 cleanupStaleInstallerFiles 清理
     if (fileName.endsWith('.zip')) {
       await _selfUpdateFromZip(filePath);
       return;
@@ -671,6 +738,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     final uri = Uri.file(filePath);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
+      // 启动后尝试清理安装包
+      await cleanupDownloadedFile();
     }
   }
 
@@ -791,14 +860,83 @@ rm -- "\$0"
   /// then calls [installDownloadedFile]. Resets [UpdateState.isInstalling] to
   /// `false` after the install attempt completes (success or failure).
   ///
-  /// This is used by the update dialog's "手动安装" button when auto-install
-  /// fails — the APK is already on disk and only needs to be re-triggered.
+  /// This is used by the update dialog's "手动安装" (and "打开安装包") button
+  /// when auto-install fails or the user wants to re-open the installer —
+  /// the file is already on disk and only needs to be re-triggered.
   Future<void> retryInstall() async {
     state = state.copyWith(isInstalling: true, downloadError: null);
     try {
       await installDownloadedFile();
     } finally {
       state = state.copyWith(isInstalling: false);
+    }
+  }
+
+  /// Deletes the downloaded installer file at [state.downloadedFilePath].
+  ///
+  /// This is called after the installer process has been launched:
+  /// - For direct installers (.exe/.msi etc.): called immediately after
+  ///   [Process.start] returns, best-effort deletion.
+  /// - For zip self-update: the file is cleaned up on next app startup via
+  ///   [cleanupStaleInstallerFiles].
+  ///
+  /// Does nothing if [state.downloadedFilePath] is null, empty, or the
+  /// file does not exist. Errors are silently caught.
+  Future<void> cleanupDownloadedFile() async {
+    final path = state.downloadedFilePath;
+    if (path == null || path.isEmpty) return;
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+        debugPrint('[UpdateNotifier] Cleaned up downloaded file: $path');
+      }
+    } catch (e) {
+      // File may still be in use (e.g., installer process is reading it).
+      // It will be cleaned up on next startup.
+      debugPrint('[UpdateNotifier] Failed to delete $path: $e');
+    }
+  }
+
+  /// Persists the downloaded file path to SharedPreferences so it can be
+  /// cleaned up on the next app startup if the file was not deleted before.
+  Future<void> _saveDownloadedFilePath() async {
+    final path = state.downloadedFilePath;
+    if (path == null || path.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kDownloadedFilePathKey, path);
+    } catch (e) {
+      debugPrint('[UpdateNotifier] Failed to save file path: $e');
+    }
+  }
+
+  /// Cleans up stale installer files from a previous update session.
+  ///
+  /// Called on app startup ([Application._runPostStartupTasks]). Reads the
+  /// persisted file path from SharedPreferences, deletes the file if it
+  /// exists, and removes the key from SharedPreferences.
+  ///
+  /// This handles the case where:
+  /// - The app was restarted after a zip self-update.
+  /// - The installer file could not be deleted immediately after launch
+  ///   (file in use).
+  /// - The user launched the app after a manual update.
+  Future<void> cleanupStaleInstallerFiles() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final path = prefs.getString(_kDownloadedFilePathKey);
+      if (path == null || path.isEmpty) return;
+
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+        debugPrint('[UpdateNotifier] Cleaned up stale installer: $path');
+      }
+      // Remove the key regardless (file may have already been deleted).
+      await prefs.remove(_kDownloadedFilePathKey);
+    } catch (e) {
+      debugPrint('[UpdateNotifier] Failed to clean up stale installers: $e');
     }
   }
 

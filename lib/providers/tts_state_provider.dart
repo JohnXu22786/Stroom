@@ -551,7 +551,13 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
         try {
           params[cp.paramName] = jsonDecode(rawValue);
         } catch (_) {
-          // Keep as string if not valid JSON
+          if (rawValue.trim().isNotEmpty) {
+            debugPrint(
+              '[TTSStateNotifier] _parseJsonCustomParams: failed to parse '
+              '"$rawValue" as JSON for param "${cp.paramName}" — '
+              'keeping raw string.',
+            );
+          }
         }
       }
     }

@@ -21,7 +21,10 @@ import 'audio_player_page.dart';
 import 'audio_recording_page.dart';
 
 class TtsPage extends ConsumerStatefulWidget {
-  const TtsPage({super.key});
+  final int tabIndex;
+  final bool isActiveTab;
+
+  const TtsPage({super.key, this.tabIndex = 1, this.isActiveTab = true});
 
   @override
   ConsumerState<TtsPage> createState() => _TtsPageState();
@@ -129,8 +132,9 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         final rawName = _sanitizeName(file.name);
         final ext = p.extension(rawName).replaceAll('.', '').toLowerCase();
         final detectedFormat = detectAudioFormat(bytes);
+        // 规范化格式：aac → m4a（与 UI 显示保持一致）
         final format = detectedFormat != 'pcm'
-            ? detectedFormat
+            ? normalizeAudioFormat(detectedFormat)
             : (ext.isNotEmpty ? ext : 'wav');
         final displayName = _uniqueAudioName(
           p.basenameWithoutExtension(rawName),
@@ -666,7 +670,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         ),
         child: Center(
           child: Text(
-            file.format.toUpperCase(),
+            formatDisplayName(file.format),
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 12,
@@ -729,9 +733,13 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
 
     final navigateToParentSignal =
         ref.watch(filesPageNavigateToParentSignalProvider);
+    final tabResetSignal =
+        ref.watch(fileTabFolderResetSignalProvider(widget.tabIndex));
 
     return FileManagerView<AudioRecord>(
+      tabResetSignal: tabResetSignal,
       navigateToParentSignal: navigateToParentSignal,
+      isActiveTab: widget.isActiveTab,
       sortedRecords: sortedRecords,
       folders: folders,
       sortConfig: sortConfig,

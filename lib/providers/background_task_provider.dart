@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show debugPrint;
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:uuid/uuid.dart';
 import 'package:path/path.dart' as p;
@@ -44,7 +43,7 @@ enum BackgroundTaskType {
         return ['连接服务器', '上传音频', '转写中', '接收结果', '保存文件'];
       case BackgroundTaskType.audioSeparation:
         // Audio Separation: local processing only, no API
-        return ['正在分离音频...'];
+        return ['分离音频', '保存到文件'];
     }
   }
 }
@@ -124,6 +123,8 @@ class BackgroundTask {
       rawRequest; // Raw request data for error diagnostics
   final Map<String, dynamic>?
       rawResponse; // Raw response data for error diagnostics
+  final Map<String, dynamic>?
+      retryData; // Retry data to pre-populate form when retrying
 
   BackgroundTask({
     required this.id,
@@ -139,6 +140,7 @@ class BackgroundTask {
     this.downloadedFilePath,
     this.rawRequest,
     this.rawResponse,
+    this.retryData,
   }) : createdAt = createdAt ?? DateTime.now();
 
   BackgroundTask copyWith({
@@ -151,10 +153,12 @@ class BackgroundTask {
     String? downloadedFilePath,
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
+    Map<String, dynamic>? retryData,
     bool clearError = false,
     bool clearDownloadedFilePath = false,
     bool clearRawRequest = false,
     bool clearRawResponse = false,
+    bool clearRetryData = false,
   }) {
     final newStatus = status ?? this.status;
     final newStatusChangedAt = statusChangedAt ??
@@ -177,6 +181,7 @@ class BackgroundTask {
           : (downloadedFilePath ?? this.downloadedFilePath),
       rawRequest: clearRawRequest ? null : (rawRequest ?? this.rawRequest),
       rawResponse: clearRawResponse ? null : (rawResponse ?? this.rawResponse),
+      retryData: clearRetryData ? null : (retryData ?? this.retryData),
     );
   }
 
@@ -195,6 +200,7 @@ class BackgroundTask {
           'downloadedFilePath': downloadedFilePath,
         if (rawRequest != null) 'rawRequest': rawRequest,
         if (rawResponse != null) 'rawResponse': rawResponse,
+        if (retryData != null) 'retryData': retryData,
       };
 
   factory BackgroundTask.fromMap(Map<String, dynamic> map) => BackgroundTask(
@@ -219,6 +225,7 @@ class BackgroundTask {
         downloadedFilePath: map['downloadedFilePath'] as String?,
         rawRequest: map['rawRequest'] as Map<String, dynamic>?,
         rawResponse: map['rawResponse'] as Map<String, dynamic>?,
+        retryData: map['retryData'] as Map<String, dynamic>?,
       );
 }
 
@@ -236,17 +243,47 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   BackgroundTaskNotifier() : super([]);
 
-  /// Add a new background task (running) and return its ID.
+  /// Add a new background task and return its ID.
   /// Initializes default step chain based on task type.
-  String addTask({required BackgroundTaskType type, required String title}) {
+  /// [retryData] stores the original input parameters (images, audio, model, etc.)
+  /// so the retry flow can pre-populate the form.
+  /// When [startImmediately] is true (default), the task starts as [TaskStatus.running].
+  /// When false, the task starts as [TaskStatus.waiting] and can be started later via [startTask].
+  String addTask({
+    required BackgroundTaskType type,
+    required String title,
+    Map<String, dynamic>? retryData,
+    bool startImmediately = true,
+  }) {
     final id = _uuid.v4();
     final steps = type.stepLabels
         .map((label) => BgTaskStep(label: label, status: BgStepStatus.pending))
         .toList();
-    final task = BackgroundTask(id: id, type: type, title: title, steps: steps);
+    final task = BackgroundTask(
+      id: id,
+      type: type,
+      title: title,
+      status: startImmediately ? TaskStatus.running : TaskStatus.waiting,
+      steps: steps,
+      retryData: retryData,
+    );
     state = [task, ...state];
     _persistTasks();
     return id;
+  }
+
+  /// Start a waiting task — transitions it from [TaskStatus.waiting] to [TaskStatus.running].
+  /// Does nothing if the task is not in waiting status (e.g. already running/completed).
+  void startTask(String taskId) {
+    state = state.map((t) {
+      if (t.id != taskId) return t;
+      if (t.status != TaskStatus.waiting) return t;
+      return t.copyWith(
+        status: TaskStatus.running,
+        statusChangedAt: DateTime.now(),
+      );
+    }).toList();
+    _persistTasks();
   }
 
   /// Mark a task as completed and keep it in the list (visible to user).
@@ -443,6 +480,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   /// Restore persisted tasks on startup.
   /// Running tasks are marked as failed since they can't be resumed.
+  /// Waiting tasks are kept as waiting (they haven't started yet).
   Future<void> restoreFromPersistence() async {
     final tasks = await _loadPersistedTasks();
     if (tasks.isEmpty) return;

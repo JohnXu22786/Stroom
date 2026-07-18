@@ -17,6 +17,7 @@ import 'manifest_database.dart';
 import 'storage_service.dart';
 import '../utils/app_version.dart';
 import '../utils/web_file_store.dart';
+import 'app_log_service.dart';
 
 /// Exception thrown when a backup operation is cancelled.
 class BackupCancelledException implements Exception {
@@ -25,6 +26,72 @@ class BackupCancelledException implements Exception {
 
   @override
   String toString() => message;
+}
+
+// ====================================================================
+// BackupSelection — 选择性备份/恢复的数据类别
+// ====================================================================
+//
+// 用于手动操作时选择要备份或恢复的数据类别。
+// 自动备份时始终使用全量选择。
+//
+// 【重要】该类字段变更说明：
+// - v1: conversations(聊天记录和设置) + attachments(附件)
+// - v2: 将 conversations 拆分为 chatRecordsAndAttachments(聊天记录和附件)
+//       和 settings(设置)，attachments 合并到 chatRecordsAndAttachments
+// ====================================================================
+
+/// 备份/恢复的选择项。
+///
+/// 每个 bool 字段表示是否包含对应的数据类别。
+/// 所有字段默认为 `true`（全量）。
+class BackupSelection {
+  /// 聊天记录和附件（聊天相关Preferences + 附件文件）
+  final bool chatRecordsAndAttachments;
+
+  /// 设置（设置相关Preferences）
+  final bool settings;
+
+  /// 图片文件（pictures/）
+  final bool pictures;
+
+  /// 音频文件（tts_audio/）
+  final bool audio;
+
+  /// 视频文件（videos/）
+  final bool videos;
+
+  /// 文本文件（texts/）
+  final bool texts;
+
+  /// 任务文件（synthesis/ + catcatch/）
+  final bool tasks;
+
+  const BackupSelection({
+    this.chatRecordsAndAttachments = true,
+    this.settings = true,
+    this.pictures = true,
+    this.audio = true,
+    this.videos = true,
+    this.texts = true,
+    this.tasks = true,
+  });
+
+  /// 全量选择（所有类别）。
+  static const all = BackupSelection();
+
+  /// 根据选择结果返回包含的类别名称列表（用于 UI 显示）。
+  List<String> get selectedLabels {
+    final labels = <String>[];
+    if (chatRecordsAndAttachments) labels.add('聊天记录和附件');
+    if (settings) labels.add('设置');
+    if (pictures) labels.add('图片');
+    if (audio) labels.add('音频');
+    if (videos) labels.add('视频');
+    if (texts) labels.add('文本');
+    if (tasks) labels.add('任务');
+    return labels;
+  }
 }
 
 // ====================================================================
@@ -43,7 +110,10 @@ class BackupService {
     required String outputPath,
     void Function(double progress)? onProgress,
     bool Function()? isCancelled,
+    BackupSelection selection = BackupSelection.all,
   }) async {
+    await AppLogService.info(
+        'BackupService', 'createBackup: outputPath=$outputPath');
     if (kIsWeb) {
       throw UnsupportedError(
           'createBackup is not available on web. Use exportBackup instead.');
@@ -52,29 +122,47 @@ class BackupService {
       throw const BackupCancelledException();
     }
     final bytes = await _buildBackupBytes(
-        onProgress: onProgress, isCancelled: isCancelled);
+        onProgress: onProgress, isCancelled: isCancelled, selection: selection);
     if (isCancelled != null && isCancelled()) {
       throw const BackupCancelledException();
     }
     await File(outputPath).writeAsBytes(bytes);
+    await AppLogService.info('BackupService', 'createBackup: success');
     return outputPath;
   }
 
   static Future<void> restoreBackup(
     String zipPath, {
     void Function(double progress)? onProgress,
+    BackupSelection selection = BackupSelection.all,
   }) async {
+    await AppLogService.info(
+        'BackupService', 'restoreBackup: zipPath=$zipPath');
     if (kIsWeb) {
       throw UnsupportedError(
           'restoreBackup is not available on web. Use importBackup instead.');
     }
     final bytes = await File(zipPath).readAsBytes();
-    await _restoreFromBytes(bytes, onProgress: onProgress);
+    await _restoreFromBytes(bytes,
+        onProgress: onProgress, selection: selection);
   }
 
   // ================================================================
   // 核心：在内存中构建备份归档
   // ================================================================
+
+  /// 判断 SharedPreferences 键是否为聊天相关键。
+  ///
+  /// 聊天键包括：对话数据、活跃对话ID、助手配置、每模型聊天设置等。
+  /// 所有非 `flutter.*` 前缀的其他键归类为"设置"。
+  static bool _isChatPrefKey(String key) {
+    return key == 'conversations' ||
+        key == 'active_conversation_id' ||
+        key == 'assistants' ||
+        key == 'per_model_chat_settings' ||
+        key == 'selected_model_index' ||
+        key == 'model_order';
+  }
 
   /// 短暂的延迟以让出事件循环，确保 UI 可以处理帧渲染。
   /// 这是防止导出备份时页面冻结的关键机制。
@@ -155,9 +243,18 @@ class BackupService {
   ///
   /// [isCancelled] 是一个可选的回调，在每次让出事件循环时被调用。
   /// 如果返回 `true`，则抛出 [BackupCancelledException] 终止备份。
+  ///
+  /// [selection] 控制哪些数据类别包含在归档中。默认全量。
+  /// 自动备份始终使用全量选择。
+  ///
+  /// 备份格式版本：
+  /// - v1: preferences.json（聊天+设置合并）+ attachments/ 分开
+  /// - v2: chat_data.json（聊天记录）+ settings.json（设置）+
+  ///       attachments/ 作为聊天记录和附件的一部分
   static Future<Uint8List> _buildBackupBytes({
     void Function(double progress)? onProgress,
     bool Function()? isCancelled,
+    BackupSelection selection = BackupSelection.all,
   }) async {
     void checkCancelled() {
       if (isCancelled != null && isCancelled()) {
@@ -170,9 +267,10 @@ class BackupService {
     checkCancelled();
     final archive = Archive();
 
-    // 1. manifest.json
+    // 1. manifest.json（始终包含）
+    debugPrint('[BackupService] _buildBackupBytes: building manifest');
     final manifest = {
-      'version': 1,
+      'version': 2,
       'createdAt': DateTime.now().toIso8601String(),
       'appVersion': appVersion,
     };
@@ -182,20 +280,36 @@ class BackupService {
     checkCancelled();
 
     // 2. 数据库（按存储格式：根目录 stroom_manifest.json）
-    final imageRecords = await ManifestDatabase.getAllImageRecords();
-    final audioRecords = await ManifestDatabase.getAllAudioRecords();
-    final videoRecords = await ManifestDatabase.getAllVideoRecords();
-    final textRecords = await ManifestDatabase.getAllTextRecords();
-    final folders = await ManifestDatabase.getAllFolders();
-    // Per-type folder tables
-    final textFolders = await ManifestDatabase.getAllFolders(
-        recordTable: ManifestTables.textRecords);
-    final audioFolders = await ManifestDatabase.getAllFolders(
-        recordTable: ManifestTables.audioRecords);
-    final imageFolders = await ManifestDatabase.getAllFolders(
-        recordTable: ManifestTables.imageRecords);
-    final videoFolders = await ManifestDatabase.getAllFolders(
-        recordTable: ManifestTables.videoRecords);
+    debugPrint('[BackupService] _buildBackupBytes: reading database');
+    final imageRecords = selection.pictures
+        ? await ManifestDatabase.getAllImageRecords()
+        : <Map<String, dynamic>>[];
+    final audioRecords = selection.audio
+        ? await ManifestDatabase.getAllAudioRecords()
+        : <Map<String, dynamic>>[];
+    final videoRecords = selection.videos
+        ? await ManifestDatabase.getAllVideoRecords()
+        : <Map<String, dynamic>>[];
+    final textRecords = selection.texts
+        ? await ManifestDatabase.getAllTextRecords()
+        : <Map<String, dynamic>>[];
+    final folders = <String>[];
+    final textFolders = selection.texts
+        ? await ManifestDatabase.getAllFolders(
+            recordTable: ManifestTables.textRecords)
+        : <String>[];
+    final audioFolders = selection.audio
+        ? await ManifestDatabase.getAllFolders(
+            recordTable: ManifestTables.audioRecords)
+        : <String>[];
+    final imageFolders = selection.pictures
+        ? await ManifestDatabase.getAllFolders(
+            recordTable: ManifestTables.imageRecords)
+        : <String>[];
+    final videoFolders = selection.videos
+        ? await ManifestDatabase.getAllFolders(
+            recordTable: ManifestTables.videoRecords)
+        : <String>[];
     final dbData = {
       'image_records': imageRecords,
       'audio_records': audioRecords,
@@ -212,114 +326,153 @@ class BackupService {
     await _yieldToEventLoop();
     checkCancelled();
 
-    // 3. SharedPreferences
-    final prefs = await SharedPreferences.getInstance();
-    final prefData = <String, dynamic>{};
-    for (final key in prefs.getKeys()) {
-      if (key.startsWith('flutter.')) continue;
-      prefData[key] = prefs.get(key);
+    // 3. SharedPreferences — 拆分聊天记录和设置
+    // chatRecordsAndAttachments → chat_data.json（聊天相关键）
+    // settings → settings.json（设置相关键）
+    bool hasChatData = false;
+    bool hasSettingsData = false;
+    final chatData = <String, dynamic>{};
+    final settingsData = <String, dynamic>{};
+
+    if (selection.chatRecordsAndAttachments || selection.settings) {
+      debugPrint('[BackupService] _buildBackupBytes: reading preferences');
+      final prefs = await SharedPreferences.getInstance();
+      for (final key in prefs.getKeys()) {
+        if (key.startsWith('flutter.')) continue;
+        if (_isChatPrefKey(key)) {
+          if (selection.chatRecordsAndAttachments) {
+            chatData[key] = prefs.get(key);
+            hasChatData = true;
+          }
+        } else {
+          if (selection.settings) {
+            settingsData[key] = prefs.get(key);
+            hasSettingsData = true;
+          }
+        }
+      }
     }
-    addStringToArchive(archive, 'preferences.json', jsonEncode(prefData));
+
+    if (hasChatData) {
+      addStringToArchive(archive, 'chat_data.json', jsonEncode(chatData));
+    }
+    if (hasSettingsData) {
+      addStringToArchive(archive, 'settings.json', jsonEncode(settingsData));
+    }
     onProgress?.call(0.25);
     await _yieldToEventLoop();
     checkCancelled();
 
     // 4. 任务文件（按存储格式：synthesis/tasks.json, catcatch/tasks.json）
-    // 在测试模式下跳过文件系统操作以避免平台通道挂起
-    if (!kIsWeb && !WebFileStore.isTestMode) {
-      final appDir = await AppStorage.directory;
-      await addTaskFileToArchive(archive, 'synthesis/tasks.json',
-          p.join(appDir, 'synthesis', 'tasks.json'));
-      await addTaskFileToArchive(archive, 'catcatch/tasks.json',
-          p.join(appDir, 'catcatch', 'tasks.json'));
-    } else {
-      addStringToArchive(archive, 'synthesis/tasks.json', '[]');
-      addStringToArchive(archive, 'catcatch/tasks.json', '[]');
+    if (selection.tasks) {
+      debugPrint('[BackupService] _buildBackupBytes: adding task files');
+      if (!kIsWeb && !WebFileStore.isTestMode) {
+        final appDir = await AppStorage.directory;
+        await addTaskFileToArchive(archive, 'synthesis/tasks.json',
+            p.join(appDir, 'synthesis', 'tasks.json'));
+        await addTaskFileToArchive(archive, 'catcatch/tasks.json',
+            p.join(appDir, 'catcatch', 'tasks.json'));
+      } else {
+        addStringToArchive(archive, 'synthesis/tasks.json', '[]');
+        addStringToArchive(archive, 'catcatch/tasks.json', '[]');
+      }
     }
     onProgress?.call(0.35);
     await _yieldToEventLoop();
     checkCancelled();
 
     // 5. 二进制文件（按存储格式：pictures/, tts_audio/, videos/, texts/, attachments/）
-    for (var i = 0; i < imageRecords.length; i++) {
-      final record = imageRecords[i];
-      final hash = record['hash'] as String?;
-      final format = record['format'] as String? ?? 'jpg';
-      if (hash == null) continue;
-      await addFileToArchive(
-          archive, 'pictures/$hash.$format', 'pictures', '$hash.$format');
-      await addFileToArchive(archive, 'pictures/${hash}_thumb.png', 'pictures',
-          '${hash}_thumb.png');
-      // 每处理 10 条记录让出一次事件循环，防止大量文件操作阻塞 UI
-      if (i % 10 == 0) {
-        await _yieldToEventLoop();
-        checkCancelled();
+    debugPrint('[BackupService] _buildBackupBytes: adding binary files');
+
+    if (selection.pictures) {
+      for (var i = 0; i < imageRecords.length; i++) {
+        final record = imageRecords[i];
+        final hash = record['hash'] as String?;
+        final format = record['format'] as String? ?? 'jpg';
+        if (hash == null) continue;
+        await addFileToArchive(
+            archive, 'pictures/$hash.$format', 'pictures', '$hash.$format');
+        await addFileToArchive(archive, 'pictures/${hash}_thumb.png',
+            'pictures', '${hash}_thumb.png');
+        if (i % 10 == 0) {
+          await _yieldToEventLoop();
+          checkCancelled();
+        }
       }
     }
     onProgress?.call(0.5);
     await _yieldToEventLoop();
     checkCancelled();
 
-    for (var i = 0; i < audioRecords.length; i++) {
-      final record = audioRecords[i];
-      final hash = record['hash'] as String?;
-      final format = record['format'] as String? ?? 'wav';
-      if (hash == null) continue;
-      await addFileToArchive(
-          archive, 'tts_audio/$hash.$format', 'tts_audio', '$hash.$format');
-      await addFileToArchive(
-          archive, 'tts_audio/$hash.txt', 'tts_audio', '$hash.txt');
-      if (i % 10 == 0) {
-        await _yieldToEventLoop();
-        checkCancelled();
+    if (selection.audio) {
+      for (var i = 0; i < audioRecords.length; i++) {
+        final record = audioRecords[i];
+        final hash = record['hash'] as String?;
+        final format = record['format'] as String? ?? 'wav';
+        if (hash == null) continue;
+        await addFileToArchive(
+            archive, 'tts_audio/$hash.$format', 'tts_audio', '$hash.$format');
+        await addFileToArchive(
+            archive, 'tts_audio/$hash.txt', 'tts_audio', '$hash.txt');
+        if (i % 10 == 0) {
+          await _yieldToEventLoop();
+          checkCancelled();
+        }
       }
     }
     onProgress?.call(0.65);
     await _yieldToEventLoop();
     checkCancelled();
 
-    for (var i = 0; i < videoRecords.length; i++) {
-      final record = videoRecords[i];
-      final hash = record['hash'] as String?;
-      final format = record['format'] as String? ?? 'mp4';
-      if (hash == null) continue;
-      await addFileToArchive(
-          archive, 'videos/$hash.$format', 'videos', '$hash.$format');
-      if (i % 10 == 0) {
-        await _yieldToEventLoop();
-        checkCancelled();
+    if (selection.videos) {
+      for (var i = 0; i < videoRecords.length; i++) {
+        final record = videoRecords[i];
+        final hash = record['hash'] as String?;
+        final format = record['format'] as String? ?? 'mp4';
+        if (hash == null) continue;
+        await addFileToArchive(
+            archive, 'videos/$hash.$format', 'videos', '$hash.$format');
+        if (i % 10 == 0) {
+          await _yieldToEventLoop();
+          checkCancelled();
+        }
       }
     }
     onProgress?.call(0.75);
     await _yieldToEventLoop();
     checkCancelled();
 
-    for (var i = 0; i < textRecords.length; i++) {
-      final record = textRecords[i];
-      final hash = record['hash'] as String?;
-      if (hash == null) continue;
-      await addFileToArchive(archive, 'texts/$hash.txt', 'texts', '$hash.txt');
-      if (i % 10 == 0) {
-        await _yieldToEventLoop();
-        checkCancelled();
+    if (selection.texts) {
+      for (var i = 0; i < textRecords.length; i++) {
+        final record = textRecords[i];
+        final hash = record['hash'] as String?;
+        if (hash == null) continue;
+        await addFileToArchive(
+            archive, 'texts/$hash.txt', 'texts', '$hash.txt');
+        if (i % 10 == 0) {
+          await _yieldToEventLoop();
+          checkCancelled();
+        }
       }
     }
     onProgress?.call(0.8);
     await _yieldToEventLoop();
     checkCancelled();
 
-    final attachmentPaths = await collectAttachmentPaths();
-    final pathList = attachmentPaths.toList();
-    for (var i = 0; i < pathList.length; i++) {
-      final storagePath = pathList[i];
-      final parts = storagePath.split('/');
-      if (parts.length < 2) continue;
-      final subDir = parts[0];
-      final fileName = parts.sublist(1).join('/');
-      await addFileToArchive(archive, storagePath, subDir, fileName);
-      if (i % 10 == 0) {
-        await _yieldToEventLoop();
-        checkCancelled();
+    if (selection.chatRecordsAndAttachments) {
+      final attachmentPaths = await collectAttachmentPaths();
+      final pathList = attachmentPaths.toList();
+      for (var i = 0; i < pathList.length; i++) {
+        final storagePath = pathList[i];
+        final parts = storagePath.split('/');
+        if (parts.length < 2) continue;
+        final subDir = parts[0];
+        final fileName = parts.sublist(1).join('/');
+        await addFileToArchive(archive, storagePath, subDir, fileName);
+        if (i % 10 == 0) {
+          await _yieldToEventLoop();
+          checkCancelled();
+        }
       }
     }
     onProgress?.call(0.85);
@@ -327,6 +480,7 @@ class BackupService {
     checkCancelled();
 
     // 6. 编码 — 在后台隔离中执行，不阻塞主 UI 线程
+    debugPrint('[BackupService] _buildBackupBytes: encoding archive');
     final files = _extractArchiveFiles(archive);
     onProgress?.call(0.9);
     await _yieldToEventLoop();
@@ -338,9 +492,17 @@ class BackupService {
   }
 
   /// 从字节数据恢复备份（双平台通用）。
+  ///
+  /// [selection] 控制只恢复哪些数据类别。默认全量恢复。
+  ///
+  /// 兼容 v1 和 v2 备份格式：
+  /// - v1: preferences.json（聊天+设置合并），attachments/ 分开
+  /// - v2: chat_data.json（聊天记录）+ settings.json（设置），
+  ///       attachments/ 作为聊天记录和附件的一部分
   static Future<void> _restoreFromBytes(
     Uint8List bytes, {
     void Function(double progress)? onProgress,
+    BackupSelection selection = BackupSelection.all,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -349,6 +511,7 @@ class BackupService {
     try {
       archive = ZipDecoder().decodeBytes(bytes);
     } catch (e) {
+      debugPrint('[BackupService] _restoreFromBytes: 备份文件解压失败: $e');
       throw Exception('无效的备份文件：无法解压 ($e)');
     }
     onProgress?.call(0.1);
@@ -365,7 +528,10 @@ class BackupService {
       if (fileIndex % 50 == 0) await _yieldToEventLoop();
     }
 
-    // 验证 manifest
+    debugPrint(
+        '[BackupService] _restoreFromBytes: archive decoded (${fileMap.length} files)');
+
+    // 验证 manifest（兼容 v1 和 v2）
     final manifestJson = fileMap['manifest.json'];
     if (manifestJson == null) {
       throw Exception('无效的备份文件：缺少 manifest.json');
@@ -373,29 +539,67 @@ class BackupService {
     final manifest =
         jsonDecode(utf8.decode(manifestJson)) as Map<String, dynamic>;
     final version = manifest['version'] as int? ?? 0;
-    if (version != 1) {
-      throw Exception('不支持的备份版本: $version');
+    if (version != 1 && version != 2) {
+      throw Exception('不支持的备份版本: $version (仅支持 v1 和 v2)');
     }
+    final isV1Format = version == 1;
     onProgress?.call(0.15);
     await _yieldToEventLoop();
 
-    // 恢复数据库（兼容新旧格式）
+    // 恢复数据库记录
+    debugPrint('[BackupService] _restoreFromBytes: restoring database');
     final dbJson = fileMap['stroom_manifest.json'] ??
         fileMap['database/manifest_data.json'];
     if (dbJson != null) {
-      await _restoreDatabaseFromJson(utf8.decode(dbJson));
+      await _restoreDatabaseFromJson(utf8.decode(dbJson), selection: selection);
     }
     onProgress?.call(0.4);
     await _yieldToEventLoop();
 
-    // 恢复 SharedPreferences
-    final prefJson = fileMap['preferences.json'];
-    if (prefJson != null) {
-      await _restorePreferencesFromJson(utf8.decode(prefJson));
+    // 恢复 SharedPreferences（兼容 v1/v2 格式）
+    // 注意：必须将要恢复的所有数据合并后一次性调用 _restorePreferencesFromJson，
+    // 因为该方法会清除现有所有非 flutter.* 键。分两次调用会导致先恢复的数据被后一次清除。
+    if (isV1Format) {
+      // v1 格式：preferences.json 包含所有键（聊天+设置合并）
+      // 如果用户选中 chatRecordsAndAttachments 或 settings，恢复完整文件
+      if (selection.chatRecordsAndAttachments || selection.settings) {
+        debugPrint(
+            '[BackupService] _restoreFromBytes: restoring v1 preferences');
+        final prefJson = fileMap['preferences.json'];
+        if (prefJson != null) {
+          await _restorePreferencesFromJson(utf8.decode(prefJson));
+        }
+      }
+    } else {
+      // v2 格式：chat_data.json + settings.json 分开，合并后一次性恢复
+      final mergedPrefs = <String, dynamic>{};
+      if (selection.chatRecordsAndAttachments) {
+        debugPrint('[BackupService] _restoreFromBytes: merging chat_data.json');
+        final chatJson = fileMap['chat_data.json'];
+        if (chatJson != null) {
+          final chatData =
+              jsonDecode(utf8.decode(chatJson)) as Map<String, dynamic>;
+          mergedPrefs.addAll(chatData);
+        }
+      }
+      if (selection.settings) {
+        debugPrint('[BackupService] _restoreFromBytes: merging settings.json');
+        final settingsJson = fileMap['settings.json'];
+        if (settingsJson != null) {
+          final settingsData =
+              jsonDecode(utf8.decode(settingsJson)) as Map<String, dynamic>;
+          mergedPrefs.addAll(settingsData);
+        }
+      }
+      if (mergedPrefs.isNotEmpty) {
+        await _restorePreferencesFromJson(jsonEncode(mergedPrefs));
+      }
     }
     onProgress?.call(0.55);
     await _yieldToEventLoop();
 
+    debugPrint(
+        '[BackupService] _restoreFromBytes: restoring binary files (selection: ${selection.selectedLabels})');
     // 恢复二进制文件和任务文件（兼容新旧两种路径格式）
     // 新格式: pictures/, tts_audio/, videos/, texts/, attachments/, synthesis/, catcatch/
     // 旧格式: files/pictures/, files/tts_audio/, ..., tasks/synthesis_tasks.json
@@ -412,8 +616,34 @@ class BackupService {
       'manifest.json',
       'stroom_manifest.json',
       'database/manifest_data.json',
-      'preferences.json'
+      'preferences.json',
+      'chat_data.json',
+      'settings.json',
     };
+
+    // 根据 selection 决定哪些目录需要恢复
+    // v1 格式：attachments 由旧的 conversations 标志控制（因为 v1 的
+    // conversations 包含了设置+聊天记录，不包含附件），但为了兼容，
+    // v1 导入时 attachments 由 chatRecordsAndAttachments 控制
+    bool shouldRestoreDir(String dir) {
+      switch (dir) {
+        case 'pictures':
+          return selection.pictures;
+        case 'tts_audio':
+          return selection.audio;
+        case 'videos':
+          return selection.videos;
+        case 'texts':
+          return selection.texts;
+        case 'synthesis':
+        case 'catcatch':
+          return selection.tasks;
+        case 'attachments':
+          return selection.chatRecordsAndAttachments;
+        default:
+          return false;
+      }
+    }
 
     var restoreIndex = 0;
     for (final entry in fileMap.entries) {
@@ -451,6 +681,12 @@ class BackupService {
         continue;
       }
 
+      // 根据 selection 跳过不需要恢复的目录
+      if (!shouldRestoreDir(matchedDir)) {
+        restoreIndex++;
+        continue;
+      }
+
       final relativePath = key.substring(matchedDir.length + 1);
 
       if (matchedDir == 'synthesis' || matchedDir == 'catcatch') {
@@ -479,7 +715,10 @@ class BackupService {
   // 恢复辅助
   // ================================================================
 
-  static Future<void> _restoreDatabaseFromJson(String json) async {
+  static Future<void> _restoreDatabaseFromJson(
+    String json, {
+    BackupSelection selection = BackupSelection.all,
+  }) async {
     final data = jsonDecode(json) as Map<String, dynamic>;
     final imageRecords = (data['image_records'] as List<dynamic>?)
             ?.cast<Map<String, dynamic>>() ??
@@ -493,7 +732,6 @@ class BackupService {
     final textRecords = (data['text_records'] as List<dynamic>?)
             ?.cast<Map<String, dynamic>>() ??
         [];
-    final folders = (data['folders'] as List<dynamic>?)?.cast<String>() ?? [];
 
     // Per-type folders (v2+ backups)
     final textFolders =
@@ -508,52 +746,72 @@ class BackupService {
     final videoFolders =
         (data[ManifestTables.videoFolders] as List<dynamic>?)?.cast<String>() ??
             <String>[];
+    final folders = (data['folders'] as List<dynamic>?)?.cast<String>() ?? [];
 
-    await ManifestDatabase.clearAllData();
+    debugPrint('[BackupService] _restoreDatabaseFromJson: '
+        'image(${imageRecords.length}) audio(${audioRecords.length}) '
+        'video(${videoRecords.length}) text(${textRecords.length})');
 
-    for (final record in imageRecords) {
-      await ManifestDatabase.insertImageRecord(record);
+    // 选择性恢复：只清除并恢复选中的记录类型
+    if (selection.pictures) {
+      await ManifestDatabase.clearRecords('image_records');
+      for (final record in imageRecords) {
+        await ManifestDatabase.insertImageRecord(record);
+      }
     }
-    for (final record in audioRecords) {
-      await ManifestDatabase.insertAudioRecord(record);
+    if (selection.audio) {
+      await ManifestDatabase.clearRecords('audio_records');
+      for (final record in audioRecords) {
+        await ManifestDatabase.insertAudioRecord(record);
+      }
     }
-    for (final record in videoRecords) {
-      await ManifestDatabase.insertVideoRecord(record);
+    if (selection.videos) {
+      await ManifestDatabase.clearRecords('video_records');
+      for (final record in videoRecords) {
+        await ManifestDatabase.insertVideoRecord(record);
+      }
     }
-    for (final record in textRecords) {
-      await ManifestDatabase.insertTextRecord(record);
+    if (selection.texts) {
+      await ManifestDatabase.clearRecords('text_records');
+      for (final record in textRecords) {
+        await ManifestDatabase.insertTextRecord(record);
+      }
     }
 
-    // Restore per-type folders if available (v2+); otherwise fall back to shared folders
-    if (textFolders.isNotEmpty ||
-        audioFolders.isNotEmpty ||
-        imageFolders.isNotEmpty ||
-        videoFolders.isNotEmpty) {
-      for (final folder in textFolders) {
+    // Restore folders only for selected record types
+    // 与记录清除一致：选中即先清除，再从备份中恢复（备份可能为空）
+    if (selection.texts) {
+      final dirs = textFolders.isNotEmpty ? textFolders : folders;
+      await ManifestDatabase.clearFolders(
+          recordTable: ManifestTables.textRecords);
+      for (final folder in dirs) {
         await ManifestDatabase.insertFolder(folder,
             recordTable: ManifestTables.textRecords);
       }
-      for (final folder in audioFolders) {
+    }
+    if (selection.audio) {
+      final dirs = audioFolders.isNotEmpty ? audioFolders : folders;
+      await ManifestDatabase.clearFolders(
+          recordTable: ManifestTables.audioRecords);
+      for (final folder in dirs) {
         await ManifestDatabase.insertFolder(folder,
             recordTable: ManifestTables.audioRecords);
       }
-      for (final folder in imageFolders) {
+    }
+    if (selection.pictures) {
+      final dirs = imageFolders.isNotEmpty ? imageFolders : folders;
+      await ManifestDatabase.clearFolders(
+          recordTable: ManifestTables.imageRecords);
+      for (final folder in dirs) {
         await ManifestDatabase.insertFolder(folder,
             recordTable: ManifestTables.imageRecords);
       }
-      for (final folder in videoFolders) {
-        await ManifestDatabase.insertFolder(folder,
-            recordTable: ManifestTables.videoRecords);
-      }
-    } else {
-      // v1 backup (legacy): distribute shared folders to all 4 per-type tables
-      for (final folder in folders) {
-        await ManifestDatabase.insertFolder(folder,
-            recordTable: ManifestTables.textRecords);
-        await ManifestDatabase.insertFolder(folder,
-            recordTable: ManifestTables.audioRecords);
-        await ManifestDatabase.insertFolder(folder,
-            recordTable: ManifestTables.imageRecords);
+    }
+    if (selection.videos) {
+      final dirs = videoFolders.isNotEmpty ? videoFolders : folders;
+      await ManifestDatabase.clearFolders(
+          recordTable: ManifestTables.videoRecords);
+      for (final folder in dirs) {
         await ManifestDatabase.insertFolder(folder,
             recordTable: ManifestTables.videoRecords);
       }
@@ -588,6 +846,8 @@ class BackupService {
         debugPrint('恢复偏好设置 ${entry.key} 失败: $e');
       }
     }
+    await AppLogService.info('BackupService',
+        '_restorePreferencesFromJson: restored ${backupPrefs.length} keys');
   }
 
   // ================================================================
@@ -597,17 +857,21 @@ class BackupService {
   /// 导出备份：弹出保存文件对话框，创建 zip。
   ///
   /// [onProgress] 可选回调，报告备份构建进度（0.0 ~ 1.0）。
+  /// [selection] 控制哪些数据类别包含在备份中。默认全量。
   static Future<void> exportBackup(
     BuildContext context, {
     void Function(double progress)? onProgress,
+    BackupSelection selection = BackupSelection.all,
   }) async {
+    await AppLogService.info('BackupService', 'exportBackup: start');
     try {
       final dateStr =
           DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
       final defaultName = 'stroom_backup_$dateStr.zip';
 
       // 在内存中构建归档（传递进度回调）
-      final bytes = await _buildBackupBytes(onProgress: onProgress);
+      final bytes =
+          await _buildBackupBytes(onProgress: onProgress, selection: selection);
 
       final outputPath = await FilePicker.saveFile(
         fileName: defaultName,
@@ -619,7 +883,9 @@ class BackupService {
           SnackBar(content: Text('备份已保存到: $outputPath')),
         );
       }
+      await AppLogService.info('BackupService', 'exportBackup: success');
     } catch (e) {
+      await AppLogService.error('BackupService', 'exportBackup: 失败', e);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('备份失败: $e'), backgroundColor: Colors.red),
@@ -630,8 +896,13 @@ class BackupService {
 
   /// 导入备份：弹出打开文件对话框，从选中的 zip 恢复。
   ///
+  /// [selection] 控制只恢复哪些数据类别。默认全量恢复。
   /// 返回 `true` 表示恢复成功，`false` 表示用户取消或失败。
-  static Future<bool> importBackup(BuildContext context) async {
+  static Future<bool> importBackup(
+    BuildContext context, {
+    BackupSelection selection = BackupSelection.all,
+  }) async {
+    await AppLogService.info('BackupService', 'importBackup: start');
     try {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
@@ -643,14 +914,16 @@ class BackupService {
       final bytes = file.bytes;
 
       if (bytes != null) {
-        await _restoreFromBytes(bytes);
+        await _restoreFromBytes(bytes, selection: selection);
       } else if (file.path != null) {
-        await restoreBackup(file.path!);
+        await restoreBackup(file.path!, selection: selection);
       }
 
       // 恢复成功 — 让调用方处理倒计时和重启
+      await AppLogService.info('BackupService', 'importBackup: success');
       return true;
     } catch (e) {
+      await AppLogService.error('BackupService', 'importBackup: 失败', e);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('恢复失败: $e'), backgroundColor: Colors.red),
@@ -669,19 +942,27 @@ class BackupService {
   static Future<Uint8List> buildBackupBytesForTest({
     void Function(double progress)? onProgress,
     bool Function()? isCancelled,
+    BackupSelection selection = BackupSelection.all,
   }) =>
-      _buildBackupBytes(onProgress: onProgress, isCancelled: isCancelled);
+      _buildBackupBytes(
+          onProgress: onProgress,
+          isCancelled: isCancelled,
+          selection: selection);
 
   /// 公开 [_restoreFromBytes] 供测试使用。
   @visibleForTesting
   static Future<void> restoreFromBytesForTest(
     Uint8List bytes, {
     void Function(double progress)? onProgress,
+    BackupSelection selection = BackupSelection.all,
   }) =>
-      _restoreFromBytes(bytes, onProgress: onProgress);
+      _restoreFromBytes(bytes, onProgress: onProgress, selection: selection);
 
   /// 公开 [_restoreDatabaseFromJson] 供测试使用。
   @visibleForTesting
-  static Future<void> restoreDatabaseFromJsonForTest(String json) =>
-      _restoreDatabaseFromJson(json);
+  static Future<void> restoreDatabaseFromJsonForTest(
+    String json, {
+    BackupSelection selection = BackupSelection.all,
+  }) =>
+      _restoreDatabaseFromJson(json, selection: selection);
 }

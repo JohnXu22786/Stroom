@@ -90,16 +90,6 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
     final s = _parseInt(_secondController.text);
     final totalSec = totalSeconds(hours: h, minutes: m, seconds: s);
 
-    if (totalSec <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('请输入视频时长'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
     try {
       ref.read(catcatchTasksProvider.notifier).addTask(
             url,
@@ -182,6 +172,24 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
               decoration: InputDecoration(
                 hintText: '请输入视频/音频网页URL',
                 prefixIcon: const Icon(Icons.link),
+                suffixIcon: ListenableBuilder(
+                  listenable: _urlController,
+                  builder: (context, child) {
+                    if (_urlController.text.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    return IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _urlController.clear();
+                        _hourController.clear();
+                        _minuteController.clear();
+                        _secondController.clear();
+                      },
+                      tooltip: '清空所有输入',
+                    );
+                  },
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -319,7 +327,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
             Padding(
               padding: const EdgeInsets.only(top: 2, left: 4),
               child: Text(
-                '按时长筛选视频资源，不匹配的将不会出现在结果列表中',
+                '可选：按时长筛选视频资源。留空则展示全部资源供选择',
                 style: TextStyle(
                   fontSize: 12,
                   color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),

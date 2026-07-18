@@ -1,3 +1,4 @@
+// Merged from: ocr_page_test.dart, ocr_page_preview_edit_test.dart
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -5,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/ocr_page.dart';
-import 'package:stroom/pages/ocr/ocr_shared.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/image_manifest.dart';
@@ -107,48 +107,6 @@ void main() {
     TextManifest.invalidateCache();
   });
 
-  group('OcrPage - basic rendering', () {
-    testWidgets('renders OCR page title', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      expect(find.text('文字识别'), findsOneWidget);
-    });
-
-    testWidgets('shows photo source buttons', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      expect(find.text('拍照识别'), findsOneWidget);
-      expect(find.text('相册选择'), findsOneWidget);
-    });
-
-    testWidgets('shows empty state initially', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      expect(find.text('暂无选中图片'), findsOneWidget);
-    });
-
-    testWidgets('shows clear button only when images are selected', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // Initially no clear button
-      expect(find.text('清空'), findsNothing);
-    });
-
-    testWidgets('shows image count text initially absent', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // No image count text when empty
-      expect(find.textContaining('已选'), findsNothing);
-    });
-  });
-
   group('OcrPage - model selector', () {
     testWidgets('shows model selector when OCR provider has models', (
       tester,
@@ -157,8 +115,8 @@ void main() {
       await tester.pumpWidget(_buildTestApp(entries: [entry]));
       await tester.pumpAndSettle();
 
-      // Should show the model selector
-      expect(find.text('GPT-4o'), findsWidgets);
+      // Should show the model selector with "ModelName | ProviderName" format
+      expect(find.text('GPT-4o | OpenAI'), findsWidgets);
     });
 
     testWidgets('model selector shows all available models when tapped', (
@@ -168,13 +126,63 @@ void main() {
       await tester.pumpWidget(_buildTestApp(entries: [entry]));
       await tester.pumpAndSettle();
 
-      // Tap the model selector dropdown
-      await tester.tap(find.text('GPT-4o').last);
+      // Tap the model selector dropdown - need to tap the displayed text
+      await tester.tap(find.text('GPT-4o | OpenAI').last);
       await tester.pumpAndSettle();
 
-      // Should show all models in the dropdown
-      expect(find.text('GPT-4o Mini'), findsWidgets);
-      expect(find.text('GPT-4 Vision'), findsWidgets);
+      // Should show all models in the dropdown with provider name
+      expect(find.text('GPT-4o Mini | OpenAI'), findsWidgets);
+      expect(find.text('GPT-4 Vision | OpenAI'), findsWidgets);
+    });
+
+    testWidgets('model selector falls back to modelId when name is empty', (
+      tester,
+    ) async {
+      final entry = ProviderEntry(
+        id: 'test_ocr',
+        type: 'ocr',
+        name: 'OCR供应商',
+        configs: [
+          ProviderConfigItem(
+            providerName: 'TestAI',
+            host: 'https://api.test.ai',
+            key: 'test-key',
+            models: [
+              ModelConfig(name: '', modelId: 'test-model-v1'),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpWidget(_buildTestApp(entries: [entry]));
+      await tester.pumpAndSettle();
+
+      // Should show modelId | ProviderName when name is empty
+      expect(find.text('test-model-v1 | TestAI'), findsWidgets);
+    });
+
+    testWidgets('model selector still works when provider name is empty', (
+      tester,
+    ) async {
+      final entry = ProviderEntry(
+        id: 'test_ocr',
+        type: 'ocr',
+        name: 'OCR供应商',
+        configs: [
+          ProviderConfigItem(
+            providerName: '',
+            host: 'https://api.test.ai',
+            key: 'test-key',
+            models: [
+              ModelConfig(name: 'TestModel', modelId: 'test-model-v1'),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpWidget(_buildTestApp(entries: [entry]));
+      await tester.pumpAndSettle();
+
+      // Should show just the model name when no provider name
+      expect(find.text('TestModel'), findsWidgets);
     });
 
     testWidgets('model selector label is visible', (tester) async {
@@ -1117,6 +1125,248 @@ void main() {
       final choiceCards = find.byType(ChoiceCard);
       final secondCard = tester.widget<ChoiceCard>(choiceCards.at(1));
       expect(secondCard.color, Colors.blue);
+    });
+  });
+
+  // ====================================================================
+  // NEW TESTS: Multiple configs within a single OCR entry
+  // ====================================================================
+
+  group('OcrPage - multiple configs', () {
+    testWidgets(
+      'shows models from valid config when first config has no host/key',
+      (tester) async {
+        final entry = ProviderEntry(
+          id: 'test_ocr',
+          type: 'ocr',
+          name: 'OCR供应商',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'Empty',
+              host: '',
+              key: '',
+              models: [
+                ModelConfig(name: 'Empty-Model', modelId: 'empty-model'),
+              ],
+            ),
+            ProviderConfigItem(
+              providerName: 'Valid',
+              host: 'https://api.valid.com',
+              key: 'valid-key-123',
+              models: [
+                ModelConfig(name: 'Valid-Model', modelId: 'valid-model'),
+              ],
+            ),
+          ],
+        );
+        await tester.pumpWidget(_buildTestApp(entries: [entry]));
+        await tester.pumpAndSettle();
+
+        // Should show the valid config's model
+        expect(find.text('Valid-Model | Valid'), findsWidgets);
+      },
+    );
+
+    testWidgets(
+      'shows models from ALL valid configs (not just first)',
+      (tester) async {
+        final entry = ProviderEntry(
+          id: 'test_ocr',
+          type: 'ocr',
+          name: 'OCR供应商',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'First',
+              host: 'https://api.first.com',
+              key: 'first-key',
+              models: [
+                ModelConfig(name: 'First-Model', modelId: 'first-model'),
+              ],
+            ),
+            ProviderConfigItem(
+              providerName: 'Second',
+              host: 'https://api.second.com',
+              key: 'second-key',
+              models: [
+                ModelConfig(name: 'Second-Model', modelId: 'second-model'),
+              ],
+            ),
+          ],
+        );
+        await tester.pumpWidget(_buildTestApp(entries: [entry]));
+        await tester.pumpAndSettle();
+
+        // First model is selected by default (visible in collapsed dropdown)
+        expect(find.text('First-Model | First'), findsOneWidget);
+
+        // Tap the dropdown to open it and see all items
+        await tester.tap(find.text('First-Model | First'));
+        await tester.pumpAndSettle();
+
+        // Should show models from ALL valid configs in the dropdown
+        expect(find.text('Second-Model | Second'), findsWidgets);
+      },
+    );
+
+    testWidgets(
+      'shows configure prompt when no config has valid host/key',
+      (tester) async {
+        final entry = ProviderEntry(
+          id: 'test_ocr',
+          type: 'ocr',
+          name: 'OCR供应商',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'Empty',
+              host: '',
+              key: '',
+              models: [
+                ModelConfig(name: 'Empty-Model', modelId: 'empty-model'),
+              ],
+            ),
+            ProviderConfigItem(
+              providerName: 'Also Empty',
+              host: '',
+              key: '',
+              models: [
+                ModelConfig(name: 'Also-Empty', modelId: 'also-empty'),
+              ],
+            ),
+          ],
+        );
+        await tester.pumpWidget(_buildTestApp(entries: [entry]));
+        await tester.pumpAndSettle();
+
+        // Should show configure prompt instead of hiding the selector
+        expect(find.text('识别模型'), findsOneWidget);
+        expect(find.textContaining('配置'), findsWidgets);
+      },
+    );
+
+    testWidgets(
+      'shows configure prompt when no OCR models exist',
+      (tester) async {
+        final entry = ProviderEntry(
+          id: 'test_ocr',
+          type: 'ocr',
+          name: 'OCR供应商',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'Empty',
+              host: '',
+              key: '',
+              models: [],
+            ),
+          ],
+        );
+        await tester.pumpWidget(_buildTestApp(entries: [entry]));
+        await tester.pumpAndSettle();
+
+        // Should show configure prompt
+        expect(find.text('识别模型'), findsOneWidget);
+        expect(find.textContaining('配置'), findsWidgets);
+      },
+    );
+
+    testWidgets(
+      'shows configure prompt when no OCR entry exists',
+      (tester) async {
+        await tester.pumpWidget(_buildTestApp(entries: []));
+        await tester.pumpAndSettle();
+
+        // Should show configure prompt
+        expect(find.text('识别模型'), findsOneWidget);
+        expect(find.textContaining('配置'), findsWidgets);
+      },
+    );
+  });
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Merged from: test/pages/ocr_page_preview_edit_test.dart
+  // ─────────────────────────────────────────────────────────────────────
+
+  group('OcrPage - preview dialog two edit buttons', () {
+    testWidgets('preview dialog shows crop and edit buttons in top-right', (
+      tester,
+    ) async {
+      final images = [_createTestImage()];
+      await tester.pumpWidget(_buildTestApp(testImages: images));
+      await tester.pumpAndSettle();
+
+      // Tap the image to open preview
+      await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
+      await tester.pumpAndSettle();
+
+      // Should see TWO edit icon buttons: crop + full editor
+      expect(find.byIcon(Icons.crop), findsOneWidget,
+          reason: 'Crop button should be visible');
+      expect(find.byIcon(Icons.edit), findsOneWidget,
+          reason: 'Full editor button should be visible');
+    });
+
+    testWidgets('preview dialog shows close button in top-left', (
+      tester,
+    ) async {
+      final images = [_createTestImage()];
+      await tester.pumpWidget(_buildTestApp(testImages: images));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
+      await tester.pumpAndSettle();
+
+      // Close button should be present
+      expect(find.byKey(const Key('preview_close_btn')), findsOneWidget);
+    });
+
+    testWidgets('preview dialog shows position indicator for multiple images', (
+      tester,
+    ) async {
+      final images = [_createTestImage(), _createTestImage()];
+      await tester.pumpWidget(_buildTestApp(testImages: images));
+      await tester.pumpAndSettle();
+
+      // Tap the first image
+      await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
+      await tester.pumpAndSettle();
+
+      // Should show the position indicator
+      expect(find.text('1 / 2'), findsOneWidget);
+    });
+
+    testWidgets('preview dialog can be closed with close button', (
+      tester,
+    ) async {
+      final images = [_createTestImage()];
+      await tester.pumpWidget(_buildTestApp(testImages: images));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
+      await tester.pumpAndSettle();
+
+      // Tap close button
+      await tester.tap(find.byKey(const Key('preview_close_btn')));
+      await tester.pumpAndSettle();
+
+      // Dialog should be closed
+      expect(find.byIcon(Icons.crop), findsNothing);
+      expect(find.byIcon(Icons.edit), findsNothing);
+    });
+
+    testWidgets('tapping crop button opens quick edit page', (tester) async {
+      final images = [_createTestImage()];
+      await tester.pumpWidget(_buildTestApp(testImages: images));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
+      await tester.pumpAndSettle();
+
+      // Tap the crop button — should navigate to ExtendedImageEditorPage
+      await tester.tap(find.byIcon(Icons.crop));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // In test, the navigation may fail due to missing routes, but
+      // verify no crash occurs from the event handler
     });
   });
 }

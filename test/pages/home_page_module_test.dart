@@ -148,7 +148,7 @@ void main() {
 
   group('HomePage responsive layout', () {
     testWidgets(
-      'welcome text and notification button both visible on small screen',
+      'welcome text and status card visible on small screen',
       (tester) async {
         _setSmallScreen(tester);
 
@@ -158,8 +158,8 @@ void main() {
         // Welcome text should be visible
         expect(find.text('欢迎使用 Stroom'), findsOneWidget);
 
-        // Notification button should be visible
-        expect(find.byIcon(Icons.pending_actions), findsOneWidget);
+        // Status card should be visible with "查看全部" button
+        expect(find.text('查看全部'), findsOneWidget);
 
         // Subtitle should be visible
         expect(find.text('选择一个功能模块开始使用'), findsOneWidget);
@@ -185,13 +185,13 @@ void main() {
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
       expect(find.text('OCR'), findsOneWidget);
       expect(find.text('语音识别'), findsOneWidget);
-      expect(find.byIcon(Icons.pending_actions), findsOneWidget);
+      expect(find.text('查看全部'), findsOneWidget);
 
       // No overflow exceptions
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('notification button does not overlap with header text', (
+    testWidgets('status card is below welcome text and subtitle', (
       tester,
     ) async {
       _setSmallScreen(tester);
@@ -199,30 +199,30 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // Get the render box of the welcome text to find its right edge
+      // Get the position of the welcome text
       final welcomeTextFinder = find.text('欢迎使用 Stroom');
       expect(welcomeTextFinder, findsOneWidget);
 
       final welcomeRenderBox = tester.renderObject<RenderBox>(
         welcomeTextFinder,
       );
-      final welcomeRect =
-          welcomeRenderBox.localToGlobal(Offset.zero) & welcomeRenderBox.size;
+      final welcomeBottom = welcomeRenderBox.localToGlobal(Offset.zero).dy +
+          welcomeRenderBox.size.height;
 
-      // Get the render box of the notification button
-      final notifBtnFinder = find.byIcon(Icons.pending_actions);
-      expect(notifBtnFinder, findsOneWidget);
+      // Get the position of the status card's "查看全部"
+      final viewAllFinder = find.text('查看全部');
+      expect(viewAllFinder, findsOneWidget);
 
-      final notifRenderBox = tester.renderObject<RenderBox>(notifBtnFinder);
-      final notifRect =
-          notifRenderBox.localToGlobal(Offset.zero) & notifRenderBox.size;
+      final viewAllRenderBox = tester.renderObject<RenderBox>(
+        viewAllFinder,
+      );
+      final viewAllTop = viewAllRenderBox.localToGlobal(Offset.zero).dy;
 
-      // The notification button should be to the RIGHT of the welcome text
-      // (not overlapping horizontally)
+      // The status card should be below the welcome text
       expect(
-        notifRect.left,
-        greaterThanOrEqualTo(welcomeRect.right - 8),
-        reason: 'Notification button should not overlap with welcome text',
+        viewAllTop,
+        greaterThan(welcomeBottom),
+        reason: 'Status card should be positioned below the welcome text',
       );
     });
 
@@ -308,7 +308,10 @@ void main() {
       expect(find.text('选择一个功能模块开始使用'), findsOneWidget);
       expect(find.text('OCR'), findsOneWidget);
       expect(find.text('语音识别'), findsOneWidget);
-      expect(find.byIcon(Icons.pending_actions), findsOneWidget);
+      expect(find.text('查看全部'), findsOneWidget);
+      expect(find.text('进行中'), findsOneWidget);
+      expect(find.text('已完成'), findsOneWidget);
+      expect(find.text('失败'), findsOneWidget);
 
       // No overflow exceptions
       expect(tester.takeException(), isNull);
@@ -322,6 +325,85 @@ void main() {
 
       // Verify no overflow exceptions
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('HomePage status card visual design', () {
+    testWidgets('status card shows "查看全部 >" with greater-than character', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // The "查看全部" text should exist
+      expect(find.text('查看全部'), findsOneWidget,
+          reason: '查看全部 button text should exist');
+
+      // The ">" character should be present as a visual indicator
+      expect(find.text('>'), findsOneWidget,
+          reason:
+              'Greater-than character ">" should appear in the view-all button');
+    });
+
+    testWidgets('status card displays count numbers for all 3 statuses', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // All 3 status items should show their count (initially all "0")
+      // Use findsAtLeast(3) to ensure all three status counts are rendered,
+      // accounting for the possibility that the navigation badge also
+      // renders a "0" text (making the total ≥ 3).
+      expect(find.text('0'), findsAtLeast(3),
+          reason:
+              'All 3 status count numbers should be displayed (found fewer than 3)');
+    });
+
+    testWidgets('tapping status items navigates to task list page', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Test tapping 进行中
+      await tester.tap(find.text('进行中'));
+      await tester.pumpAndSettle();
+      expect(find.text('任务列表'), findsOneWidget,
+          reason: 'Tapping 进行中 should navigate to task list page');
+
+      // Go back to home
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+
+      // Test tapping 已完成
+      await tester.tap(find.text('已完成'));
+      await tester.pumpAndSettle();
+      expect(find.text('任务列表'), findsOneWidget,
+          reason: 'Tapping 已完成 should navigate to task list page');
+
+      // Go back to home
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+
+      // Test tapping 失败
+      await tester.tap(find.text('失败'));
+      await tester.pumpAndSettle();
+      expect(find.text('任务列表'), findsOneWidget,
+          reason: 'Tapping 失败 should navigate to task list page');
+    });
+
+    testWidgets('tapping 查看全部 navigates to task list page', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('查看全部'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('任务列表'), findsOneWidget,
+          reason: 'Tapping 查看全部 should navigate to task list page');
     });
   });
 }

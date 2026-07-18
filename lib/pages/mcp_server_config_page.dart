@@ -23,9 +23,11 @@ class McpServerConfigPage extends ConsumerStatefulWidget {
 
 class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
   final _nameController = TextEditingController();
+  final _descriptionController = TextEditingController();
   final _commandController = TextEditingController();
   final _argsController = TextEditingController();
   final _urlController = TextEditingController();
+  final _apiKeyController = TextEditingController();
 
   McpTransportType _transportType = McpTransportType.sse;
   bool _isSaving = false;
@@ -33,10 +35,12 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
   bool _hasUnsavedChanges = false;
 
   String _originalName = '';
+  String _originalDescription = '';
   McpTransportType _originalTransport = McpTransportType.sse;
   String _originalCommand = '';
   String _originalArgs = '';
   String _originalUrl = '';
+  String _originalApiKey = '';
   bool _isVendor = false;
 
   bool get _isExistingConfig => widget.configIndex >= 0;
@@ -83,11 +87,24 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
       _urlController.text = serverConfig.url ?? '';
       _isVendor = serverConfig.isVendor;
 
+      // Load description from typeConfig
+      final desc = mcpConfig?['description'] as String? ?? '';
+      _descriptionController.text = desc;
+
+      // Extract API key from apiKey field, env, or headers
+      final apiKey = serverConfig.apiKey?.isNotEmpty == true
+          ? serverConfig.apiKey!
+          : _extractApiKeyFromEnvOrHeaders(serverConfig);
+
+      _apiKeyController.text = apiKey;
+
       _originalName = serverConfig.name;
+      _originalDescription = _descriptionController.text;
       _originalTransport = serverConfig.transportType;
       _originalCommand = _commandController.text;
       _originalArgs = _argsController.text;
       _originalUrl = _urlController.text;
+      _originalApiKey = _apiKeyController.text;
     } else {
       // Legacy: use providerName and host
       _nameController.text = config.providerName;
@@ -97,24 +114,71 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
     }
   }
 
+  /// Extract API key from env or headers if apiKey field is empty.
+  /// This handles legacy configs and provides a better editing experience.
+  String _extractApiKeyFromEnvOrHeaders(McpServerConfig config) {
+    // Prefer the explicit apiKey field if set
+    if (config.apiKey != null && config.apiKey!.isNotEmpty)
+      return config.apiKey!;
+
+    // Check env vars for non-empty, non-default values (stdio configs)
+    const knownNonApiKeys = {'PATH', 'HOME', 'USER', 'SHELL', 'TERM'};
+    for (final entry in config.env.entries) {
+      final val = entry.value;
+      if (val.isNotEmpty && !knownNonApiKeys.contains(entry.key)) {
+        // Skip common path-like values
+        if (val.contains('/usr/') ||
+            val.contains('/bin') ||
+            val.contains('/local')) {
+          continue;
+        }
+        return val;
+      }
+    }
+    // Check headers for non-empty values (sse configs)
+    for (final val in config.headers.values) {
+      final trimmed = val.trim();
+      if (trimmed.isNotEmpty) {
+        // Strip Bearer prefix if present
+        if (trimmed.startsWith('Bearer ')) {
+          final afterBearer = trimmed.substring(7).trim();
+          if (afterBearer.isNotEmpty) return afterBearer;
+          continue;
+        }
+        // If value is just whitespace or the header key name, skip
+        if (trimmed.length < 3) continue;
+        return trimmed;
+      }
+    }
+    return '';
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
+    _descriptionController.dispose();
     _commandController.dispose();
     _argsController.dispose();
     _urlController.dispose();
+    _apiKeyController.dispose();
     super.dispose();
   }
 
   void _checkUnsavedChanges() {
-    // Vendor configs should not be edited in detail
-    if (_isVendor) return;
+    // Vendor configs: only track API key changes
+    if (_isVendor) {
+      final changed = _apiKeyController.text != _originalApiKey;
+      setState(() => _hasUnsavedChanges = changed);
+      return;
+    }
 
     final changed = _nameController.text != _originalName ||
+        _descriptionController.text != _originalDescription ||
         _transportType != _originalTransport ||
         _commandController.text != _originalCommand ||
         _argsController.text != _originalArgs ||
-        _urlController.text != _originalUrl;
+        _urlController.text != _originalUrl ||
+        _apiKeyController.text != _originalApiKey;
     setState(() => _hasUnsavedChanges = changed);
   }
 
@@ -127,10 +191,12 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
 
   void _discardChanges() {
     _nameController.text = _originalName;
+    _descriptionController.text = _originalDescription;
     _transportType = _originalTransport;
     _commandController.text = _originalCommand;
     _argsController.text = _originalArgs;
     _urlController.text = _originalUrl;
+    _apiKeyController.text = _originalApiKey;
     setState(() {
       _isEditMode = false;
       _hasUnsavedChanges = false;
@@ -142,10 +208,12 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
 
   void _exitEditMode() {
     _originalName = _nameController.text;
+    _originalDescription = _descriptionController.text;
     _originalTransport = _transportType;
     _originalCommand = _commandController.text;
     _originalArgs = _argsController.text;
     _originalUrl = _urlController.text;
+    _originalApiKey = _apiKeyController.text;
     setState(() {
       _isEditMode = false;
       _hasUnsavedChanges = false;
@@ -192,25 +260,110 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
             .toList()
         : <String>[];
 
+    final apiKey = _apiKeyController.text.trim();
+    final effectiveApiKey = apiKey.isNotEmpty ? apiKey : null;
+
     McpServerConfig serverConfig;
     if (_transportType == McpTransportType.stdio) {
+      // For stdio: merge apiKey into env vars
+      // Load existing env from the original config if editing
+      var effectiveEnv = <String, String>{
+        'PATH': '/usr/local/bin:/usr/bin:/bin'
+      };
+      if (_isExistingConfig) {
+        final entry = _entry;
+        if (entry != null && widget.configIndex < entry.configs.length) {
+          final existingConfig = entry.configs[widget.configIndex];
+          if (existingConfig.models.isNotEmpty) {
+            final tc = existingConfig.models[0].typeConfig;
+            final envRaw = tc['env'];
+            if (envRaw is Map) {
+              effectiveEnv =
+                  envRaw.map((k, v) => MapEntry(k.toString(), v.toString()));
+            }
+          }
+        }
+      }
+      // Merge apiKey: replace empty placeholder values in env
+      if (effectiveApiKey != null) {
+        for (final key in effectiveEnv.keys.toList()) {
+          if (effectiveEnv[key]!.isEmpty) {
+            effectiveEnv[key] = effectiveApiKey;
+          }
+        }
+      }
       serverConfig = McpServerConfig.stdio(
         name: name,
         command: _commandController.text.trim(),
         args: args,
+        env: effectiveEnv,
+        apiKey: effectiveApiKey,
+        isVendor: _isVendor,
       );
     } else {
+      // For sse: merge apiKey into headers
+      var effectiveHeaders = <String, String>{};
+      var effectiveEnv = <String, String>{};
+      // Load existing headers/env from original config if editing
+      if (_isExistingConfig) {
+        final entry = _entry;
+        if (entry != null && widget.configIndex < entry.configs.length) {
+          final existingConfig = entry.configs[widget.configIndex];
+          if (existingConfig.models.isNotEmpty) {
+            final tc = existingConfig.models[0].typeConfig;
+            final headersRaw = tc['headers'];
+            if (headersRaw is Map) {
+              effectiveHeaders = headersRaw
+                  .map((k, v) => MapEntry(k.toString(), v.toString()));
+            }
+            final envRaw = tc['env'];
+            if (envRaw is Map) {
+              effectiveEnv =
+                  envRaw.map((k, v) => MapEntry(k.toString(), v.toString()));
+            }
+          }
+        }
+      }
+      // Merge apiKey into headers: replace placeholder values
+      if (effectiveApiKey != null) {
+        for (final key in effectiveHeaders.keys.toList()) {
+          final val = effectiveHeaders[key]!;
+          // Match empty, key-only (e.g. "x-api-key "), or prefix-only (e.g. "Bearer ")
+          final isEmptyOrPlaceholder = val.isEmpty ||
+              val == '$key ' ||
+              val.endsWith(' ') ||
+              !RegExp(r'\S').hasMatch(val.trim());
+          if (isEmptyOrPlaceholder) {
+            if (key.toLowerCase() == 'authorization') {
+              effectiveHeaders[key] = 'Bearer $effectiveApiKey';
+            } else {
+              effectiveHeaders[key] = effectiveApiKey;
+            }
+          }
+        }
+      }
       serverConfig = McpServerConfig.sse(
         name: name,
         url: _urlController.text.trim(),
+        env: effectiveEnv,
+        headers: effectiveHeaders,
+        apiKey: effectiveApiKey,
+        isVendor: _isVendor,
       );
+    }
+
+    // Add description to typeConfig
+    final typeConfigMap = serverConfig.toMap();
+    final description = _descriptionController.text.trim();
+    if (description.isNotEmpty) {
+      typeConfigMap['description'] = description;
     }
 
     // Store in ProviderConfigItem with typeConfig in models[0]
     final modelConfig = ModelConfig(
       name: name,
       modelId: _transportType.value,
-      typeConfig: serverConfig.toMap(),
+      typeConfig: typeConfigMap,
     );
 
     var configs = entry.configs.map((c) => c.copy()).toList();
@@ -278,7 +431,8 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
             ],
           ),
         );
-        if (shouldDiscard == true && mounted) {
+        if (shouldDiscard == true) {
+          if (!context.mounted) return;
           setState(() {
             _isEditMode = false;
             _hasUnsavedChanges = false;
@@ -297,7 +451,7 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
             // Transport type
             const SectionHeader(title: '传输方式'),
             const SizedBox(height: 8),
-            if (_isEditMode)
+            if (_isEditMode && !_isVendor)
               _buildTransportSelector()
             else
               _buildReadOnlyTransport(),
@@ -307,7 +461,7 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
             // Server name
             const SectionHeader(title: '服务器名称'),
             const SizedBox(height: 8),
-            if (_isEditMode)
+            if (_isEditMode && !_isVendor)
               TextField(
                 controller: _nameController,
                 decoration: const InputDecoration(
@@ -331,7 +485,7 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
             if (_transportType == McpTransportType.stdio) ...[
               const SectionHeader(title: '命令'),
               const SizedBox(height: 8),
-              if (_isEditMode)
+              if (_isEditMode && !_isVendor)
                 TextField(
                   controller: _commandController,
                   decoration: const InputDecoration(
@@ -351,7 +505,7 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
               const SizedBox(height: 12),
               const SectionHeader(title: '参数'),
               const SizedBox(height: 8),
-              if (_isEditMode)
+              if (_isEditMode && !_isVendor)
                 TextField(
                   controller: _argsController,
                   decoration: const InputDecoration(
@@ -372,7 +526,7 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
             ] else ...[
               const SectionHeader(title: 'SSE URL'),
               const SizedBox(height: 8),
-              if (_isEditMode)
+              if (_isEditMode && !_isVendor)
                 TextField(
                   controller: _urlController,
                   decoration: const InputDecoration(
@@ -390,6 +544,39 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
                   value: _urlController.text,
                 ),
             ],
+
+            const SizedBox(height: 16),
+
+            // API Key (for built-in and regular configs)
+            const SectionHeader(title: 'API 密钥'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _apiKeyController,
+              decoration: const InputDecoration(
+                hintText: '输入 API Key（可选）',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.vpn_key, color: Colors.amber),
+              ),
+              obscureText: true,
+              onChanged: (_) => _checkUnsavedChanges(),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Description
+            const SectionHeader(title: '描述'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(
+                hintText: '输入此 MCP 服务器的描述信息（可选）',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.description, color: Colors.teal),
+              ),
+              maxLines: 2,
+              minLines: 1,
+              onChanged: (_) => _checkUnsavedChanges(),
+            ),
 
             const SizedBox(height: 16),
 
@@ -521,7 +708,7 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
       ];
     }
     return [
-      if (_isExistingConfig && !_isVendor)
+      if (_isExistingConfig)
         TextButton.icon(
           icon: const Icon(Icons.edit, size: 20),
           label: const Text('编辑'),

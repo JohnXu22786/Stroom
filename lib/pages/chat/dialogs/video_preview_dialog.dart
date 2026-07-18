@@ -1,8 +1,11 @@
-import 'package:flutter/material.dart';
-import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart';
+import 'dart:io';
 
-/// Video preview dialog — plays a video file using [media_kit].
+import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
+
+/// Video preview dialog — plays a video file using Chewie + video_player
+/// (backed by fvp).
 class VideoPreviewDialog extends StatefulWidget {
   final String filePath;
   final String fileName;
@@ -18,8 +21,9 @@ class VideoPreviewDialog extends StatefulWidget {
 }
 
 class _VideoPreviewDialogState extends State<VideoPreviewDialog> {
-  Player? _player;
-  VideoController? _controller;
+  VideoPlayerController? _videoPlayerController;
+  ChewieController? _chewieController;
+  bool _hasError = false;
 
   @override
   void initState() {
@@ -29,21 +33,38 @@ class _VideoPreviewDialogState extends State<VideoPreviewDialog> {
 
   Future<void> _initPlayer() async {
     try {
-      final player = Player();
-      _player = player;
-      _controller = VideoController(player);
-      await player.open(Media(widget.filePath));
+      final controller = VideoPlayerController.file(
+        File(widget.filePath),
+      );
+      _videoPlayerController = controller;
+      await controller.initialize();
+
+      _chewieController = ChewieController(
+        videoPlayerController: controller,
+        autoPlay: true,
+        looping: false,
+        showControls: true,
+        materialProgressColors: ChewieProgressColors(
+          playedColor: Colors.red,
+          handleColor: Colors.red,
+          backgroundColor: Colors.grey,
+          bufferedColor: Colors.white24,
+        ),
+      );
+
+      if (mounted) setState(() {});
     } catch (e) {
       debugPrint('[VideoPreview] init failed: $e');
-      _player?.dispose();
-      _player = null;
-      _controller = null;
+      _videoPlayerController?.dispose();
+      _videoPlayerController = null;
+      if (mounted) setState(() => _hasError = true);
     }
   }
 
   @override
   void dispose() {
-    _player?.dispose();
+    _chewieController?.dispose();
+    _videoPlayerController?.dispose();
     super.dispose();
   }
 
@@ -54,17 +75,25 @@ class _VideoPreviewDialogState extends State<VideoPreviewDialog> {
       insetPadding: EdgeInsets.zero,
       child: Stack(
         children: [
-          if (_controller != null)
+          if (_chewieController != null)
             Center(
               child: ConstrainedBox(
                 constraints: BoxConstraints(
                   maxWidth: MediaQuery.of(context).size.width,
                   maxHeight: MediaQuery.of(context).size.height * 0.8,
                 ),
-                child: Video(
-                  controller: _controller!,
-                  fit: BoxFit.contain,
-                ),
+                child: Chewie(controller: _chewieController!),
+              ),
+            )
+          else if (_hasError)
+            const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.error_outline, color: Colors.white38, size: 48),
+                  SizedBox(height: 12),
+                  Text('视频加载失败', style: TextStyle(color: Colors.white70)),
+                ],
               ),
             )
           else
@@ -77,7 +106,6 @@ class _VideoPreviewDialogState extends State<VideoPreviewDialog> {
             child: IconButton(
               icon: const Icon(Icons.close, color: Colors.white, size: 28),
               onPressed: () {
-                _player?.stop();
                 Navigator.pop(context);
               },
             ),

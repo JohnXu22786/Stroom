@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Process, ProcessStartMode;
 
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:dio/dio.dart' show CancelToken;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 
 import '../models/mcp.dart';
-import '../models/tool_call.dart';
+import 'sse_client.dart';
+import 'app_log_service.dart';
 
 // ============================================================================
 // JSON-RPC 工具函数（纯逻辑，可直接测试）
@@ -45,6 +47,16 @@ class JsonRpcUtils {
   static String buildRequest(String method, [Map<String, dynamic>? params]) {
     return McpMessage.request(method, params).toJsonString();
   }
+
+  /// 从 JSON-RPC 消息体中提取 request ID
+  static String? extractRequestId(String message) {
+    try {
+      final parsed = jsonDecode(message) as Map<String, dynamic>;
+      return parsed['id'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 // ============================================================================
@@ -55,6 +67,15 @@ class JsonRpcUtils {
 enum _McpClientState { created, connecting, connected, disconnected, disposed }
 
 /// MCP 客户端，管理与单个 MCP 服务器的连接
+///
+/// ## 跨平台兼容性
+/// | 传输方式 | iOS | Android | Linux | Windows | macOS | Web |
+/// |----------|-----|---------|-------|---------|-------|-----|
+/// | stdio    | ❌  | ❌      | ✅    | ✅      | ✅    | ❌  |
+/// | sse      | ✅  | ✅      | ✅    | ✅      | ✅    | ✅  |
+///
+/// - **stdio**: 仅桌面端可用（需要 `dart:io` Process 启动子进程）
+/// - **sse**: 全端可用（使用 HTTP POST + SSE 响应，支持所有平台的条件导出 SSE 客户端）
 class McpClient {
   final McpServerConfig config;
 
@@ -62,17 +83,12 @@ class McpClient {
   Process? _process;
   StreamSubscription<String>? _stdoutSubscription;
   StreamSubscription<String>? _stderrSubscription;
-  final Completer<Map<String, dynamic>> _initializeCompleter =
-      Completer<Map<String, dynamic>>();
 
   /// 挂起的请求：id -> Completer
   final Map<String, Completer<Map<String, dynamic>>> _pendingRequests = {};
 
   /// 当前连接的工具列表（缓存）
   List<McpTool> _cachedTools = [];
-
-  /// 当前连接是否已初始化
-  bool _initialized = false;
 
   McpClient({required this.config}) {
     _validateConfig();
@@ -105,6 +121,8 @@ class McpClient {
 
   /// 连接到 MCP 服务器
   Future<bool> connect() async {
+    await AppLogService.info('McpClient',
+        '连接 MCP 服务器: ${config.name} (${config.transportType.name})');
     if (_state == _McpClientState.disposed) return false;
     if (_state == _McpClientState.connected) return true;
 
@@ -121,15 +139,22 @@ class McpClient {
       // 发送 initialize 请求
       await _sendInitialize();
       _state = _McpClientState.connected;
+      await AppLogService.info('McpClient', 'MCP 服务器连接成功: ${config.name}');
       return true;
     } catch (e) {
       debugPrint('McpClient.connect failed for ${config.name}: $e');
       _state = _McpClientState.disconnected;
+      await AppLogService.error('McpClient', 'MCP 服务器连接失败: ${config.name}', e);
       return false;
     }
   }
 
   Future<void> _connectStdio() async {
+    // stdio 传输仅桌面端可用（iOS/Android/Web 不支持启动子进程）
+    if (kIsWeb) {
+      throw UnsupportedError('stdio MCP 在 Web 平台上不可用。请使用 SSE (远程) MCP 服务器。');
+    }
+
     try {
       _process = await Process.start(
         config.command!,
@@ -167,13 +192,109 @@ class McpClient {
     }
   }
 
+  /// CancelToken for SSE requests
+  CancelToken? _cancelToken;
+
+  /// Persistent SSE connection subscription (standard MCP SSE protocol)
+  StreamSubscription<String>? _sseSubscription;
+
+  /// Endpoint URL extracted from the SSE `event: endpoint` message
+  String? _sseEndpointUrl;
+
+  /// Completer that resolves when the SSE `event: endpoint` is received.
+  /// Recreated on each connection attempt to support retry.
+  Completer<void> _sseEndpointCompleter = Completer<void>();
+
   Future<void> _connectSse() async {
+    if (config.url == null || config.url!.isEmpty) {
+      throw ArgumentError('SSE URL is required');
+    }
+
+    // Reset state for new connection attempt (supports retry)
+    _sseEndpointUrl = null;
+    _sseEndpointCompleter = Completer<void>();
+
     debugPrint(
-        'McpClient._connectSse: SSE transport not fully implemented yet');
-    _state = _McpClientState.disconnected;
+        'MCP[${config.name}]: Establishing persistent SSE connection to ${config.url}');
+
+    _cancelToken = CancelToken();
+
+    // Build headers for the SSE GET connection
+    final headers = <String, String>{
+      ...config.headers,
+    };
+    if (config.apiKey != null && config.apiKey!.isNotEmpty) {
+      headers.putIfAbsent('x-api-key', () => config.apiKey!);
+    }
+
+    try {
+      final stream = sseConnect(
+        config.url!,
+        headers,
+        cancelToken: _cancelToken,
+      );
+
+      String? currentEvent;
+
+      _sseSubscription = stream.listen(
+        (line) {
+          if (line.startsWith('event: ')) {
+            currentEvent = line.substring(7).trim();
+          } else if (line.startsWith('data: ')) {
+            final data = line.substring(6);
+            if (currentEvent == 'endpoint') {
+              // Standard MCP: server sends event: endpoint with URL to post messages
+              _sseEndpointUrl = data.trim();
+              debugPrint(
+                  'MCP[${config.name}]: received endpoint URL: $_sseEndpointUrl');
+              if (!_sseEndpointCompleter.isCompleted) {
+                _sseEndpointCompleter.complete();
+              }
+            } else {
+              // JSON-RPC response through the SSE stream
+              _handleMessage(data);
+            }
+            currentEvent = null;
+          } else if (line.isEmpty) {
+            currentEvent = null;
+          }
+        },
+        onError: (Object error) {
+          debugPrint('MCP[${config.name}]: SSE connection error: $error');
+          if (!_sseEndpointCompleter.isCompleted) {
+            _sseEndpointCompleter.completeError(error);
+          }
+          _completePendingRequestsWithError(
+              Exception('SSE connection error: $error'));
+          _state = _McpClientState.disconnected;
+        },
+        onDone: () {
+          debugPrint('MCP[${config.name}]: SSE connection closed');
+          _completePendingRequestsWithError(
+              Exception('SSE connection closed unexpectedly'));
+          _state = _McpClientState.disconnected;
+        },
+        cancelOnError: false,
+      );
+
+      // Wait for the endpoint event with a 30-second timeout
+      await _sseEndpointCompleter.future.timeout(const Duration(seconds: 30));
+      _state = _McpClientState.connected;
+      debugPrint(
+          'MCP[${config.name}]: SSE transport connected, endpoint: $_sseEndpointUrl');
+    } catch (e) {
+      debugPrint('MCP[${config.name}]: SSE connect failed: $e');
+      _sseSubscription?.cancel();
+      _sseSubscription = null;
+      _cancelToken?.cancel();
+      _cancelToken = null;
+      _state = _McpClientState.disconnected;
+      rethrow;
+    }
   }
 
   Future<void> _sendInitialize() async {
+    await AppLogService.info('McpClient', '发送 initialize 请求: ${config.name}');
     final request = JsonRpcUtils.buildRequest('initialize', {
       'protocolVersion': '2024-11-05',
       'capabilities': {},
@@ -187,6 +308,7 @@ class McpClient {
     // 发送 notifications/initialized 通知
     final notification = JsonRpcUtils.buildRequest('notifications/initialized');
     await _sendMessage(notification);
+    await AppLogService.info('McpClient', 'initialize 完成: ${config.name}');
   }
 
   Future<void> _sendMessage(String message) async {
@@ -197,9 +319,128 @@ class McpClient {
         _process?.stdin.writeln(message);
         break;
       case McpTransportType.sse:
-        debugPrint('McpClient._sendMessage: SSE send not implemented');
+        await _sendSseRequest(message);
         break;
     }
+  }
+
+  /// Send a JSON-RPC message via HTTP POST to the MCP endpoint URL.
+  /// The response is received through the persistent SSE connection
+  /// and routed to the pending request's completer by [listTools]/[callTool].
+  Future<void> _sendSseRequest(String message) async {
+    if (_sseEndpointUrl == null || _sseEndpointUrl!.isEmpty) {
+      debugPrint('MCP[${config.name}]: SSE endpoint URL not available');
+      // Fallback: try direct POST to the SSE URL (legacy compatibility)
+      await _sendSseRequestLegacy(message);
+      return;
+    }
+
+    final msgId = JsonRpcUtils.extractRequestId(message);
+
+    // Build HTTP headers for the JSON-RPC POST request
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      ...config.headers,
+    };
+
+    if (config.apiKey != null && config.apiKey!.isNotEmpty) {
+      headers.putIfAbsent('x-api-key', () => config.apiKey!);
+    }
+
+    // Resolve relative endpoint URL against the SSE URL base
+    final endpointUrl = _resolveEndpointUrl(_sseEndpointUrl!);
+
+    try {
+      await ssePost(
+        endpointUrl,
+        headers,
+        message,
+        cancelToken: _cancelToken,
+      );
+      // Response will arrive through the persistent SSE connection
+      // and be handled by _handleMessage in the _sseSubscription listener.
+    } catch (e) {
+      debugPrint('MCP[${config.name}]: POST to endpoint failed: $e');
+      if (msgId != null) {
+        final completer = _pendingRequests.remove(msgId);
+        if (completer != null && !completer.isCompleted) {
+          completer.completeError(Exception('SSE POST request failed: $e'));
+        }
+      }
+    }
+  }
+
+  /// Legacy fallback: send POST directly to SSE URL (for servers that support it).
+  Future<void> _sendSseRequestLegacy(String message) async {
+    if (config.url == null || config.url!.isEmpty) {
+      debugPrint('MCP[${config.name}]: SSE URL is empty');
+      return;
+    }
+
+    final msgId = JsonRpcUtils.extractRequestId(message);
+
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      ...config.headers,
+    };
+
+    if (config.apiKey != null && config.apiKey!.isNotEmpty) {
+      headers.putIfAbsent('x-api-key', () => config.apiKey!);
+    }
+
+    final cancelToken = CancelToken();
+
+    try {
+      final stream = sseStream(
+        config.url!,
+        headers,
+        message,
+        cancelToken: cancelToken,
+      ).timeout(const Duration(seconds: 30));
+
+      await for (final line in stream) {
+        if (line.startsWith('data: ')) {
+          final data = line.substring(6);
+          _handleMessage(data);
+          if (msgId != null) {
+            final completer = _pendingRequests[msgId];
+            if (completer == null || completer.isCompleted) {
+              break;
+            }
+          }
+        }
+      }
+    } on TimeoutException {
+      debugPrint('MCP[${config.name}]: Legacy SSE request timed out');
+      if (msgId != null) {
+        final completer = _pendingRequests.remove(msgId);
+        if (completer != null && !completer.isCompleted) {
+          completer
+              .completeError(TimeoutException('MCP SSE request timed out'));
+        }
+      }
+    } catch (e) {
+      debugPrint('MCP[${config.name}]: Legacy SSE request failed: $e');
+      if (msgId != null) {
+        final completer = _pendingRequests.remove(msgId);
+        if (completer != null && !completer.isCompleted) {
+          completer.completeError(Exception('SSE request failed: $e'));
+        }
+      }
+    }
+  }
+
+  /// Resolve a possibly-relative endpoint URL against the SSE base URL.
+  String _resolveEndpointUrl(String endpoint) {
+    if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {
+      // Absolute URL
+      return endpoint;
+    }
+    // Relative URL: resolve against the SSE URL base
+    final uri = Uri.tryParse(config.url ?? '');
+    if (uri == null) return endpoint;
+    final resolved = uri.resolve(endpoint);
+    return resolved.toString();
   }
 
   void _handleMessage(String line) {
@@ -223,6 +464,7 @@ class McpClient {
 
   /// 列出 MCP 服务器上所有可用的工具
   Future<List<McpTool>> listTools() async {
+    await AppLogService.info('McpClient', '列出 MCP 工具: ${config.name}');
     if (_state != _McpClientState.connected) {
       final connected = await connect();
       if (!connected) return [];
@@ -231,15 +473,19 @@ class McpClient {
     try {
       final result = await _sendRequest('tools/list');
       _cachedTools = JsonRpcUtils.extractTools(result);
+      await AppLogService.info('McpClient',
+          'MCP 工具列表获取完成: ${config.name}, 共 ${_cachedTools.length} 个工具');
       return List.from(_cachedTools);
     } catch (e) {
       debugPrint('McpClient.listTools failed: $e');
+      await AppLogService.error('McpClient', '列出 MCP 工具失败: ${config.name}', e);
       return [];
     }
   }
 
   /// 调用 MCP 服务器上的工具
   Future<String> callTool(String name, Map<String, dynamic> arguments) async {
+    await AppLogService.info('McpClient', '调用 MCP 工具: $name (${config.name})');
     if (_state != _McpClientState.connected) {
       final connected = await connect();
       if (!connected) {
@@ -255,9 +501,11 @@ class McpClient {
       final response = JsonRpcUtils.extractCallResult(result);
       if (response == null) return 'Error: No response from MCP tool "$name"';
       if (response.isError) return 'Error: ${response.text}';
+      await AppLogService.info('McpClient', 'MCP 工具调用完成: $name');
       return response.text;
     } catch (e) {
       debugPrint('McpClient.callTool failed: $e');
+      await AppLogService.error('McpClient', '调用 MCP 工具失败: $name', e);
       return 'Error: ${e.toString()}';
     }
   }
@@ -270,20 +518,22 @@ class McpClient {
 
     await _sendMessage(request.toJsonString());
 
-    // 设置超时
-    final timeout = Future.delayed(const Duration(seconds: 30), () {
-      if (!completer.isCompleted) {
-        _pendingRequests.remove(request.id);
-        completer
-            .completeError(TimeoutException('MCP request timed out: $method'));
-      }
-    });
-
     return await completer.future.timeout(const Duration(seconds: 30));
+  }
+
+  /// Complete all pending requests with an error (e.g., on connection drop).
+  void _completePendingRequestsWithError(Exception error) {
+    for (final entry in _pendingRequests.entries) {
+      if (!entry.value.isCompleted) {
+        entry.value.completeError(error);
+      }
+    }
+    _pendingRequests.clear();
   }
 
   /// 释放资源
   void dispose() {
+    AppLogService.info('McpClient', '释放 MCP 客户端: ${config.name}');
     if (_state == _McpClientState.disposed) return;
     _state = _McpClientState.disposed;
 
@@ -292,18 +542,19 @@ class McpClient {
     _stderrSubscription?.cancel();
     _stderrSubscription = null;
 
+    // Cancel SSE subscription and in-flight requests
+    _sseSubscription?.cancel();
+    _sseSubscription = null;
+    _cancelToken?.cancel();
+    _cancelToken = null;
+
     // 完成所有挂起的请求（带错误）
-    for (final entry in _pendingRequests.entries) {
-      if (!entry.value.isCompleted) {
-        entry.value.completeError(Exception('Client disposed'));
-      }
-    }
-    _pendingRequests.clear();
+    _completePendingRequestsWithError(Exception('Client disposed'));
 
     _process?.kill();
     _process = null;
     _cachedTools = [];
-    _initialized = false;
+    AppLogService.info('McpClient', 'MCP 客户端已释放: ${config.name}');
   }
 }
 

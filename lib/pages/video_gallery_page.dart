@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:media_kit/media_kit.dart';
+import 'package:video_player/video_player.dart';
 import 'package:path/path.dart' as p;
 
 import '../providers/video_provider.dart';
@@ -22,7 +22,11 @@ import '../widgets/folder_picker_dialog.dart';
 import 'files_page_shared.dart';
 
 class VideoGalleryPage extends ConsumerStatefulWidget {
-  const VideoGalleryPage({super.key});
+  final int tabIndex;
+  final bool isActiveTab;
+
+  const VideoGalleryPage(
+      {super.key, this.tabIndex = 0, this.isActiveTab = true});
 
   @override
   ConsumerState<VideoGalleryPage> createState() => _VideoGalleryPageState();
@@ -53,23 +57,19 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     }
   }
 
-  /// Probe video duration using media_kit Player.
-  /// This is separate from thumbnail generation — Player.state.duration works
-  /// even when Player.screenshot() does not.
+  /// Probe video duration using VideoPlayerController (backed by fvp).
+  /// This is separate from thumbnail generation.
   Future<int> _probeVideoDuration(String videoPath) async {
     if (kIsWeb) return 0;
-    final probePlayer = Player();
+    final controller = VideoPlayerController.file(File(videoPath));
     try {
-      await probePlayer.open(
-        Media(Uri.file(videoPath).toString()),
-        play: false,
-      );
-      await Future.delayed(const Duration(milliseconds: 500));
-      return probePlayer.state.duration.inMilliseconds;
+      await controller.initialize();
+      final duration = controller.value.duration.inMilliseconds;
+      await controller.dispose();
+      return duration;
     } catch (_) {
+      await controller.dispose();
       return 0;
-    } finally {
-      await probePlayer.dispose();
     }
   }
 
@@ -867,9 +867,13 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     final navigateToParentSignal = ref.watch(
       filesPageNavigateToParentSignalProvider,
     );
+    final tabResetSignal =
+        ref.watch(fileTabFolderResetSignalProvider(widget.tabIndex));
 
     return FileManagerView<VideoRecord>(
+      tabResetSignal: tabResetSignal,
       navigateToParentSignal: navigateToParentSignal,
+      isActiveTab: widget.isActiveTab,
       sortedRecords: sortedRecords,
       folders: folders,
       sortConfig: sortConfig,

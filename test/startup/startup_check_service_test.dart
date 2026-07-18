@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -183,6 +182,81 @@ void main() {
       final integrityIssues = await StartupCheckService.checkDataIntegrity();
       expect(formatIssues, isEmpty);
       expect(integrityIssues, isEmpty);
+    });
+  });
+
+  group('StartupCheckService - runs in test mode (sync fallback)', () {
+    test('validateDataFormats completes in test environment', () async {
+      // This test verifies that even in test mode (where Isolate.run is unavailable),
+      // the validation falls back to synchronous execution and still returns results.
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 1,
+        'provider_entries': jsonEncode([
+          {
+            'id': 'test_llm',
+            'type': 'llm',
+            'name': 'Test Provider',
+            'configs': [
+              {
+                'models': [
+                  {
+                    'customParams': [],
+                    'voices': ['not_a_map'],
+                  },
+                ],
+              },
+            ],
+          },
+        ]),
+        'conversations': jsonEncode([
+          {
+            'id': 'conv1',
+            'title': 'Test',
+            'messages': [],
+            'createdAt': DateTime.now().toIso8601String(),
+          },
+        ]),
+      });
+      AppStorage.resetCache();
+
+      final issues = await StartupCheckService.validateDataFormats();
+      // Should complete without throwing and at least return no errors or some errors
+      expect(issues, isA<List<StartupIssue>>());
+    });
+
+    test('validateDataFormats detects nested non-Map entries in test mode',
+        () async {
+      // provider_entries has voices list containing non-Map entry 'not_a_map'
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 1,
+        'provider_entries': jsonEncode([
+          {
+            'id': 'test_llm',
+            'type': 'llm',
+            'name': 'Test Provider',
+            'configs': [
+              {
+                'models': [
+                  {
+                    'customParams': [],
+                    'voices': ['not_a_map'],
+                  },
+                ],
+              },
+            ],
+          },
+        ]),
+      });
+      AppStorage.resetCache();
+
+      final issues = await StartupCheckService.validateDataFormats();
+
+      // Should detect that voices[0] is not a valid Map object
+      final voicesIssues = issues.where(
+        (i) => i.message.contains('voices'),
+      );
+      expect(voicesIssues, isNotEmpty,
+          reason: 'Should detect non-Map entry in voices list');
     });
   });
 }

@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/background_task_provider.dart';
 import '../../providers/task_provider.dart';
 import '../chat/dialogs/error_detail_dialog.dart';
+import '../asr_page.dart';
+import '../ocr_page.dart';
+import '../audio_separation_page.dart';
 import 'task_utils.dart';
 
 // =============================================================================
@@ -32,8 +35,6 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final statusColor = _statusColor(widget.task.status);
-    final statusIcon = _statusIcon(widget.task.status);
     final hasRawData =
         widget.task.rawRequest != null || widget.task.rawResponse != null;
 
@@ -101,7 +102,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                             _buildStatusChip(widget.task.status),
                             const SizedBox(width: 8),
                             Text(
-                              '${formatRelativeTime(widget.task.createdAt)}',
+                              formatRelativeTime(widget.task.createdAt),
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey[500],
@@ -421,6 +422,14 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
+        // "立即开始" button for waiting tasks
+        if (task.status == TaskStatus.waiting)
+          _actionButton(
+            icon: Icons.play_arrow,
+            label: '立即开始',
+            color: Colors.purple,
+            onPressed: () => _navigateToTaskPage(context, task),
+          ),
         // Open file button for completed tasks
         if (task.status == TaskStatus.completed &&
             task.downloadedFilePath != null)
@@ -428,7 +437,15 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
             icon: Icons.folder_open,
             label: '打开文件',
             color: Colors.green,
-            onPressed: () => openFile(task.downloadedFilePath!),
+            onPressed: () => openFile(task.downloadedFilePath!, context),
+          ),
+        // Retry button for failed tasks
+        if (task.status == TaskStatus.failed)
+          _actionButton(
+            icon: Icons.refresh,
+            label: '重试',
+            color: Colors.blue,
+            onPressed: () => _navigateToTaskPage(context, task),
           ),
         // Delete button
         TextButton.icon(
@@ -445,6 +462,35 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         ),
       ],
     );
+  }
+
+  void _navigateToTaskPage(BuildContext context, BackgroundTask task) {
+    switch (task.type) {
+      case BackgroundTaskType.ocr:
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => OcrPage(retryData: task.retryData),
+          ),
+        );
+        break;
+      case BackgroundTaskType.asr:
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AsrPage(retryData: task.retryData),
+          ),
+        );
+        break;
+      case BackgroundTaskType.audioSeparation:
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AudioSeparationPage(retryData: task.retryData),
+          ),
+        );
+        break;
+    }
   }
 
   Widget _actionButton({
@@ -512,6 +558,8 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         return Colors.red;
       case TaskStatus.paused:
         return Colors.orange;
+      case TaskStatus.waiting:
+        return Colors.purple;
     }
   }
 
@@ -525,6 +573,8 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         return Icons.error;
       case TaskStatus.paused:
         return Icons.pause_circle;
+      case TaskStatus.waiting:
+        return Icons.hourglass_empty;
     }
   }
 
@@ -536,6 +586,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         size: 24,
       );
     }
+    // Waiting uses a static icon (no spinning), handled by the fallback below.
     return Icon(_statusIcon(status), color: _statusColor(status), size: 24);
   }
 
@@ -587,6 +638,18 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
           child: const Text(
             '已暂停',
             style: TextStyle(fontSize: 11, color: Colors.orange),
+          ),
+        );
+      case TaskStatus.waiting:
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.purple.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Text(
+            '等待中',
+            style: TextStyle(fontSize: 11, color: Colors.purple),
           ),
         );
     }

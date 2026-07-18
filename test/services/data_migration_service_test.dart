@@ -36,9 +36,10 @@ void main() {
 
     test('backup root contains backup directory name', () async {
       final backupRoot = await DataMigrationService.getExternalBackupRootPath();
-      // Should contain either StroomBackups or stroom_backup_test
+      // Should contain either Stroom/AutoBackups or stroom_backup_test
       expect(
-        backupRoot.contains('StroomBackups') ||
+        backupRoot.contains('AutoBackups') ||
+            backupRoot.contains('AutoBackup') ||
             backupRoot.contains('stroom_backup_test'),
         isTrue,
         reason: 'Backup root should reference backup directory name',
@@ -286,33 +287,38 @@ void main() {
       // No exception = test passes
     });
 
-    test('cleanOldBackups keeps 3 newest backup_ entries', () async {
+    test('cleanOldBackups keeps max 5 backup_ entries (new policy)', () async {
       final backupRoot = await DataMigrationService.getExternalBackupRootPath();
       final rootDir = Directory(backupRoot);
       await rootDir.create(recursive: true);
 
       try {
-        // Create 5 backup_ prefixed items (4 dirs + 1 zip)
+        // Create 7 backup_ prefixed items (4 dirs + 3 zips) on different dates
         for (int i = 0; i < 4; i++) {
-          final d =
-              Directory('${rootDir.path}/backup_2024-01-0${i + 1}T00-00-00');
+          final t = DateTime.now().subtract(Duration(days: 2 * (i + 1)));
+          final timeStr = '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
+              '${_pad(t.hour)}-${_pad(t.minute)}-${_pad(t.second)}';
+          final d = Directory('${rootDir.path}/backup_$timeStr');
           await d.create(recursive: true);
-          await Future.delayed(const Duration(milliseconds: 100));
         }
-        final f = File('${rootDir.path}/backup_2024-01-05T00-00-00.zip');
-        await f.writeAsString('dummy');
-        await Future.delayed(const Duration(milliseconds: 100));
+        for (int i = 0; i < 3; i++) {
+          final t = DateTime.now().subtract(Duration(hours: 2 * (i + 1)));
+          final timeStr = '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
+              '${_pad(t.hour)}-${_pad(t.minute)}-${_pad(t.second)}';
+          final f = File('${rootDir.path}/backup_$timeStr.zip');
+          await f.writeAsString('dummy');
+        }
 
         await DataMigrationService.cleanOldBackups();
 
-        // Should keep exactly 3 of the 5
+        // Should keep 5 of the 7 (new retention policy: max 5 total)
         final entries = await rootDir.list().toList();
         final backupItems = entries
             .where((e) =>
                 (e is File && e.path.endsWith('.zip')) ||
                 (e is Directory && e.path.contains('backup_')))
             .toList();
-        expect(backupItems.length, equals(3));
+        expect(backupItems.length, equals(5));
       } finally {
         if (await rootDir.exists()) {
           await rootDir.delete(recursive: true);
@@ -340,3 +346,5 @@ void main() {
     });
   });
 }
+
+String _pad(int n) => n.toString().padLeft(2, '0');

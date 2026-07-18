@@ -62,7 +62,7 @@ void main() {
 
     test('handles title with only special chars', () {
       expect(
-        sanitizeForFileName('<>:"/\|?*'),
+        sanitizeForFileName('<>:"/|?*'),
         isEmpty,
       );
     });
@@ -174,17 +174,6 @@ void main() {
         buildDownloadFileName(media, metadata),
         equals('Live Stream.m3u8'),
       );
-    });
-  });
-
-  group('uniquePath naming pattern', () {
-    test('uses (1), (2) format pattern', () {
-      // Verify the naming convention: the _uniquePath method generates
-      // "name (1).ext", "name (2).ext" not "name_1.ext"
-      final path1 = 'base_dir/Page Title (1).mp4';
-      final path2 = 'base_dir/Page Title (2).mp4';
-      expect(path1, contains(' (1).mp4'));
-      expect(path2, contains(' (2).mp4'));
     });
   });
 }

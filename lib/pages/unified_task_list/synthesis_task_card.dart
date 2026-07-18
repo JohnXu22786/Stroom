@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/task_provider.dart';
 import '../tts_create_page.dart';
+import 'task_utils.dart';
 
 // =============================================================================
 // 合成任务卡片
@@ -242,23 +243,43 @@ class SynthesisTaskCard extends ConsumerWidget {
                 ],
               ),
             if (task.status == TaskStatus.completed)
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert, size: 20),
-                onSelected: (value) {
-                  if (value == 'remove') {
-                    ref.read(taskListProvider.notifier).removeTask(task.id);
-                  }
-                },
-                itemBuilder: (_) => [
-                  const PopupMenuItem(
-                    value: 'remove',
-                    child: ListTile(
-                      leading: Icon(Icons.delete_outline,
-                          size: 20, color: Colors.grey),
-                      title: Text('从列表移除'),
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (task.downloadedFilePath != null)
+                    SizedBox(
+                      height: 32,
+                      child: TextButton.icon(
+                        onPressed: () =>
+                            openFile(task.downloadedFilePath!, context),
+                        icon: const Icon(Icons.folder_open, size: 16),
+                        label:
+                            const Text('打开文件', style: TextStyle(fontSize: 13)),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.green,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                      ),
                     ),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert, size: 20),
+                    onSelected: (value) {
+                      if (value == 'remove') {
+                        ref.read(taskListProvider.notifier).removeTask(task.id);
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(
+                        value: 'remove',
+                        child: ListTile(
+                          leading: Icon(Icons.delete_outline,
+                              size: 20, color: Colors.grey),
+                          title: Text('从列表移除'),
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -285,6 +306,9 @@ class SynthesisTaskCard extends ConsumerWidget {
         return const Icon(Icons.error, color: Colors.red, size: 24);
       case TaskStatus.paused:
         return const Icon(Icons.pause_circle, color: Colors.orange, size: 24);
+      case TaskStatus.waiting:
+        return const Icon(Icons.hourglass_empty,
+            color: Colors.purple, size: 24);
     }
   }
 
@@ -336,6 +360,18 @@ class SynthesisTaskCard extends ConsumerWidget {
           child: const Text(
             '已暂停',
             style: TextStyle(fontSize: 11, color: Colors.orange),
+          ),
+        );
+      case TaskStatus.waiting:
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.purple.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Text(
+            '等待中',
+            style: TextStyle(fontSize: 11, color: Colors.purple),
           ),
         );
     }

@@ -1,5 +1,6 @@
 package com.johntsui.stroom
 
+import android.app.Activity
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.ActivityNotFoundException
@@ -7,25 +8,65 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.Process
+import android.provider.DocumentsContract
 import android.util.Log
 import androidx.core.content.FileProvider
+import androidx.documentfile.provider.DocumentFile
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import java.io.File
+import java.io.FileOutputStream
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL = "com.johntsui.stroom/install"
+    private val CHANNEL_INSTALL = "com.johntsui.stroom/install"
+    private val CHANNEL_SAF = "com.johntsui.stroom/saf"
     private val TAG = "MainActivity"
 
     companion object {
         private const val RESTART_REQUEST_CODE = 1001
+        private const val SAF_REQUEST_CODE = 1002
+
+        // 保存 pickDirectory 的结果回调
+        private var pendingSafResult: MethodChannel.Result? = null
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == SAF_REQUEST_CODE) {
+            if (resultCode == Activity.RESULT_OK && data?.data != null) {
+                val uri = data.data!!
+                // 立即固化权限 — 必须成功才能持久化 URI
+                try {
+                    contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                    Log.i(TAG, "SAF: 权限已固化: $uri")
+                    pendingSafResult?.success(uri.toString())
+                } catch (e: SecurityException) {
+                    Log.w(TAG, "SAF: 无法固化权限: $uri", e)
+                    // 固化失败时返回 null，避免 Dart 侧保存一个无效 URI
+                    // 否则下次启动时权限丢失，导致授权弹窗反复出现
+                    pendingSafResult?.success(null)
+                }
+            } else {
+                Log.i(TAG, "SAF: 用户取消了目录选择")
+                pendingSafResult?.success(null)
+            }
+            pendingSafResult = null
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+
+        // === 安装 APK 通道 ===
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_INSTALL).setMethodCallHandler { call, result ->
             if (call.method == "installApk") {
                 val filePath = call.argument<String>("filePath")
                 if (filePath != null) {
@@ -48,6 +89,81 @@ class MainActivity : FlutterActivity() {
                 }
             } else {
                 result.notImplemented()
+            }
+        }
+
+        // === SAF 存储访问框架通道 ===
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_SAF).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "pickDirectory" -> {
+                    // 打开 SAF 目录选择器，优先导航到 Documents 目录
+                    openSafDirectoryPicker(result)
+                }
+                "checkAccess" -> {
+                    val uriStr = call.argument<String>("uri")
+                    if (uriStr != null) {
+                        checkSafAccess(uriStr, result)
+                    } else {
+                        result.success(false)
+                    }
+                }
+                "writeFile" -> {
+                    val uriStr = call.argument<String>("uri")
+                    val fileName = call.argument<String>("fileName")
+                    val bytes = call.argument<ByteArray>("bytes")
+                    if (uriStr != null && fileName != null && bytes != null) {
+                        writeFileToSaf(uriStr, fileName, bytes, result)
+                    } else {
+                        result.error("INVALID_ARGS", "参数不完整", null)
+                    }
+                }
+                "readFile" -> {
+                    val uriStr = call.argument<String>("uri")
+                    val fileName = call.argument<String>("fileName")
+                    if (uriStr != null && fileName != null) {
+                        readFileFromSaf(uriStr, fileName, result)
+                    } else {
+                        result.error("INVALID_ARGS", "参数不完整", null)
+                    }
+                }
+                "deleteFile" -> {
+                    val uriStr = call.argument<String>("uri")
+                    val fileName = call.argument<String>("fileName")
+                    if (uriStr != null && fileName != null) {
+                        deleteFileInSaf(uriStr, fileName, result)
+                    } else {
+                        result.error("INVALID_ARGS", "参数不完整", null)
+                    }
+                }
+                "renameFile" -> {
+                    val uriStr = call.argument<String>("uri")
+                    val oldName = call.argument<String>("oldName")
+                    val newName = call.argument<String>("newName")
+                    if (uriStr != null && oldName != null && newName != null) {
+                        renameFileInSaf(uriStr, oldName, newName, result)
+                    } else {
+                        result.error("INVALID_ARGS", "参数不完整", null)
+                    }
+                }
+                "listFiles" -> {
+                    val uriStr = call.argument<String>("uri")
+                    if (uriStr != null) {
+                        listFilesInSaf(uriStr, result)
+                    } else {
+                        result.error("INVALID_ARGS", "URI 为空", null)
+                    }
+                }
+                "getFreeSpace" -> {
+                    val uriStr = call.argument<String>("uri")
+                    if (uriStr != null) {
+                        getFreeSpaceInSaf(uriStr, result)
+                    } else {
+                        result.success(null)
+                    }
+                }
+                else -> {
+                    result.notImplemented()
+                }
             }
         }
     }
@@ -136,6 +252,317 @@ class MainActivity : FlutterActivity() {
         } else {
             // No restart needed — let the Flutter engine handle the intent
             super.onNewIntent(intent)
+        }
+    }
+
+    // ==================================================================
+    // SAF（Storage Access Framework）方法
+    // ==================================================================
+
+    /// 打开 SAF 目录选择器，引导用户选择 Documents 目录。
+    ///
+    /// Android 8.0+ (API 26+) 使用 [EXTRA_INITIAL_URI] 自动定位到
+    /// Documents 文档目录，用户无需手动查找，直接点击「允许」即可。
+    /// 低版本 Android 回退到系统默认位置（通常也是最近使用的目录）。
+    private fun openSafDirectoryPicker(result: MethodChannel.Result) {
+        pendingSafResult = result
+        try {
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+
+            // Android 8.0+ 支持初始目录定位到 Documents 文件夹
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                try {
+                    val documentsUri = DocumentsContract.buildDocumentUri(
+                        "com.android.externalstorage.documents",
+                        "primary:Documents"
+                    )
+                    intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, documentsUri)
+                    Log.i(TAG, "SAF: 设置初始目录为 Documents: $documentsUri")
+                } catch (e: Exception) {
+                    Log.w(TAG, "SAF: 设置初始目录失败，使用默认位置", e)
+                }
+            }
+
+            startActivityForResult(intent, SAF_REQUEST_CODE)
+        } catch (e: Exception) {
+            Log.e(TAG, "SAF: 打开目录选择器失败", e)
+            pendingSafResult = null
+            result.error("PICKER_FAILED", "无法打开目录选择器", null)
+        }
+    }
+
+    /// 检查 SAF URI 是否仍然可访问。
+    ///
+    /// 在 Stroom/AutoBackups 子目录中尝试创建临时文件并删除来验证权限是否仍有效，
+    /// 因为文件实际会写入该子目录。在某些 Android 版本上，在 Documents 根目录
+    /// 直接创建文件可能失败，但在其子目录中创建文件却能正常工作。
+    private fun checkSafAccess(uriStr: String, result: MethodChannel.Result) {
+        try {
+            val uri = Uri.parse(uriStr)
+            val documentFile = DocumentFile.fromTreeUri(this, uri)
+
+            if (documentFile == null) {
+                result.success(false)
+                return
+            }
+
+            // 首先找到或创建 Stroom/AutoBackups 子目录
+            val backupDir = getOrCreateBackupDir(documentFile)
+            if (backupDir == null) {
+                result.success(false)
+                return
+            }
+
+            // 在 Stroom/AutoBackups 子目录中创建临时测试文件
+            val testFileName = ".saf_access_test_${System.currentTimeMillis()}.tmp"
+            val testFile = backupDir.createFile("application/octet-stream", testFileName)
+            if (testFile != null) {
+                // 写入一些测试数据
+                val outStream = contentResolver.openOutputStream(testFile.uri)
+                outStream?.use { it.write(1) }
+                // 删除测试文件
+                testFile.delete()
+                result.success(true)
+            } else {
+                result.success(false)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "SAF: 访问检查失败", e)
+            result.success(false)
+        }
+    }
+
+    /// 在 treeDocument 下找到或创建 Stroom/AutoBackups 嵌套目录。
+    ///
+    /// SAF 的 findFile/createDirectory 只支持一级子目录，因此需要
+    /// 先处理 Stroom 目录，再在其下处理 AutoBackups 目录。
+    /// 返回 AutoBackups 的 DocumentFile，如果任何一级创建失败返回 null。
+    private fun getOrCreateBackupDir(treeDocument: DocumentFile): DocumentFile? {
+        val stroomDir = treeDocument.findFile("Stroom")
+            ?: treeDocument.createDirectory("Stroom")
+        if (stroomDir == null) return null
+
+        val autoBackupsDir = stroomDir.findFile("AutoBackups")
+            ?: stroomDir.createDirectory("AutoBackups")
+        return autoBackupsDir
+    }
+
+    /// 通过 SAF 将字节写入文件。
+    private fun writeFileToSaf(
+        uriStr: String,
+        fileName: String,
+        bytes: ByteArray,
+        result: MethodChannel.Result
+    ) {
+        try {
+            val uri = Uri.parse(uriStr)
+            val treeDocument = DocumentFile.fromTreeUri(this, uri)
+
+            if (treeDocument == null) {
+                result.error("TREE_DOC_FAILED", "无法访问目录", null)
+                return
+            }
+
+            // 获取或创建 Stroom/AutoBackups 嵌套子目录
+            val backupDir = getOrCreateBackupDir(treeDocument)
+            if (backupDir == null) {
+                result.error("CREATE_DIR_FAILED", "无法创建备份目录", null)
+                return
+            }
+
+            // 删除已存在的同名文件，然后创建新文件
+            val existingFile = backupDir.findFile(fileName)
+            if (existingFile != null) {
+                existingFile.delete()
+            }
+
+            val newFile = backupDir.createFile("application/zip", fileName)
+            if (newFile != null) {
+                val outputStream = contentResolver.openOutputStream(newFile.uri)
+                outputStream?.use { stream ->
+                    stream.write(bytes)
+                    stream.flush()
+                }
+                result.success(null)
+            } else {
+                result.error("CREATE_FILE_FAILED", "无法创建备份文件", null)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "SAF: 写入文件失败", e)
+            result.error("WRITE_FAILED", "写入备份文件失败: ${e.message}", null)
+        }
+    }
+
+    /// 通过 SAF 从文件中读取字节。
+    private fun readFileFromSaf(
+        uriStr: String,
+        fileName: String,
+        result: MethodChannel.Result
+    ) {
+        try {
+            val uri = Uri.parse(uriStr)
+            val treeDocument = DocumentFile.fromTreeUri(this, uri)
+            if (treeDocument == null) {
+                result.success(null)
+                return
+            }
+            val backupDir = getOrCreateBackupDir(treeDocument)
+                ?: run {
+                    result.success(null)
+                    return
+                }
+
+            val file = backupDir.findFile(fileName)
+            if (file != null) {
+                val inputStream = contentResolver.openInputStream(file.uri)
+                val bytes = inputStream?.use { stream -> stream.readBytes() }
+                result.success(bytes)
+            } else {
+                result.success(null)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "SAF: 读取文件失败", e)
+            result.success(null)
+        }
+    }
+
+    /// 通过 SAF 删除文件。
+    private fun deleteFileInSaf(
+        uriStr: String,
+        fileName: String,
+        result: MethodChannel.Result
+    ) {
+        try {
+            val uri = Uri.parse(uriStr)
+            val treeDocument = DocumentFile.fromTreeUri(this, uri)
+            if (treeDocument == null) {
+                result.success(null)
+                return
+            }
+            val backupDir = getOrCreateBackupDir(treeDocument)
+                ?: run {
+                    result.success(null)
+                    return
+                }
+
+            val file = backupDir.findFile(fileName)
+            if (file != null) {
+                val deleted = file.delete()
+                Log.i(TAG, "SAF: 删除文件 $fileName: $deleted")
+            }
+            result.success(null)
+        } catch (e: Exception) {
+            Log.e(TAG, "SAF: 删除文件失败", e)
+            result.success(null)
+        }
+    }
+
+    /// 通过 SAF 重命名文件（.tmp → .zip）。
+    private fun renameFileInSaf(
+        uriStr: String,
+        oldName: String,
+        newName: String,
+        result: MethodChannel.Result
+    ) {
+        try {
+            val uri = Uri.parse(uriStr)
+            val treeDocument = DocumentFile.fromTreeUri(this, uri)
+            if (treeDocument == null) {
+                result.error("TREE_DOC_FAILED", "无法访问目录", null)
+                return
+            }
+            val backupDir = getOrCreateBackupDir(treeDocument)
+                ?: run {
+                    result.error("DIR_NOT_FOUND", "备份目录不存在", null)
+                    return
+                }
+
+            val file = backupDir.findFile(oldName)
+            if (file != null) {
+                val renamed = file.renameTo(newName)
+                if (renamed) {
+                    result.success(null)
+                } else {
+                    // 重命名失败（SAF 不支持直接重命名），使用先读后写再删的方式
+                    val inputStream = contentResolver.openInputStream(file.uri)
+                    val bytes = inputStream?.use { stream -> stream.readBytes() }
+                    if (bytes != null) {
+                        // 删除旧文件
+                        file.delete()
+                        // 创建新文件
+                        val newFile = backupDir.createFile("application/zip", newName)
+                        if (newFile != null) {
+                            val outputStream = contentResolver.openOutputStream(newFile.uri)
+                            outputStream?.use { stream ->
+                                stream.write(bytes)
+                                stream.flush()
+                            }
+                            result.success(null)
+                        } else {
+                            result.error("RENAME_FAILED", "无法创建新文件", null)
+                        }
+                    } else {
+                        result.error("RENAME_FAILED", "无法读取原文件", null)
+                    }
+                }
+            } else {
+                // 原文件不存在，尝试直接创建
+                val newFile = backupDir.createFile("application/zip", newName)
+                if (newFile != null) {
+                    result.success(null)
+                } else {
+                    result.error("RENAME_FAILED", "原文件不存在且无法创建新文件", null)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "SAF: 重命名文件失败", e)
+            result.error("RENAME_FAILED", "重命名失败: ${e.message}", null)
+        }
+    }
+
+    /// 列出 SAF 备份目录中的所有文件。
+    private fun listFilesInSaf(
+        uriStr: String,
+        result: MethodChannel.Result
+    ) {
+        try {
+            val uri = Uri.parse(uriStr)
+            val treeDocument = DocumentFile.fromTreeUri(this, uri)
+            if (treeDocument == null) {
+                result.success(emptyList<String>())
+                return
+            }
+            val backupDir = getOrCreateBackupDir(treeDocument)
+                ?: run {
+                    result.success(emptyList<String>())
+                    return
+                }
+
+            val children = backupDir.listFiles()
+            val fileNames = children
+                .filter { it.isFile }
+                .map { it.name }
+                .filterNotNull()
+            result.success(fileNames)
+        } catch (e: Exception) {
+            Log.e(TAG, "SAF: 列出文件失败", e)
+            result.success(emptyList<String>())
+        }
+    }
+
+    /// 获取 SAF 目录所在存储的可用空间。
+    private fun getFreeSpaceInSaf(
+        uriStr: String,
+        result: MethodChannel.Result
+    ) {
+        try {
+            // 使用 Environment 获取外部存储的可用空间
+            val stat = Environment.getExternalStorageDirectory()
+            val freeBytes = stat?.freeSpace ?: -1L
+            result.success(freeBytes)
+        } catch (e: Exception) {
+            Log.e(TAG, "SAF: 获取可用空间失败", e)
+            result.success(-1L)
         }
     }
 

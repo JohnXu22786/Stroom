@@ -3,10 +3,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/mermaid_templates.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
+import 'package:stroom/widgets/mermaid_render_widget.dart';
 
 // ============================================================================
 // Editor Mode
@@ -51,7 +51,8 @@ enum EditorMode {
 // ============================================================================
 
 /// The height ratio of the split editor relative to the available space.
-const double _splitEditorHeightRatio = 0.45;
+/// Set to 0.5 for a 50/50 split between preview and editor.
+const double _splitEditorHeightRatio = 0.5;
 
 /// 图表制作页面 — 使用 Mermaid.js 制作和预览各种图表
 ///
@@ -82,16 +83,12 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   // Editor state
   final _codeController = TextEditingController();
   String _selectedTypeId = 'flowchart';
-  bool _isPreviewReady = false;
   bool _isSaving = false;
   late EditorMode _editorMode;
 
-  // WebView controller
-  InAppWebViewController? _webViewController;
-  bool _webViewLoaded = false;
-
-  // Previously rendered code (to avoid unnecessary re-renders)
-  String _lastRenderedCode = '';
+  // Debounced preview code — passed to MermaidRenderWidget so the WebView
+  // is only updated after the user stops typing (debounce in _onCodeChanged).
+  String _previewCode = '';
 
   @override
   void initState() {
@@ -104,6 +101,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
     } else {
       _codeController.text = MermaidTemplates.getTemplate(_selectedTypeId);
     }
+    _previewCode = _codeController.text.trim();
     _codeController.addListener(_onCodeChanged);
   }
 
@@ -132,12 +130,28 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
     _debounceTimer?.cancel();
     _codeController.removeListener(_onCodeChanged);
     _codeController.dispose();
-    _webViewController = null;
     super.dispose();
   }
 
   void _onCodeChanged() {
     _schedulePreviewUpdate();
+  }
+
+  Timer? _debounceTimer;
+
+  /// Debounces preview updates so that the [MermaidRenderWidget] is not
+  /// rebuilt on every keystroke. After 800ms of inactivity, [setState] is
+  /// called with the latest code so [MermaidRenderWidget.didUpdateWidget]
+  /// triggers a reload inside the WebView.
+  void _schedulePreviewUpdate() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 800), () {
+      if (mounted) {
+        setState(() {
+          _previewCode = _codeController.text.trim();
+        });
+      }
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -178,8 +192,6 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   // ---------------------------------------------------------------------------
 
   void _showEditorModeMenu() {
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-
     showMenu<EditorMode>(
       context: context,
       position: RelativeRect.fromLTRB(
@@ -206,117 +218,10 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       }).toList(),
     ).then((selected) {
       if (selected != null && selected != _editorMode) {
-        setState(() => _editorMode = selected);
+        setState(() {
+          _editorMode = selected;
+        });
       }
-    });
-  }
-
-  // ---------------------------------------------------------------------------
-  // Mermaid rendering via WebView
-  // ---------------------------------------------------------------------------
-
-  static const _mermaidHtmlTemplate = '''
-<!DOCTYPE html>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js">
-  </script>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: sans-serif;
-      padding: 16px;
-      background: transparent;
-      display: flex;
-      justify-content: center;
-      overflow-x: auto;
-    }
-    #container {
-      max-width: 100%;
-      overflow-x: auto;
-    }
-    .mermaid {
-      text-align: center;
-    }
-    /* Prevent mermaid SVG from overflowing its container */
-    .mermaid svg {
-      max-width: 100%;
-      height: auto;
-    }
-    .error-message {
-      color: #e74c3c;
-      padding: 16px;
-      border: 1px solid #e74c3c;
-      border-radius: 8px;
-      margin: 16px;
-      background: #fdf0ef;
-      font-family: monospace;
-      white-space: pre-wrap;
-    }
-  </style>
-</head>
-<body>
-  <div id="container">
-    <pre class="mermaid" id="mermaid-code">
-MERMAID_CODE_PLACEHOLDER
-    </pre>
-  </div>
-  <script>
-    try {
-      mermaid.initialize({
-        theme: 'default',
-        securityLevel: 'loose',
-        fontFamily: 'sans-serif',
-      });
-      // Use mermaid.run() for v11 API compatibility (startOnLoad is deprecated)
-      mermaid.run({
-        nodes: [document.getElementById('mermaid-code')],
-      }).catch(function(err) {
-        document.getElementById('container').innerHTML =
-          '<div class="error-message">Mermaid render error: ' + err.message + '</div>';
-      });
-    } catch(e) {
-      document.getElementById('container').innerHTML =
-        '<div class="error-message">Mermaid initialize error: ' + e.message + '</div>';
-    }
-  </script>
-</body>
-</html>
-''';
-
-  String _buildMermaidHtml(String mermaidCode) {
-    final escaped = mermaidCode
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;');
-    return _mermaidHtmlTemplate.replaceFirst(
-      'MERMAID_CODE_PLACEHOLDER',
-      escaped,
-    );
-  }
-
-  void _updatePreview() {
-    final code = _codeController.text.trim();
-    if (code.isEmpty || code == _lastRenderedCode) return;
-    _lastRenderedCode = code;
-
-    if (_webViewController != null && _webViewLoaded) {
-      final html = _buildMermaidHtml(code);
-      _webViewController!.loadData(
-        data: html,
-        mimeType: 'text/html',
-        encoding: 'utf8',
-      );
-    }
-  }
-
-  Timer? _debounceTimer;
-
-  void _schedulePreviewUpdate() {
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 800), () {
-      if (mounted) _updatePreview();
     });
   }
 
@@ -333,15 +238,21 @@ MERMAID_CODE_PLACEHOLDER
       return;
     }
 
-    // Show folder picker dialog first (same style as catcatch/get-web-resource)
+    // Show save dialog with filename input and folder picker
     final folders = await TextManifest.getAllFolders();
     if (!mounted) return;
 
+    // Local controller - will be garbage collected after _saveChart completes.
+    // Not explicitly disposed because the dialog's dismiss animation still
+    // references it after showDialog returns.
+    final fileNameController = TextEditingController(text: '我的图表');
     final selectedFolder = await FolderPickerDialog.show(
       context,
       availableFolders: folders,
-      title: '选择保存文件夹',
+      title: '保存图表',
       hintText: '选择或创建文件夹保存 .mmd 图表文件',
+      fileNameController: fileNameController,
+      fileNameHintText: '输入文件名（自动添加 .mmd 后缀）',
       onCreateFolder: (name) async {
         await TextManifest.addFolder(name);
         return null;
@@ -349,7 +260,18 @@ MERMAID_CODE_PLACEHOLDER
       onRefreshFolders: () async => TextManifest.getAllFolders(),
     );
 
+    final userFileName = fileNameController.text.trim();
+
     if (selectedFolder == null || !mounted) return;
+
+    if (userFileName.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('文件名不能为空')),
+        );
+      }
+      return;
+    }
 
     setState(() => _isSaving = true);
 
@@ -362,18 +284,20 @@ MERMAID_CODE_PLACEHOLDER
       final hash = computeTextHash(bytes);
       final storageFileName = '$hash.txt';
 
-      const baseName = '我的图表';
+      // Use user-provided filename (without extension for storage consistency)
+      final baseName = userFileName;
+      final saveName = '$baseName-$typeLabel';
       final records = await TextManifest.loadRecords();
-      String name = '$baseName-$typeLabel';
+      String finalName = saveName;
       int counter = 2;
-      while (records.any((r) => r.name == name)) {
-        name = '$baseName-$typeLabel ($counter)';
+      while (records.any((r) => r.name == finalName)) {
+        finalName = '$saveName ($counter)';
         counter++;
       }
 
       await TextManifest.writeText(storageFileName, content);
       await TextManifest.addRecord(TextRecord(
-        name: name,
+        name: finalName,
         hash: hash,
         format: 'mmd',
         createdAt: DateTime.now(),
@@ -387,7 +311,7 @@ MERMAID_CODE_PLACEHOLDER
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                '已保存到文本储存区: ${selectedFolder.isEmpty ? "根目录" : selectedFolder}/$name.mmd'),
+                '已保存到文本储存区: ${selectedFolder.isEmpty ? "根目录" : selectedFolder}/$finalName.mmd'),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -534,120 +458,115 @@ MERMAID_CODE_PLACEHOLDER
   Widget _buildMainContent(ColorScheme cs) {
     final bool showPreview = _editorMode != EditorMode.edit;
 
-    return Stack(
-      children: [
-        // Preview — always at the same tree depth to keep InAppWebView alive
-        if (showPreview)
-          Positioned.fill(
-            // In split mode, leave bottom space for the code editor
-            bottom: _editorMode == EditorMode.split
-                ? MediaQuery.of(context).size.height * _splitEditorHeightRatio
-                : 0,
-            child: _buildPreviewPanel(cs),
-          ),
-        // Editor overlay for edit mode (full area)
-        if (_editorMode == EditorMode.edit)
-          Positioned.fill(
-            child: _buildCodeEditor(cs),
-          ),
-        // Editor overlay for split mode (bottom portion, no overlap)
-        if (_editorMode == EditorMode.split)
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height:
-                MediaQuery.of(context).size.height * _splitEditorHeightRatio,
-            child: _buildSplitEditorPart(cs),
-          ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableHeight = constraints.maxHeight;
+        final editorHeight = _editorMode == EditorMode.split
+            ? availableHeight * _splitEditorHeightRatio
+            : 0.0;
+
+        return Stack(
+          children: [
+            // Preview — uses MermaidRenderWidget which defers WebView creation
+            // via postFrameCallback to avoid freezing the UI (same pattern as
+            // the chat page's inline Mermaid rendering).
+            if (showPreview)
+              Positioned.fill(
+                // In split mode, leave bottom space for the code editor
+                bottom: editorHeight,
+                child: _buildPreviewPanel(cs),
+              ),
+            // Editor overlay for edit mode (full area)
+            if (_editorMode == EditorMode.edit)
+              Positioned.fill(
+                child: _buildCodeEditor(cs),
+              ),
+            // Editor overlay for split mode (bottom portion, no overlap)
+            if (_editorMode == EditorMode.split)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: editorHeight,
+                child: _buildSplitEditorPart(cs),
+              ),
+          ],
+        );
+      },
     );
   }
 
-  /// Preview panel that wraps [InAppWebView] in a consistent widget tree.
-  /// In preview mode, [InteractiveViewer] pan/scale is enabled for zoom/pan.
-  /// In split mode, the InteractiveViewer is still present but interaction
-  /// is disabled, keeping the widget tree depth constant so the platform
-  /// view is never recreated on mode switch.
+  /// Preview panel that uses [MermaidRenderWidget] — the same widget used
+  /// by the chat page for inline Mermaid rendering. This avoids creating
+  /// an [InAppWebView] directly in the chart page's widget tree, which was
+  /// causing the entire application to freeze when the platform view
+  /// (WebView2 on Windows) was created synchronously.
+  ///
+  /// [MermaidRenderWidget] handles deferred WebView creation, loading
+  /// states, error reporting, zoom controls, source code toggle, and
+  /// fullscreen — all without blocking the UI thread.
   Widget _buildPreviewPanel(ColorScheme cs) {
-    final isPreviewMode = _editorMode == EditorMode.preview;
-
     return Padding(
       padding: const EdgeInsets.all(12),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: cs.outlineVariant, width: 0.5),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: InteractiveViewer(
-            minScale: 0.5,
-            maxScale: 5.0,
-            constrained: false,
-            // Disable pan/scale in split mode so the WebView receives
-            // touch events normally; enable only in full preview mode.
-            panEnabled: isPreviewMode,
-            scaleEnabled: isPreviewMode,
-            child: _buildPreviewContent(cs),
-          ),
-        ),
+      child: MermaidRenderWidget(
+        mermaidCode: _previewCode,
+        expand: true,
+        showToolbar: false,
       ),
     );
   }
 
   /// Editor-only part of the split view (no InAppWebView preview).
+  /// The height is constrained by the parent [Positioned] widget so this
+  /// widget does not set its own fixed height.
   Widget _buildSplitEditorPart(ColorScheme cs) {
-    return SizedBox(
-      height: MediaQuery.of(context).size.height * _splitEditorHeightRatio,
-      child: Column(
-        children: [
-          // Divider + label
-          Container(
-            color: cs.surfaceContainerLow,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                Icon(Icons.code, size: 14, color: cs.onSurfaceVariant),
-                const SizedBox(width: 4),
-                Text(
-                  '代码',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: cs.onSurfaceVariant,
-                  ),
+    return Column(
+      children: [
+        // Divider + label
+        Container(
+          color: cs.surfaceContainerLow,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              Icon(Icons.code, size: 14, color: cs.onSurfaceVariant),
+              const SizedBox(width: 4),
+              Text(
+                '代码',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: cs.onSurfaceVariant,
                 ),
-                const Expanded(child: Divider(thickness: 0.5)),
-              ],
-            ),
+              ),
+              const Expanded(child: Divider(thickness: 0.5)),
+            ],
           ),
-          // Code editor
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-              child: TextField(
-                controller: _codeController,
-                decoration: InputDecoration(
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  contentPadding: const EdgeInsets.all(10),
-                  labelText: 'Mermaid 代码',
-                  isDense: true,
+        ),
+        // Code editor
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+            child: TextField(
+              controller: _codeController,
+              decoration: InputDecoration(
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                maxLines: null,
-                expands: true,
-                textAlignVertical: TextAlignVertical.top,
-                style: const TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 12,
-                  height: 1.4,
-                ),
+                contentPadding: const EdgeInsets.all(10),
+                labelText: 'Mermaid 代码',
+                isDense: true,
+              ),
+              maxLines: null,
+              expands: true,
+              textAlignVertical: TextAlignVertical.top,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 12,
+                height: 1.4,
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -681,68 +600,6 @@ MERMAID_CODE_PLACEHOLDER
   }
 
   // ---------------------------------------------------------------------------
-  // Preview content (shared between split and preview-only modes)
+  // Preview — delegated to MermaidRenderWidget (see _buildPreviewPanel above)
   // ---------------------------------------------------------------------------
-
-  Widget _buildPreviewContent(ColorScheme cs) {
-    return Stack(
-      children: [
-        // Single InAppWebView with a const Key so it is never recreated
-        // on rebuild or mode switch. This eliminates the infinite
-        // recreation loop that previously froze the app.
-        InAppWebView(
-          key: const Key('mermaid_webview'),
-          initialSettings: InAppWebViewSettings(
-            javaScriptEnabled: true,
-            transparentBackground: true,
-            verticalScrollBarEnabled: false,
-          ),
-          onWebViewCreated: (ctrl) {
-            _webViewController = ctrl;
-            final html = _buildMermaidHtml(
-              _codeController.text.trim(),
-            );
-            ctrl.loadData(
-              data: html,
-              mimeType: 'text/html',
-              encoding: 'utf8',
-            );
-          },
-          onLoadStop: (ctrl, url) {
-            // Only set state once to prevent infinite build → recreate → load loop
-            if (!_isPreviewReady) {
-              _webViewLoaded = true;
-              if (mounted) setState(() => _isPreviewReady = true);
-            }
-          },
-        ),
-        // Loading overlay — shown until the WebView first finishes loading
-        if (!_isPreviewReady)
-          Positioned.fill(
-            child: Container(
-              color: cs.surface,
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: cs.primary,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '加载渲染引擎...',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
 }

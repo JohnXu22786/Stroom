@@ -178,6 +178,10 @@ class ReasoningParam {
 
   bool isReasoningToggle;
 
+  /// True if this param is the dedicated inference intensity/effort param
+  /// (推理力度). Only one param in a model should have this set to true.
+  bool isEffortParam;
+
   String? onValue;
 
   String? offValue;
@@ -188,6 +192,7 @@ class ReasoningParam {
     required this.paramName,
     this.enabled = true,
     this.isReasoningToggle = false,
+    this.isEffortParam = false,
     this.onValue,
     this.offValue,
     List<String>? options,
@@ -199,6 +204,7 @@ class ReasoningParam {
         'options': options,
         'enabled': enabled,
         'isReasoningToggle': isReasoningToggle,
+        'isEffortParam': isEffortParam,
         if (onValue != null) 'onValue': onValue,
         if (offValue != null) 'offValue': offValue,
         'type': type,
@@ -215,6 +221,7 @@ class ReasoningParam {
       paramName: map['paramName'] as String? ?? '',
       enabled: map['enabled'] as bool? ?? true,
       isReasoningToggle: map['isReasoningToggle'] as bool? ?? false,
+      isEffortParam: map['isEffortParam'] as bool? ?? false,
       onValue: map['onValue'] as String?,
       offValue: map['offValue'] as String?,
       options:
@@ -227,6 +234,7 @@ class ReasoningParam {
         paramName: paramName,
         enabled: enabled,
         isReasoningToggle: isReasoningToggle,
+        isEffortParam: isEffortParam,
         onValue: onValue,
         offValue: offValue,
         options: List<String>.from(options),

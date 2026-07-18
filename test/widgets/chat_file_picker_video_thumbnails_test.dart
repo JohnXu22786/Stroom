@@ -20,7 +20,7 @@ void main() {
     VideoManifest.invalidateCache();
   });
 
-  Widget _buildTestApp() {
+  Widget buildTestApp() {
     return MaterialApp(
       home: Scaffold(
         body: Builder(
@@ -55,7 +55,7 @@ void main() {
         ),
       );
 
-      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpWidget(buildTestApp());
 
       // Open the picker
       await tester.tap(find.text('Open Picker'));
@@ -105,7 +105,7 @@ void main() {
       final stored = await VideoManifest.readThumbnail('cached_hash');
       expect(stored, isNotNull);
 
-      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpWidget(buildTestApp());
 
       // Open the picker
       await tester.tap(find.text('Open Picker'));
@@ -136,7 +136,7 @@ void main() {
         ),
       );
 
-      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpWidget(buildTestApp());
 
       // Open the picker
       await tester.tap(find.text('Open Picker'));

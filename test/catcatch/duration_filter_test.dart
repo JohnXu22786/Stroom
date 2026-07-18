@@ -22,14 +22,6 @@ void main() {
       isPlayable: true,
     );
 
-    final mediaWithDuration3 = MediaResource(
-      url: 'https://example.com/video3.mp4',
-      name: 'video3',
-      ext: 'mp4',
-      duration: '01:00:00.000', // 3600 seconds
-      isPlayable: true,
-    );
-
     final mediaWithoutDuration = MediaResource(
       url: 'https://example.com/no_duration.mp4',
       name: 'no_duration',

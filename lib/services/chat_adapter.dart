@@ -7,6 +7,7 @@ import '../models/mcp.dart';
 import '../models/tool_call.dart';
 import '../providers/provider_config.dart';
 import 'chat_service.dart';
+import 'http_tool_service.dart';
 import '../providers/chat_api_provider.dart';
 import 'mcp_client.dart';
 
@@ -70,17 +71,78 @@ class ChatAdapter {
   List<ToolDefinition> get mcpToolDefinitions =>
       List.unmodifiable(_mcpToolDefinitions);
 
-  /// 初始化 MCP 客户端并发现工具
+  /// 初始化内置工具（HTTP 工具），与 MCP SSE 服务器初始化独立。
+  ///
+  /// 此方法确保 HTTP 工具（如 brave_web_search、bocha_web_search 等）
+  /// 始终被注册，不受 MCP 服务器连接状态影响。
+  /// 即使 MCP 条目不存在或为空，也会尝试注册已缓存的工具。
+  void initializeBuiltinTools(ProviderEntriesState entriesState) {
+    final mcpEntry =
+        entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
+
+    String? braveApiKey, bochaApiKey, queritApiKey, searxngUrl, searxngApiKey;
+
+    if (mcpEntry != null && mcpEntry.configs.isNotEmpty) {
+      for (final config in mcpEntry.configs) {
+        final typeConfig =
+            config.models.isNotEmpty ? config.models[0].typeConfig : null;
+
+        // Collect API keys from HTTP tool configs
+        final isHttpTool = typeConfig?['isHttpTool'] as bool? ?? false;
+        if (isHttpTool) {
+          debugPrint(
+              'BuiltinTools: collecting API key for "${config.providerName}"');
+          _collectHttpToolApiKey(
+            config.providerName,
+            typeConfig,
+            (key) => braveApiKey ??= key,
+            (key) => bochaApiKey ??= key,
+            (key) => queritApiKey ??= key,
+            (url) => searxngUrl ??= url,
+            (key) => searxngApiKey ??= key,
+          );
+        }
+      }
+    }
+
+    // Always update API keys and register HTTP tools, even if no configs
+    // were found. This ensures previously registered tools remain available
+    // and new API keys take effect.
+    HttpToolService.updateApiKeys(
+      braveApiKey: braveApiKey,
+      bochaApiKey: bochaApiKey,
+      queritApiKey: queritApiKey,
+      searxngUrl: searxngUrl,
+      searxngApiKey: searxngApiKey,
+    );
+
+    // Register HTTP tool handlers in ChatService (idempotent)
+    _registerHttpTools();
+
+    // Set McpClientManager on ChatService for tool routing
+    ChatService.setMcpClientManager(_mcpClientManager);
+  }
+
+  /// 初始化 MCP 客户端（SSE / stdio）并发现工具。
+  ///
+  /// 仅处理非 HTTP 工具的 MCP 服务器配置。HTTP 工具由 [initializeBuiltinTools] 独立处理。
+  /// MCP 服务器连接失败不会影响已注册的内置工具。
   Future<void> initializeMcpServers(ProviderEntriesState entriesState) async {
     final mcpEntry =
         entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
     if (mcpEntry == null || mcpEntry.configs.isEmpty) return;
 
-    // Build MCP server configs from provider configs
+    // Build MCP server configs (skip HTTP tools — handled by initializeBuiltinTools)
     final mcpConfigs = <McpServerConfig>[];
+
     for (final config in mcpEntry.configs) {
       final typeConfig =
           config.models.isNotEmpty ? config.models[0].typeConfig : null;
+
+      // Skip HTTP tools (pure Dart, not MCP)
+      final isHttpTool = typeConfig?['isHttpTool'] as bool? ?? false;
+      if (isHttpTool) continue;
+
       final serverConfig = McpServerConfig.fromProviderConfig(
         providerName: config.providerName,
         typeConfig: typeConfig,
@@ -90,10 +152,7 @@ class ChatAdapter {
       }
     }
 
-    // Set McpClientManager on ChatService for tool routing
-    ChatService.setMcpClientManager(_mcpClientManager);
-
-    // Create clients and discover tools
+    // Create clients and discover tools from MCP servers
     final allTools = <ToolDefinition>[];
     for (final mcpConfig in mcpConfigs) {
       try {
@@ -113,6 +172,85 @@ class ChatAdapter {
       }
     }
     _mcpToolDefinitions = allTools;
+  }
+
+  /// Collect API key from an HTTP tool config entry
+  void _collectHttpToolApiKey(
+    String name,
+    Map<String, dynamic>? typeConfig,
+    void Function(String) setBrave,
+    void Function(String) setBocha,
+    void Function(String) setQuerit,
+    void Function(String) setSearxngUrl,
+    void Function(String) setSearxngKey,
+  ) {
+    if (typeConfig == null) return;
+
+    // Try apiKey field first, then headers, then env
+    String? extractKey() {
+      final apiKey = typeConfig['apiKey'] as String?;
+      if (apiKey != null && apiKey.isNotEmpty) return apiKey;
+      final headersRaw = typeConfig['headers'];
+      if (headersRaw is Map) {
+        for (final val in headersRaw.values) {
+          final s = val.toString().trim();
+          if (s.isNotEmpty && s.length > 3) {
+            if (s.startsWith('Bearer ')) return s.substring(7).trim();
+            return s;
+          }
+        }
+      }
+      final envRaw = typeConfig['env'];
+      if (envRaw is Map) {
+        for (final val in envRaw.values) {
+          final s = val.toString();
+          if (s.isNotEmpty) return s;
+        }
+      }
+      return null;
+    }
+
+    switch (name) {
+      case 'Brave Search':
+        setBrave(extractKey() ?? '');
+      case 'Bocha':
+        setBocha(extractKey() ?? '');
+      case 'Querit':
+        setQuerit(extractKey() ?? '');
+      case 'Searxng':
+        final url = typeConfig['url'] as String? ?? 'http://localhost:8080';
+        setSearxngUrl(url);
+        setSearxngKey(extractKey() ?? '');
+    }
+  }
+
+  /// Register HTTP tool handlers in ChatService (idempotent — uses static flag)
+  static bool _httpToolsRegistered = false;
+  void _registerHttpTools() {
+    if (_httpToolsRegistered) return;
+    _httpToolsRegistered = true;
+
+    for (final def in HttpToolService.toolDefinitions) {
+      // Async handler that delegates to the HTTP tool service
+      Future<String> handler(Map<String, dynamic> args) async {
+        switch (def.name) {
+          case 'brave_web_search':
+            return await HttpToolService.handleBraveSearch(args);
+          case 'bocha_web_search':
+            return await HttpToolService.handleBochaSearch(args);
+          case 'querit_search':
+            return await HttpToolService.handleQueritSearch(args);
+          case 'searxng_search':
+            return await HttpToolService.handleSearxngSearch(args);
+          default:
+            return '错误: 未知的 HTTP 工具 "${def.name}"';
+        }
+      }
+
+      ChatService.registerTool(def, handler);
+    }
+    debugPrint(
+        'Registered ${HttpToolService.toolDefinitions.length} HTTP tools');
   }
 
   /// 释放 MCP 资源
@@ -338,4 +476,34 @@ class ChatAdapter {
   int? get lastResponseStatusCode => _chatService?.lastResponseStatusCode;
   Map<String, List<String>>? get lastResponseHeaders =>
       _chatService?.lastResponseHeaders;
+}
+
+/// Resolve the set of tool names to enable for the current conversation.
+///
+/// Behavior:
+/// - If [hasExplicitSavedPrefs] is true (the user has touched the toggles
+///   for this conversation), the [savedEnabledNames] set is returned as-is.
+///   This is the case for both "user selected some tools" and
+///   "user toggled every tool off" — both must survive serialization.
+/// - If [hasExplicitSavedPrefs] is false (the conversation has no saved
+///   preferences — the default for new conversations), all available tool
+///   names are returned so that built-in HTTP tools and built-in remote
+///   SSE MCP providers (Exa, Tavily, Jina, Firecrawl, Zhipu) are
+///   immediately visible in the conversation page's tool list. Users can
+///   still opt-out specific tools via the "可用工具" panel; the opt-out set
+///   will be persisted on the next save (with hasExplicitEnabledMcpTools
+///   flipped to true).
+///
+/// This is a pure function to keep the policy testable and easy to reason
+/// about. The actual side-effect of writing to [enabledToolNamesProvider]
+/// stays in the chat page.
+Set<String> resolveEnabledToolNames({
+  required List<ToolDefinition> allTools,
+  required Set<String> savedEnabledNames,
+  required bool hasExplicitSavedPrefs,
+}) {
+  if (hasExplicitSavedPrefs) {
+    return Set<String>.from(savedEnabledNames);
+  }
+  return allTools.map((t) => t.name).toSet();
 }

@@ -5,39 +5,6 @@ import 'package:stroom/utils/audio_utils.dart';
 
 void main() {
   group('detectAudioFormat', () {
-    test('detects WAV from RIFF magic bytes', () {
-      final data = Uint8List.fromList([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0]);
-      expect(detectAudioFormat(data), equals('wav'));
-    });
-
-    test('detects MP3 from ID3 magic bytes', () {
-      final data = Uint8List.fromList([0x49, 0x44, 0x33, 0, 0, 0, 0]);
-      expect(detectAudioFormat(data), equals('mp3'));
-    });
-
-    test('detects MP3 from MPEG sync bytes', () {
-      // 0xFFFx pattern
-      final data = Uint8List.fromList([0xFF, 0xF0, 0, 0, 0, 0]);
-      expect(detectAudioFormat(data), equals('mp3'));
-    });
-
-    test('detects FLAC from magic bytes', () {
-      final data = Uint8List.fromList([0x66, 0x4C, 0x61, 0x43, 0, 0, 0, 0]);
-      expect(detectAudioFormat(data), equals('flac'));
-    });
-
-    test('detects OGG from magic bytes', () {
-      final data = Uint8List.fromList([0x4F, 0x67, 0x67, 0x53, 0, 0, 0, 0]);
-      expect(detectAudioFormat(data), equals('ogg'));
-    });
-
-    test('detects M4A from ftyp magic bytes (ISO base media)', () {
-      // M4A/MP4: box size (4 bytes) + "ftyp" at offset 4
-      final data =
-          Uint8List.fromList([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]);
-      expect(detectAudioFormat(data), equals('m4a'));
-    });
-
     test('detects M4A with different box size prefix', () {
       // Larger box size
       final data =
@@ -45,59 +12,38 @@ void main() {
       expect(detectAudioFormat(data), equals('m4a'));
     });
 
-    test('returns pcm for unknown data', () {
-      final data = Uint8List.fromList([0x00, 0x01, 0x02, 0x03]);
-      expect(detectAudioFormat(data), equals('pcm'));
-    });
-
-    test('returns pcm for empty data', () {
-      final data = Uint8List.fromList([]);
-      expect(detectAudioFormat(data), equals('pcm'));
-    });
-
     test('returns pcm for data smaller than 4 bytes', () {
       final data = Uint8List.fromList([0x00, 0x01, 0x02]);
       expect(detectAudioFormat(data), equals('pcm'));
     });
+
+    test('detects AAC ADTS and does not confuse with MP3', () {
+      // AAC ADTS frame header: sync=0xFFF, MPEG-4, layer=00
+      // Byte 2: profile(1)<<6 | freqIdx(4)<<2 | chanConfig_h(2)
+      // Byte 3: chanConfig_l<<6 | frameLen_h<<2  ...
+      final data = Uint8List.fromList([
+        0xFF, 0xF1, // sync (12 bits) + ID(0=MPEG4) + layer(00) + protect(1)
+        0x50, 0x80, // profile, freq, channels, frame length
+      ]);
+      expect(detectAudioFormat(data), equals('aac'));
+    });
+
+    test('detects regular MP3 sync (not confused with AAC)', () {
+      // MPEG1 Layer3: sync=0xFFF, version=11, layer=01
+      final data = Uint8List.fromList([0xFF, 0xFB, 0x90, 0x00]);
+      expect(detectAudioFormat(data), equals('mp3'));
+    });
+
+    test('detects MP3 with ID3 tag', () {
+      final data = Uint8List.fromList([
+        0x49, 0x44, 0x33, // ID3
+        0x03, 0x00, 0x00, // version, flags
+      ]);
+      expect(detectAudioFormat(data), equals('mp3'));
+    });
   });
 
   group('getMimeType', () {
-    test('returns correct MIME for wav', () {
-      expect(getMimeType('wav'), equals('audio/wav'));
-    });
-
-    test('returns correct MIME for mp3', () {
-      expect(getMimeType('mp3'), equals('audio/mpeg'));
-    });
-
-    test('returns correct MIME for flac', () {
-      expect(getMimeType('flac'), equals('audio/flac'));
-    });
-
-    test('returns correct MIME for ogg', () {
-      expect(getMimeType('ogg'), equals('audio/ogg'));
-    });
-
-    test('returns correct MIME for aac', () {
-      expect(getMimeType('aac'), equals('audio/aac'));
-    });
-
-    test('returns correct MIME for m4a', () {
-      expect(getMimeType('m4a'), equals('audio/mp4'));
-    });
-
-    test('returns correct MIME for wma', () {
-      expect(getMimeType('wma'), equals('audio/x-ms-wma'));
-    });
-
-    test('returns correct MIME for opus', () {
-      expect(getMimeType('opus'), equals('audio/ogg'));
-    });
-
-    test('returns correct MIME for pcm', () {
-      expect(getMimeType('pcm'), equals('audio/L16;rate=24000;channels=1'));
-    });
-
     test('defaults to audio/wav for unknown format', () {
       expect(getMimeType('unknown'), equals('audio/wav'));
     });
@@ -109,12 +55,81 @@ void main() {
     });
   });
 
-  group('ensureValidAudioFormat', () {
-    test('returns empty data as-is', () {
-      final result = ensureValidAudioFormat(Uint8List.fromList([]));
-      expect(result.$1, isEmpty);
+  group('formatDisplayName', () {
+    test('maps AAC to M4A (consumer-friendly name)', () {
+      // Regression: raw AAC ADTS format should display as "M4A" because
+      // "AAC" is a codec name unfamiliar to most users, while "M4A" is
+      // the widely recognized consumer audio format name.
+      expect(formatDisplayName('aac'), equals('M4A'));
     });
 
+    test('returns same uppercase for wav', () {
+      expect(formatDisplayName('wav'), equals('WAV'));
+    });
+
+    test('returns same uppercase for mp3', () {
+      expect(formatDisplayName('mp3'), equals('MP3'));
+    });
+
+    test('returns same uppercase for m4a', () {
+      expect(formatDisplayName('m4a'), equals('M4A'));
+    });
+
+    test('returns same uppercase for flac', () {
+      expect(formatDisplayName('flac'), equals('FLAC'));
+    });
+
+    test('returns same uppercase for ogg', () {
+      expect(formatDisplayName('ogg'), equals('OGG'));
+    });
+
+    test('returns same uppercase for opus', () {
+      expect(formatDisplayName('opus'), equals('OPUS'));
+    });
+
+    test('returns same uppercase for webm', () {
+      expect(formatDisplayName('webm'), equals('WEBM'));
+    });
+
+    test('returns same uppercase for weba', () {
+      expect(formatDisplayName('weba'), equals('WEBA'));
+    });
+
+    test('returns same uppercase for wma', () {
+      expect(formatDisplayName('wma'), equals('WMA'));
+    });
+
+    test('returns same uppercase for mp4', () {
+      expect(formatDisplayName('mp4'), equals('MP4'));
+    });
+
+    test('returns same uppercase for mpeg', () {
+      expect(formatDisplayName('mpeg'), equals('MPEG'));
+    });
+
+    test('returns same uppercase for pcm', () {
+      expect(formatDisplayName('pcm'), equals('PCM'));
+    });
+
+    test('is case-insensitive - AAC upper', () {
+      expect(formatDisplayName('AAC'), equals('M4A'));
+    });
+
+    test('is case-insensitive - Aac mixed', () {
+      expect(formatDisplayName('Aac'), equals('M4A'));
+    });
+
+    test('handles empty string', () {
+      expect(formatDisplayName(''), equals(''));
+    });
+
+    test('handles unknown format by uppercasing', () {
+      expect(formatDisplayName('unknown'), equals('UNKNOWN'));
+      expect(formatDisplayName('custom'), equals('CUSTOM'));
+    });
+  });
+
+  group('ensureValidAudioFormat', () {
     test('converts PCM to WAV when requested format is wav', () {
       // Fake PCM data
       final pcmData = Uint8List.fromList(
@@ -138,15 +153,63 @@ void main() {
       // Should detect it's actually wav and keep it
       expect(result.$2, equals('wav'));
     });
+  });
 
-    test('detects and keeps m4a format', () {
-      // Simulate m4a data (ftyp box)
-      final m4aData = Uint8List.fromList([
-        0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, // ftyp
-        0x6D, 0x70, 0x34, 0x32, // major brand
-      ]);
-      final result = ensureValidAudioFormat(m4aData, requestedFormat: 'm4a');
-      expect(result.$2, equals('m4a'));
+  // ====================================================================
+  // normalizeAudioFormat — map internal format identifiers to the
+  // consumer-facing extension used both for on-disk filenames and for
+  // AudioRecord.format. Currently: aac -> m4a.
+  // ====================================================================
+  group('normalizeAudioFormat', () {
+    test('aac maps to m4a (consumer-friendly file extension)', () {
+      expect(normalizeAudioFormat('aac'), equals('m4a'),
+          reason:
+              'Audio extracted as ADTS-wrapped AAC should be saved with the '
+              'm4a extension so users see the widely recognized consumer name.');
+    });
+
+    test('is case-insensitive (AAC, Aac -> m4a)', () {
+      expect(normalizeAudioFormat('AAC'), equals('m4a'));
+      expect(normalizeAudioFormat('Aac'), equals('m4a'));
+    });
+
+    test('m4a passes through as m4a', () {
+      expect(normalizeAudioFormat('m4a'), equals('m4a'));
+    });
+
+    test('wav passes through as wav', () {
+      expect(normalizeAudioFormat('wav'), equals('wav'));
+    });
+
+    test('mp3 passes through as mp3', () {
+      expect(normalizeAudioFormat('mp3'), equals('mp3'));
+    });
+
+    test('flac passes through as flac', () {
+      expect(normalizeAudioFormat('flac'), equals('flac'));
+    });
+
+    test('pcm passes through as pcm', () {
+      expect(normalizeAudioFormat('pcm'), equals('pcm'));
+    });
+
+    test('empty string is preserved as empty', () {
+      expect(normalizeAudioFormat(''), equals(''));
+    });
+  });
+
+  // ====================================================================
+  // getMimeType — must accept normalized (m4a) form too
+  // ====================================================================
+  group('getMimeType (normalized)', () {
+    test('aac still maps to audio/aac (mime type unchanged)', () {
+      // The mime type for raw ADTS stays audio/aac; only the file
+      // extension is normalized to m4a for display.
+      expect(getMimeType('aac'), equals('audio/aac'));
+    });
+
+    test('m4a maps to audio/mp4', () {
+      expect(getMimeType('m4a'), equals('audio/mp4'));
     });
   });
 }

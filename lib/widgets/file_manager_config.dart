@@ -34,5 +34,5 @@ class FileManagerConfig<T extends FileRecord> {
     this.extraAppBarActions,
   });
 
-  static List<PopupMenuEntry<String>> _defaultExtraMenu(_) => [];
+  static List<PopupMenuEntry<String>> _defaultExtraMenu(Object? _) => [];
 }

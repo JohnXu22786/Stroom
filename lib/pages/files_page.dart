@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
+import 'files_page_shared.dart';
 import 'gallery_page.dart';
 import 'text_storage_page.dart';
 import 'tts_page.dart';
@@ -13,7 +14,8 @@ final fileTabOrderProvider = StateProvider<List<int>>((ref) => [0, 1, 2, 3]);
 /// Refresh signal provider - increment to trigger refresh of files sub-pages
 final filesRefreshSignalProvider = StateProvider<int>((ref) => 0);
 
-/// 文件页面 - 包含文本、图片、视频和音频四个标签页，支持左右滑动切换和标签排序
+/// 文件页面 - 包含文本、图片、视频和音频四个标签页，支持标签排序
+/// 使用 IndexedStack 保持各标签页的导航状态（如已打开的文件夹）在切换时不变。
 class FilesPage extends ConsumerStatefulWidget {
   const FilesPage({super.key});
 
@@ -25,19 +27,45 @@ class _FilesPageState extends ConsumerState<FilesPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
+  /// Track the last tapped logical tab index for double-tap detection.
+  /// Uses the logical tab ID (0-3) instead of physical position, so tab
+  /// reordering does not cause false resets.
+  /// Initialized to -1 so the first tap never triggers a reset.
+  int _lastTappedLogicalTabIndex = -1;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(_onTabControllerChanged);
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_onTabControllerChanged);
     _tabController.dispose();
     super.dispose();
   }
 
+  /// Trigger a rebuild when the tab index changes so [IndexedStack] shows
+  /// the correct child. Without this listener the build method would not be
+  /// called on tab switch, leaving [IndexedStack] stuck on the old index.
+  void _onTabControllerChanged() {
+    setState(() {});
+  }
+
   static const _tabLabels = ['文本', '音频', '图片', '视频'];
+
+  void _onTabTapped(int physicalIndex) {
+    // Map physical position → logical tab index via the current order.
+    final tabOrder = ref.read(fileTabOrderProvider);
+    final logicalIndex = tabOrder[physicalIndex];
+    if (logicalIndex == _lastTappedLogicalTabIndex) {
+      // Same tab tapped again → reset to root (home).
+      ref.read(fileTabFolderResetSignalProvider(logicalIndex).notifier).state++;
+    }
+    _lastTappedLogicalTabIndex = logicalIndex;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,26 +85,46 @@ class _FilesPageState extends ConsumerState<FilesPage>
               onLongPress: () => _showReorderDialog(context, tabOrder),
               child: TabBar(
                 controller: _tabController,
+                onTap: _onTabTapped,
                 tabs: tabOrder.map((i) => Tab(text: _tabLabels[i])).toList(),
               ),
             ),
           ),
           // Content area - each page handles its own Scaffold
+          // Uses IndexedStack instead of TabBarView to keep all tab children
+          // alive in the widget tree, preserving their navigation state (e.g.
+          // open subfolders) when the user switches between tabs. Only the
+          // visible tab is rendered, but inactive tabs retain their State.
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
+            child: IndexedStack(
+              index: _tabController.index,
               children: tabOrder.map((i) {
+                final isActiveTab = tabOrder[_tabController.index] == i;
                 switch (i) {
                   case 0:
                     return TextStoragePage(
-                        key: ValueKey('text_storage_$refreshSignal'));
+                      key: ValueKey('text_storage_$refreshSignal'),
+                      tabIndex: 0,
+                      isActiveTab: isActiveTab,
+                    );
                   case 1:
-                    return TtsPage(key: ValueKey('tts_$refreshSignal'));
+                    return TtsPage(
+                      key: ValueKey('tts_$refreshSignal'),
+                      tabIndex: 1,
+                      isActiveTab: isActiveTab,
+                    );
                   case 2:
-                    return GalleryPage(key: ValueKey('gallery_$refreshSignal'));
+                    return GalleryPage(
+                      key: ValueKey('gallery_$refreshSignal'),
+                      tabIndex: 2,
+                      isActiveTab: isActiveTab,
+                    );
                   case 3:
                     return VideoGalleryPage(
-                        key: ValueKey('video_gallery_$refreshSignal'));
+                      key: ValueKey('video_gallery_$refreshSignal'),
+                      tabIndex: 3,
+                      isActiveTab: isActiveTab,
+                    );
                   default:
                     return const SizedBox.shrink();
                 }
@@ -106,7 +154,7 @@ class _FilesPageState extends ConsumerState<FilesPage>
                 children: [
                   ReorderableListView(
                     shrinkWrap: true,
-                    onReorder: (oldIndex, newIndex) {
+                    onReorderItem: (oldIndex, newIndex) {
                       setDialogState(() {
                         if (newIndex > oldIndex) newIndex--;
                         final item = order.removeAt(oldIndex);
