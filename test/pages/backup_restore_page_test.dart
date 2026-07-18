@@ -28,48 +28,37 @@ void main() {
       expect(find.text('数据备份与恢复'), findsOneWidget);
     });
 
-    testWidgets('shows backup and restore sections', (tester) async {
-      await tester.pumpWidget(createTestApp());
-      await tester.pump();
-
-      // Should find section headers (import section is below export section in scroll)
-      expect(find.text('导出备份'), findsAtLeast(1));
-
-      // Scroll down to find the import section header
-      await tester.scrollUntilVisible(
-        find.text('导入恢复'),
-        200.0,
-        scrollable: find.byType(Scrollable),
-      );
-      await tester.pump();
-      expect(find.text('导入恢复'), findsOneWidget);
-    });
-
-    testWidgets('import card shows selection heading when scrolled to',
+    testWidgets('shows unified selection card with new categories',
         (tester) async {
       await tester.pumpWidget(createTestApp());
       await tester.pump();
 
-      // Scroll down to the import section
+      // Should find the unified selection section header
+      expect(find.text('选择要备份或恢复的数据类别'), findsOneWidget);
+
+      // New category labels should be present
+      expect(find.text('聊天记录和附件'), findsAtLeast(1));
+      expect(find.text('设置'), findsAtLeast(1));
+      expect(find.text('图片'), findsAtLeast(1));
+      expect(find.text('音频'), findsAtLeast(1));
+      expect(find.text('视频'), findsAtLeast(1));
+      expect(find.text('文本'), findsAtLeast(1));
+      expect(find.text('任务'), findsAtLeast(1));
+    });
+
+    testWidgets('export and import buttons both exist', (tester) async {
+      await tester.pumpWidget(createTestApp());
+      await tester.pump();
+
+      // Scroll down to find buttons
       await tester.scrollUntilVisible(
-        find.text('选择备份文件并恢复'),
+        find.text('导出备份'),
         200.0,
         scrollable: find.byType(Scrollable),
       );
       await tester.pump();
+      expect(find.text('导出备份'), findsOneWidget);
 
-      // The import card should show selection heading
-      expect(find.text('选择要恢复的数据类别'), findsOneWidget);
-    });
-
-    testWidgets('export and import buttons exist', (tester) async {
-      await tester.pumpWidget(createTestApp());
-      await tester.pump();
-
-      // There should be at least one "导出备份" (either section header or button)
-      expect(find.text('导出备份'), findsWidgets);
-
-      // Scroll to find import button
       await tester.scrollUntilVisible(
         find.text('选择备份文件并恢复'),
         200.0,
@@ -77,6 +66,31 @@ void main() {
       );
       await tester.pump();
       expect(find.text('选择备份文件并恢复'), findsOneWidget);
+    });
+
+    testWidgets('old section headers are gone (merged into one)',
+        (tester) async {
+      await tester.pumpWidget(createTestApp());
+      await tester.pump();
+
+      // The old separate section headers should not exist
+      expect(find.text('导入恢复'), findsNothing);
+
+      // The old selection card titles should be gone
+      expect(find.text('选择要备份的数据类别'), findsNothing);
+      expect(find.text('选择要恢复的数据类别'), findsNothing);
+
+      // The unified section header should exist
+      expect(find.text('选择要备份或恢复的数据类别'), findsOneWidget);
+    });
+
+    testWidgets('auto backup path display does not contain 点击重新选择',
+        (tester) async {
+      await tester.pumpWidget(createTestApp());
+      await tester.pump();
+
+      // The description text should not contain "点击重新选择目录"
+      expect(find.textContaining('点击重新选择'), findsNothing);
     });
   });
 }

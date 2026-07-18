@@ -128,7 +128,7 @@ class BackupLocationManager {
         if (Platform.isAndroid) {
           final uri = await _getSavedSafUri();
           if (uri != null) {
-            return 'Documents/Stroom/AutoBackups (点击重新选择目录)';
+            return 'Documents/Stroom/AutoBackups';
           }
           return '尚未选择备份目录，请在启动流程中授权';
         }
