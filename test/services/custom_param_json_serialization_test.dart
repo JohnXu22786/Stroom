@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/assistant.dart' show CustomParameter;
-import 'package:stroom/models/tts_models.dart' show CustomParam, ModelConfig, ProviderConfigItem;
+import 'package:stroom/models/tts_models.dart' show CustomParam, ModelConfig;
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_service.dart';
 
@@ -153,28 +153,10 @@ void main() {
     });
   });
 
-  group('ChatService._buildExtraParams - JSON custom param full flow', () {
-    /// A minimal mock provider that captures extraParams for inspection.
-    /// Simplified version to test the extra params output directly.
+  group('ChatService.parseJsonValue - full flow', () {
     test(
         'model-level JSON custom param defaultValue is parsed to Map in extraParams',
         () async {
-      final modelConfig = ModelConfig(
-        modelId: 'test-model',
-        name: 'Test',
-        typeConfig: {'context': 4096},
-        customParams: [
-          CustomParam(
-            paramName: 'response_format',
-            defaultValue: '{"type": "json_object"}',
-            type: 'json',
-          ),
-        ],
-      );
-
-      // Build extra params using the static-like approach
-      // We need to create ChatService and inspect via a mock provider
-      // Instead, let's use the static parseJsonValue directly
       final result = ChatService.parseJsonValue('{"type": "json_object"}');
       expect(result, isA<Map>());
       expect((result as Map)['type'], equals('json_object'));

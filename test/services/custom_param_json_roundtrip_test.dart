@@ -38,7 +38,8 @@ void main() {
 
       // In JSON, the defaultValue should be a string value (quoted)
       expect(paramMap['defaultValue'], isA<String>());
-      expect(paramMap['defaultValue'], equals('{"key": "value", "nested": {"a": 1}}'));
+      expect(paramMap['defaultValue'],
+          equals('{"key": "value", "nested": {"a": 1}}'));
 
       // Deserialize back
       final restoredModel = ModelConfig.fromMap(raw);
@@ -46,7 +47,8 @@ void main() {
 
       // The defaultValue should remain a String
       expect(restoredParam.defaultValue, isA<String>());
-      expect(restoredParam.defaultValue, equals('{"key": "value", "nested": {"a": 1}}'));
+      expect(restoredParam.defaultValue,
+          equals('{"key": "value", "nested": {"a": 1}}'));
     });
 
     test('Empty string defaultValue is handled correctly', () {
@@ -71,25 +73,21 @@ void main() {
 
     test('jsonDecode correctly parses valid JSON from CustomParam.defaultValue',
         () {
-      final testCases = [
-        {'defaultValue': '{"key": "value"}', 'expectedType': Map},
-        {'defaultValue': '["a", "b"]', 'expectedType': List},
-        {'defaultValue': '42', 'expectedType': num},
-        {'defaultValue': 'true', 'expectedType': bool},
-        {'defaultValue': 'null', 'expectedType': Null},
-      ];
-
-      for (final tc in testCases) {
-        final value = tc['defaultValue'] as String;
-        final result = jsonDecode(value);
-
-        if (tc['expectedType'] == Null) {
-          expect(result, isNull);
-        } else {
-          expect(result, isA(tc['expectedType'] as Type),
-              reason: 'Failed for value: $value');
-        }
-      }
+      // Object
+      var result = jsonDecode('{"key": "value"}');
+      expect(result, isA<Map>());
+      // Array
+      result = jsonDecode('["a", "b"]');
+      expect(result, isA<List>());
+      // Number
+      result = jsonDecode('42');
+      expect(result, isA<num>());
+      // Boolean
+      result = jsonDecode('true');
+      expect(result, isA<bool>());
+      // Null
+      result = jsonDecode('null');
+      expect(result, isNull);
     });
   });
 
@@ -104,7 +102,9 @@ void main() {
           CustomParam(paramName: 'num', defaultValue: '42', type: 'number'),
           CustomParam(paramName: 'bool', defaultValue: 'true', type: 'boolean'),
           CustomParam(
-              paramName: 'json', defaultValue: '{"key": "value"}', type: 'json'),
+              paramName: 'json',
+              defaultValue: '{"key": "value"}',
+              type: 'json'),
         ],
       );
 
@@ -113,8 +113,7 @@ void main() {
       final restored = ModelConfig.fromMap(decoded);
 
       expect(restored.customParams.length, equals(4));
-      expect(restored.customParams[3].defaultValue,
-          equals('{"key": "value"}'));
+      expect(restored.customParams[3].defaultValue, equals('{"key": "value"}'));
       expect(restored.customParams[3].type, equals('json'));
     });
   });

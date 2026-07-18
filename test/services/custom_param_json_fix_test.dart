@@ -171,7 +171,9 @@ void main() {
       final original = CustomParameter(
         name: 'provider',
         type: 'json',
-        value: {'order': ['deepinfra', 'stepfun/fp8']},
+        value: {
+          'order': ['deepinfra', 'stepfun/fp8']
+        },
       );
       final map = original.toMap();
       final restored = CustomParameter.fromMap(map);
@@ -187,7 +189,9 @@ void main() {
       final original = CustomParameter(
         name: 'provider',
         type: 'json',
-        value: {'order': ['deepinfra', 'stepfun/fp8']},
+        value: {
+          'order': ['deepinfra', 'stepfun/fp8']
+        },
       );
       final jsonStr = jsonEncode(original.toMap());
       final decoded = jsonDecode(jsonStr) as Map<String, dynamic>;
@@ -214,7 +218,8 @@ void main() {
     });
 
     test('CustomParameter number value survives round-trip', () {
-      final original = CustomParameter(name: 'count', type: 'number', value: 42);
+      final original =
+          CustomParameter(name: 'count', type: 'number', value: 42);
       final jsonStr = jsonEncode(original.toMap());
       final decoded = jsonDecode(jsonStr) as Map<String, dynamic>;
       final restored = CustomParameter.fromMap(decoded);
