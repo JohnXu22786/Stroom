@@ -3,17 +3,24 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
-import 'data_migration_service.dart';
 import '../utils/web_file_store.dart';
 
 // ====================================================================
 // AppLogService — 应用日志服务
 // ====================================================================
 //
-// 将应用运行日志写入自动备份目录下的 logs/ 子目录。
-// 日志按天分割，格式为 app_YYYY-MM-DD.log。
+// 日志数据先存入内存缓冲区，每 10 秒自动写入一次存储。
+// 写入成功后从内存中抹除。日志按天分割，格式为 app_YYYY-MM-DD.log。
 // 每个日志条目包含时间戳、日志级别、来源和消息内容。
+//
+// 日志目录位置（与备份共享 Documents/Stroom 总目录）：
+// - Windows: %USERPROFILE%\Documents\Stroom\Logs\
+// - macOS:   ~/Documents/Stroom/Logs/
+// - Linux:   ~/Documents/Stroom/Logs/
+// - Android: <app_documents>/Stroom/Logs/
+// - iOS:     <app_documents>/Stroom/Logs/
 //
 // 日志保留策略：保留最近 3 次使用的天的日志（按文件日期计）。
 // 超过 3 天的日志文件会自动清理。
@@ -36,10 +43,25 @@ enum LogLevel {
   const LogLevel(this.label);
 }
 
+/// 内存中的日志条目。
+class _LogEntry {
+  final DateTime timestamp;
+  final LogLevel level;
+  final String source;
+  final String message;
+
+  _LogEntry({
+    required this.timestamp,
+    required this.level,
+    required this.source,
+    required this.message,
+  });
+}
+
 /// 应用日志服务。
 ///
 /// 提供静态方法供全局调用，无需实例化。
-/// 日志写入备份目录下的 logs/ 子目录。
+/// 日志先存入内存缓冲区，每 10 秒自动写入 Documents/Stroom/Logs。
 class AppLogService {
   AppLogService._();
 
@@ -84,13 +106,24 @@ class AppLogService {
   /// 日志文件保留天数。
   static const int _retentionDays = 3;
 
-  /// 日志子目录名。
-  static const String _logDirName = 'logs';
-
-  /// 缓存日志目录，避免每次写入都重新解析备份路径。
-  /// 解析路径会触发 BackupLocationManager，而它可能又调用 AppLogService，
-  /// 造成递归 Future 链。缓存切断这个循环。
+  /// 缓存日志目录。
   static Directory? _cachedLogDir;
+
+  // ================================================================
+  // 内存缓冲区与定时刷入
+  // ================================================================
+
+  /// 内存日志缓冲区。
+  static final List<_LogEntry> _buffer = [];
+
+  /// 定时刷入计时器（每 10 秒）。
+  static Timer? _flushTimer;
+
+  /// 刷入间隔。
+  static const Duration _flushInterval = Duration(seconds: 10);
+
+  /// 是否正在刷入中（防重入）。
+  static bool _isFlushing = false;
 
   // ================================================================
   // 日志写入方法
@@ -132,58 +165,108 @@ class AppLogService {
   }
 
   /// 核心日志写入方法。
+  ///
+  /// 日志先存入内存缓冲区，随后由定时器每 10 秒刷入文件。
   static Future<void> _writeLog(
       LogLevel level, String source, String message) async {
     // 先输出到控制台（所有场景）
     debugPrint('[AppLog] [${level.label}] [$source] $message');
 
-    // 手动禁用或 Web 平台时跳过文件写入
+    // 手动禁用或 Web 平台时跳过缓冲区写入
     if (_shouldSkipFileIo) return;
 
-    // 文件写入以 fire-and-forget 方式执行，绝不阻塞主流程。
-    // 在 testWidgets 的 FakeAsync zone 中，即使 _shouldSkipFileIo=false，
-    // 文件 I/O 也会永远挂起，所以必须不等待。
-    _writeLogToFile(level, source, message);
+    _buffer.add(_LogEntry(
+      timestamp: DateTime.now(),
+      level: level,
+      source: source,
+      message: message,
+    ));
+
+    // 启动定时刷入（仅一次，非测试环境）
+    if (_flushTimer == null) _startFlushTimer();
   }
 
-  /// 用于测试同步的 Completer，完成时表示所有待写入日志已刷新。
-  static Completer<void>? _flushCompleter;
-
-  /// 等待所有待写入日志完成（仅用于测试）。
-  static Future<void> flush() async {
-    await _flushCompleter?.future;
-  }
-
-  /// 将日志写入文件（fire-and-forget，不阻塞调用方）。
-  /// 在 _shouldSkipFileIo 为 true 时完全跳过（不创建 Future/timer），
-  /// 避免在 testWidgets 的 FakeAsync zone 中产生未决计时器。
-  static void _writeLogToFile(LogLevel level, String source, String message) {
-    if (_shouldSkipFileIo) return;
-
-    // 使用 Future 构造避免 async/await，确保即使在没有微任务调度的
-    // FakeAsync zone 中也不会挂起调用方。
-    final completer = Completer<void>();
-    _flushCompleter = completer;
-    Future(() async {
-      try {
-        final logDir = await getLogDir();
-        if (!await logDir.exists()) {
-          await logDir.create(recursive: true);
-        }
-        final now = DateTime.now();
-        final dateStr = '${now.year}-${_pad(now.month)}-${_pad(now.day)}';
-        final logFile = File(p.join(logDir.path, 'app_$dateStr.log'));
-        final timestamp = '${now.year}-${_pad(now.month)}-${_pad(now.day)} '
-            '${_pad(now.hour)}:${_pad(now.minute)}:${_pad(now.second)}';
-        final logLine = '[$timestamp] [${level.label}] [$source] $message\n';
-        await logFile.writeAsString(logLine, mode: FileMode.append);
-      } catch (e) {
-        // 文件写入失败不影响主流程（包括 FakeAsync zone 中不可用的情况）
-        debugPrint('[AppLogService] 写入日志文件失败: $e');
-      } finally {
-        completer.complete();
-      }
+  /// 启动定时刷入（仅在非测试环境下运行一次）。
+  static void _startFlushTimer() {
+    if (_flushTimer != null) return;
+    // 测试环境不启动定时器，依赖显式 flush() 调用
+    if (WebFileStore.isTestMode || _isTestEnv) return;
+    _flushTimer = Timer.periodic(_flushInterval, (_) {
+      _flushBuffer();
     });
+  }
+
+  /// 将内存缓冲区中的所有日志刷入文件。
+  ///
+  /// 按日期分组写入对应的每日日志文件。写入成功后从缓冲区移除。
+  /// 写入失败时回退（重新加入缓冲区前端）。
+  static Future<void> _flushBuffer() async {
+    if (_buffer.isEmpty || _isFlushing) return;
+    _isFlushing = true;
+
+    // 原子性取出所有待写入条目
+    final entries = List<_LogEntry>.from(_buffer);
+    _buffer.clear();
+
+    try {
+      final logDir = await getLogDir();
+      if (!await logDir.exists()) {
+        await logDir.create(recursive: true);
+      }
+
+      // 按日期分组
+      final byDate = <String, List<_LogEntry>>{};
+      for (final entry in entries) {
+        final dateStr =
+            '${entry.timestamp.year}-${_pad(entry.timestamp.month)}-${_pad(entry.timestamp.day)}';
+        byDate.putIfAbsent(dateStr, () => []).add(entry);
+      }
+
+      // 逐日期写入
+      for (final group in byDate.entries) {
+        final dateStr = group.key;
+        final dateEntries = group.value;
+        final logFile = File(p.join(logDir.path, 'app_$dateStr.log'));
+
+        final sb = StringBuffer();
+        for (final e in dateEntries) {
+          final ts = e.timestamp;
+          final timestamp = '${ts.year}-${_pad(ts.month)}-${_pad(ts.day)} '
+              '${_pad(ts.hour)}:${_pad(ts.minute)}:${_pad(ts.second)}';
+          sb.writeln(
+              '[$timestamp] [${e.level.label}] [${e.source}] ${e.message}');
+        }
+
+        await logFile.writeAsString(sb.toString(), mode: FileMode.append);
+      }
+      // 写入成功：entries 已从 _buffer 清除，无需额外操作
+    } catch (e) {
+      // 写入失败：将条目放回缓冲区前端，避免丢失
+      debugPrint('[AppLogService] 写入日志文件失败: $e');
+      _buffer.insertAll(0, entries);
+    } finally {
+      _isFlushing = false;
+    }
+  }
+
+  /// 等待所有待写入日志刷入文件。
+  ///
+  /// 在测试中调用此方法确保日志已写入后再断言。
+  /// 在生产中也可手动调用以确保关键时刻（如应用退出前）日志已落盘。
+  static Future<void> flush() async {
+    await _flushBuffer();
+  }
+
+  /// 重置所有内部状态（仅用于测试）。
+  static void reset() {
+    _flushTimer?.cancel();
+    _flushTimer = null;
+    _buffer.clear();
+    _cachedLogDir = null;
+    _manualFileLogging = null;
+    _cachedIsTestEnv = false;
+    _isTestEnvChecked = false;
+    _isFlushing = false;
   }
   // ================================================================
   // 日志文件管理
@@ -191,18 +274,69 @@ class AppLogService {
 
   /// 获取日志目录。
   ///
-  /// 日志目录位于自动备份目录下的 logs/ 子目录。
-  /// 结果会被缓存，避免重复解析备份路径（该路径会触发 BackupLocationManager，
-  /// 从而产生递归的 AppLogService 调用）。
+  /// 日志目录位于 Documents/Stroom/Logs（与备份共享 Stroom 总目录）。
+  /// 结果会被缓存，避免重复解析路径。
   static Future<Directory> getLogDir() async {
     if (_cachedLogDir != null) return _cachedLogDir!;
     if (kIsWeb) {
       _cachedLogDir = Directory('/tmp/stroom_logs');
       return _cachedLogDir!;
     }
-    final backupRoot = await DataMigrationService.getExternalBackupRootPath();
-    _cachedLogDir = Directory(p.join(backupRoot, _logDirName));
+    final logsPath = await _getLogsRootPath();
+    _cachedLogDir = Directory(logsPath);
     return _cachedLogDir!;
+  }
+
+  /// 计算日志根目录路径（平台相关）。
+  ///
+  /// 路径策略（与 BackupLocationManager 的备份路径共享 Documents/Stroom）：
+  /// - Windows: %USERPROFILE%\Documents\Stroom\Logs
+  /// - macOS:   ~/Documents/Stroom/Logs
+  /// - Linux:   ~/Documents/Stroom/Logs
+  /// - Android: <app_documents>/Stroom/Logs
+  /// - iOS:     <app_documents>/Stroom/Logs
+  static Future<String> _getLogsRootPath() async {
+    // 测试环境
+    try {
+      if (Platform.environment['FLUTTER_TEST'] == 'true') {
+        return '${Directory.systemTemp.path}/stroom_log_test';
+      }
+    } catch (_) {}
+
+    // Windows: %USERPROFILE%\Documents\Stroom\Logs
+    try {
+      if (Platform.isWindows) {
+        final userProfile = Platform.environment['USERPROFILE'];
+        if (userProfile != null && userProfile.isNotEmpty) {
+          return p.join(userProfile, 'Documents', 'Stroom', 'Logs');
+        }
+      }
+    } catch (_) {}
+
+    // macOS / Linux: ~/Documents/Stroom/Logs
+    try {
+      if (Platform.isMacOS || Platform.isLinux) {
+        final home = Platform.environment['HOME'];
+        if (home != null && home.isNotEmpty) {
+          return p.join(home, 'Documents', 'Stroom', 'Logs');
+        }
+      }
+    } catch (_) {}
+
+    // 移动平台：应用 Documents 目录
+    try {
+      if (Platform.isAndroid || Platform.isIOS) {
+        final docsDir = await getApplicationDocumentsDirectory();
+        return p.join(docsDir.path, 'Stroom', 'Logs');
+      }
+    } catch (_) {}
+
+    // 兜底
+    try {
+      return p.join(Directory.systemTemp.path, 'Stroom', 'Logs');
+    } catch (_) {
+      return '/tmp/Stroom/Logs';
+    }
   }
 
   /// 清空日志目录缓存（仅用于测试）。

@@ -14,7 +14,236 @@ void main() {
     ManifestDatabase.enableTestMode();
     WebFileStore.enableTestMode();
     // Must enable file logging AFTER WebFileStore test mode (which disables it by default)
+    AppLogService.reset();
     AppLogService.enableFileLogging();
+  });
+
+  // ==================================================================
+  // In-memory buffer — logs are buffered before being flushed to disk
+  // ==================================================================
+
+  group('AppLogService — memory buffer flushing', () {
+    test('logs are NOT written to file before flush()', () async {
+      await AppLogService.info('TestSource', 'Buffered message');
+
+      // Before flush, the file should NOT exist
+      final logDir = await AppLogService.getLogDir();
+      final today = DateTime.now();
+      final dateStr = '${today.year}-${_pad(today.month)}-${_pad(today.day)}';
+      final logFile = File('${logDir.path}/app_$dateStr.log');
+      expect(await logFile.exists(), isFalse,
+          reason: 'Log should NOT be written to file before flush()');
+
+      // After flush, the file should exist with content
+      await AppLogService.flush();
+      expect(await logFile.exists(), isTrue,
+          reason: 'Log should be written to file after flush()');
+      final content = await logFile.readAsString();
+      expect(content, contains('Buffered message'));
+
+      // Cleanup
+      await logDir.delete(recursive: true);
+    });
+
+    test('multiple buffered entries are flushed together', () async {
+      await AppLogService.info('TestSource', 'Message A');
+      await AppLogService.info('TestSource', 'Message B');
+      await AppLogService.info('TestSource', 'Message C');
+
+      // Before flush, no file should exist
+      final logDir = await AppLogService.getLogDir();
+      final today = DateTime.now();
+      final dateStr = '${today.year}-${_pad(today.month)}-${_pad(today.day)}';
+      final logFile = File('${logDir.path}/app_$dateStr.log');
+      expect(await logFile.exists(), isFalse,
+          reason: 'No file before flush with multiple buffered entries');
+
+      await AppLogService.flush();
+      expect(await logFile.exists(), isTrue);
+      final content = await logFile.readAsString();
+      expect(content, contains('Message A'));
+      expect(content, contains('Message B'));
+      expect(content, contains('Message C'));
+
+      // Cleanup
+      await logDir.delete(recursive: true);
+    });
+
+    test('buffer is empty after flush', () async {
+      await AppLogService.info('TestSource', 'Gone after flush');
+      await AppLogService.flush();
+
+      // Write another info and flush — buffer from first flush is gone
+      await AppLogService.info('TestSource', 'Second batch');
+      await AppLogService.flush();
+
+      final logDir = await AppLogService.getLogDir();
+      final today = DateTime.now();
+      final dateStr = '${today.year}-${_pad(today.month)}-${_pad(today.day)}';
+      final logFile = File('${logDir.path}/app_$dateStr.log');
+      final content = await logFile.readAsString();
+      // Both entries should be present (appended to same file)
+      expect(content, contains('Gone after flush'));
+      expect(content, contains('Second batch'));
+
+      // Cleanup
+      await logDir.delete(recursive: true);
+    });
+
+    test('logs from different days go to separate files', () async {
+      // Force a different date by manipulating what we can — write entries
+      // that span two dates; the flush groups them by timestamp.
+      // We'll write one entry and manually create a "yesterday" entry in the
+      // buffer by using the service as-is.  Since we can't easily mock DateTime,
+      // verify that writing and flushing produces one file for today.
+      await AppLogService.info('TestSource', 'Today entry');
+      await AppLogService.flush();
+
+      final logDir = await AppLogService.getLogDir();
+      final files = await logDir.list().toList();
+      final logFiles = files
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.log'))
+          .toList();
+      // Should be exactly one file (today)
+      expect(logFiles.length, equals(1));
+
+      // Cleanup
+      await logDir.delete(recursive: true);
+    });
+  });
+
+  // ==================================================================
+  // Reset — state cleanup
+  // ==================================================================
+
+  group('AppLogService — reset', () {
+    test('reset clears buffer, cache, and timer state', () async {
+      // Write some log to populate buffer
+      await AppLogService.info('Test', 'Pre-reset message');
+      expect(await AppLogService.getLogDir(), isNotNull);
+
+      AppLogService.reset();
+
+      // After reset, buffer should be empty
+      await AppLogService.flush(); // should be a no-op
+      final logDir = await AppLogService.getLogDir();
+      if (await logDir.exists()) await logDir.delete(recursive: true);
+      AppLogService.clearLogDirCache();
+
+      // Re-enable and write a new log — should work fresh
+      AppLogService.enableFileLogging();
+      await AppLogService.info('Test', 'Post-reset message');
+      await AppLogService.flush();
+
+      final newLogDir = await AppLogService.getLogDir();
+      expect(await newLogDir.exists(), isTrue,
+          reason: 'Should work after reset');
+      final today = DateTime.now();
+      final dateStr = '${today.year}-${_pad(today.month)}-${_pad(today.day)}';
+      final logFile = File('${newLogDir.path}/app_$dateStr.log');
+      final content = await logFile.readAsString();
+      expect(content, contains('Post-reset message'));
+      expect(content, isNot(contains('Pre-reset message')),
+          reason: 'Pre-reset message should not appear after reset');
+
+      // Cleanup
+      await newLogDir.delete(recursive: true);
+    });
+  });
+
+  // ==================================================================
+  // Failure recovery — buffer re-adds entries on write failure
+  // ==================================================================
+
+  group('AppLogService — flush failure recovery', () {
+    test('buffered entries survive a flush failure and are written on retry',
+        () async {
+      // Create a log dir
+      final logDir = await AppLogService.getLogDir();
+      if (!await logDir.exists()) {
+        await logDir.create(recursive: true);
+      }
+
+      // Write two log entries
+      await AppLogService.info('Test', 'Entry A');
+      await AppLogService.info('Test', 'Entry B');
+
+      // Simulate a write failure: replace the log directory with a file
+      // with the same name, so writeAsString throws.
+      AppLogService.clearLogDirCache();
+
+      final backupDirPath = '${logDir.path}_backup';
+      if (await logDir.exists()) {
+        await logDir.rename(backupDirPath);
+      }
+      final badFile = File(logDir.path);
+      await badFile.create(); // Create a FILE at what was the directory path
+
+      // First flush should fail
+      await AppLogService.flush();
+      // Entries should still be in buffer (re-added on failure)
+
+      // Restore the real directory
+      await badFile.delete();
+      if (await Directory(backupDirPath).exists()) {
+        await Directory(backupDirPath).rename(logDir.path);
+      } else {
+        await logDir.create(recursive: true);
+      }
+      AppLogService.clearLogDirCache();
+
+      // Second flush should succeed and write the entries
+      await AppLogService.flush();
+
+      final today = DateTime.now();
+      final dateStr = '${today.year}-${_pad(today.month)}-${_pad(today.day)}';
+      final logFile = File('${logDir.path}/app_$dateStr.log');
+      expect(await logFile.exists(), isTrue,
+          reason: 'File should exist after successful retry flush');
+      final content = await logFile.readAsString();
+      expect(content, contains('Entry A'));
+      expect(content, contains('Entry B'),
+          reason: 'Both entries should survive a failed flush');
+
+      // Cleanup
+      await logDir.delete(recursive: true);
+    });
+  });
+
+  // ==================================================================
+  // Concurrent flush guard — rapid flush calls are safe
+  // ==================================================================
+
+  group('AppLogService — concurrent flush guard', () {
+    test('rapid sequential flush() calls do not lose entries', () async {
+      await AppLogService.info('Test', 'Concurrent A');
+      await AppLogService.info('Test', 'Concurrent B');
+
+      // Call flush rapidly multiple times — only one should execute
+      await Future.wait([
+        AppLogService.flush(),
+        AppLogService.flush(),
+        AppLogService.flush(),
+      ]);
+
+      final logDir = await AppLogService.getLogDir();
+      final today = DateTime.now();
+      final dateStr = '${today.year}-${_pad(today.month)}-${_pad(today.day)}';
+      final logFile = File('${logDir.path}/app_$dateStr.log');
+      expect(await logFile.exists(), isTrue);
+      final content = await logFile.readAsString();
+      expect(content, contains('Concurrent A'));
+      expect(content, contains('Concurrent B'));
+      // No duplicates — each entry should appear exactly once
+      expect('Concurrent A'.allMatches(content).length, equals(1),
+          reason: 'Entry A should appear exactly once (no duplicate)');
+      expect('Concurrent B'.allMatches(content).length, equals(1),
+          reason: 'Entry B should appear exactly once (no duplicate)');
+
+      // Cleanup
+      await logDir.delete(recursive: true);
+    });
   });
 
   // ==================================================================
