@@ -408,16 +408,168 @@ class MathExpression {
     var result = expr.trim();
     if (result.isEmpty) return '';
 
-    // Convert LaTeX-style braces to parentheses: {} → ()
-    // This ensures 2^{x-1} is parsed as 2^(x-1) by function_tree.
+    // Step 1: Convert LaTeX commands (including \frac{}{} with braces)
+    result = _convertLatex(result);
+
+    // Step 2: Remaining braces → parentheses (for ^{...} superscript, etc.)
     result = result.replaceAll('{', '(').replaceAll('}', ')');
 
-    // Remove whitespace
+    // Step 3: Remove whitespace
     result = result.replaceAll(RegExp(r'\s+'), '');
     if (result.isEmpty) return '';
 
-    // Handle implicit multiplication
+    // Step 4: Handle implicit multiplication
     result = _addImplicitMultiplication(result);
+
+    return result;
+  }
+
+  /// Replace `\frac{numerator}{denominator}` with `(num)/(denom)`.
+  /// Supports nested braces via brace-level counting.
+  static String _replaceFrac(String expr) {
+    final fracRegex = RegExp(r'\\frac\b');
+    var result = expr;
+    int pos;
+
+    while ((pos = result.indexOf(fracRegex, 0)) != -1) {
+      // Found \frac at pos
+      final start1 = pos + 5; // skip past \frac
+      var idx = start1;
+      // Skip whitespace before first {
+      while (idx < result.length && result[idx] == ' ') {
+        idx++;
+      }
+      if (idx >= result.length || result[idx] != '{') break; // malformed
+
+      // Extract first {…} content with brace counting
+      final braceStart1 = idx;
+      int depth = 1;
+      idx++; // move past opening {
+      final contentStart1 = idx;
+      while (idx < result.length && depth > 0) {
+        if (result[idx] == '{') {
+          depth++;
+        } else if (result[idx] == '}') {
+          depth--;
+        }
+        if (depth > 0) idx++;
+      }
+      if (depth != 0) break; // unmatched brace
+      final content1 = result.substring(contentStart1, idx);
+      final braceEnd1 = idx; // position of '}'
+
+      // Move past first }
+      idx++;
+      // Skip whitespace before second {
+      while (idx < result.length && result[idx] == ' ') {
+        idx++;
+      }
+      if (idx >= result.length || result[idx] != '{') break;
+
+      // Extract second {…}
+      final braceStart2 = idx;
+      depth = 1;
+      idx++; // move past opening {
+      final contentStart2 = idx;
+      while (idx < result.length && depth > 0) {
+        if (result[idx] == '{') {
+          depth++;
+        } else if (result[idx] == '}') {
+          depth--;
+        }
+        if (depth > 0) idx++;
+      }
+      if (depth != 0) break;
+      final content2 = result.substring(contentStart2, idx);
+      final braceEnd2 = idx;
+
+      // Replace \frac{content1}{content2} with (content1)/(content2)
+      final before = result.substring(0, pos);
+      final after = result.substring(braceEnd2 + 1);
+      result = '$before($content1)/($content2)$after';
+    }
+
+    return result;
+  }
+
+  /// Convert LaTeX command sequences to plain math notation.
+  ///
+  /// Handles `\frac`, `\times`, `\cdot`, `\div`, `\sin`, `\cos`, `\tan`,
+  /// `\ln`, `\log`, `\sqrt`, `\left`/`\right`, `\pi`, Greek letters,
+  /// spacing commands, and any unknown command by stripping the backslash.
+  ///
+  /// This runs BEFORE `{}` → `()` conversion, so braces are still intact.
+  static String _convertLatex(String expr) {
+    var result = expr;
+
+    // 1) \frac{numerator}{denominator} → (numerator)/(denominator)
+    //    Uses a simple brace-matcher: find first {…} and second {…}
+    //    after \frac. Works with nested braces.
+    result = _replaceFrac(result);
+
+    // 2) Remove \left and \right (they add no meaning for function_tree)
+    result = result.replaceAll(RegExp(r'\\left\b'), '');
+    result = result.replaceAll(RegExp(r'\\right\b'), '');
+
+    // 3) Operators
+    result = result.replaceAll(RegExp(r'\\times\b'), '*');
+    result = result.replaceAll(RegExp(r'\\cdot\b'), '*');
+    result = result.replaceAll(RegExp(r'\\div\b'), '/');
+    result = result.replaceAll(RegExp(r'\\pm\b'), '+-'); // ± → +-
+    result = result.replaceAll(RegExp(r'\\mp\b'), '-+'); // ∓ → -+
+
+    // 4) Functions (known to function_tree)
+    result = result.replaceAll(RegExp(r'\\sin\b'), 'sin');
+    result = result.replaceAll(RegExp(r'\\cos\b'), 'cos');
+    result = result.replaceAll(RegExp(r'\\tan\b'), 'tan');
+    result = result.replaceAll(RegExp(r'\\cot\b'), 'cot');
+    result = result.replaceAll(RegExp(r'\\sec\b'), 'sec');
+    result = result.replaceAll(RegExp(r'\\csc\b'), 'csc');
+    result = result.replaceAll(RegExp(r'\\sqrt\b'), 'sqrt');
+    result = result.replaceAll(RegExp(r'\\ln\b'), 'ln');
+    result = result.replaceAll(RegExp(r'\\log\b'), 'log');
+    result = result.replaceAll(RegExp(r'\\exp\b'), 'exp');
+    result = result.replaceAll(RegExp(r'\\sinh\b'), 'sinh');
+    result = result.replaceAll(RegExp(r'\\cosh\b'), 'cosh');
+    result = result.replaceAll(RegExp(r'\\tanh\b'), 'tanh');
+    result = result.replaceAll(RegExp(r'\\arcsin\b'), 'asin');
+    result = result.replaceAll(RegExp(r'\\arccos\b'), 'acos');
+    result = result.replaceAll(RegExp(r'\\arctan\b'), 'atan');
+    result = result.replaceAll(RegExp(r'\\abs\b'), 'abs');
+
+    // 5) Constants
+    result = result.replaceAll(RegExp(r'\\pi\b'), 'pi');
+    result = result.replaceAll(RegExp(r'\\infty\b'), 'Infinity');
+
+    // 6) Greek letters → single ASCII letters (for parameter usage)
+    result = result.replaceAll(RegExp(r'\\alpha\b'), 'alpha');
+    result = result.replaceAll(RegExp(r'\\beta\b'), 'beta');
+    result = result.replaceAll(RegExp(r'\\gamma\b'), 'gamma');
+    result = result.replaceAll(RegExp(r'\\delta\b'), 'delta');
+    result = result.replaceAll(RegExp(r'\\epsilon\b'), 'epsilon');
+    result = result.replaceAll(RegExp(r'\\theta\b'), 'theta');
+    result = result.replaceAll(RegExp(r'\\phi\b'), 'phi');
+
+    // 7) Spacing commands → space (will be stripped later, but
+    //    keeps token separation for the implicit multiplication pass)
+    result = result.replaceAll(RegExp(r'\\;\b'), ' ');
+    result = result.replaceAll(RegExp(r'\\:\b'), ' ');
+    result = result.replaceAll(RegExp(r'\\,\b'), ' ');
+    result = result.replaceAll(RegExp(r'\\!\b'), '');
+    result = result.replaceAll(RegExp(r'\\quad\b'), ' ');
+    result = result.replaceAll(RegExp(r'\\qquad\b'), '  ');
+    result = result.replaceAll(RegExp(r'\\space\b'), ' ');
+
+    // 8) Superscript/subscript notation: x^{n} already handled by
+    //    brace conversion above. Handle x_n notation: x_n → x_n
+    //    (subscript is kept as-is for parameter naming)
+
+    // 9) Catch-all: any remaining \command → just command
+    //    (function_tree will likely reject it, but won't crash)
+    result = result.replaceAllMapped(
+      RegExp(r'\\([a-zA-Z]+)'),
+      (m) => m[1]!,
+    );
 
     return result;
   }

@@ -366,4 +366,63 @@ void main() {
       );
     });
   });
+
+  group('MathExpression - LaTeX conversion', () {
+    test('\\times is converted to *', () {
+      final e = MathExpression.fromInput(r'x \times e^x');
+      expect(e.isValid, isTrue, reason: '\times should be converted to *');
+      expect(e.evaluator(0), closeTo(0, 1e-10)); // 0 * e^0 = 0
+      expect(e.evaluator(1), closeTo(dart_math.e, 1e-4)); // 1 * e^1 = e
+    });
+
+    test('\\frac{x}{y} works', () {
+      final e = MathExpression.fromInput(r'\frac{x}{2}');
+      expect(e.isValid, isTrue);
+      expect(e.evaluator(4), closeTo(2, 1e-10)); // 4/2 = 2
+    });
+
+    test('\\frac with nested braces works: \\frac{x^{2}}{y}', () {
+      final e = MathExpression.fromInput(r'\frac{x^{2}}{2}');
+      expect(e.isValid, isTrue);
+      // x^2 / 2
+      expect(e.evaluator(4), closeTo(8, 1e-10)); // 4^2/2 = 8
+    });
+
+    test('\\sin, \\cos work', () {
+      final e = MathExpression.fromInput(r'\sin(x) + \cos(x)');
+      expect(e.isValid, isTrue);
+      expect(e.evaluator(0), closeTo(1, 1e-10)); // sin(0)+cos(0)=1
+    });
+
+    test('\\sqrt works', () {
+      final e = MathExpression.fromInput(r'\sqrt{x}');
+      expect(e.isValid, isTrue);
+      expect(e.evaluator(16), closeTo(4, 1e-10));
+    });
+
+    test('\\pi constant works', () {
+      final e = MathExpression.fromInput(r'\pi');
+      expect(e.isValid, isTrue);
+      expect(e.evaluator(0), closeTo(dart_math.pi, 1e-10));
+    });
+
+    test('\\ln works', () {
+      final e = MathExpression.fromInput(r'\ln(x)');
+      expect(e.isValid, isTrue);
+      expect(e.evaluator(1), closeTo(0, 1e-10));
+    });
+
+    test('x \\times \\sin(x) works', () {
+      final e = MathExpression.fromInput(r'x \times \sin(x)');
+      expect(e.isValid, isTrue);
+      expect(e.evaluator(dart_math.pi / 2), closeTo(dart_math.pi / 2, 1e-4));
+      // (pi/2) * sin(pi/2) = (pi/2) * 1 = pi/2
+    });
+
+    test('\\left and \\right are stripped', () {
+      final e = MathExpression.fromInput(r'\left(x^2\right)');
+      expect(e.isValid, isTrue);
+      expect(e.evaluator(3), closeTo(9, 1e-10));
+    });
+  });
 }
