@@ -494,8 +494,7 @@ void showReasoningPanel({
                             activeThumbColor: cs.primary,
                             onChanged: hasEffortParam
                                 ? (value) {
-                                    setState(
-                                        () => localEffortEnabled = value);
+                                    setState(() => localEffortEnabled = value);
                                     onReasoningEffortToggle(value);
                                   }
                                 : null,
@@ -532,8 +531,7 @@ void showReasoningPanel({
                             selected: isSelected,
                             onTap: () {
                               setState(() {
-                                localSelections[effortParam.paramName] =
-                                    option;
+                                localSelections[effortParam.paramName] = option;
                               });
                               onReasoningParamChanged(
                                   effortParam.paramName, option);
@@ -694,8 +692,8 @@ void showCustomReasoningParamsPanel({
                                     ),
                                   ),
                                   Switch(
-                                    value: param.enabled &&
-                                        localReasoningEnabled,
+                                    value:
+                                        param.enabled && localReasoningEnabled,
                                     activeThumbColor: cs.primary,
                                     onChanged: localReasoningEnabled
                                         ? (value) {

@@ -41,7 +41,8 @@ Future<void> showReasoningPanelForTest(
 
 void main() {
   group('ReasoningPanel - disabled switch when no params', () {
-    testWidgets('shows reasoning toggle switch even when reasoningParams is empty',
+    testWidgets(
+        'shows reasoning toggle switch even when reasoningParams is empty',
         (tester) async {
       await showReasoningPanelForTest(
         tester,
@@ -68,7 +69,8 @@ void main() {
       expect(true, isFalse, reason: 'Expected a disabled switch in the panel');
     });
 
-    testWidgets('reasoning switch is disabled with onChanged=null when no params',
+    testWidgets(
+        'reasoning switch is disabled with onChanged=null when no params',
         (tester) async {
       await showReasoningPanelForTest(
         tester,
@@ -90,7 +92,8 @@ void main() {
   });
 
   group('ReasoningPanel - additional params with switch + options', () {
-    testWidgets('shows reasoning panel with toggle and effort, custom params in separate panel',
+    testWidgets(
+        'shows reasoning panel with toggle and effort, custom params in separate panel',
         (tester) async {
       await showReasoningPanelForTest(
         tester,
@@ -321,8 +324,7 @@ void main() {
       expect(find.byType(Switch), findsWidgets);
     });
 
-    testWidgets('shows empty state when no custom params',
-        (tester) async {
+    testWidgets('shows empty state when no custom params', (tester) async {
       await tester.binding.setSurfaceSize(const Size(800, 1200));
       await tester.pumpWidget(
         MaterialApp(
@@ -428,13 +430,11 @@ void main() {
 
       final shouldShowLoading = isStreaming && isMermaid;
       expect(shouldShowLoading, isTrue,
-          reason:
-              'During streaming, mermaid code blocks should show loading');
+          reason: 'During streaming, mermaid code blocks should show loading');
     });
 
     test('mermaid code block renders normally after streaming', () {
       // After streaming completes, the mermaid code block can be rendered.
-      const code = 'graph TD;\n    A-->B;';
       final isStreaming = false;
       final isMermaid = true;
 
