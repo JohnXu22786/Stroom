@@ -549,8 +549,7 @@ void main() {
       expect(find.text('下载完成'), findsOneWidget);
     });
 
-    testWidgets(
-        'shows "打开安装包" button when download complete with no error',
+    testWidgets('shows "打开安装包" button when download complete with no error',
         (tester) async {
       SharedPreferences.setMockInitialValues({});
       final notifier = _setupNotifier(

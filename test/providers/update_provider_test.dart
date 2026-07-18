@@ -1677,8 +1677,7 @@ void main() {
       // Should not throw
     });
 
-    test('cleanupStaleInstallerFiles cleans up persisted file path',
-        () async {
+    test('cleanupStaleInstallerFiles cleans up persisted file path', () async {
       // Set up SharedPreferences with a stored file path
       final testFile = File('$tempDir/stale_installer.exe');
       await testFile.writeAsBytes([1, 2, 3]);
@@ -1718,8 +1717,7 @@ void main() {
       expect(prefs.containsKey('update_downloaded_file_path'), false);
     });
 
-    test(
-        'cleanupStaleInstallerFiles does nothing when no path is persisted',
+    test('cleanupStaleInstallerFiles does nothing when no path is persisted',
         () async {
       SharedPreferences.setMockInitialValues({});
 
