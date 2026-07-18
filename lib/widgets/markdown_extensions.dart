@@ -117,15 +117,28 @@ class LatexNode extends SpanNode {
 
 /// Builds a code block widget for the given [code] and [language].
 ///
-/// If [language] is `'mermaid'`, renders the code using [MermaidRenderWidget].
+/// If [language] is `'mermaid'`, renders the code using [MermaidRenderWidget]
+/// (or [CodeBlockSourceView] when [isStreaming] is true, to avoid repeatedly
+/// reloading the WebView during incremental streaming updates).
 /// If [language] is `'html'`, renders the code using [HtmlCodeBlockWidget]
 /// (which shows the raw HTML source without inline rendering; the user must
 /// tap the full-screen button to render the HTML in a dialog).
 /// Otherwise, renders the code using [CodeBlockSourceView] which provides
 /// a unified code display area with line numbers and a wrap toggle (matching
 /// the HTML code block's UI form).
-Widget _buildCodeBlock(String code, String language, PreConfig preConfig) {
+Widget _buildCodeBlock(
+  String code,
+  String language,
+  PreConfig preConfig, {
+  bool isStreaming = false,
+}) {
   if (language == 'mermaid') {
+    // During streaming, show the raw source code instead of repeatedly
+    // reloading the WebView on each incremental update. The Mermaid
+    // rendering happens after streaming completes.
+    if (isStreaming) {
+      return CodeBlockSourceView(code: code);
+    }
     return MermaidRenderWidget(mermaidCode: code);
   }
 
@@ -155,7 +168,7 @@ Widget _buildCodeBlock(String code, String language, PreConfig preConfig) {
 /// All other code blocks are rendered using [CodeBlockSourceView] which
 /// provides a unified code display area with line numbers and a wrap
 /// toggle, matching the HTML code block's UI form.
-PreConfig codeBlockPreConfig({required bool isDark}) {
+PreConfig codeBlockPreConfig({required bool isDark, bool isStreaming = false}) {
   final baseConfig = PreConfig(
     theme: draculaTheme,
     decoration: BoxDecoration(
@@ -173,7 +186,8 @@ PreConfig codeBlockPreConfig({required bool isDark}) {
     textStyle: baseConfig.textStyle,
     styleNotMatched: baseConfig.styleNotMatched,
     language: baseConfig.language,
-    builder: (code, language) => _buildCodeBlock(code, language, baseConfig),
+    builder: (code, language) =>
+        _buildCodeBlock(code, language, baseConfig, isStreaming: isStreaming),
   );
 }
 
@@ -240,11 +254,12 @@ Widget _wrapTableWithHorizontalScroll(Widget child) {
   );
 }
 
-MarkdownConfig buildMarkdownConfig({required bool isDark}) {
+MarkdownConfig buildMarkdownConfig(
+    {required bool isDark, bool isStreaming = false}) {
   final base =
       isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig;
   return base.copy(configs: [
-    codeBlockPreConfig(isDark: isDark),
+    codeBlockPreConfig(isDark: isDark, isStreaming: isStreaming),
     TableConfig(
       wrapper: _wrapTableWithHorizontalScroll,
     ),
