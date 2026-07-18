@@ -115,11 +115,56 @@ class LatexNode extends SpanNode {
   }
 }
 
+/// A simple loading placeholder shown while a mermaid code block is still
+/// being generated during streaming. The markdown parser strips the
+/// backtick fences from the code content, so we cannot detect completion
+/// by checking for closing backticks. Instead, during streaming we always
+/// show this loading widget — the actual mermaid diagram renders after
+/// streaming completes (when [isStreaming] becomes false).
+class _MermaidLoadingWidget extends StatelessWidget {
+  const _MermaidLoadingWidget();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      height: 100,
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.5),
+          width: 0.5,
+        ),
+      ),
+      child: const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(height: 8),
+            Text(
+              '正在生成...',
+              style: TextStyle(fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Builds a code block widget for the given [code] and [language].
 ///
-/// If [language] is `'mermaid'`, renders the code using [MermaidRenderWidget]
-/// (or [CodeBlockSourceView] when [isStreaming] is true, to avoid repeatedly
-/// reloading the WebView during incremental streaming updates).
+/// If [language] is `'mermaid'`, renders the code using [MermaidRenderWidget].
+/// During streaming, shows a [_MermaidLoadingWidget] with a spinning
+/// indicator and "正在生成..." text. The actual Mermaid diagram renders
+/// after streaming completes. This avoids repeatedly reloading the WebView
+/// on each incremental streaming update.
 /// If [language] is `'html'`, renders the code using [HtmlCodeBlockWidget]
 /// (which shows the raw HTML source without inline rendering; the user must
 /// tap the full-screen button to render the HTML in a dialog).
@@ -132,12 +177,14 @@ Widget _buildCodeBlock(
   PreConfig preConfig, {
   bool isStreaming = false,
 }) {
-  if (language == 'mermaid') {
-    // During streaming, show the raw source code instead of repeatedly
+  if (language.toLowerCase() == 'mermaid') {
+    // During streaming, show a loading animation instead of repeatedly
     // reloading the WebView on each incremental update. The Mermaid
-    // rendering happens after streaming completes.
+    // diagram renders after the entire streaming session completes.
+    // Note: The markdown parser strips backtick fences from the code
+    // content, so we cannot detect individual codeblock completion here.
     if (isStreaming) {
-      return CodeBlockSourceView(code: code);
+      return const _MermaidLoadingWidget();
     }
     return MermaidRenderWidget(mermaidCode: code);
   }
