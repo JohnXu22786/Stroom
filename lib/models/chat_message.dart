@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:uuid/uuid.dart';
 
 /// 简化的聊天消息模型，仅用于持久化到 SharedPreferences
@@ -128,6 +129,77 @@ class ChatMessage {
         createdAt = createdAt ?? DateTime.now(),
         attachments = attachments ?? [];
 
+  /// Sanitize a raw data map for JSON serialization.
+  ///
+  /// Recursively ensures all values are JSON-serializable (Map, List, String,
+  /// num, bool, Null). Strips any keys/values that would cause [jsonEncode] to
+  /// throw. This prevents `rawRequest` / `rawResponse` from containing
+  /// non-serializable types (e.g. Dio ResponseBody, custom objects, DateTime)
+  /// that would silently break conversation persistence.
+  ///
+  /// The sanitized copy is returned; the original map is NOT modified.
+  static Map<String, dynamic>? _sanitizeRawMap(Map<String, dynamic>? raw) {
+    if (raw == null) return null;
+    try {
+      final result = <String, dynamic>{};
+      for (final entry in raw.entries) {
+        final value = _sanitizeJsonValue(entry.value);
+        // Only include the entry if it's JSON-serializable
+        if (value != null || entry.value == null) {
+          result[entry.key] = value;
+        }
+      }
+      return result;
+    } catch (_) {
+      // If ANY error occurs during sanitization, skip the entire raw map
+      // rather than letting a partial/serialization-error corrupt the save.
+      return null;
+    }
+  }
+
+  /// Recursively sanitize a single value for JSON serialization.
+  /// Returns the sanitized value, or null if it can't be sanitized.
+  static dynamic _sanitizeJsonValue(dynamic value) {
+    if (value == null) return null;
+    if (value is String || value is num || value is bool) return value;
+    if (value is Map) {
+      final result = <String, dynamic>{};
+      for (final entry in value.entries) {
+        final key = entry.key?.toString();
+        if (key == null) continue;
+        result[key] = _sanitizeJsonValue(entry.value);
+      }
+      return result;
+    }
+    if (value is List) {
+      return value.map(_sanitizeJsonValue).toList();
+    }
+    // Non-serializable type (DateTime, Uri, custom object, etc.) — skip
+    return null;
+  }
+
+  /// Safely cast a dynamic value to [Map<String, dynamic>?].
+  ///
+  /// Returns the map if the value is a valid [Map], or `null` otherwise.
+  /// This prevents the `as Map<String, dynamic>?` cast from throwing a runtime
+  /// [TypeError] when the stored data is a non-Map type (String, List, int,
+  /// etc.), which would cause the entire message to be skipped during loading.
+  ///
+  /// Such corruption can happen when a streaming API error stores non-Map
+  /// diagnostic data in `rawResponse` or when in-flight request data is
+  /// captured in an unexpected format.
+  @visibleForTesting
+  static Map<String, dynamic>? safeCastToMap(dynamic value) {
+    if (value is Map) {
+      try {
+        return Map<String, dynamic>.from(value);
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+
   Map<String, dynamic> toMap() => {
         'id': id,
         'role': role,
@@ -137,8 +209,11 @@ class ChatMessage {
         if (isStreaming) 'isStreaming': true,
         if (isError) 'isError': true,
         if (reasoningContent != null) 'reasoningContent': reasoningContent,
-        if (rawRequest != null) 'rawRequest': rawRequest,
-        if (rawResponse != null) 'rawResponse': rawResponse,
+        // Sanitize raw maps to ensure JSON-serializable output.
+        // This prevents non-serializable types (Dio ResponseBody, DateTime,
+        // custom objects, etc.) from silently breaking conversation persistence.
+        if (rawRequest != null) 'rawRequest': _sanitizeRawMap(rawRequest),
+        if (rawResponse != null) 'rawResponse': _sanitizeRawMap(rawResponse),
       };
 
   factory ChatMessage.fromMap(Map<String, dynamic> map) {
@@ -184,8 +259,10 @@ class ChatMessage {
       isStreaming: map['isStreaming'] is bool ? map['isStreaming'] : false,
       isError: map['isError'] is bool ? map['isError'] : false,
       reasoningContent: map['reasoningContent'] as String?,
-      rawRequest: map['rawRequest'] as Map<String, dynamic>?,
-      rawResponse: map['rawResponse'] as Map<String, dynamic>?,
+      // Use safe casting so non-Map rawRequest/rawResponse values don't throw
+      // a TypeError, which would skip the ENTIRE message in Conversation.fromMap.
+      rawRequest: safeCastToMap(map['rawRequest']),
+      rawResponse: safeCastToMap(map['rawResponse']),
     );
   }
 

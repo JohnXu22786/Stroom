@@ -1785,6 +1785,26 @@ class _ChatPageState extends ConsumerState<ChatPage>
       }
     });
 
+    // Reactively load messages when conversations data finishes loading
+    // (e.g., after async _load() in ConversationsNotifier completes).
+    //
+    // Fixes the race condition where _loadConversationMessages() runs before
+    // conversation data is available, leaving the chat page blank with
+    // "no message yet" even though all data exists in SharedPreferences.
+    //
+    // Uses _history.isEmpty to only trigger on data arrival (not on every
+    // subsequent save/update), avoiding redundant reloads.
+    ref.listen(conversationsProvider, (prev, next) {
+      if (prev != next && _history.isEmpty) {
+        final activeId = ref.read(activeConversationIdProvider);
+        if (activeId != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _loadConversationMessages();
+          });
+        }
+      }
+    });
+
     // Re-configure adapter when provider entries change (e.g. after load completes).
     // Also re-initialize built-in and MCP tools: if ProviderEntriesNotifier.load()
     // hasn't completed when _initialize() first runs, the MCP entry is empty and
