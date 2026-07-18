@@ -220,6 +220,7 @@ void main() {
         (WidgetTester t) async {
       SharedPreferences.setMockInitialValues({
         'conversations': '[]',
+        'assistants': '[{"id":"a1","name":"测试助手"}]',
         'provider_entries': '[]',
         'data_format_version': 2,
       });
@@ -244,6 +245,21 @@ void main() {
       expect(fileNames, contains('manifest.json'));
       expect(fileNames, contains('chat_data.json'));
       expect(fileNames, isNot(contains('settings.json')));
+
+      // Verify assistants is NOT in chat_data.json (it should be settings)
+      Uint8List? chatDataRaw;
+      for (final f in archive) {
+        if (f.isFile && f.name == 'chat_data.json') {
+          chatDataRaw = Uint8List.fromList(f.content as List<int>);
+          break;
+        }
+      }
+      expect(chatDataRaw, isNotNull);
+      final chatData =
+          jsonDecode(utf8.decode(chatDataRaw!)) as Map<String, dynamic>;
+      expect(chatData.containsKey('assistants'), isFalse,
+          reason:
+              'assistants should NOT be in chat_data.json; it should be classified as settings');
     });
 
     testWidgets(
@@ -251,6 +267,7 @@ void main() {
         (WidgetTester t) async {
       SharedPreferences.setMockInitialValues({
         'conversations': '[]',
+        'assistants': '[{"id":"a1","name":"测试助手"}]',
         'provider_entries': '[]',
         'data_format_version': 2,
       });
@@ -275,6 +292,102 @@ void main() {
       expect(fileNames, contains('manifest.json'));
       expect(fileNames, contains('settings.json'));
       expect(fileNames, isNot(contains('chat_data.json')));
+
+      // Verify assistants IS in settings.json (it should be classified as settings)
+      Uint8List? settingsDataRaw;
+      for (final f in archive) {
+        if (f.isFile && f.name == 'settings.json') {
+          settingsDataRaw = Uint8List.fromList(f.content as List<int>);
+          break;
+        }
+      }
+      expect(settingsDataRaw, isNotNull);
+      final settingsData =
+          jsonDecode(utf8.decode(settingsDataRaw!)) as Map<String, dynamic>;
+      expect(settingsData.containsKey('assistants'), isTrue,
+          reason:
+              'assistants should be in settings.json when settings-only backup is selected');
+    });
+  });
+
+  // ==================================================================
+  // 助手设置分类：assistants 键应归为"设置"而非"聊天记录和附件"
+  // ==================================================================
+
+  group('Assistant settings classification', () {
+    testWidgets(
+        'full backup: assistants goes to settings.json, conversations goes to chat_data.json',
+        (WidgetTester t) async {
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"conv1"}]',
+        'active_conversation_id': 'conv1',
+        'assistants': '[{"id":"a1","name":"测试助手","prompt":"你好"}]',
+        'provider_entries': '[{"id":"p1","type":"llm"}]',
+        'data_format_version': 2,
+        'selected_model_index': 0,
+        'model_order': '["gpt-4","gpt-3.5"]',
+      });
+
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: true,
+        settings: true,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+      );
+      final bytes = await BackupService.buildBackupBytesForTest(
+        selection: sel,
+      );
+      final archive = ZipDecoder().decodeBytes(bytes);
+
+      final fileNames =
+          archive.files.where((f) => f.isFile).map((f) => f.name).toSet();
+
+      expect(fileNames, contains('manifest.json'));
+      expect(fileNames, contains('chat_data.json'));
+      expect(fileNames, contains('settings.json'));
+
+      // Verify assistants is in settings.json (not chat_data.json)
+      Uint8List? settingsDataRaw;
+      Uint8List? chatDataRaw;
+      for (final f in archive) {
+        if (f.isFile && f.name == 'settings.json') {
+          settingsDataRaw = Uint8List.fromList(f.content as List<int>);
+        }
+        if (f.isFile && f.name == 'chat_data.json') {
+          chatDataRaw = Uint8List.fromList(f.content as List<int>);
+        }
+      }
+      expect(settingsDataRaw, isNotNull);
+      expect(chatDataRaw, isNotNull);
+
+      final settingsData =
+          jsonDecode(utf8.decode(settingsDataRaw!)) as Map<String, dynamic>;
+      final chatData =
+          jsonDecode(utf8.decode(chatDataRaw!)) as Map<String, dynamic>;
+
+      // assistants should be in settings.json
+      expect(settingsData.containsKey('assistants'), isTrue,
+          reason:
+              'assistants must be in settings.json (classified as settings, not chat)');
+      expect(settingsData['assistants'],
+          '[{"id":"a1","name":"测试助手","prompt":"你好"}]');
+
+      // assistants should NOT be in chat_data.json
+      expect(chatData.containsKey('assistants'), isFalse,
+          reason:
+              'assistants must NOT be in chat_data.json; it belongs to settings');
+
+      // conversations should be in chat_data.json
+      expect(chatData.containsKey('conversations'), isTrue,
+          reason: 'conversations should still be in chat_data.json');
+      expect(chatData.containsKey('active_conversation_id'), isTrue);
+
+      // provider_entries should be in settings.json
+      expect(settingsData.containsKey('provider_entries'), isTrue,
+          reason: 'provider_entries should be in settings.json');
     });
   });
 

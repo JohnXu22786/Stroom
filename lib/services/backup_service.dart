@@ -153,12 +153,11 @@ class BackupService {
 
   /// 判断 SharedPreferences 键是否为聊天相关键。
   ///
-  /// 聊天键包括：对话数据、活跃对话ID、助手配置、每模型聊天设置等。
+  /// 聊天键包括：对话数据、活跃对话ID、每模型聊天设置等。
   /// 所有非 `flutter.*` 前缀的其他键归类为"设置"。
   static bool _isChatPrefKey(String key) {
     return key == 'conversations' ||
         key == 'active_conversation_id' ||
-        key == 'assistants' ||
         key == 'per_model_chat_settings' ||
         key == 'selected_model_index' ||
         key == 'model_order';
