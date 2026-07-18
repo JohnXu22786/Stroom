@@ -134,8 +134,7 @@ void main() {
           reason: 'Hourly log file should exist at app_YYYY-MM-DD-HH.log path');
 
       // Old day-based filename should NOT exist
-      final dayStr =
-          '${now.year}-${_pad(now.month)}-${_pad(now.day)}';
+      final dayStr = '${now.year}-${_pad(now.month)}-${_pad(now.day)}';
       final oldStyleFile = File('${logDir.path}/app_$dayStr.log');
       expect(await oldStyleFile.exists(), isFalse,
           reason: 'Old day-based filename should not be used anymore');
@@ -190,15 +189,15 @@ void main() {
   // AppLogService._getLogsRootPath() and is covered by manual verification
   // on each target platform (see app_log_service.dart header comment).
   group('AppLogService — log directory location', () {
-    test('log directory is a non-empty path under a parent that includes '
+    test(
+        'log directory is a non-empty path under a parent that includes '
         '"stroom" or "Logs"', () async {
       final logDir = await AppLogService.getLogDir();
       // In production, path is .../Stroom/Logs. In tests, it's
       // <systemTemp>/stroom_log_test. Both share the property that
       // "stroom" appears in the path (case-insensitive).
       expect(logDir.path.toLowerCase(), contains('stroom'),
-          reason:
-              'Log directory should live under a Stroom-named parent. '
+          reason: 'Log directory should live under a Stroom-named parent. '
               'Production: Documents/Stroom/Logs. Tests: <tmp>/stroom_log_test.');
 
       // Cleanup

@@ -66,8 +66,7 @@ void main() {
       // Build many lines so the structured list overflows the viewport.
       final buffer = StringBuffer();
       for (var i = 0; i < 500; i++) {
-        buffer.writeln(
-            '[2024-01-01 00:00:00] [INFO] [TestSource] line $i');
+        buffer.writeln('[2024-01-01 00:00:00] [INFO] [TestSource] line $i');
       }
       final content = buffer.toString();
 

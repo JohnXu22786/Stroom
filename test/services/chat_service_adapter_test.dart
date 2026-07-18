@@ -1003,14 +1003,13 @@ void main() {
         hasExplicitSavedPrefs: false,
       );
 
-      expect(resolved,
-          equals({'brave_web_search', 'tavily_search', 'exa_search'}),
+      expect(
+          resolved, equals({'brave_web_search', 'tavily_search', 'exa_search'}),
           reason: 'New conversation with no saved preferences should default '
               'to all available tools enabled so built-in MCPs are visible.');
     });
 
-    test(
-        'resolver respects saved preferences when user has toggled tools off',
+    test('resolver respects saved preferences when user has toggled tools off',
         () {
       final allTools = <ToolDefinition>[
         const ToolDefinition(

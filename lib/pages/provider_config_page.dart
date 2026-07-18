@@ -439,8 +439,7 @@ class _McpConfigCard extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color:
-                                    cs.primary.withValues(alpha: 0.15),
+                                color: cs.primary.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
@@ -504,8 +503,7 @@ class _McpConfigCard extends StatelessWidget {
                 if (onDelete != null) ...[
                   const SizedBox(width: 4),
                   IconButton(
-                    icon: Icon(Icons.delete_outline,
-                        size: 20, color: cs.error),
+                    icon: Icon(Icons.delete_outline, size: 20, color: cs.error),
                     onPressed: onDelete,
                     tooltip: '删除配置',
                     padding: EdgeInsets.zero,

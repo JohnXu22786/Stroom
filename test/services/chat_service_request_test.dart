@@ -1333,7 +1333,8 @@ void main() {
       expect((toolsConfig as List).length, equals(2));
     });
 
-    test('malformed JSON is omitted from the request body '
+    test(
+        'malformed JSON is omitted from the request body '
         '(no raw string fallback)', () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',

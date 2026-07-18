@@ -438,7 +438,8 @@ void main() {
       expect(ChatService.parseJsonValue('false'), isFalse);
     });
 
-    test('throws FormatException for invalid JSON (no raw string fallback)', () {
+    test('throws FormatException for invalid JSON (no raw string fallback)',
+        () {
       // Regression: the previous behavior returned the raw string and let it
       // get re-serialized as a quoted string in the API request body. Now we
       // throw so the param can be cleanly omitted and the user can see the

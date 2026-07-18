@@ -145,8 +145,7 @@ class Conversation {
         'draftText': draftText,
         // Persist the explicit-empty flag so a user who toggled every tool
         // off doesn't accidentally get them all re-enabled next time.
-        if (hasExplicitEnabledMcpTools)
-          'hasExplicitEnabledMcpTools': true,
+        if (hasExplicitEnabledMcpTools) 'hasExplicitEnabledMcpTools': true,
         // Persist the set whenever the user has explicitly touched the toggles,
         // even if it's empty. Otherwise omit it so new conversations fall back
         // to the "auto-enable all" default.

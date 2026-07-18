@@ -41,8 +41,7 @@ void main() {
     test('empty string returns null (no-op for blank JSON params)', () {
       final result = ChatService.parseJsonValue('');
       expect(result, isNull,
-          reason:
-              'Empty JSON value should be treated as a no-op, not parsed.');
+          reason: 'Empty JSON value should be treated as a no-op, not parsed.');
     });
 
     test('whitespace-only string returns null', () {
@@ -366,7 +365,8 @@ void main() {
       expect((result as Map)['key'], equals('value'));
     });
 
-    test('json type with invalid string returns OmittedSentinel '
+    test(
+        'json type with invalid string returns OmittedSentinel '
         '(no raw string in request body)', () {
       // The bug we're fixing: previously this returned the raw string
       // (e.g. '{key: value}') which then got JSON-encoded as a quoted

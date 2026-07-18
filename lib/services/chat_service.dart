@@ -935,8 +935,9 @@ class ChatService {
 
       // Provider-level custom params
       for (final cp in _providerConfig!.customParams) {
-        result[cp.paramName] = _coerceCustomParam(cp.paramName, cp.type,
-            cp.defaultValue, source: 'provider');
+        result[cp.paramName] = _coerceCustomParam(
+            cp.paramName, cp.type, cp.defaultValue,
+            source: 'provider');
       }
 
       // Provider-level reasoning params (when reasoning enabled)
@@ -1012,8 +1013,9 @@ class ChatService {
 
     // Model-level custom params
     for (final cp in _modelConfig!.customParams) {
-      result[cp.paramName] = _coerceCustomParam(cp.paramName, cp.type,
-          cp.defaultValue, source: 'model');
+      result[cp.paramName] = _coerceCustomParam(
+          cp.paramName, cp.type, cp.defaultValue,
+          source: 'model');
     }
 
     // Assistant-level custom params (override model-level on name collision)

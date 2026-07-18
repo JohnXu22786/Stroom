@@ -512,8 +512,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       final convEnabled = (conv != null)
           ? Set<String>.from(conv.enabledMcpToolNames)
           : <String>{};
-      final hasExplicitPrefs =
-          conv?.hasExplicitEnabledMcpTools ?? false;
+      final hasExplicitPrefs = conv?.hasExplicitEnabledMcpTools ?? false;
       ref.read(enabledToolNamesProvider.notifier).state =
           resolveEnabledToolNames(
         allTools: _adapter.getAllToolDefinitions(),
