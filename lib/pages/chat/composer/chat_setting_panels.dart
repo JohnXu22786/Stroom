@@ -331,11 +331,14 @@ void showToolsPanel({
 /// of selectable values). When [reasoningParams] is empty, the panel shows a
 /// disabled state.
 ///
-/// The panel is organized in three sections:
+/// The panel is organized in two sections:
 /// 1. A global "推理" toggle (controls the reasoning toggle param on/off).
 /// 2. A "推理力度" section (if an [isEffortParam] exists) with its own toggle
-///    and option chips for the effort param's values.
-/// 3. Additional reasoning params (non-toggle, non-effort) displayed as chips.
+///    and option chips for the effort param's values. Shown even when no
+///    effort param is configured (disabled state with hint).
+///
+/// Additional reasoning params (non-toggle, non-effort) are shown in a
+/// separate panel via [showCustomReasoningParamsPanel].
 void showReasoningPanel({
   required BuildContext context,
   required bool reasoningEnabled,
@@ -358,15 +361,12 @@ void showReasoningPanel({
             orElse: () => null,
           );
 
-  // Non-toggle, non-effort params shown as generic param sections
-  final displayParams = reasoningParams
-      .where(
-        (p) => !p.isReasoningToggle && !p.isEffortParam,
-      )
-      .toList();
-
   final hasParams = reasoningParams.isNotEmpty;
   final hasNonToggleParams = reasoningParams.any((p) => !p.isReasoningToggle);
+  final hasEffortParam = effortParam != null;
+
+  // Show the effort section even when effortParam is null (disabled state)
+  final showEffortSection = localEnabled;
 
   showModalBottomSheet(
     context: context,
@@ -442,7 +442,7 @@ void showReasoningPanel({
                           ),
                         ),
                         Switch(
-                          value: localEnabled && hasParams,
+                          value: localEnabled,
                           activeThumbColor: cs.primary,
                           onChanged: hasParams
                               ? (value) {
@@ -454,8 +454,20 @@ void showReasoningPanel({
                       ],
                     ),
                   ),
+                  // Hint when no params configured
+                  if (!hasParams)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8, left: 4),
+                      child: Text(
+                        '当前模型未配置推理参数，请在模型设置中添加',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ),
                   // ── Section 2: Reasoning effort (力度) ──
-                  if (localEnabled && effortParam != null) ...[
+                  if (showEffortSection) ...[
                     const SizedBox(height: 12),
                     Container(
                       decoration: BoxDecoration(
@@ -478,17 +490,30 @@ void showReasoningPanel({
                             ),
                           ),
                           Switch(
-                            value: localEffortEnabled,
+                            value: localEffortEnabled && hasEffortParam,
                             activeThumbColor: cs.primary,
-                            onChanged: (value) {
-                              setState(() => localEffortEnabled = value);
-                              onReasoningEffortToggle(value);
-                            },
+                            onChanged: hasEffortParam
+                                ? (value) {
+                                    setState(() => localEffortEnabled = value);
+                                    onReasoningEffortToggle(value);
+                                  }
+                                : null,
                           ),
                         ],
                       ),
                     ),
-                    if (localEffortEnabled) ...[
+                    if (!hasEffortParam)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8, left: 4),
+                        child: Text(
+                          '当前模型未配置推理力度参数，请在模型设置中添加',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ),
+                    if (hasEffortParam && localEffortEnabled) ...[
                       const SizedBox(height: 12),
                       // Effort param options
                       Wrap(
@@ -516,57 +541,17 @@ void showReasoningPanel({
                       ),
                     ],
                   ],
-                  // ── Section 3: Additional reasoning param chips ──
-                  if (localEnabled && displayParams.isNotEmpty) ...[
-                    if (localEffortEnabled || effortParam == null)
-                      const SizedBox(height: 12),
-                    ...displayParams.map((param) {
-                      final currentValue = localSelections[param.paramName] ??
-                          (param.options.isNotEmpty ? param.options.first : '');
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              param.paramName,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: cs.onSurfaceVariant,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: param.options.map((option) {
-                                final isSelected = currentValue == option;
-                                return _OptionChip(
-                                  label: option,
-                                  selected: isSelected,
-                                  onTap: () {
-                                    setState(() {
-                                      localSelections[param.paramName] = option;
-                                    });
-                                    onReasoningParamChanged(
-                                        param.paramName, option);
-                                  },
-                                );
-                              }).toList(),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                  ],
-                  // No non-toggle params state
-                  if (hasParams && !hasNonToggleParams && effortParam == null)
+                  // No non-toggle params state (when reasoning is enabled
+                  // but there are no additional params configured)
+                  if (localEnabled &&
+                      hasParams &&
+                      !hasNonToggleParams &&
+                      !hasEffortParam)
                     Padding(
                       padding: const EdgeInsets.only(top: 16),
                       child: Center(
                         child: Text(
-                          '当前模型未配置推理参数\n请在模型设置中添加推理参数',
+                          '当前模型未配置其他推理参数\n请在模型设置中添加',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 13,
@@ -575,6 +560,179 @@ void showReasoningPanel({
                         ),
                       ),
                     ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
+/// Shows a modal bottom sheet for custom (non-toggle, non-effort) reasoning
+/// parameters. Each param is displayed with a switch (enabled/disabled) and
+/// its selectable options, similar to the effort section style.
+///
+/// This panel only shows params that are not [isReasoningToggle] and not
+/// [isEffortParam].
+void showCustomReasoningParamsPanel({
+  required BuildContext context,
+  required bool reasoningEnabled,
+  required Map<String, String> reasoningParamSelections,
+  required List<ReasoningParam> reasoningParams,
+  required void Function(String paramName, String value)
+      onReasoningParamChanged,
+}) {
+  var localSelections = Map<String, String>.from(reasoningParamSelections);
+  var localReasoningEnabled = reasoningEnabled;
+
+  // Non-toggle, non-effort params shown with switch + options
+  final displayParams = reasoningParams
+      .where(
+        (p) => !p.isReasoningToggle && !p.isEffortParam,
+      )
+      .toList();
+
+  showModalBottomSheet(
+    context: context,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (ctx) {
+      final cs = Theme.of(ctx).colorScheme;
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Drag handle
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[350],
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  // Title
+                  Row(
+                    children: [
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Icon(Icons.tune,
+                            size: 18, color: Colors.blue),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        '自定义推理参数',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  if (displayParams.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Center(
+                        child: Text(
+                          '当前模型未配置自定义推理参数\n请在模型设置中添加',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    ...displayParams.map((param) {
+                      final currentValue = localSelections[param.paramName] ??
+                          (param.options.isNotEmpty ? param.options.first : '');
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Switch row (like effort section)
+                            Container(
+                              decoration: BoxDecoration(
+                                color: cs.surfaceContainerHighest
+                                    .withValues(alpha: 0.5),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 4),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      param.paramName,
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w500,
+                                        color: cs.onSurface,
+                                      ),
+                                    ),
+                                  ),
+                                  Switch(
+                                    value:
+                                        param.enabled && localReasoningEnabled,
+                                    activeThumbColor: cs.primary,
+                                    onChanged: localReasoningEnabled
+                                        ? (value) {
+                                            setState(() {
+                                              param.enabled = value;
+                                            });
+                                          }
+                                        : null,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Options (only shown when enabled)
+                            if (param.enabled && localReasoningEnabled) ...[
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: param.options.map((option) {
+                                  final isSelected = currentValue == option;
+                                  return _OptionChip(
+                                    label: option,
+                                    selected: isSelected,
+                                    onTap: () {
+                                      setState(() {
+                                        localSelections[param.paramName] =
+                                            option;
+                                      });
+                                      onReasoningParamChanged(
+                                          param.paramName, option);
+                                    },
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    }),
                 ],
               ),
             ),

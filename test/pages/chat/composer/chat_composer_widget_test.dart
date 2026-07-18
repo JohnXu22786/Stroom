@@ -108,15 +108,21 @@ void main() {
       // The reasoning button exists
       expect(find.text('推理'), findsOneWidget);
 
-      // When no reasoning params are configured, the button is disabled.
-      // Tap it to verify no crash, then check the panel is not shown.
+      // The reasoning button is always enabled now, and opens the panel
+      // even when no reasoning params are configured.
       await tester.tap(find.text('推理'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Reasoning panel should NOT open (button is disabled without params)
-      expect(find.text('推理设置'), findsNothing);
+      // Reasoning panel should open even without params
+      expect(find.text('推理设置'), findsOneWidget);
+
+      // The disable hint should appear
+      expect(
+        find.textContaining('当前模型未配置推理参数'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('settings row tags use natural width, not forced full width',
