@@ -20,42 +20,42 @@ void main() {
   });
 
   // ==================================================================
-  // BackupSelection 类行为
+  // BackupSelection 类行为（新字段）
   // ==================================================================
 
   group('BackupSelection class', () {
     test('BackupSelection.all has all flags set to true', () {
       final sel = BackupSelection.all;
-      expect(sel.conversations, isTrue);
+      expect(sel.chatRecordsAndAttachments, isTrue);
+      expect(sel.settings, isTrue);
       expect(sel.pictures, isTrue);
       expect(sel.audio, isTrue);
       expect(sel.videos, isTrue);
       expect(sel.texts, isTrue);
       expect(sel.tasks, isTrue);
-      expect(sel.attachments, isTrue);
     });
 
     test('BackupSelection.all.selectedLabels returns all 7 labels', () {
       final labels = BackupSelection.all.selectedLabels;
       expect(labels.length, equals(7));
-      expect(labels, contains('聊天记录和设置'));
+      expect(labels, contains('聊天记录和附件'));
+      expect(labels, contains('设置'));
       expect(labels, contains('图片'));
       expect(labels, contains('音频'));
       expect(labels, contains('视频'));
       expect(labels, contains('文本'));
       expect(labels, contains('任务'));
-      expect(labels, contains('附件'));
     });
 
     test('BackupSelection with pictures-only returns correct labels', () {
       final sel = BackupSelection(
-        conversations: false,
+        chatRecordsAndAttachments: false,
+        settings: false,
         pictures: true,
         audio: false,
         videos: false,
         texts: false,
         tasks: false,
-        attachments: false,
       );
       final labels = sel.selectedLabels;
       expect(labels.length, equals(1));
@@ -64,13 +64,43 @@ void main() {
 
     test('BackupSelection default constructor has all flags true', () {
       final sel = BackupSelection();
-      expect(sel.conversations, isTrue);
+      expect(sel.chatRecordsAndAttachments, isTrue);
+      expect(sel.settings, isTrue);
       expect(sel.pictures, isTrue);
       expect(sel.audio, isTrue);
       expect(sel.videos, isTrue);
       expect(sel.texts, isTrue);
       expect(sel.tasks, isTrue);
-      expect(sel.attachments, isTrue);
+    });
+
+    test('chatRecordsAndAttachments-only shows 1 label', () {
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: true,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+      );
+      final labels = sel.selectedLabels;
+      expect(labels.length, equals(1));
+      expect(labels.first, equals('聊天记录和附件'));
+    });
+
+    test('settings-only shows 1 label', () {
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: true,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+      );
+      final labels = sel.selectedLabels;
+      expect(labels.length, equals(1));
+      expect(labels.first, equals('设置'));
     });
   });
 
@@ -126,13 +156,13 @@ void main() {
 
       // Build backup with pictures-only selection
       final sel = BackupSelection(
-        conversations: false,
+        chatRecordsAndAttachments: false,
+        settings: false,
         pictures: true,
         audio: false,
         videos: false,
         texts: false,
         tasks: false,
-        attachments: false,
       );
       final bytes = await BackupService.buildBackupBytesForTest(
         selection: sel,
@@ -149,8 +179,9 @@ void main() {
       // Should contain stroom_manifest.json (always included, but only with selected records)
       expect(fileNames, contains('stroom_manifest.json'));
 
-      // Should NOT contain preferences.json (conversations=false)
-      expect(fileNames, isNot(contains('preferences.json')));
+      // Should NOT contain chat_data.json or settings.json (both false)
+      expect(fileNames, isNot(contains('chat_data.json')));
+      expect(fileNames, isNot(contains('settings.json')));
 
       // Should NOT contain audio, video, text files
       expect(fileNames.any((n) => n.startsWith('tts_audio/')), isFalse,
@@ -184,29 +215,23 @@ void main() {
           reason: 'text_records should be empty');
     });
 
-    testWidgets('backup with conversations-only has preferences and db',
+    testWidgets(
+        'backup with chatRecordsAndAttachments includes chat_data.json and no settings.json',
         (WidgetTester t) async {
-      // Insert a text record
-      await ManifestDatabase.insertTextRecord({
-        'id': 'txt_conv_1',
-        'name': 'conv_txt',
-        'hash': 'conv_txt_hash',
-        'format': 'txt',
-        'createdAt': DateTime.now().toIso8601String(),
-        'size': 100,
-        'folder': '',
-        'textLength': 100,
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[]',
+        'provider_entries': '[]',
+        'data_format_version': 2,
       });
 
-      // Build backup with conversations-only selection
       final sel = BackupSelection(
-        conversations: true,
+        chatRecordsAndAttachments: true,
+        settings: false,
         pictures: false,
         audio: false,
         videos: false,
         texts: false,
         tasks: false,
-        attachments: false,
       );
       final bytes = await BackupService.buildBackupBytesForTest(
         selection: sel,
@@ -216,18 +241,40 @@ void main() {
       final fileNames =
           archive.files.where((f) => f.isFile).map((f) => f.name).toSet();
 
-      // Should contain manifest and preferences and database
       expect(fileNames, contains('manifest.json'));
-      expect(fileNames, contains('stroom_manifest.json'));
-      expect(fileNames, contains('preferences.json'));
+      expect(fileNames, contains('chat_data.json'));
+      expect(fileNames, isNot(contains('settings.json')));
+    });
 
-      // Should NOT contain any binary files
-      expect(fileNames.any((n) => n.startsWith('pictures/')), isFalse);
-      expect(fileNames.any((n) => n.startsWith('tts_audio/')), isFalse);
-      expect(fileNames.any((n) => n.startsWith('videos/')), isFalse);
-      expect(fileNames.any((n) => n.startsWith('texts/')), isFalse);
-      expect(fileNames.any((n) => n.startsWith('synthesis/')), isFalse);
-      expect(fileNames.any((n) => n.startsWith('catcatch/')), isFalse);
+    testWidgets(
+        'backup with settings-only includes settings.json and no chat_data.json',
+        (WidgetTester t) async {
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[]',
+        'provider_entries': '[]',
+        'data_format_version': 2,
+      });
+
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: true,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+      );
+      final bytes = await BackupService.buildBackupBytesForTest(
+        selection: sel,
+      );
+      final archive = ZipDecoder().decodeBytes(bytes);
+
+      final fileNames =
+          archive.files.where((f) => f.isFile).map((f) => f.name).toSet();
+
+      expect(fileNames, contains('manifest.json'));
+      expect(fileNames, contains('settings.json'));
+      expect(fileNames, isNot(contains('chat_data.json')));
     });
   });
 
@@ -252,12 +299,12 @@ void main() {
 
       // Build a backup archive containing both image and audio records
       final backupArchive = Archive();
-      // manifest.json
+      // manifest.json (v2 format)
       backupArchive.addFile(ArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
-            'version': 1,
+            'version': 2,
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
@@ -298,13 +345,13 @@ void main() {
 
       // Restore with pictures-only selection
       final sel = BackupSelection(
-        conversations: false,
+        chatRecordsAndAttachments: false,
+        settings: false,
         pictures: true,
         audio: false,
         videos: false,
         texts: false,
         tasks: false,
-        attachments: false,
       );
       await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
 
@@ -315,11 +362,6 @@ void main() {
       expect(imageRecords[0]['id'], equals('img_restore_1'));
 
       // Verify: audio records from the backup were NOT restored (pictures-only)
-      // The pre-existing audio record should also have been preserved
-      // since we only cleared image_records, not audio_records
-      // Wait - actually the behavior is: with pictures-only selection,
-      // we ONLY clear and restore image_records. audio_records is untouched.
-      // So the existing audio record should still be there.
       final audioRecords = await ManifestDatabase.getAllAudioRecords();
       expect(audioRecords.length, equals(1),
           reason:
@@ -350,7 +392,7 @@ void main() {
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
-            'version': 1,
+            'version': 2,
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
@@ -389,6 +431,126 @@ void main() {
       expect(imageRecords[0]['id'], equals('img_new_1'),
           reason: 'Old image record must be replaced during full restore');
     });
+
+    testWidgets(
+        'restore old v1 backup with preferences.json maps keys correctly',
+        (WidgetTester t) async {
+      // Set up old format preferences with chat and settings keys
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"conv1"}]',
+        'active_conversation_id': 'conv1',
+        'provider_entries': '[{"id":"p1","type":"llm"}]',
+        'data_format_version': 1,
+      });
+
+      final prefs = await SharedPreferences.getInstance();
+      final prefData = <String, dynamic>{};
+      for (final key in prefs.getKeys()) {
+        if (key.startsWith('flutter.')) continue;
+        prefData[key] = prefs.get(key);
+      }
+
+      // Build an old-format (v1) backup with preferences.json
+      final archive = Archive();
+      archive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 1,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      archive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': <Map<String, dynamic>>[],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
+      archive.addFile(ArchiveFile(
+          'preferences.json', 0, utf8.encode(jsonEncode(prefData))));
+
+      final encoded = ZipEncoder().encode(archive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      // Clear state
+      SharedPreferences.setMockInitialValues({});
+
+      // Restore with chatRecordsAndAttachments + settings (full restore of prefs)
+      await BackupService.restoreFromBytesForTest(backupBytes);
+
+      final restoredPrefs = await SharedPreferences.getInstance();
+      expect(restoredPrefs.getString('conversations'), isNotNull,
+          reason: 'Chat key should be restored from v1 backup');
+      expect(restoredPrefs.getString('provider_entries'), isNotNull,
+          reason: 'Settings key should be restored from v1 backup');
+    });
+
+    testWidgets(
+        'full v2 restore merges chat_data.json and settings.json correctly',
+        (WidgetTester t) async {
+      // Regression test: _restorePreferencesFromJson clears all keys on each call,
+      // so separate calls for chat_data.json and settings.json would lose data.
+      // The restore must merge both files before calling restore once.
+      SharedPreferences.setMockInitialValues({});
+
+      // Build a v2 backup with both chat_data.json and settings.json
+      final archive = Archive();
+      archive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      archive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': <Map<String, dynamic>>[],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
+      // Chat data
+      archive.addFile(ArchiveFile(
+          'chat_data.json',
+          0,
+          utf8.encode(jsonEncode({
+            'conversations': '[{"id":"conv1"}]',
+            'active_conversation_id': 'conv1',
+          }))));
+      // Settings data
+      archive.addFile(ArchiveFile(
+          'settings.json',
+          0,
+          utf8.encode(jsonEncode({
+            'provider_entries': '[{"id":"p1"}]',
+            'data_format_version': 1,
+          }))));
+
+      final encoded = ZipEncoder().encode(archive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      // Full restore (default selection = chatRecordsAndAttachments + settings)
+      await BackupService.restoreFromBytesForTest(backupBytes);
+
+      // Verify BOTH chat and settings keys survived
+      final restoredPrefs = await SharedPreferences.getInstance();
+      expect(restoredPrefs.getString('conversations'), isNotNull,
+          reason: 'Chat key must survive full v2 restore (regression)');
+      expect(restoredPrefs.getString('active_conversation_id'), isNotNull,
+          reason: 'Chat key must survive full v2 restore (regression)');
+      expect(restoredPrefs.getString('provider_entries'), isNotNull,
+          reason: 'Settings key must survive full v2 restore (regression)');
+      expect(restoredPrefs.getInt('data_format_version'), isNotNull,
+          reason: 'Settings key must survive full v2 restore (regression)');
+    });
   });
 
   // ==================================================================
@@ -422,13 +584,13 @@ void main() {
 
       // Build backup with pictures + audio + tasks selection (no video, no text)
       final sel = BackupSelection(
-        conversations: false,
+        chatRecordsAndAttachments: false,
+        settings: false,
         pictures: true,
         audio: true,
         videos: false,
         texts: false,
         tasks: true,
-        attachments: false,
       );
       final bytes = await BackupService.buildBackupBytesForTest(selection: sel);
       final archive = ZipDecoder().decodeBytes(bytes);
@@ -438,9 +600,6 @@ void main() {
       expect(fileNames, contains('manifest.json'));
       expect(fileNames, contains('stroom_manifest.json'));
 
-      // The key behavior to verify is which categories' DB records are included.
-      // Binary files (pictures/, tts_audio/) are only added if they exist on disk,
-      // which isn't tested here. The DB records tell us which categories were selected.
       expect(fileNames.any((n) => n.startsWith('videos/')), isFalse,
           reason: 'Videos should not be in pictures+audio+tasks backup');
       expect(fileNames.any((n) => n.startsWith('texts/')), isFalse,
@@ -490,7 +649,7 @@ void main() {
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
-            'version': 1,
+            'version': 2,
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
@@ -520,13 +679,13 @@ void main() {
 
       // Restore with videos-only selection
       final sel = BackupSelection(
-        conversations: false,
+        chatRecordsAndAttachments: false,
+        settings: false,
         pictures: false,
         audio: false,
         videos: true,
         texts: false,
         tasks: false,
-        attachments: false,
       );
       await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
 
@@ -575,6 +734,11 @@ void main() {
         'duration': 1.0,
       });
 
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[]',
+        'provider_entries': '[]',
+      });
+
       // Default selection (should be full)
       final bytes = await BackupService.buildBackupBytesForTest();
       final archive = ZipDecoder().decodeBytes(bytes);
@@ -584,7 +748,9 @@ void main() {
       // All expected files should be present
       expect(fileNames, contains('manifest.json'));
       expect(fileNames, contains('stroom_manifest.json'));
-      expect(fileNames, contains('preferences.json'));
+      // New format: both chat_data.json and settings.json should be present
+      expect(fileNames, contains('chat_data.json'));
+      expect(fileNames, contains('settings.json'));
 
       // DB should contain both record types
       Uint8List? manifestData;
@@ -623,7 +789,7 @@ void main() {
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
-            'version': 1,
+            'version': 2,
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));

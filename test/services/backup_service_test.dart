@@ -499,7 +499,7 @@ void main() {
 
       final manifest = jsonDecode(utf8.decode(manifestData!));
       expect(manifest, isA<Map<String, dynamic>>());
-      expect((manifest as Map<String, dynamic>)['version'], equals(1));
+      expect((manifest as Map<String, dynamic>)['version'], equals(2));
     });
   });
 }
