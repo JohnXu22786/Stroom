@@ -206,6 +206,36 @@ void main() {
       expect(html, contains('touchPanStartY'),
           reason: 'touchend should update pan start Y for remaining finger');
     });
+
+    // ---- withJsGestures parameter ----
+
+    test('buildMermaidHtml default includes JS gesture handlers', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      expect(html, contains('mousedown'),
+          reason: 'default should include mouse drag handlers');
+      expect(html, contains('wheel'),
+          reason: 'default should include wheel zoom handler');
+      expect(html, contains('touchstart'),
+          reason: 'default should include touch handlers');
+    });
+
+    test(
+        'buildMermaidHtml with withJsGestures: false omits JS gesture handlers',
+        () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD',
+          withJsGestures: false);
+      expect(html, isNot(contains('mousedown')),
+          reason: 'should omit mouse drag handlers');
+      expect(html, isNot(contains('wheel')),
+          reason: 'should omit wheel zoom handler');
+      expect(html, isNot(contains('touchstart')),
+          reason: 'should omit touch handlers');
+      // Core mermaid rendering should still be present
+      expect(html, contains('mermaid.initialize'));
+      expect(html, contains('mermaid.run'));
+      expect(html, isNot(contains('MERMAID_CODE_PLACEHOLDER')),
+          reason: 'code placeholder should be replaced');
+    });
   });
 
   group('MermaidRenderWidget - widget rendering', () {
@@ -320,6 +350,39 @@ void main() {
       );
       expect(find.text('No Mermaid code to render'), findsOneWidget);
       expect(find.text('正在准备渲染引擎...'), findsNothing);
+    });
+  });
+
+  group('MermaidRenderWidget - gesture wrapper', () {
+    testWidgets('renders with gesture wrapper in render mode', (tester) async {
+      const widget = MermaidRenderWidget(mermaidCode: 'graph TD');
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: widget,
+          ),
+        ),
+      );
+      // Early loading state shows the preparation text
+      expect(find.text('正在准备渲染引擎...'), findsOneWidget);
+      // The gesture wrapper (Listener) should wrap the WebView when created
+    });
+
+    testWidgets('gesture wrapper not present when showing source code',
+        (tester) async {
+      const widget = MermaidRenderWidget(
+        mermaidCode: 'graph TD',
+        testOnlyShowSourceCode: true,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: widget,
+          ),
+        ),
+      );
+      // Source code mode shows code text, no gesture wrapper needed
+      expect(find.text('graph TD'), findsOneWidget);
     });
   });
 

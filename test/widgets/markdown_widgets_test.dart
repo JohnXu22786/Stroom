@@ -377,6 +377,52 @@ void main() {
       final mermaidWidget = builder('graph TD', 'mermaid');
       expect(mermaidWidget, isA<MermaidRenderWidget>());
     });
+
+    test('buildMarkdownConfig accepts isStreaming parameter', () {
+      final config = buildMarkdownConfig(isDark: false, isStreaming: false);
+      expect(config, isA<MarkdownConfig>());
+    });
+
+    test('buildMarkdownConfig defaults isStreaming to false', () {
+      final config = buildMarkdownConfig(isDark: false);
+      expect(config, isA<MarkdownConfig>());
+    });
+
+    test('codeBlockPreConfig accepts isStreaming parameter', () {
+      final pre = codeBlockPreConfig(isDark: false, isStreaming: false);
+      expect(pre.builder, isNotNull);
+    });
+
+    test('preConfig builder returns MermaidRenderWidget when not streaming',
+        () {
+      final pre = codeBlockPreConfig(isDark: false, isStreaming: false);
+      final builder = pre.builder!;
+      final widget = builder('graph TD\nA-->B', 'mermaid');
+      expect(widget, isA<MermaidRenderWidget>());
+    });
+
+    test('preConfig builder returns CodeBlockSourceView when streaming mermaid',
+        () {
+      final pre = codeBlockPreConfig(isDark: false, isStreaming: true);
+      final builder = pre.builder!;
+      final widget = builder('graph TD\nA-->B', 'mermaid');
+      expect(widget, isA<CodeBlockSourceView>());
+    });
+
+    test('preConfig builder still renders non-mermaid code during streaming',
+        () {
+      final pre = codeBlockPreConfig(isDark: false, isStreaming: true);
+      final builder = pre.builder!;
+      final widget = builder('print("hello")', 'python');
+      expect(widget, isA<CodeBlockSourceView>());
+    });
+
+    test('preConfig builder still renders html code during streaming', () {
+      final pre = codeBlockPreConfig(isDark: false, isStreaming: true);
+      final builder = pre.builder!;
+      final widget = builder('<h1>Hello</h1>', 'html');
+      expect(widget, isA<HtmlCodeBlockWidget>());
+    });
   });
 
   // ===========================================================================
