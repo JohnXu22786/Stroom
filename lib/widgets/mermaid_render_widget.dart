@@ -564,26 +564,39 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   }
 
   /// Wraps the rendered diagram [child] in gesture detectors that provide
-  /// pan and zoom for mouse/trackpad input (desktop), while being
-  /// transparent to touch input (JS handlers in the WebView handle touch
-  /// on mobile).
+  /// pan and zoom for all input types (mouse, touch, trackpad).
   ///
-  /// The [GestureDetector] with [onScaleStart]/[onScaleUpdate] handles
-  /// single-finger drag (pan) and touchpad pinch (zoom). Flutter's gesture
-  /// arena resolves conflicts with the parent scroll view, so the diagram
-  /// pans/zooms instead of the chat list scrolling.
+  /// Uses [HitTestBehavior.opaque] to absorb all pointer events within the
+  /// Mermaid diagram area, preventing the parent chat scroll view from
+  /// capturing them. This ensures that interactions within the diagram area
+  /// always pan/zoom the diagram instead of scrolling the chat page.
   ///
-  /// The [Listener] with [onPointerSignal] handles Ctrl/MouseWheel zoom.
-  /// Known limitation: the parent scroll view may also receive the wheel
-  /// event on desktop, causing simultaneous chat scrolling and diagram zoom.
+  /// The [GestureDetector] with [onScaleStart]/[onScaleUpdate] handles:
+  /// - Single-finger drag → pan
+  /// - Two-finger pinch → zoom (mobile and touchpad)
+  /// - The [ScaleGestureRecognizer] natively supports both single and
+  ///   multi-touch, so the JS touch gesture handlers in the WebView are
+  ///   no longer needed for inline rendering — all gesture logic is
+  ///   handled at the Flutter level.
+  ///
+  /// The [Listener] with [onPointerSignal] handles Ctrl/MouseWheel zoom
+  /// on desktop. The opaque hit test also prevents the parent scroll view
+  /// from receiving wheel events while the pointer is over the diagram.
+  ///
+  /// Note: The inline HTML template still includes touch gesture JS for
+  /// mobile as a fallback when [HitTestBehavior.opaque] does not fully
+  /// absorb all touch sequences on certain platforms.
   Widget _buildGestureWrapper(Widget child) {
     return Listener(
       onPointerSignal: _onPointerSignal,
       child: GestureDetector(
         onScaleStart: _onScaleStart,
         onScaleUpdate: _onScaleUpdate,
-        // Don't use HitTestBehavior.opaque — let the WebView receive
-        // touch events for JS gesture handlers (mobile).
+        // Use opaque hit testing to absorb all pointer events within the
+        // diagram area, preventing the parent scroll view from receiving
+        // them. This fixes the issue where scrolling the chat page could
+        // sometimes be triggered when interacting with the Mermaid diagram.
+        behavior: HitTestBehavior.opaque,
         child: child,
       ),
     );

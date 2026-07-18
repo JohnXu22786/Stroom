@@ -38,7 +38,6 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   final String initialDraftText;
   final ValueChanged<List<String>>? onModelsReordered;
   final List<ReasoningParam> reasoningParams;
-  final bool hasReasoningParams;
 
   // ── Edit mode support ──
   /// When non-null, the composer enters edit mode for the given message.
@@ -75,7 +74,6 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     this.initialDraftText = '',
     this.onModelsReordered,
     this.reasoningParams = const [],
-    this.hasReasoningParams = false,
     this.editingMessageId,
     this.editingMessageText,
     this.editingMessageAttachments,
@@ -498,6 +496,27 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         if (effortParam != null && paramName == effortParam.paramName) {
           ref.read(reasoningEffortProvider.notifier).state = value;
         }
+        SharedPreferences.getInstance().then(
+          (prefs) => prefs.setString('reasoning_params', current.toString()),
+        );
+      },
+    );
+  }
+
+  void _showCustomParamsPanel() {
+    final reasoningParamValues = ref.read(reasoningParamValuesProvider);
+    final reasoningEnabled = ref.read(reasoningEnabledProvider);
+    showCustomReasoningParamsPanel(
+      context: context,
+      reasoningEnabled: reasoningEnabled,
+      reasoningParamSelections: reasoningParamValues,
+      reasoningParams: widget.reasoningParams,
+      onReasoningParamChanged: (paramName, value) {
+        final current = Map<String, String>.from(
+          ref.read(reasoningParamValuesProvider),
+        );
+        current[paramName] = value;
+        ref.read(reasoningParamValuesProvider.notifier).state = current;
         SharedPreferences.getInstance().then(
           (prefs) => prefs.setString('reasoning_params', current.toString()),
         );
@@ -993,11 +1012,20 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                         icon: Icons.psychology_outlined,
                         label: reasoningLabel,
                         color: reasoningColor,
-                        onTap: widget.hasReasoningParams
-                            ? _showReasoningPanel
-                            : null,
-                        enabled: widget.hasReasoningParams,
+                        onTap: _showReasoningPanel,
+                        enabled: true,
                       ),
+                      // Custom reasoning params button (non-toggle, non-effort)
+                      if (widget.reasoningParams
+                              .where((p) => !p.isReasoningToggle && !p.isEffortParam)
+                              .isNotEmpty)
+                        _SettingsChip(
+                          icon: Icons.tune,
+                          label: '自定义参数',
+                          color: Colors.blue,
+                          onTap: _showCustomParamsPanel,
+                          enabled: true,
+                        ),
                     ],
                   );
                 },

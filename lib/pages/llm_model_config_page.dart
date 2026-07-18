@@ -638,12 +638,6 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                 const SizedBox(width: 4),
                 _buildTypeDropdown(param, cs),
                 const SizedBox(width: 4),
-                Switch(
-                  value: param.enabled,
-                  onChanged: (v) {
-                    setState(() => param.enabled = v);
-                  },
-                ),
                 IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                   onPressed: () => _removeReasoningParam(actualIndex),
@@ -660,7 +654,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                 )),
             const SizedBox(height: 4),
             Text(
-              '这些选项将按顺序显示在推理面板中供选择',
+              '这些选项将按顺序显示在推理面板中供选择。启用/禁用开关在推理面板中操作。',
               style: TextStyle(
                 fontSize: 11,
                 color: cs.onSurfaceVariant.withValues(alpha: 0.7),
