@@ -103,8 +103,17 @@ class Conversation {
   String draftText;
 
   /// Per-conversation set of MCP/built-in tool names that the user has enabled.
-  /// Defaults to empty (all tools OFF). Persisted with the conversation.
+  /// Defaults to empty (interpreted by the chat page as "auto-enable all
+  /// available tools" for new conversations; explicit empty is preserved
+  /// via [hasExplicitEnabledMcpTools]).
   Set<String> enabledMcpToolNames = {};
+
+  /// Whether the user has explicitly touched the MCP/built-in tool toggles
+  /// in the "可用工具" panel for this conversation. Used to distinguish
+  /// "new conversation — auto-enable all" (false) from "user toggled every
+  /// tool off" (true). Persisted as a boolean flag so an explicit-empty
+  /// set survives serialization.
+  bool hasExplicitEnabledMcpTools = false;
 
   Conversation({
     String? id,
@@ -117,6 +126,7 @@ class Conversation {
     this.assistantId,
     this.draftText = '',
     Set<String>? enabledMcpToolNames,
+    this.hasExplicitEnabledMcpTools = false,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now(),
@@ -133,7 +143,14 @@ class Conversation {
         'sortOrder': sortOrder,
         if (assistantId != null) 'assistantId': assistantId,
         'draftText': draftText,
-        if (enabledMcpToolNames.isNotEmpty)
+        // Persist the explicit-empty flag so a user who toggled every tool
+        // off doesn't accidentally get them all re-enabled next time.
+        if (hasExplicitEnabledMcpTools)
+          'hasExplicitEnabledMcpTools': true,
+        // Persist the set whenever the user has explicitly touched the toggles,
+        // even if it's empty. Otherwise omit it so new conversations fall back
+        // to the "auto-enable all" default.
+        if (hasExplicitEnabledMcpTools)
           'enabledMcpToolNames': enabledMcpToolNames.toList(),
       };
 
@@ -182,6 +199,11 @@ class Conversation {
     if (toolsRaw is List) {
       enabledMcpToolNames = toolsRaw.map((e) => e.toString()).toSet();
     }
+    // hasExplicitEnabledMcpTools is true if the user has touched the toggles
+    // for this conversation. Defaults to false (new conversation → auto-enable
+    // all available tools). Persisted explicitly so an empty
+    // enabledMcpToolNames set survives serialization.
+    final hasExplicit = map['hasExplicitEnabledMcpTools'] as bool? ?? false;
 
     return Conversation(
       id: map['id'] as String?,
@@ -194,6 +216,7 @@ class Conversation {
       assistantId: map['assistantId'] as String?,
       draftText: map['draftText'] as String? ?? '',
       enabledMcpToolNames: enabledMcpToolNames,
+      hasExplicitEnabledMcpTools: hasExplicit,
     );
   }
 
@@ -509,10 +532,14 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
 
   /// Updates the enabled MCP/built-in tool names for a conversation.
   /// These are the tools the user has turned ON for this specific conversation.
+  /// Also marks the conversation as having an explicit tool selection so the
+  /// chat page won't auto-enable all tools on next load (preserves the
+  /// "user toggled every tool off" case).
   void updateEnabledTools(String conversationId, Set<String> enabledTools) {
     state = state.map((c) {
       if (c.id != conversationId) return c;
       c.enabledMcpToolNames = Set<String>.from(enabledTools);
+      c.hasExplicitEnabledMcpTools = true;
       return c;
     }).toList();
     _persist();
