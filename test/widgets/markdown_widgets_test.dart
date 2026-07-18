@@ -401,7 +401,8 @@ void main() {
       expect(widget, isA<MermaidRenderWidget>());
     });
 
-    test('preConfig builder returns loading widget (not CodeBlockSourceView) when streaming mermaid',
+    test(
+        'preConfig builder returns loading widget (not CodeBlockSourceView) when streaming mermaid',
         () {
       final pre = codeBlockPreConfig(isDark: false, isStreaming: true);
       final builder = pre.builder!;
