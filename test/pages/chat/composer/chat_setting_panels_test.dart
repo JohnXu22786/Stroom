@@ -494,7 +494,8 @@ void main() {
 
       await openPanel(tester);
 
-      await tester.tap(find.byType(Switch));
+      // Tap the first switch (reasoning toggle)
+      await tester.tap(find.byType(Switch).first);
       await tester.pump();
 
       expect(toggleValue, false);
