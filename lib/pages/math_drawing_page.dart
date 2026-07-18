@@ -1,26 +1,26 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 
 import '../models/math_expression.dart';
 import '../models/math_drawing_state.dart';
-import '../widgets/math_canvas_webview.dart';
+import '../widgets/math_canvas.dart';
 
 /// The constant used to multiply parameter slider values for display.
 const double _parameterDefaultValue = 1.0;
 const double _parameterMinValue = -10.0;
 const double _parameterMaxValue = 10.0;
 
-/// 数学绘制页面 — 使用 JSXGraph 在 WebView 中绘制函数图像。
+/// 数学绘制页面 — 使用纯 Flutter Canvas 绘制函数图像。
 ///
-/// 支持 LaTeX 格式的数学表达式输入，实时渲染函数图像。
-/// 提供 2D 绘图功能（3D 功能待推出）。
+/// 使用 [function_tree] 解析数学表达式，[CustomPainter] 负责渲染，
+/// 不再依赖 WebView/JSXGraph，支持全平台一致体验。
+///
+/// 点击回车按钮（而非自动渲染）才执行绘制，避免过度渲染。
 class MathDrawingPage extends StatefulWidget {
   /// 初始表达式（可选）
   final String? initialExpression;
 
-  /// 初始是否显示 WebView（测试环境中设为 false 以避免 InAppWebView 平台问题）
+  /// 初始是否显示 WebView（保留参数保持兼容，新 Canvas 始终有效）
   final bool initialShowWebView;
 
   const MathDrawingPage({
@@ -35,20 +35,19 @@ class MathDrawingPage extends StatefulWidget {
 
 class _MathDrawingPageState extends State<MathDrawingPage>
     with SingleTickerProviderStateMixin {
-  // Controller
   late final TextEditingController _formulaController;
   late final TabController _tabController;
-  final GlobalKey<MathCanvasWebViewState> _canvasKey = GlobalKey();
+  final GlobalKey<MathCanvasState> _canvasKey = GlobalKey();
 
   // State
   ViewMode _currentView = ViewMode.mode2D;
   MathExpression? _currentExpression;
-  Map<String, double> _parameterValues = {};
-  List<Map<String, dynamic>> _coordinatePoints = [];
-  bool _showCoordinatePanel = false;
 
-  // Debounce
-  Timer? _debounceTimer;
+  /// The last expression text that was successfully rendered (plotted).
+  /// Used to determine whether the plot button should be enabled.
+  String _renderedExpression = '';
+
+  Map<String, double> _parameterValues = {};
 
   @override
   void initState() {
@@ -60,16 +59,24 @@ class _MathDrawingPageState extends State<MathDrawingPage>
       text: widget.initialExpression ?? '',
     );
 
-    // If there's an initial expression, parse it
+    // Initial expression is handled by the MathCanvas widget itself.
+    // Sync page state for LaTeX preview and parameter sliders.
     if (widget.initialExpression != null &&
         widget.initialExpression!.isNotEmpty) {
-      _parseAndPlotExpression(widget.initialExpression!);
+      final expr = MathExpression.fromInput(widget.initialExpression!);
+      if (expr.isValid) {
+        _currentExpression = expr;
+        _renderedExpression = widget.initialExpression!;
+        _parameterValues = {};
+        for (final param in expr.parameters) {
+          _parameterValues[param] = _parameterDefaultValue;
+        }
+      }
     }
   }
 
   @override
   void dispose() {
-    _debounceTimer?.cancel();
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     _formulaController.dispose();
@@ -95,18 +102,28 @@ class _MathDrawingPageState extends State<MathDrawingPage>
     if (trimmed.isEmpty) return;
 
     final expression = MathExpression.fromInput(trimmed);
-    if (!expression.isValid) return;
+    if (!expression.isValid) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(expression.parseError ?? '表达式解析失败'),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
 
     setState(() {
       _currentExpression = expression;
-      // Initialize parameters with default values
+      _renderedExpression = trimmed;
       _parameterValues = {};
       for (final param in expression.parameters) {
         _parameterValues[param] = _parameterDefaultValue;
       }
     });
 
-    // Send to WebView
     _canvasKey.currentState?.setExpression(
       expression.rawExpression,
       _parameterValues.isNotEmpty ? _parameterValues : null,
@@ -117,14 +134,20 @@ class _MathDrawingPageState extends State<MathDrawingPage>
     _parseAndPlotExpression(_formulaController.text);
   }
 
+  /// Whether the plot button should be enabled.
+  /// Only enabled when the text field content differs from the last rendered
+  /// expression, i.e., there are uncommitted changes.
+  bool get _canPlot {
+    final currentText = _formulaController.text.trim();
+    if (currentText.isEmpty) return false;
+    return currentText != _renderedExpression;
+  }
+
   void _onParameterChanged(String param, double value) {
     setState(() {
       _parameterValues[param] = value;
     });
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 100), () {
-      _canvasKey.currentState?.updateParameters(_parameterValues);
-    });
+    _canvasKey.currentState?.updateParameters(_parameterValues);
   }
 
   void _onResetView() {
@@ -132,21 +155,31 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   }
 
   // ==================================================================
-  // WebView callbacks
+  // Canvas callbacks
   // ==================================================================
-
-  void _onCoordinateUpdate(List<Map<String, dynamic>> points) {
-    if (!mounted) return;
-    setState(() {
-      _coordinatePoints = points;
-    });
-  }
 
   void _onViewportChange(
       double xMin, double yMin, double xMax, double yMax) {
     debugPrint(
       '[MathDrawing] Viewport changed: [$xMin, $yMin, $xMax, $yMax]',
     );
+  }
+
+  void _onCanvasReady() {
+    debugPrint('[MathDrawing] Canvas is ready');
+  }
+
+  void _onCanvasError(String message) {
+    debugPrint('[MathDrawing] Canvas error: $message');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   // ==================================================================
@@ -161,7 +194,6 @@ class _MathDrawingPageState extends State<MathDrawingPage>
       appBar: AppBar(
         title: const Text('数学绘制'),
         actions: [
-          // Reset view button
           IconButton(
             icon: const Icon(Icons.center_focus_strong, size: 20),
             tooltip: '重置视图',
@@ -171,10 +203,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
       ),
       body: Column(
         children: [
-          // ----- Tab bar for 2D / 3D switching -----
           _buildTabBar(cs),
-
-          // ----- Main content area -----
           Expanded(
             child: _currentView == ViewMode.mode2D
                 ? _build2DContent(cs)
@@ -227,13 +256,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   Widget _build2DContent(ColorScheme cs) {
     return Column(
       children: [
-        // ----- Formula input row -----
         _buildFormulaInput(cs),
-
-        // ----- LaTeX preview -----
         if (_currentExpression != null) _buildLatexPreview(cs),
-
-        // ----- WebView canvas -----
         Expanded(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -247,28 +271,20 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                   ),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: MathCanvasWebView(
+                child: MathCanvas(
                   key: _canvasKey,
-                  initialExpression: widget.initialExpression ?? '',
-                  initialShowWebView: widget.initialShowWebView,
-                  onCoordinateUpdate: _onCoordinateUpdate,
+                  initialExpression: widget.initialExpression,
                   onViewportChange: _onViewportChange,
+                  onReady: _onCanvasReady,
+                  onError: _onCanvasError,
                 ),
               ),
             ),
           ),
         ),
-
-        // ----- Parameter sliders -----
         if (_currentExpression != null &&
             _currentExpression!.parameters.isNotEmpty)
           _buildParameterSliders(cs),
-
-        // ----- Coordinate panel toggle button -----
-        _buildCoordinateToggle(cs),
-
-        // ----- Coordinate data panel -----
-        if (_showCoordinatePanel) _buildCoordinatePanel(cs),
       ],
     );
   }
@@ -303,9 +319,10 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                           _formulaController.clear();
                           setState(() {
                             _currentExpression = null;
+                            _renderedExpression = '';
                             _parameterValues = {};
-                            _coordinatePoints = [];
                           });
+                          _canvasKey.currentState?.setExpression('', null);
                         },
                       )
                     : null,
@@ -319,9 +336,10 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                 if (value.trim().isEmpty) {
                   setState(() {
                     _currentExpression = null;
+                    _renderedExpression = '';
                     _parameterValues = {};
-                    _coordinatePoints = [];
                   });
+                  _canvasKey.currentState?.setExpression('', null);
                 } else {
                   setState(() {});
                 }
@@ -330,15 +348,14 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             ),
           ),
           const SizedBox(width: 8),
-          // Plot button
+          // Plot button: only enabled when text differs from rendered expression
           FilledButton(
-            onPressed:
-                _formulaController.text.trim().isNotEmpty ? _onPlotPressed : null,
+            onPressed: _canPlot ? _onPlotPressed : null,
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               minimumSize: const Size(40, 40),
             ),
-            child: const Icon(Icons.functions, size: 20),
+            child: const Icon(Icons.keyboard_return, size: 20),
           ),
         ],
       ),
@@ -443,167 +460,6 @@ class _MathDrawingPageState extends State<MathDrawingPage>
           }).toList(),
         ),
       ),
-    );
-  }
-
-  // ==================================================================
-  // Coordinate panel toggle
-  // ==================================================================
-
-  Widget _buildCoordinateToggle(ColorScheme cs) {
-    return InkWell(
-      onTap: () {
-        setState(() => _showCoordinatePanel = !_showCoordinatePanel);
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: Row(
-          children: [
-            Icon(
-              Icons.table_chart_outlined,
-              size: 16,
-              color: cs.onSurfaceVariant,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              '坐标数据',
-              style: TextStyle(
-                fontSize: 13,
-                color: cs.onSurfaceVariant,
-              ),
-            ),
-            const Spacer(),
-            Text(
-              _coordinatePoints.isNotEmpty
-                  ? '${_coordinatePoints.length} 个点'
-                  : '暂无数据',
-              style: TextStyle(
-                fontSize: 11,
-                color: cs.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Icon(
-              _showCoordinatePanel
-                  ? Icons.keyboard_arrow_down
-                  : Icons.keyboard_arrow_up,
-              size: 18,
-              color: cs.onSurfaceVariant,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ==================================================================
-  // Coordinate data panel
-  // ==================================================================
-
-  Widget _buildCoordinatePanel(ColorScheme cs) {
-    return Container(
-      constraints: const BoxConstraints(maxHeight: 180),
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: cs.outlineVariant, width: 0.5),
-        ),
-      ),
-      child: _coordinatePoints.isEmpty
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  '绘制函数后将在此显示坐标数据',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: cs.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            )
-          : SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 80,
-                          child: Text(
-                            'x',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: cs.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                        SizedBox(
-                          width: 80,
-                          child: Text(
-                            'y',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: cs.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Coordinate rows (show first 20)
-                  ..._coordinatePoints.take(20).map((point) {
-                    final x = (point['x'] as num).toDouble();
-                    final y = (point['y'] as num).toDouble();
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 1),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 80,
-                            child: Text(
-                              x.toStringAsFixed(3),
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontFamily: 'monospace',
-                                color: cs.onSurface,
-                              ),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 80,
-                            child: Text(
-                              y.toStringAsFixed(3),
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontFamily: 'monospace',
-                                color: cs.onSurface,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                  if (_coordinatePoints.length > 20)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Text(
-                        '... 还有 ${_coordinatePoints.length - 20} 个点',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
     );
   }
 
