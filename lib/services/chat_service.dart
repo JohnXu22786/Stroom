@@ -1092,11 +1092,20 @@ class ChatService {
 
   /// Parse a JSON string into a dynamic value.
   /// Returns the parsed JSON on success, or the raw string on failure.
+  /// Logs a warning when parsing fails so callers can diagnose why a
+  /// JSON-type custom param is being sent as a raw string.
   @visibleForTesting
   static dynamic parseJsonValue(String value) {
     try {
       return jsonDecode(value);
     } catch (_) {
+      if (value.trim().isNotEmpty) {
+        debugPrint(
+          '[ChatService] parseJsonValue: failed to parse "$value" as JSON — '
+          'keeping raw string. Check the defaultValue in the model config '
+          'for valid JSON syntax (keys and strings must use double quotes).',
+        );
+      }
       return value;
     }
   }

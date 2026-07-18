@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../providers/provider_config.dart';
 import 'llm_model_config_shared.dart';
@@ -193,6 +194,20 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
           ),
         );
         return false;
+      }
+      // JSON 类型的默认值必须是合法 JSON
+      if (param.type == 'json' && param.defaultValue.trim().isNotEmpty) {
+        try {
+          jsonDecode(param.defaultValue.trim());
+        } catch (_) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('参数 "$pn" 的默认值不是合法 JSON：${param.defaultValue}'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return false;
+        }
       }
     }
 
