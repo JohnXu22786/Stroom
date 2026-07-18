@@ -31,6 +31,16 @@ import 'app_log_service.dart';
 //    ChatService.sendStream(text);
 // ====================================================================
 
+/// Sentinel value used to mark a custom param that should be omitted from
+/// the request body (e.g. because its JSON value failed to parse). Distinct
+/// from null, which is a legitimate value to send for some params.
+class _OmittedSentinel {
+  const _OmittedSentinel();
+}
+
+/// Single shared instance of the sentinel (used by tests for type matching).
+const _OmittedSentinel _kOmittedSentinelInstance = _OmittedSentinel();
+
 class ChatService {
   // ── Instance fields (used when constructed with a provider) ─────
   final BaseChatProvider? _provider;
@@ -891,6 +901,10 @@ class ChatService {
   /// Assistant-level params take final precedence.
   /// When [reasoning] is true, also includes user-configured reasoning params
   /// from both provider and model configs (sent only when reasoning is enabled).
+  ///
+  /// Custom params with invalid JSON values are omitted from the result (and
+  /// NOT sent as quoted strings). The omission is logged so the user can
+  /// find the offending config in the model settings page.
   Map<String, dynamic> _buildExtraParams({
     bool reasoning = false,
     String reasoningEffort = 'medium',
@@ -921,12 +935,8 @@ class ChatService {
 
       // Provider-level custom params
       for (final cp in _providerConfig!.customParams) {
-        result[cp.paramName] = switch (cp.type) {
-          'number' => double.tryParse(cp.defaultValue) ?? 0.0,
-          'boolean' => cp.defaultValue.toLowerCase() == 'true',
-          'json' => parseJsonValue(cp.defaultValue),
-          'string' || _ => cp.defaultValue,
-        };
+        result[cp.paramName] = _coerceCustomParam(cp.paramName, cp.type,
+            cp.defaultValue, source: 'provider');
       }
 
       // Provider-level reasoning params (when reasoning enabled)
@@ -946,10 +956,11 @@ class ChatService {
           final toggleValue = reasoning
               ? (toggleParam.onValue ?? 'true')
               : (toggleParam.offValue ?? 'false');
-          setNestedParam(
+          _setReasoningParam(
             result,
-            toggleParam.paramName,
-            parseReasoningValue(toggleValue, toggleParam.type),
+            toggleParam,
+            toggleValue,
+            source: 'provider',
           );
         }
 
@@ -968,10 +979,11 @@ class ChatService {
           } else {
             final selectedValue = reasoningParamValues[rp.paramName];
             if (selectedValue != null && selectedValue.isNotEmpty) {
-              setNestedParam(
+              _setReasoningParam(
                 result,
-                rp.paramName,
-                parseReasoningValue(selectedValue, rp.type),
+                rp,
+                selectedValue,
+                source: 'provider',
               );
             }
           }
@@ -1000,27 +1012,14 @@ class ChatService {
 
     // Model-level custom params
     for (final cp in _modelConfig!.customParams) {
-      result[cp.paramName] = switch (cp.type) {
-        'number' => double.tryParse(cp.defaultValue) ?? 0.0,
-        'boolean' => cp.defaultValue.toLowerCase() == 'true',
-        'json' => parseJsonValue(cp.defaultValue),
-        'string' || _ => cp.defaultValue,
-      };
+      result[cp.paramName] = _coerceCustomParam(cp.paramName, cp.type,
+          cp.defaultValue, source: 'model');
     }
 
     // Assistant-level custom params (override model-level on name collision)
     if (_assistantCustomParams != null) {
       for (final cp in _assistantCustomParams!) {
-        result[cp.name] = switch (cp.type) {
-          'number' => (cp.value is num)
-              ? (cp.value as num).toDouble()
-              : (double.tryParse(cp.value.toString()) ?? 0.0),
-          'boolean' => cp.value is bool
-              ? cp.value
-              : (cp.value.toString().toLowerCase() == 'true'),
-          'json' => parseJsonParam(cp.value),
-          'string' || _ => cp.value?.toString() ?? '',
-        };
+        result[cp.name] = _coerceAssistantCustomParam(cp);
       }
     }
 
@@ -1065,10 +1064,11 @@ class ChatService {
       final toggleValue = reasoning
           ? (toggleParam.onValue ?? 'true')
           : (toggleParam.offValue ?? 'false');
-      setNestedParam(
+      _setReasoningParam(
         result,
-        toggleParam.paramName,
-        parseReasoningValue(toggleValue, toggleParam.type),
+        toggleParam,
+        toggleValue,
+        source: 'model',
       );
     }
 
@@ -1078,42 +1078,85 @@ class ChatService {
         if (!rp.enabled) continue;
         final selectedValue = reasoningParamValues[rp.paramName];
         if (selectedValue != null && selectedValue.isNotEmpty) {
-          setNestedParam(
+          _setReasoningParam(
             result,
-            rp.paramName,
-            parseReasoningValue(selectedValue, rp.type),
+            rp,
+            selectedValue,
+            source: 'model',
           );
         }
       }
     }
 
-    return result;
+    return _stripOmitted(result);
   }
 
+  /// Filter out the `_OmittedSentinel` values (params that failed to coerce).
+  /// Sentinel-mapped entries must be removed so they don't get re-serialized
+  /// into the JSON request body.
+  static Map<String, dynamic> _stripOmitted(Map<String, dynamic> params) {
+    return {
+      for (final entry in params.entries)
+        if (entry.value is! _OmittedSentinel) entry.key: entry.value,
+    };
+  }
+
+  // ----------------------------------------------------------------
+  // Test-only entry points. The real coercion path is exercised by
+  // sendStream() in integration tests; these wrappers let unit tests
+  // verify the coercion / stripping policy without standing up a full
+  // ChatService with a real provider.
+  // ----------------------------------------------------------------
+
+  /// @visibleForTesting
+  static dynamic coerceCustomParamForTest({
+    required String paramName,
+    required String type,
+    required String defaultValue,
+  }) =>
+      _coerceCustomParam(paramName, type, defaultValue);
+
+  /// @visibleForTesting
+  static Map<String, dynamic> stripOmittedForTest(
+          Map<String, dynamic> params) =>
+      _stripOmitted(params);
+
+  /// @visibleForTesting — type marker for the omitted sentinel (for `isA`).
+  static Type get omittedSentinelTypeForTest => _OmittedSentinel;
+
+  /// @visibleForTesting — singleton instance for inserting into test maps.
+  static Object get omittedSentinelInstanceForTest => _kOmittedSentinelInstance;
+
   /// Parse a JSON string into a dynamic value.
-  /// Returns the parsed JSON on success, or the raw string on failure.
-  /// Logs a warning when parsing fails so callers can diagnose why a
-  /// JSON-type custom param is being sent as a raw string.
+  ///
+  /// Throws [FormatException] when parsing fails. The previous behavior of
+  /// returning the raw string on failure meant a malformed JSON defaultValue
+  /// would be re-serialized as a quoted string in the API request body
+  /// (e.g. `{"response_format": "{\\"type\\": \\"json_object\\"}"}` instead of
+  /// the intended `{"response_format": {"type": "json_object"}}`). That
+  /// silently sent the wrong shape to the upstream API. Throwing lets callers
+  /// skip the offending parameter and surface a clear error.
+  ///
+  /// Empty strings are treated as a no-op (returns null) so optional JSON
+  /// parameters that have been left blank don't break the request.
   @visibleForTesting
   static dynamic parseJsonValue(String value) {
+    if (value.trim().isEmpty) return null;
     try {
       return jsonDecode(value);
-    } catch (_) {
-      if (value.trim().isNotEmpty) {
-        debugPrint(
-          '[ChatService] parseJsonValue: failed to parse "$value" as JSON — '
-          'keeping raw string. Check the defaultValue in the model config '
-          'for valid JSON syntax (keys and strings must use double quotes).',
-        );
-      }
-      return value;
+    } catch (e) {
+      throw FormatException(
+        'Failed to parse JSON value: $value. '
+        'Check the custom param defaultValue for valid JSON syntax '
+        '(keys and strings must use double quotes).',
+        value,
+      );
     }
   }
 
   /// Parse a JSON custom parameter value that may already be a parsed object
   /// or a JSON string. If it's a String, tries to parse it as JSON.
   /// If it's already a Map/List, returns it as-is.
-  /// Falls back to the string representation on parse failure.
   @visibleForTesting
   static dynamic parseJsonParam(dynamic value) {
     if (value is String) {
@@ -1125,6 +1168,10 @@ class ChatService {
 
   /// Parse a reasoning parameter value according to its [type].
   /// Supports: 'string', 'number', 'boolean', 'json'.
+  /// Throws [FormatException] for invalid JSON values. Callers that loop
+  /// over many params (e.g. _buildExtraParams) should use the safer
+  /// [_setReasoningParam] wrapper instead, which catches the exception,
+  /// logs it, and drops the param from the request body.
   static dynamic parseReasoningValue(String value, String type) {
     return switch (type) {
       'number' => double.tryParse(value) ?? 0.0,
@@ -1132,6 +1179,101 @@ class ChatService {
       'json' => parseJsonValue(value),
       'string' || _ => value,
     };
+  }
+
+  /// Apply a reasoning [rp]'s selected value to the [result] map under its
+  /// paramName, swallowing any [FormatException] from invalid JSON so that
+  /// one bad param can't abort the whole request build.
+  @visibleForTesting
+  static void setReasoningParamForTest(
+    Map<String, dynamic> result,
+    ReasoningParam rp,
+    String value, {
+    String source = 'model',
+  }) {
+    _setReasoningParam(result, rp, value, source: source);
+  }
+
+  static void _setReasoningParam(
+    Map<String, dynamic> result,
+    ReasoningParam rp,
+    String value, {
+    String source = 'model',
+  }) {
+    try {
+      setNestedParam(
+        result,
+        rp.paramName,
+        parseReasoningValue(value, rp.type),
+      );
+    } on FormatException catch (e) {
+      debugPrint(
+        '[ChatService] Skipping $source reasoning param "${rp.paramName}" '
+        'because its value is not valid JSON: ${e.message}',
+      );
+    }
+  }
+
+  /// Coerce a model-level / provider-level [CustomParam] defaultValue into
+  /// the runtime type expected by the API. JSON failures throw, are logged,
+  /// and the parameter is omitted (NOT sent as a raw string).
+  static dynamic _coerceCustomParam(
+    String paramName,
+    String type,
+    String defaultValue, {
+    String source = 'model',
+  }) {
+    switch (type) {
+      case 'number':
+        return double.tryParse(defaultValue) ?? 0.0;
+      case 'boolean':
+        return defaultValue.toLowerCase() == 'true';
+      case 'json':
+        try {
+          return parseJsonValue(defaultValue);
+        } on FormatException catch (e) {
+          debugPrint(
+            '[ChatService] Skipping $source custom param "$paramName" '
+            'because its defaultValue is not valid JSON: ${e.message}',
+          );
+          return const _OmittedSentinel();
+        }
+      case 'string':
+      default:
+        return defaultValue;
+    }
+  }
+
+  /// Coerce an assistant-level [CustomParameter] into the runtime type.
+  /// Assistant-level params already store parsed values for type 'json',
+  /// so this only falls back to string→JSON parsing when given a String.
+  static dynamic _coerceAssistantCustomParam(CustomParameter cp) {
+    switch (cp.type) {
+      case 'number':
+        return (cp.value is num)
+            ? (cp.value as num).toDouble()
+            : (double.tryParse(cp.value.toString()) ?? 0.0);
+      case 'boolean':
+        return cp.value is bool
+            ? cp.value
+            : (cp.value.toString().toLowerCase() == 'true');
+      case 'json':
+        if (cp.value is String) {
+          try {
+            return parseJsonValue(cp.value as String);
+          } on FormatException catch (e) {
+            debugPrint(
+              '[ChatService] Skipping assistant custom param "${cp.name}" '
+              'because its value is not valid JSON: ${e.message}',
+            );
+            return const _OmittedSentinel();
+          }
+        }
+        return cp.value; // already parsed
+      case 'string':
+      default:
+        return cp.value?.toString() ?? '';
+    }
   }
 
   /// Dispose permanently (no more streams possible after this)

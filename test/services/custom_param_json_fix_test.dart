@@ -38,20 +38,34 @@ void main() {
       expect(result, isNull);
     });
 
-    test('empty string stays as raw string (invalid JSON)', () {
+    test('empty string returns null (no-op for blank JSON params)', () {
       final result = ChatService.parseJsonValue('');
-      expect(result, equals(''));
+      expect(result, isNull,
+          reason:
+              'Empty JSON value should be treated as a no-op, not parsed.');
     });
 
-    test('malformed JSON stays as raw string', () {
-      final result = ChatService.parseJsonValue('{invalid json}');
-      expect(result, equals('{invalid json}'));
+    test('whitespace-only string returns null', () {
+      expect(ChatService.parseJsonValue('   '), isNull);
+      expect(ChatService.parseJsonValue('\n\t'), isNull);
     });
 
-    test('Dart format map (no quotes) stays as raw string', () {
-      // This is a KEY edge case: {key: value} is NOT valid JSON
-      final result = ChatService.parseJsonValue('{key: value}');
-      expect(result, equals('{key: value}'));
+    test('malformed JSON throws FormatException', () {
+      // Regression: previously the raw string was returned and re-serialized
+      // as a quoted string in the request body. Now we throw so the param
+      // can be skipped cleanly and the user can see the underlying error.
+      expect(
+        () => ChatService.parseJsonValue('{invalid json}'),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('Dart format map (no quotes) throws FormatException', () {
+      // {key: value} is NOT valid JSON (keys need quotes)
+      expect(
+        () => ChatService.parseJsonValue('{key: value}'),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('deeply nested JSON object is properly parsed', () {
@@ -258,12 +272,14 @@ void main() {
     });
 
     test(
-        'A raw string "hello" WITHOUT quotes is NOT valid JSON (stays as string)',
+        'A raw string "hello" WITHOUT quotes is NOT valid JSON (throws FormatException)',
         () {
-      // jsonDecode('hello') throws because it's not valid JSON
-      final result = ChatService.parseJsonValue('hello');
-      // Falls back to raw string
-      expect(result, equals('hello'));
+      // jsonDecode('hello') throws because it's not valid JSON.
+      // The new behavior surfaces the failure to the caller.
+      expect(
+        () => ChatService.parseJsonValue('hello'),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('Number string in json type is parsed as number', () {
@@ -283,6 +299,122 @@ void main() {
       // through a non-json type (just verifying behavior)
       final result = ChatService.parseJsonParam({'key': 'value'});
       expect(result, isA<Map>());
+    });
+  });
+
+  // ====================================================================
+  // _coerceCustomParam — model/provider-level custom param coercion.
+  // JSON-typed params with invalid defaultValue are NOT silently coerced
+  // to a raw string. Instead, they are marked with the internal
+  // `_OmittedSentinel` so _stripOmitted can drop them from the request body.
+  // ====================================================================
+  group('ChatService._coerceCustomParam', () {
+    test('string type returns the raw defaultValue', () {
+      final result = ChatService.coerceCustomParamForTest(
+        paramName: 'foo',
+        type: 'string',
+        defaultValue: 'hello',
+      );
+      expect(result, equals('hello'));
+    });
+
+    test('number type parses to double, falling back to 0.0', () {
+      expect(
+        ChatService.coerceCustomParamForTest(
+          paramName: 'n',
+          type: 'number',
+          defaultValue: '3.14',
+        ),
+        equals(3.14),
+      );
+      expect(
+        ChatService.coerceCustomParamForTest(
+          paramName: 'n',
+          type: 'number',
+          defaultValue: 'not a number',
+        ),
+        equals(0.0),
+      );
+    });
+
+    test('boolean type coerces "true"/"false" case-insensitively', () {
+      expect(
+        ChatService.coerceCustomParamForTest(
+          paramName: 'b',
+          type: 'boolean',
+          defaultValue: 'true',
+        ),
+        isTrue,
+      );
+      expect(
+        ChatService.coerceCustomParamForTest(
+          paramName: 'b',
+          type: 'boolean',
+          defaultValue: 'FALSE',
+        ),
+        isFalse,
+      );
+    });
+
+    test('json type with valid object string returns a Map', () {
+      final result = ChatService.coerceCustomParamForTest(
+        paramName: 'cfg',
+        type: 'json',
+        defaultValue: '{"key": "value"}',
+      );
+      expect(result, isA<Map>());
+      expect((result as Map)['key'], equals('value'));
+    });
+
+    test('json type with invalid string returns OmittedSentinel '
+        '(no raw string in request body)', () {
+      // The bug we're fixing: previously this returned the raw string
+      // (e.g. '{key: value}') which then got JSON-encoded as a quoted
+      // string in the request body, sending the wrong shape to the API.
+      // Now it returns the OmittedSentinel so _stripOmitted drops it.
+      final result = ChatService.coerceCustomParamForTest(
+        paramName: 'cfg',
+        type: 'json',
+        defaultValue: '{key: value}',
+      );
+      expect(
+        result,
+        same(ChatService.omittedSentinelInstanceForTest),
+        reason: 'Invalid JSON should be omitted from the request, not sent '
+            'as a raw string. This is the regression test for the '
+            '"JSON sent as stringified form" bug.',
+      );
+    });
+
+    test('json type with empty string returns null (no-op, not sentinel)', () {
+      final result = ChatService.coerceCustomParamForTest(
+        paramName: 'cfg',
+        type: 'json',
+        defaultValue: '',
+      );
+      expect(result, isNull);
+    });
+  });
+
+  // ====================================================================
+  // _stripOmitted — removes _OmittedSentinel entries from a param map.
+  // ====================================================================
+  group('ChatService._stripOmitted', () {
+    test('removes entries whose value is the OmittedSentinel', () {
+      final result = ChatService.stripOmittedForTest({
+        'good_string': 'hello',
+        'good_json': {'nested': true},
+        'invalid_json': ChatService.omittedSentinelInstanceForTest,
+      });
+      expect(result.keys, equals(['good_string', 'good_json']),
+          reason: 'Sentinel entries must be dropped from the request body.');
+    });
+
+    test('keeps null values (they are legitimate)', () {
+      final result = ChatService.stripOmittedForTest({
+        'nullable_param': null,
+      });
+      expect(result, equals({'nullable_param': null}));
     });
   });
 }
