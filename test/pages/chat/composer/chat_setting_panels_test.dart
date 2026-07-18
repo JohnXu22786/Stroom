@@ -347,6 +347,7 @@ void main() {
                     showReasoningPanel(
                       context: context,
                       reasoningEnabled: true,
+                      reasoningEffortEnabled: false,
                       reasoningParamSelections: {'reasoning_effort': 'medium'},
                       reasoningParams: [
                         ReasoningParam(
@@ -355,6 +356,7 @@ void main() {
                         ),
                       ],
                       onReasoningToggle: (_) {},
+                      onReasoningEffortToggle: (_) {},
                       onReasoningParamChanged: (_, __) {},
                     );
                   },
@@ -385,6 +387,7 @@ void main() {
                     showReasoningPanel(
                       context: context,
                       reasoningEnabled: true,
+                      reasoningEffortEnabled: false,
                       reasoningParamSelections: {'reasoning_effort': 'medium'},
                       reasoningParams: [
                         ReasoningParam(
@@ -393,6 +396,7 @@ void main() {
                         ),
                       ],
                       onReasoningToggle: (_) {},
+                      onReasoningEffortToggle: (_) {},
                       onReasoningParamChanged: (_, __) {},
                     );
                   },
@@ -423,6 +427,7 @@ void main() {
                     showReasoningPanel(
                       context: context,
                       reasoningEnabled: false,
+                      reasoningEffortEnabled: false,
                       reasoningParamSelections: {},
                       reasoningParams: [
                         ReasoningParam(
@@ -431,6 +436,7 @@ void main() {
                         ),
                       ],
                       onReasoningToggle: (_) {},
+                      onReasoningEffortToggle: (_) {},
                       onReasoningParamChanged: (_, __) {},
                     );
                   },
@@ -461,6 +467,7 @@ void main() {
                     showReasoningPanel(
                       context: context,
                       reasoningEnabled: true,
+                      reasoningEffortEnabled: false,
                       reasoningParamSelections: {},
                       reasoningParams: [
                         ReasoningParam(
@@ -469,6 +476,7 @@ void main() {
                         ),
                       ],
                       onReasoningToggle: (v) => toggleValue = v,
+                      onReasoningEffortToggle: (_) {},
                       onReasoningParamChanged: (_, __) {},
                     );
                   },

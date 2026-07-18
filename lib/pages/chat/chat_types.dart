@@ -58,6 +58,9 @@ final isStreamingProvider = StateProvider<bool>((ref) => false);
 /// Shared state provider tracking whether reasoning is enabled.
 final reasoningEnabledProvider = StateProvider<bool>((ref) => false);
 
+/// Shared state provider tracking whether the reasoning effort toggle is enabled.
+final reasoningEffortEnabledProvider = StateProvider<bool>((ref) => false);
+
 /// Shared state provider tracking reasoning effort level ('low', 'medium', 'high').
 final reasoningEffortProvider = StateProvider<String>((ref) => 'medium');
 
