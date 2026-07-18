@@ -385,6 +385,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
       await _adapter.initializeMcpServers(entriesState);
       await AppLogService.info('ChatPage', 'MCP 服务器初始化完成');
     } finally {
+      // Rebuild UI so the tool panel reflects the newly discovered MCP tools.
+      // Must check mounted because the async gap may outlive the widget.
+      if (mounted) setState(() {});
       // Do NOT auto-enable all tools. All tools default to OFF.
       // Per-conversation enabled tools are restored in _loadConversationMessages.
       // Using finally ensures MCP discovery errors don't prevent the rest.
@@ -1779,12 +1782,24 @@ class _ChatPageState extends ConsumerState<ChatPage>
       }
     });
 
-    // Re-configure adapter when provider entries change (e.g. after load completes)
+    // Re-configure adapter when provider entries change (e.g. after load completes).
+    // Also re-initialize built-in and MCP tools: if ProviderEntriesNotifier.load()
+    // hasn't completed when _initialize() first runs, the MCP entry is empty and
+    // no MCP servers are initialized. This listener ensures that once the data
+    // finishes loading, MCP servers are discovered and their tools appear in the
+    // chat page's tool list.
     ref.listen(providerEntriesProvider, (prev, next) {
       if (prev != next) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
           if (!mounted) return;
           _configureAdapter();
+          // Re-initialize built-in and MCP tools with the updated provider data.
+          // This is safe to call multiple times — initializeMcpServers disposes
+          // old clients before creating new ones.
+          final entriesState = ref.read(providerEntriesProvider);
+          _adapter.initializeBuiltinTools(entriesState);
+          await _adapter.initializeMcpServers(entriesState);
+          if (mounted) setState(() {});
           // _configureAdapter resets the adapter to model 0. Restore the
           // saved model selection so the adapter and reasoning params
           // stay in sync with the persisted choice.
