@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/widgets/folder_picker_dialog.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
 void main() {
@@ -19,7 +23,8 @@ void main() {
         (tester) async {
       // Regression: zoom in/out and fullscreen buttons must only appear
       // when the widget is in render (diagram) mode. In source code mode
-      // they should be absent and only the image icon (查看图表) shown.
+      // they should be absent and only the image (查看图表) and save
+      // icons shown.
       const widget = MermaidRenderWidget(
         mermaidCode: 'graph TD\nA-->B',
         testOnlyShowSourceCode: true,
@@ -36,8 +41,9 @@ void main() {
       expect(find.byIcon(Icons.zoom_in), findsNothing);
       expect(find.byIcon(Icons.zoom_out), findsNothing);
       expect(find.byIcon(Icons.fullscreen), findsNothing);
-      // Should show image icon for "查看图表"
+      // Should show image icon for "查看图表" and save icon
       expect(find.byIcon(Icons.image), findsOneWidget);
+      expect(find.byIcon(Icons.save), findsOneWidget);
     });
 
     testWidgets(
@@ -125,6 +131,128 @@ void main() {
 
       final imageIcon = tester.widget<Icon>(find.byIcon(Icons.image));
       expect(imageIcon.semanticLabel, isNotNull);
+    });
+  });
+
+  // ===========================================================================
+  // Save button behavior tests
+  // ===========================================================================
+  //
+  // These tests verify that the save button appears correctly in the
+  // source code mode toolbar and triggers the FolderPickerDialog for
+  // saving Mermaid source code as .mmd files via TextManifest.
+
+  group('MermaidRenderWidget - save button', () {
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      ManifestDatabase.enableTestMode();
+      TextManifest.invalidateCache();
+    });
+
+    testWidgets('save icon appears in source code mode toolbar',
+        (tester) async {
+      // Regression: the save button (Icons.save) must be present in the
+      // source code mode toolbar so users can save Mermaid source code.
+      const widget = MermaidRenderWidget(
+        mermaidCode: 'graph TD\nA-->B',
+        testOnlyShowSourceCode: true,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: widget,
+          ),
+        ),
+      );
+
+      // Save button should be visible in source code mode
+      expect(find.byIcon(Icons.save), findsOneWidget);
+    });
+
+    testWidgets(
+        'save icon and code toggle icon both visible in source code mode',
+        (tester) async {
+      // Regression: both the save button and the "view chart" toggle
+      // button must be present in the source code mode toolbar.
+      const widget = MermaidRenderWidget(
+        mermaidCode: 'graph TD\nA-->B',
+        testOnlyShowSourceCode: true,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: widget,
+          ),
+        ),
+      );
+
+      expect(find.byIcon(Icons.save), findsOneWidget);
+      expect(find.byIcon(Icons.image), findsOneWidget);
+    });
+
+    testWidgets('save icon absent when mermaid code is empty', (tester) async {
+      // Regression: when the Mermaid code is empty, the widget shows a
+      // placeholder instead of the source code view, so the save button
+      // must not be present.
+      const widget = MermaidRenderWidget(
+        mermaidCode: '',
+        testOnlyShowSourceCode: true,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: widget,
+          ),
+        ),
+      );
+
+      // Empty code shows placeholder, not the code view
+      expect(find.text('No Mermaid code to render'), findsOneWidget);
+      // Save button should NOT be present
+      expect(find.byIcon(Icons.save), findsNothing);
+    });
+
+    testWidgets('tapping save button opens FolderPickerDialog', (tester) async {
+      // Regression: tapping the save button must show the folder picker
+      // dialog so the user can choose where to save the .mmd file.
+      const widget = MermaidRenderWidget(
+        mermaidCode: 'graph TD',
+        testOnlyShowSourceCode: true,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: widget,
+          ),
+        ),
+      );
+
+      // Tap the save button
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Should show the FolderPickerDialog for selecting save location
+      expect(find.byType(FolderPickerDialog), findsOneWidget);
+    });
+
+    testWidgets('save icon has proper accessibility semantic label',
+        (tester) async {
+      // Regression: save button must have semanticLabel for accessibility.
+      const widget = MermaidRenderWidget(
+        mermaidCode: 'graph TD',
+        testOnlyShowSourceCode: true,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: widget,
+          ),
+        ),
+      );
+
+      final saveIcon = tester.widget<Icon>(find.byIcon(Icons.save));
+      expect(saveIcon.semanticLabel, isNotNull);
     });
   });
 
