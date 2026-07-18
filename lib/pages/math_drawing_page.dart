@@ -499,7 +499,6 @@ class _FormulaState {
     required this.controller,
     required this.color,
     this.autoColor = true,
-    this.committedText = '',
     this.visible = true,
-  });
+  }) : committedText = '';
 }

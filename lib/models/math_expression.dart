@@ -1,5 +1,3 @@
-import 'dart:math' as dart_math;
-
 import 'package:function_tree/function_tree.dart';
 
 /// The type of a math expression.
@@ -442,7 +440,6 @@ class MathExpression {
       if (idx >= result.length || result[idx] != '{') break; // malformed
 
       // Extract first {…} content with brace counting
-      final braceStart1 = idx;
       int depth = 1;
       idx++; // move past opening {
       final contentStart1 = idx;
@@ -456,8 +453,6 @@ class MathExpression {
       }
       if (depth != 0) break; // unmatched brace
       final content1 = result.substring(contentStart1, idx);
-      final braceEnd1 = idx; // position of '}'
-
       // Move past first }
       idx++;
       // Skip whitespace before second {
@@ -467,7 +462,6 @@ class MathExpression {
       if (idx >= result.length || result[idx] != '{') break;
 
       // Extract second {…}
-      final braceStart2 = idx;
       depth = 1;
       idx++; // move past opening {
       final contentStart2 = idx;
