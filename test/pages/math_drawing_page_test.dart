@@ -2,12 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/pages/math_drawing_page.dart';
 
-Widget _buildTestApp({bool initialShowWebView = false, String? initialExpression}) {
+Widget _buildTestApp({String? initialExpression}) {
   return MaterialApp(
-    home: MathDrawingPage(
-      initialShowWebView: initialShowWebView,
-      initialExpression: initialExpression,
-    ),
+    home: MathDrawingPage(initialExpression: initialExpression),
     localizationsDelegates: const [
       DefaultMaterialLocalizations.delegate,
       DefaultWidgetsLocalizations.delegate,
@@ -25,155 +22,145 @@ void main() {
       expect(find.text('数学绘制'), findsOneWidget);
     });
 
-    testWidgets('renders 2D tab and 3D placeholder tab', (tester) async {
+    testWidgets('renders 2D and 3D tabs', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
       expect(find.text('2D 绘图'), findsOneWidget);
       expect(find.text('3D'), findsOneWidget);
     });
 
-    testWidgets('renders formula input field', (tester) async {
+    testWidgets('shows one empty formula input initially', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
       expect(find.byType(TextField), findsOneWidget);
     });
 
-    testWidgets('renders plot button with keyboard return icon', (tester) async {
+    testWidgets('shows plot and add-formula buttons', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
       expect(find.byIcon(Icons.keyboard_return), findsOneWidget);
-    });
-
-    testWidgets('shows placeholder text when no expression entered',
-        (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-      expect(find.text('输入数学表达式，如: x^2'), findsOneWidget);
+      expect(find.byIcon(Icons.add_circle_outline), findsOneWidget);
     });
   });
 
-  group('MathDrawingPage - expression input', () {
-    testWidgets('typing expression shows in text field', (tester) async {
+  group('MathDrawingPage - multi formula', () {
+    testWidgets('typing in formula field updates state', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
       await tester.enterText(find.byType(TextField), 'x^2');
       await tester.pump();
 
-      final textField = tester.widget<TextField>(find.byType(TextField));
-      expect(textField.controller?.text, equals('x^2'));
+      final tf = tester.widget<TextField>(find.byType(TextField));
+      expect(tf.controller?.text, equals('x^2'));
     });
 
-    testWidgets('plot button enabled when expression differs from rendered',
+    testWidgets('plot button enabled when text differs from committed',
         (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
-      // Initially no expression rendered, typing enables the button
       await tester.enterText(find.byType(TextField), 'x^2');
       await tester.pump();
 
-      expect(find.byIcon(Icons.keyboard_return), findsOneWidget);
+      // Button should be enabled
+      final button = tester.widget<FilledButton>(find.byType(FilledButton));
+      expect(button.onPressed, isNotNull);
     });
 
-    testWidgets('pressing plot triggers canvas rendering', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-
-      await tester.enterText(find.byType(TextField), 'x^2');
-      await tester.pump();
-
-      await tester.tap(find.byIcon(Icons.keyboard_return));
-      await tester.pumpAndSettle();
-
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('button disabled after expression is rendered (no change)',
+    testWidgets('plot button disabled after plotting (no change)',
         (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
-      // Enter and plot
       await tester.enterText(find.byType(TextField), 'x^2');
       await tester.pump();
       await tester.tap(find.byIcon(Icons.keyboard_return));
       await tester.pumpAndSettle();
 
-      // Button should now be disabled (expression matches rendered)
-      final button = tester.widget<FilledButton>(
-        find.byType(FilledButton),
-      );
+      // Button should now be disabled
+      final button = tester.widget<FilledButton>(find.byType(FilledButton));
       expect(button.onPressed, isNull);
     });
 
-    testWidgets('button re-enabled when expression changes after render',
-        (tester) async {
+    testWidgets('plot button re-enabled when formula changes', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
-      // Enter and plot x^2
       await tester.enterText(find.byType(TextField), 'x^2');
       await tester.pump();
       await tester.tap(find.byIcon(Icons.keyboard_return));
       await tester.pumpAndSettle();
 
-      // Change the expression
+      // Change expression
       await tester.enterText(find.byType(TextField), 'x^3');
       await tester.pump();
 
-      // Button should be enabled again
-      final button = tester.widget<FilledButton>(
-        find.byType(FilledButton),
-      );
+      final button = tester.widget<FilledButton>(find.byType(FilledButton));
       expect(button.onPressed, isNotNull);
     });
-  });
 
-  group('MathDrawingPage - parameter sliders', () {
-    testWidgets('sliders appear when expression has parameters',
+    testWidgets('add formula button adds another input field',
         (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
-      await tester.enterText(find.byType(TextField), 'a*x^2 + b');
+      // Initially 1 text field
+      expect(find.byType(TextField), findsOneWidget);
+
+      // Add formula
+      await tester.tap(find.byIcon(Icons.add_circle_outline));
       await tester.pump();
 
-      await tester.tap(find.byIcon(Icons.keyboard_return));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      expect(find.text('a'), findsWidgets);
-      expect(find.text('b'), findsWidgets);
+      // Now 2 text fields
+      expect(find.byType(TextField), findsNWidgets(2));
     });
 
-    testWidgets('sliders disappear when expression is cleared',
-        (tester) async {
+    testWidgets('remove formula button removes input field', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
-      await tester.enterText(find.byType(TextField), 'a*x + b');
+      // Add second formula
+      await tester.tap(find.byIcon(Icons.add_circle_outline));
       await tester.pump();
+      expect(find.byType(TextField), findsNWidgets(2));
+
+      // Remove first formula
+      await tester.tap(find.byIcon(Icons.remove_circle_outline).first);
+      await tester.pump();
+
+      // Should have 1 left
+      expect(find.byType(TextField), findsOneWidget);
+    });
+
+    testWidgets('pressing plot with multiple formulas works', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      // Enter first formula
+      await tester.enterText(find.byType(TextField), 'x^2');
+      await tester.pump();
+
+      // Add second formula
+      await tester.tap(find.byIcon(Icons.add_circle_outline));
+      await tester.pump();
+
+      // Enter text in second text field
+      final fields = find.byType(TextField);
+      await tester.enterText(fields.last, 'x');
+      await tester.pump();
+
+      // Press plot
       await tester.tap(find.byIcon(Icons.keyboard_return));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
-      await tester.enterText(find.byType(TextField), '');
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      expect(find.text('a'), findsNothing);
+      // No crash
+      expect(tester.takeException(), isNull);
     });
   });
 
   group('MathDrawingPage - tab switching', () {
-    testWidgets('2D tab is selected by default', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-      expect(find.byType(TabBar), findsOneWidget);
-    });
-
-    testWidgets('switching to 3D tab shows coming soon message',
-        (tester) async {
+    testWidgets('switching to 3D shows placeholder', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
@@ -183,14 +170,12 @@ void main() {
       expect(find.text('3D 绘图功能即将推出'), findsOneWidget);
     });
 
-    testWidgets('switching back to 2D tab shows expression input',
-        (tester) async {
+    testWidgets('switching back to 2D shows input fields', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
       await tester.tap(find.text('3D'));
       await tester.pumpAndSettle();
-
       await tester.tap(find.text('2D 绘图'));
       await tester.pumpAndSettle();
 
@@ -199,7 +184,7 @@ void main() {
   });
 
   group('MathDrawingPage - error handling', () {
-    testWidgets('app does not crash on empty expression', (tester) async {
+    testWidgets('app does not crash', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
       expect(tester.takeException(), isNull);
@@ -226,8 +211,8 @@ void main() {
       );
       await tester.pump();
 
-      final textField = tester.widget<TextField>(find.byType(TextField));
-      expect(textField.controller?.text, equals('sin(x)'));
+      final tf = tester.widget<TextField>(find.byType(TextField));
+      expect(tf.controller?.text, equals('sin(x)'));
     });
   });
 }

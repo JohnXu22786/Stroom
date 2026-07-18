@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/models/formula_entry.dart';
+import 'package:stroom/models/math_expression.dart';
 import 'package:stroom/widgets/math_canvas.dart';
 
 void main() {
@@ -259,7 +261,7 @@ void main() {
       expect(points.length, greaterThan(0));
     });
 
-    testWidgets('updateParameters changes the function', (tester) async {
+    testWidgets('setFormulas with multiple formulas works', (tester) async {
       final key = GlobalKey<MathCanvasState>();
 
       await tester.pumpWidget(
@@ -275,23 +277,27 @@ void main() {
       );
       await tester.pump();
 
-      // Set initial expression
-      await key.currentState!
-          .setExpression('a*x', {'a': 2});
+      // Set two formulas
+      final parsed1 = MathExpression.fromInput('x^2');
+      final parsed2 = MathExpression.fromInput('x');
+      await key.currentState!.setFormulas([
+        FormulaEntry(
+          rawExpression: 'x^2',
+          parsed: parsed1,
+          color: Colors.blue,
+          autoColor: true,
+        ),
+        FormulaEntry(
+          rawExpression: 'x',
+          parsed: parsed2,
+          color: Colors.red,
+          autoColor: true,
+        ),
+      ]);
       await tester.pump();
 
-      // Get point at x=5 (should be 10)
-      final initialPoints = key.currentState!.curvePoints
-          .where((p) => (p['x']! - 5).abs() < 0.1)
-          .toList();
-      // Just verify it doesn't crash
-
-      // Update parameter
-      await key.currentState!.updateParameters({'a': 3});
-      await tester.pump();
-
-      // Should have new points (3*x instead of 2*x)
-      expect(key.currentState!.curvePoints.length, greaterThan(0));
+      // Should have points from both expressions
+      expect(key.currentState!.curvePoints.length, greaterThanOrEqualTo(2));
     });
   });
 

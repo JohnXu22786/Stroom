@@ -1,26 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_math_fork/flutter_math.dart';
 
 import '../models/math_expression.dart';
 import '../models/math_drawing_state.dart';
+import '../models/formula_entry.dart';
 import '../widgets/math_canvas.dart';
 
-/// The constant used to multiply parameter slider values for display.
-const double _parameterDefaultValue = 1.0;
-const double _parameterMinValue = -10.0;
-const double _parameterMaxValue = 10.0;
-
-/// 数学绘制页面 — 使用纯 Flutter Canvas 绘制函数图像。
-///
-/// 使用 [function_tree] 解析数学表达式，[CustomPainter] 负责渲染，
-/// 不再依赖 WebView/JSXGraph，支持全平台一致体验。
-///
-/// 点击回车按钮（而非自动渲染）才执行绘制，避免过度渲染。
+/// 数学绘制页面 — 支持多公式、悬浮公式面板。
 class MathDrawingPage extends StatefulWidget {
-  /// 初始表达式（可选）
   final String? initialExpression;
-
-  /// 初始是否显示 WebView（保留参数保持兼容，新 Canvas 始终有效）
   final bool initialShowWebView;
 
   const MathDrawingPage({
@@ -38,16 +25,16 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   late final TextEditingController _formulaController;
   late final TabController _tabController;
   final GlobalKey<MathCanvasState> _canvasKey = GlobalKey();
+  final LayerLink _overlayLayerLink = LayerLink();
 
-  // State
   ViewMode _currentView = ViewMode.mode2D;
   MathExpression? _currentExpression;
-
-  /// The last expression text that was successfully rendered (plotted).
-  /// Used to determine whether the plot button should be enabled.
+  Map<String, double> _parameterValues = {};
   String _renderedExpression = '';
 
-  Map<String, double> _parameterValues = {};
+  /// Extra formulas beyond the first one.
+  final List<_ExtraFormula> _extraFormulas = [];
+  bool _showOverlay = false;
 
   @override
   void initState() {
@@ -59,8 +46,6 @@ class _MathDrawingPageState extends State<MathDrawingPage>
       text: widget.initialExpression ?? '',
     );
 
-    // Initial expression is handled by the MathCanvas widget itself.
-    // Sync page state for LaTeX preview and parameter sliders.
     if (widget.initialExpression != null &&
         widget.initialExpression!.isNotEmpty) {
       final expr = MathExpression.fromInput(widget.initialExpression!);
@@ -69,7 +54,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
         _renderedExpression = widget.initialExpression!;
         _parameterValues = {};
         for (final param in expr.parameters) {
-          _parameterValues[param] = _parameterDefaultValue;
+          _parameterValues[param] = 1.0;
         }
       }
     }
@@ -77,6 +62,9 @@ class _MathDrawingPageState extends State<MathDrawingPage>
 
   @override
   void dispose() {
+    for (final f in _extraFormulas) {
+      f.controller.dispose();
+    }
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     _formulaController.dispose();
@@ -86,99 +74,185 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   void _onTabChanged() {
     if (!_tabController.indexIsChanging) {
       setState(() {
-        _currentView = _tabController.index == 0
-            ? ViewMode.mode2D
-            : ViewMode.mode3D;
+        _currentView =
+            _tabController.index == 0 ? ViewMode.mode2D : ViewMode.mode3D;
       });
     }
   }
 
   // ==================================================================
-  // Expression handling
+  // Expression / formula handling
   // ==================================================================
 
-  void _parseAndPlotExpression(String input) {
-    final trimmed = input.trim();
-    if (trimmed.isEmpty) return;
-
-    final expression = MathExpression.fromInput(trimmed);
-    if (!expression.isValid) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(expression.parseError ?? '表达式解析失败'),
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-      return;
+  bool get _canPlot {
+    final mainText = _formulaController.text.trim();
+    if (mainText.isNotEmpty && mainText != _renderedExpression) return true;
+    for (final f in _extraFormulas) {
+      final text = f.controller.text.trim();
+      if (text.isNotEmpty && text != f.committedText) return true;
     }
-
-    setState(() {
-      _currentExpression = expression;
-      _renderedExpression = trimmed;
-      _parameterValues = {};
-      for (final param in expression.parameters) {
-        _parameterValues[param] = _parameterDefaultValue;
-      }
-    });
-
-    _canvasKey.currentState?.setExpression(
-      expression.rawExpression,
-      _parameterValues.isNotEmpty ? _parameterValues : null,
-    );
+    return false;
   }
 
   void _onPlotPressed() {
-    _parseAndPlotExpression(_formulaController.text);
+    // Build all formula entries
+    final entries = <FormulaEntry>[];
+
+    // Main formula
+    final mainText = _formulaController.text.trim();
+    if (mainText.isNotEmpty) {
+      final parsed = MathExpression.fromInput(mainText);
+      if (!parsed.isValid) {
+        _showError(parsed.parseError ?? '表达式错误');
+        return;
+      }
+      entries.add(FormulaEntry(
+        rawExpression: mainText,
+        parsed: parsed,
+        color: formulaPalette[0],
+        autoColor: true,
+      ));
+    }
+
+    // Extra formulas
+    for (int i = 0; i < _extraFormulas.length; i++) {
+      final text = _extraFormulas[i].controller.text.trim();
+      if (text.isEmpty) continue;
+      final parsed = MathExpression.fromInput(text);
+      if (!parsed.isValid) {
+        _showError(parsed.parseError ?? '表达式 ${i + 2} 错误');
+        return;
+      }
+      entries.add(FormulaEntry(
+        rawExpression: text,
+        parsed: parsed,
+        color: _extraFormulas[i].color,
+        autoColor: _extraFormulas[i].autoColor,
+      ));
+    }
+
+    if (entries.isEmpty) return;
+
+    setState(() {
+      _renderedExpression = _formulaController.text.trim();
+      for (final f in _extraFormulas) {
+        f.committedText = f.controller.text.trim();
+      }
+      _showOverlay = false;
+    });
+
+    _canvasKey.currentState?.setFormulas(entries);
   }
 
-  /// Whether the plot button should be enabled.
-  /// Only enabled when the text field content differs from the last rendered
-  /// expression, i.e., there are uncommitted changes.
-  bool get _canPlot {
-    final currentText = _formulaController.text.trim();
-    if (currentText.isEmpty) return false;
-    return currentText != _renderedExpression;
+  void _showError(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 2),
+    ));
+  }
+
+  void _addFormula() {
+    final used = _extraFormulas
+        .where((f) => f.autoColor)
+        .map((f) => f.color)
+        .toSet()
+      ..add(formulaPalette[0]); // main formula uses first color
+    final color = nextFormulaColor(used);
+
+    setState(() {
+      _extraFormulas.add(_ExtraFormula(
+        controller: TextEditingController(),
+        color: color,
+        autoColor: true,
+      ));
+      _showOverlay = true;
+    });
+  }
+
+  void _removeExtraFormula(int index) {
+    setState(() {
+      _extraFormulas[index].controller.dispose();
+      _extraFormulas.removeAt(index);
+      if (_extraFormulas.isEmpty) _showOverlay = false;
+    });
+  }
+
+  void _onColorChanged(int index, Color newColor) {
+    setState(() {
+      _extraFormulas[index].color = newColor;
+      _extraFormulas[index].autoColor = false;
+    });
+  }
+
+  void _showColorPicker(int index) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('选择颜色'),
+        content: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: formulaPalette.map((c) {
+            final selected = _extraFormulas[index].color == c;
+            return GestureDetector(
+              onTap: () {
+                _onColorChanged(index, c);
+                Navigator.pop(ctx);
+              },
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: c,
+                  shape: BoxShape.circle,
+                  border: selected
+                      ? Border.all(color: Colors.black87, width: 3)
+                      : null,
+                ),
+                child: selected
+                    ? const Icon(Icons.check, color: Colors.white, size: 20)
+                    : null,
+              ),
+            );
+          }).toList(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _onParameterChanged(String param, double value) {
-    setState(() {
-      _parameterValues[param] = value;
-    });
-    _canvasKey.currentState?.updateParameters(_parameterValues);
+    setState(() => _parameterValues[param] = value);
+    // TODO: update parameter on canvas for the relevant formula
   }
 
-  void _onResetView() {
-    _canvasKey.currentState?.resetView();
-  }
+  void _onResetView() => _canvasKey.currentState?.resetView();
 
   // ==================================================================
   // Canvas callbacks
   // ==================================================================
 
-  void _onViewportChange(
-      double xMin, double yMin, double xMax, double yMax) {
-    debugPrint(
-      '[MathDrawing] Viewport changed: [$xMin, $yMin, $xMax, $yMax]',
-    );
+  void _onViewportChange(double xMin, double yMin, double xMax, double yMax) {
+    debugPrint('[MathDrawing] Viewport: [$xMin, $yMin, $xMax, $yMax]');
   }
 
-  void _onCanvasReady() {
-    debugPrint('[MathDrawing] Canvas is ready');
-  }
+  void _onCanvasReady() => debugPrint('[MathDrawing] Canvas ready');
 
-  void _onCanvasError(String message) {
-    debugPrint('[MathDrawing] Canvas error: $message');
+  void _onCanvasError(String msg) {
+    debugPrint('[MathDrawing] Canvas error: $msg');
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(msg),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ));
     }
   }
 
@@ -204,19 +278,18 @@ class _MathDrawingPageState extends State<MathDrawingPage>
       body: Column(
         children: [
           _buildTabBar(cs),
-          Expanded(
-            child: _currentView == ViewMode.mode2D
-                ? _build2DContent(cs)
-                : _build3DPlaceholder(cs),
-          ),
+          if (_currentView == ViewMode.mode2D) ...[
+            _buildFormulaInput(cs),
+            Expanded(child: _buildCanvasArea(cs)),
+            if (_currentExpression != null &&
+                _currentExpression!.parameters.isNotEmpty)
+              _buildParameterSliders(cs),
+          ] else
+            Expanded(child: _build3DPlaceholder(cs)),
         ],
       ),
     );
   }
-
-  // ==================================================================
-  // Tab bar
-  // ==================================================================
 
   Widget _buildTabBar(ColorScheme cs) {
     return Container(
@@ -224,73 +297,23 @@ class _MathDrawingPageState extends State<MathDrawingPage>
       child: TabBar(
         controller: _tabController,
         tabs: const [
-          Tab(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.show_chart, size: 18),
-                SizedBox(width: 6),
-                Text('2D 绘图'),
-              ],
-            ),
-          ),
-          Tab(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.view_in_ar, size: 18),
-                SizedBox(width: 6),
-                Text('3D'),
-              ],
-            ),
-          ),
+          Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.show_chart, size: 18),
+            SizedBox(width: 6),
+            Text('2D 绘图'),
+          ])),
+          Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.view_in_ar, size: 18),
+            SizedBox(width: 6),
+            Text('3D'),
+          ])),
         ],
       ),
     );
   }
 
   // ==================================================================
-  // 2D content
-  // ==================================================================
-
-  Widget _build2DContent(ColorScheme cs) {
-    return Column(
-      children: [
-        _buildFormulaInput(cs),
-        if (_currentExpression != null) _buildLatexPreview(cs),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: cs.outlineVariant,
-                    width: 0.5,
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: MathCanvas(
-                  key: _canvasKey,
-                  initialExpression: widget.initialExpression,
-                  onViewportChange: _onViewportChange,
-                  onReady: _onCanvasReady,
-                  onError: _onCanvasError,
-                ),
-              ),
-            ),
-          ),
-        ),
-        if (_currentExpression != null &&
-            _currentExpression!.parameters.isNotEmpty)
-          _buildParameterSliders(cs),
-      ],
-    );
-  }
-
-  // ==================================================================
-  // Formula input
+  // Formula input row (original style, 1 line)
   // ==================================================================
 
   Widget _buildFormulaInput(ColorScheme cs) {
@@ -298,62 +321,52 @@ class _MathDrawingPageState extends State<MathDrawingPage>
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
       child: Row(
         children: [
+          // Color dot for main formula
+          Container(
+            width: 20, height: 20,
+            margin: const EdgeInsets.only(right: 6),
+            decoration: BoxDecoration(
+              color: formulaPalette[0],
+              shape: BoxShape.circle,
+            ),
+          ),
+          // Text field
           Expanded(
             child: TextField(
               controller: _formulaController,
               decoration: InputDecoration(
-                hintText: '输入数学表达式，如: x^2',
-                labelText: '表达式',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
+                hintText: '输入表达式，如: x^2',
+                labelText: '公式 1',
                 isDense: true,
-                suffixIcon: _formulaController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        onPressed: () {
-                          _formulaController.clear();
-                          setState(() {
-                            _currentExpression = null;
-                            _renderedExpression = '';
-                            _parameterValues = {};
-                          });
-                          _canvasKey.currentState?.setExpression('', null);
-                        },
-                      )
-                    : null,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
               ),
               style: TextStyle(
                 fontFamily: 'monospace',
                 fontSize: 14,
                 color: cs.onSurface,
               ),
-              onChanged: (value) {
-                if (value.trim().isEmpty) {
-                  setState(() {
-                    _currentExpression = null;
-                    _renderedExpression = '';
-                    _parameterValues = {};
-                  });
-                  _canvasKey.currentState?.setExpression('', null);
-                } else {
-                  setState(() {});
-                }
-              },
+              onChanged: (_) => setState(() {}),
               onSubmitted: (_) => _onPlotPressed(),
             ),
           ),
-          const SizedBox(width: 8),
-          // Plot button: only enabled when text differs from rendered expression
+          const SizedBox(width: 6),
+          // Add formula button
+          IconButton(
+            icon: const Icon(Icons.add_circle_outline, size: 22),
+            tooltip: '添加公式',
+            onPressed: _addFormula,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          ),
+          const SizedBox(width: 4),
+          // Plot button (keyboard return)
           FilledButton(
             onPressed: _canPlot ? _onPlotPressed : null,
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              minimumSize: const Size(40, 40),
+              minimumSize: const Size(40, 38),
             ),
             child: const Icon(Icons.keyboard_return, size: 20),
           ),
@@ -363,41 +376,133 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   }
 
   // ==================================================================
-  // LaTeX preview
+  // Canvas area with floating overlay
   // ==================================================================
 
-  Widget _buildLatexPreview(ColorScheme cs) {
-    if (_currentExpression == null) return const SizedBox.shrink();
-
-    final latex = _currentExpression!.latexDisplay;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: cs.primaryContainer.withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.functions, size: 16, color: cs.primary),
-            const SizedBox(width: 8),
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Math.tex(
-                  latex,
-                  textStyle: TextStyle(
-                    fontSize: 16,
-                    color: cs.onSurface,
-                  ),
+  Widget _buildCanvasArea(ColorScheme cs) {
+    return Stack(
+      children: [
+        // Canvas (fills entire area)
+        Positioned.fill(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: cs.outlineVariant, width: 0.5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: MathCanvas(
+                  key: _canvasKey,
+                  onViewportChange: _onViewportChange,
+                  onReady: _onCanvasReady,
+                  onError: _onCanvasError,
                 ),
               ),
             ),
-          ],
+          ),
         ),
+        // Floating formula overlay (if extra formulas exist)
+        if (_showOverlay && _extraFormulas.isNotEmpty)
+          Positioned(
+            top: 0,
+            left: 12,
+            right: 12,
+            child: Material(
+              elevation: 6,
+              borderRadius: BorderRadius.circular(8),
+              color: cs.surface,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.3,
+                ),
+                child: ListView(
+                  padding: const EdgeInsets.all(8),
+                  shrinkWrap: true,
+                  children: [
+                    // Header
+                    Row(
+                      children: [
+                        Text('附加公式',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: cs.onSurfaceVariant,
+                                fontWeight: FontWeight.w600)),
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: () => setState(() => _showOverlay = false),
+                          child: Icon(Icons.close, size: 18, color: cs.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 8),
+                    // Extra formula rows
+                    for (int i = 0; i < _extraFormulas.length; i++)
+                      _buildExtraFormulaRow(cs, i),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildExtraFormulaRow(ColorScheme cs, int index) {
+    final f = _extraFormulas[index];
+    final hasChanged = f.controller.text.trim().isNotEmpty &&
+        f.controller.text.trim() != f.committedText;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          // Color indicator
+          GestureDetector(
+            onTap: () => _showColorPicker(index),
+            child: Container(
+              width: 20, height: 20,
+              decoration: BoxDecoration(
+                color: f.color,
+                shape: BoxShape.circle,
+                border: hasChanged
+                    ? Border.all(color: cs.primary, width: 2)
+                    : null,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          // Formula text
+          Expanded(
+            child: TextField(
+              controller: f.controller,
+              decoration: InputDecoration(
+                hintText: '公式 ${index + 2}',
+                isDense: true,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                filled: true,
+                fillColor: f.color.withValues(alpha: 0.06),
+              ),
+              style: TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 13,
+                color: cs.onSurface,
+              ),
+              onChanged: (_) => setState(() {}),
+              onSubmitted: (_) => _onPlotPressed(),
+            ),
+          ),
+          // Remove
+          IconButton(
+            icon: Icon(Icons.remove_circle_outline, size: 18, color: cs.error),
+            onPressed: () => _removeExtraFormula(index),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+          ),
+        ],
       ),
     );
   }
@@ -408,7 +513,6 @@ class _MathDrawingPageState extends State<MathDrawingPage>
 
   Widget _buildParameterSliders(ColorScheme cs) {
     final params = _currentExpression!.parameters.toList()..sort();
-
     return Container(
       constraints: const BoxConstraints(maxHeight: 120),
       child: SingleChildScrollView(
@@ -416,46 +520,36 @@ class _MathDrawingPageState extends State<MathDrawingPage>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: params.map((param) {
-            final value = _parameterValues[param] ?? _parameterDefaultValue;
+            final value = _parameterValues[param] ?? 1.0;
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 24,
-                    child: Text(
-                      param,
+              child: Row(children: [
+                SizedBox(
+                  width: 24,
+                  child: Text(param,
                       style: TextStyle(
-                        fontFamily: 'monospace',
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                        color: cs.onSurface,
-                      ),
-                    ),
+                          fontFamily: 'monospace',
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          color: cs.onSurface)),
+                ),
+                Expanded(
+                  child: Slider(
+                    value: value.toDouble(),
+                    min: -10,
+                    max: 10,
+                    divisions: 200,
+                    label: value.toStringAsFixed(2),
+                    onChanged: (v) => _onParameterChanged(param, v),
                   ),
-                  Expanded(
-                    child: Slider(
-                      value: value.toDouble(),
-                      min: _parameterMinValue,
-                      max: _parameterMaxValue,
-                      divisions: 200,
-                      label: value.toStringAsFixed(2),
-                      onChanged: (v) => _onParameterChanged(param, v),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 48,
-                    child: Text(
-                      value.toStringAsFixed(1),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: cs.onSurfaceVariant,
-                      ),
-                      textAlign: TextAlign.right,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+                SizedBox(
+                  width: 48,
+                  child: Text(value.toStringAsFixed(1),
+                      style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                      textAlign: TextAlign.right),
+                ),
+              ]),
             );
           }).toList(),
         ),
@@ -474,31 +568,34 @@ class _MathDrawingPageState extends State<MathDrawingPage>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.view_in_ar,
-              size: 64,
-              color: cs.onSurfaceVariant.withValues(alpha: 0.4),
-            ),
+            Icon(Icons.view_in_ar, size: 64,
+                color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
             const SizedBox(height: 16),
-            Text(
-              '3D 绘图功能即将推出',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-                color: cs.onSurfaceVariant,
-              ),
-            ),
+            Text('3D 绘图功能即将推出',
+                style: TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.w500, color: cs.onSurfaceVariant)),
             const SizedBox(height: 8),
-            Text(
-              '敬请期待后续更新',
-              style: TextStyle(
-                fontSize: 14,
-                color: cs.onSurfaceVariant.withValues(alpha: 0.7),
-              ),
-            ),
+            Text('敬请期待后续更新',
+                style: TextStyle(
+                    fontSize: 14, color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
           ],
         ),
       ),
     );
   }
+}
+
+/// State for an extra formula row.
+class _ExtraFormula {
+  final TextEditingController controller;
+  Color color;
+  bool autoColor;
+  String committedText;
+
+  _ExtraFormula({
+    required this.controller,
+    required this.color,
+    this.autoColor = true,
+    this.committedText = '',
+  });
 }

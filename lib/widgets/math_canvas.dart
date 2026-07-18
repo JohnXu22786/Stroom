@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 
 import '../models/math_expression.dart';
+import '../models/formula_entry.dart';
 
 /// Callback types for canvas → parent communication.
 typedef OnCoordinateUpdate = void Function(List<Map<String, double>> points);
@@ -52,6 +53,13 @@ class MathCanvas extends StatefulWidget {
   State<MathCanvas> createState() => MathCanvasState();
 }
 
+/// Internal pairing of a formula entry with its sampled curve points.
+class _FormulaCurve {
+  final FormulaEntry formula;
+  final List<Map<String, double>> points;
+  const _FormulaCurve({required this.formula, this.points = const []});
+}
+
 /// The state class for [MathCanvas], exposing methods that can be
 /// called from the parent widget to control the canvas.
 class MathCanvasState extends State<MathCanvas> {
@@ -61,12 +69,8 @@ class MathCanvasState extends State<MathCanvas> {
   double _xMax = 10;
   double _yMax = 10;
 
-  // Expression state
-  MathExpression? _currentExpression;
-  Map<String, double> _parameterValues = {};
-
-  // Sampled curve data (in math coordinates)
-  List<Map<String, double>> _curvePoints = [];
+  // Formula state (multi-formula support)
+  final List<_FormulaCurve> _formulaCurves = [];
 
   // Gesture state
   Offset? _lastFocalPoint;
@@ -87,7 +91,19 @@ class MathCanvasState extends State<MathCanvas> {
       if (!mounted) return;
       if (widget.initialExpression != null &&
           widget.initialExpression!.isNotEmpty) {
-        _parseAndPlot(widget.initialExpression!);
+        final expr = MathExpression.fromInput(widget.initialExpression!);
+        if (expr.isValid) {
+          final formula = FormulaEntry(
+            rawExpression: widget.initialExpression!,
+            parsed: expr,
+            color: formulaPalette[0],
+            autoColor: true,
+          );
+          _formulaCurves.add(_FormulaCurve(
+            formula: formula,
+            points: _sampleCurve(formula),
+          ));
+        }
       }
       if (!_isReady) {
         setState(() => _isReady = true);
@@ -100,24 +116,42 @@ class MathCanvasState extends State<MathCanvas> {
   // Public API
   // ==================================================================
 
-  /// Set/update the expression to plot.
-  Future<void> setExpression(
-      String expression, Map<String, double>? parameters) async {
-    _parseAndPlot(expression, parameters: parameters ?? {});
+  /// Set all formulas to plot (replaces any existing formulas).
+  Future<void> setFormulas(List<FormulaEntry> newFormulas) async {
+    setState(() {
+      _formulaCurves
+        ..clear()
+        ..addAll(newFormulas.map((f) => _FormulaCurve(
+              formula: f,
+              points: _sampleCurve(f),
+            )));
+    });
+    // Fire coordinate update with all points combined
+    final allPoints = _formulaCurves.expand((fc) => fc.points).toList();
+    widget.onCoordinateUpdate?.call(allPoints);
   }
 
-  /// Update parameter values without changing the expression.
-  Future<void> updateParameters(Map<String, double> parameters) async {
-    if (_currentExpression == null || !_currentExpression!.isValid) return;
-
-    _parameterValues = Map.from(parameters);
-
-    setState(() {
-      _currentExpression =
-          _currentExpression!.withParameters(_parameterValues);
-      _curvePoints = _sampleCurve();
-    });
-    widget.onCoordinateUpdate?.call(_curvePoints);
+  /// Backward-compat: set a single expression.
+  Future<void> setExpression(
+      String expression, Map<String, double>? parameters) async {
+    if (expression.isEmpty) {
+      await setFormulas([]);
+      return;
+    }
+    final parsed =
+        MathExpression.fromInput(expression, parameterValues: parameters ?? {});
+    if (!parsed.isValid) {
+      widget.onError?.call(parsed.parseError ?? '表达式错误');
+      return;
+    }
+    final formula = FormulaEntry(
+      rawExpression: expression,
+      parsed: parsed,
+      color: Colors.blue,
+      autoColor: true,
+      parameterValues: parameters ?? {},
+    );
+    await setFormulas([formula]);
   }
 
   /// Reset the viewport to the default bounds.
@@ -127,9 +161,13 @@ class MathCanvasState extends State<MathCanvas> {
       _yMin = -10;
       _xMax = 10;
       _yMax = 10;
-      _curvePoints = _sampleCurve();
+      for (int i = 0; i < _formulaCurves.length; i++) {
+        _formulaCurves[i] = _FormulaCurve(
+          formula: _formulaCurves[i].formula,
+          points: _sampleCurve(_formulaCurves[i].formula),
+        );
+      }
     });
-    widget.onCoordinateUpdate?.call(_curvePoints);
     widget.onViewportChange?.call(_xMin, _yMin, _xMax, _yMax);
   }
 
@@ -142,9 +180,13 @@ class MathCanvasState extends State<MathCanvas> {
       _yMin = yMin;
       _xMax = xMax;
       _yMax = yMax;
-      _curvePoints = _sampleCurve();
+      for (int i = 0; i < _formulaCurves.length; i++) {
+        _formulaCurves[i] = _FormulaCurve(
+          formula: _formulaCurves[i].formula,
+          points: _sampleCurve(_formulaCurves[i].formula),
+        );
+      }
     });
-    widget.onCoordinateUpdate?.call(_curvePoints);
     widget.onViewportChange?.call(_xMin, _yMin, _xMax, _yMax);
   }
 
@@ -152,38 +194,19 @@ class MathCanvasState extends State<MathCanvas> {
   (double xMin, double yMin, double xMax, double yMax) get viewport =>
       (_xMin, _yMin, _xMax, _yMax);
 
-  /// Get the current curve points.
+  /// Get all current curve points (from all formulas).
   List<Map<String, double>> get curvePoints =>
-      List.unmodifiable(_curvePoints);
+      _formulaCurves.expand((fc) => fc.points).toList();
 
   // ==================================================================
   // Internal: expression handling
   // ==================================================================
 
-  void _parseAndPlot(String input, {Map<String, double> parameters = const {}}) {
-    final expression = MathExpression.fromInput(input, parameterValues: parameters);
-
-    if (!expression.isValid) {
-      widget.onError?.call(expression.parseError ?? '表达式错误');
-      return;
-    }
-
-    setState(() {
-      _currentExpression = expression;
-      _parameterValues = Map.from(parameters);
-      _curvePoints = _sampleCurve();
-    });
-    widget.onCoordinateUpdate?.call(_curvePoints);
-  }
-
-  /// Sample the current expression at the current viewport.
+  /// Sample a single formula at the current viewport.
   /// Returns the sampled points (does NOT update state or fire callbacks).
-  List<Map<String, double>> _sampleCurve() {
-    if (_currentExpression == null || !_currentExpression!.isValid) {
-      return [];
-    }
-
-    return _currentExpression!.samplePoints(
+  List<Map<String, double>> _sampleCurve(FormulaEntry formula) {
+    if (!formula.isValid) return [];
+    return formula.parsed!.samplePoints(
       xMin: _xMin,
       xMax: _xMax,
       numPoints: 300,
@@ -210,13 +233,14 @@ class MathCanvasState extends State<MathCanvas> {
     // Determine if this is a pan or zoom
     if (details.pointerCount == 1 ||
         (scale == 1.0 && focalPoint != _lastFocalPoint)) {
-      // Pan
+      // Pan (with damping factor 0.5 for smoother control)
+      const damping = 0.5;
       final dx = _lastFocalPoint == null
           ? 0.0
-          : (focalPoint.dx - _lastFocalPoint!.dx);
+          : (focalPoint.dx - _lastFocalPoint!.dx) * damping;
       final dy = _lastFocalPoint == null
           ? 0.0
-          : (focalPoint.dy - _lastFocalPoint!.dy);
+          : (focalPoint.dy - _lastFocalPoint!.dy) * damping;
 
       final xRange = _xMax - _xMin;
       final yRange = _yMax - _yMin;
@@ -248,12 +272,23 @@ class MathCanvasState extends State<MathCanvas> {
   void _onScaleEnd(ScaleEndDetails details) {
     _lastFocalPoint = null;
     _lastScale = null;
-    // Resample after gesture ends for smooth result
+    // Resample all formulas after gesture ends for smooth result
     setState(() {
-      _curvePoints = _sampleCurve();
+      _resampleAll();
     });
-    widget.onCoordinateUpdate?.call(_curvePoints);
+    final allPoints = curvePoints;
+    widget.onCoordinateUpdate?.call(allPoints);
     widget.onViewportChange?.call(_xMin, _yMin, _xMax, _yMax);
+  }
+
+  /// Resample all formulas at the current viewport (updates _formulaCurves).
+  void _resampleAll() {
+    for (int i = 0; i < _formulaCurves.length; i++) {
+      _formulaCurves[i] = _FormulaCurve(
+        formula: _formulaCurves[i].formula,
+        points: _sampleCurve(_formulaCurves[i].formula),
+      );
+    }
   }
 
   // Mouse wheel zoom
@@ -280,9 +315,10 @@ class MathCanvasState extends State<MathCanvas> {
         _xMax = _xMin + newXRange;
         _yMin = fy - (fy - _yMin) * clampedFactor;
         _yMax = _yMin + newYRange;
-        _curvePoints = _sampleCurve();
+        _resampleAll();
       });
-      widget.onCoordinateUpdate?.call(_curvePoints);
+      final allPoints = curvePoints;
+      widget.onCoordinateUpdate?.call(allPoints);
       widget.onViewportChange?.call(_xMin, _yMin, _xMax, _yMax);
     }
   }
@@ -326,10 +362,14 @@ class MathCanvasState extends State<MathCanvas> {
                   yMin: _yMin,
                   xMax: _xMax,
                   yMax: _yMax,
-                  curves: [
-                    if (_curvePoints.isNotEmpty) _curvePoints,
-                  ],
-                  curveColors: [cs.primary],
+                  curves: _formulaCurves
+                      .map((fc) => fc.points)
+                      .where((pts) => pts.isNotEmpty)
+                      .toList(),
+                  curveColors: _formulaCurves
+                      .where((fc) => fc.points.isNotEmpty)
+                      .map((fc) => fc.formula.color)
+                      .toList(),
                   backgroundColor: cs.surface,
                   gridColor: cs.outlineVariant.withValues(alpha: 0.5),
                   axisColor: cs.onSurface,
@@ -492,11 +532,11 @@ class GraphPainter extends CustomPainter {
       ..color = gridColor
       ..strokeWidth = 0.5;
 
-    final xStep = _niceStep(xMax - xMin, 8);
-    final yStep = _niceStep(eYMax - eYMin, 8);
+    // Use the same step for both axes so they have the same number of cells.
+    final step = _niceStep((xMax - xMin + eYMax - eYMin) / 2, 8);
 
     // Vertical grid lines
-    double gx = (xMin / xStep).ceil() * xStep;
+    double gx = (xMin / step).ceil() * step;
     while (gx <= xMax) {
       if (gx.abs() > 1e-10) {
         // Skip axis line (drawn separately)
@@ -507,11 +547,11 @@ class GraphPainter extends CustomPainter {
           gridPaint,
         );
       }
-      gx += xStep;
+      gx += step;
     }
 
     // Horizontal grid lines (using effective y bounds for 1:1 aspect ratio)
-    double gy = (eYMin / yStep).ceil() * yStep;
+    double gy = (eYMin / step).ceil() * step;
     while (gy <= eYMax) {
       if (gy.abs() > 1e-10) {
         // Skip axis line
@@ -522,7 +562,7 @@ class GraphPainter extends CustomPainter {
           gridPaint,
         );
       }
-      gy += yStep;
+      gy += step;
     }
   }
 
@@ -597,15 +637,15 @@ class GraphPainter extends CustomPainter {
 
   void _drawTickLabels(
       Canvas canvas, Size size, TextStyle style, double eYMin, double eYMax) {
-    final xStep = _niceStep(xMax - xMin, 8);
-    final yStep = _niceStep(eYMax - eYMin, 8);
+    // Use the same step for both axes so they have the same number of cells.
+    final step = _niceStep((xMax - xMin + eYMax - eYMin) / 2, 8);
 
     // X-axis tick labels
     final y0 = (eYMin <= 0 && eYMax >= 0)
         ? _mathToScreenY(0, size.height, eYMin, eYMax)
         : size.height - 8;
 
-    double tx = (xMin / xStep).ceil() * xStep;
+    double tx = (xMin / step).ceil() * step;
     while (tx <= xMax) {
       if (tx.abs() > 1e-10) {
         final screenX = _mathToScreenX(tx, size.width);
@@ -630,13 +670,13 @@ class GraphPainter extends CustomPainter {
           Paint()..color = axisColor..strokeWidth = 1,
         );
       }
-      tx += xStep;
+      tx += step;
     }
 
     // Y-axis tick labels
     final x0 = (xMin <= 0 && xMax >= 0) ? _mathToScreenX(0, size.width) : 8;
 
-    double ty = (eYMin / yStep).ceil() * yStep;
+    double ty = (eYMin / step).ceil() * step;
     while (ty <= eYMax) {
       if (ty.abs() > 1e-10) {
         final screenY = _mathToScreenY(ty, size.height, eYMin, eYMax);
@@ -661,7 +701,7 @@ class GraphPainter extends CustomPainter {
           Paint()..color = axisColor..strokeWidth = 1,
         );
       }
-      ty += yStep;
+      ty += step;
     }
 
     // Origin label
