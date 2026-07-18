@@ -117,6 +117,19 @@ String formatDisplayName(String format) {
   }
 }
 
+/// 将内部检测到的格式标识符规范化为最终保存使用的格式 / 扩展名。
+///
+/// 某些检测到的格式（如原始 ADTS 封装的 AAC）从用户体验角度应当用更
+/// 通用的容器名保存。目前唯一的映射：
+/// - 'aac' → 'm4a' （ADTS 原始流在用户视角下等同于 .m4a 容器中的 AAC）
+///
+/// 其他格式保持原样（wav/mp3/flac/ogg/opus/webm/weba/wma/mp4/mpeg/m4a/pcm）。
+String normalizeAudioFormat(String format) {
+  final lower = format.toLowerCase();
+  if (lower == 'aac') return 'm4a';
+  return lower;
+}
+
 // ===========================================================================
 // 通用音频格式检测与修复
 // ===========================================================================

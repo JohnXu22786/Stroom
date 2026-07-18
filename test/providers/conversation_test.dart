@@ -420,6 +420,7 @@ void main() {
         messages: [],
       );
       conv.enabledMcpToolNames = {'calculator', 'web_search'};
+      conv.hasExplicitEnabledMcpTools = true;
 
       final map = conv.toMap();
       final restored = Conversation.fromMap(map);
@@ -427,6 +428,7 @@ void main() {
       expect(
           restored.enabledMcpToolNames, equals({'calculator', 'web_search'}));
       expect(restored.id, equals('test-id'));
+      expect(restored.hasExplicitEnabledMcpTools, isTrue);
     });
 
     test('toMap/fromMap roundtrip preserves empty enabledMcpToolNames', () {
@@ -435,12 +437,15 @@ void main() {
         title: 'Test',
         messages: [],
       );
-      // enabledMcpToolNames defaults to empty, don't change it
+      // Explicit-empty case: user toggled every tool off.
+      // The set is empty but the explicit flag is true, so it must survive.
+      conv.hasExplicitEnabledMcpTools = true;
 
       final map = conv.toMap();
       final restored = Conversation.fromMap(map);
 
       expect(restored.enabledMcpToolNames, isEmpty);
+      expect(restored.hasExplicitEnabledMcpTools, isTrue);
     });
 
     test('fromMap handles missing enabledMcpToolNames gracefully (old data)',
@@ -473,6 +478,7 @@ void main() {
         messages: [],
       );
       conv.enabledMcpToolNames = {'tool_a', 'tool_b'};
+      conv.hasExplicitEnabledMcpTools = true;
 
       final map = conv.toMap();
       // enabledMcpToolNames should be serialized as a List in JSON
@@ -491,6 +497,7 @@ void main() {
         messages: [],
       );
       conv.enabledMcpToolNames = {'tool_a', 'tool_b'};
+      conv.hasExplicitEnabledMcpTools = true;
       expect(conv.enabledMcpToolNames, equals({'tool_a', 'tool_b'}));
 
       // Replace with different set
@@ -501,9 +508,11 @@ void main() {
     test('multiple conversations preserve independent enabledMcpToolNames', () {
       final conv1 = Conversation(id: 'conv-1', title: 'Conv 1');
       conv1.enabledMcpToolNames = {'tool_a'};
+      conv1.hasExplicitEnabledMcpTools = true;
 
       final conv2 = Conversation(id: 'conv-2', title: 'Conv 2');
       conv2.enabledMcpToolNames = {'tool_b', 'tool_c'};
+      conv2.hasExplicitEnabledMcpTools = true;
 
       final map1 = conv1.toMap();
       final map2 = conv2.toMap();

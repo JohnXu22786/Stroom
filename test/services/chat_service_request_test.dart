@@ -1333,7 +1333,9 @@ void main() {
       expect((toolsConfig as List).length, equals(2));
     });
 
-    test('malformed JSON falls back to raw string', () async {
+    test(
+        'malformed JSON is omitted from the request body '
+        '(no raw string fallback)', () async {
       final modelConfig = ModelConfig(
         modelId: 'test-model',
         name: 'Test',
@@ -1356,8 +1358,13 @@ void main() {
 
       final extraParams = provider.capturedExtraParams;
       expect(extraParams, isNotNull);
-      // Malformed JSON should return the raw string
-      expect(extraParams!['bad_json'], equals('{invalid json}'));
+      // Regression: previously the malformed JSON was sent as a raw string
+      // (and re-serialized as a quoted string in the request body). Now the
+      // param is dropped entirely so the request shape is correct.
+      expect(extraParams!.containsKey('bad_json'), isFalse,
+          reason: 'Malformed JSON param should be omitted, not sent as a raw '
+              'string. This is the regression test for the '
+              '"JSON sent as stringified form" bug.');
     });
   });
 

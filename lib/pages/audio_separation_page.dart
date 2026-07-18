@@ -9,7 +9,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
 import '../utils/audio_separation.dart';
-import '../utils/audio_utils.dart' show detectAudioFormat;
+import '../utils/audio_utils.dart' show detectAudioFormat, normalizeAudioFormat;
 import '../providers/tts_state_provider.dart';
 import '../providers/background_task_provider.dart';
 import '../utils/file_manifest.dart';
@@ -803,7 +803,11 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
         displayName ?? '音频分离_${p.basenameWithoutExtension(effectiveVideoName)}';
 
     final hash = computeAudioHash(audioBytes);
-    final format = detectAudioFormat(audioBytes);
+    // 检测原始格式（可能为 'aac'）后规范化为面向用户的扩展名（如 'm4a'），
+    // 这样保存的文件以 .m4a 命名、AudioRecord.format 也为 'm4a'，与显示名
+    // (M4A) 保持一致。
+    final detectedFormat = detectAudioFormat(audioBytes);
+    final format = normalizeAudioFormat(detectedFormat);
 
     // 保存音频文件
     await FileManifest.writeFile('$hash.$format', audioBytes);
