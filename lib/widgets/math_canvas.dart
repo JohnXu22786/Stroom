@@ -54,10 +54,14 @@ class MathCanvas extends StatefulWidget {
 }
 
 /// Internal pairing of a formula entry with its sampled curve points.
+///
+/// For explicit functions, [polylines] has one entry (the y=f(x) curve).
+/// For implicit equations, [polylines] has many short segments (the
+/// zero-contour line segments from marching squares).
 class _FormulaCurve {
   final FormulaEntry formula;
-  final List<Map<String, double>> points;
-  const _FormulaCurve({required this.formula, this.points = const []});
+  final List<List<Map<String, double>>> polylines;
+  const _FormulaCurve({required this.formula, this.polylines = const []});
 }
 
 /// The state class for [MathCanvas], exposing methods that can be
@@ -101,7 +105,7 @@ class MathCanvasState extends State<MathCanvas> {
           );
           _formulaCurves.add(_FormulaCurve(
             formula: formula,
-            points: _sampleCurve(formula),
+            polylines: _sampleCurve(formula),
           ));
         }
       }
@@ -123,11 +127,12 @@ class MathCanvasState extends State<MathCanvas> {
         ..clear()
         ..addAll(newFormulas.map((f) => _FormulaCurve(
               formula: f,
-              points: _sampleCurve(f),
+              polylines: _sampleCurve(f),
             )));
     });
-    // Fire coordinate update with all points combined
-    final allPoints = _formulaCurves.expand((fc) => fc.points).toList();
+    final allPoints = _formulaCurves
+        .expand((fc) => fc.polylines.expand((pl) => pl))
+        .toList();
     widget.onCoordinateUpdate?.call(allPoints);
   }
 
@@ -164,7 +169,7 @@ class MathCanvasState extends State<MathCanvas> {
       for (int i = 0; i < _formulaCurves.length; i++) {
         _formulaCurves[i] = _FormulaCurve(
           formula: _formulaCurves[i].formula,
-          points: _sampleCurve(_formulaCurves[i].formula),
+          polylines: _sampleCurve(_formulaCurves[i].formula),
         );
       }
     });
@@ -183,7 +188,7 @@ class MathCanvasState extends State<MathCanvas> {
       for (int i = 0; i < _formulaCurves.length; i++) {
         _formulaCurves[i] = _FormulaCurve(
           formula: _formulaCurves[i].formula,
-          points: _sampleCurve(_formulaCurves[i].formula),
+          polylines: _sampleCurve(_formulaCurves[i].formula),
         );
       }
     });
@@ -196,30 +201,60 @@ class MathCanvasState extends State<MathCanvas> {
 
   /// Get all current curve points (from all formulas).
   List<Map<String, double>> get curvePoints =>
-      _formulaCurves.expand((fc) => fc.points).toList();
+      _formulaCurves.expand((fc) => fc.polylines.expand((pl) => pl)).toList();
+
+  // ==================================================================
+  // Build helpers for painter
+  // ==================================================================
+
+  /// Flatten all formula polylines into a list for the painter.
+  List<List<Map<String, double>>> _buildCurvesList() {
+    final result = <List<Map<String, double>>>[];
+    for (final fc in _formulaCurves) {
+      for (final poly in fc.polylines) {
+        if (poly.length >= 2) result.add(poly);
+      }
+    }
+    return result;
+  }
+
+  /// Build a parallel list of colors matching [_buildCurvesList].
+  List<Color> _buildColorsList() {
+    final result = <Color>[];
+    for (final fc in _formulaCurves) {
+      for (final poly in fc.polylines) {
+        if (poly.length >= 2) result.add(fc.formula.color);
+      }
+    }
+    return result;
+  }
 
   // ==================================================================
   // Internal: expression handling
   // ==================================================================
 
   /// Sample a single formula at the current viewport.
-  /// Returns the sampled points (does NOT update state or fire callbacks).
-  List<Map<String, double>> _sampleCurve(FormulaEntry formula) {
+  /// Returns polylines (list of point lists). For explicit functions this
+  /// is a single polyline; for implicit equations it's many short segments.
+  List<List<Map<String, double>>> _sampleCurve(FormulaEntry formula) {
     if (!formula.isValid) return [];
     final parsed = formula.parsed!;
     if (parsed.type == MathExpressionType.implicit) {
-      return parsed.sampleContour(
+      // Contour segments — each is a short line across one grid cell
+      return parsed.sampleContourSegments(
         xMin: _xMin,
         xMax: _xMax,
         yMin: _yMin,
         yMax: _yMax,
       );
     }
-    return parsed.samplePoints(
+    // Single explicit polyline
+    final pts = parsed.samplePoints(
       xMin: _xMin,
       xMax: _xMax,
       numPoints: 300,
     );
+    return pts.isEmpty ? [] : [pts];
   }
 
   // ==================================================================
@@ -295,7 +330,7 @@ class MathCanvasState extends State<MathCanvas> {
     for (int i = 0; i < _formulaCurves.length; i++) {
       _formulaCurves[i] = _FormulaCurve(
         formula: _formulaCurves[i].formula,
-        points: _sampleCurve(_formulaCurves[i].formula),
+        polylines: _sampleCurve(_formulaCurves[i].formula),
       );
     }
   }
@@ -371,14 +406,8 @@ class MathCanvasState extends State<MathCanvas> {
                   yMin: _yMin,
                   xMax: _xMax,
                   yMax: _yMax,
-                  curves: _formulaCurves
-                      .map((fc) => fc.points)
-                      .where((pts) => pts.isNotEmpty)
-                      .toList(),
-                  curveColors: _formulaCurves
-                      .where((fc) => fc.points.isNotEmpty)
-                      .map((fc) => fc.formula.color)
-                      .toList(),
+                  curves: _buildCurvesList(),
+                  curveColors: _buildColorsList(),
                   backgroundColor: cs.surface,
                   gridColor: cs.outlineVariant.withValues(alpha: 0.5),
                   axisColor: cs.onSurface,

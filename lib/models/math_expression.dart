@@ -217,10 +217,14 @@ class MathExpression {
 
   /// Sample the contour of an implicit equation f(x,y)=0 within the viewport.
   ///
-  /// Uses a fine grid (resolution x [gridX] × [gridY]) and scans for
-  /// zero crossings. Returns a list of {x, y} coordinate pairs along
-  /// the contour(s). For explicit functions, returns [samplePoints].
-  List<Map<String, double>> sampleContour({
+  /// Uses marching squares on a fine grid and returns line segments
+  /// (pairs of points). Each inner list has exactly 2 {x, y} maps
+  /// forming one segment of the contour. For non-implicit expressions,
+  /// falls back to [samplePoints].
+  ///
+  /// The segment-based output avoids the "scattered points" issue
+  /// where unordered contour points get connected incorrectly.
+  List<List<Map<String, double>>> sampleContourSegments({
     double xMin = -10,
     double xMax = 10,
     double yMin = -10,
@@ -228,16 +232,13 @@ class MathExpression {
     int gridX = 80,
     int gridY = 80,
   }) {
-    if (!isValid || xMax <= xMin || yMax <= yMin) return [];
-    if (type == MathExpressionType.explicit) {
-      // Fall back to regular sampling for explicit functions
-      return samplePoints(xMin: xMin, xMax: xMax, numPoints: gridX);
-    }
+    final result = <List<Map<String, double>>>[];
+    if (!isValid || xMax <= xMin || yMax <= yMin) return result;
+    if (type == MathExpressionType.explicit) return result;
 
     final evaluator2D = implicitEvaluator;
-    if (evaluator2D == null) return [];
+    if (evaluator2D == null) return result;
 
-    // Grid scanning with marching squares to find zero crossings.
     final stepX = (xMax - xMin) / gridX;
     final stepY = (yMax - yMin) / gridY;
 
@@ -246,7 +247,6 @@ class MathExpression {
     for (int i = 0; i <= gridX; i++) {
       grid.add(List<double>.filled(gridY + 1, double.nan));
     }
-
     for (int ix = 0; ix <= gridX; ix++) {
       final x = xMin + ix * stepX;
       for (int iy = 0; iy <= gridY; iy++) {
@@ -259,8 +259,7 @@ class MathExpression {
       }
     }
 
-    // Find zero crossings on each grid cell
-    final points = <Map<String, double>>[];
+    // Marching squares: for each cell, find zero-crossing edge pairs.
     for (int ix = 0; ix < gridX; ix++) {
       for (int iy = 0; iy < gridY; iy++) {
         final v00 = grid[ix][iy];
@@ -270,35 +269,84 @@ class MathExpression {
 
         if (v00.isNaN || v10.isNaN || v01.isNaN || v11.isNaN) continue;
 
-        // Check if the cell contains a zero crossing
-        // (opposite signs on any edge)
         final x = xMin + ix * stepX;
         final y = yMin + iy * stepY;
 
+        // Collect crossing info for each edge
+        double? bottomT, topT, leftT, rightT;
+
         // Bottom edge (v00-v10)
         if (v00 * v10 < 0) {
-          final t = v00.abs() / (v00.abs() + v10.abs());
-          points.add({'x': x + t * stepX, 'y': y.toDouble()});
+          bottomT = v00.abs() / (v00.abs() + v10.abs());
         }
         // Top edge (v01-v11)
         if (v01 * v11 < 0) {
-          final t = v01.abs() / (v01.abs() + v11.abs());
-          points.add({'x': x + t * stepX, 'y': (y + stepY).toDouble()});
+          topT = v01.abs() / (v01.abs() + v11.abs());
         }
         // Left edge (v00-v01)
         if (v00 * v01 < 0) {
-          final t = v00.abs() / (v00.abs() + v01.abs());
-          points.add({'x': x.toDouble(), 'y': y + t * stepY});
+          leftT = v00.abs() / (v00.abs() + v01.abs());
         }
         // Right edge (v10-v11)
         if (v10 * v11 < 0) {
-          final t = v10.abs() / (v10.abs() + v11.abs());
-          points.add({'x': (x + stepX).toDouble(), 'y': y + t * stepY});
+          rightT = v10.abs() / (v10.abs() + v11.abs());
+        }
+
+        // Count crossings and connect pairs
+        final crossings = [
+          if (bottomT != null) 'bottom',
+          if (topT != null) 'top',
+          if (leftT != null) 'left',
+          if (rightT != null) 'right',
+        ];
+
+        // With 2 crossings, connect them as a segment
+        // With 4 (ambiguous), connect bottom-top and left-right
+        // as a reasonable heuristic (works for most smooth curves)
+        if (crossings.length == 2) {
+          final p1 = _crossingPoint(
+              crossings[0], bottomT, topT, leftT, rightT,
+              x, y, stepX, stepY);
+          final p2 = _crossingPoint(
+              crossings[1], bottomT, topT, leftT, rightT,
+              x, y, stepX, stepY);
+          if (p1 != null && p2 != null) {
+            result.add([p1, p2]);
+          }
+        } else if (crossings.length == 4) {
+          // Ambiguous case: pair opposite edges
+          final pBottom = _crossingPoint('bottom', bottomT, topT, leftT, rightT,
+              x, y, stepX, stepY);
+          final pTop = _crossingPoint('top', bottomT, topT, leftT, rightT,
+              x, y, stepX, stepY);
+          final pLeft = _crossingPoint('left', bottomT, topT, leftT, rightT,
+              x, y, stepX, stepY);
+          final pRight = _crossingPoint('right', bottomT, topT, leftT, rightT,
+              x, y, stepX, stepY);
+          if (pBottom != null && pTop != null) result.add([pBottom, pTop]);
+          if (pLeft != null && pRight != null) result.add([pLeft, pRight]);
         }
       }
     }
 
-    return points;
+    return result;
+  }
+
+  /// Compute the (x,y) coordinates of a crossing on the specified edge.
+  Map<String, double>? _crossingPoint(
+      String edge, double? bT, double? tT, double? lT, double? rT,
+      double x, double y, double stepX, double stepY) {
+    switch (edge) {
+      case 'bottom':
+        return bT == null ? null : {'x': x + bT * stepX, 'y': y};
+      case 'top':
+        return tT == null ? null : {'x': x + tT * stepX, 'y': y + stepY};
+      case 'left':
+        return lT == null ? null : {'x': x, 'y': y + lT * stepY};
+      case 'right':
+        return rT == null ? null : {'x': x + stepX, 'y': y + rT * stepY};
+    }
+    return null;
   }
 
   /// Check whether [expr] contains `=` as an equation (not y= / f(x)= prefix).
@@ -353,11 +401,16 @@ class MathExpression {
   /// Normalize an expression for [function_tree] parsing.
   ///
   /// Handles:
+  /// - LaTeX braces `{}` → `()` so that `2^{x-1}` becomes `2^(x-1)`
   /// - Whitespace removal
   /// - Insertion of explicit `*` for implicit multiplication (e.g., `2x` → `2*x`)
   static String _normalizeExpression(String expr) {
     var result = expr.trim();
     if (result.isEmpty) return '';
+
+    // Convert LaTeX-style braces to parentheses: {} → ()
+    // This ensures 2^{x-1} is parsed as 2^(x-1) by function_tree.
+    result = result.replaceAll('{', '(').replaceAll('}', ')');
 
     // Remove whitespace
     result = result.replaceAll(RegExp(r'\s+'), '');

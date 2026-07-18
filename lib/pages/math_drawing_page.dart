@@ -290,13 +290,14 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   // ==================================================================
 
   Widget _buildFormulaList(ColorScheme cs) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: 180),
-      child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
-        itemCount: _formulas.length,
-        itemBuilder: (_, index) => _buildFormulaRow(cs, index),
-      ),
+    // Dynamic expand: no max height, the list grows as formulas are added,
+    // pushing the canvas down naturally.
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _formulas.length,
+      itemBuilder: (_, index) => _buildFormulaRow(cs, index),
     );
   }
 
@@ -352,6 +353,22 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                     OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
                 filled: true,
                 fillColor: f.color.withValues(alpha: 0.06),
+                // Undo button: appears only when text has been modified
+                suffixIcon: hasChanged
+                    ? IconButton(
+                        icon: Icon(Icons.undo, size: 16, color: cs.onSurfaceVariant),
+                        tooltip: '撤销修改',
+                        onPressed: () {
+                          f.controller.text = f.committedText;
+                          f.controller.selection = TextSelection.fromPosition(
+                            TextPosition(offset: f.committedText.length),
+                          );
+                          setState(() {});
+                        },
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                      )
+                    : null,
               ),
               style: TextStyle(
                 fontFamily: 'monospace',
