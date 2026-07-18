@@ -434,7 +434,8 @@ class MathCanvasWebViewState extends State<MathCanvasWebView> {
   }
 
   /// Set/update the expression to plot on the canvas.
-  Future<void> setExpression(String expression, Map<String, double>? parameters) async {
+  Future<void> setExpression(
+      String expression, Map<String, double>? parameters) async {
     final ctrl = _webViewController;
     if (ctrl == null) return;
 
@@ -465,7 +466,8 @@ class MathCanvasWebViewState extends State<MathCanvasWebView> {
   }
 
   /// Set the viewport to specific bounds.
-  Future<void> setViewport(double xMin, double yMin, double xMax, double yMax) async {
+  Future<void> setViewport(
+      double xMin, double yMin, double xMax, double yMax) async {
     final ctrl = _webViewController;
     if (ctrl == null) return;
     await ctrl.evaluateJavascript(

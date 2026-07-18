@@ -58,7 +58,8 @@ class FormulaEntry {
     );
   }
 
-  bool get isValid => rawExpression.isNotEmpty && parsed != null && parsed!.isValid;
+  bool get isValid =>
+      rawExpression.isNotEmpty && parsed != null && parsed!.isValid;
 }
 
 /// Assign the next auto-color from the palette, skipping [usedColors].

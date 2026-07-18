@@ -85,8 +85,6 @@ class MathCanvasState extends State<MathCanvas> {
   double _canvasWidth = 1;
   double _canvasHeight = 1;
 
-
-
   @override
   void initState() {
     super.initState();
@@ -130,9 +128,8 @@ class MathCanvasState extends State<MathCanvas> {
               polylines: _sampleCurve(f),
             )));
     });
-    final allPoints = _formulaCurves
-        .expand((fc) => fc.polylines.expand((pl) => pl))
-        .toList();
+    final allPoints =
+        _formulaCurves.expand((fc) => fc.polylines.expand((pl) => pl)).toList();
     widget.onCoordinateUpdate?.call(allPoints);
   }
 
@@ -518,7 +515,8 @@ class GraphPainter extends CustomPainter {
     return (mathX - xMin) / (xMax - xMin) * width;
   }
 
-  double _mathToScreenY(double mathY, double height, double eYMin, double eYMax) {
+  double _mathToScreenY(
+      double mathY, double height, double eYMin, double eYMax) {
     return (1.0 - (mathY - eYMin) / (eYMax - eYMin)) * height;
   }
 
@@ -548,7 +546,8 @@ class GraphPainter extends CustomPainter {
   static double _niceStep(double range, int targetTicks) {
     if (range <= 0) return 1.0;
     final roughStep = range / targetTicks;
-    final magnitude = dart_math.pow(10, (dart_math.log(roughStep) / dart_math.ln10).floor());
+    final magnitude =
+        dart_math.pow(10, (dart_math.log(roughStep) / dart_math.ln10).floor());
     final residual = roughStep / magnitude;
 
     double niceStep;
@@ -705,7 +704,9 @@ class GraphPainter extends CustomPainter {
         canvas.drawLine(
           Offset(screenX, y0 - 3),
           Offset(screenX, y0 + 3),
-          Paint()..color = axisColor..strokeWidth = 1,
+          Paint()
+            ..color = axisColor
+            ..strokeWidth = 1,
         );
       }
       tx += step;
@@ -736,7 +737,9 @@ class GraphPainter extends CustomPainter {
         canvas.drawLine(
           Offset(x0 - 3, screenY),
           Offset(x0 + 3, screenY),
-          Paint()..color = axisColor..strokeWidth = 1,
+          Paint()
+            ..color = axisColor
+            ..strokeWidth = 1,
         );
       }
       ty += step;
@@ -785,8 +788,7 @@ class GraphPainter extends CustomPainter {
   // Curves
   // ==================================================================
 
-  void _drawCurves(
-      Canvas canvas, Size size, double eYMin, double eYMax) {
+  void _drawCurves(Canvas canvas, Size size, double eYMin, double eYMax) {
     for (int c = 0; c < curves.length; c++) {
       final points = curves[c];
       if (points.length < 2) continue;

@@ -117,7 +117,8 @@ class MathExpression {
           // Normalize the implicit expression
           final normalizedImplicit = _normalizeExpression(implicitExpr);
           // Create multi-variable evaluator with x and y
-          implicitFn = _createImplicitEvaluator(normalizedImplicit, parameterValues);
+          implicitFn =
+              _createImplicitEvaluator(normalizedImplicit, parameterValues);
           // Also create a backward-compat explicit evaluator (y=0 slice)
           evalFn = (double x) => implicitFn!(x, 0.0);
         } else {
@@ -136,12 +137,15 @@ class MathExpression {
     return MathExpression._(
       rawExpression: trimmed,
       normalizedExpression: normalized,
-      type: isEquation ? MathExpressionType.implicit : MathExpressionType.explicit,
+      type: isEquation
+          ? MathExpressionType.implicit
+          : MathExpressionType.explicit,
       latexDisplay: _toLatexDisplay(trimmed),
       parameters: params,
-      evaluator: evalFn ?? ((double x) {
-        throw error ?? 'Unknown parse error';
-      }),
+      evaluator: evalFn ??
+          ((double x) {
+            throw error ?? 'Unknown parse error';
+          }),
       implicitEvaluator: implicitFn,
       parseError: error,
     );
@@ -159,7 +163,8 @@ class MathExpression {
       if (type == MathExpressionType.implicit) {
         final eqParts = normalizedExpression.split('=');
         if (eqParts.length == 2) {
-          final implicitExpr = _normalizeExpression('(${eqParts[0]})-(${eqParts[1]})');
+          final implicitExpr =
+              _normalizeExpression('(${eqParts[0]})-(${eqParts[1]})');
           implicitFn = _createImplicitEvaluator(implicitExpr, parameterValues);
           evalFn = (double x) => implicitFn!(x, 0.0);
         }
@@ -176,9 +181,10 @@ class MathExpression {
       type: type,
       latexDisplay: latexDisplay,
       parameters: parameters,
-      evaluator: evalFn ?? ((double x) {
-        throw error ?? 'Unknown parse error';
-      }),
+      evaluator: evalFn ??
+          ((double x) {
+            throw error ?? 'Unknown parse error';
+          }),
       implicitEvaluator: implicitFn,
       parseError: error,
     );
@@ -303,24 +309,22 @@ class MathExpression {
         // as a reasonable heuristic (works for most smooth curves)
         if (crossings.length == 2) {
           final p1 = _crossingPoint(
-              crossings[0], bottomT, topT, leftT, rightT,
-              x, y, stepX, stepY);
+              crossings[0], bottomT, topT, leftT, rightT, x, y, stepX, stepY);
           final p2 = _crossingPoint(
-              crossings[1], bottomT, topT, leftT, rightT,
-              x, y, stepX, stepY);
+              crossings[1], bottomT, topT, leftT, rightT, x, y, stepX, stepY);
           if (p1 != null && p2 != null) {
             result.add([p1, p2]);
           }
         } else if (crossings.length == 4) {
           // Ambiguous case: pair opposite edges
-          final pBottom = _crossingPoint('bottom', bottomT, topT, leftT, rightT,
-              x, y, stepX, stepY);
-          final pTop = _crossingPoint('top', bottomT, topT, leftT, rightT,
-              x, y, stepX, stepY);
-          final pLeft = _crossingPoint('left', bottomT, topT, leftT, rightT,
-              x, y, stepX, stepY);
-          final pRight = _crossingPoint('right', bottomT, topT, leftT, rightT,
-              x, y, stepX, stepY);
+          final pBottom = _crossingPoint(
+              'bottom', bottomT, topT, leftT, rightT, x, y, stepX, stepY);
+          final pTop = _crossingPoint(
+              'top', bottomT, topT, leftT, rightT, x, y, stepX, stepY);
+          final pLeft = _crossingPoint(
+              'left', bottomT, topT, leftT, rightT, x, y, stepX, stepY);
+          final pRight = _crossingPoint(
+              'right', bottomT, topT, leftT, rightT, x, y, stepX, stepY);
           if (pBottom != null && pTop != null) result.add([pBottom, pTop]);
           if (pLeft != null && pRight != null) result.add([pLeft, pRight]);
         }
@@ -331,9 +335,8 @@ class MathExpression {
   }
 
   /// Compute the (x,y) coordinates of a crossing on the specified edge.
-  Map<String, double>? _crossingPoint(
-      String edge, double? bT, double? tT, double? lT, double? rT,
-      double x, double y, double stepX, double stepY) {
+  Map<String, double>? _crossingPoint(String edge, double? bT, double? tT,
+      double? lT, double? rT, double x, double y, double stepX, double stepY) {
     switch (edge) {
       case 'bottom':
         return bT == null ? null : {'x': x + bT * stepX, 'y': y};
@@ -610,9 +613,25 @@ class MathExpression {
   /// Known function names that should not trigger implicit multiplication
   /// insertion when followed by '('.
   static const Set<String> _knownFunctions = {
-    'sin', 'cos', 'tan', 'sqrt', 'abs', 'ln', 'log', 'exp',
-    'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh',
-    'sec', 'csc', 'cot', 'pow', 'nrt',
+    'sin',
+    'cos',
+    'tan',
+    'sqrt',
+    'abs',
+    'ln',
+    'log',
+    'exp',
+    'asin',
+    'acos',
+    'atan',
+    'sinh',
+    'cosh',
+    'tanh',
+    'sec',
+    'csc',
+    'cot',
+    'pow',
+    'nrt',
   };
 
   /// Create an evaluator [double Function(double)] from a normalized expression.
@@ -629,7 +648,16 @@ class MathExpression {
     // This ensures we handle parameters like a, b, c even if no values provided.
     final variableNames = <String>['x'];
     // Built-in constants in function_tree that should not be treated as variables
-    const builtinConstants = {'e', 'pi', 'ln2', 'ln10', 'log2e', 'log10e', 'sqrt1_2', 'sqrt2'};
+    const builtinConstants = {
+      'e',
+      'pi',
+      'ln2',
+      'ln10',
+      'log2e',
+      'log10e',
+      'sqrt1_2',
+      'sqrt2'
+    };
     // Use a simple regex to find potential variable names
     final varMatches = RegExp(r'\b([a-zA-Z]\w*)\b').allMatches(normalized);
     for (final m in varMatches) {
@@ -748,7 +776,8 @@ class MathExpression {
 
     // Convert known functions to Math.* equivalents
     expr = expr.replaceAllMapped(
-      RegExp(r'\b(sin|cos|tan|sqrt|abs|ln|log|exp|asin|acos|atan|sinh|cosh|tanh)\('),
+      RegExp(
+          r'\b(sin|cos|tan|sqrt|abs|ln|log|exp|asin|acos|atan|sinh|cosh|tanh)\('),
       (m) => 'Math.${m[1]}(',
     );
 

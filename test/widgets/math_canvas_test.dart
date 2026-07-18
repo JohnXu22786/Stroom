@@ -104,7 +104,9 @@ void main() {
         xMax: 10,
         yMax: 10,
         curves: [
-          [{'x': 0.0, 'y': 0.0}],
+          [
+            {'x': 0.0, 'y': 0.0}
+          ],
         ],
       );
       final painter2 = const GraphPainter(
@@ -253,8 +255,7 @@ void main() {
       );
       await tester.pump();
 
-      await key.currentState!
-          .setExpression('a*x^2', {'a': 2});
+      await key.currentState!.setExpression('a*x^2', {'a': 2});
       await tester.pump();
 
       final points = key.currentState!.curvePoints;
@@ -387,8 +388,7 @@ void main() {
               height: 300,
               child: MathCanvas(
                 key: key,
-                onViewportChange: (_, __, ___, ____) =>
-                    viewportChanged = true,
+                onViewportChange: (_, __, ___, ____) => viewportChanged = true,
               ),
             ),
           ),

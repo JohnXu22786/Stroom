@@ -58,9 +58,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   void _onTabChanged() {
     if (!_tabController.indexIsChanging) {
       setState(() {
-        _currentView = _tabController.index == 0
-            ? ViewMode.mode2D
-            : ViewMode.mode3D;
+        _currentView =
+            _tabController.index == 0 ? ViewMode.mode2D : ViewMode.mode3D;
       });
     }
   }
@@ -112,10 +111,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   }
 
   void _addFormula() {
-    final used = _formulas
-        .where((f) => f.autoColor)
-        .map((f) => f.color)
-        .toSet();
+    final used =
+        _formulas.where((f) => f.autoColor).map((f) => f.color).toSet();
     final color = nextFormulaColor(used);
 
     setState(() {
@@ -152,7 +149,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
               Navigator.pop(ctx);
               _removeFormula(index);
             },
-            child: Text('删除', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            child: Text('删除',
+                style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
         ],
       ),
@@ -270,12 +268,14 @@ class _MathDrawingPageState extends State<MathDrawingPage>
       child: TabBar(
         controller: _tabController,
         tabs: const [
-          Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Tab(
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
             Icon(Icons.show_chart, size: 18),
             SizedBox(width: 6),
             Text('2D 绘图'),
           ])),
-          Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Tab(
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
             Icon(Icons.view_in_ar, size: 18),
             SizedBox(width: 6),
             Text('3D'),
@@ -319,9 +319,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
               decoration: BoxDecoration(
                 color: f.color,
                 shape: BoxShape.circle,
-                border: hasChanged
-                    ? Border.all(color: cs.primary, width: 2)
-                    : null,
+                border:
+                    hasChanged ? Border.all(color: cs.primary, width: 2) : null,
               ),
             ),
           ),
@@ -356,7 +355,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                 // Undo button: appears only when text has been modified
                 suffixIcon: hasChanged
                     ? IconButton(
-                        icon: Icon(Icons.undo, size: 16, color: cs.onSurfaceVariant),
+                        icon: Icon(Icons.undo,
+                            size: 16, color: cs.onSurfaceVariant),
                         tooltip: '撤销修改',
                         onPressed: () {
                           f.controller.text = f.committedText;
@@ -366,7 +366,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                           setState(() {});
                         },
                         padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                        constraints:
+                            const BoxConstraints(minWidth: 24, minHeight: 24),
                       )
                     : null,
               ),
@@ -395,7 +396,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
           // ---- Remove formula (X) button ----
           if (_formulas.length > 1)
             IconButton(
-              icon: Icon(Icons.remove_circle_outline, size: 18, color: cs.error.withValues(alpha: 0.7)),
+              icon: Icon(Icons.remove_circle_outline,
+                  size: 18, color: cs.error.withValues(alpha: 0.7)),
               tooltip: '删除公式',
               onPressed: () => _confirmRemove(index),
               padding: EdgeInsets.zero,
@@ -407,9 +409,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             icon: Icon(
               Icons.check_circle_outline,
               size: 22,
-              color: hasChanged
-                  ? cs.primary
-                  : cs.onSurface.withValues(alpha: 0.2),
+              color:
+                  hasChanged ? cs.primary : cs.onSurface.withValues(alpha: 0.2),
             ),
             tooltip: '绘制',
             onPressed: _canPlot ? _plotAll : null,
@@ -467,8 +468,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.view_in_ar,
-                size: 64,
-                color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+                size: 64, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
             const SizedBox(height: 16),
             Text('3D 绘图功能即将推出',
                 style: TextStyle(
