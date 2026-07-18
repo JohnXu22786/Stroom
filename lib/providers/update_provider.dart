@@ -110,6 +110,7 @@ const String _kSkippedVersionKey = 'update_skipped_version';
 const String _kUpdateAvailableKey = 'update_available_data';
 const String _kAcceptPreReleaseKey = 'update_accept_pre_release';
 const String _kPendingUpdateRestartKey = 'pending_update_restart';
+const String _kDownloadedFilePathKey = 'update_downloaded_file_path';
 
 /// In-memory flag that survives as long as the Dart isolate is alive.
 /// Set to `true` right before the APK installer is launched on Android.
@@ -127,6 +128,10 @@ bool _pendingRestartInMemory = false;
 /// Exported so that [main.dart] and [startup_app.dart] can check and clear
 /// it during cold-start without importing the notifier.
 String get pendingUpdateRestartKey => _kPendingUpdateRestartKey;
+
+/// The SharedPreferences key used to persist the downloaded installer file
+/// path for cleanup on next app startup.
+String get downloadFilePathKey => _kDownloadedFilePathKey;
 
 /// Returns `true` if a pending-update-restart flag was found in
 /// SharedPreferences.  The caller should clear the flag after handling it.
@@ -575,6 +580,9 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
           isInstalling: true,
         );
 
+        // 持久化文件路径，以便下次启动时清理残留安装包
+        await _saveDownloadedFilePath();
+
         // 自动安装：下载完成后立即安装，无需用户点击安装按钮
         try {
           await installDownloadedFile();
@@ -677,6 +685,9 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   /// ### 全部桌面端
   /// - .zip → 解压后走自更新流程（替换文件并重启）
   /// - 其他类型 → [launchUrl] 以系统默认方式打开
+  ///
+  /// 启动安装程序后，会尝试清理下载的安装包文件。如果文件被占用，
+  /// 将在下次启动时通过 [cleanupStaleInstallerFiles] 清理。
   Future<void> _installOnDesktop(String filePath) async {
     final fileName = filePath.split(Platform.pathSeparator).last.toLowerCase();
 
@@ -684,6 +695,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       if (fileName.endsWith('.exe') || fileName.endsWith('.msi')) {
         // Windows: 直接启动安装程序
         await Process.start(filePath, [], runInShell: true);
+        // 启动后尝试清理安装包
+        await cleanupDownloadedFile();
         return;
       }
     } else if (Platform.isMacOS) {
@@ -691,6 +704,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         // macOS: 挂载 dmg 或启动 pkg 安装器
         final uri = Uri.file(filePath);
         await launchUrl(uri, mode: LaunchMode.externalApplication);
+        // 启动后尝试清理安装包
+        await cleanupDownloadedFile();
         return;
       }
     } else if (Platform.isLinux) {
@@ -698,17 +713,22 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         // Linux AppImage: 加执行权限后直接运行
         await Process.run('chmod', ['+x', filePath]);
         await Process.run(filePath, []);
+        // 启动后尝试清理安装包
+        await cleanupDownloadedFile();
         return;
       }
       if (fileName.endsWith('.deb') || fileName.endsWith('.rpm')) {
         // Linux 包: 通过系统默认打开（会调起包管理器）
         final uri = Uri.file(filePath);
         await launchUrl(uri, mode: LaunchMode.externalApplication);
+        // 启动后尝试清理安装包
+        await cleanupDownloadedFile();
         return;
       }
     }
 
     // .zip：自更新流程（解压 → 替换 → 重启）
+    // 安装包将在下次启动时通过 cleanupStaleInstallerFiles 清理
     if (fileName.endsWith('.zip')) {
       await _selfUpdateFromZip(filePath);
       return;
@@ -718,6 +738,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     final uri = Uri.file(filePath);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
+      // 启动后尝试清理安装包
+      await cleanupDownloadedFile();
     }
   }
 
@@ -838,14 +860,83 @@ rm -- "\$0"
   /// then calls [installDownloadedFile]. Resets [UpdateState.isInstalling] to
   /// `false` after the install attempt completes (success or failure).
   ///
-  /// This is used by the update dialog's "手动安装" button when auto-install
-  /// fails — the APK is already on disk and only needs to be re-triggered.
+  /// This is used by the update dialog's "手动安装" (and "打开安装包") button
+  /// when auto-install fails or the user wants to re-open the installer —
+  /// the file is already on disk and only needs to be re-triggered.
   Future<void> retryInstall() async {
     state = state.copyWith(isInstalling: true, downloadError: null);
     try {
       await installDownloadedFile();
     } finally {
       state = state.copyWith(isInstalling: false);
+    }
+  }
+
+  /// Deletes the downloaded installer file at [state.downloadedFilePath].
+  ///
+  /// This is called after the installer process has been launched:
+  /// - For direct installers (.exe/.msi etc.): called immediately after
+  ///   [Process.start] returns, best-effort deletion.
+  /// - For zip self-update: the file is cleaned up on next app startup via
+  ///   [cleanupStaleInstallerFiles].
+  ///
+  /// Does nothing if [state.downloadedFilePath] is null, empty, or the
+  /// file does not exist. Errors are silently caught.
+  Future<void> cleanupDownloadedFile() async {
+    final path = state.downloadedFilePath;
+    if (path == null || path.isEmpty) return;
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+        debugPrint('[UpdateNotifier] Cleaned up downloaded file: $path');
+      }
+    } catch (e) {
+      // File may still be in use (e.g., installer process is reading it).
+      // It will be cleaned up on next startup.
+      debugPrint('[UpdateNotifier] Failed to delete $path: $e');
+    }
+  }
+
+  /// Persists the downloaded file path to SharedPreferences so it can be
+  /// cleaned up on the next app startup if the file was not deleted before.
+  Future<void> _saveDownloadedFilePath() async {
+    final path = state.downloadedFilePath;
+    if (path == null || path.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kDownloadedFilePathKey, path);
+    } catch (e) {
+      debugPrint('[UpdateNotifier] Failed to save file path: $e');
+    }
+  }
+
+  /// Cleans up stale installer files from a previous update session.
+  ///
+  /// Called on app startup ([Application._runPostStartupTasks]). Reads the
+  /// persisted file path from SharedPreferences, deletes the file if it
+  /// exists, and removes the key from SharedPreferences.
+  ///
+  /// This handles the case where:
+  /// - The app was restarted after a zip self-update.
+  /// - The installer file could not be deleted immediately after launch
+  ///   (file in use).
+  /// - The user launched the app after a manual update.
+  Future<void> cleanupStaleInstallerFiles() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final path = prefs.getString(_kDownloadedFilePathKey);
+      if (path == null || path.isEmpty) return;
+
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+        debugPrint('[UpdateNotifier] Cleaned up stale installer: $path');
+      }
+      // Remove the key regardless (file may have already been deleted).
+      await prefs.remove(_kDownloadedFilePathKey);
+    } catch (e) {
+      debugPrint('[UpdateNotifier] Failed to clean up stale installers: $e');
     }
   }
 

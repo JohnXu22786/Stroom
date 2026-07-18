@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Directory;
+import 'dart:io' show Directory, File;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart'
     show
@@ -1616,6 +1616,156 @@ void main() {
       // No releases pass the filter → no update
       expect(notifier.state.updateAvailable, false);
       expect(notifier.state.availableVersions, isNull);
+    });
+  });
+
+  group('UpdateNotifier - Cleanup downloaded file', () {
+    late String tempDir;
+
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      tempDir =
+          Directory.systemTemp.createTempSync('stroom_test_cleanup_').path;
+    });
+
+    tearDown(() {
+      try {
+        Directory(tempDir).deleteSync(recursive: true);
+      } catch (_) {}
+    });
+
+    test('cleanupDownloadedFile deletes the downloaded file when it exists',
+        () async {
+      final dio = Dio(BaseOptions());
+      final notifier = UpdateNotifier(dio: dio);
+
+      // Create a real file to clean up
+      final testFile = File('$tempDir/test_cleanup.apk');
+      await testFile.writeAsBytes([1, 2, 3]);
+      expect(await testFile.exists(), true);
+
+      notifier.state = UpdateState(
+        downloadComplete: true,
+        downloadedFilePath: testFile.path,
+      );
+
+      await notifier.cleanupDownloadedFile();
+
+      expect(await testFile.exists(), false);
+    });
+
+    test('cleanupDownloadedFile handles non-existent file gracefully',
+        () async {
+      final dio = Dio(BaseOptions());
+      final notifier = UpdateNotifier(dio: dio);
+
+      notifier.state = UpdateState(
+        downloadComplete: true,
+        downloadedFilePath: '$tempDir/nonexistent_file.zip',
+      );
+
+      // Should not throw
+      await notifier.cleanupDownloadedFile();
+    });
+
+    test('cleanupDownloadedFile handles null downloadedFilePath', () async {
+      final dio = Dio(BaseOptions());
+      final notifier = UpdateNotifier(dio: dio);
+
+      // No downloadedFilePath set
+      await notifier.cleanupDownloadedFile();
+      // Should not throw
+    });
+
+    test('cleanupStaleInstallerFiles cleans up persisted file path',
+        () async {
+      // Set up SharedPreferences with a stored file path
+      final testFile = File('$tempDir/stale_installer.exe');
+      await testFile.writeAsBytes([1, 2, 3]);
+      expect(await testFile.exists(), true);
+
+      SharedPreferences.setMockInitialValues({
+        'update_downloaded_file_path': testFile.path,
+      });
+
+      final dio = Dio(BaseOptions());
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.cleanupStaleInstallerFiles();
+
+      // File should be deleted
+      expect(await testFile.exists(), false);
+
+      // SharedPreferences key should be removed
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.containsKey('update_downloaded_file_path'), false);
+    });
+
+    test('cleanupStaleInstallerFiles handles non-existent persisted path',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'update_downloaded_file_path': '$tempDir/nonexistent_stale.zip',
+      });
+
+      final dio = Dio(BaseOptions());
+      final notifier = UpdateNotifier(dio: dio);
+
+      // Should not throw
+      await notifier.cleanupStaleInstallerFiles();
+
+      // Key should be removed even if file doesn't exist
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.containsKey('update_downloaded_file_path'), false);
+    });
+
+    test(
+        'cleanupStaleInstallerFiles does nothing when no path is persisted',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+
+      final dio = Dio(BaseOptions());
+      final notifier = UpdateNotifier(dio: dio);
+
+      // Should not throw
+      await notifier.cleanupStaleInstallerFiles();
+    });
+
+    test('downloadFilePathKey getter returns correct key', () {
+      expect(downloadFilePathKey, equals('update_downloaded_file_path'));
+    });
+
+    test('downloadUpdate persists downloaded file path to SharedPreferences',
+        () async {
+      final dio = Dio(BaseOptions());
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: <int>[1, 2, 3],
+            ),
+          );
+        },
+      ));
+
+      final notifier = UpdateNotifier(dio: dio);
+      notifier.state = UpdateState(
+        updateAvailable: true,
+        latestVersion: '0.2.14',
+        downloadUrl:
+            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test_cleanup.zip',
+        releaseNotes: '',
+      );
+
+      await notifier.downloadUpdate(downloadDir: tempDir);
+
+      // File path should be persisted in SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      final persistedPath = prefs.getString('update_downloaded_file_path');
+      expect(persistedPath, isNotNull);
+      expect(persistedPath, isNotEmpty);
+      expect(persistedPath, contains('test_cleanup.zip'));
     });
   });
 
