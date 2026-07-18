@@ -372,10 +372,11 @@ void main() {
 
       expect(find.text('推理设置'), findsOneWidget);
       expect(find.text('推理'), findsOneWidget);
-      expect(find.byType(Switch), findsOneWidget);
+      // Now there are 2 switches: reasoning toggle + effort section
+      expect(find.byType(Switch), findsWidgets);
     });
 
-    testWidgets('option chips appear when reasoning is enabled',
+    testWidgets('option chips appear when reasoning and effort are enabled',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -387,11 +388,12 @@ void main() {
                     showReasoningPanel(
                       context: context,
                       reasoningEnabled: true,
-                      reasoningEffortEnabled: false,
+                      reasoningEffortEnabled: true,
                       reasoningParamSelections: {'reasoning_effort': 'medium'},
                       reasoningParams: [
                         ReasoningParam(
                           paramName: 'reasoning_effort',
+                          isEffortParam: true,
                           options: ['low', 'medium', 'high'],
                         ),
                       ],
@@ -410,6 +412,7 @@ void main() {
 
       await openPanel(tester);
 
+      // Effort options should appear when effort is enabled
       expect(find.text('low'), findsOneWidget);
       expect(find.text('medium'), findsOneWidget);
       expect(find.text('high'), findsOneWidget);
@@ -432,6 +435,7 @@ void main() {
                       reasoningParams: [
                         ReasoningParam(
                           paramName: 'reasoning_effort',
+                          isEffortParam: true,
                           options: ['low', 'medium', 'high'],
                         ),
                       ],

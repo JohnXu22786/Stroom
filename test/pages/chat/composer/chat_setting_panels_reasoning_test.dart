@@ -116,7 +116,7 @@ void main() {
     });
 
     testWidgets(
-        'reasoning panel shows no effort section when no isEffortParam exists',
+        'reasoning panel shows effort section disabled when no isEffortParam exists',
         (tester) async {
       final reasoningParams = [
         ReasoningParam(
@@ -156,14 +156,14 @@ void main() {
 
       expect(find.text('推理设置'), findsOneWidget);
       expect(find.text('推理'), findsOneWidget);
-      // No effort section — only one Switch for 推理 toggle
-      expect(find.byType(Switch), findsOneWidget);
+      // Effort section is shown but with disabled switch (2 switches total)
+      expect(find.byType(Switch), findsNWidgets(2));
 
-      // Param should still show as regular param section with its name
-      expect(find.text('reasoning_effort'), findsOneWidget);
-      expect(find.text('low'), findsOneWidget);
-      expect(find.text('medium'), findsOneWidget);
-      expect(find.text('high'), findsOneWidget);
+      // The hint about no effort param should appear
+      expect(
+        find.textContaining('当前模型未配置推理力度参数'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('tapping effort option calls onReasoningParamChanged',
@@ -317,7 +317,7 @@ void main() {
     });
 
     testWidgets(
-        'reasoning panel shows empty state when no reasoning params configured',
+        'reasoning panel shows disabled state when no reasoning params configured',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -349,11 +349,14 @@ void main() {
 
       expect(find.text('推理设置'), findsOneWidget);
 
-      // Switch should exist but should show disabled state indicator
-      expect(find.byType(Switch), findsOneWidget);
+      // Both reasoning toggle (disabled) and effort section (disabled) switches exist
+      expect(find.byType(Switch), findsNWidgets(2));
 
       // Should show some text indicating no params configured
-      expect(find.textContaining('推理'), findsWidgets);
+      expect(
+        find.textContaining('当前模型未配置推理参数'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('options preserve user-added order', (tester) async {
@@ -402,7 +405,7 @@ void main() {
     });
 
     testWidgets(
-        'true/false boolean options display correctly for non-effort param',
+        'non-effort params not shown in reasoning panel (now in custom params panel)',
         (tester) async {
       final reasoningParams = [
         ReasoningParam(
@@ -440,9 +443,13 @@ void main() {
 
       await openPanel(tester);
 
-      expect(find.text('thinking.type'), findsOneWidget);
-      expect(find.text('true'), findsOneWidget);
-      expect(find.text('false'), findsOneWidget);
+      // The reasoning panel should NOT show non-effort params
+      expect(find.text('thinking.type'), findsNothing);
+      expect(find.text('true'), findsNothing);
+      expect(find.text('false'), findsNothing);
+
+      // These are now in the separate custom params panel
+      // (tested in reasoning_panel_test.dart)
     });
   });
 }
