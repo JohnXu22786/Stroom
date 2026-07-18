@@ -1017,8 +1017,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                       ),
                       // Custom reasoning params button (non-toggle, non-effort)
                       if (widget.reasoningParams
-                              .where((p) => !p.isReasoningToggle && !p.isEffortParam)
-                              .isNotEmpty)
+                          .where(
+                              (p) => !p.isReasoningToggle && !p.isEffortParam)
+                          .isNotEmpty)
                         _SettingsChip(
                           icon: Icons.tune,
                           label: '自定义参数',
