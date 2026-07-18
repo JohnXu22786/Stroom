@@ -1,8 +1,13 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:stroom/pages/chat/dialogs/mermaid_preview_dialog.dart';
+import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/widgets/folder_picker_dialog.dart';
 import 'code_block_source_widget.dart';
 
 /// A reusable widget that renders Mermaid diagram code using [InAppWebView]
@@ -407,6 +412,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// Whether the source code view is shown instead of the rendered diagram.
   bool _showSourceCode = false;
 
+  /// Guard flag to prevent concurrent save operations.
+  bool _isSaving = false;
+
   /// Current zoom level tracked on the Flutter side.
   double _zoomLevel = 1.0;
 
@@ -629,6 +637,123 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Save to text storage
+  // ---------------------------------------------------------------------------
+
+  /// Saves the Mermaid source code as a .mmd file using [FolderPickerDialog]
+  /// for folder selection and [TextManifest] for persistent storage.
+  Future<void> _saveAsMmd() async {
+    if (_isSaving) return;
+    _isSaving = true;
+
+    final content = widget.mermaidCode.trim();
+    if (content.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Mermaid 代码为空，无法保存')),
+        );
+      }
+      _isSaving = false;
+      return;
+    }
+
+    final folders = await TextManifest.getAllFolders();
+    if (!mounted) {
+      _isSaving = false;
+      return;
+    }
+
+    // Use first line of code as default filename suggestion
+    final firstLine = content.split('\n').first.trim();
+    final defaultName = firstLine.isNotEmpty ? firstLine : 'mermaid-diagram';
+
+    // Local controller - will be garbage collected after _saveAsMmd completes.
+    // Not explicitly disposed because the dialog's dismiss animation still
+    // references it after showDialog returns.
+    final fileNameController = TextEditingController(text: defaultName);
+
+    final selectedFolder = await FolderPickerDialog.show(
+      context,
+      availableFolders: folders,
+      title: '保存 Mermaid 图表',
+      hintText: '选择或创建文件夹保存 .mmd 文件',
+      fileNameController: fileNameController,
+      fileNameHintText: '输入文件名（自动添加 .mmd 后缀）',
+      onCreateFolder: (name) async {
+        await TextManifest.addFolder(name);
+        return null;
+      },
+      onRefreshFolders: () async => TextManifest.getAllFolders(),
+    );
+
+    final userFileName = fileNameController.text.trim();
+
+    if (selectedFolder == null || !mounted) {
+      _isSaving = false;
+      return;
+    }
+
+    if (userFileName.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('文件名不能为空')),
+        );
+      }
+      _isSaving = false;
+      return;
+    }
+
+    try {
+      final bytes = Uint8List.fromList(utf8.encode(content));
+      final hash = computeTextHash(bytes);
+      final storageFileName = '$hash.txt';
+
+      // Ensure unique filename in the selected folder
+      final records = await TextManifest.loadRecords();
+      String finalName = userFileName;
+      int counter = 2;
+      while (records
+          .any((r) => r.name == finalName && r.folder == selectedFolder)) {
+        finalName = '$userFileName ($counter)';
+        counter++;
+      }
+
+      await TextManifest.writeText(storageFileName, content);
+      await TextManifest.addRecord(TextRecord(
+        name: finalName,
+        hash: hash,
+        format: 'mmd',
+        createdAt: DateTime.now(),
+        size: bytes.length,
+        folder: selectedFolder,
+        textLength: content.length,
+      ));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '已保存到文本储存区: ${selectedFolder.isEmpty ? "根目录" : selectedFolder}/$finalName.mmd',
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      _isSaving = false;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('保存失败: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      _isSaving = false;
+    }
+  }
+
   static const _emptyPlaceholderHtml = '''
 <html>
 <body style="background:transparent;display:flex;justify-content:center;align-items:center;height:100%;font-family:sans-serif;color:#999;font-size:14px;padding:16px;text-align:center;">
@@ -787,6 +912,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       height: effectiveHeight,
       actionButtons: [
         _buildSrcCodeActionButton(),
+        _buildSrcSaveButton(),
       ],
     );
   }
@@ -810,6 +936,34 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
               const SizedBox(width: 4),
               const Text(
                 '查看图表',
+                style: TextStyle(fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Builds the "保存" action button for the source code view.
+  Widget _buildSrcSaveButton() {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: _saveAsMmd,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 16,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.save, size: 18, semanticLabel: '保存'),
+              const SizedBox(width: 4),
+              const Text(
+                '保存',
                 style: TextStyle(fontSize: 12),
               ),
             ],
@@ -855,6 +1009,13 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 onTap: _openFullScreen,
               ),
             ],
+
+            // ---- Save button ----
+            _buildActionButton(
+              icon: Icons.save,
+              label: '保存',
+              onTap: _saveAsMmd,
+            ),
 
             // ---- Source code toggle ----
             _buildActionButton(
