@@ -5,7 +5,7 @@ import '../models/math_drawing_state.dart';
 import '../models/formula_entry.dart';
 import '../widgets/math_canvas.dart';
 
-/// 数学绘制页面 — 支持多公式、悬浮公式面板。
+/// 数学绘制页面 — 多公式、等价的公式行、颜色选择、显隐切换。
 class MathDrawingPage extends StatefulWidget {
   final String? initialExpression;
   final bool initialShowWebView;
@@ -22,19 +22,13 @@ class MathDrawingPage extends StatefulWidget {
 
 class _MathDrawingPageState extends State<MathDrawingPage>
     with SingleTickerProviderStateMixin {
-  late final TextEditingController _formulaController;
   late final TabController _tabController;
   final GlobalKey<MathCanvasState> _canvasKey = GlobalKey();
-  final LayerLink _overlayLayerLink = LayerLink();
 
   ViewMode _currentView = ViewMode.mode2D;
-  MathExpression? _currentExpression;
-  Map<String, double> _parameterValues = {};
-  String _renderedExpression = '';
 
-  /// Extra formulas beyond the first one.
-  final List<_ExtraFormula> _extraFormulas = [];
-  bool _showOverlay = false;
+  /// All formula rows (each is equal).
+  final List<_FormulaState> _formulas = [];
 
   @override
   void initState() {
@@ -42,151 +36,116 @@ class _MathDrawingPageState extends State<MathDrawingPage>
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(_onTabChanged);
 
-    _formulaController = TextEditingController(
-      text: widget.initialExpression ?? '',
-    );
-
-    if (widget.initialExpression != null &&
-        widget.initialExpression!.isNotEmpty) {
-      final expr = MathExpression.fromInput(widget.initialExpression!);
-      if (expr.isValid) {
-        _currentExpression = expr;
-        _renderedExpression = widget.initialExpression!;
-        _parameterValues = {};
-        for (final param in expr.parameters) {
-          _parameterValues[param] = 1.0;
-        }
-      }
-    }
+    // Start with one formula row
+    _formulas.add(_FormulaState(
+      controller: TextEditingController(text: widget.initialExpression ?? ''),
+      color: formulaPalette[0],
+      autoColor: true,
+      visible: true,
+    ));
   }
 
   @override
   void dispose() {
-    for (final f in _extraFormulas) {
+    for (final f in _formulas) {
       f.controller.dispose();
     }
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
-    _formulaController.dispose();
     super.dispose();
   }
 
   void _onTabChanged() {
     if (!_tabController.indexIsChanging) {
       setState(() {
-        _currentView =
-            _tabController.index == 0 ? ViewMode.mode2D : ViewMode.mode3D;
+        _currentView = _tabController.index == 0
+            ? ViewMode.mode2D
+            : ViewMode.mode3D;
       });
     }
   }
 
   // ==================================================================
-  // Expression / formula handling
+  // Formula management
   // ==================================================================
 
   bool get _canPlot {
-    final mainText = _formulaController.text.trim();
-    if (mainText.isNotEmpty && mainText != _renderedExpression) return true;
-    for (final f in _extraFormulas) {
+    return _formulas.any((f) {
       final text = f.controller.text.trim();
-      if (text.isNotEmpty && text != f.committedText) return true;
-    }
-    return false;
+      return text.isNotEmpty && text != f.committedText;
+    });
   }
 
-  void _onPlotPressed() {
-    // Build all formula entries
+  /// Plot all visible formulas that have changes.
+  void _plotAll() {
     final entries = <FormulaEntry>[];
-
-    // Main formula
-    final mainText = _formulaController.text.trim();
-    if (mainText.isNotEmpty) {
-      final parsed = MathExpression.fromInput(mainText);
-      if (!parsed.isValid) {
-        _showError(parsed.parseError ?? '表达式错误');
-        return;
-      }
-      entries.add(FormulaEntry(
-        rawExpression: mainText,
-        parsed: parsed,
-        color: formulaPalette[0],
-        autoColor: true,
-      ));
-    }
-
-    // Extra formulas
-    for (int i = 0; i < _extraFormulas.length; i++) {
-      final text = _extraFormulas[i].controller.text.trim();
+    for (final f in _formulas) {
+      final text = f.controller.text.trim();
       if (text.isEmpty) continue;
+      if (!f.visible) continue;
+
       final parsed = MathExpression.fromInput(text);
       if (!parsed.isValid) {
-        _showError(parsed.parseError ?? '表达式 ${i + 2} 错误');
+        _showError(parsed.parseError ?? '表达式错误: $text');
         return;
       }
       entries.add(FormulaEntry(
         rawExpression: text,
         parsed: parsed,
-        color: _extraFormulas[i].color,
-        autoColor: _extraFormulas[i].autoColor,
+        color: f.color,
+        autoColor: f.autoColor,
       ));
     }
+    if (entries.isEmpty) {
+      _canvasKey.currentState?.setFormulas([]);
+      return;
+    }
 
-    if (entries.isEmpty) return;
-
+    // Mark all rows as committed
     setState(() {
-      _renderedExpression = _formulaController.text.trim();
-      for (final f in _extraFormulas) {
+      for (final f in _formulas) {
         f.committedText = f.controller.text.trim();
       }
-      _showOverlay = false;
     });
 
     _canvasKey.currentState?.setFormulas(entries);
   }
 
-  void _showError(String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      behavior: SnackBarBehavior.floating,
-      duration: const Duration(seconds: 2),
-    ));
-  }
-
   void _addFormula() {
-    final used = _extraFormulas
+    final used = _formulas
         .where((f) => f.autoColor)
         .map((f) => f.color)
-        .toSet()
-      ..add(formulaPalette[0]); // main formula uses first color
+        .toSet();
     final color = nextFormulaColor(used);
 
     setState(() {
-      _extraFormulas.add(_ExtraFormula(
+      _formulas.add(_FormulaState(
         controller: TextEditingController(),
         color: color,
         autoColor: true,
+        visible: true,
       ));
-      _showOverlay = true;
     });
   }
 
-  void _removeExtraFormula(int index) {
+  void _removeFormula(int index) {
+    if (_formulas.length <= 1) return;
     setState(() {
-      _extraFormulas[index].controller.dispose();
-      _extraFormulas.removeAt(index);
-      if (_extraFormulas.isEmpty) _showOverlay = false;
+      _formulas[index].controller.dispose();
+      _formulas.removeAt(index);
     });
   }
 
-  void _onColorChanged(int index, Color newColor) {
+  void _toggleVisibility(int index) {
     setState(() {
-      _extraFormulas[index].color = newColor;
-      _extraFormulas[index].autoColor = false;
+      _formulas[index].visible = !_formulas[index].visible;
     });
+    // Re-plot to update canvas
+    _plotAll();
   }
 
   void _showColorPicker(int index) {
+    final currentColor = _formulas[index].color;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -195,11 +154,15 @@ class _MathDrawingPageState extends State<MathDrawingPage>
           spacing: 8,
           runSpacing: 8,
           children: formulaPalette.map((c) {
-            final selected = _extraFormulas[index].color == c;
+            final selected = currentColor == c;
             return GestureDetector(
               onTap: () {
-                _onColorChanged(index, c);
+                setState(() {
+                  _formulas[index].color = c;
+                  _formulas[index].autoColor = false;
+                });
                 Navigator.pop(ctx);
+                _plotAll();
               },
               child: Container(
                 width: 40,
@@ -228,33 +191,16 @@ class _MathDrawingPageState extends State<MathDrawingPage>
     );
   }
 
-  void _onParameterChanged(String param, double value) {
-    setState(() => _parameterValues[param] = value);
-    // TODO: update parameter on canvas for the relevant formula
+  void _showError(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 2),
+    ));
   }
 
   void _onResetView() => _canvasKey.currentState?.resetView();
-
-  // ==================================================================
-  // Canvas callbacks
-  // ==================================================================
-
-  void _onViewportChange(double xMin, double yMin, double xMax, double yMax) {
-    debugPrint('[MathDrawing] Viewport: [$xMin, $yMin, $xMax, $yMax]');
-  }
-
-  void _onCanvasReady() => debugPrint('[MathDrawing] Canvas ready');
-
-  void _onCanvasError(String msg) {
-    debugPrint('[MathDrawing] Canvas error: $msg');
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(msg),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
-      ));
-    }
-  }
 
   // ==================================================================
   // Build
@@ -278,14 +224,18 @@ class _MathDrawingPageState extends State<MathDrawingPage>
       body: Column(
         children: [
           _buildTabBar(cs),
-          if (_currentView == ViewMode.mode2D) ...[
-            _buildFormulaInput(cs),
-            Expanded(child: _buildCanvasArea(cs)),
-            if (_currentExpression != null &&
-                _currentExpression!.parameters.isNotEmpty)
-              _buildParameterSliders(cs),
-          ] else
-            Expanded(child: _build3DPlaceholder(cs)),
+          // Formula list (always shown)
+          _buildFormulaList(cs),
+          // Canvas + 3D placeholder kept alive via IndexedStack
+          Expanded(
+            child: IndexedStack(
+              index: _currentView == ViewMode.mode2D ? 0 : 1,
+              children: [
+                _buildCanvas(cs),
+                _build3DPlaceholder(cs),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -313,156 +263,35 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   }
 
   // ==================================================================
-  // Formula input row (original style, 1 line)
+  // Formula list
   // ==================================================================
 
-  Widget _buildFormulaInput(ColorScheme cs) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-      child: Row(
-        children: [
-          // Color dot for main formula
-          Container(
-            width: 20, height: 20,
-            margin: const EdgeInsets.only(right: 6),
-            decoration: BoxDecoration(
-              color: formulaPalette[0],
-              shape: BoxShape.circle,
-            ),
-          ),
-          // Text field
-          Expanded(
-            child: TextField(
-              controller: _formulaController,
-              decoration: InputDecoration(
-                hintText: '输入表达式，如: x^2',
-                labelText: '公式 1',
-                isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 14,
-                color: cs.onSurface,
-              ),
-              onChanged: (_) => setState(() {}),
-              onSubmitted: (_) => _onPlotPressed(),
-            ),
-          ),
-          const SizedBox(width: 6),
-          // Add formula button
-          IconButton(
-            icon: const Icon(Icons.add_circle_outline, size: 22),
-            tooltip: '添加公式',
-            onPressed: _addFormula,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-          ),
-          const SizedBox(width: 4),
-          // Plot button (keyboard return)
-          FilledButton(
-            onPressed: _canPlot ? _onPlotPressed : null,
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              minimumSize: const Size(40, 38),
-            ),
-            child: const Icon(Icons.keyboard_return, size: 20),
-          ),
-        ],
+  Widget _buildFormulaList(ColorScheme cs) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 180),
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
+        itemCount: _formulas.length,
+        itemBuilder: (_, index) => _buildFormulaRow(cs, index),
       ),
     );
   }
 
-  // ==================================================================
-  // Canvas area with floating overlay
-  // ==================================================================
-
-  Widget _buildCanvasArea(ColorScheme cs) {
-    return Stack(
-      children: [
-        // Canvas (fills entire area)
-        Positioned.fill(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
-            child: Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: cs.outlineVariant, width: 0.5),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: MathCanvas(
-                  key: _canvasKey,
-                  onViewportChange: _onViewportChange,
-                  onReady: _onCanvasReady,
-                  onError: _onCanvasError,
-                ),
-              ),
-            ),
-          ),
-        ),
-        // Floating formula overlay (if extra formulas exist)
-        if (_showOverlay && _extraFormulas.isNotEmpty)
-          Positioned(
-            top: 0,
-            left: 12,
-            right: 12,
-            child: Material(
-              elevation: 6,
-              borderRadius: BorderRadius.circular(8),
-              color: cs.surface,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.3,
-                ),
-                child: ListView(
-                  padding: const EdgeInsets.all(8),
-                  shrinkWrap: true,
-                  children: [
-                    // Header
-                    Row(
-                      children: [
-                        Text('附加公式',
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: cs.onSurfaceVariant,
-                                fontWeight: FontWeight.w600)),
-                        const Spacer(),
-                        GestureDetector(
-                          onTap: () => setState(() => _showOverlay = false),
-                          child: Icon(Icons.close, size: 18, color: cs.onSurfaceVariant),
-                        ),
-                      ],
-                    ),
-                    const Divider(height: 8),
-                    // Extra formula rows
-                    for (int i = 0; i < _extraFormulas.length; i++)
-                      _buildExtraFormulaRow(cs, i),
-                  ],
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildExtraFormulaRow(ColorScheme cs, int index) {
-    final f = _extraFormulas[index];
+  Widget _buildFormulaRow(ColorScheme cs, int index) {
+    final f = _formulas[index];
     final hasChanged = f.controller.text.trim().isNotEmpty &&
         f.controller.text.trim() != f.committedText;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         children: [
-          // Color indicator
+          // ---- Color indicator (tappable) ----
           GestureDetector(
             onTap: () => _showColorPicker(index),
             child: Container(
-              width: 20, height: 20,
+              width: 22,
+              height: 22,
               decoration: BoxDecoration(
                 color: f.color,
                 shape: BoxShape.circle,
@@ -472,17 +301,32 @@ class _MathDrawingPageState extends State<MathDrawingPage>
               ),
             ),
           ),
-          const SizedBox(width: 6),
-          // Formula text
+
+          const SizedBox(width: 4),
+
+          // ---- Eye / eye-off toggle ----
+          GestureDetector(
+            onTap: () => _toggleVisibility(index),
+            child: Icon(
+              f.visible ? Icons.visibility : Icons.visibility_off,
+              size: 20,
+              color: f.visible ? cs.onSurface : cs.onSurfaceVariant,
+            ),
+          ),
+
+          const SizedBox(width: 4),
+
+          // ---- Formula text field ----
           Expanded(
             child: TextField(
               controller: f.controller,
               decoration: InputDecoration(
-                hintText: '公式 ${index + 2}',
+                hintText: '公式 ${index + 1}',
                 isDense: true,
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
                 filled: true,
                 fillColor: f.color.withValues(alpha: 0.06),
               ),
@@ -492,15 +336,43 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                 color: cs.onSurface,
               ),
               onChanged: (_) => setState(() {}),
-              onSubmitted: (_) => _onPlotPressed(),
+              onSubmitted: (_) => _plotAll(),
             ),
           ),
-          // Remove
+
+          const SizedBox(width: 2),
+
+          // ---- Add formula (+) button (first row only) ----
+          if (index == 0)
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline, size: 20),
+              tooltip: '添加公式',
+              onPressed: _addFormula,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            ),
+
+          // ---- Remove formula (X) button ----
+          if (_formulas.length > 1)
+            IconButton(
+              icon: Icon(Icons.remove_circle_outline, size: 18, color: cs.error),
+              tooltip: '删除公式',
+              onPressed: () => _removeFormula(index),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            ),
+
+          // ---- Plot (✓) button ----
           IconButton(
-            icon: Icon(Icons.remove_circle_outline, size: 18, color: cs.error),
-            onPressed: () => _removeExtraFormula(index),
+            icon: Icon(
+              Icons.check_circle_outline,
+              size: 22,
+              color: hasChanged ? cs.primary : cs.onSurfaceVariant,
+            ),
+            tooltip: '绘制',
+            onPressed: _plotAll,
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),
         ],
       ),
@@ -508,50 +380,34 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   }
 
   // ==================================================================
-  // Parameter sliders
+  // Canvas (2D)
   // ==================================================================
 
-  Widget _buildParameterSliders(ColorScheme cs) {
-    final params = _currentExpression!.parameters.toList()..sort();
-    return Container(
-      constraints: const BoxConstraints(maxHeight: 120),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: params.map((param) {
-            final value = _parameterValues[param] ?? 1.0;
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Row(children: [
-                SizedBox(
-                  width: 24,
-                  child: Text(param,
-                      style: TextStyle(
-                          fontFamily: 'monospace',
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                          color: cs.onSurface)),
-                ),
-                Expanded(
-                  child: Slider(
-                    value: value.toDouble(),
-                    min: -10,
-                    max: 10,
-                    divisions: 200,
-                    label: value.toStringAsFixed(2),
-                    onChanged: (v) => _onParameterChanged(param, v),
-                  ),
-                ),
-                SizedBox(
-                  width: 48,
-                  child: Text(value.toStringAsFixed(1),
-                      style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                      textAlign: TextAlign.right),
-                ),
-              ]),
-            );
-          }).toList(),
+  Widget _buildCanvas(ColorScheme cs) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: cs.outlineVariant, width: 0.5),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: MathCanvas(
+            key: _canvasKey,
+            initialExpression: null,
+            onReady: () => debugPrint('[MathDrawing] Canvas ready'),
+            onError: (msg) {
+              debugPrint('[MathDrawing] Canvas error: $msg');
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(msg),
+                  behavior: SnackBarBehavior.floating,
+                  duration: const Duration(seconds: 3),
+                ));
+              }
+            },
+          ),
         ),
       ),
     );
@@ -568,16 +424,20 @@ class _MathDrawingPageState extends State<MathDrawingPage>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.view_in_ar, size: 64,
+            Icon(Icons.view_in_ar,
+                size: 64,
                 color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
             const SizedBox(height: 16),
             Text('3D 绘图功能即将推出',
                 style: TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.w500, color: cs.onSurfaceVariant)),
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                    color: cs.onSurfaceVariant)),
             const SizedBox(height: 8),
             Text('敬请期待后续更新',
                 style: TextStyle(
-                    fontSize: 14, color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
+                    fontSize: 14,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
           ],
         ),
       ),
@@ -585,17 +445,19 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   }
 }
 
-/// State for an extra formula row.
-class _ExtraFormula {
+/// State for a single formula row.
+class _FormulaState {
   final TextEditingController controller;
   Color color;
   bool autoColor;
   String committedText;
+  bool visible;
 
-  _ExtraFormula({
+  _FormulaState({
     required this.controller,
     required this.color,
     this.autoColor = true,
     this.committedText = '',
+    this.visible = true,
   });
 }

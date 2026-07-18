@@ -16,7 +16,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('MathDrawingPage - initial render', () {
-    testWidgets('renders app bar with correct title', (tester) async {
+    testWidgets('renders app bar with title', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
       expect(find.text('数学绘制'), findsOneWidget);
@@ -29,162 +29,130 @@ void main() {
       expect(find.text('3D'), findsOneWidget);
     });
 
-    testWidgets('shows one empty formula input initially', (tester) async {
+    testWidgets('shows one formula row with text field', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
       expect(find.byType(TextField), findsOneWidget);
     });
 
-    testWidgets('shows plot and add-formula buttons', (tester) async {
+    testWidgets('shows add, checkmark, eye, color buttons', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
-      expect(find.byIcon(Icons.keyboard_return), findsOneWidget);
       expect(find.byIcon(Icons.add_circle_outline), findsOneWidget);
+      expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
+      expect(find.byIcon(Icons.visibility), findsOneWidget);
     });
   });
 
-  group('MathDrawingPage - multi formula', () {
-    testWidgets('typing in formula field updates state', (tester) async {
+  group('MathDrawingPage - formula input', () {
+    testWidgets('typing shows in text field', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
-
       await tester.enterText(find.byType(TextField), 'x^2');
       await tester.pump();
-
       final tf = tester.widget<TextField>(find.byType(TextField));
       expect(tf.controller?.text, equals('x^2'));
     });
 
-    testWidgets('plot button enabled when text differs from committed',
-        (tester) async {
+    testWidgets('checkmark button plots formulas', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
       await tester.enterText(find.byType(TextField), 'x^2');
       await tester.pump();
 
-      // Button should be enabled
-      final button = tester.widget<FilledButton>(find.byType(FilledButton));
-      expect(button.onPressed, isNotNull);
-    });
-
-    testWidgets('plot button disabled after plotting (no change)',
-        (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-
-      await tester.enterText(find.byType(TextField), 'x^2');
-      await tester.pump();
-      await tester.tap(find.byIcon(Icons.keyboard_return));
+      await tester.tap(find.byIcon(Icons.check_circle_outline));
       await tester.pumpAndSettle();
 
-      // Button should now be disabled
-      final button = tester.widget<FilledButton>(find.byType(FilledButton));
-      expect(button.onPressed, isNull);
-    });
-
-    testWidgets('plot button re-enabled when formula changes', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-
-      await tester.enterText(find.byType(TextField), 'x^2');
-      await tester.pump();
-      await tester.tap(find.byIcon(Icons.keyboard_return));
-      await tester.pumpAndSettle();
-
-      // Change expression
-      await tester.enterText(find.byType(TextField), 'x^3');
-      await tester.pump();
-
-      final button = tester.widget<FilledButton>(find.byType(FilledButton));
-      expect(button.onPressed, isNotNull);
-    });
-
-    testWidgets('add formula button adds another input field',
-        (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-
-      // Initially 1 text field
-      expect(find.byType(TextField), findsOneWidget);
-
-      // Add formula
-      await tester.tap(find.byIcon(Icons.add_circle_outline));
-      await tester.pump();
-
-      // Now 2 text fields
-      expect(find.byType(TextField), findsNWidgets(2));
-    });
-
-    testWidgets('remove formula button removes input field', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-
-      // Add second formula
-      await tester.tap(find.byIcon(Icons.add_circle_outline));
-      await tester.pump();
-      expect(find.byType(TextField), findsNWidgets(2));
-
-      // Remove first formula
-      await tester.tap(find.byIcon(Icons.remove_circle_outline).first);
-      await tester.pump();
-
-      // Should have 1 left
-      expect(find.byType(TextField), findsOneWidget);
-    });
-
-    testWidgets('pressing plot with multiple formulas works', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-
-      // Enter first formula
-      await tester.enterText(find.byType(TextField), 'x^2');
-      await tester.pump();
-
-      // Add second formula
-      await tester.tap(find.byIcon(Icons.add_circle_outline));
-      await tester.pump();
-
-      // Enter text in second text field
-      final fields = find.byType(TextField);
-      await tester.enterText(fields.last, 'x');
-      await tester.pump();
-
-      // Press plot
-      await tester.tap(find.byIcon(Icons.keyboard_return));
-      await tester.pumpAndSettle();
-
-      // No crash
       expect(tester.takeException(), isNull);
     });
   });
 
-  group('MathDrawingPage - tab switching', () {
-    testWidgets('switching to 3D shows placeholder', (tester) async {
+  group('MathDrawingPage - multi formula', () {
+    testWidgets('add button adds another row', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
-      await tester.tap(find.text('3D'));
-      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsOneWidget);
 
-      expect(find.text('3D 绘图功能即将推出'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.add_circle_outline));
+      await tester.pump();
+
+      expect(find.byType(TextField), findsNWidgets(2));
     });
 
-    testWidgets('switching back to 2D shows input fields', (tester) async {
+    testWidgets('remove button removes a row', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
+      await tester.tap(find.byIcon(Icons.add_circle_outline));
+      await tester.pump();
+      expect(find.byType(TextField), findsNWidgets(2));
+
+      // Remove buttons appear when 2+ formulas
+      await tester.tap(find.byIcon(Icons.remove_circle_outline).first);
+      await tester.pump();
+
+      expect(find.byType(TextField), findsOneWidget);
+    });
+
+    testWidgets('add button only on first row', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.add_circle_outline));
+      await tester.pump();
+
+      // There should be exactly 1 add button (only on first row)
+      expect(find.byIcon(Icons.add_circle_outline), findsOneWidget);
+    });
+
+    testWidgets('eye toggle hides formula', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      await tester.enterText(find.byType(TextField), 'x^2');
+      await tester.pump();
+
+      // Tap eye to toggle
+      await tester.tap(find.byIcon(Icons.visibility));
+      await tester.pump();
+
+      // Should now show eye-off icon
+      expect(find.byIcon(Icons.visibility_off), findsOneWidget);
+    });
+
+    testWidgets('plotting across tabs keeps formulas alive', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      // Enter formula
+      await tester.enterText(find.byType(TextField), 'x^2');
+      await tester.pump();
+
+      // Plot it
+      await tester.tap(find.byIcon(Icons.check_circle_outline));
+      await tester.pumpAndSettle();
+
+      // Switch to 3D tab
       await tester.tap(find.text('3D'));
       await tester.pumpAndSettle();
+
+      // Switch back to 2D tab
       await tester.tap(find.text('2D 绘图'));
       await tester.pumpAndSettle();
 
-      expect(find.byType(TextField), findsOneWidget);
+      // Text field should still have the formula
+      final tf = tester.widget<TextField>(find.byType(TextField));
+      expect(tf.controller?.text, equals('x^2'));
+
+      // Canvas should still be present
+      expect(tester.takeException(), isNull);
     });
   });
 
   group('MathDrawingPage - error handling', () {
-    testWidgets('app does not crash', (tester) async {
+    testWidgets('no crash on empty', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
       expect(tester.takeException(), isNull);
@@ -196,7 +164,7 @@ void main() {
 
       await tester.enterText(find.byType(TextField), 'x ^^ 2');
       await tester.pump();
-      await tester.tap(find.byIcon(Icons.keyboard_return));
+      await tester.tap(find.byIcon(Icons.check_circle_outline));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
