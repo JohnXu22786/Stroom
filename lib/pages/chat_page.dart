@@ -502,9 +502,23 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
       // Restore per-conversation enabled MCP/built-in tool names.
       // If the conversation has saved tool preferences, use them.
-      // Otherwise, all tools are OFF by default.
+      // Otherwise, default to ALL available tools enabled so that built-in
+      // remote SSE MCP providers (and user-added MCPs) are immediately
+      // visible in the chat page's tool list without requiring the user to
+      // manually toggle each one on. Users can still opt-out specific tools
+      // via the "可用工具" panel — the toggled-off state is then persisted
+      // into conv.enabledMcpToolNames + conv.hasExplicitEnabledMcpTools on
+      // the next save.
+      final convEnabled = (conv != null)
+          ? Set<String>.from(conv.enabledMcpToolNames)
+          : <String>{};
+      final hasExplicitPrefs = conv?.hasExplicitEnabledMcpTools ?? false;
       ref.read(enabledToolNamesProvider.notifier).state =
-          (conv != null) ? Set<String>.from(conv.enabledMcpToolNames) : {};
+          resolveEnabledToolNames(
+        allTools: _adapter.getAllToolDefinitions(),
+        savedEnabledNames: convEnabled,
+        hasExplicitSavedPrefs: hasExplicitPrefs,
+      );
       if (conv == null || conv.messages.isEmpty) {
         if (mounted) setState(() {});
         return;

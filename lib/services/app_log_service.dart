@@ -12,18 +12,19 @@ import '../utils/web_file_store.dart';
 // ====================================================================
 //
 // 日志数据先存入内存缓冲区，每 10 秒自动写入一次存储。
-// 写入成功后从内存中抹除。日志按天分割，格式为 app_YYYY-MM-DD.log。
+// 写入成功后从内存中抹除。日志按小时分割，格式为 app_YYYY-MM-DD-HH.log。
 // 每个日志条目包含时间戳、日志级别、来源和消息内容。
 //
-// 日志目录位置（与备份共享 Documents/Stroom 总目录）：
+// 日志目录位置（与自动备份共享 Documents/Stroom 总目录）：
 // - Windows: %USERPROFILE%\Documents\Stroom\Logs\
 // - macOS:   ~/Documents/Stroom/Logs/
 // - Linux:   ~/Documents/Stroom/Logs/
 // - Android: <app_documents>/Stroom/Logs/
 // - iOS:     <app_documents>/Stroom/Logs/
 //
-// 日志保留策略：保留最近 3 次使用的天的日志（按文件日期计）。
-// 超过 3 天的日志文件会自动清理。
+// 日志保留策略：保留最近 3 天（按文件日期计）。超过 3 天的日志文件
+// 会自动清理。每个小时内产生的所有日志写入同一个文件，方便集中查看。
+// ====================================================================
 //
 // 日志级别：
 // - DEBUG: 调试信息（详细开发日志）
@@ -198,7 +199,7 @@ class AppLogService {
 
   /// 将内存缓冲区中的所有日志刷入文件。
   ///
-  /// 按日期分组写入对应的每日日志文件。写入成功后从缓冲区移除。
+  /// 按小时分组写入对应的小时日志文件。写入成功后从缓冲区移除。
   /// 写入失败时回退（重新加入缓冲区前端）。
   static Future<void> _flushBuffer() async {
     if (_buffer.isEmpty || _isFlushing) return;
@@ -214,22 +215,22 @@ class AppLogService {
         await logDir.create(recursive: true);
       }
 
-      // 按日期分组
-      final byDate = <String, List<_LogEntry>>{};
+      // 按小时分组 (YYYY-MM-DD-HH)
+      final byHour = <String, List<_LogEntry>>{};
       for (final entry in entries) {
-        final dateStr =
-            '${entry.timestamp.year}-${_pad(entry.timestamp.month)}-${_pad(entry.timestamp.day)}';
-        byDate.putIfAbsent(dateStr, () => []).add(entry);
+        final hourStr =
+            '${entry.timestamp.year}-${_pad(entry.timestamp.month)}-${_pad(entry.timestamp.day)}-${_pad(entry.timestamp.hour)}';
+        byHour.putIfAbsent(hourStr, () => []).add(entry);
       }
 
-      // 逐日期写入
-      for (final group in byDate.entries) {
-        final dateStr = group.key;
-        final dateEntries = group.value;
-        final logFile = File(p.join(logDir.path, 'app_$dateStr.log'));
+      // 逐小时写入
+      for (final group in byHour.entries) {
+        final hourStr = group.key;
+        final hourEntries = group.value;
+        final logFile = File(p.join(logDir.path, 'app_$hourStr.log'));
 
         final sb = StringBuffer();
-        for (final e in dateEntries) {
+        for (final e in hourEntries) {
           final ts = e.timestamp;
           final timestamp = '${ts.year}-${_pad(ts.month)}-${_pad(ts.day)} '
               '${_pad(ts.hour)}:${_pad(ts.minute)}:${_pad(ts.second)}';
@@ -289,12 +290,15 @@ class AppLogService {
 
   /// 计算日志根目录路径（平台相关）。
   ///
-  /// 路径策略（与 BackupLocationManager 的备份路径共享 Documents/Stroom）：
+  /// 路径策略：与自动备份共享 Documents/Stroom 父目录，日志位于 Logs 子目录。
   /// - Windows: %USERPROFILE%\Documents\Stroom\Logs
-  /// - macOS:   ~/Documents/Stroom/Logs
-  /// - Linux:   ~/Documents/Stroom/Logs
-  /// - Android: <app_documents>/Stroom/Logs
-  /// - iOS:     <app_documents>/Stroom/Logs
+  /// - macOS:   `~/Documents/Stroom/Logs`
+  /// - Linux:   `~/Documents/Stroom/Logs`
+  /// - Android: `<app_documents>/Stroom/Logs`
+  /// - iOS:     `<app_documents>/Stroom/Logs`
+  ///
+  /// 注意：父目录 Stroom/ 与自动备份目录 (Stroom/AutoBackups) 保持一致，
+  /// 方便用户在同一处查看所有 Stroom 数据。
   static Future<String> _getLogsRootPath() async {
     // 测试环境
     try {
@@ -399,17 +403,25 @@ class AppLogService {
     }
   }
 
-  /// 读取今天的日志内容。
+  /// 读取当前小时日志文件的内容。
+  ///
+  /// 在按小时分组的策略下，"今天" 的概念不再适用——每小时一个文件，
+  /// 此方法返回的是**当前小时**的日志。函数名保留 `readTodayLog` 以
+  /// 维持向后兼容（不会破坏现有调用点），但语义上等价于
+  /// `readCurrentHourLog`。
   static Future<String?> readTodayLog() async {
     final now = DateTime.now();
-    final dateStr = '${now.year}-${_pad(now.month)}-${_pad(now.day)}';
-    return readLogFile('app_$dateStr.log');
+    final hourStr =
+        '${now.year}-${_pad(now.month)}-${_pad(now.day)}-${_pad(now.hour)}';
+    return readLogFile('app_$hourStr.log');
   }
 
   /// 清理超过保留天数的旧日志文件。
   ///
   /// 保留最近 _retentionDays 天的日志文件。
   /// 此方法应在启动时或每日首次写入日志时调用。
+  /// 文件名格式为 app_YYYY-MM-DD-HH.log，所以日期前缀是 YYYY-MM-DD。
+  /// 同时也清理升级前留下的旧版日分割文件 (app_YYYY-MM-DD.log)。
   static Future<void> cleanupOldLogs() async {
     if (kIsWeb) return;
 
@@ -420,18 +432,20 @@ class AppLogService {
       final entries = await logDir.list().toList();
       final cutoff = DateTime.now().subtract(Duration(days: _retentionDays));
 
+      // 同时匹配新格式 (app_YYYY-MM-DD-HH.log) 和旧格式 (app_YYYY-MM-DD.log)
+      // 的日期前缀。旧文件在升级后没有 -HH 后缀，必须用宽松的正则匹配。
+      final dateOnlyMatch = RegExp(r'app_(\d{4}-\d{2}-\d{2})');
+
       for (final entry in entries) {
         if (entry is! File) continue;
         if (!entry.path.endsWith('.log')) continue;
 
-        // 从文件名提取日期: app_YYYY-MM-DD.log
         final fileName = p.basename(entry.path);
-        final dateMatch =
-            RegExp(r'app_(\d{4}-\d{2}-\d{2})\.log').firstMatch(fileName);
-        if (dateMatch == null) continue;
+        final m = dateOnlyMatch.firstMatch(fileName);
+        if (m == null) continue;
 
         try {
-          final fileDate = DateTime.parse(dateMatch.group(1)!);
+          final fileDate = DateTime.parse(m.group(1)!);
           if (fileDate.isBefore(cutoff)) {
             await entry.delete();
             debugPrint('[AppLogService] 清理旧日志: $fileName');

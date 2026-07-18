@@ -477,3 +477,33 @@ class ChatAdapter {
   Map<String, List<String>>? get lastResponseHeaders =>
       _chatService?.lastResponseHeaders;
 }
+
+/// Resolve the set of tool names to enable for the current conversation.
+///
+/// Behavior:
+/// - If [hasExplicitSavedPrefs] is true (the user has touched the toggles
+///   for this conversation), the [savedEnabledNames] set is returned as-is.
+///   This is the case for both "user selected some tools" and
+///   "user toggled every tool off" — both must survive serialization.
+/// - If [hasExplicitSavedPrefs] is false (the conversation has no saved
+///   preferences — the default for new conversations), all available tool
+///   names are returned so that built-in HTTP tools and built-in remote
+///   SSE MCP providers (Exa, Tavily, Jina, Firecrawl, Zhipu) are
+///   immediately visible in the conversation page's tool list. Users can
+///   still opt-out specific tools via the "可用工具" panel; the opt-out set
+///   will be persisted on the next save (with hasExplicitEnabledMcpTools
+///   flipped to true).
+///
+/// This is a pure function to keep the policy testable and easy to reason
+/// about. The actual side-effect of writing to [enabledToolNamesProvider]
+/// stays in the chat page.
+Set<String> resolveEnabledToolNames({
+  required List<ToolDefinition> allTools,
+  required Set<String> savedEnabledNames,
+  required bool hasExplicitSavedPrefs,
+}) {
+  if (hasExplicitSavedPrefs) {
+    return Set<String>.from(savedEnabledNames);
+  }
+  return allTools.map((t) => t.name).toSet();
+}

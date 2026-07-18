@@ -40,23 +40,31 @@ void main() {
       expect(result, isNull);
     });
 
-    test('empty string stays as string (not valid JSON)', () {
+    test('empty string returns null (treated as no-op)', () {
       const input = '';
       final result = ChatService.parseJsonValue(input);
-      expect(result, equals(''));
+      expect(result, isNull,
+          reason: 'Empty JSON values should be treated as a no-op.');
     });
 
-    test('invalid JSON string stays as raw string', () {
+    test('invalid JSON string throws FormatException', () {
       const input = '{invalid json}';
-      final result = ChatService.parseJsonValue(input);
-      expect(result, equals('{invalid json}'));
+      // Regression: previously the raw string was sent as a quoted string in
+      // the API request body. Now we throw so the param is skipped and the
+      // user can see the error.
+      expect(
+        () => ChatService.parseJsonValue(input),
+        throwsA(isA<FormatException>()),
+      );
     });
 
-    test('Dart format Map string stays as string (not valid JSON)', () {
+    test('Dart format Map string throws FormatException', () {
       const input = '{key: value}';
-      final result = ChatService.parseJsonValue(input);
       // {key: value} is not valid JSON (keys need quotes)
-      expect(result, equals('{key: value}'));
+      expect(
+        () => ChatService.parseJsonValue(input),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('nested JSON object is properly parsed', () {

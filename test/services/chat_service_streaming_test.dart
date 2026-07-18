@@ -438,14 +438,22 @@ void main() {
       expect(ChatService.parseJsonValue('false'), isFalse);
     });
 
-    test('returns raw string for invalid JSON', () {
-      final result = ChatService.parseJsonValue('not-json');
-      expect(result, equals('not-json'));
+    test('throws FormatException for invalid JSON (no raw string fallback)',
+        () {
+      // Regression: the previous behavior returned the raw string and let it
+      // get re-serialized as a quoted string in the API request body. Now we
+      // throw so the param can be cleanly omitted and the user can see the
+      // underlying error.
+      expect(
+        () => ChatService.parseJsonValue('not-json'),
+        throwsA(isA<FormatException>()),
+      );
     });
 
-    test('returns raw string for empty string', () {
+    test('returns null for empty string (treated as no-op)', () {
       final result = ChatService.parseJsonValue('');
-      expect(result, equals(''));
+      expect(result, isNull,
+          reason: 'Empty JSON values should be treated as a no-op.');
     });
   });
 
@@ -491,9 +499,15 @@ void main() {
       expect((result as Map)['key'], equals('val'));
     });
 
-    test('json type returns raw string for invalid JSON', () {
-      expect(ChatService.parseReasoningValue('not-json', 'json'),
-          equals('not-json'));
+    test('json type throws FormatException for invalid JSON', () {
+      // Regression: parseReasoningValue delegates to parseJsonValue for the
+      // 'json' type. The new behavior is to propagate the FormatException.
+      // Callers (_buildExtraParams) catch and log it; the param is dropped
+      // from the request body via _stripOmitted.
+      expect(
+        () => ChatService.parseReasoningValue('not-json', 'json'),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('default type (string) returns value as-is', () {

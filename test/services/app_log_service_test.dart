@@ -28,9 +28,10 @@ void main() {
 
       // Before flush, the file should NOT exist
       final logDir = await AppLogService.getLogDir();
-      final today = DateTime.now();
-      final dateStr = '${today.year}-${_pad(today.month)}-${_pad(today.day)}';
-      final logFile = File('${logDir.path}/app_$dateStr.log');
+      final now = DateTime.now();
+      final hourStr =
+          '${now.year}-${_pad(now.month)}-${_pad(now.day)}-${_pad(now.hour)}';
+      final logFile = File('${logDir.path}/app_$hourStr.log');
       expect(await logFile.exists(), isFalse,
           reason: 'Log should NOT be written to file before flush()');
 
@@ -52,9 +53,10 @@ void main() {
 
       // Before flush, no file should exist
       final logDir = await AppLogService.getLogDir();
-      final today = DateTime.now();
-      final dateStr = '${today.year}-${_pad(today.month)}-${_pad(today.day)}';
-      final logFile = File('${logDir.path}/app_$dateStr.log');
+      final now = DateTime.now();
+      final hourStr =
+          '${now.year}-${_pad(now.month)}-${_pad(now.day)}-${_pad(now.hour)}';
+      final logFile = File('${logDir.path}/app_$hourStr.log');
       expect(await logFile.exists(), isFalse,
           reason: 'No file before flush with multiple buffered entries');
 
@@ -78,9 +80,10 @@ void main() {
       await AppLogService.flush();
 
       final logDir = await AppLogService.getLogDir();
-      final today = DateTime.now();
-      final dateStr = '${today.year}-${_pad(today.month)}-${_pad(today.day)}';
-      final logFile = File('${logDir.path}/app_$dateStr.log');
+      final now = DateTime.now();
+      final hourStr =
+          '${now.year}-${_pad(now.month)}-${_pad(now.day)}-${_pad(now.hour)}';
+      final logFile = File('${logDir.path}/app_$hourStr.log');
       final content = await logFile.readAsString();
       // Both entries should be present (appended to same file)
       expect(content, contains('Gone after flush'));
@@ -114,6 +117,95 @@ void main() {
   });
 
   // ==================================================================
+  // Hourly grouping — logs are split into one file per hour
+  // ==================================================================
+
+  group('AppLogService — hourly grouping', () {
+    test('writes log file with hour suffix (app_YYYY-MM-DD-HH.log)', () async {
+      await AppLogService.info('Test', 'Hourly log message');
+      await AppLogService.flush();
+
+      final logDir = await AppLogService.getLogDir();
+      final now = DateTime.now();
+      final hourStr =
+          '${now.year}-${_pad(now.month)}-${_pad(now.day)}-${_pad(now.hour)}';
+      final expectedFile = File('${logDir.path}/app_$hourStr.log');
+      expect(await expectedFile.exists(), isTrue,
+          reason: 'Hourly log file should exist at app_YYYY-MM-DD-HH.log path');
+
+      // Old day-based filename should NOT exist
+      final dayStr = '${now.year}-${_pad(now.month)}-${_pad(now.day)}';
+      final oldStyleFile = File('${logDir.path}/app_$dayStr.log');
+      expect(await oldStyleFile.exists(), isFalse,
+          reason: 'Old day-based filename should not be used anymore');
+
+      // Cleanup
+      await logDir.delete(recursive: true);
+    });
+
+    test('listLogFiles includes hour-suffixed filenames', () async {
+      await AppLogService.info('Test', 'Hour-suffix list test');
+      await AppLogService.flush();
+
+      final files = await AppLogService.listLogFiles();
+      final now = DateTime.now();
+      final hourStr =
+          '${now.year}-${_pad(now.month)}-${_pad(now.day)}-${_pad(now.hour)}';
+      expect(files, contains('app_$hourStr.log'),
+          reason: 'listLogFiles should include app_YYYY-MM-DD-HH.log');
+
+      // Cleanup
+      final logDir = await AppLogService.getLogDir();
+      await logDir.delete(recursive: true);
+    });
+
+    test('readLogFile reads hour-suffixed file by exact filename', () async {
+      await AppLogService.info('TestSource', 'Hourly content marker');
+      await AppLogService.flush();
+
+      final now = DateTime.now();
+      final hourStr =
+          '${now.year}-${_pad(now.month)}-${_pad(now.day)}-${_pad(now.hour)}';
+      final fileName = 'app_$hourStr.log';
+
+      final content = await AppLogService.readLogFile(fileName);
+      expect(content, isNotNull);
+      expect(content, contains('Hourly content marker'));
+
+      // Cleanup
+      final logDir = await AppLogService.getLogDir();
+      await logDir.delete(recursive: true);
+    });
+  });
+
+  // ==================================================================
+  // Log directory path — under Documents/Stroom/Logs
+  // ==================================================================
+  //
+  // The production path is hard to exercise from the test env (which uses
+  // <systemTemp>/stroom_log_test). What we CAN verify here is that the
+  // path resolver is a function we can introspect and that it produces a
+  // stable, non-empty result. The full production path is documented in
+  // AppLogService._getLogsRootPath() and is covered by manual verification
+  // on each target platform (see app_log_service.dart header comment).
+  group('AppLogService — log directory location', () {
+    test(
+        'log directory is a non-empty path under a parent that includes '
+        '"stroom" or "Logs"', () async {
+      final logDir = await AppLogService.getLogDir();
+      // In production, path is .../Stroom/Logs. In tests, it's
+      // <systemTemp>/stroom_log_test. Both share the property that
+      // "stroom" appears in the path (case-insensitive).
+      expect(logDir.path.toLowerCase(), contains('stroom'),
+          reason: 'Log directory should live under a Stroom-named parent. '
+              'Production: Documents/Stroom/Logs. Tests: <tmp>/stroom_log_test.');
+
+      // Cleanup
+      if (await logDir.exists()) await logDir.delete(recursive: true);
+    });
+  });
+
+  // ==================================================================
   // Reset — state cleanup
   // ==================================================================
 
@@ -140,7 +232,8 @@ void main() {
       expect(await newLogDir.exists(), isTrue,
           reason: 'Should work after reset');
       final today = DateTime.now();
-      final dateStr = '${today.year}-${_pad(today.month)}-${_pad(today.day)}';
+      final dateStr =
+          '${today.year}-${_pad(today.month)}-${_pad(today.day)}-${_pad(today.hour)}';
       final logFile = File('${newLogDir.path}/app_$dateStr.log');
       final content = await logFile.readAsString();
       expect(content, contains('Post-reset message'));
@@ -197,7 +290,8 @@ void main() {
       await AppLogService.flush();
 
       final today = DateTime.now();
-      final dateStr = '${today.year}-${_pad(today.month)}-${_pad(today.day)}';
+      final dateStr =
+          '${today.year}-${_pad(today.month)}-${_pad(today.day)}-${_pad(today.hour)}';
       final logFile = File('${logDir.path}/app_$dateStr.log');
       expect(await logFile.exists(), isTrue,
           reason: 'File should exist after successful retry flush');
@@ -229,7 +323,8 @@ void main() {
 
       final logDir = await AppLogService.getLogDir();
       final today = DateTime.now();
-      final dateStr = '${today.year}-${_pad(today.month)}-${_pad(today.day)}';
+      final dateStr =
+          '${today.year}-${_pad(today.month)}-${_pad(today.day)}-${_pad(today.hour)}';
       final logFile = File('${logDir.path}/app_$dateStr.log');
       expect(await logFile.exists(), isTrue);
       final content = await logFile.readAsString();
@@ -259,7 +354,8 @@ void main() {
       expect(await logDir.exists(), isTrue);
 
       final today = DateTime.now();
-      final dateStr = '${today.year}-${_pad(today.month)}-${_pad(today.day)}';
+      final dateStr =
+          '${today.year}-${_pad(today.month)}-${_pad(today.day)}-${_pad(today.hour)}';
       final logFile = File('${logDir.path}/app_$dateStr.log');
       expect(await logFile.exists(), isTrue,
           reason: 'Log file should exist at expected path');
@@ -268,7 +364,7 @@ void main() {
       await logDir.delete(recursive: true);
     });
 
-    test('creates one file per day', () async {
+    test('creates one file per hour', () async {
       await AppLogService.info('TestSource', 'Message 1');
       await AppLogService.info('TestSource', 'Message 2');
       await AppLogService.flush();
@@ -280,7 +376,7 @@ void main() {
           .where((f) => f.path.endsWith('.log'))
           .toList();
       expect(logFiles.length, equals(1),
-          reason: 'Messages on same day should go to one file');
+          reason: 'Messages on same hour should go to one file');
 
       // Cleanup
       await logDir.delete(recursive: true);
@@ -499,7 +595,7 @@ void main() {
       // Create a log file from 5 days ago
       final oldDate = DateTime.now().subtract(const Duration(days: 5));
       final oldDateStr =
-          '${oldDate.year}-${_pad(oldDate.month)}-${_pad(oldDate.day)}';
+          '${oldDate.year}-${_pad(oldDate.month)}-${_pad(oldDate.day)}-${_pad(oldDate.hour)}';
       final oldFile = File('${logDir.path}/app_$oldDateStr.log');
       await oldFile.writeAsString('old log content');
       expect(await oldFile.exists(), isTrue);
@@ -508,7 +604,7 @@ void main() {
       const twoDaysAgo = Duration(days: 2);
       final recentDate = DateTime.now().subtract(twoDaysAgo);
       final recentDateStr =
-          '${recentDate.year}-${_pad(recentDate.month)}-${_pad(recentDate.day)}';
+          '${recentDate.year}-${_pad(recentDate.month)}-${_pad(recentDate.day)}-${_pad(recentDate.hour)}';
       final recentFile = File('${logDir.path}/app_$recentDateStr.log');
       await recentFile.writeAsString('recent log content');
       expect(await recentFile.exists(), isTrue);
@@ -526,7 +622,8 @@ void main() {
 
       // Today's file should be kept
       final today = DateTime.now();
-      final todayStr = '${today.year}-${_pad(today.month)}-${_pad(today.day)}';
+      final todayStr =
+          '${today.year}-${_pad(today.month)}-${_pad(today.day)}-${_pad(today.hour)}';
       final todayFile = File('${logDir.path}/app_$todayStr.log');
       expect(await todayFile.exists(), isTrue,
           reason: 'Today log should be kept');
@@ -554,7 +651,7 @@ void main() {
       // Simulate yesterday's log file
       final yesterday = DateTime.now().subtract(const Duration(days: 1));
       final yDateStr =
-          '${yesterday.year}-${_pad(yesterday.month)}-${_pad(yesterday.day)}';
+          '${yesterday.year}-${_pad(yesterday.month)}-${_pad(yesterday.day)}-${_pad(yesterday.hour)}';
       final yesterdayFile = File('${logDir.path}/app_$yDateStr.log');
       await yesterdayFile
           .writeAsString('[yesterday] [INFO] [Test] Yesterday log\n');
@@ -589,7 +686,7 @@ void main() {
       // Only yesterday's log exists (no today log)
       final yesterday = DateTime.now().subtract(const Duration(days: 1));
       final yDateStr =
-          '${yesterday.year}-${_pad(yesterday.month)}-${_pad(yesterday.day)}';
+          '${yesterday.year}-${_pad(yesterday.month)}-${_pad(yesterday.day)}-${_pad(yesterday.hour)}';
       final yesterdayFile = File('${logDir.path}/app_$yDateStr.log');
       await yesterdayFile
           .writeAsString('[yesterday] [INFO] [Test] Only yesterday\n');
@@ -621,7 +718,7 @@ void main() {
       // Try to read a log from 30 days ago (which doesn't exist)
       final longAgo = DateTime.now().subtract(const Duration(days: 30));
       final laDateStr =
-          '${longAgo.year}-${_pad(longAgo.month)}-${_pad(longAgo.day)}';
+          '${longAgo.year}-${_pad(longAgo.month)}-${_pad(longAgo.day)}-${_pad(longAgo.hour)}';
       final content = await AppLogService.readLogFile('app_$laDateStr.log');
       expect(content, isNull,
           reason: 'Non-existent previous day log should return null');

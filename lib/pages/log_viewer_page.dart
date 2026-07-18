@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../services/app_log_service.dart';
@@ -177,6 +178,38 @@ class _LogViewerPageState extends State<LogViewerPage>
     }
   }
 
+  /// 导出日志文件：复制文件路径到剪贴板，方便用户用系统资源管理器打开。
+  /// 这是最简单、最通用的"导出"方式——文件本身就在用户机器上，
+  /// 无需另存为。
+  Future<void> _exportLogFile(String fileName) async {
+    try {
+      final logDir = await AppLogService.getLogDir();
+      final filePath = p.join(logDir.path, fileName);
+      final file = File(filePath);
+      if (!await file.exists()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('日志文件 "$fileName" 不存在')),
+          );
+        }
+        return;
+      }
+
+      await Clipboard.setData(ClipboardData(text: filePath));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已复制路径: $filePath')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导出失败: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -276,12 +309,18 @@ class _LogViewerPageState extends State<LogViewerPage>
             style: const TextStyle(fontWeight: FontWeight.w500),
           ),
           subtitle: Text(
-            _getFileDate(fileName),
+            _getFileDateLabel(fileName),
             style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
           ),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              IconButton(
+                icon: Icon(Icons.ios_share,
+                    color: theme.colorScheme.primary, size: 20),
+                tooltip: '导出',
+                onPressed: () => _exportLogFile(fileName),
+              ),
               IconButton(
                 icon: Icon(Icons.delete_outline,
                     color: theme.colorScheme.error, size: 20),
@@ -297,10 +336,21 @@ class _LogViewerPageState extends State<LogViewerPage>
     );
   }
 
-  String _getFileDate(String fileName) {
-    // app_2024-01-01.log -> 2024-01-01
-    final match = RegExp(r'app_(\d{4}-\d{2}-\d{2})').firstMatch(fileName);
-    if (match != null) return match.group(1)!;
+  /// 解析文件名的时间戳，返回人类友好的展示标签。
+  ///
+  /// 新格式：app_YYYY-MM-DD-HH.log → 2024-01-01 14:00
+  /// 兼容旧格式：app_YYYY-MM-DD.log → 2024-01-01
+  String _getFileDateLabel(String fileName) {
+    final hourMatch =
+        RegExp(r'app_(\d{4}-\d{2}-\d{2})-(\d{2})\.log').firstMatch(fileName);
+    if (hourMatch != null) {
+      return '${hourMatch.group(1)} ${hourMatch.group(2)}:00';
+    }
+    final dayMatch =
+        RegExp(r'app_(\d{4}-\d{2}-\d{2})\.log').firstMatch(fileName);
+    if (dayMatch != null) {
+      return dayMatch.group(1)!;
+    }
     return '';
   }
 
@@ -350,6 +400,33 @@ class _LogContentPage extends StatefulWidget {
 
 class _LogContentPageState extends State<_LogContentPage> {
   bool _showRaw = false;
+  final ScrollController _rawScrollController = ScrollController();
+  final ScrollController _structuredScrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    // 在第一帧渲染完成后自动滚动到底部，
+    // 这样最新的日志（位于文件末尾）能直接展示给用户。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom();
+    });
+  }
+
+  @override
+  void dispose() {
+    _rawScrollController.dispose();
+    _structuredScrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToBottom() {
+    if (!mounted) return;
+    final controller =
+        _showRaw ? _rawScrollController : _structuredScrollController;
+    if (!controller.hasClients) return;
+    controller.jumpTo(controller.position.maxScrollExtent);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -364,7 +441,13 @@ class _LogContentPageState extends State<_LogContentPage> {
           IconButton(
             icon: Icon(_showRaw ? Icons.format_list_bulleted : Icons.code),
             tooltip: _showRaw ? '结构化视图' : '原始视图',
-            onPressed: () => setState(() => _showRaw = !_showRaw),
+            onPressed: () {
+              setState(() => _showRaw = !_showRaw);
+              // 切换视图后保持滚到底部的行为
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _scrollToBottom();
+              });
+            },
           ),
         ],
       ),
@@ -375,6 +458,7 @@ class _LogContentPageState extends State<_LogContentPage> {
 
   Widget _buildRawView(ThemeData theme) {
     return SingleChildScrollView(
+      controller: _rawScrollController,
       padding: const EdgeInsets.all(12),
       child: SelectableText(
         widget.content,
@@ -389,6 +473,7 @@ class _LogContentPageState extends State<_LogContentPage> {
 
   Widget _buildStructuredView(ThemeData theme, List<String> lines) {
     return ListView.builder(
+      controller: _structuredScrollController,
       padding: const EdgeInsets.all(8),
       itemCount: lines.length,
       itemBuilder: (context, index) {

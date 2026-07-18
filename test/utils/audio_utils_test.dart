@@ -154,4 +154,62 @@ void main() {
       expect(result.$2, equals('wav'));
     });
   });
+
+  // ====================================================================
+  // normalizeAudioFormat — map internal format identifiers to the
+  // consumer-facing extension used both for on-disk filenames and for
+  // AudioRecord.format. Currently: aac -> m4a.
+  // ====================================================================
+  group('normalizeAudioFormat', () {
+    test('aac maps to m4a (consumer-friendly file extension)', () {
+      expect(normalizeAudioFormat('aac'), equals('m4a'),
+          reason:
+              'Audio extracted as ADTS-wrapped AAC should be saved with the '
+              'm4a extension so users see the widely recognized consumer name.');
+    });
+
+    test('is case-insensitive (AAC, Aac -> m4a)', () {
+      expect(normalizeAudioFormat('AAC'), equals('m4a'));
+      expect(normalizeAudioFormat('Aac'), equals('m4a'));
+    });
+
+    test('m4a passes through as m4a', () {
+      expect(normalizeAudioFormat('m4a'), equals('m4a'));
+    });
+
+    test('wav passes through as wav', () {
+      expect(normalizeAudioFormat('wav'), equals('wav'));
+    });
+
+    test('mp3 passes through as mp3', () {
+      expect(normalizeAudioFormat('mp3'), equals('mp3'));
+    });
+
+    test('flac passes through as flac', () {
+      expect(normalizeAudioFormat('flac'), equals('flac'));
+    });
+
+    test('pcm passes through as pcm', () {
+      expect(normalizeAudioFormat('pcm'), equals('pcm'));
+    });
+
+    test('empty string is preserved as empty', () {
+      expect(normalizeAudioFormat(''), equals(''));
+    });
+  });
+
+  // ====================================================================
+  // getMimeType — must accept normalized (m4a) form too
+  // ====================================================================
+  group('getMimeType (normalized)', () {
+    test('aac still maps to audio/aac (mime type unchanged)', () {
+      // The mime type for raw ADTS stays audio/aac; only the file
+      // extension is normalized to m4a for display.
+      expect(getMimeType('aac'), equals('audio/aac'));
+    });
+
+    test('m4a maps to audio/mp4', () {
+      expect(getMimeType('m4a'), equals('audio/mp4'));
+    });
+  });
 }

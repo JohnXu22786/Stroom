@@ -132,8 +132,9 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         final rawName = _sanitizeName(file.name);
         final ext = p.extension(rawName).replaceAll('.', '').toLowerCase();
         final detectedFormat = detectAudioFormat(bytes);
+        // 规范化格式：aac → m4a（与 UI 显示保持一致）
         final format = detectedFormat != 'pcm'
-            ? detectedFormat
+            ? normalizeAudioFormat(detectedFormat)
             : (ext.isNotEmpty ? ext : 'wav');
         final displayName = _uniqueAudioName(
           p.basenameWithoutExtension(rawName),

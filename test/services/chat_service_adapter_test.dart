@@ -957,4 +957,127 @@ void main() {
       expect(() => adapter.getAllToolDefinitions(), returnsNormally);
     });
   });
+
+  // ====================================================================
+  // Auto-enable all available tools by default — built-in SSE MCPs must
+  // be visible in the conversation page's tool list without manual
+  // toggling.
+  //
+  // The chat page loads `enabledToolNamesProvider` from the conversation's
+  // saved `enabledMcpToolNames` and `hasExplicitEnabledMcpTools` flag. If
+  // the flag is false (default for new conversations), the page must
+  // default to ALL available tool names (built-in HTTP + MCP) so the user
+  // can see them right away. Users can still opt-out specific tools via
+  // the "可用工具" panel; the explicit-empty case is preserved via the
+  // flag so a user who toggled every tool off doesn't get them all
+  // re-enabled on the next load.
+  // ====================================================================
+
+  group('Auto-enable all available tools when no saved preferences', () {
+    test(
+        'resolver returns the full set of available tool names when conv has '
+        'no saved enabledMcpToolNames (new conversation)', () {
+      // Simulate the discovery result.
+      final allTools = <ToolDefinition>[
+        const ToolDefinition(
+          name: 'brave_web_search',
+          description: 'Built-in Brave',
+          parameters: {'type': 'object'},
+        ),
+        const ToolDefinition(
+          name: 'tavily_search',
+          description: 'MCP Tavily search',
+          parameters: {'type': 'object'},
+        ),
+        const ToolDefinition(
+          name: 'exa_search',
+          description: 'MCP Exa search',
+          parameters: {'type': 'object'},
+        ),
+      ];
+
+      // New conversation (no explicit prefs) → default to ALL available.
+      final resolved = resolveEnabledToolNames(
+        allTools: allTools,
+        savedEnabledNames: <String>{},
+        hasExplicitSavedPrefs: false,
+      );
+
+      expect(
+          resolved, equals({'brave_web_search', 'tavily_search', 'exa_search'}),
+          reason: 'New conversation with no saved preferences should default '
+              'to all available tools enabled so built-in MCPs are visible.');
+    });
+
+    test('resolver respects saved preferences when user has toggled tools off',
+        () {
+      final allTools = <ToolDefinition>[
+        const ToolDefinition(
+          name: 'brave_web_search',
+          description: 'Brave',
+          parameters: {'type': 'object'},
+        ),
+        const ToolDefinition(
+          name: 'tavily_search',
+          description: 'Tavily',
+          parameters: {'type': 'object'},
+        ),
+        const ToolDefinition(
+          name: 'exa_search',
+          description: 'Exa',
+          parameters: {'type': 'object'},
+        ),
+      ];
+
+      // User previously toggled tavily off; explicit flag is true.
+      final resolved = resolveEnabledToolNames(
+        allTools: allTools,
+        savedEnabledNames: {'brave_web_search', 'exa_search'},
+        hasExplicitSavedPrefs: true,
+      );
+
+      expect(resolved, equals({'brave_web_search', 'exa_search'}),
+          reason: 'Saved preferences must override the "enable all" default.');
+    });
+
+    test(
+        'resolver returns empty set when user explicitly toggled every tool '
+        'off (explicit-empty must be preserved)', () {
+      // Regression test: a user who has explicitly toggled every tool off
+      // must NOT have them all re-enabled on the next load. This is the
+      // "explicit-empty" case the hasExplicitSavedPrefs flag protects.
+      final allTools = <ToolDefinition>[
+        const ToolDefinition(
+          name: 'brave_web_search',
+          description: 'Brave',
+          parameters: {'type': 'object'},
+        ),
+        const ToolDefinition(
+          name: 'tavily_search',
+          description: 'Tavily',
+          parameters: {'type': 'object'},
+        ),
+      ];
+
+      final resolved = resolveEnabledToolNames(
+        allTools: allTools,
+        savedEnabledNames: <String>{},
+        hasExplicitSavedPrefs: true,
+      );
+
+      expect(resolved, isEmpty,
+          reason: 'When the user has explicitly cleared all toggles, the '
+              'resolver must return an empty set, not silently re-enable '
+              'every tool.');
+    });
+
+    test('resolver returns empty set when no tools are available', () {
+      final resolved = resolveEnabledToolNames(
+        allTools: const [],
+        savedEnabledNames: <String>{},
+        hasExplicitSavedPrefs: false,
+      );
+      expect(resolved, isEmpty);
+    });
+  });
 }
