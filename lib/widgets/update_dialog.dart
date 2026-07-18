@@ -198,11 +198,20 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
           ),
         ];
       }
-      // No error — show a close button for manual dismissal.
+      // No error — show close and reopen buttons.
+      // The "打开安装包" button allows the user to manually re-open the
+      // installer if they accidentally closed it without installing.
       return [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('关闭'),
+        ),
+        FilledButton(
+          onPressed: () {
+            // Re-open the installer (same as manual install fallback)
+            notifier.retryInstall();
+          },
+          child: const Text('打开安装包'),
         ),
       ];
     }
