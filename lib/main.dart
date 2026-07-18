@@ -13,7 +13,7 @@ import 'catcatch/providers/catcatch_provider.dart';
 import 'providers/task_provider.dart';
 import 'providers/background_task_provider.dart';
 import 'providers/notification_provider.dart';
-import 'pages/unified_task_list_page.dart';
+import 'pages/unified_task_list/task_utils.dart';
 import 'services/background_service.dart';
 import 'services/notification_service.dart';
 
@@ -26,6 +26,9 @@ final catcatchStartupProvider = FutureProvider<void>((ref) async {
   ref.read(taskListLastReadProvider.notifier).state = lastRead;
   // 加载通知设置
   await ref.read(notificationSettingsProvider.notifier).load();
+  // 记录冷启动（仅完全退出后重新启动算一次）
+  final launchTimestamps = await recordAppLaunch();
+  ref.read(appLaunchTimestampsProvider.notifier).state = launchTimestamps;
 });
 
 /// 全局错误处理器：捕获所有未处理的异常，打印日志但不闪退。
