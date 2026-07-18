@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../models/math_expression.dart';
+import '../models/math_expression.dart' show MathExpression;
 import '../models/math_drawing_state.dart';
 import '../models/formula_entry.dart';
 import '../widgets/math_canvas.dart';
@@ -134,6 +134,29 @@ class _MathDrawingPageState extends State<MathDrawingPage>
       _formulas[index].controller.dispose();
       _formulas.removeAt(index);
     });
+  }
+
+  void _confirmRemove(int index) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除公式'),
+        content: Text('确定要删除"公式 ${index + 1}"吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _removeFormula(index);
+            },
+            child: Text('删除', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _toggleVisibility(int index) {
@@ -345,7 +368,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
           // ---- Add formula (+) button (first row only) ----
           if (index == 0)
             IconButton(
-              icon: const Icon(Icons.add_circle_outline, size: 20),
+              icon: Icon(Icons.add_circle, size: 20, color: cs.primary),
               tooltip: '添加公式',
               onPressed: _addFormula,
               padding: EdgeInsets.zero,
@@ -355,9 +378,9 @@ class _MathDrawingPageState extends State<MathDrawingPage>
           // ---- Remove formula (X) button ----
           if (_formulas.length > 1)
             IconButton(
-              icon: Icon(Icons.remove_circle_outline, size: 18, color: cs.error),
+              icon: Icon(Icons.remove_circle_outline, size: 18, color: cs.error.withValues(alpha: 0.7)),
               tooltip: '删除公式',
-              onPressed: () => _removeFormula(index),
+              onPressed: () => _confirmRemove(index),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
             ),
@@ -367,10 +390,12 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             icon: Icon(
               Icons.check_circle_outline,
               size: 22,
-              color: hasChanged ? cs.primary : cs.onSurfaceVariant,
+              color: hasChanged
+                  ? cs.primary
+                  : cs.onSurface.withValues(alpha: 0.2),
             ),
             tooltip: '绘制',
-            onPressed: _plotAll,
+            onPressed: _canPlot ? _plotAll : null,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),

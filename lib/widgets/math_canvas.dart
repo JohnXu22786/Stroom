@@ -3,7 +3,7 @@ import 'dart:math' as dart_math;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 
-import '../models/math_expression.dart';
+import '../models/math_expression.dart' show MathExpression, MathExpressionType;
 import '../models/formula_entry.dart';
 
 /// Callback types for canvas → parent communication.
@@ -206,7 +206,16 @@ class MathCanvasState extends State<MathCanvas> {
   /// Returns the sampled points (does NOT update state or fire callbacks).
   List<Map<String, double>> _sampleCurve(FormulaEntry formula) {
     if (!formula.isValid) return [];
-    return formula.parsed!.samplePoints(
+    final parsed = formula.parsed!;
+    if (parsed.type == MathExpressionType.implicit) {
+      return parsed.sampleContour(
+        xMin: _xMin,
+        xMax: _xMax,
+        yMin: _yMin,
+        yMax: _yMax,
+      );
+    }
+    return parsed.samplePoints(
       xMin: _xMin,
       xMax: _xMax,
       numPoints: 300,

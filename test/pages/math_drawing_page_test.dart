@@ -38,7 +38,7 @@ void main() {
     testWidgets('shows add, checkmark, eye, color buttons', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
-      expect(find.byIcon(Icons.add_circle_outline), findsOneWidget);
+      expect(find.byIcon(Icons.add_circle), findsOneWidget);
       expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
       expect(find.byIcon(Icons.visibility), findsOneWidget);
     });
@@ -75,24 +75,35 @@ void main() {
 
       expect(find.byType(TextField), findsOneWidget);
 
-      await tester.tap(find.byIcon(Icons.add_circle_outline));
+      await tester.tap(find.byIcon(Icons.add_circle));
       await tester.pump();
 
       expect(find.byType(TextField), findsNWidgets(2));
     });
 
-    testWidgets('remove button removes a row', (tester) async {
+    testWidgets('remove button with confirmation removes formula',
+        (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
-      await tester.tap(find.byIcon(Icons.add_circle_outline));
+      // Add a second formula
+      await tester.tap(find.byIcon(Icons.add_circle));
       await tester.pump();
       expect(find.byType(TextField), findsNWidgets(2));
 
-      // Remove buttons appear when 2+ formulas
+      // Tap remove on first formula
       await tester.tap(find.byIcon(Icons.remove_circle_outline).first);
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
+      // Confirmation dialog should appear
+      expect(find.text('删除'), findsWidgets);
+
+      // Confirm deletion
+      await tester.tap(find.text('删除').last);
+      await tester.pump();
+
+      // Now 1 formula should remain
       expect(find.byType(TextField), findsOneWidget);
     });
 
@@ -100,11 +111,11 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
-      await tester.tap(find.byIcon(Icons.add_circle_outline));
+      await tester.tap(find.byIcon(Icons.add_circle));
       await tester.pump();
 
       // There should be exactly 1 add button (only on first row)
-      expect(find.byIcon(Icons.add_circle_outline), findsOneWidget);
+      expect(find.byIcon(Icons.add_circle), findsOneWidget);
     });
 
     testWidgets('eye toggle hides formula', (tester) async {

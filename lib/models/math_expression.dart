@@ -1,32 +1,48 @@
+import 'dart:math' as dart_math;
+
 import 'package:function_tree/function_tree.dart';
+
+/// The type of a math expression.
+enum MathExpressionType {
+  /// Explicit y = f(x) — a single-valued function of x.
+  explicit,
+
+  /// Implicit f(x,y) = 0 — a contour/relation in the plane.
+  implicit,
+}
 
 /// Represents a single math expression with its various forms.
 ///
 /// Uses [function_tree] for expression parsing and evaluation, enabling
 /// native Flutter rendering without WebView/JSXGraph dependencies.
 ///
-/// The [rawExpression] is the user's input (LaTeX-style).
-/// [evaluator] is a callable function [double Function(double)] with
-/// parameters baked in.
-/// [latexDisplay] is the LaTeX display string for flutter_math_fork.
+/// For explicit functions (e.g. "x^2", "sin(x)"), [evaluator] is a
+/// [double Function(double)] and [samplePoints] samples y = f(x).
+///
+/// For implicit equations (e.g. "x^2+y^2=1"), [implicitEvaluator] is a
+/// [double Function(double, double)] and [sampleContour] finds the zero set.
 class MathExpression {
-  /// The raw expression as entered by the user (e.g. "x^2", "sin(x)").
+  /// The raw expression as entered by the user (e.g. "x^2", "x=1").
   final String rawExpression;
 
   /// The normalized expression ready for [function_tree] parsing.
-  /// For example "pow(x,2)" instead of "x^2" if needed by function_tree —
-  /// but function_tree supports ^ natively, so this is just the normalized form.
   final String normalizedExpression;
 
-  /// LaTeX display string for rendering (e.g. "y = x^2", "y = sin(x)").
+  /// The type of expression (explicit or implicit).
+  final MathExpressionType type;
+
+  /// LaTeX display string for rendering.
   final String latexDisplay;
 
   /// Set of parameter names extracted from the expression (e.g. {"a", "b"}).
   final Set<String> parameters;
 
-  /// A callable function that evaluates this expression at a given x value,
-  /// with current parameter values baked in.
+  /// For explicit functions: evaluates at a given x value.
+  /// For implicit equations: evaluates f(x, y) at a given x (y defaults to 0).
   final double Function(double) evaluator;
+
+  /// For implicit equations: evaluates f(x, y). Null for explicit.
+  final double Function(double, double)? implicitEvaluator;
 
   /// Whether this expression is valid (non-empty and parseable).
   bool get isValid => rawExpression.isNotEmpty && _parseError == null;
@@ -40,9 +56,11 @@ class MathExpression {
   const MathExpression._({
     required this.rawExpression,
     required this.normalizedExpression,
+    required this.type,
     required this.latexDisplay,
     required this.parameters,
     required this.evaluator,
+    this.implicitEvaluator,
     String? parseError,
   }) : _parseError = parseError;
 
@@ -59,6 +77,7 @@ class MathExpression {
       return MathExpression._(
         rawExpression: '',
         normalizedExpression: '',
+        type: MathExpressionType.explicit,
         latexDisplay: '',
         parameters: {},
         evaluator: (_) => 0.0,
@@ -72,6 +91,7 @@ class MathExpression {
       return MathExpression._(
         rawExpression: trimmed,
         normalizedExpression: '',
+        type: MathExpressionType.explicit,
         latexDisplay: _toLatexDisplay(trimmed),
         parameters: {},
         evaluator: (_) => 0.0,
@@ -79,15 +99,35 @@ class MathExpression {
       );
     }
 
+    // Detect implicit equations: body contains '=' that's not part of y= or f(x)=
+    final isEquation = _isEquation(body);
+
     // Normalize the expression for function_tree
     final normalized = _normalizeExpression(body);
 
     // Try to parse and create evaluator
     String? error;
     double Function(double)? evalFn;
+    double Function(double, double)? implicitFn;
 
     try {
-      evalFn = _createEvaluator(normalized, parameterValues);
+      if (isEquation) {
+        // For equations like x=1 or x^2+y^2=1, create f(x,y) = left - right
+        final eqParts = normalized.split('=');
+        if (eqParts.length == 2) {
+          final implicitExpr = '(${eqParts[0]})-(${eqParts[1]})';
+          // Normalize the implicit expression
+          final normalizedImplicit = _normalizeExpression(implicitExpr);
+          // Create multi-variable evaluator with x and y
+          implicitFn = _createImplicitEvaluator(normalizedImplicit, parameterValues);
+          // Also create a backward-compat explicit evaluator (y=0 slice)
+          evalFn = (double x) => implicitFn!(x, 0.0);
+        } else {
+          error = '无效的等式';
+        }
+      } else {
+        evalFn = _createEvaluator(normalized, parameterValues);
+      }
     } catch (e) {
       error = e.toString();
     }
@@ -98,11 +138,13 @@ class MathExpression {
     return MathExpression._(
       rawExpression: trimmed,
       normalizedExpression: normalized,
+      type: isEquation ? MathExpressionType.implicit : MathExpressionType.explicit,
       latexDisplay: _toLatexDisplay(trimmed),
       parameters: params,
       evaluator: evalFn ?? ((double x) {
         throw error ?? 'Unknown parse error';
       }),
+      implicitEvaluator: implicitFn,
       parseError: error,
     );
   }
@@ -112,10 +154,20 @@ class MathExpression {
     if (!isValid) return this;
 
     double Function(double)? evalFn;
+    double Function(double, double)? implicitFn;
     String? error;
 
     try {
-      evalFn = _createEvaluator(normalizedExpression, parameterValues);
+      if (type == MathExpressionType.implicit) {
+        final eqParts = normalizedExpression.split('=');
+        if (eqParts.length == 2) {
+          final implicitExpr = _normalizeExpression('(${eqParts[0]})-(${eqParts[1]})');
+          implicitFn = _createImplicitEvaluator(implicitExpr, parameterValues);
+          evalFn = (double x) => implicitFn!(x, 0.0);
+        }
+      } else {
+        evalFn = _createEvaluator(normalizedExpression, parameterValues);
+      }
     } catch (e) {
       error = e.toString();
     }
@@ -123,11 +175,13 @@ class MathExpression {
     return MathExpression._(
       rawExpression: rawExpression,
       normalizedExpression: normalizedExpression,
+      type: type,
       latexDisplay: latexDisplay,
       parameters: parameters,
       evaluator: evalFn ?? ((double x) {
         throw error ?? 'Unknown parse error';
       }),
+      implicitEvaluator: implicitFn,
       parseError: error,
     );
   }
@@ -159,6 +213,122 @@ class MathExpression {
     }
 
     return points;
+  }
+
+  /// Sample the contour of an implicit equation f(x,y)=0 within the viewport.
+  ///
+  /// Uses a fine grid (resolution x [gridX] × [gridY]) and scans for
+  /// zero crossings. Returns a list of {x, y} coordinate pairs along
+  /// the contour(s). For explicit functions, returns [samplePoints].
+  List<Map<String, double>> sampleContour({
+    double xMin = -10,
+    double xMax = 10,
+    double yMin = -10,
+    double yMax = 10,
+    int gridX = 80,
+    int gridY = 80,
+  }) {
+    if (!isValid || xMax <= xMin || yMax <= yMin) return [];
+    if (type == MathExpressionType.explicit) {
+      // Fall back to regular sampling for explicit functions
+      return samplePoints(xMin: xMin, xMax: xMax, numPoints: gridX);
+    }
+
+    final evaluator2D = implicitEvaluator;
+    if (evaluator2D == null) return [];
+
+    // Grid scanning with marching squares to find zero crossings.
+    final stepX = (xMax - xMin) / gridX;
+    final stepY = (yMax - yMin) / gridY;
+
+    // Evaluate f at each grid point
+    final grid = <List<double>>[];
+    for (int i = 0; i <= gridX; i++) {
+      grid.add(List<double>.filled(gridY + 1, double.nan));
+    }
+
+    for (int ix = 0; ix <= gridX; ix++) {
+      final x = xMin + ix * stepX;
+      for (int iy = 0; iy <= gridY; iy++) {
+        final y = yMin + iy * stepY;
+        try {
+          grid[ix][iy] = evaluator2D(x, y);
+        } catch (_) {
+          grid[ix][iy] = double.nan;
+        }
+      }
+    }
+
+    // Find zero crossings on each grid cell
+    final points = <Map<String, double>>[];
+    for (int ix = 0; ix < gridX; ix++) {
+      for (int iy = 0; iy < gridY; iy++) {
+        final v00 = grid[ix][iy];
+        final v10 = grid[ix + 1][iy];
+        final v01 = grid[ix][iy + 1];
+        final v11 = grid[ix + 1][iy + 1];
+
+        if (v00.isNaN || v10.isNaN || v01.isNaN || v11.isNaN) continue;
+
+        // Check if the cell contains a zero crossing
+        // (opposite signs on any edge)
+        final x = xMin + ix * stepX;
+        final y = yMin + iy * stepY;
+
+        // Bottom edge (v00-v10)
+        if (v00 * v10 < 0) {
+          final t = v00.abs() / (v00.abs() + v10.abs());
+          points.add({'x': x + t * stepX, 'y': y.toDouble()});
+        }
+        // Top edge (v01-v11)
+        if (v01 * v11 < 0) {
+          final t = v01.abs() / (v01.abs() + v11.abs());
+          points.add({'x': x + t * stepX, 'y': (y + stepY).toDouble()});
+        }
+        // Left edge (v00-v01)
+        if (v00 * v01 < 0) {
+          final t = v00.abs() / (v00.abs() + v01.abs());
+          points.add({'x': x.toDouble(), 'y': y + t * stepY});
+        }
+        // Right edge (v10-v11)
+        if (v10 * v11 < 0) {
+          final t = v10.abs() / (v10.abs() + v11.abs());
+          points.add({'x': (x + stepX).toDouble(), 'y': y + t * stepY});
+        }
+      }
+    }
+
+    return points;
+  }
+
+  /// Check whether [expr] contains `=` as an equation (not y= / f(x)= prefix).
+  static bool _isEquation(String expr) {
+    if (!expr.contains('=')) return false;
+    // If it starts with y= or f(x)=, it's explicit (already stripped prefix).
+    // We already stripped those, so any remaining '=' is a true equation.
+    // But x=1 is an equation, while things like "==" are malformed.
+    return expr.contains('=');
+  }
+
+  /// Create a multi-variable evaluator for implicit equations f(x,y).
+  static double Function(double, double) _createImplicitEvaluator(
+    String normalized,
+    Map<String, double> parameterValues,
+  ) {
+    final variableNames = ['x', 'y'];
+    // Add any additional parameters from parameterValues
+    for (final key in parameterValues.keys) {
+      if (!variableNames.contains(key)) {
+        variableNames.add(key);
+      }
+    }
+    final multiFunc = normalized.toMultiVariableFunction(variableNames);
+    return (double x, double y) {
+      final args = Map<String, num>.from(parameterValues);
+      args['x'] = x;
+      args['y'] = y;
+      return multiFunc(args).toDouble();
+    };
   }
 
   // ==================================================================
