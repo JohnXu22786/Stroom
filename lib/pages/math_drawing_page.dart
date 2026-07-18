@@ -5,7 +5,7 @@ import '../models/math_drawing_state.dart';
 import '../models/formula_entry.dart';
 import '../widgets/math_canvas.dart';
 
-/// 数学绘制页面 — 多公式、等价的公式行、颜色选择、显隐切换。
+/// 数学绘图页面 — 多公式、等价的公式行、颜色选择、显隐切换。
 class MathDrawingPage extends StatefulWidget {
   final String? initialExpression;
   final bool initialShowWebView;
@@ -235,7 +235,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('数学绘制'),
+        title: const Text('数学绘图'),
         actions: [
           IconButton(
             icon: const Icon(Icons.center_focus_strong, size: 20),

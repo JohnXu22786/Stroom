@@ -647,7 +647,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                   _buildModuleCard(
                     icon: Icons.functions,
-                    label: '数学绘制',
+                    label: '数学绘图',
                     subtitle: '函数绘图',
                     color: Colors.blue,
                     onTap: () {

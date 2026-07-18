@@ -79,7 +79,7 @@ void main() {
       expect(find.text('音频分离'), findsOneWidget);
       expect(find.text('语音合成'), findsOneWidget);
       expect(find.text('图表制作'), findsOneWidget);
-      expect(find.text('数学绘制'), findsOneWidget);
+      expect(find.text('数学绘图'), findsOneWidget);
     });
 
     testWidgets('TTSCreatePage import is available', (tester) async {
@@ -136,12 +136,12 @@ void main() {
       expect(find.text('Mermaid图表编辑'), findsOneWidget);
     });
 
-    testWidgets('数学绘制 card is visible on home page', (tester) async {
+    testWidgets('数学绘图 card is visible on home page', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
       // The new math drawing card should be visible
-      expect(find.text('数学绘制'), findsOneWidget);
+      expect(find.text('数学绘图'), findsOneWidget);
       expect(find.text('函数绘图'), findsOneWidget);
     });
   });

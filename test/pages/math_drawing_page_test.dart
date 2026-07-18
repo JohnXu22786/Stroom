@@ -19,7 +19,7 @@ void main() {
     testWidgets('renders app bar with title', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
-      expect(find.text('数学绘制'), findsOneWidget);
+      expect(find.text('数学绘图'), findsOneWidget);
     });
 
     testWidgets('renders 2D and 3D tabs', (tester) async {
