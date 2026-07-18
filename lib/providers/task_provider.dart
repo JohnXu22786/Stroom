@@ -462,7 +462,13 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
         try {
           params[cp.paramName] = jsonDecode(rawValue);
         } catch (_) {
-          // Keep as string if not valid JSON
+          if (rawValue.trim().isNotEmpty) {
+            debugPrint(
+              '[TaskListNotifier] parseJsonCustomParams: failed to parse '
+              '"$rawValue" as JSON for param "${cp.paramName}" — '
+              'keeping raw string.',
+            );
+          }
         }
       }
       // If already a Map/List/num/bool — leave as-is
