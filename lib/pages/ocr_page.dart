@@ -1368,6 +1368,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final bgNotifier = ref.read(backgroundTasksProvider.notifier);
     final textNotifier = ref.read(textRecordsProvider.notifier);
 
+    // Pop back to home page IMMEDIATELY so user doesn't experience a freeze.
+    // Heavy work (base64Encode for retry data) happens after the pop.
+    if (mounted) {
+      Navigator.pop(context);
+    }
+
     // Create a background task for tracking
     final timestamp = _currentTimestamp();
     // Determine naming: if all images have source names (imported), use prefix + original name
@@ -1396,11 +1402,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       title: title,
       retryData: retryData,
     );
-
-    // Pop back to home page immediately so user can see task progress
-    if (mounted) {
-      Navigator.pop(context);
-    }
 
     try {
       await _performOcr(effectiveConfig, taskId, bgNotifier, textNotifier,
