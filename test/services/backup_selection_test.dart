@@ -220,6 +220,10 @@ void main() {
         (WidgetTester t) async {
       SharedPreferences.setMockInitialValues({
         'conversations': '[]',
+        'assistants': '[{"id":"a1","name":"测试助手"}]',
+        'per_model_chat_settings': '{}',
+        'selected_model_index': 0,
+        'model_order': '[]',
         'provider_entries': '[]',
         'data_format_version': 2,
       });
@@ -244,6 +248,30 @@ void main() {
       expect(fileNames, contains('manifest.json'));
       expect(fileNames, contains('chat_data.json'));
       expect(fileNames, isNot(contains('settings.json')));
+
+      // Verify settings keys are NOT in chat_data.json
+      Uint8List? chatDataRaw;
+      for (final f in archive) {
+        if (f.isFile && f.name == 'chat_data.json') {
+          chatDataRaw = Uint8List.fromList(f.content as List<int>);
+          break;
+        }
+      }
+      expect(chatDataRaw, isNotNull);
+      final chatData =
+          jsonDecode(utf8.decode(chatDataRaw!)) as Map<String, dynamic>;
+      expect(chatData.containsKey('assistants'), isFalse,
+          reason:
+              'assistants should NOT be in chat_data.json; it belongs to settings');
+      expect(chatData.containsKey('per_model_chat_settings'), isFalse,
+          reason:
+              'per_model_chat_settings should NOT be in chat_data.json; it belongs to settings');
+      expect(chatData.containsKey('selected_model_index'), isFalse,
+          reason:
+              'selected_model_index should NOT be in chat_data.json; it belongs to settings');
+      expect(chatData.containsKey('model_order'), isFalse,
+          reason:
+              'model_order should NOT be in chat_data.json; it belongs to settings');
     });
 
     testWidgets(
@@ -251,6 +279,10 @@ void main() {
         (WidgetTester t) async {
       SharedPreferences.setMockInitialValues({
         'conversations': '[]',
+        'assistants': '[{"id":"a1","name":"测试助手"}]',
+        'per_model_chat_settings': '{}',
+        'selected_model_index': 0,
+        'model_order': '[]',
         'provider_entries': '[]',
         'data_format_version': 2,
       });
@@ -275,6 +307,123 @@ void main() {
       expect(fileNames, contains('manifest.json'));
       expect(fileNames, contains('settings.json'));
       expect(fileNames, isNot(contains('chat_data.json')));
+
+      // Verify all settings keys ARE in settings.json
+      Uint8List? settingsDataRaw;
+      for (final f in archive) {
+        if (f.isFile && f.name == 'settings.json') {
+          settingsDataRaw = Uint8List.fromList(f.content as List<int>);
+          break;
+        }
+      }
+      expect(settingsDataRaw, isNotNull);
+      final settingsData =
+          jsonDecode(utf8.decode(settingsDataRaw!)) as Map<String, dynamic>;
+      expect(settingsData.containsKey('assistants'), isTrue,
+          reason:
+              'assistants should be in settings.json when settings-only backup is selected');
+      expect(settingsData.containsKey('per_model_chat_settings'), isTrue,
+          reason:
+              'per_model_chat_settings should be in settings.json when settings-only backup is selected');
+      expect(settingsData.containsKey('selected_model_index'), isTrue,
+          reason:
+              'selected_model_index should be in settings.json when settings-only backup is selected');
+      expect(settingsData.containsKey('model_order'), isTrue,
+          reason:
+              'model_order should be in settings.json when settings-only backup is selected');
+    });
+  });
+
+  // ==================================================================
+  // 助手设置分类：assistants 键应归为"设置"而非"聊天记录和附件"
+  // ==================================================================
+
+  group('Assistant settings classification', () {
+    testWidgets(
+        'full backup: assistants goes to settings.json, conversations goes to chat_data.json',
+        (WidgetTester t) async {
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"conv1"}]',
+        'active_conversation_id': 'conv1',
+        'assistants': '[{"id":"a1","name":"测试助手","prompt":"你好"}]',
+        'per_model_chat_settings': '{"gpt-4":{"reasoningEnabled":true}}',
+        'selected_model_index': 0,
+        'model_order': '["gpt-4","gpt-3.5"]',
+        'provider_entries': '[{"id":"p1","type":"llm"}]',
+        'data_format_version': 2,
+      });
+
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: true,
+        settings: true,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+      );
+      final bytes = await BackupService.buildBackupBytesForTest(
+        selection: sel,
+      );
+      final archive = ZipDecoder().decodeBytes(bytes);
+
+      final fileNames =
+          archive.files.where((f) => f.isFile).map((f) => f.name).toSet();
+
+      expect(fileNames, contains('manifest.json'));
+      expect(fileNames, contains('chat_data.json'));
+      expect(fileNames, contains('settings.json'));
+
+      // Verify assistants is in settings.json (not chat_data.json)
+      Uint8List? settingsDataRaw;
+      Uint8List? chatDataRaw;
+      for (final f in archive) {
+        if (f.isFile && f.name == 'settings.json') {
+          settingsDataRaw = Uint8List.fromList(f.content as List<int>);
+        }
+        if (f.isFile && f.name == 'chat_data.json') {
+          chatDataRaw = Uint8List.fromList(f.content as List<int>);
+        }
+      }
+      expect(settingsDataRaw, isNotNull);
+      expect(chatDataRaw, isNotNull);
+
+      final settingsData =
+          jsonDecode(utf8.decode(settingsDataRaw!)) as Map<String, dynamic>;
+      final chatData =
+          jsonDecode(utf8.decode(chatDataRaw!)) as Map<String, dynamic>;
+
+      // All settings keys should be in settings.json
+      expect(settingsData.containsKey('assistants'), isTrue,
+          reason: 'assistants must be in settings.json (settings, not chat)');
+      expect(settingsData.containsKey('per_model_chat_settings'), isTrue,
+          reason:
+              'per_model_chat_settings must be in settings.json (settings, not chat)');
+      expect(settingsData.containsKey('selected_model_index'), isTrue,
+          reason:
+              'selected_model_index must be in settings.json (settings, not chat)');
+      expect(settingsData.containsKey('model_order'), isTrue,
+          reason: 'model_order must be in settings.json (settings, not chat)');
+
+      // All settings keys should NOT be in chat_data.json
+      expect(chatData.containsKey('assistants'), isFalse,
+          reason: 'assistants must NOT be in chat_data.json');
+      expect(chatData.containsKey('per_model_chat_settings'), isFalse,
+          reason: 'per_model_chat_settings must NOT be in chat_data.json');
+      expect(chatData.containsKey('selected_model_index'), isFalse,
+          reason: 'selected_model_index must NOT be in chat_data.json');
+      expect(chatData.containsKey('model_order'), isFalse,
+          reason: 'model_order must NOT be in chat_data.json');
+
+      // conversations should still be in chat_data.json
+      expect(chatData.containsKey('conversations'), isTrue,
+          reason: 'conversations should still be in chat_data.json');
+      expect(chatData.containsKey('active_conversation_id'), isTrue,
+          reason: 'active_conversation_id should still be in chat_data.json');
+
+      // provider_entries should still be in settings.json
+      expect(settingsData.containsKey('provider_entries'), isTrue,
+          reason: 'provider_entries should be in settings.json');
     });
   });
 
