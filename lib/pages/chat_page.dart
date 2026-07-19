@@ -622,22 +622,119 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // Fallback: save directly to SharedPreferences if the notifier is
       // unavailable (e.g. during background streaming after page disposal).
       debugPrint('_saveMessages via notifier failed: $e\n$s');
+      await AppLogService.error('ChatPage', '通过 notifier 保存消息失败, 尝试直接写入', e, s);
       try {
         final prefs = await SharedPreferences.getInstance();
-        final allJson = prefs.getString('conversations');
-        if (allJson == null) return;
         final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
         if (convId == null) return;
-        final decoded = jsonDecode(allJson);
-        if (decoded is! List) return;
-        final list = decoded.cast<Map<String, dynamic>>();
-        final conv = list.where((c) => c['id'] == convId).firstOrNull;
-        if (conv == null) return;
-        conv['messages'] = _history.map((m) => m.toMap()).toList();
-        conv['updatedAt'] = DateTime.now().toIso8601String();
-        await prefs.setString('conversations', jsonEncode(list));
-      } catch (e2, s2) {
-        debugPrint('_saveMessages fallback also failed: $e2\n$s2');
+
+        // Tier A: read existing, modify the target conversation, write back.
+        // We round-trip the other conversations through Conversation.fromMap →
+        // toMap so that any pre-existing unsanitized base64 in their
+        // rawRequest/rawResponse is stripped (this prevents the
+        // SharedPreferences file from being re-bloated by unsanitized data
+        // from older app versions or from a previous failed save).
+        try {
+          final allJson = prefs.getString('conversations');
+          if (allJson != null && allJson.isNotEmpty) {
+            final decoded = jsonDecode(allJson);
+            if (decoded is List) {
+              final list = <Map<String, dynamic>>[];
+              for (final item in decoded) {
+                if (item is Map) {
+                  try {
+                    // Round-trip through fromMap/toMap to strip any
+                    // unsanitized large base64 in rawRequest/rawResponse.
+                    final conv =
+                        Conversation.fromMap(Map<String, dynamic>.from(item));
+                    list.add(conv.toMap());
+                  } catch (_) {
+                    // If we can't round-trip this conversation, drop it.
+                    // The new conversation will be added below.
+                    debugPrint(
+                        '_saveMessages Tier A: dropping unparseable conversation');
+                  }
+                }
+              }
+              // Find or insert the target conversation
+              final existingIdx = list.indexWhere((c) => c['id'] == convId);
+              final targetMap = <String, dynamic>{
+                'id': convId,
+                'title': '',
+                'createdAt': DateTime.now().toIso8601String(),
+                'updatedAt': DateTime.now().toIso8601String(),
+                'messages': _history.map((m) => m.toMap()).toList(),
+                'isPinned': false,
+                'sortOrder': 0,
+                'draftText': '',
+              };
+              if (existingIdx >= 0) {
+                final existing = list[existingIdx];
+                // Preserve user-set fields from the existing entry.
+                targetMap['title'] = existing['title'] ?? '';
+                targetMap['createdAt'] =
+                    existing['createdAt'] ?? targetMap['createdAt'];
+                targetMap['isPinned'] = existing['isPinned'] ?? false;
+                targetMap['sortOrder'] = existing['sortOrder'] ?? 0;
+                targetMap['draftText'] = existing['draftText'] ?? '';
+                if (existing['assistantId'] != null) {
+                  targetMap['assistantId'] = existing['assistantId'];
+                }
+                // Preserve per-conversation tool preferences (the user may
+                // have explicitly disabled all tools for this conversation).
+                if (existing['hasExplicitEnabledMcpTools'] == true) {
+                  targetMap['hasExplicitEnabledMcpTools'] = true;
+                  if (existing['enabledMcpToolNames'] is List) {
+                    targetMap['enabledMcpToolNames'] =
+                        (existing['enabledMcpToolNames'] as List)
+                            .map((e) => e.toString())
+                            .toList();
+                  }
+                }
+                list[existingIdx] = targetMap;
+              } else {
+                list.insert(0, targetMap);
+              }
+              final json = jsonEncode(list);
+              await prefs.setString('conversations', json);
+              await AppLogService.warning(
+                  'ChatPage', '通过直接写入 SharedPreferences 成功保存消息 (Tier A)');
+              return;
+            }
+          }
+        } catch (eA, sA) {
+          debugPrint('_saveMessages Tier A failed: $eA\n$sA');
+          await AppLogService.error(
+              'ChatPage', '保存消息失败 (Tier A: 修改现有对话)', eA, sA);
+        }
+
+        // Tier B: existing data is missing or corrupt — overwrite with just
+        // this conversation. The user's history is preserved because the
+        // backup keys (conversations.corrupt.*) created by _load still
+        // contain the undecodable data for manual recovery.
+        try {
+          final convMap = <String, dynamic>{
+            'id': convId,
+            'title': '',
+            'createdAt': DateTime.now().toIso8601String(),
+            'updatedAt': DateTime.now().toIso8601String(),
+            'messages': _history.map((m) => m.toMap()).toList(),
+            'isPinned': false,
+            'sortOrder': 0,
+            'draftText': '',
+          };
+          final json = jsonEncode([convMap]);
+          await prefs.setString('conversations', json);
+          await AppLogService.error(
+              'ChatPage', '通过直接写入 SharedPreferences 成功保存消息 (Tier B - 仅当前对话)');
+        } catch (eB, sB) {
+          debugPrint('_saveMessages Tier B failed: $eB\n$sB');
+          await AppLogService.error(
+              'ChatPage', '保存消息失败 (Tier B: 全新写入)', eB, sB);
+        }
+      } catch (eOuter, sOuter) {
+        debugPrint('_saveMessages outer fallback failed: $eOuter\n$sOuter');
+        await AppLogService.error('ChatPage', '保存消息失败 (外层兜底)', eOuter, sOuter);
       }
     }
   }

@@ -272,20 +272,23 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
                 }
               }
             }
-            state = conversations;
+            if (mounted) state = conversations;
             await AppLogService.info(
-                'ConversationsNotifier', '加载了 ${state.length} 个对话');
+                'ConversationsNotifier', '加载了 ${conversations.length} 个对话');
           } else {
-            state = [];
+            if (mounted) state = [];
             await AppLogService.info('ConversationsNotifier', '对话数据格式无效');
           }
         } catch (e) {
           debugPrint('Failed to decode conversations JSON: $e');
           await AppLogService.error('ConversationsNotifier', '解析对话 JSON 失败', e);
-          state = [];
+          // Back up the corrupt file so the user can manually recover it
+          // and we don't silently overwrite it on the next save.
+          await _backupCorruptConversationsFile(prefs, json);
+          if (mounted) state = [];
         }
       } else {
-        state = [];
+        if (mounted) state = [];
         await AppLogService.info('ConversationsNotifier', '没有已保存的对话');
       }
 
@@ -294,7 +297,9 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       // it catches conversations that were created without assistantId
       // even after the old migration had already "run".
       try {
-        await assignNullAssistantConversations(prefs, state);
+        if (mounted) {
+          await assignNullAssistantConversations(prefs, state);
+        }
       } catch (e) {
         debugPrint('Failed to auto-fix null assistant conversations: $e');
         await AppLogService.error(
@@ -303,14 +308,16 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
 
       // Restore last active conversation
       try {
-        final activeId = prefs.getString('active_conversation_id');
-        if (activeId != null && state.any((c) => c.id == activeId)) {
-          _ref.read(activeConversationIdProvider.notifier).state = activeId;
-          await AppLogService.info(
-              'ConversationsNotifier', '恢复上次活跃对话: $activeId');
-        } else {
-          await AppLogService.warning('ConversationsNotifier',
-              '未找到上次活跃对话或 activeId 为 null: activeId=$activeId');
+        if (mounted) {
+          final activeId = prefs.getString('active_conversation_id');
+          if (activeId != null && state.any((c) => c.id == activeId)) {
+            _ref.read(activeConversationIdProvider.notifier).state = activeId;
+            await AppLogService.info(
+                'ConversationsNotifier', '恢复上次活跃对话: $activeId');
+          } else {
+            await AppLogService.warning('ConversationsNotifier',
+                '未找到上次活跃对话或 activeId 为 null: activeId=$activeId');
+          }
         }
       } catch (e) {
         debugPrint('Failed to restore active conversation: $e');
@@ -320,7 +327,56 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     } catch (e) {
       debugPrint('Failed to load conversations: $e');
       await AppLogService.error('ConversationsNotifier', '加载对话失败', e);
-      state = [];
+      if (mounted) state = [];
+    } finally {
+      // Mark the initial load as having run, so a subsequent debounced
+      // _persist (with empty state) doesn't write an empty list over the
+      // previous good save before _load completes.
+      _loadHasRun = true;
+    }
+  }
+
+  /// Move a corrupt conversations JSON blob to a timestamped backup key so
+  /// the user can inspect it later and we don't overwrite it on the next save.
+  ///
+  /// This is called when `jsonDecode` throws on the on-disk JSON. The previous
+  /// behavior was to silently throw away the data; this preserves the
+  /// undecodable payload in case the user wants to recover it manually.
+  ///
+  /// **Bounded retention**: keeps at most [_maxCorruptBackups] backups. When
+  /// the cap is exceeded, the oldest backup is deleted. This prevents
+  /// SharedPreferences from growing without bound on devices that
+  /// repeatedly hit decode failures.
+  static const int _maxCorruptBackups = 3;
+
+  Future<void> _backupCorruptConversationsFile(
+      SharedPreferences prefs, String corruptJson) async {
+    try {
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final backupKey = 'conversations.corrupt.$timestamp';
+      await prefs.setString(backupKey, corruptJson);
+      // Also clear the original key so the next save starts fresh instead of
+      // repeatedly trying to decode the same corrupt blob.
+      await prefs.remove('conversations');
+      debugPrint(
+          'ConversationsNotifier: backed up corrupt conversations to $backupKey');
+      await AppLogService.warning(
+          'ConversationsNotifier', '检测到损坏的对话数据，已备份到 $backupKey，原始数据已清空');
+
+      // Enforce the cap: keep only the N most recent backups.
+      final backupKeys = prefs
+          .getKeys()
+          .where((k) => k.startsWith('conversations.corrupt.'))
+          .toList()
+        ..sort();
+      while (backupKeys.length > _maxCorruptBackups) {
+        final oldest = backupKeys.removeAt(0);
+        await prefs.remove(oldest);
+        debugPrint(
+            'ConversationsNotifier: removed old corrupt backup $oldest (cap=$_maxCorruptBackups)');
+      }
+    } catch (e) {
+      debugPrint('Failed to back up corrupt conversations: $e');
     }
   }
 
@@ -341,33 +397,110 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   Future<void> _persist() async {
     _persistTimer?.cancel();
     _persistTimer = Timer(const Duration(milliseconds: 500), () async {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final json = jsonEncode(state.map((e) => e.toMap()).toList());
-        await prefs.setString('conversations', json);
-        await AppLogService.debug(
-            'ConversationsNotifier', '对话已持久化 (延迟保存), 共 ${state.length} 个');
-      } catch (e) {
-        debugPrint('Failed to persist conversations: $e');
-        await AppLogService.error('ConversationsNotifier', '持久化对话失败', e);
-      }
+      await _persistCore();
     });
   }
 
   Future<void> _persistNow() async {
     _persistTimer?.cancel();
     _persistTimer = null;
+    await _persistCore();
+  }
+
+  /// Persist the current state to SharedPreferences with fallback.
+  ///
+  /// Tries these strategies in order, stopping at the first success:
+  /// 1. Normal save (jsonEncode full state toMap) — preserves rawRequest
+  ///    and rawResponse for the "view raw data" feature.
+  /// 2. Save with rawRequest/rawResponse stripped from every message —
+  ///    used when (1) throws so the user's message content is preserved
+  ///    even if diagnostic raw data is lost.
+  ///
+  /// We intentionally do NOT have a tier that drops message content.
+  /// Silently losing chat history to "make the save succeed" is worse than
+  /// failing the save and keeping the previous good copy on disk.
+  ///
+  /// All failures are logged so the user can find the cause.
+  ///
+  /// **Important**: captures a local snapshot of [state] at function entry
+  /// so the save still completes if the notifier is disposed mid-call
+  /// (e.g. `dispose()` schedules a final save but the notifier is torn down
+  /// before it can run — the snapshot is already captured at that point).
+  /// We therefore do NOT bail out on `!mounted` at the top; the snapshot
+  /// pattern is what protects us.
+  Future<void> _persistCore() async {
+    final List<Conversation> snapshot;
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final json = jsonEncode(state.map((e) => e.toMap()).toList());
+      snapshot = List<Conversation>.from(state);
+    } catch (_) {
+      // Notifier was already disposed before we could snapshot. Nothing we
+      // can do — the previous good save is still on disk.
+      return;
+    }
+    if (snapshot.isEmpty && !_loadHasRun) return;
+    SharedPreferences? prefs;
+    try {
+      prefs = await SharedPreferences.getInstance();
+    } catch (e) {
+      debugPrint('Failed to get SharedPreferences: $e');
+      return;
+    }
+
+    // Tier 1: full save
+    try {
+      final json = jsonEncode(snapshot.map((e) => e.toMap()).toList());
       await prefs.setString('conversations', json);
       await AppLogService.debug(
-          'ConversationsNotifier', '对话已立即持久化, 共 ${state.length} 个');
+          'ConversationsNotifier', '对话已持久化, 共 ${snapshot.length} 个');
+      return;
     } catch (e) {
-      debugPrint('Failed to persist conversations synchronously: $e');
-      await AppLogService.error('ConversationsNotifier', '立即持久化对话失败', e);
+      debugPrint('Failed to persist conversations (full): $e');
+      await AppLogService.error('ConversationsNotifier', '持久化对话失败 (完整)', e);
+    }
+
+    // Tier 2: drop rawRequest/rawResponse from every message.
+    try {
+      final stripped = snapshot
+          .map((c) => Conversation(
+                id: c.id,
+                title: c.title,
+                createdAt: c.createdAt,
+                updatedAt: c.updatedAt,
+                messages: c.messages
+                    .map((m) => ChatMessage(
+                          id: m.id,
+                          role: m.role,
+                          content: m.content,
+                          createdAt: m.createdAt,
+                          attachments: m.attachments,
+                          isStreaming: m.isStreaming,
+                          isError: m.isError,
+                          reasoningContent: m.reasoningContent,
+                        ))
+                    .toList(),
+                isPinned: c.isPinned,
+                sortOrder: c.sortOrder,
+                assistantId: c.assistantId,
+                draftText: c.draftText,
+                enabledMcpToolNames: c.enabledMcpToolNames,
+                hasExplicitEnabledMcpTools: c.hasExplicitEnabledMcpTools,
+              ))
+          .toList();
+      final json = jsonEncode(stripped.map((e) => e.toMap()).toList());
+      await prefs.setString('conversations', json);
+      await AppLogService.warning(
+          'ConversationsNotifier', '持久化对话成功 (剥离 rawRequest/rawResponse 后)');
+    } catch (e) {
+      debugPrint('Failed to persist conversations (stripped): $e');
+      await AppLogService.error('ConversationsNotifier', '持久化对话失败 (剥离后)', e);
+      // Both tiers failed. The previous good save on disk is preserved
+      // (we never overwrote it). Log loudly so the user can find the cause.
     }
   }
+
+  /// Whether the initial async _load has completed at least once.
+  /// Used to skip a no-op persist triggered before any data has loaded.
+  bool _loadHasRun = false;
 
   @override
   void dispose() {
