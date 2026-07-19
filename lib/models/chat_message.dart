@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:uuid/uuid.dart';
 
+import '../utils/data_sanitizer.dart';
+
 /// 简化的聊天消息模型，仅用于持久化到 SharedPreferences
 /// UI 层使用 flutter_chat_ui 的 Message 类型
 class Attachment {
@@ -137,13 +139,32 @@ class ChatMessage {
   /// non-serializable types (e.g. Dio ResponseBody, custom objects, DateTime)
   /// that would silently break conversation persistence.
   ///
+  /// **Also strips large base64 attachment data** (data URIs and plain base64
+  /// payloads) via [DataSanitizer.sanitizeForDisplay]. Without this, sending a
+  /// single video/image/audio/PDF could bloat the on-disk JSON to multiple MB,
+  /// causing SharedPreferences write failures, UI freezes, and silent data
+  /// corruption (the "flash crash + half-broken history" bug).
+  ///
   /// The sanitized copy is returned; the original map is NOT modified.
   static Map<String, dynamic>? _sanitizeRawMap(Map<String, dynamic>? raw) {
     if (raw == null) return null;
     try {
       final result = <String, dynamic>{};
       for (final entry in raw.entries) {
-        final value = _sanitizeJsonValue(entry.value);
+        // First make the value JSON-serializable (strip non-encodable types).
+        final typed = _sanitizeJsonValue(entry.value);
+        // Then strip large base64 content so the on-disk payload stays small.
+        // This is safe because:
+        //   1. The original raw data is preserved in memory for the "view raw
+        //      data" dialog, which already sanitizes for display.
+        //   2. Restoring the conversation does not need the full base64 —
+        //      attachments live on disk (AttachmentStorage) and are loaded
+        //      separately when needed.
+        //   3. The first 100 chars of every base64 string is preserved as
+        //      context, so users can still see what was sent.
+        final value = (typed is String || typed is Map || typed is List)
+            ? DataSanitizer.sanitizeForDisplay(typed)
+            : typed;
         // Only include the entry if it's JSON-serializable
         if (value != null || entry.value == null) {
           result[entry.key] = value;

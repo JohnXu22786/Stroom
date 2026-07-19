@@ -1,12 +1,36 @@
-/// Utility functions for sanitizing data for display.
+/// Utility functions for sanitizing data for display and persistence.
 ///
-/// Prevents UI freezes by hiding large base64-encoded content (e.g., images)
-/// and truncating oversized strings.
+/// Prevents UI freezes by hiding large base64-encoded content (e.g., images,
+/// videos, audio, documents) and truncating oversized strings.
+///
+/// IMPORTANT: This is also used on the **save path** (see
+/// [ChatMessage._sanitizeRawMap]) to keep the on-disk JSON small. A multi-MB
+/// base64 video embedded in `rawRequest` would otherwise bloat SharedPreferences
+/// writes, causing UI freezes, process kills, and silent data corruption.
 class DataSanitizer {
   DataSanitizer._();
 
+  /// Generic `data:<mime>;base64,<data>` URI pattern.
+  ///
+  /// MIME type characters per RFC 6838: `[a-zA-Z0-9.+\-]+`. We allow both
+  /// the type and subtype segments plus an optional `;<params>` block
+  /// (e.g. `;charset=utf-8`) before the `;base64,` marker.
+  ///
+  /// Matches: `data:image/png;base64,…`, `data:video/mp4;base64,…`,
+  ///          `data:audio/mpeg;base64,…`, `data:application/pdf;base64,…`,
+  ///          `data:image/svg+xml;base64,…`
+  static final RegExp _dataUriPattern = RegExp(
+      r'^data:[a-zA-Z0-9][a-zA-Z0-9.+\-]*/[a-zA-Z0-9][a-zA-Z0-9.+\-]*(;[^,]*)?;base64,');
+
+  /// Long base64-like strings (no data URI prefix) are detected by sampling
+  /// the first 100 chars for the base64 alphabet. Compiled once at file scope
+  /// to avoid per-call compilation cost on the save hot path.
+  static final RegExp _base64Alphabet = RegExp(r'^[A-Za-z0-9+/=]+$');
+  static final RegExp _whitespace = RegExp(r'[\s\r\n]');
+
   /// Recursively sanitize [data] for display by hiding base64 content
-  /// (images, etc.) to prevent UI freezes when rendering large encoded data.
+  /// (images, videos, audio, documents, etc.) to prevent UI freezes when
+  /// rendering large encoded data.
   static dynamic sanitizeForDisplay(dynamic data) {
     if (data is Map) {
       final result = <String, dynamic>{};
@@ -23,13 +47,12 @@ class DataSanitizer {
   }
 
   /// Replace long base64 strings with a placeholder showing only length.
-  /// Detects data URIs for images and standalone base64 strings longer than 300 chars.
+  ///
+  /// Detects **all** `data:<mime>;base64,<data>` URIs (not just images) so
+  /// video, audio, PDF and other large attachments are stripped on save.
+  /// Also detects standalone base64 strings longer than 300 chars.
   static String sanitizeBase64String(String value) {
-    // Data URI pattern: data:image/<type>;base64,<data>
-    // Supports types like png, jpeg, svg+xml, webp, etc.
-    final dataUriPattern =
-        RegExp(r'^data:image/[a-zA-Z][a-zA-Z0-9+\-.]*;base64,');
-    if (dataUriPattern.hasMatch(value)) {
+    if (_dataUriPattern.hasMatch(value)) {
       final commaIndex = value.indexOf(',');
       final prefix = value.substring(0, commaIndex + 1);
       final b64Part = value.substring(commaIndex + 1);
@@ -39,10 +62,8 @@ class DataSanitizer {
     // Only check first 100 chars to avoid scanning huge strings on the main thread.
     if (value.length >= 300) {
       // Some base64 encoders insert newlines every 76 chars — strip them for the check.
-      final sample =
-          value.substring(0, 100).replaceAll(RegExp(r'[\s\r\n]'), '');
-      final base64Chars = RegExp(r'^[A-Za-z0-9+/=]+$');
-      if (base64Chars.hasMatch(sample)) {
+      final sample = value.substring(0, 100).replaceAll(_whitespace, '');
+      if (_base64Alphabet.hasMatch(sample)) {
         return '[base64 data: ${value.length} bytes hidden]';
       }
     }

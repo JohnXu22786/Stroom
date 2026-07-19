@@ -29,11 +29,17 @@ void main() {
       expect(DataSanitizer.sanitizeBase64String(short), short);
     });
 
-    test('mixed content string with non-base64 chars passes through', () {
+    test('data:application/json URI matches the generic data URI pattern', () {
+      // The sanitizer now matches ALL data:<mime>;base64, URIs, not just
+      // images. Even a "data:application/json" URI gets the data portion
+      // stripped (with the prefix preserved) so JSON containing such a
+      // value won't blow up the saved payload.
       const mixed = 'data:application/json;base64,{some data here}';
-      // This doesn't match image data URI pattern and is long enough
-      // but contains non-base64 chars ({, }, space)
-      expect(DataSanitizer.sanitizeBase64String(mixed), mixed);
+      final result = DataSanitizer.sanitizeBase64String(mixed);
+      expect(result, startsWith('data:application/json;base64,'));
+      expect(result, contains('[base64 data:'));
+      // The original content is no longer present
+      expect(result, isNot(contains('{some data here}')));
     });
 
     test('empty string passes through', () {
@@ -85,19 +91,47 @@ void main() {
     });
 
     test(
-        'non-image data URI (application/pdf) is not hidden by image regex but returns without freeze',
+        'video data URI base64 is hidden (not just images) - critical for save size',
         () {
-      // Non-image data URIs don't match the ^data:image/... regex.
-      // The pure base64 check also won't match because the prefix
-      // 'data:application/pdf;base64,' contains non-base64 characters.
-      // Important: the function returns the string as-is (no freeze/crash).
-      final longB64 =
-          'aGVsbG8gd29ybGQgaGVsbG8gd29ybGQ=' * 20; // >300 chars base64
+      // Bug fix: previously the sanitizer only matched data:image/...
+      // Sending a video produced a huge data:video/mp4;base64,... string
+      // that was saved verbatim into SharedPreferences, causing multi-MB
+      // JSON files, UI freezes, and process kills on save.
+      final longB64 = 'AAAAGGZ0eXBpc29tAAACAGlzb21pc28y' * 30;
+      final dataUri = 'data:video/mp4;base64,$longB64';
+      final result = DataSanitizer.sanitizeBase64String(dataUri);
+
+      // The prefix is preserved for context, but the actual base64 is replaced.
+      expect(result, startsWith('data:video/mp4;base64,'));
+      expect(result, contains('[base64 data:'));
+      expect(result, contains('bytes hidden]'));
+      // The original base64 portion should NOT appear in full.
+      expect(result, isNot(contains('AAAAGGZ0eXBpc29t')));
+    });
+
+    test(
+        'application data URI base64 (e.g. PDF) is hidden - critical for save size',
+        () {
+      // PDFs and other documents can be 5-50MB, base64 → 7-70MB.
+      // Saving the full base64 to SharedPreferences causes flash crashes
+      // and silent data loss. Strip on save.
+      final longB64 = 'aGVsbG8gd29ybGQgaGVsbG8gd29ybGQ=' * 30;
       final dataUri = 'data:application/pdf;base64,$longB64';
       final result = DataSanitizer.sanitizeBase64String(dataUri);
-      // The prefix is preserved; the full string is returned (not hidden)
+
       expect(result, startsWith('data:application/pdf;base64,'));
-      expect(result, contains(longB64));
+      expect(result, contains('[base64 data:'));
+      expect(result, contains('bytes hidden]'));
+      expect(result, isNot(contains('aGVsbG8gd29ybGQ')));
+    });
+
+    test('audio data URI base64 is hidden', () {
+      const longB64 = 'SUQzAwAAAAACdFRJVDIAAAAdAAADc3ViLm1wMwAAAA==';
+      final dataUri = 'data:audio/mpeg;base64,$longB64';
+      final result = DataSanitizer.sanitizeBase64String(dataUri);
+
+      expect(result, startsWith('data:audio/mpeg;base64,'));
+      expect(result, contains('[base64 data:'));
     });
 
     test('multi-line base64 with embedded newlines is detected', () {
@@ -175,6 +209,104 @@ void main() {
       final result = DataSanitizer.sanitizeForDisplay(input);
       expect(result['empty'], <String, dynamic>{});
       expect(result['items'], <dynamic>[]);
+    });
+
+    test('input_audio.data (base64 audio) is sanitized', () {
+      // OpenAI input_audio format: { type: "input_audio",
+      //   input_audio: { data: "<base64>", format: "wav" } }
+      // Without sanitization, the audio data blows up saved JSON.
+      // Real audio data is always >> 300 chars (the sanitizer's threshold
+      // for plain base64 without a data: URI prefix). Use a 500-char string
+      // to comfortably exceed the threshold.
+      final longB64 = 'A' * 500; // 500 chars of valid base64
+      final input = {
+        'role': 'user',
+        'content': [
+          {
+            'type': 'input_audio',
+            'input_audio': {'data': longB64, 'format': 'wav'},
+          },
+        ],
+      };
+      final result = DataSanitizer.sanitizeForDisplay(input) as Map;
+      final parts = result['content'] as List;
+      final audio = parts[0]['input_audio'] as Map;
+      expect(audio['data'], contains('[base64 data:'));
+      expect(audio['data'], isNot(equals(longB64)));
+      // format field is preserved (it's a small enum-like string)
+      expect(audio['format'], 'wav');
+    });
+
+    test('file.file_data (base64 PDF) is sanitized', () {
+      // OpenRouter file format: { type: "file",
+      //   file: { filename: "x.pdf", file_data: "data:application/pdf;base64,..." } }
+      final longB64 = 'JVBERi0xLjQKJeLjz9MKMyAwIG9iago8PC9MZW5ndGggMzU+Pn' * 5;
+      final input = {
+        'type': 'file',
+        'file': {
+          'filename': 'report.pdf',
+          'file_data': 'data:application/pdf;base64,$longB64',
+        },
+      };
+      final result = DataSanitizer.sanitizeForDisplay(input) as Map;
+      final file = result['file'] as Map;
+      expect(file['file_data'], contains('[base64 data:'));
+      expect(file['file_data'], isNot(contains('JVBERi0xLjQK')));
+      // filename is preserved
+      expect(file['filename'], 'report.pdf');
+    });
+
+    test('video_url.url (base64 video) is sanitized', () {
+      final longB64 = 'AAAAGGZ0eXBpc29tAAACAGlzb21pc28y' * 30;
+      final input = {
+        'type': 'video_url',
+        'video_url': {
+          'url': 'data:video/mp4;base64,$longB64',
+        },
+      };
+      final result = DataSanitizer.sanitizeForDisplay(input) as Map;
+      final video = result['video_url'] as Map;
+      expect(video['url'], contains('[base64 data:'));
+      expect(video['url'], isNot(contains('AAAAGGZ0eXBpc29t')));
+    });
+
+    test('deeply nested multimodal messages all get sanitized', () {
+      final input = {
+        'messages': [
+          {
+            'role': 'user',
+            'content': [
+              {
+                'type': 'image_url',
+                'image_url': {
+                  'url': 'data:image/png;base64,iVBORw0KGgoAAAA' * 10,
+                },
+              },
+              {
+                'type': 'video_url',
+                'video_url': {
+                  'url': 'data:video/mp4;base64,AAAAGGZ0' * 10,
+                },
+              },
+              {
+                'type': 'input_audio',
+                'input_audio': {
+                  'data': 'SUQzAwAAAAA' * 30,
+                  'format': 'mp3',
+                },
+              },
+            ],
+          },
+        ],
+      };
+      final result = DataSanitizer.sanitizeForDisplay(input) as Map;
+      final parts = (result['messages'] as List)[0]['content'] as List;
+
+      // All three attachment types should be sanitized
+      expect((parts[0]['image_url'] as Map)['url'], contains('[base64 data:'));
+      expect((parts[1]['video_url'] as Map)['url'], contains('[base64 data:'));
+      expect(
+          (parts[2]['input_audio'] as Map)['data'], contains('[base64 data:'));
     });
   });
 }
