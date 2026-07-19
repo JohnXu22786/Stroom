@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../anki/sync/anki_sync_engine.dart';
 import '../anki/sync/anki_sync_provider.dart';
 
@@ -214,13 +214,20 @@ class AnkiSyncSettingsPage extends ConsumerWidget {
     );
   }
 
-  void _openRegisterPage(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => _AnkiWebRegisterPage(),
-      ),
-    );
+  void _openRegisterPage(BuildContext context) async {
+    final uri = Uri.parse('https://ankiweb.net/account/register');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('无法打开浏览器，请手动访问 https://ankiweb.net/account/register'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
 
@@ -299,21 +306,6 @@ class _SyncButtonState extends ConsumerState<_SyncButton> {
                   color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ],
       ],
-    );
-  }
-}
-
-/// WebView that opens AnkiWeb's register page.
-class _AnkiWebRegisterPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('注册 AnkiWeb')),
-      body: InAppWebView(
-        initialUrlRequest: URLRequest(
-          url: WebUri('https://ankiweb.net/account/register'),
-        ),
-      ),
     );
   }
 }
