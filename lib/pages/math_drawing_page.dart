@@ -389,8 +389,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
               onPressed: _addFormula,
               padding: EdgeInsets.zero,
               visualDensity: VisualDensity.compact,
-              constraints:
-                  const BoxConstraints(minWidth: 28, maxWidth: 28, minHeight: 28, maxHeight: 28),
+              constraints: const BoxConstraints(
+                  minWidth: 28, maxWidth: 28, minHeight: 28, maxHeight: 28),
             ),
 
           // ---- Remove formula (X) button ----
@@ -402,8 +402,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
               onPressed: () => _confirmRemove(index),
               padding: EdgeInsets.zero,
               visualDensity: VisualDensity.compact,
-              constraints:
-                  const BoxConstraints(minWidth: 28, maxWidth: 28, minHeight: 28, maxHeight: 28),
+              constraints: const BoxConstraints(
+                  minWidth: 28, maxWidth: 28, minHeight: 28, maxHeight: 28),
             ),
 
           // ---- Plot (✓) button ----
@@ -418,8 +418,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             onPressed: _canPlot ? _plotAll : null,
             padding: EdgeInsets.zero,
             visualDensity: VisualDensity.compact,
-            constraints:
-                const BoxConstraints(minWidth: 28, maxWidth: 28, minHeight: 28, maxHeight: 28),
+            constraints: const BoxConstraints(
+                minWidth: 28, maxWidth: 28, minHeight: 28, maxHeight: 28),
           ),
         ],
       ),

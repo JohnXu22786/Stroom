@@ -197,7 +197,8 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('right side formula IconButtons have compact constraints for consistent sizing',
+    testWidgets(
+        'right side formula IconButtons have compact constraints for consistent sizing',
         (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
@@ -252,8 +253,7 @@ void main() {
       }
     });
 
-    testWidgets('formula row overall layout does not overflow',
-        (tester) async {
+    testWidgets('formula row overall layout does not overflow', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
