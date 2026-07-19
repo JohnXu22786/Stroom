@@ -1,14 +1,13 @@
+import 'dart:convert';
+import 'dart:math';
 import 'package:http/http.dart' as http;
 
 /// HTTP client for AnkiWeb sync authentication.
 ///
-/// Mirrors AnkiDroid's `com.ichi2.anki.sync.AnkiSyncClient` login flow:
-/// 1. POST credentials → get `key` (session hkey)
-/// 2. POST key → get `hostKey` (optional, for API access)
-///
-/// The full sync protocol (protobuf data exchange) is NOT implemented here.
-/// This covers authentication only — sufficient for identity verification
-/// and future API access.
+/// Matches Anki's Rust HttpSyncClient + sync_login() exactly:
+/// 1. POST to /sync/hostKey with JSON {"u": email, "p": password}
+/// 2. X-Sync-Header with empty sync_key (first login)
+/// 3. Response: JSON {"key": "hkey_value"}
 class AnkiSyncClient {
   static const String _baseUrl = 'https://sync.ankiweb.net/sync';
 
@@ -16,45 +15,78 @@ class AnkiSyncClient {
   ///
   /// Returns the session key (hkey) on success, or throws on failure.
   static Future<String> login(String email, String password) async {
-    final uri = Uri.parse('$_baseUrl/login');
+    final uri = Uri.parse('$_baseUrl/hostKey');
+    final body = jsonEncode({'u': email, 'p': password});
+    final header = jsonEncode({
+      'sync_version': 1,
+      'sync_key': '',
+      'client_ver': 'ankidart:1.0',
+      'session_key': _randomSessionId(),
+    });
+
     final resp = await http.post(
       uri,
-      body: {'username': email, 'password': password},
-      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: body,
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-Sync-Header': header,
+      },
     );
 
     if (resp.statusCode != 200) {
-      throw AnkiSyncException('服务器返回 ${resp.statusCode}');
+      final errorText = resp.body.isNotEmpty ? resp.body : '无响应体';
+      throw AnkiSyncException('登录失败 (${resp.statusCode}): $errorText');
     }
 
-    final body = resp.body.trim();
-    if (body.startsWith('key=')) {
-      return body.substring(4);
-    }
-    if (body == 'bad auth') {
-      throw AnkiSyncException('账号或密码错误');
-    }
-    throw AnkiSyncException('登录失败: $body');
+    try {
+      final json = jsonDecode(resp.body) as Map<String, dynamic>;
+      final key = json['key'] as String?;
+      if (key != null && key.isNotEmpty) return key;
+    } catch (_) {}
+
+    throw AnkiSyncException('登录失败: 无法解析服务器响应 "${resp.body.trim()}"');
   }
 
   /// Exchange session key for a hostKey.
+  /// [key] is the sync hkey to exchange.
   static Future<String> hostKey(String key) async {
     final uri = Uri.parse('$_baseUrl/hostKey');
+    final header = jsonEncode({
+      'sync_version': 1,
+      'sync_key': key,
+      'client_ver': 'ankidart:1.0',
+      'session_key': _randomSessionId(),
+    });
+
     final resp = await http.post(
       uri,
-      body: {'key': key},
-      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: jsonEncode({'u': key}),
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-Sync-Header': header,
+      },
     );
 
     if (resp.statusCode != 200) {
-      throw AnkiSyncException('hostKey 请求失败: ${resp.statusCode}');
+      throw AnkiSyncException(
+          'hostKey 请求失败 (${resp.statusCode}): ${resp.body}');
     }
 
-    final body = resp.body.trim();
-    if (body.startsWith('hostKey=')) {
-      return body.substring(8);
-    }
-    throw AnkiSyncException('hostKey 获取失败: $body');
+    try {
+      final json = jsonDecode(resp.body) as Map<String, dynamic>;
+      final hk = json['key'] as String?;
+      if (hk != null && hk.isNotEmpty) return hk;
+    } catch (_) {}
+
+    throw AnkiSyncException('hostKey 获取失败: ${resp.body.trim()}');
+  }
+
+  static String _randomSessionId() {
+    const chars =
+        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final rng = Random();
+    return String.fromCharCodes(Iterable.generate(
+        10, (_) => chars.codeUnitAt(rng.nextInt(chars.length))));
   }
 }
 
