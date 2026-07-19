@@ -114,9 +114,19 @@ class AudioSeparationEngine {
 
     // ---------- AAC configuration ----------
     const freqMap = {
-      96000: 0, 88200: 1, 64000: 2, 48000: 3, 44100: 4,
-      32000: 5, 24000: 6, 22050: 7, 16000: 8, 12000: 9,
-      11025: 10, 8000: 11, 7350: 12,
+      96000: 0,
+      88200: 1,
+      64000: 2,
+      48000: 3,
+      44100: 4,
+      32000: 5,
+      24000: 6,
+      22050: 7,
+      16000: 8,
+      12000: 9,
+      11025: 10,
+      8000: 11,
+      7350: 12,
     };
     final freqIdx = freqMap[sampleRate] ?? 4;
     final chanCfg = channels > 6 ? 6 : channels;
@@ -145,7 +155,8 @@ class AudioSeparationEngine {
     // stsd entry size: mp4a base (36) + esds box
     final esdsSize = _esdsBoxSize(asc);
     final stsdEntrySize = 36 + esdsSize;
-    final stsdSize = 16 + stsdEntrySize; // header(8)+ver/flags(4)+entryCount(4)+entry
+    final stsdSize =
+        16 + stsdEntrySize; // header(8)+ver/flags(4)+entryCount(4)+entry
     const sttsSize = 24; // header + 1 entry
     const stscSize = 28; // header + 1 entry
     final stszSize = 20 + sampleCount * 4; // header + per-sample sizes
@@ -346,9 +357,14 @@ class AudioSeparationEngine {
     // + DecoderConfigDescriptor(1+1+1+1+3+4+4 + 1+1+asc.length)
     // + SLConfigDescriptor(1+1+1)
     final dsiBodySize = 1 + 1 + asc.length; // tag + length + asc
-    final decConfigBodySize =
-        1 + 1 + 3 + 4 + 4 + dsiBodySize; // tag+length+objType+streamType+bufSize+maxBR+avgBR+DSI
-    final esBodySize = 2 + 1 +
+    final decConfigBodySize = 1 +
+        1 +
+        3 +
+        4 +
+        4 +
+        dsiBodySize; // tag+length+objType+streamType+bufSize+maxBR+avgBR+DSI
+    final esBodySize = 2 +
+        1 +
         (1 + 1 + decConfigBodySize) +
         (1 + 1 + 1); // ES_ID+flags + (tag+len+decConfig) + (tag+len+SL)
     return 12 + esBodySize; // box header(8) + version/flags(4) + ES_Descriptor
