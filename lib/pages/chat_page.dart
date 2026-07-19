@@ -143,6 +143,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Whether a pagination load is currently in progress.
   bool _isLoadingMore = false;
 
+  /// Guards against concurrent calls to [_loadConversationMessages].
+  /// Prevents race conditions where message loading is triggered from
+  /// multiple sources (init, provider listeners) simultaneously, which
+  /// could dispose the chat controller mid-use and cause null errors.
+  bool _isLoadingMessages = false;
+
   /// Whether there are more older messages to load.
   bool get _hasMoreMessages => _loadedUpToIndex > 0;
 
@@ -377,6 +383,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // available in the tool list even if MCP servers are unreachable.
     final entriesState = ref.read(providerEntriesProvider);
     _adapter.initializeBuiltinTools(entriesState);
+
+    // Load conversation messages EARLY — before MCP server initialization —
+    // so chat history appears immediately without waiting for potentially
+    // slow MCP discovery. Messages will still show even if MCP servers
+    // are unreachable.
+    await _loadConversationMessages();
+
     // Then discover MCP server tools (SSE / stdio) dynamically.
     // MCP discovery failures don't affect already-registered built-in tools.
     try {
@@ -397,7 +410,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
       if (!mounted) return;
       _restoreSavedModelSelection(prefs);
     });
-    await _loadConversationMessages();
     // Restore streaming state if a stream was active when the page was
     // previously disposed (user navigated away during generation and then
     // came back). This re-inserts the streaming message placeholder with
@@ -482,6 +494,31 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   Future<void> _loadConversationMessages() async {
+    // Guard: prevent concurrent calls to _loadConversationMessages.
+    // Multiple sources can trigger message loading (init, provider
+    // listeners for conversationsProvider, activeConversationIdProvider)
+    // and without this guard they race — one call might dispose the
+    // controller while another is using it, causing null errors.
+    if (_isLoadingMessages) {
+      await AppLogService.debug(
+          'ChatPage', '_loadConversationMessages: 已有加载进行中，跳过');
+      return;
+    }
+
+    // Guard: do NOT reload messages while streaming is active. The
+    // streaming loop relies on _chatSegments, _streamingRenderedLengths,
+    // and other per-message state that would be cleared by a reload.
+    // Reloading mid-stream would cause null-assert crashes (e.g.
+    // "Null check operator used on a null value") when the streaming
+    // loop accesses _streamingRenderedLengths[aiMsgId]! after the
+    // map was cleared.
+    if (_isStreamingActive) {
+      await AppLogService.debug(
+          'ChatPage', '_loadConversationMessages: 流式传输进行中，跳过');
+      return;
+    }
+
+    _isLoadingMessages = true;
     try {
       final activeId = ref.read(activeConversationIdProvider);
       await AppLogService.info(
@@ -585,6 +622,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     } catch (e, s) {
       debugPrint('[ChatPage] _loadConversationMessages error: $e\n$s');
       await AppLogService.error('ChatPage', '加载对话消息失败', e, s);
+    } finally {
+      _isLoadingMessages = false;
     }
   }
 
@@ -1903,15 +1942,31 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // conversation data is available, leaving the chat page blank with
     // "no message yet" even though all data exists in SharedPreferences.
     //
-    // Uses _history.isEmpty to only trigger on data arrival (not on every
-    // subsequent save/update), avoiding redundant reloads.
+    // Uses _history.isEmpty OR history length mismatch to detect when the
+    // initial load hadn't completed. Without this, if the user sends a
+    // message before the data loads, _history becomes non-empty and the
+    // old check would skip reloading — forever losing the conversation
+    // history in the current session.
     ref.listen(conversationsProvider, (prev, next) {
-      if (prev != next && _history.isEmpty) {
+      if (prev != next) {
         final activeId = ref.read(activeConversationIdProvider);
         if (activeId != null) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _loadConversationMessages();
-          });
+          final activeConv = next.where((c) => c.id == activeId).firstOrNull;
+          if (activeConv != null && activeConv.messages.isNotEmpty) {
+            // Only reload if there's a mismatch: either history is empty
+            // (initial load hadn't completed) OR the loaded conversation
+            // has more messages than we currently have (e.g. data arrived
+            // after user sent a message, so _history only has the new
+            // message but not the history).
+            if (_history.isEmpty ||
+                (_history.length < activeConv.messages.length &&
+                    !_isStreamingActive &&
+                    !_isLoadingMessages)) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) _loadConversationMessages();
+              });
+            }
+          }
         }
       }
     });
