@@ -770,48 +770,62 @@ class _HomePageState extends ConsumerState<HomePage> {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
         child: Column(
           children: [
-            // "查看全部 >" 文字按钮 — 极简风格
-            Align(
-              alignment: Alignment.centerRight,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const UnifiedTaskListPage(initialTab: 0),
+            // Header row: "最近任务" on left, "查看全部 >" on right
+            Padding(
+              padding: const EdgeInsets.only(left: 4, right: 6),
+              child: Row(
+                children: [
+                  Text(
+                    '最近任务',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: cs.onSurfaceVariant,
+                      fontWeight: FontWeight.w500,
                     ),
-                  );
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 4,
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '查看全部',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: cs.primary,
-                          fontWeight: FontWeight.w500,
+                  const Spacer(),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              const UnifiedTaskListPage(initialTab: 0),
                         ),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 4,
                       ),
-                      const SizedBox(width: 1),
-                      Text(
-                        '>',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: cs.primary,
-                          fontWeight: FontWeight.w500,
-                          height: 1.2,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '查看全部',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: cs.primary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(width: 1),
+                          Text(
+                            '>',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: cs.primary,
+                              fontWeight: FontWeight.w500,
+                              height: 1.2,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
             const SizedBox(height: 4),
