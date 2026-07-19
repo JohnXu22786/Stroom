@@ -156,8 +156,7 @@ class BackupService {
   /// 聊天键仅包括：对话数据和活跃对话ID。
   /// 所有非 `flutter.*` 前缀的其他键归类为"设置"。
   static bool _isChatPrefKey(String key) {
-    return key == 'conversations' ||
-        key == 'active_conversation_id';
+    return key == 'conversations' || key == 'active_conversation_id';
   }
 
   /// 短暂的延迟以让出事件循环，确保 UI 可以处理帧渲染。
