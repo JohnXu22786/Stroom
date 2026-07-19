@@ -2,6 +2,7 @@ import 'dart:math' as dart_math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../models/math_expression.dart' show MathExpression, MathExpressionType;
 import '../models/formula_entry.dart';
@@ -77,7 +78,6 @@ class MathCanvasState extends State<MathCanvas> {
   final List<_FormulaCurve> _formulaCurves = [];
 
   // Gesture state
-  Offset? _lastFocalPoint;
   double? _lastScale;
   bool _isReady = false;
 
@@ -259,7 +259,6 @@ class MathCanvasState extends State<MathCanvas> {
   // ==================================================================
 
   void _onScaleStart(ScaleStartDetails details) {
-    _lastFocalPoint = details.focalPoint;
     _lastScale = 1.0;
   }
 
@@ -267,24 +266,14 @@ class MathCanvasState extends State<MathCanvas> {
     final focalPoint = details.focalPoint;
     final scale = details.scale;
 
-    // Calculate focal point in math coordinates before zoom
-    final fx = _screenToMathX(focalPoint.dx);
-    final fy = _screenToMathY(focalPoint.dy);
-
-    // Determine if this is a pan or zoom
-    if (details.pointerCount == 1 ||
-        (scale == 1.0 && focalPoint != _lastFocalPoint)) {
-      // Pan (with damping factor 0.5 for smoother control)
-      const damping = 0.5;
-      final dx = _lastFocalPoint == null
-          ? 0.0
-          : (focalPoint.dx - _lastFocalPoint!.dx) * damping;
-      final dy = _lastFocalPoint == null
-          ? 0.0
-          : (focalPoint.dy - _lastFocalPoint!.dy) * damping;
+    if (details.pointerCount == 1 || scale == 1.0) {
+      // Pan: use focalPointDelta directly (no damping) for 1:1 tracking
+      final dx = details.focalPointDelta.dx;
+      final dy = details.focalPointDelta.dy;
 
       final xRange = _xMax - _xMin;
-      final yRange = _yMax - _yMin;
+      final yRange =
+          _effectiveYRange(); // Use effective Y range for correct delta
 
       setState(() {
         _xMin -= (dx / _canvasWidth) * xRange;
@@ -295,23 +284,30 @@ class MathCanvasState extends State<MathCanvas> {
     } else if (scale != 1.0 && _lastScale != null) {
       // Zoom: scale around focal point
       final scaleChange = scale / _lastScale!;
-      final newXRange = (_xMax - _xMin) / scaleChange;
+      final fx = _screenToMathX(focalPoint.dx);
+      final fy = _screenToMathY(focalPoint.dy); // Uses effective Y bounds
+
+      final xRange = _xMax - _xMin;
+
+      // Convert effective Y focal point to raw Y coordinate space so the
+      // zoom operation preserves the correct screen position under the finger.
+      final fyRaw = _effectiveYToRawY(fy);
+
+      final newXRange = xRange / scaleChange;
       final newYRange = (_yMax - _yMin) / scaleChange;
 
       setState(() {
         _xMin = fx - (fx - _xMin) / scaleChange;
         _xMax = _xMin + newXRange;
-        _yMin = fy - (fy - _yMin) / scaleChange;
+        _yMin = fyRaw - (fyRaw - _yMin) / scaleChange;
         _yMax = _yMin + newYRange;
       });
     }
 
-    _lastFocalPoint = focalPoint;
     _lastScale = scale;
   }
 
   void _onScaleEnd(ScaleEndDetails details) {
-    _lastFocalPoint = null;
     _lastScale = null;
     // Resample all formulas after gesture ends for smooth result
     setState(() {
@@ -339,7 +335,7 @@ class MathCanvasState extends State<MathCanvas> {
       final focalPoint = event.localPosition;
 
       final fx = _screenToMathX(focalPoint.dx);
-      final fy = _screenToMathY(focalPoint.dy);
+      final fy = _screenToMathY(focalPoint.dy); // Uses effective Y bounds
 
       // Scroll down (negative dy on some platforms / positive on others):
       // we want scroll UP = zoom in, scroll DOWN = zoom out.
@@ -348,13 +344,18 @@ class MathCanvasState extends State<MathCanvas> {
       final zoomFactor = 1.0 + scrollDelta.dy * 0.001;
       final clampedFactor = zoomFactor.clamp(0.1, 10.0);
 
-      final newXRange = (_xMax - _xMin) * clampedFactor;
+      final xRange = _xMax - _xMin;
+
+      // Convert effective Y focal point to raw Y coordinate space
+      final fyRaw = _effectiveYToRawY(fy);
+
+      final newXRange = xRange * clampedFactor;
       final newYRange = (_yMax - _yMin) * clampedFactor;
 
       setState(() {
         _xMin = fx - (fx - _xMin) * clampedFactor;
         _xMax = _xMin + newXRange;
-        _yMin = fy - (fy - _yMin) * clampedFactor;
+        _yMin = fyRaw - (fyRaw - _yMin) * clampedFactor;
         _yMax = _yMin + newYRange;
         _resampleAll();
       });
@@ -365,15 +366,156 @@ class MathCanvasState extends State<MathCanvas> {
   }
 
   // ==================================================================
-  // Coordinate conversion
+  // Coordinate conversion (gesture helpers)
   // ==================================================================
 
+  /// Convert an effective-Y coordinate (from [_screenToMathY]) to the
+  /// corresponding raw Y coordinate in the [_yMin, _yMax] space.
+  ///
+  /// The painter renders using effective Y bounds (aspect-ratio-corrected,
+  /// derived from xRange and canvas aspect ratio) centered on the raw Y center.
+  /// Gesture focal points are computed in effective Y space, but the viewport
+  /// is stored in raw Y space. This conversion bridges the two.
+  double _effectiveYToRawY(double fy) {
+    final yCenter = (_yMin + _yMax) / 2.0;
+    final effYRange = _effectiveYRange();
+    final rawYRange = _yMax - _yMin;
+    if (effYRange > 0 && rawYRange > 0) {
+      return yCenter + (fy - yCenter) * rawYRange / effYRange;
+    }
+    return fy;
+  }
+
+  /// The effective Y minimum that maintains 1:1 pixel aspect ratio.
+  /// Matches [GraphPainter._effectiveYMin] exactly.
+  double _effectiveYMin() {
+    if (_canvasWidth <= 0 || _canvasHeight <= 0) return _yMin;
+    final aspectRatio = _canvasWidth / _canvasHeight;
+    final xRange = _xMax - _xMin;
+    if (xRange <= 0) return _yMin;
+    final targetYRange = xRange / aspectRatio;
+    final yCenter = (_yMin + _yMax) / 2.0;
+    return yCenter - targetYRange / 2.0;
+  }
+
+  /// The effective Y maximum that maintains 1:1 pixel aspect ratio.
+  /// Matches [GraphPainter._effectiveYMax] exactly.
+  double _effectiveYMax() {
+    if (_canvasWidth <= 0 || _canvasHeight <= 0) return _yMax;
+    final aspectRatio = _canvasWidth / _canvasHeight;
+    final xRange = _xMax - _xMin;
+    if (xRange <= 0) return _yMax;
+    final targetYRange = xRange / aspectRatio;
+    final yCenter = (_yMin + _yMax) / 2.0;
+    return yCenter + targetYRange / 2.0;
+  }
+
+  /// The effective Y range (always equals xRange / aspectRatio).
+  double _effectiveYRange() {
+    return _effectiveYMax() - _effectiveYMin();
+  }
+
+  /// Convert screen X coordinate to math X coordinate.
+  /// Uses raw X bounds (direct 1:1 mapping).
   double _screenToMathX(double screenX) {
     return screenX / _canvasWidth * (_xMax - _xMin) + _xMin;
   }
 
+  /// Convert screen Y coordinate to math Y coordinate in the **effective**
+  /// (aspect-ratio-corrected) Y space — matching what the user actually sees.
+  ///
+  /// The painter uses [_effectiveYMin]/[_effectiveYMax] for rendering, so
+  /// gesture focal points must also use this same coordinate system.
   double _screenToMathY(double screenY) {
-    return (1.0 - screenY / _canvasHeight) * (_yMax - _yMin) + _yMin;
+    final eYMin = _effectiveYMin();
+    final eYMax = _effectiveYMax();
+    return (1.0 - screenY / _canvasHeight) * (eYMax - eYMin) + eYMin;
+  }
+
+  // ==================================================================
+  // @visibleForTesting accessors
+  // ==================================================================
+
+  @visibleForTesting
+  double testEffectiveYMin() => _effectiveYMin();
+
+  @visibleForTesting
+  double testEffectiveYMax() => _effectiveYMax();
+
+  @visibleForTesting
+  double testEffectiveYRange() => _effectiveYRange();
+
+  @visibleForTesting
+  double testScreenToMathY(double screenY) => _screenToMathY(screenY);
+
+  @visibleForTesting
+  double testCanvasWidth() => _canvasWidth;
+
+  @visibleForTesting
+  double testCanvasHeight() => _canvasHeight;
+
+  /// Simulates a pan delta by directly shifting the viewport.
+  /// Used in gesture tests to verify 1:1 pan tracking (no damping).
+  @visibleForTesting
+  void testApplyPanDelta(double dx, double dy) {
+    final xRange = _xMax - _xMin;
+    final yRange = _effectiveYRange();
+    setState(() {
+      _xMin -= (dx / _canvasWidth) * xRange;
+      _xMax -= (dx / _canvasWidth) * xRange;
+      _yMin += (dy / _canvasHeight) * yRange;
+      _yMax += (dy / _canvasHeight) * yRange;
+    });
+  }
+
+  /// Simulates a zoom delta around the given screen focal point.
+  /// Uses the same zoom math as [_onScaleUpdate] with correct Y coordinate
+  /// space (effective Y bounds).
+  @visibleForTesting
+  void testApplyZoomDelta(
+      double scale, double focalPointX, double focalPointY) {
+    final fx = _screenToMathX(focalPointX);
+    final fy = _screenToMathY(focalPointY);
+    final scaleChange = scale;
+
+    final xRange = _xMax - _xMin;
+
+    // Convert effective Y focal point to raw Y coordinate space
+    final fyRaw = _effectiveYToRawY(fy);
+
+    final newXRange = xRange / scaleChange;
+    final newYRange = (_yMax - _yMin) / scaleChange;
+
+    setState(() {
+      _xMin = fx - (fx - _xMin) / scaleChange;
+      _xMax = _xMin + newXRange;
+      _yMin = fyRaw - (fyRaw - _yMin) / scaleChange;
+      _yMax = _yMin + newYRange;
+    });
+  }
+
+  /// Simulates a mouse wheel zoom at the given screen focal point.
+  @visibleForTesting
+  void testApplyScrollZoom(
+      double zoomFactor, double focalPointX, double focalPointY) {
+    final fx = _screenToMathX(focalPointX);
+    final fy = _screenToMathY(focalPointY);
+    final clampedFactor = zoomFactor.clamp(0.1, 10.0);
+
+    final xRange = _xMax - _xMin;
+
+    // Convert effective Y focal point to raw Y coordinate space
+    final fyRaw = _effectiveYToRawY(fy);
+
+    final newXRange = xRange * clampedFactor;
+    final newYRange = (_yMax - _yMin) * clampedFactor;
+
+    setState(() {
+      _xMin = fx - (fx - _xMin) * clampedFactor;
+      _xMax = _xMin + newXRange;
+      _yMin = fyRaw - (fyRaw - _yMin) * clampedFactor;
+      _yMax = _yMin + newYRange;
+    });
   }
 
   // ==================================================================
