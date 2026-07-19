@@ -74,10 +74,12 @@ void main() {
 
       // Should NOT show "最近任务" label on task list page (moved to home page)
       expect(find.text('最近任务'), findsNothing,
-          reason: 'Task list page should NOT show 最近任务 label (moved to home page)');
+          reason:
+              'Task list page should NOT show 最近任务 label (moved to home page)');
     });
 
-    testWidgets('still does NOT show 最近任务 when no launches recorded', (tester) async {
+    testWidgets('still does NOT show 最近任务 when no launches recorded',
+        (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [

@@ -120,8 +120,7 @@ void main() {
           reason: 'Home page should show "最近任务" text in status card');
     });
 
-    testWidgets('"最近任务" is positioned to the left of "查看全部"',
-        (tester) async {
+    testWidgets('"最近任务" is positioned to the left of "查看全部"', (tester) async {
       await tester.pumpWidget(
         const ProviderScope(
           child: MaterialApp(
@@ -154,13 +153,11 @@ void main() {
       expect(
         recentTaskRight,
         lessThan(viewAllLeft),
-        reason:
-            '"最近任务" text should be positioned to the left of "查看全部"',
+        reason: '"最近任务" text should be positioned to the left of "查看全部"',
       );
     });
 
-    testWidgets('"查看全部" and ">" still present in status card',
-        (tester) async {
+    testWidgets('"查看全部" and ">" still present in status card', (tester) async {
       await tester.pumpWidget(
         const ProviderScope(
           child: MaterialApp(
