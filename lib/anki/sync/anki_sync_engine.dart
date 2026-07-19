@@ -287,29 +287,53 @@ class AnkiSyncEngine {
 
   /// Login and get host key.
   Future<String> login(String email, String password) async {
-    final uri = Uri.parse('https://sync.ankiweb.net/sync/login');
-    final resp =
-        await http.post(uri, body: {'username': email, 'password': password});
-    if (resp.statusCode != 200)
-      throw Exception('Login failed: ${resp.statusCode}');
-    final body = resp.body.trim();
-    if (body.startsWith('key=')) {
-      syncKey = body.substring(4);
-      return syncKey;
+    final uri = Uri.parse('https://sync.ankiweb.net/sync/hostKey');
+    final body = jsonEncode({'u': email, 'p': password});
+    final header = jsonEncode({
+      'sync_version': 1,
+      'sync_key': '',
+      'client_ver': 'ankidart:1.0',
+      'session_key': _sessionKey,
+    });
+    final resp = await http.post(
+      uri,
+      body: body,
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-Sync-Header': header,
+      },
+    );
+    if (resp.statusCode != 200) {
+      throw Exception('登录失败 (${resp.statusCode}): ${resp.body}');
     }
-    if (body == 'bad auth') throw Exception('邮箱或密码错误');
-    throw Exception('Login failed: $body');
+    final json = jsonDecode(resp.body) as Map<String, dynamic>;
+    final key = json['key'] as String?;
+    if (key == null || key.isEmpty) throw Exception('登录失败: 响应中没有 key');
+    syncKey = key;
+    return key;
   }
 
   /// Get the host key (used by the sync server).
   Future<String> hostKey() async {
     final uri = Uri.parse('https://sync.ankiweb.net/sync/hostKey');
-    final resp = await http.post(uri, body: {'key': syncKey});
+    final header = jsonEncode({
+      'sync_version': 1,
+      'sync_key': syncKey,
+      'client_ver': 'ankidart:1.0',
+      'session_key': _sessionKey,
+    });
+    final resp = await http.post(
+      uri,
+      body: jsonEncode({'u': syncKey}),
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-Sync-Header': header,
+      },
+    );
     if (resp.statusCode != 200)
       throw Exception('HostKey failed: ${resp.statusCode}');
-    final body = resp.body.trim();
-    if (body.startsWith('hostKey=')) return body.substring(8);
-    throw Exception('HostKey failed: $body');
+    final json = jsonDecode(resp.body) as Map<String, dynamic>;
+    return json['key'] as String? ?? '';
   }
 
   /// Send a sync request with uncompressed JSON (sync v1 protocol).
