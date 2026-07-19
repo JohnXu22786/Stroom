@@ -107,6 +107,7 @@ class MathCanvasState extends State<MathCanvas> {
           ));
         }
       }
+      _sampleAnchorX = (_xMin + _xMax) / 2.0;
       if (!_isReady) {
         setState(() => _isReady = true);
         widget.onReady?.call();
@@ -127,6 +128,7 @@ class MathCanvasState extends State<MathCanvas> {
               formula: f,
               polylines: _sampleCurve(f),
             )));
+      _sampleAnchorX = (_xMin + _xMax) / 2.0;
     });
     final allPoints =
         _formulaCurves.expand((fc) => fc.polylines.expand((pl) => pl)).toList();
@@ -163,12 +165,7 @@ class MathCanvasState extends State<MathCanvas> {
       _yMin = -10;
       _xMax = 10;
       _yMax = 10;
-      for (int i = 0; i < _formulaCurves.length; i++) {
-        _formulaCurves[i] = _FormulaCurve(
-          formula: _formulaCurves[i].formula,
-          polylines: _sampleCurve(_formulaCurves[i].formula),
-        );
-      }
+      _resampleAll();
     });
     widget.onViewportChange?.call(_xMin, _yMin, _xMax, _yMax);
   }
@@ -182,12 +179,7 @@ class MathCanvasState extends State<MathCanvas> {
       _yMin = yMin;
       _xMax = xMax;
       _yMax = yMax;
-      for (int i = 0; i < _formulaCurves.length; i++) {
-        _formulaCurves[i] = _FormulaCurve(
-          formula: _formulaCurves[i].formula,
-          polylines: _sampleCurve(_formulaCurves[i].formula),
-        );
-      }
+      _resampleAll();
     });
     widget.onViewportChange?.call(_xMin, _yMin, _xMax, _yMax);
   }
@@ -230,26 +222,52 @@ class MathCanvasState extends State<MathCanvas> {
   // Internal: expression handling
   // ==================================================================
 
-  /// Sample a single formula at the current viewport.
+  /// Margin ratio for curve sampling, as a fraction of the viewport range.
+  ///
+  /// When the user pans the canvas, the viewport changes but curves are only
+  /// re-sampled after the gesture ends ([_onScaleEnd]). To avoid large empty
+  /// areas at the edges during a drag, we sample over a wider range than the
+  /// current viewport. A margin of 1.0 means we sample 100% beyond each edge
+  /// (3× total range), providing headroom for panning up to one full viewport
+  /// width before needing to re-sample during the gesture.
+  static const double _sampleMargin = 1.0;
+
+  /// Viewport center X when curves were last sampled.
+  /// Used during gesture to detect when viewport has drifted beyond the
+  /// sampled margin and trigger an inline resample.
+  double? _sampleAnchorX;
+
+  /// Sample a single formula at the current viewport (with margin).
   /// Returns polylines (list of point lists). For explicit functions this
   /// is a single polyline; for implicit equations it's many short segments.
   List<List<Map<String, double>>> _sampleCurve(FormulaEntry formula) {
     if (!formula.isValid) return [];
     final parsed = formula.parsed!;
+
+    final xRange = _xMax - _xMin;
+    final yRange = _yMax - _yMin;
+    final marginX = xRange * _sampleMargin;
+    final marginY = yRange * _sampleMargin;
+
     if (parsed.type == MathExpressionType.implicit) {
       // Contour segments — each is a short line across one grid cell
       return parsed.sampleContourSegments(
-        xMin: _xMin,
-        xMax: _xMax,
-        yMin: _yMin,
-        yMax: _yMax,
+        xMin: _xMin - marginX,
+        xMax: _xMax + marginX,
+        yMin: _yMin - marginY,
+        yMax: _yMax + marginY,
+        // Keep grid density the same by increasing cells proportionally
+        gridX: (80 * (1 + 2 * _sampleMargin)).round(),
+        gridY: (80 * (1 + 2 * _sampleMargin)).round(),
       );
     }
-    // Single explicit polyline
+    // Single explicit polyline — sample over extended range with more points
+    // to maintain resolution in the visible area.
+    final scale = (1 + 2 * _sampleMargin);
     final pts = parsed.samplePoints(
-      xMin: _xMin,
-      xMax: _xMax,
-      numPoints: 300,
+      xMin: _xMin - marginX,
+      xMax: _xMax + marginX,
+      numPoints: (300 * scale).round(),
     );
     return pts.isEmpty ? [] : [pts];
   }
@@ -281,6 +299,16 @@ class MathCanvasState extends State<MathCanvas> {
         _yMin += (dy / _canvasHeight) * yRange;
         _yMax += (dy / _canvasHeight) * yRange;
       });
+
+      // If the viewport center has drifted beyond the sample margin,
+      // resample inline so the panning area stays populated.
+      if (_sampleAnchorX != null) {
+        final currentCenterX = (_xMin + _xMax) / 2.0;
+        final threshold = (_sampleMargin * xRange) / 2.0;
+        if ((currentCenterX - _sampleAnchorX!).abs() > threshold) {
+          _resampleAll();
+        }
+      }
     } else if (scale != 1.0 && _lastScale != null) {
       // Zoom: scale around focal point
       final scaleChange = scale / _lastScale!;
@@ -320,6 +348,7 @@ class MathCanvasState extends State<MathCanvas> {
 
   /// Resample all formulas at the current viewport (updates _formulaCurves).
   void _resampleAll() {
+    _sampleAnchorX = (_xMin + _xMax) / 2.0;
     for (int i = 0; i < _formulaCurves.length; i++) {
       _formulaCurves[i] = _FormulaCurve(
         formula: _formulaCurves[i].formula,
