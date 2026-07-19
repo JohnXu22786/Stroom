@@ -83,6 +83,17 @@ class CardDao {
     return result.first['cnt'] as int;
   }
 
+  Future<int> totalCountAll() async {
+    final result = await _db.rawQuery('SELECT COUNT(*) AS cnt FROM cards');
+    return result.first['cnt'] as int;
+  }
+
+  Future<int> countByQueueAll(int queue) async {
+    final result = await _db
+        .rawQuery('SELECT COUNT(*) AS cnt FROM cards WHERE queue = ?', [queue]);
+    return result.first['cnt'] as int;
+  }
+
   Future<List<AnkiCard>> all() async {
     final rows = await _db.query('cards');
     return rows.map(AnkiCard.fromMap).toList();

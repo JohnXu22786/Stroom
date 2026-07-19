@@ -7,6 +7,7 @@ import '../anki/models/card.dart';
 import '../anki/models/note.dart';
 import '../anki/models/model.dart';
 import '../anki/pages/card_browser.dart';
+import '../anki/pages/anki_stats_page.dart';
 import 'anki_sync_page.dart';
 
 /// Main Anki page showing all decks and options.
@@ -21,6 +22,12 @@ class AnkiDroidPage extends ConsumerWidget {
         title: const Text('闪卡'),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.bar_chart),
+            tooltip: '学习统计',
+            onPressed: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const AnkiStatsPage())),
+          ),
           IconButton(
             icon: const Icon(Icons.search),
             tooltip: '浏览卡片',
@@ -431,6 +438,10 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
   AnkiNote? _note;
   bool _showAnswer = false;
   bool _studying = true;
+  bool _whiteboardOn = false;
+  final List<_DrawingStroke> _strokes = [];
+  Color _penColor = Colors.orange;
+  double _penWidth = 3;
 
   @override
   void initState() {
@@ -486,8 +497,24 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
             loading: () => const Text('学习'),
             error: (_, __) => const Text('学习')),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: Icon(_whiteboardOn ? Icons.brush : Icons.brush_outlined,
+                color: _whiteboardOn ? Colors.orange : null),
+            tooltip: '白板',
+            onPressed: () => setState(() {
+              _whiteboardOn = !_whiteboardOn;
+              if (!_whiteboardOn) _strokes.clear();
+            }),
+          ),
+        ],
       ),
-      body: _studying && _current != null ? _buildContent(cs) : _buildDone(cs),
+      body: _studying && _current != null
+          ? Stack(children: [
+              _buildContent(cs),
+              if (_whiteboardOn) _buildWhiteboard(),
+            ])
+          : _buildDone(cs),
     );
   }
 
@@ -596,6 +623,61 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
       ]),
     ));
   }
+
+  // ── Whiteboard ────────────────────────────────────────
+
+  Widget _buildWhiteboard() {
+    return Positioned.fill(
+      child: GestureDetector(
+        onPanStart: (d) => setState(() => _strokes
+            .add(_DrawingStroke([d.localPosition], _penColor, _penWidth))),
+        onPanUpdate: (d) =>
+            setState(() => _strokes.last.points.add(d.localPosition)),
+        onPanEnd: (_) {},
+        child: RepaintBoundary(
+          child: CustomPaint(
+            painter: _WhiteboardPainter(_strokes),
+            child: Container(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    // No resources to clean up for whiteboard
+    super.dispose();
+  }
+}
+
+class _DrawingStroke {
+  final List<Offset> points;
+  final Color color;
+  final double width;
+  _DrawingStroke(this.points, this.color, this.width);
+}
+
+class _WhiteboardPainter extends CustomPainter {
+  final List<_DrawingStroke> strokes;
+  _WhiteboardPainter(this.strokes);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final stroke in strokes) {
+      final paint = Paint()
+        ..color = stroke.color.withValues(alpha: 0.6)
+        ..strokeWidth = stroke.width
+        ..strokeCap = StrokeCap.round
+        ..style = PaintingStyle.stroke;
+      for (int i = 0; i < stroke.points.length - 1; i++) {
+        canvas.drawLine(stroke.points[i], stroke.points[i + 1], paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WhiteboardPainter old) => true;
 }
 
 class _RatingBtn extends StatelessWidget {

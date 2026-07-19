@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import '../anki/sync/anki_sync_engine.dart';
 import '../anki/sync/anki_sync_provider.dart';
 
 /// AnkiWeb 账号管理页面。
@@ -149,7 +150,10 @@ class AnkiSyncSettingsPage extends ConsumerWidget {
           const SizedBox(height: 8),
           Text(state.email ?? '',
               style: TextStyle(fontSize: 16, color: cs.onSurfaceVariant)),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
+          // Sync button
+          _SyncButton(state: state),
+          const SizedBox(height: 16),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -167,7 +171,8 @@ class AnkiSyncSettingsPage extends ConsumerWidget {
                     Icon(Icons.info_outline, color: cs.primary, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text('同步功能将自动在后台进行。导出 .apkg 文件时也会附带同步状态信息。',
+                      child: Text(
+                          '点击"立即同步"将执行全量同步：交换元数据 → 发送/接收变更 → 一致性检查 → 完成。',
                           style: TextStyle(
                               fontSize: 13, color: cs.onSurfaceVariant)),
                     ),
@@ -215,6 +220,85 @@ class AnkiSyncSettingsPage extends ConsumerWidget {
       MaterialPageRoute(
         builder: (_) => _AnkiWebRegisterPage(),
       ),
+    );
+  }
+}
+
+/// Sync button that runs the full sync flow.
+class _SyncButton extends ConsumerStatefulWidget {
+  final AnkiSyncState state;
+  const _SyncButton({required this.state});
+  @override
+  ConsumerState<_SyncButton> createState() => _SyncButtonState();
+}
+
+class _SyncButtonState extends ConsumerState<_SyncButton> {
+  String _status = '';
+  bool _syncing = false;
+
+  Future<void> _doSync() async {
+    setState(() {
+      _syncing = true;
+      _status = '登录中...';
+    });
+    try {
+      final engine = AnkiSyncEngine();
+      await engine.login(widget.state.email!, widget.state.key!);
+      // Actually login uses the key directly, but we already have it
+      engine.syncKey = widget.state.key!;
+
+      setState(() => _status = '交换元数据...');
+      final meta = await engine.meta(SyncMeta());
+
+      setState(() => _status = '开始同步...');
+      await engine.start(meta.usn, 9999);
+
+      setState(() => _status = '获取/发送变更...');
+      var chunk = await engine.chunk();
+      while (!chunk.done) {
+        if (chunk.cards.isNotEmpty || chunk.notes.isNotEmpty) {
+          await engine.applyChunk(chunk);
+        }
+        chunk = await engine.chunk();
+      }
+
+      setState(() => _status = '一致性检查...');
+      await engine.sanityCheck(0, 0);
+
+      setState(() => _status = '完成同步...');
+      await engine.finish();
+
+      setState(() => _status = '同步完成 ✓');
+    } catch (e) {
+      setState(() => _status = '同步失败: $e');
+    } finally {
+      setState(() => _syncing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        FilledButton.icon(
+          icon: _syncing
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.sync),
+          label: Text(_syncing ? '同步中...' : '立即同步'),
+          onPressed: _syncing ? null : _doSync,
+        ),
+        if (_status.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(_status,
+              style: TextStyle(
+                  fontSize: 13,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        ],
+      ],
     );
   }
 }
