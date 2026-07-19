@@ -22,6 +22,7 @@ import 'audio_separation_page.dart';
 import 'tts_create_page.dart';
 import 'mermaid_chart_page.dart';
 import 'math_drawing_page.dart';
+import 'anki_page.dart';
 
 /// 页面枚举，定义应用中的主要页面（不含加号按钮）
 enum AppPage { home, chat, files, settings }
@@ -605,6 +606,20 @@ class _HomePageState extends ConsumerState<HomePage> {
                         context,
                         MaterialPageRoute(
                           builder: (_) => const MathDrawingPage(),
+                        ),
+                      );
+                    },
+                  ),
+                  _buildModuleCard(
+                    icon: Icons.auto_stories,
+                    label: '闪卡',
+                    subtitle: '记忆辅助系统',
+                    color: Colors.teal,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const AnkiDroidPage(),
                         ),
                       );
                     },
