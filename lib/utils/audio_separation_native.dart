@@ -1,5 +1,5 @@
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:dio/dio.dart' show CancelToken;
 import 'audio_utils.dart' show pcmToWav;
 
@@ -75,7 +75,7 @@ class AudioSeparationEngine {
   }
 
   /// Package audio frames into a playable format.
-  /// For raw PCM, wrap in WAV. For AAC, add ADTS headers to each frame.
+  /// For raw PCM, wrap in WAV. For AAC, wrap in a valid M4A (MP4 container).
   Uint8List _packageFrames(List<_AudioFrame> frames, _AudioTrackInfo track) {
     if (track.codec == 'raw ') {
       // PCM audio — concatenate frames and wrap in WAV
@@ -92,11 +92,375 @@ class AudioSeparationEngine {
       );
     }
 
-    // AAC — add ADTS header to each frame using the actual frame size
-    return _addAdtsHeadersToFrames(frames, track);
+    // AAC — wrap raw frames in a valid M4A (MP4) container so the output
+    // is accepted by Whisper ASR APIs (which require m4a, not raw ADTS AAC).
+    return _createM4aFromAacFrames(frames, track);
   }
 
+  // ==================================================================
+  // M4A (MP4 container) muxer for AAC audio
+  // ==================================================================
+
+  /// Wrap raw AAC frames in a minimal valid M4A (MP4) container.
+  ///
+  /// Produces a standard ISOBMFF file with ftyp + moov + mdat boxes.
+  /// The resulting bytes form a valid .m4a file playable by all major
+  /// players and accepted by Whisper ASR APIs.
+  Uint8List _createM4aFromAacFrames(
+      List<_AudioFrame> frames, _AudioTrackInfo track) {
+    final sampleRate = track.sampleRate > 0 ? track.sampleRate : 44100;
+    final channels = track.channels > 0 ? track.channels : 2;
+    final sampleCount = frames.length;
+
+    // ---------- AAC configuration ----------
+    const freqMap = {
+      96000: 0,
+      88200: 1,
+      64000: 2,
+      48000: 3,
+      44100: 4,
+      32000: 5,
+      24000: 6,
+      22050: 7,
+      16000: 8,
+      12000: 9,
+      11025: 10,
+      8000: 11,
+      7350: 12,
+    };
+    final freqIdx = freqMap[sampleRate] ?? 4;
+    final chanCfg = channels > 6 ? 6 : channels;
+    const audioObjectType = 2; // AAC-LC
+
+    // AudioSpecificConfig (2 bytes): objectType(5) + freqIdx(4) + chanCfg(4)
+    final asc = Uint8List.fromList([
+      (audioObjectType << 3) | (freqIdx >> 1),
+      ((freqIdx & 1) << 7) | (chanCfg << 3),
+    ]);
+
+    // ---------- Compute frame info ----------
+    int totalDataSize = 0;
+    final sampleSizes = <int>[];
+    for (final frame in frames) {
+      final s = frame.data.length;
+      sampleSizes.add(s);
+      totalDataSize += s;
+    }
+
+    // ---------- Pre-compute box sizes ----------
+    // AAC frames have 1024 samples per frame in MP4 timing.
+    const samplesPerFrame = 1024;
+    final duration = sampleCount * samplesPerFrame;
+
+    // stsd entry size: mp4a base (36) + esds box
+    final esdsSize = _esdsBoxSize(asc);
+    final stsdEntrySize = 36 + esdsSize;
+    final stsdSize =
+        16 + stsdEntrySize; // header(8)+ver/flags(4)+entryCount(4)+entry
+    const sttsSize = 24; // header + 1 entry
+    const stscSize = 28; // header + 1 entry
+    final stszSize = 20 + sampleCount * 4; // header + per-sample sizes
+    const stcoSize = 20; // header + 1 chunk offset
+    final stblSize = stsdSize + sttsSize + stscSize + stszSize + stcoSize;
+
+    const smhdSize = 16;
+    const dinfSize = 28; // includes dref + url
+    final minfSize = smhdSize + dinfSize + stblSize;
+
+    const mdhdSize = 32;
+    const hdlrSize = 32;
+    final mdiaSize = mdhdSize + hdlrSize + minfSize;
+
+    const tkhdSize = 92;
+    final trakSize = tkhdSize + mdiaSize;
+
+    const mvhdSize = 108;
+    final moovSize = mvhdSize + trakSize;
+
+    const ftypSize = 32;
+    final mdatSize = 8 + totalDataSize;
+
+    // File layout: ftyp | moov | mdat
+    final moovOffset = ftypSize;
+    final mdatOffset = moovOffset + moovSize;
+    final mdatDataOffset = mdatOffset + 8; // skip mdat box header
+
+    // ---------- Build file ----------
+    final buf = BytesBuilder();
+
+    // ---- ftyp ----
+    _writeBoxHeader(buf, ftypSize, 'ftyp');
+    _writeCString(buf, 'M4A '); // major brand
+    _writeU32be(buf, 0x00000200); // minor version
+    _writeCString(buf, 'M4A '); // compatible brand
+    _writeCString(buf, 'mp42');
+    _writeCString(buf, 'isom');
+
+    // ---- moov ----
+    _writeBoxHeader(buf, moovSize, 'moov');
+
+    // mvhd
+    _writeBoxHeader(buf, mvhdSize, 'mvhd');
+    _writeU32be(buf, 0); // version=0, flags=0
+    _writeU32be(buf, 0); // creation_time
+    _writeU32be(buf, 0); // modification_time
+    _writeU32be(buf, sampleRate); // timescale
+    _writeU32be(buf, duration); // duration
+    _writeU32be(buf, 0x00010000); // rate (1.0 fixed-point)
+    _writeU16be(buf, 0x0100); // volume (1.0)
+    _writeBytes(buf, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // reserved(10)
+    // matrix (identity)
+    for (final v in [0x00010000, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000]) {
+      _writeU32be(buf, v);
+    }
+    // pre-defined (6 x 4 bytes)
+    for (var i = 0; i < 6; i++) {
+      _writeU32be(buf, 0);
+    }
+    _writeU32be(buf, 2); // next_track_id
+
+    // trak
+    _writeBoxHeader(buf, trakSize, 'trak');
+
+    // tkhd
+    _writeBoxHeader(buf, tkhdSize, 'tkhd');
+    _writeU32be(buf, 0x00000007); // version=0, flags=0x000007 (enabled)
+    _writeU32be(buf, 0); // creation_time
+    _writeU32be(buf, 0); // modification_time
+    _writeU32be(buf, 1); // track_id
+    _writeU32be(buf, 0); // reserved
+    _writeU32be(buf, duration); // duration
+    _writeBytes(buf, [0, 0, 0, 0, 0, 0, 0, 0]); // reserved(8)
+    _writeU16be(buf, 0); // layer
+    _writeU16be(buf, 0); // alternate_group
+    _writeU16be(buf, 0x0100); // volume (1.0)
+    _writeU16be(buf, 0); // reserved
+    // matrix (identity)
+    for (final v in [0x00010000, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000]) {
+      _writeU32be(buf, v);
+    }
+    _writeU32be(buf, 0); // width
+    _writeU32be(buf, 0); // height
+
+    // mdia
+    _writeBoxHeader(buf, mdiaSize, 'mdia');
+
+    // mdhd
+    _writeBoxHeader(buf, mdhdSize, 'mdhd');
+    _writeU32be(buf, 0); // version=0, flags=0
+    _writeU32be(buf, 0); // creation_time
+    _writeU32be(buf, 0); // modification_time
+    _writeU32be(buf, sampleRate); // timescale
+    _writeU32be(buf, duration); // duration
+    _writeU16be(buf, 0x55C4); // language code (und)
+    _writeU16be(buf, 0); // quality
+
+    // hdlr
+    _writeBoxHeader(buf, hdlrSize, 'hdlr');
+    _writeU32be(buf, 0); // version=0, flags=0
+    _writeU32be(buf, 0); // pre_defined
+    _writeCString(buf, 'soun'); // handler_type
+    _writeU32be(buf, 0); // reserved
+    _writeU32be(buf, 0); // reserved
+    _writeU32be(buf, 0); // reserved
+    _writeBytes(buf, [0]); // null name terminator
+
+    // minf
+    _writeBoxHeader(buf, minfSize, 'minf');
+
+    // smhd
+    _writeBoxHeader(buf, smhdSize, 'smhd');
+    _writeU32be(buf, 0); // version=0, flags=0
+    _writeU16be(buf, 0); // balance
+    _writeU16be(buf, 0); // reserved
+
+    // dinf
+    _writeBoxHeader(buf, dinfSize, 'dinf');
+
+    // dref
+    _writeBoxHeader(buf, dinfSize - 8, 'dref');
+    _writeU32be(buf, 0); // version=0, flags=0
+    _writeU32be(buf, 1); // entry_count
+    // url box (self-contained)
+    _writeBoxHeader(buf, 12, 'url ');
+    _writeU32be(buf, 0x00000001); // version=0, flags=0x000001 (self-contained)
+
+    // stbl
+    _writeBoxHeader(buf, stblSize, 'stbl');
+
+    // stsd
+    _writeBoxHeader(buf, stsdSize, 'stsd');
+    _writeU32be(buf, 0); // version=0, flags=0
+    _writeU32be(buf, 1); // entry_count = 1
+
+    // SampleEntry: mp4a
+    _writeU32be(buf, stsdEntrySize); // entry_size
+    _writeCString(buf, 'mp4a'); // codec
+    _writeBytes(buf, [0, 0, 0, 0, 0, 0]); // reserved(6)
+    _writeU16be(buf, 1); // data_reference_index
+    _writeBytes(buf, [0, 0, 0, 0, 0, 0, 0, 0]); // reserved(8)
+    _writeU16be(buf, channels); // channel count
+    _writeU16be(buf, 16); // sample size
+    _writeU16be(buf, 0); // pre-defined
+    _writeU16be(buf, 0); // reserved
+    _writeU32be(buf, sampleRate << 16); // sample rate (16.16 fixed-point)
+
+    // esds box inside stsd
+    _writeEsdsBox(buf, asc);
+
+    // stts
+    _writeBoxHeader(buf, sttsSize, 'stts');
+    _writeU32be(buf, 0); // version=0, flags=0
+    _writeU32be(buf, 1); // entry_count
+    _writeU32be(buf, sampleCount); // sample_count
+    _writeU32be(buf, samplesPerFrame); // sample_duration
+
+    // stsc
+    _writeBoxHeader(buf, stscSize, 'stsc');
+    _writeU32be(buf, 0); // version=0, flags=0
+    _writeU32be(buf, 1); // entry_count
+    _writeU32be(buf, 1); // first_chunk
+    _writeU32be(buf, sampleCount); // samples_per_chunk
+    _writeU32be(buf, 1); // sample_description_index
+
+    // stsz
+    _writeBoxHeader(buf, stszSize, 'stsz');
+    _writeU32be(buf, 0); // version=0, flags=0
+    _writeU32be(buf, 0); // sample_size (0 = non-constant)
+    _writeU32be(buf, sampleCount);
+    for (final s in sampleSizes) {
+      _writeU32be(buf, s);
+    }
+
+    // stco
+    _writeBoxHeader(buf, stcoSize, 'stco');
+    _writeU32be(buf, 0); // version=0, flags=0
+    _writeU32be(buf, 1); // entry_count
+    _writeU32be(buf, mdatDataOffset); // chunk_offset
+
+    // ---- mdat ----
+    _writeBoxHeader(buf, mdatSize, 'mdat');
+    for (final frame in frames) {
+      buf.add(frame.data);
+    }
+
+    return buf.toBytes();
+  }
+
+  // ==================================================================
+  // esds box builder
+  // ==================================================================
+
+  /// Compute the total size of an esds box containing the given ASC.
+  static int _esdsBoxSize(Uint8List asc) {
+    // ES_Descriptor body: ES_ID(2) + flags(1) + ...
+    // + DecoderConfigDescriptor(1+1+1+1+3+4+4 + 1+1+asc.length)
+    // + SLConfigDescriptor(1+1+1)
+    final dsiBodySize = 1 + 1 + asc.length; // tag + length + asc
+    final decConfigBodySize = 1 +
+        1 +
+        3 +
+        4 +
+        4 +
+        dsiBodySize; // tag+length+objType+streamType+bufSize+maxBR+avgBR+DSI
+    final esBodySize = 2 +
+        1 +
+        (1 + 1 + decConfigBodySize) +
+        (1 + 1 + 1); // ES_ID+flags + (tag+len+decConfig) + (tag+len+SL)
+    return 12 + esBodySize; // box header(8) + version/flags(4) + ES_Descriptor
+  }
+
+  /// Write a complete esds box with AudioSpecificConfig.
+  static void _writeEsdsBox(BytesBuilder buf, Uint8List asc) {
+    final size = _esdsBoxSize(asc);
+    _writeBoxHeader(buf, size, 'esds');
+    _writeU32be(buf, 0); // version=0, flags=0
+
+    // ES_Descriptor (tag 0x03)
+    buf.addByte(0x03);
+    _writeDescLength(buf, _esdsDescriptorBodyLength(asc));
+    _writeU16be(buf, 0); // ES_ID
+    buf.addByte(0x00); // flags
+
+    // DecoderConfigDescriptor (tag 0x04)
+    buf.addByte(0x04);
+    final decLen = 1 + 1 + 3 + 4 + 4 + (1 + 1 + asc.length);
+    _writeDescLength(buf, decLen);
+    buf.addByte(0x40); // objectTypeIndication (Audio ISO/IEC 14496-3)
+    buf.addByte(0x15); // streamType (Audio) + bufferSizeDB flag (0x05 << 2 | 1)
+    // bufferSizeDB (3 bytes, little-endian in MP4 spec)
+    _writeBytes(buf, [0, 0, 0]);
+    _writeU32be(buf, 0); // maxBitrate
+    _writeU32be(buf, 0); // avgBitrate
+
+    // DecoderSpecificInfo (tag 0x05)
+    buf.addByte(0x05);
+    _writeDescLength(buf, asc.length);
+    buf.add(asc);
+
+    // SLConfigDescriptor (tag 0x06)
+    buf.addByte(0x06);
+    _writeDescLength(buf, 1);
+    buf.addByte(0x02); // predef = 2
+  }
+
+  /// Compute the length of the ES_Descriptor body (for the length field).
+  static int _esdsDescriptorBodyLength(Uint8List asc) {
+    final decLen = 1 + 1 + 3 + 4 + 4 + (1 + 1 + asc.length);
+    return 2 + 1 + (1 + 1 + decLen) + (1 + 1 + 1);
+  }
+
+  // ==================================================================
+  // ISOBMFF binary write helpers
+  // ==================================================================
+
+  /// Write an 8-byte ISOBMFF box header.
+  static void _writeBoxHeader(BytesBuilder buf, int size, String type) {
+    _writeU32be(buf, size);
+    _writeCString(buf, type);
+  }
+
+  /// Write a 4-character code.
+  static void _writeCString(BytesBuilder buf, String s) {
+    buf.add(s.codeUnits.map((c) => c.toInt()).toList());
+  }
+
+  /// Write a 32-bit big-endian integer.
+  static void _writeU32be(BytesBuilder buf, int v) {
+    buf.addByte((v >> 24) & 0xFF);
+    buf.addByte((v >> 16) & 0xFF);
+    buf.addByte((v >> 8) & 0xFF);
+    buf.addByte(v & 0xFF);
+  }
+
+  /// Write a 16-bit big-endian integer.
+  static void _writeU16be(BytesBuilder buf, int v) {
+    buf.addByte((v >> 8) & 0xFF);
+    buf.addByte(v & 0xFF);
+  }
+
+  /// Write raw bytes.
+  static void _writeBytes(BytesBuilder buf, List<int> bytes) {
+    buf.add(Uint8List.fromList(bytes));
+  }
+
+  /// Write an MP4 descriptor length (compact form: 1 byte, MSB=0 means end).
+  static void _writeDescLength(BytesBuilder buf, int length) {
+    // For lengths < 128, use single byte (MSB=0).
+    // This is sufficient for our esds boxes since they're always < 128 bytes.
+    buf.addByte(length & 0x7F);
+  }
+
+  // ==================================================================
+  // Legacy ADTS output (kept for reference)
+  // ==================================================================
+
   /// Add ADTS headers to individual AAC frames using actual frame sizes.
+  ///
+  /// Note: This outputs raw ADTS AAC which is NOT accepted by Whisper ASR
+  /// APIs. Use the M4A container output from [_createM4aFromAacFrames]
+  /// instead for API compatibility.
+  @visibleForTesting
   Uint8List _addAdtsHeadersToFrames(
       List<_AudioFrame> frames, _AudioTrackInfo track) {
     const freqMap = {
