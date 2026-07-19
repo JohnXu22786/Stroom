@@ -7,6 +7,8 @@ import '../services/backup_location_manager.dart';
 import '../services/backup_service.dart';
 import '../services/data_migration_service.dart';
 import '../startup/app_restart.dart';
+import '../anki/apkg/apkg_exporter.dart';
+import '../anki/apkg/apkg_importer.dart';
 
 class BackupRestorePage extends ConsumerStatefulWidget {
   const BackupRestorePage({super.key});
@@ -20,6 +22,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   bool _isImporting = false;
   String? _externalBackupPath;
   Timer? _restartTimer;
+  bool _isAnkiExporting = false;
+  bool _isAnkiImporting = false;
 
   // 统一选择（对应新 BackupSelection 字段）
   // 聊天记录和附件、设置、图片、音频、视频、文本、任务
@@ -292,6 +296,77 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     }
   }
 
+  // ── Anki .apkg ──────────────────────────────────────────
+
+  Future<void> _onAnkiExport() async {
+    setState(() => _isAnkiExporting = true);
+    try {
+      final path = await AnkiApkgExporter.export();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('闪卡片组已导出到: $path'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导出失败: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isAnkiExporting = false);
+    }
+  }
+
+  Future<void> _onAnkiImport() async {
+    // Use file_picker to select .apkg file
+    // Since file_picker may need Android permissions, use a simpler approach:
+    // show a dialog asking for path, or use the file_picker if available
+    final ctl = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('导入 .apkg'),
+        content: TextField(
+          controller: ctl,
+          decoration: const InputDecoration(
+            hintText: '/path/to/file.apkg',
+            labelText: '.apkg 文件路径',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, ctl.text),
+              child: const Text('导入')),
+        ],
+      ),
+    );
+
+    if (result == null || result.isEmpty) return;
+
+    setState(() => _isAnkiImporting = true);
+    try {
+      final summary = await AnkiApkgImporter.import(result);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(summary), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导入失败: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isAnkiImporting = false);
+    }
+  }
+
   Future<void> _showRestartCountdown() async {
     if (!mounted) return;
 
@@ -427,6 +502,55 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
             ),
           ),
           const SizedBox(height: 24),
+          // === 闪卡 .apkg 导出/导入 ===
+          _buildSectionHeader('闪卡牌组'),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('导入/导出 .apkg 格式的 Anki 牌组',
+                      style: TextStyle(
+                          fontSize: 13,
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant)),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _isAnkiExporting ? null : _onAnkiExport,
+                          icon: _isAnkiExporting
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.file_upload_outlined),
+                          label: Text(_isAnkiExporting ? '导出中...' : '导出 .apkg'),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _isAnkiImporting ? null : _onAnkiImport,
+                          icon: _isAnkiImporting
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.file_download_outlined),
+                          label: Text(_isAnkiImporting ? '导入中...' : '导入 .apkg'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );

@@ -4,6 +4,7 @@ import '../anki/providers/anki_provider.dart';
 import '../anki/providers/anki_actions.dart';
 import '../anki/models/deck.dart';
 import '../anki/models/card.dart';
+import 'anki_sync_page.dart';
 
 /// Main Anki page showing all decks and options.
 class AnkiDroidPage extends ConsumerWidget {
@@ -17,6 +18,16 @@ class AnkiDroidPage extends ConsumerWidget {
         title: const Text('闪卡'),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.cloud_sync),
+            tooltip: 'AnkiWeb 同步',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AnkiSyncSettingsPage()),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.add),
             tooltip: '新建牌组',
