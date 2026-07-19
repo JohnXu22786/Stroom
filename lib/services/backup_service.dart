@@ -376,6 +376,17 @@ class BackupService {
     await _yieldToEventLoop();
     checkCancelled();
 
+    // 4b. 闪卡 Anki 数据库
+    if (!kIsWeb && !WebFileStore.isTestMode) {
+      try {
+        final appDir = await AppStorage.directory;
+        final ankiDb = p.join(appDir, 'collection.anki2');
+        if (File(ankiDb).existsSync()) {
+          await addTaskFileToArchive(archive, 'anki/collection.anki2', ankiDb);
+        }
+      } catch (_) {}
+    }
+
     // 5. 二进制文件（按存储格式：pictures/, tts_audio/, videos/, texts/, attachments/）
     debugPrint('[BackupService] _buildBackupBytes: adding binary files');
 
