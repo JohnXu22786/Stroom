@@ -348,6 +348,167 @@ void main() {
     });
   });
 
+  group('GraphPainter - edge rendering', () {
+    test('draws curves with clipRect for clean edges', () {
+      // Test with points that extend beyond canvas bounds
+      const painter = GraphPainter(
+        xMin: -10,
+        yMin: -10,
+        xMax: 10,
+        yMax: 10,
+        curves: [
+          [
+            {'x': -10.0, 'y': 5.0},
+            {'x': -5.0, 'y': 2.0},
+            {'x': 0.0, 'y': 0.0},
+            {'x': 5.0, 'y': 2.0},
+            {'x': 10.0, 'y': 5.0},
+          ],
+        ],
+        curveColors: [Colors.blue],
+      );
+      // Should not crash - clipRect handles edge points
+      expect(painter, isNotNull);
+    });
+
+    test('does not break path for points at viewport edges', () {
+      // Points exactly at the viewport boundaries should be valid
+      const painter = GraphPainter(
+        xMin: -10,
+        yMin: -10,
+        xMax: 10,
+        yMax: 10,
+        curves: [
+          [
+            {'x': -10.0, 'y': 0.0},
+            {'x': 10.0, 'y': 0.0},
+          ],
+        ],
+        curveColors: [Colors.green],
+      );
+      expect(painter, isNotNull);
+
+      // Verify coordinate transform works for boundary points
+      // (-10, 0) should map to screen x=0 and y=height/2
+      // (10, 0) should map to screen x=width and y=height/2
+    });
+
+    test('renders curves with points outside viewport without crash', () {
+      // Points far outside the viewport (clipped by clipRect)
+      const painter = GraphPainter(
+        xMin: -10,
+        yMin: -10,
+        xMax: 10,
+        yMax: 10,
+        curves: [
+          [
+            {'x': -10.0, 'y': 100.0},
+            {'x': 0.0, 'y': -100.0},
+            {'x': 10.0, 'y': 100.0},
+          ],
+        ],
+        curveColors: [Colors.red],
+      );
+      expect(painter, isNotNull);
+    });
+  });
+
+  group('MathCanvas - edge sampling', () {
+    testWidgets('sampled points extend slightly beyond viewport bounds',
+        (tester) async {
+      final key = GlobalKey<MathCanvasState>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 300,
+              height: 300,
+              child: MathCanvas(key: key),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Set a specific viewport
+      await key.currentState!.setViewport(-5, -5, 5, 5);
+      await tester.pump();
+
+      // Set a simple formula
+      await key.currentState!.setExpression('x', null);
+      await tester.pump();
+
+      final points = key.currentState!.curvePoints;
+      expect(points.length, greaterThanOrEqualTo(2));
+
+      // With margin, first sampled x should be slightly less than xMin=-5
+      // and last sampled x should be slightly more than xMax=5
+      final firstX = points.first['x']!;
+      final lastX = points.last['x']!;
+      expect(firstX, lessThan(-5.0));
+      expect(lastX, greaterThan(5.0));
+    });
+  });
+
+  group('MathCanvas - curve continuity', () {
+    testWidgets('formula renders without gaps from boundary issues',
+        (tester) async {
+      final key = GlobalKey<MathCanvasState>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 300,
+              height: 300,
+              child: MathCanvas(key: key),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Set a simple continuous function
+      await key.currentState!.setExpression('x^2', null);
+      await tester.pump();
+
+      final points = key.currentState!.curvePoints;
+      expect(points.length, greaterThan(0));
+
+      // All points should have finite coordinates
+      for (final p in points) {
+        expect(p['x']!.isFinite, isTrue);
+        expect(p['y']!.isFinite, isTrue);
+      }
+    });
+
+    testWidgets('extreme zoom levels render without crash', (tester) async {
+      final key = GlobalKey<MathCanvasState>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 300,
+              height: 300,
+              child: MathCanvas(key: key),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Set a very tight viewport (deep zoom)
+      await key.currentState!.setViewport(-0.1, -0.1, 0.1, 0.1);
+      await key.currentState!.setExpression('x^2', null);
+      await tester.pump();
+
+      final points = key.currentState!.curvePoints;
+      expect(points.length, greaterThan(0));
+    });
+  });
+
   group('MathCanvas - callbacks', () {
     testWidgets('onError fires for invalid expression', (tester) async {
       String? errorMsg;

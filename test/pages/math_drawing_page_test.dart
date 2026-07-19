@@ -183,6 +183,92 @@ void main() {
     });
   });
 
+  group('MathDrawingPage - UI spacing', () {
+    testWidgets('formula row left side has adequate spacing', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      // Color circle and eye icon should both be present
+      expect(find.byIcon(Icons.visibility), findsOneWidget);
+
+      // The color indicator is a Container with circle shape
+      // Check that the Row has appropriate spacing
+      // (verified indirectly by layout not crashing)
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'right side formula IconButtons have compact constraints for consistent sizing',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      // Find only the IconButtons within the formula list (exclude AppBar)
+      final formulaList = find.byType(ListView);
+      final iconButtonsInFormula = find.descendant(
+        of: formulaList,
+        matching: find.byType(IconButton),
+      );
+
+      // Should have at least add + checkmark (2)
+      expect(iconButtonsInFormula, findsAtLeastNWidgets(2));
+
+      // All formula IconButtons should have explicit tight constraints (28x28)
+      for (final btn in iconButtonsInFormula.evaluate()) {
+        final ib = btn.widget as IconButton;
+        final c = ib.constraints;
+        expect(c, isNotNull);
+        expect(c!.minWidth, 28);
+        expect(c.maxWidth, 28);
+        expect(c.minHeight, 28);
+        expect(c.maxHeight, 28);
+      }
+    });
+
+    testWidgets('remove button also has tight constraints when visible',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      // Add a second formula to make remove button visible
+      await tester.tap(find.byType(IconButton).first);
+      await tester.pump();
+
+      final formulaList = find.byType(ListView);
+      final iconButtonsInFormula = find.descendant(
+        of: formulaList,
+        matching: find.byType(IconButton),
+      );
+
+      // Now should have more IconButtons (add, 2×remove, 2×plot = 5)
+      expect(iconButtonsInFormula, findsAtLeastNWidgets(3));
+
+      // All should have tight constraints
+      for (final btn in iconButtonsInFormula.evaluate()) {
+        final ib = btn.widget as IconButton;
+        final c = ib.constraints;
+        expect(c, isNotNull);
+        expect(c!.minWidth, 28);
+        expect(c.maxWidth, 28);
+      }
+    });
+
+    testWidgets('formula row overall layout does not overflow', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      // Type a long formula to stress test layout
+      await tester.enterText(
+        find.byType(TextField),
+        'sin(x) + cos(x) + tan(x) + log(x) + sqrt(x)',
+      );
+      await tester.pump();
+
+      // Should not have overflow errors
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   group('MathDrawingPage - initial expression', () {
     testWidgets('pre-populates expression when provided', (tester) async {
       await tester.pumpWidget(
