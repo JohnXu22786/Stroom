@@ -325,7 +325,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             ),
           ),
 
-          const SizedBox(width: 4),
+          const SizedBox(width: 10),
 
           // ---- Eye / eye-off toggle ----
           GestureDetector(
@@ -337,7 +337,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             ),
           ),
 
-          const SizedBox(width: 4),
+          const SizedBox(width: 8),
 
           // ---- Formula text field ----
           Expanded(
@@ -381,8 +381,6 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             ),
           ),
 
-          const SizedBox(width: 2),
-
           // ---- Add formula (+) button (first row only) ----
           if (index == 0)
             IconButton(
@@ -390,7 +388,9 @@ class _MathDrawingPageState extends State<MathDrawingPage>
               tooltip: '添加公式',
               onPressed: _addFormula,
               padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              visualDensity: VisualDensity.compact,
+              constraints:
+                  const BoxConstraints(minWidth: 28, maxWidth: 28, minHeight: 28, maxHeight: 28),
             ),
 
           // ---- Remove formula (X) button ----
@@ -401,7 +401,9 @@ class _MathDrawingPageState extends State<MathDrawingPage>
               tooltip: '删除公式',
               onPressed: () => _confirmRemove(index),
               padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              visualDensity: VisualDensity.compact,
+              constraints:
+                  const BoxConstraints(minWidth: 28, maxWidth: 28, minHeight: 28, maxHeight: 28),
             ),
 
           // ---- Plot (✓) button ----
@@ -415,7 +417,9 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             tooltip: '绘制',
             onPressed: _canPlot ? _plotAll : null,
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            visualDensity: VisualDensity.compact,
+            constraints:
+                const BoxConstraints(minWidth: 28, maxWidth: 28, minHeight: 28, maxHeight: 28),
           ),
         ],
       ),
