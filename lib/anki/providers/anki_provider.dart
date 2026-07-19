@@ -13,7 +13,7 @@ import '../scheduler/scheduler.dart';
 
 /// Opens the SQLite database once.
 final ankiDatabaseProvider = FutureProvider<AnkiDatabase>((ref) async {
-  if (kIsWeb) throw UnsupportedError('闪卡功能不支持 Web 平台，请在桌面端或移动端使用');
+  if (kIsWeb) throw UnsupportedError('Web 平台不支持本地存储，请使用桌面端或移动端管理牌组。同步功能正常可用。');
   final db = AnkiDatabase();
   await db.open();
   return db;
