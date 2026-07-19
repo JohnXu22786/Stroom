@@ -99,7 +99,8 @@ class AnkiCollection {
     Map<int, AnkiModel>? models,
     this.conf = '{}',
     this.tags = '',
-  })  : creationDate = creationDate ?? DateTime.now().millisecondsSinceEpoch ~/ 1000,
+  })  : creationDate =
+            creationDate ?? DateTime.now().millisecondsSinceEpoch ~/ 1000,
         nextCardId = nextCardId ?? DateTime.now().microsecondsSinceEpoch,
         nextNoteId = nextNoteId ?? DateTime.now().microsecondsSinceEpoch,
         nextDeckId = nextDeckId ?? DateTime.now().microsecondsSinceEpoch,
@@ -287,25 +288,25 @@ class AnkiCollection {
   // --- JSON Serialization ---
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'creationDate': creationDate,
-    'modified': modified,
-    'schemaModified': schemaModified,
-    'version': version,
-    'dirty': dirty,
-    'usn': usn,
-    'lastSync': lastSync,
-    'nextCardId': nextCardId,
-    'nextNoteId': nextNoteId,
-    'nextDeckId': nextDeckId,
-    'conf': conf,
-    'tags': tags,
-    'models': models.values.map((m) => m.toJson()).toList(),
-    'decks': decks.values.map((d) => d.toJson()).toList(),
-    'notes': notes.values.map((n) => n.toJson()).toList(),
-    'cards': cards.values.map((c) => c.toJson()).toList(),
-    'revlog': revlog.map((r) => r.toJson()).toList(),
-  };
+        'id': id,
+        'creationDate': creationDate,
+        'modified': modified,
+        'schemaModified': schemaModified,
+        'version': version,
+        'dirty': dirty,
+        'usn': usn,
+        'lastSync': lastSync,
+        'nextCardId': nextCardId,
+        'nextNoteId': nextNoteId,
+        'nextDeckId': nextDeckId,
+        'conf': conf,
+        'tags': tags,
+        'models': models.values.map((m) => m.toJson()).toList(),
+        'decks': decks.values.map((d) => d.toJson()).toList(),
+        'notes': notes.values.map((n) => n.toJson()).toList(),
+        'cards': cards.values.map((c) => c.toJson()).toList(),
+        'revlog': revlog.map((r) => r.toJson()).toList(),
+      };
 
   factory AnkiCollection.fromJson(Map<String, dynamic> json) {
     final modelList = (json['models'] as List<dynamic>?)

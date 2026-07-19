@@ -41,26 +41,26 @@ class AnkiRevlog {
   // --- JSON Serialization ---
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'cardId': cardId,
-    'reviewTime': reviewTime,
-    'rating': rating,
-    'interval': interval,
-    'lastInterval': lastInterval,
-    'easeFactor': easeFactor,
-    'reviewDuration': reviewDuration,
-  };
+        'id': id,
+        'cardId': cardId,
+        'reviewTime': reviewTime,
+        'rating': rating,
+        'interval': interval,
+        'lastInterval': lastInterval,
+        'easeFactor': easeFactor,
+        'reviewDuration': reviewDuration,
+      };
 
   factory AnkiRevlog.fromJson(Map<String, dynamic> json) => AnkiRevlog(
-    id: json['id'] as int? ?? DateTime.now().microsecondsSinceEpoch,
-    cardId: json['cardId'] as int,
-    reviewTime: json['reviewTime'] as int,
-    rating: json['rating'] as int,
-    interval: json['interval'] as int,
-    lastInterval: json['lastInterval'] as int,
-    easeFactor: json['easeFactor'] as int,
-    reviewDuration: json['reviewDuration'] as int? ?? 0,
-  );
+        id: json['id'] as int? ?? DateTime.now().microsecondsSinceEpoch,
+        cardId: json['cardId'] as int,
+        reviewTime: json['reviewTime'] as int,
+        rating: json['rating'] as int,
+        interval: json['interval'] as int,
+        lastInterval: json['lastInterval'] as int,
+        easeFactor: json['easeFactor'] as int,
+        reviewDuration: json['reviewDuration'] as int? ?? 0,
+      );
 
   @override
   String toString() =>

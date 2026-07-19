@@ -26,9 +26,7 @@ class AnkiScheduler {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     return collection.cards.values
         .where((c) =>
-            c.deckId == deckId &&
-            c.queue == CardQueue.newQueue &&
-            c.isDue(now))
+            c.deckId == deckId && c.queue == CardQueue.newQueue && c.isDue(now))
         .toList();
   }
 

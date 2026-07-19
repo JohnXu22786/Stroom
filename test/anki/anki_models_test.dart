@@ -34,7 +34,8 @@ void main() {
       expect(restored.easeFactor, equals(card.easeFactor));
     });
 
-    test('creates a learning card from new card with initial learning step', () {
+    test('creates a learning card from new card with initial learning step',
+        () {
       final card = AnkiCard.createNew(deckId: 1, noteId: 1, ordinal: 0);
       final now = DateTime.now().millisecondsSinceEpoch;
       card.startLearning(now);
@@ -48,7 +49,8 @@ void main() {
       final card = AnkiCard.createNew(deckId: 1, noteId: 1, ordinal: 0);
       final now = DateTime.now().millisecondsSinceEpoch;
       card.startLearning(now);
-      final stepsRemainingBefore = card.left & 0xFF; // Low byte = remaining steps
+      final stepsRemainingBefore =
+          card.left & 0xFF; // Low byte = remaining steps
       // Answer Good (idx 2) during learning - advances to next step
       card.answerLearning(now, learningSteps: [1, 10], answerIdx: 2);
       // Should have fewer remaining steps (low byte) after advancing
@@ -220,12 +222,14 @@ void main() {
       expect(deck.childName, equals('Child'));
     });
 
-    test('gets parent deck names correctly', () => () {
-      final deck1 = AnkiDeck.createNew(name: 'A::B::C');
-      final deck2 = AnkiDeck.createNew(name: 'X');
-      expect(deck1.parentName, equals('A::B'));
-      expect(deck2.parentName, isNull);
-    }());
+    test(
+        'gets parent deck names correctly',
+        () => () {
+              final deck1 = AnkiDeck.createNew(name: 'A::B::C');
+              final deck2 = AnkiDeck.createNew(name: 'X');
+              expect(deck1.parentName, equals('A::B'));
+              expect(deck2.parentName, isNull);
+            }());
   });
 
   group('AnkiRevlog', () {

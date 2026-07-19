@@ -80,26 +80,26 @@ class AnkiDeck {
   // --- JSON Serialization ---
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'name': name,
-    'description': description,
-    'modified': modified,
-    'usn': usn,
-    'isDynamic': isDynamic,
-    'configId': configId,
-    'creationDate': creationDate,
-  };
+        'id': id,
+        'name': name,
+        'description': description,
+        'modified': modified,
+        'usn': usn,
+        'isDynamic': isDynamic,
+        'configId': configId,
+        'creationDate': creationDate,
+      };
 
   factory AnkiDeck.fromJson(Map<String, dynamic> json) => AnkiDeck(
-    id: json['id'] as int,
-    name: json['name'] as String,
-    description: json['description'] as String? ?? '',
-    modified: json['modified'] as int? ?? 0,
-    usn: json['usn'] as int? ?? -1,
-    isDynamic: json['isDynamic'] as bool? ?? false,
-    configId: json['configId'] as int? ?? 1,
-    creationDate: json['creationDate'] as int? ?? 0,
-  );
+        id: json['id'] as int,
+        name: json['name'] as String,
+        description: json['description'] as String? ?? '',
+        modified: json['modified'] as int? ?? 0,
+        usn: json['usn'] as int? ?? -1,
+        isDynamic: json['isDynamic'] as bool? ?? false,
+        configId: json['configId'] as int? ?? 1,
+        creationDate: json['creationDate'] as int? ?? 0,
+      );
 
   @override
   String toString() => 'AnkiDeck(id=$id, name=$name)';

@@ -45,9 +45,12 @@ void main() {
         AnkiNote.createNew(modelId: 1, fields: ['Q', 'A']),
       );
 
-      collection.addCard(AnkiCard.createNew(deckId: deck1.id, noteId: noteId, ordinal: 0));
-      collection.addCard(AnkiCard.createNew(deckId: deck1.id, noteId: noteId, ordinal: 1));
-      collection.addCard(AnkiCard.createNew(deckId: deck2.id, noteId: noteId, ordinal: 0));
+      collection.addCard(
+          AnkiCard.createNew(deckId: deck1.id, noteId: noteId, ordinal: 0));
+      collection.addCard(
+          AnkiCard.createNew(deckId: deck1.id, noteId: noteId, ordinal: 1));
+      collection.addCard(
+          AnkiCard.createNew(deckId: deck2.id, noteId: noteId, ordinal: 0));
 
       expect(collection.getCardsByDeck(deck1.id), hasLength(2));
       expect(collection.getCardsByDeck(deck2.id), hasLength(1));
@@ -69,12 +72,14 @@ void main() {
         AnkiNote.createNew(modelId: 1, fields: ['Q', 'A']),
       );
 
-      final dueCard = AnkiCard.createNew(deckId: deck.id, noteId: noteId, ordinal: 0);
+      final dueCard =
+          AnkiCard.createNew(deckId: deck.id, noteId: noteId, ordinal: 0);
       dueCard.due = 0;
       dueCard.queue = CardQueue.newQueue;
       collection.addCard(dueCard);
 
-      final notDueCard = AnkiCard.createNew(deckId: deck.id, noteId: noteId, ordinal: 1);
+      final notDueCard =
+          AnkiCard.createNew(deckId: deck.id, noteId: noteId, ordinal: 1);
       notDueCard.due = now + 86400; // Tomorrow
       notDueCard.queue = CardQueue.reviewQueue;
       collection.addCard(notDueCard);
@@ -91,16 +96,19 @@ void main() {
       );
 
       // Add cards in different states
-      final newCard = AnkiCard.createNew(deckId: deck.id, noteId: noteId, ordinal: 0);
+      final newCard =
+          AnkiCard.createNew(deckId: deck.id, noteId: noteId, ordinal: 0);
       newCard.queue = CardQueue.newQueue;
       collection.addCard(newCard);
 
-      final learningCard = AnkiCard.createNew(deckId: deck.id, noteId: noteId, ordinal: 1);
+      final learningCard =
+          AnkiCard.createNew(deckId: deck.id, noteId: noteId, ordinal: 1);
       learningCard.queue = CardQueue.learningQueue;
       learningCard.due = DateTime.now().millisecondsSinceEpoch + 60000;
       collection.addCard(learningCard);
 
-      final reviewCard = AnkiCard.createNew(deckId: deck.id, noteId: noteId, ordinal: 2);
+      final reviewCard =
+          AnkiCard.createNew(deckId: deck.id, noteId: noteId, ordinal: 2);
       reviewCard.queue = CardQueue.reviewQueue;
       reviewCard.due = 0;
       collection.addCard(reviewCard);
@@ -126,7 +134,8 @@ void main() {
       final noteId = collection.addNote(
         AnkiNote.createNew(modelId: 1, fields: ['Q', 'A'], tags: ['tag']),
       );
-      final card = AnkiCard.createNew(deckId: deck.id, noteId: noteId, ordinal: 0);
+      final card =
+          AnkiCard.createNew(deckId: deck.id, noteId: noteId, ordinal: 0);
       card.reps = 5;
       card.interval = 30;
       collection.addCard(card);

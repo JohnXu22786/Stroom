@@ -4,7 +4,6 @@ import '../models/collection.dart';
 import '../models/card.dart';
 import '../models/note.dart';
 import '../models/deck.dart';
-import '../models/revlog.dart';
 import '../models/model.dart';
 import '../scheduler/scheduler.dart';
 import '../utils/anki_storage_service.dart';
@@ -21,22 +20,22 @@ final ankiSchedulerProvider = Provider<AnkiScheduler>((ref) {
 
 /// Provider for the AnkiCollection state.
 final ankiCollectionProvider =
-    StateNotifierProvider<AnkiCollectionNotifier, AnkiCollection>((ref) {
-  final storage = ref.read(ankiStorageServiceProvider);
-  final scheduler = ref.read(ankiSchedulerProvider);
-  return AnkiCollectionNotifier(storage, scheduler);
-});
+    NotifierProvider<AnkiCollectionNotifier, AnkiCollection>(
+  AnkiCollectionNotifier.new,
+);
 
-/// StateNotifier that manages the AnkiCollection.
-class AnkiCollectionNotifier extends StateNotifier<AnkiCollection> {
-  final AnkiStorageService _storage;
-  final AnkiScheduler _scheduler;
+/// Notifier that manages the AnkiCollection.
+class AnkiCollectionNotifier extends Notifier<AnkiCollection> {
   bool _modelsInitialized = false;
 
-  AnkiCollectionNotifier(this._storage, this._scheduler)
-      : super(AnkiCollection.createNew()) {
+  @override
+  AnkiCollection build() {
     _load();
+    return AnkiCollection.createNew();
   }
+
+  AnkiStorageService get _storage => ref.read(ankiStorageServiceProvider);
+  AnkiScheduler get _scheduler => ref.read(ankiSchedulerProvider);
 
   /// Loads the collection from storage.
   Future<void> _load() async {
@@ -161,10 +160,9 @@ class AnkiCollectionNotifier extends StateNotifier<AnkiCollection> {
 }
 
 /// Provider that exposes deck-level statistics.
-final ankiDeckStatsProvider =
-    FutureProvider.family<DeckStats, int>((ref, deckId) {
+final ankiDeckStatsProvider = Provider.family<DeckStats, int>((ref, deckId) {
   final collection = ref.watch(ankiCollectionProvider);
-  return Future.value(collection.getDeckStats(deckId));
+  return collection.getDeckStats(deckId);
 });
 
 /// Provider that lists all deck names and IDs.
@@ -182,15 +180,13 @@ final ankiCardsByDeckProvider =
 });
 
 /// Provider that returns a single card by ID.
-final ankiCardByIdProvider =
-    Provider.family<AnkiCard?, int>((ref, cardId) {
+final ankiCardByIdProvider = Provider.family<AnkiCard?, int>((ref, cardId) {
   final collection = ref.watch(ankiCollectionProvider);
   return collection.getCard(cardId);
 });
 
 /// Provider that returns a single deck by ID.
-final ankiDeckByIdProvider =
-    Provider.family<AnkiDeck?, int>((ref, deckId) {
+final ankiDeckByIdProvider = Provider.family<AnkiDeck?, int>((ref, deckId) {
   final collection = ref.watch(ankiCollectionProvider);
   return collection.getDeck(deckId);
 });

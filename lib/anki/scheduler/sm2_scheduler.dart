@@ -107,8 +107,7 @@ class SM2Scheduler {
 
   /// Schedules a review card after answering.
   /// Passes scheduler configuration to the card's answerReview method.
-  void scheduleReview(AnkiCard card, int nowMs,
-      {required int answerRating}) {
+  void scheduleReview(AnkiCard card, int nowMs, {required int answerRating}) {
     card.answerReview(nowMs,
         answerRating: answerRating,
         hardMultiplier: hardMultiplier,

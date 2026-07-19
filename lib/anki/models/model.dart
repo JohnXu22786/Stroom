@@ -48,7 +48,8 @@ class AnkiModel {
           answerTemplate: '{{FrontSide}}\n\n<hr id="answer">\n\n{{Back}}',
         ),
       ],
-      css: '.card {\n  font-family: arial;\n  font-size: 20px;\n  text-align: center;\n  color: black;\n  background-color: white;\n}\n',
+      css:
+          '.card {\n  font-family: arial;\n  font-size: 20px;\n  text-align: center;\n  color: black;\n  background-color: white;\n}\n',
     );
   }
 
@@ -75,27 +76,28 @@ class AnkiModel {
   }
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'name': name,
-    'fieldNames': fieldNames,
-    'templates': templates.map((t) => t.toJson()).toList(),
-    'isCloze': isCloze,
-    'css': css,
-    'modified': modified,
-  };
+        'id': id,
+        'name': name,
+        'fieldNames': fieldNames,
+        'templates': templates.map((t) => t.toJson()).toList(),
+        'isCloze': isCloze,
+        'css': css,
+        'modified': modified,
+      };
 
   factory AnkiModel.fromJson(Map<String, dynamic> json) => AnkiModel(
-    id: json['id'] as int,
-    name: json['name'] as String,
-    fieldNames: (json['fieldNames'] as List<dynamic>?)?.cast<String>() ?? [],
-    templates: (json['templates'] as List<dynamic>?)
-            ?.map((t) => CardTemplate.fromJson(t as Map<String, dynamic>))
-            .toList() ??
-        [],
-    isCloze: json['isCloze'] as bool? ?? false,
-    css: json['css'] as String? ?? '',
-    modified: json['modified'] as int? ?? 0,
-  );
+        id: json['id'] as int,
+        name: json['name'] as String,
+        fieldNames:
+            (json['fieldNames'] as List<dynamic>?)?.cast<String>() ?? [],
+        templates: (json['templates'] as List<dynamic>?)
+                ?.map((t) => CardTemplate.fromJson(t as Map<String, dynamic>))
+                .toList() ??
+            [],
+        isCloze: json['isCloze'] as bool? ?? false,
+        css: json['css'] as String? ?? '',
+        modified: json['modified'] as int? ?? 0,
+      );
 }
 
 /// A card template within a model.
@@ -116,14 +118,14 @@ class CardTemplate {
   });
 
   Map<String, dynamic> toJson() => {
-    'name': name,
-    'questionTemplate': questionTemplate,
-    'answerTemplate': answerTemplate,
-  };
+        'name': name,
+        'questionTemplate': questionTemplate,
+        'answerTemplate': answerTemplate,
+      };
 
   factory CardTemplate.fromJson(Map<String, dynamic> json) => CardTemplate(
-    name: json['name'] as String,
-    questionTemplate: json['questionTemplate'] as String,
-    answerTemplate: json['answerTemplate'] as String,
-  );
+        name: json['name'] as String,
+        questionTemplate: json['questionTemplate'] as String,
+        answerTemplate: json['answerTemplate'] as String,
+      );
 }

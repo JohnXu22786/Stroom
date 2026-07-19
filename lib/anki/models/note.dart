@@ -98,18 +98,18 @@ class AnkiNote {
   // --- JSON Serialization ---
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'guid': guid,
-    'modelId': modelId,
-    'modified': modified,
-    'usn': usn,
-    'tags': tags.join(' '),
-    'fields': fields.join(String.fromCharCode(0x1f)),
-    'sortField': sortField,
-    'csum': csum,
-    'flags': flags,
-    'data': data,
-  };
+        'id': id,
+        'guid': guid,
+        'modelId': modelId,
+        'modified': modified,
+        'usn': usn,
+        'tags': tags.join(' '),
+        'fields': fields.join(String.fromCharCode(0x1f)),
+        'sortField': sortField,
+        'csum': csum,
+        'flags': flags,
+        'data': data,
+      };
 
   factory AnkiNote.fromJson(Map<String, dynamic> json) {
     final fieldsStr = json['fields'] as String? ?? '';
@@ -120,8 +120,11 @@ class AnkiNote {
       guid: json['guid'] as String? ?? '',
       modified: json['modified'] as int? ?? 0,
       usn: json['usn'] as int? ?? -1,
-      tags: tagsStr.isEmpty ? [] : tagsStr.split(' ').where((t) => t.isNotEmpty).toList(),
-      fields: fieldsStr.isEmpty ? [] : fieldsStr.split(String.fromCharCode(0x1f)),
+      tags: tagsStr.isEmpty
+          ? []
+          : tagsStr.split(' ').where((t) => t.isNotEmpty).toList(),
+      fields:
+          fieldsStr.isEmpty ? [] : fieldsStr.split(String.fromCharCode(0x1f)),
       sortField: json['sortField'] as String? ?? '',
       csum: json['csum'] as int? ?? 0,
       flags: json['flags'] as int? ?? 0,

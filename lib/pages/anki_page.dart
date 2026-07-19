@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../anki/providers/anki_provider.dart';
 import '../anki/models/deck.dart';
 import '../anki/models/collection.dart';
+import '../anki/models/card.dart';
+import '../anki/scheduler/scheduler.dart';
 
 /// Main Anki page showing all decks and options to manage them.
 class AnkiDroidPage extends ConsumerStatefulWidget {
@@ -45,7 +47,8 @@ class _AnkiDroidPageState extends ConsumerState<AnkiDroidPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.auto_stories, size: 64, color: cs.primary.withValues(alpha: 0.5)),
+            Icon(Icons.auto_stories,
+                size: 64, color: cs.primary.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
             Text(
               '还没有牌组',
@@ -119,8 +122,8 @@ class _AnkiDroidPageState extends ConsumerState<AnkiDroidPage> {
             onPressed: () {
               if (controller.text.trim().isNotEmpty) {
                 ref.read(ankiCollectionProvider.notifier).addDeck(
-                  controller.text.trim(),
-                );
+                      controller.text.trim(),
+                    );
                 Navigator.pop(ctx);
               }
             },
@@ -153,9 +156,9 @@ class _AnkiDroidPageState extends ConsumerState<AnkiDroidPage> {
             onPressed: () {
               if (controller.text.trim().isNotEmpty) {
                 ref.read(ankiCollectionProvider.notifier).renameDeck(
-                  deckId,
-                  controller.text.trim(),
-                );
+                      deckId,
+                      controller.text.trim(),
+                    );
                 Navigator.pop(ctx);
               }
             },
@@ -241,10 +244,10 @@ class _AnkiDroidPageState extends ConsumerState<AnkiDroidPage> {
               if (frontController.text.trim().isNotEmpty &&
                   backController.text.trim().isNotEmpty) {
                 ref.read(ankiCollectionProvider.notifier).addNote(
-                  1, // Basic model
-                  [frontController.text.trim(), backController.text.trim()],
-                  deckId: deckId,
-                );
+                      1, // Basic model
+                      [frontController.text.trim(), backController.text.trim()],
+                      deckId: deckId,
+                    );
                 Navigator.pop(ctx);
               }
             },
@@ -346,7 +349,8 @@ class _DeckCard extends StatelessWidget {
               ),
               if (totalDue > 0)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: cs.primary,
                     borderRadius: BorderRadius.circular(20),
@@ -405,7 +409,6 @@ class _StatChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
@@ -475,10 +478,10 @@ class _AnkiStudyPageState extends ConsumerState<_AnkiStudyPage> {
   void _answerCard(int rating) {
     if (_currentCard == null) return;
     ref.read(ankiCollectionProvider.notifier).answerCard(
-      _currentCard!.id,
-      rating,
-      reviewDuration: 3, // simplified
-    );
+          _currentCard!.id,
+          rating,
+          reviewDuration: 3, // simplified
+        );
     _loadNextCard();
   }
 

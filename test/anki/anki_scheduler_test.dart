@@ -96,7 +96,8 @@ void main() {
       card.interval = 30;
       card.easeFactor = 2500;
 
-      scheduler.scheduleReview(card, now.millisecondsSinceEpoch, answerRating: 3);
+      scheduler.scheduleReview(card, now.millisecondsSinceEpoch,
+          answerRating: 3);
       expect(card.interval, equals(75)); // 30 * 2.5 = 75
       expect(card.reps, equals(6));
     });
@@ -109,9 +110,11 @@ void main() {
       card.easeFactor = 2500;
       card.lapses = 0;
 
-      scheduler.scheduleReview(card, now.millisecondsSinceEpoch, answerRating: 1);
+      scheduler.scheduleReview(card, now.millisecondsSinceEpoch,
+          answerRating: 1);
       expect(card.lapses, equals(1));
-      expect(card.queue, equals(CardQueue.learningQueue)); // Goes back to learning
+      expect(
+          card.queue, equals(CardQueue.learningQueue)); // Goes back to learning
     });
 
     test('minimum interval is always at least 1 day', () {
@@ -163,7 +166,8 @@ void main() {
 
     test('does not return non-due cards', () {
       final card = AnkiCard.createNew(deckId: deckId, noteId: 1, ordinal: 0);
-      final futureTime = DateTime.now().millisecondsSinceEpoch ~/ 1000 + 86400; // tomorrow
+      final futureTime =
+          DateTime.now().millisecondsSinceEpoch ~/ 1000 + 86400; // tomorrow
       card.due = futureTime;
       card.queue = CardQueue.reviewQueue;
       collection.addCard(card);
@@ -175,14 +179,16 @@ void main() {
     test('counts due cards correctly', () {
       // Add 3 cards to deck
       for (int i = 0; i < 3; i++) {
-        final card = AnkiCard.createNew(deckId: deckId, noteId: 1 + i, ordinal: 0);
+        final card =
+            AnkiCard.createNew(deckId: deckId, noteId: 1 + i, ordinal: 0);
         card.due = 0;
         card.queue = CardQueue.newQueue;
         collection.addCard(card);
       }
       // Add 1 non-due review card (due in the future)
       final card = AnkiCard.createNew(deckId: deckId, noteId: 4, ordinal: 0);
-      final futureTime = DateTime.now().millisecondsSinceEpoch ~/ 1000 + 86400; // tomorrow
+      final futureTime =
+          DateTime.now().millisecondsSinceEpoch ~/ 1000 + 86400; // tomorrow
       card.due = futureTime;
       card.queue = CardQueue.reviewQueue;
       collection.addCard(card);
@@ -192,7 +198,8 @@ void main() {
 
     test('counts new cards correctly', () {
       for (int i = 0; i < 5; i++) {
-        final card = AnkiCard.createNew(deckId: deckId, noteId: 1 + i, ordinal: 0);
+        final card =
+            AnkiCard.createNew(deckId: deckId, noteId: 1 + i, ordinal: 0);
         card.queue = CardQueue.newQueue;
         collection.addCard(card);
       }
@@ -202,9 +209,11 @@ void main() {
 
     test('counts cards in learning correctly', () {
       for (int i = 0; i < 2; i++) {
-        final card = AnkiCard.createNew(deckId: deckId, noteId: 1 + i, ordinal: 0);
+        final card =
+            AnkiCard.createNew(deckId: deckId, noteId: 1 + i, ordinal: 0);
         card.queue = CardQueue.learningQueue;
-        card.due = DateTime.now().millisecondsSinceEpoch + 60000; // 1 minute from now
+        card.due =
+            DateTime.now().millisecondsSinceEpoch + 60000; // 1 minute from now
         collection.addCard(card);
       }
 

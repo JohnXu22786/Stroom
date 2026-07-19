@@ -213,7 +213,8 @@ class AnkiCard {
       // Easy - graduate immediately with a bonus interval
       queue = CardQueue.reviewQueue;
       type = CardType.reviewCard;
-      interval = graduatingInterval * 2; // Double the graduating interval for Easy
+      interval =
+          graduatingInterval * 2; // Double the graduating interval for Easy
       due = nowSec + (interval * 86400);
       reps = 1;
       left = 0;
@@ -247,8 +248,7 @@ class AnkiCard {
       double hardMultiplier = 1.2,
       int relearningSteps = 2,
       int relearningStepMinutes = 1}) {
-    if (queue != CardQueue.reviewQueue &&
-        queue != CardQueue.dayLearningQueue) {
+    if (queue != CardQueue.reviewQueue && queue != CardQueue.dayLearningQueue) {
       return;
     }
 
@@ -274,7 +274,8 @@ class AnkiCard {
     switch (answerRating) {
       case 2: // Hard
         easeFactor = (easeFactor - 150).clamp(1300, 9999);
-        interval = (_applyHardInterval(interval, hardMultiplier)).clamp(1, 36500);
+        interval =
+            (_applyHardInterval(interval, hardMultiplier)).clamp(1, 36500);
         break;
       case 3: // Good
         interval = _nextInterval(interval, easeFactor);
@@ -303,47 +304,48 @@ class AnkiCard {
   // --- JSON Serialization ---
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'noteId': noteId,
-    'deckId': deckId,
-    'ordinal': ordinal,
-    'modified': modified,
-    'usn': usn,
-    'type': type.value,
-    'queue': queue.value,
-    'due': due,
-    'interval': interval,
-    'easeFactor': easeFactor,
-    'reps': reps,
-    'lapses': lapses,
-    'left': left,
-    'originalDue': originalDue,
-    'originalDeckId': originalDeckId,
-    'flags': flags,
-    'data': data,
-  };
+        'id': id,
+        'noteId': noteId,
+        'deckId': deckId,
+        'ordinal': ordinal,
+        'modified': modified,
+        'usn': usn,
+        'type': type.value,
+        'queue': queue.value,
+        'due': due,
+        'interval': interval,
+        'easeFactor': easeFactor,
+        'reps': reps,
+        'lapses': lapses,
+        'left': left,
+        'originalDue': originalDue,
+        'originalDeckId': originalDeckId,
+        'flags': flags,
+        'data': data,
+      };
 
   factory AnkiCard.fromJson(Map<String, dynamic> json) => AnkiCard(
-    id: json['id'] as int,
-    noteId: json['noteId'] as int,
-    deckId: json['deckId'] as int,
-    ordinal: json['ordinal'] as int? ?? 0,
-    modified: json['modified'] as int? ?? 0,
-    usn: json['usn'] as int? ?? -1,
-    type: CardType.fromValue(json['type'] as int? ?? 0),
-    queue: CardQueue.fromValue(json['queue'] as int? ?? 0),
-    due: json['due'] as int? ?? 0,
-    interval: json['interval'] as int? ?? 0,
-    easeFactor: json['easeFactor'] as int? ?? 2500,
-    reps: json['reps'] as int? ?? 0,
-    lapses: json['lapses'] as int? ?? 0,
-    left: json['left'] as int? ?? 0,
-    originalDue: json['originalDue'] as int? ?? 0,
-    originalDeckId: json['originalDeckId'] as int? ?? 0,
-    flags: json['flags'] as int? ?? 0,
-    data: json['data'] as String? ?? '',
-  );
+        id: json['id'] as int,
+        noteId: json['noteId'] as int,
+        deckId: json['deckId'] as int,
+        ordinal: json['ordinal'] as int? ?? 0,
+        modified: json['modified'] as int? ?? 0,
+        usn: json['usn'] as int? ?? -1,
+        type: CardType.fromValue(json['type'] as int? ?? 0),
+        queue: CardQueue.fromValue(json['queue'] as int? ?? 0),
+        due: json['due'] as int? ?? 0,
+        interval: json['interval'] as int? ?? 0,
+        easeFactor: json['easeFactor'] as int? ?? 2500,
+        reps: json['reps'] as int? ?? 0,
+        lapses: json['lapses'] as int? ?? 0,
+        left: json['left'] as int? ?? 0,
+        originalDue: json['originalDue'] as int? ?? 0,
+        originalDeckId: json['originalDeckId'] as int? ?? 0,
+        flags: json['flags'] as int? ?? 0,
+        data: json['data'] as String? ?? '',
+      );
 
   @override
-  String toString() => 'AnkiCard(id=$id, deckId=$deckId, type=$type, queue=$queue)';
+  String toString() =>
+      'AnkiCard(id=$id, deckId=$deckId, type=$type, queue=$queue)';
 }
