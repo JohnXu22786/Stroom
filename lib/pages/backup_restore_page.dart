@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 
 import '../services/backup_location_manager.dart';
 import '../services/backup_service.dart';
@@ -320,37 +321,25 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   }
 
   Future<void> _onAnkiImport() async {
-    // Use file_picker to select .apkg file
-    // Since file_picker may need Android permissions, use a simpler approach:
-    // show a dialog asking for path, or use the file_picker if available
-    final ctl = TextEditingController();
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('导入 .apkg'),
-        content: TextField(
-          controller: ctl,
-          decoration: const InputDecoration(
-            hintText: '/path/to/file.apkg',
-            labelText: '.apkg 文件路径',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, ctl.text),
-              child: const Text('导入')),
-        ],
-      ),
+    final picked = await FilePicker.pickFiles(
+      type: FileType.any,
+      allowMultiple: false,
     );
-
-    if (result == null || result.isEmpty) return;
+    if (picked == null || picked.files.isEmpty) return;
+    final path = picked.files.single.path;
+    if (path == null || !path.endsWith('.apkg')) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('请选择 .apkg 格式的文件'), backgroundColor: Colors.orange),
+        );
+      }
+      return;
+    }
 
     setState(() => _isAnkiImporting = true);
     try {
-      final summary = await AnkiApkgImporter.import(result);
+      final summary = await AnkiApkgImporter.import(path);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(summary), backgroundColor: Colors.green),
