@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/anki_database.dart';
 import '../database/col_dao.dart';
@@ -12,6 +13,7 @@ import '../scheduler/scheduler.dart';
 
 /// Opens the SQLite database once.
 final ankiDatabaseProvider = FutureProvider<AnkiDatabase>((ref) async {
+  if (kIsWeb) throw UnsupportedError('闪卡功能不支持 Web 平台，请在桌面端或移动端使用');
   final db = AnkiDatabase();
   await db.open();
   return db;

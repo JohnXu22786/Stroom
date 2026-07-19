@@ -4,6 +4,9 @@ import '../anki/providers/anki_provider.dart';
 import '../anki/providers/anki_actions.dart';
 import '../anki/models/deck.dart';
 import '../anki/models/card.dart';
+import '../anki/models/note.dart';
+import '../anki/models/model.dart';
+import '../anki/pages/card_browser.dart';
 import 'anki_sync_page.dart';
 
 /// Main Anki page showing all decks and options.
@@ -18,6 +21,14 @@ class AnkiDroidPage extends ConsumerWidget {
         title: const Text('闪卡'),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            tooltip: '浏览卡片',
+            onPressed: () {
+              Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const AnkiCardBrowser()));
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.cloud_sync),
             tooltip: 'AnkiWeb 同步',
@@ -78,18 +89,34 @@ class AnkiDroidPage extends ConsumerWidget {
 
   Widget _buildDeckList(
       BuildContext context, WidgetRef ref, List<AnkiDeck> decks) {
+    // Sort hierarchically: top-level first, then children nested under parents
+    final sorted = List<AnkiDeck>.from(decks)
+      ..sort((a, b) {
+        final aParts = a.name.split('::');
+        final bParts = b.name.split('::');
+        for (int i = 0; i < aParts.length && i < bParts.length; i++) {
+          final cmp = aParts[i].compareTo(bParts[i]);
+          if (cmp != 0) return cmp;
+        }
+        return aParts.length.compareTo(bParts.length);
+      });
     return ListView.builder(
       padding: const EdgeInsets.all(12),
-      itemCount: decks.length,
+      itemCount: sorted.length,
       itemBuilder: (context, i) {
-        final deck = decks[i];
-        return _DeckCard(
-          deck: deck,
-          deckId: deck.id,
-          onTap: () => _startStudy(context, ref, deck.id),
-          onAddCard: () => _showAddCardDialog(context, ref, deck.id),
-          onRename: () => _showRenameDialog(context, ref, deck.id, deck.name),
-          onDelete: () => _confirmDeleteDeck(context, ref, deck.id, deck.name),
+        final deck = sorted[i];
+        final depth = '::'.allMatches(deck.name).length;
+        return Padding(
+          padding: EdgeInsets.only(left: depth * 24.0),
+          child: _DeckCard(
+            deck: deck,
+            deckId: deck.id,
+            onTap: () => _startStudy(context, ref, deck.id),
+            onAddCard: () => _showAddCardDialog(context, ref, deck.id),
+            onRename: () => _showRenameDialog(context, ref, deck.id, deck.name),
+            onDelete: () =>
+                _confirmDeleteDeck(context, ref, deck.id, deck.name),
+          ),
         );
       },
     );
@@ -183,42 +210,84 @@ class AnkiDroidPage extends ConsumerWidget {
   void _showAddCardDialog(BuildContext context, WidgetRef ref, int did) {
     final fc = TextEditingController();
     final bc = TextEditingController();
+    final tc = TextEditingController();
+    int selectedModelId = 1;
+    String hintText = '正面 (问题)';
+
+    // Load models synchronously from the last known value.
+    // If not ready, fall back to Basic model id 1.
+    final models = ref.read(ankiModelListProvider).value ?? <AnkiModel>[];
+    if (models.isNotEmpty) selectedModelId = models.first.id;
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('添加卡片'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-                controller: fc,
-                maxLines: 3,
-                autofocus: true,
-                decoration: const InputDecoration(
-                    labelText: '正面 (问题)', border: OutlineInputBorder())),
-            const SizedBox(height: 12),
-            TextField(
-                controller: bc,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                    labelText: '背面 (答案)', border: OutlineInputBorder())),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-          FilledButton(
-            onPressed: () {
-              if (fc.text.trim().isNotEmpty && bc.text.trim().isNotEmpty) {
-                ref
-                    .read(ankiActionsProvider)
-                    .addCard(did, fc.text.trim(), bc.text.trim());
-                Navigator.pop(ctx);
-              }
-            },
-            child: const Text('添加'),
-          ),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            title: const Text('添加卡片'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (models.isNotEmpty)
+                  DropdownButtonFormField<int>(
+                    value: selectedModelId,
+                    decoration: const InputDecoration(
+                        labelText: '笔记类型', border: OutlineInputBorder()),
+                    items: models
+                        .map((m) =>
+                            DropdownMenuItem(value: m.id, child: Text(m.name)))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setDialogState(() {
+                        selectedModelId = v;
+                        final m = models.firstWhere((x) => x.id == v);
+                        hintText = m.name == 'Cloze'
+                            ? '正文 (用 {{c1::答案}} 标记挖空)'
+                            : '正面 (问题)';
+                      });
+                    },
+                  ),
+                const SizedBox(height: 12),
+                TextField(
+                    controller: fc,
+                    maxLines: 3,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                        labelText: hintText,
+                        border: const OutlineInputBorder())),
+                const SizedBox(height: 12),
+                TextField(
+                    controller: bc,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                        labelText: '背面/额外', border: OutlineInputBorder())),
+                const SizedBox(height: 12),
+                TextField(
+                    controller: tc,
+                    decoration: const InputDecoration(
+                        labelText: '标签 (空格分隔)',
+                        border: OutlineInputBorder(),
+                        hintText: '例如: 数学 物理')),
+              ],
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+              FilledButton(
+                onPressed: () {
+                  if (fc.text.trim().isNotEmpty && bc.text.trim().isNotEmpty) {
+                    ref.read(ankiActionsProvider).addCard(
+                        did, fc.text.trim(), bc.text.trim(),
+                        modelId: selectedModelId, tags: tc.text.trim());
+                    Navigator.pop(ctx);
+                  }
+                },
+                child: const Text('添加'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -359,6 +428,7 @@ class AnkiStudyPage extends ConsumerStatefulWidget {
 
 class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
   AnkiCard? _current;
+  AnkiNote? _note;
   bool _showAnswer = false;
   bool _studying = true;
 
@@ -370,9 +440,17 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
 
   Future<void> _load() async {
     final card = await ref.read(ankiActionsProvider).getNextCard(widget.deckId);
+    AnkiNote? note;
+    if (card != null) {
+      try {
+        final dao = ref.read(ankiNoteDaoProvider).requireValue;
+        note = await dao.get(card.nid);
+      } catch (_) {}
+    }
     if (mounted)
       setState(() {
         _current = card;
+        _note = note;
         _showAnswer = false;
         _studying = card != null;
       });
@@ -384,6 +462,16 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
         .read(ankiActionsProvider)
         .answerCard(_current!.id, rating, duration: 3);
     await _load();
+  }
+
+  String get _frontText {
+    if (_note == null || _note!.fieldList.isEmpty) return '(无内容)';
+    return _note!.fieldList[0];
+  }
+
+  String get _backText {
+    if (_note == null || _note!.fieldList.length < 2) return '(无内容)';
+    return _note!.fieldList[1];
   }
 
   @override
@@ -482,17 +570,6 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
         ],
       ),
     );
-  }
-
-  String get _frontText {
-    if (_current == null) return '';
-    // TODO: load note and show first field
-    return 'card #${_current!.id}';
-  }
-
-  String get _backText {
-    if (_current == null) return '';
-    return '';
   }
 
   Widget _buildDone(ColorScheme cs) {

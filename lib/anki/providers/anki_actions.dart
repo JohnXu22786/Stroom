@@ -56,15 +56,23 @@ class AnkiActions {
 
   // ── Notes / Cards ──────────────────────────────────────
 
-  Future<int> addCard(int did, String front, String back) async {
+  Future<int> addCard(int did, String front, String back,
+      {int? modelId, String tags = ''}) async {
     final col = await _col;
     final models = col.modelList;
-    final mid = models.isNotEmpty ? models.first.id : 1;
-    if (!col.modelList.any((m) => m.id == mid)) {
+    final mid = modelId ?? (models.isNotEmpty ? models.first.id : 1);
+
+    // Ensure model exists; if not, seed both Basic and Cloze
+    if (models.isEmpty) {
       col.addModel(AnkiModel.createBasic());
     }
+    // Ensure Cloze model exists
+    if (!col.modelList.any((m) => m.name == 'Cloze')) {
+      col.addModel(AnkiModel.createCloze());
+    }
+
     final flds = [front, back].join(String.fromCharCode(0x1f));
-    final note = AnkiNote.createNew(mid: mid, flds: flds);
+    final note = AnkiNote.createNew(mid: mid, flds: flds, tags: tags);
     await col.notes.insert(note);
     final card = AnkiCard.createNew(nid: note.id, did: did);
     await col.cards.insert(card);

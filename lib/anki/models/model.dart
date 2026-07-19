@@ -65,6 +65,34 @@ class AnkiModel {
     );
   }
 
+  /// Creates a "Cloze" model.
+  factory AnkiModel.createCloze() {
+    final now = DateTime.now().microsecondsSinceEpoch;
+    return AnkiModel(
+      id: now + 1,
+      name: 'Cloze',
+      type: 1, // cloze
+      flds: [
+        ModelField(name: 'Text', ord: 0, font: 'Arial', size: 20),
+        ModelField(name: 'Extra', ord: 1, font: 'Arial', size: 20),
+      ],
+      tmpls: [
+        ModelTemplate(
+          name: 'Cloze',
+          ord: 0,
+          qfmt: '{{cloze:Text}}',
+          afmt: '{{cloze:Text}}\n\n<hr id="answer">\n\n{{Extra}}',
+        ),
+      ],
+      req: [
+        0,
+        0,
+        [0]
+      ],
+      sortf: 0,
+    );
+  }
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
