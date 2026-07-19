@@ -88,7 +88,7 @@ void main() {
       expect(c.queue, equals(1)); // learning
       expect(c.type, equals(1)); // learning
       expect(c.left, equals(2)); // 2 steps remaining
-      expect(c.due, equals(1 * 60 * 1000)); // 1 min in ms
+      expect(c.due, equals(1 * 60)); // 1 min in seconds
     });
 
     test('answerLearning Again resets to first step', () {
@@ -96,7 +96,7 @@ void main() {
       c.startLearning(0, steps: [1, 10]);
       c.answerLearning(0, steps: [1, 10], answerIdx: 0); // Again
       expect(c.left, equals(2)); // back to full steps
-      expect(c.due, equals(1 * 60 * 1000));
+      expect(c.due, equals(1 * 60));
     });
 
     test('answerLearning Good graduates after last step', () {
@@ -119,12 +119,9 @@ void main() {
       c.startLearning(t, steps: [1, 10]);
       final dueBefore = c.due;
       c.answerLearning(t, steps: [1, 10], answerIdx: 1); // Hard
-      // Due should be same step (1 min from t)
-      expect(c.due, equals(t + 1 * 60 * 1000));
-      // But actually startLearning set due = t + 60*1000, and Hard
-      // recalculates due from the current step. The result should equal start.
-      // Start sets due = t + 1*60*1000. Hard reads stepIdx=0 and sets
-      // due = t + steps[0]*60*1000 = t + 60*1000. Same result.
+      // Due is in epoch seconds, step=0 => t~/1000 + 1*60
+      expect(c.due, equals(t ~/ 1000 + 1 * 60));
+      // Same as startLearning's due (same step)
       expect(c.due, equals(dueBefore));
     });
 
@@ -133,7 +130,8 @@ void main() {
       c.startLearning(0, steps: [1, 10]);
       c.answerLearning(0, steps: [1, 10], answerIdx: 3); // Easy
       expect(c.queue, equals(2)); // review
-      expect(c.ivl, equals(2)); // graduatingIvl * 2
+      // Anki easyBonus: graduatingIvl * 1.3 = 1 * 1.3 = 1 (rounded)
+      expect(c.ivl, equals(1));
     });
 
     test('answerReview Again causes lapse', () {
@@ -169,15 +167,16 @@ void main() {
       expect(c.factor, equals(2350)); // -150
     });
 
-    test('answerReview Easy doubles interval and boosts ease', () {
+    test('answerReview Easy uses 1.3x bonus', () {
       final c = AnkiCard.createNew(nid: 1, did: 1);
       c.queue = 2;
       c.ivl = 10;
       c.factor = 2500;
       c.answerReview(0, rating: 4); // Easy
-      // factor increases to 2650, then _nextIvl(10, 2650) = (10*2650/1000).round() = 27
-      // then * 2 = 54
-      expect(c.ivl, equals(54));
+      // factor: 2500 + 150 = 2650
+      // _nextIvl(10, 2650) = (10*2650/1000).round() = 27
+      // Easy bonus: 27 * 1.3 = 35.1 -> 35
+      expect(c.ivl, equals(35));
       expect(c.factor, equals(2650)); // +150
     });
 

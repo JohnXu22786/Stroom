@@ -70,39 +70,42 @@ class AnkiCard {
   // ── learning/review scheduling ──────────────────────────
 
   /// Start learning (new → learning).
+  /// [nowMs] is current time in milliseconds (for compatibility with Anki's API).
+  /// [due] is stored as epoch seconds (same as Anki's learning due encoding).
   void startLearning(int nowMs, {List<int> steps = const [1, 10]}) {
     if (queue != 0) return;
     queue = 1;
     type = 1;
     left = steps.length;
-    // due in epoch milliseconds (matching Anki's learning due encoding)
-    due = nowMs + (steps[0] * 60 * 1000);
+    // due in epoch seconds
+    due = (nowMs ~/ 1000) + (steps[0] * 60);
   }
 
   /// Answer during learning. [answerIdx]: 0=again, 1=hard, 2=good, 3=easy.
   void answerLearning(int nowMs,
       {required List<int> steps, int answerIdx = 2, int graduatingIvl = 1}) {
     if (queue != 1) return;
+    final nowSec = nowMs ~/ 1000;
     final stepIdx = left >> 8; // high byte
 
     if (answerIdx == 0) {
       // Again — reset to first step
       left = steps.length;
-      due = nowMs + (steps[0] * 60 * 1000);
+      due = nowSec + (steps[0] * 60);
       return;
     }
     if (answerIdx == 1) {
       // Hard — repeat current step
       final min = stepIdx < steps.length ? steps[stepIdx] : steps.last;
-      due = nowMs + (min * 60 * 1000);
+      due = nowSec + (min * 60);
       return;
     }
     if (answerIdx == 3) {
-      // Easy — graduate immediately with bonus
+      // Easy — graduate immediately with bonus (Anki easyBonus=1.3)
       queue = 2;
       type = 2;
-      ivl = graduatingIvl * 2;
-      due = nowMs + (ivl * 86400000);
+      ivl = (graduatingIvl * 1.3).round();
+      due = nowSec + (ivl * 86400);
       reps = 1;
       left = 0;
       return;
@@ -110,16 +113,16 @@ class AnkiCard {
     // Good (idx 2) — advance one step
     final next = stepIdx + 1;
     if (next >= steps.length) {
-      // Graduate
+      // Graduate to review (Anki uses graduating interval directly)
       queue = 2;
       type = 2;
       ivl = graduatingIvl;
-      due = nowMs + (ivl * 86400000);
+      due = nowSec + (ivl * 86400);
       reps = 1;
       left = 0;
     } else {
       left = (next << 8) | (steps.length - next);
-      due = nowMs + (steps[next] * 60 * 1000);
+      due = nowSec + (steps[next] * 60);
     }
   }
 
@@ -130,13 +133,14 @@ class AnkiCard {
       int relearnSteps = 2,
       int relearnMin = 1}) {
     if (queue != 2 && queue != 3) return;
+    final nowSec = nowMs ~/ 1000;
     if (rating == 1) {
       // Lapse
       lapses++;
       queue = 1;
       type = 3;
       left = relearnSteps;
-      due = nowMs + (relearnMin * 60 * 1000);
+      due = nowSec + (relearnMin * 60);
       factor = (factor - 200).clamp(1300, 9999);
       return;
     }
@@ -151,10 +155,12 @@ class AnkiCard {
         break;
       case 4:
         factor = (factor + 150).clamp(1300, 9999);
-        ivl = _nextIvl(ivl, factor) * 2;
+        // Anki easyBonus: max(ivl * factor/1000 * 1.3, ivl * 1.3)
+        final base = _nextIvl(ivl, factor);
+        ivl = (base * 1.3).round().clamp(1, 36500);
         break;
     }
-    due = nowMs + (ivl * 86400000);
+    due = nowSec + (ivl * 86400);
   }
 
   int _nextIvl(int cur, int fac) {
