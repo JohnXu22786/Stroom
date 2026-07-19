@@ -245,10 +245,12 @@ class MathCanvasState extends State<MathCanvas> {
         yMax: _yMax,
       );
     }
-    // Single explicit polyline
+    // Sample slightly beyond viewport bounds (2% margin) to ensure
+    // curves reach the canvas edges without gaps at certain zoom levels.
+    final margin = (_xMax - _xMin) * 0.02;
     final pts = parsed.samplePoints(
-      xMin: _xMin,
-      xMax: _xMax,
+      xMin: _xMin - margin,
+      xMax: _xMax + margin,
       numPoints: 300,
     );
     return pts.isEmpty ? [] : [pts];
@@ -789,6 +791,11 @@ class GraphPainter extends CustomPainter {
   // ==================================================================
 
   void _drawCurves(Canvas canvas, Size size, double eYMin, double eYMax) {
+    // Clip to canvas bounds so lines at the very edge are cleanly clipped
+    // rather than drawing beyond the visible area.
+    canvas.save();
+    canvas.clipRect(Rect.fromLTWH(0, 0, size.width, size.height));
+
     for (int c = 0; c < curves.length; c++) {
       final points = curves[c];
       if (points.length < 2) continue;
@@ -811,19 +818,19 @@ class GraphPainter extends CustomPainter {
         final y = points[i]['y']!;
         final screenPos = _mathToScreen(x, y, size, eYMin, eYMax);
 
-        // Check if point is within reasonable screen bounds
-        if (screenPos.dx.isFinite &&
-            screenPos.dy.isFinite &&
-            screenPos.dx >= -10000 &&
-            screenPos.dx <= size.width + 10000 &&
-            screenPos.dy >= -10000 &&
-            screenPos.dy <= size.height + 10000) {
+        // Clamp coordinates to a generous bound to keep the segment
+        // continuous for points near the canvas edge. Only break the
+        // segment for truly invalid coordinates (NaN or Infinity).
+        if (screenPos.dx.isFinite && screenPos.dy.isFinite) {
+          final clampedX = screenPos.dx.clamp(-10000.0, size.width + 10000.0);
+          final clampedY = screenPos.dy.clamp(-10000.0, size.height + 10000.0);
+
           if (!inSegment) {
-            path.moveTo(screenPos.dx, screenPos.dy);
+            path.moveTo(clampedX, clampedY);
             inSegment = true;
             pathHasContent = true;
           } else {
-            path.lineTo(screenPos.dx, screenPos.dy);
+            path.lineTo(clampedX, clampedY);
           }
         } else {
           inSegment = false;
@@ -834,6 +841,8 @@ class GraphPainter extends CustomPainter {
         canvas.drawPath(path, curvePaint);
       }
     }
+
+    canvas.restore();
   }
 
   // ==================================================================
