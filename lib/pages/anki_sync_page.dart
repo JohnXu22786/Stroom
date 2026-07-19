@@ -260,13 +260,11 @@ class _SyncButtonState extends ConsumerState<_SyncButton> {
   Future<void> _doSync() async {
     setState(() {
       _syncing = true;
-      _status = '登录中...';
+      _status = '同步中...';
     });
     try {
       final engine = AnkiSyncEngine();
-      await engine.login(widget.state.email!, widget.state.key!);
-      // Actually login uses the key directly, but we already have it
-      engine.syncKey = widget.state.key!;
+      engine.syncKey = widget.state.key!; // already have hkey
 
       setState(() => _status = '交换元数据...');
       final meta = await engine.meta(SyncMeta());
