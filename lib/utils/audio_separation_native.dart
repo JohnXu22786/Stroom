@@ -353,21 +353,19 @@ class AudioSeparationEngine {
 
   /// Compute the total size of an esds box containing the given ASC.
   static int _esdsBoxSize(Uint8List asc) {
-    // ES_Descriptor body: ES_ID(2) + flags(1) + ...
-    // + DecoderConfigDescriptor(1+1+1+1+3+4+4 + 1+1+asc.length)
-    // + SLConfigDescriptor(1+1+1)
-    final dsiBodySize = 1 + 1 + asc.length; // tag + length + asc
-    final decConfigBodySize = 1 +
-        1 +
-        3 +
-        4 +
-        4 +
-        dsiBodySize; // tag+length+objType+streamType+bufSize+maxBR+avgBR+DSI
-    final esBodySize = 2 +
-        1 +
-        (1 + 1 + decConfigBodySize) +
-        (1 + 1 + 1); // ES_ID+flags + (tag+len+decConfig) + (tag+len+SL)
-    return 12 + esBodySize; // box header(8) + version/flags(4) + ES_Descriptor
+    // DecoderSpecificInfo: tag(1) + length(1) + asc(N)
+    final dsiTotal = 2 + asc.length;
+    // DecoderConfigDescriptor body: objType(1) + streamType(1) + bufSize(3) +
+    //   maxBR(4) + avgBR(4) + DSI_total
+    final decConfigBody = 13 + dsiTotal;
+    // DecoderConfigDescriptor total: tag(1) + length(1) + body
+    final decConfigTotal = 2 + decConfigBody;
+    // SLConfigDescriptor total: tag(1) + length(1) + predef(1)
+    const slConfigTotal = 3;
+    // ES_Descriptor body: ES_ID(2) + flags(1) + DecConfig + SLConfig
+    final esBody = 3 + decConfigTotal + slConfigTotal;
+    // esds box: header(8) + ver/flags(4) + ES_tag(1) + ES_length(1) + esBody
+    return 14 + esBody;
   }
 
   /// Write a complete esds box with AudioSpecificConfig.
@@ -384,12 +382,11 @@ class AudioSeparationEngine {
 
     // DecoderConfigDescriptor (tag 0x04)
     buf.addByte(0x04);
-    final decLen = 1 + 1 + 3 + 4 + 4 + (1 + 1 + asc.length);
-    _writeDescLength(buf, decLen);
+    final decConfigBody = 13 + (2 + asc.length);
+    _writeDescLength(buf, decConfigBody);
     buf.addByte(0x40); // objectTypeIndication (Audio ISO/IEC 14496-3)
-    buf.addByte(0x15); // streamType (Audio) + bufferSizeDB flag (0x05 << 2 | 1)
-    // bufferSizeDB (3 bytes, little-endian in MP4 spec)
-    _writeBytes(buf, [0, 0, 0]);
+    buf.addByte(0x15); // streamType (Audio) + bufferSizeDB flag
+    _writeBytes(buf, [0, 0, 0]); // bufferSizeDB
     _writeU32be(buf, 0); // maxBitrate
     _writeU32be(buf, 0); // avgBitrate
 
@@ -406,8 +403,9 @@ class AudioSeparationEngine {
 
   /// Compute the length of the ES_Descriptor body (for the length field).
   static int _esdsDescriptorBodyLength(Uint8List asc) {
-    final decLen = 1 + 1 + 3 + 4 + 4 + (1 + 1 + asc.length);
-    return 2 + 1 + (1 + 1 + decLen) + (1 + 1 + 1);
+    final decConfigBody = 13 + (2 + asc.length);
+    final decConfigTotal = 2 + decConfigBody;
+    return 3 + decConfigTotal + 3;
   }
 
   // ==================================================================
