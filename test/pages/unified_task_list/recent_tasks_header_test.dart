@@ -6,12 +6,13 @@ import 'package:stroom/catcatch/models/catcatch_task.dart' as catcatch;
 import 'package:stroom/catcatch/providers/catcatch_provider.dart';
 import 'package:stroom/pages/unified_task_list_page.dart';
 import 'package:stroom/pages/unified_task_list/task_utils.dart';
+import 'package:stroom/pages/home_page.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/task_provider.dart';
 
 void main() {
-  group('UnifiedTaskListPage - recent tasks header', () {
+  group('UnifiedTaskListPage - recent tasks header removed', () {
     final baseTime = DateTime(2025, 7, 18, 10, 0, 0);
 
     catcatch.CatCatchTask _catCatch({
@@ -28,26 +29,7 @@ void main() {
       );
     }
 
-    SynthesisTask _synth({
-      required String id,
-      required DateTime createdAt,
-    }) {
-      return SynthesisTask(
-        id: id,
-        title: 'Synth $id',
-        status: TaskStatus.completed,
-        text: 'text',
-        providerConfig: ProviderConfigItem(
-          providerName: 'Test',
-          host: 'https://test.com',
-          key: 'key',
-        ),
-        modelConfig: ModelConfig(name: 'M', modelId: 'm'),
-        createdAt: createdAt,
-      );
-    }
-
-    testWidgets('shows 最近任务 header with task counts when launches exist', (
+    testWidgets('does NOT show 最近任务 header even when launches exist', (
       tester,
     ) async {
       // Set up launches: 3 timestamps → 2 sessions
@@ -90,12 +72,14 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Should show "最近任务" label
-      expect(find.text('最近任务'), findsOneWidget,
-          reason: 'Should show 最近任务 label when launches exist');
+      // Should NOT show "最近任务" label on task list page (moved to home page)
+      expect(find.text('最近任务'), findsNothing,
+          reason:
+              'Task list page should NOT show 最近任务 label (moved to home page)');
     });
 
-    testWidgets('hides 最近任务 header when no launches recorded', (tester) async {
+    testWidgets('still does NOT show 最近任务 when no launches recorded',
+        (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -125,9 +109,26 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Should NOT show "最近任务" label when no launches
+      // Should NOT show "最近任务" label on task list page
       expect(find.text('最近任务'), findsNothing,
-          reason: 'Should not show 最近任务 label when no launches exist');
+          reason: 'Task list page should NOT show 最近任务 label');
+    });
+  });
+
+  group('HomePage - recent tasks header present', () {
+    testWidgets('shows 最近任务 header on home page status card', (tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: HomePage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Should show "最近任务" label on home page status card
+      expect(find.text('最近任务'), findsOneWidget,
+          reason: 'Home page should show 最近任务 in status card');
     });
   });
 }

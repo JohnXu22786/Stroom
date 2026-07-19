@@ -707,6 +707,12 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     final bgNotifier = ref.read(backgroundTasksProvider.notifier);
     final audioRecordsNotifier = ref.read(audioRecordsProvider.notifier);
 
+    // Pop back to home page IMMEDIATELY so user doesn't experience a freeze.
+    // Heavy work (base64Encode for retry data) happens after the pop.
+    if (mounted) {
+      Navigator.pop(context);
+    }
+
     // Add ALL tasks to the task list first so they appear simultaneously.
     // Each video gets its own background task with a unique title.
     final taskIds = <String>[];
@@ -732,11 +738,6 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
         retryData: retryData,
       );
       taskIds.add(taskId);
-    }
-
-    // Pop back to home page so user can see ALL task progress
-    if (mounted) {
-      Navigator.pop(context);
     }
 
     // Now process each video sequentially
