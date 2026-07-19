@@ -102,17 +102,17 @@ class SM2Scheduler {
 
   /// Starts learning for a new card, placing it in the learning queue.
   void scheduleLearning(AnkiCard card, int nowMs) {
-    card.startLearning(nowMs, learningSteps: learningSteps);
+    card.startLearning(nowMs, steps: learningSteps);
   }
 
   /// Schedules a review card after answering.
   /// Passes scheduler configuration to the card's answerReview method.
-  void scheduleReview(AnkiCard card, int nowMs, {required int answerRating}) {
+  void scheduleReview(AnkiCard card, int nowMs, {required int rating}) {
     card.answerReview(nowMs,
-        answerRating: answerRating,
-        hardMultiplier: hardMultiplier,
-        relearningSteps: learningSteps.length,
-        relearningStepMinutes: learningSteps.isNotEmpty ? learningSteps[0] : 1);
+        rating: rating,
+        hardMult: hardMultiplier,
+        relearnSteps: learningSteps.length,
+        relearnMin: learningSteps.isNotEmpty ? learningSteps[0] : 1);
   }
 
   /// Renders a card template by replacing {{FieldName}} with field values.

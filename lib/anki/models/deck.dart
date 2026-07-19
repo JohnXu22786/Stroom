@@ -1,114 +1,110 @@
-/// Represents a deck in the Anki system.
-///
-/// Decks are containers for cards. They can be nested using `::` as a separator
-/// (e.g., "Parent::Child"). Each deck has its own configuration and statistics.
+/// Represents a deck in the Anki system — JSON shape matches Anki's col blob.
 class AnkiDeck {
-  /// Unique deck ID
   int id;
-
-  /// Deck name (may include :: for subdecks)
   String name;
+  String desc; // description
+  int mod; // last modified (epoch seconds)
+  int usn; // update sequence number
+  int dyn; // 0=normal, 1=filtered
+  int conf; // deck config preset id
+  int crt; // creation date
 
-  /// Deck description (may include HTML)
-  String description;
+  // Per-day counters (set by Anki on load; zero-initialized for us)
+  List<int> lrnToday; // [count, sec]
+  List<int> revToday;
+  List<int> newToday;
+  List<int> timeToday;
 
-  /// Last modification time (epoch seconds)
-  int modified;
-
-  /// Update sequence number
-  int usn;
-
-  /// Whether this is a dynamic (filtered) deck
-  bool isDynamic;
-
-  /// Configuration preset ID
-  int configId;
-
-  /// The time when the deck was created (epoch seconds)
-  int creationDate;
+  bool collapsed;
+  bool browserCollapsed;
 
   AnkiDeck({
     required this.id,
     required this.name,
-    this.description = '',
-    this.modified = 0,
+    this.desc = '',
+    this.mod = 0,
     this.usn = -1,
-    this.isDynamic = false,
-    this.configId = 1,
-    this.creationDate = 0,
-  });
+    this.dyn = 0,
+    this.conf = 1,
+    this.crt = 0,
+    List<int>? lrnToday,
+    List<int>? revToday,
+    List<int>? newToday,
+    List<int>? timeToday,
+    this.collapsed = false,
+    this.browserCollapsed = false,
+  })  : lrnToday = lrnToday ?? [0, 0],
+        revToday = revToday ?? [0, 0],
+        newToday = newToday ?? [0, 0],
+        timeToday = timeToday ?? [0, 0];
 
-  /// Creates a new deck with a unique ID (guaranteed unique via a static counter).
-  factory AnkiDeck.createNew({
-    required String name,
-    String description = '',
-  }) {
-    // Combine timestamp with a counter for guaranteed uniqueness
+  factory AnkiDeck.createNew({required String name, String description = ''}) {
     _idCounter++;
     final now = DateTime.now().microsecondsSinceEpoch;
-    final uniqueId = now + _idCounter;
     return AnkiDeck(
-      id: uniqueId,
+      id: now + _idCounter,
       name: name,
-      description: description,
-      modified: now ~/ 1000,
-      creationDate: now ~/ 1000,
+      desc: description,
+      mod: now ~/ 1000,
+      crt: now ~/ 1000,
     );
   }
 
   static int _idCounter = 0;
 
-  /// Returns the parent deck name, or null if this is a top-level deck.
   String? get parentName {
-    final idx = name.lastIndexOf('::');
-    if (idx < 0) return null;
-    return name.substring(0, idx);
+    final i = name.lastIndexOf('::');
+    return i < 0 ? null : name.substring(0, i);
   }
 
-  /// Returns the child portion of a nested deck name.
   String get childName {
-    final idx = name.lastIndexOf('::');
-    if (idx < 0) return name;
-    return name.substring(idx + 2);
+    final i = name.lastIndexOf('::');
+    return i < 0 ? name : name.substring(i + 2);
   }
 
-  /// Returns true if this deck is the parent of the given deck name.
-  bool isParentOf(String childDeckName) {
-    return childDeckName.startsWith('$name::');
-  }
+  bool isParentOf(String n) => n.startsWith('$name::');
 
-  // --- JSON Serialization ---
+  // ── Anki-compatible JSON ───────────────────────────────
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
-        'description': description,
-        'modified': modified,
+        'desc': desc,
+        'mod': mod,
         'usn': usn,
-        'isDynamic': isDynamic,
-        'configId': configId,
-        'creationDate': creationDate,
+        'dyn': dyn,
+        'conf': conf,
+        'crt': crt,
+        'lrnToday': lrnToday,
+        'revToday': revToday,
+        'newToday': newToday,
+        'timeToday': timeToday,
+        'collapsed': collapsed,
+        'browserCollapsed': browserCollapsed,
       };
 
-  factory AnkiDeck.fromJson(Map<String, dynamic> json) => AnkiDeck(
-        id: json['id'] as int,
-        name: json['name'] as String,
-        description: json['description'] as String? ?? '',
-        modified: json['modified'] as int? ?? 0,
-        usn: json['usn'] as int? ?? -1,
-        isDynamic: json['isDynamic'] as bool? ?? false,
-        configId: json['configId'] as int? ?? 1,
-        creationDate: json['creationDate'] as int? ?? 0,
+  factory AnkiDeck.fromJson(Map<String, dynamic> j) => AnkiDeck(
+        id: j['id'] as int,
+        name: j['name'] as String,
+        desc: j['desc'] as String? ?? '',
+        mod: j['mod'] as int? ?? 0,
+        usn: j['usn'] as int? ?? -1,
+        dyn: j['dyn'] as int? ?? 0,
+        conf: j['conf'] as int? ?? 1,
+        crt: j['crt'] as int? ?? 0,
+        lrnToday: (j['lrnToday'] as List?)?.cast<int>() ?? [0, 0],
+        revToday: (j['revToday'] as List?)?.cast<int>() ?? [0, 0],
+        newToday: (j['newToday'] as List?)?.cast<int>() ?? [0, 0],
+        timeToday: (j['timeToday'] as List?)?.cast<int>() ?? [0, 0],
+        collapsed: j['collapsed'] as bool? ?? false,
+        browserCollapsed: j['browserCollapsed'] as bool? ?? false,
       );
 
   @override
   String toString() => 'AnkiDeck(id=$id, name=$name)';
-
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is AnkiDeck && runtimeType == other.runtimeType && id == other.id;
-
+      identical(this, other) || other is AnkiDeck && id == other.id;
   @override
   int get hashCode => id.hashCode;
 }

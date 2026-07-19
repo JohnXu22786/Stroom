@@ -1,137 +1,110 @@
-/// Represents a note (fact) in the Anki system.
-///
-/// Notes are the raw data from which cards are generated.
-/// A note belongs to a model (note type) which defines its fields and card templates.
-/// Each note can generate one or more cards.
+/// AnkiDroid note database schema — exact 1:1 mapping.
 class AnkiNote {
-  /// Unique note ID (millisecond timestamp at creation)
-  int id;
-
-  /// Globally unique identifier (used for syncing)
-  String guid;
-
-  /// Model ID (note type ID)
-  int modelId;
-
-  /// Last modification time (epoch seconds)
-  int modified;
-
-  /// Update sequence number (used for syncing, -1 = local changes)
-  int usn;
-
-  /// Tags (space-separated string internally, exposed as list)
-  List<String> tags;
-
-  /// Field values (each element is the text of one field)
-  List<String> fields;
-
-  /// Sort field (first field text, for sorting)
-  String sortField;
-
-  /// Checksum (for duplicate detection)
-  int csum;
-
-  /// Flags
-  int flags;
-
-  /// Extra data (JSON string)
-  String data;
+  int id; // PRIMARY KEY — microsecond timestamp
+  String guid; // globally unique id (for syncing)
+  int mid; // model id (note type)
+  int mod; // last modified (epoch seconds)
+  int usn; // update sequence number
+  String tags; // space-separated tag string (e.g. " tag1 tag2 ")
+  String flds; // field values separated by 0x1f (unit separator)
+  String sfld; // sort field — first field value
+  int csum; // checksum (for duplicate detection)
+  int flags; // flags
+  String data; // JSON string (unused by core)
 
   AnkiNote({
-    required this.id,
-    required this.modelId,
+    int? id,
     this.guid = '',
-    this.modified = 0,
+    required this.mid,
+    this.mod = 0,
     this.usn = -1,
-    List<String>? tags,
-    required this.fields,
-    this.sortField = '',
+    this.tags = '',
+    required this.flds,
+    this.sfld = '',
     this.csum = 0,
     this.flags = 0,
     this.data = '',
-  }) : tags = tags ?? [];
+  }) : id = id ?? _nextId();
 
-  /// Creates a new note with a unique ID and auto-generated GUID.
-  factory AnkiNote.createNew({
-    required int modelId,
-    required List<String> fields,
-    List<String> tags = const [],
-  }) {
-    _idCounter++;
+  factory AnkiNote.createNew(
+      {required int mid, required String flds, String tags = ''}) {
     final now = DateTime.now().microsecondsSinceEpoch;
+    final fields = flds.split(String.fromCharCode(0x1f));
+    final sf = fields.isNotEmpty ? fields.first : '';
     return AnkiNote(
-      id: now + _idCounter,
-      modelId: modelId,
-      guid: _generateGuid(),
-      modified: now ~/ 1000,
-      fields: fields,
-      sortField: fields.isNotEmpty ? fields.first : '',
-      tags: List.from(tags),
+      id: now + DateTime.now().microsecond,
+      guid: _guid(),
+      mid: mid,
+      mod: now ~/ 1000,
+      tags: tags,
+      flds: flds,
+      sfld: sf,
     );
   }
 
-  static int _idCounter = 0;
+  /// Fields as a list.
+  List<String> get fieldList =>
+      flds.isEmpty ? [] : flds.split(String.fromCharCode(0x1f));
 
-  /// Generates a simple GUID.
-  static String _generateGuid() {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final random = (now * 7 + 13) % 100000;
-    return '${now}_$random';
-  }
+  /// Tag list.
+  List<String> get tagList => tags.trim().isEmpty
+      ? []
+      : tags.trim().split(' ').where((t) => t.isNotEmpty).toList();
 
-  /// Adds a tag to this note.
-  void addTag(String tag) {
-    final trimmed = tag.trim();
-    if (trimmed.isNotEmpty && !tags.contains(trimmed)) {
-      tags.add(trimmed);
+  void addTag(String t) {
+    final list = tagList;
+    if (!list.contains(t)) {
+      list.add(t);
+      tags = ' ${list.join(' ')} ';
     }
   }
 
-  /// Removes a tag from this note.
-  void removeTag(String tag) {
-    tags.remove(tag);
+  void removeTag(String t) {
+    final list = tagList..remove(t);
+    tags = list.isEmpty ? '' : ' ${list.join(' ')} ';
   }
 
-  /// Returns whether this note has the specified tag.
-  bool hasTag(String tag) => tags.contains(tag);
-
-  // --- JSON Serialization ---
-
-  Map<String, dynamic> toJson() => {
+  Map<String, dynamic> toMap() => {
         'id': id,
         'guid': guid,
-        'modelId': modelId,
-        'modified': modified,
+        'mid': mid,
+        'mod': mod,
         'usn': usn,
-        'tags': tags.join(' '),
-        'fields': fields.join(String.fromCharCode(0x1f)),
-        'sortField': sortField,
+        'tags': tags,
+        'flds': flds,
+        'sfld': sfld,
         'csum': csum,
         'flags': flags,
         'data': data,
       };
 
-  factory AnkiNote.fromJson(Map<String, dynamic> json) {
-    final fieldsStr = json['fields'] as String? ?? '';
-    final tagsStr = json['tags'] as String? ?? '';
-    return AnkiNote(
-      id: json['id'] as int,
-      modelId: json['modelId'] as int,
-      guid: json['guid'] as String? ?? '',
-      modified: json['modified'] as int? ?? 0,
-      usn: json['usn'] as int? ?? -1,
-      tags: tagsStr.isEmpty
-          ? []
-          : tagsStr.split(' ').where((t) => t.isNotEmpty).toList(),
-      fields:
-          fieldsStr.isEmpty ? [] : fieldsStr.split(String.fromCharCode(0x1f)),
-      sortField: json['sortField'] as String? ?? '',
-      csum: json['csum'] as int? ?? 0,
-      flags: json['flags'] as int? ?? 0,
-      data: json['data'] as String? ?? '',
-    );
+  factory AnkiNote.fromMap(Map<String, dynamic> m) => AnkiNote(
+        id: m['id'] as int,
+        guid: m['guid'] as String? ?? '',
+        mid: m['mid'] as int,
+        mod: m['mod'] as int? ?? 0,
+        usn: m['usn'] as int? ?? -1,
+        tags: m['tags'] as String? ?? '',
+        flds: m['flds'] as String? ?? '',
+        sfld: m['sfld'] as String? ?? '',
+        csum: m['csum'] as int? ?? 0,
+        flags: m['flags'] as int? ?? 0,
+        data: m['data'] as String? ?? '',
+      );
+
+  static int _counter = 0;
+  static int _nextId() {
+    _counter++;
+    return DateTime.now().microsecondsSinceEpoch + _counter;
   }
 
+  static String _guid() => '${DateTime.now().microsecondsSinceEpoch}_$_counter';
+
   @override
-  String toString() => 'AnkiNote(id=$id, modelId=$modelId, fields=$fields)';
+  String toString() => 'AnkiNote(id=$id, mid=$mid)';
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is AnkiNote && id == other.id;
+  @override
+  int get hashCode => id.hashCode;
 }
