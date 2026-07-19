@@ -1309,6 +1309,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     if (name == null) return 'wav';
     final lower = name.toLowerCase();
     if (lower.endsWith('.mp3')) return 'mp3';
+    if (lower.endsWith('.mp4')) return 'mp4';
     if (lower.endsWith('.m4a')) return 'm4a';
     if (lower.endsWith('.ogg')) return 'ogg';
     if (lower.endsWith('.flac')) return 'flac';
