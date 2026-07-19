@@ -221,6 +221,9 @@ void main() {
       SharedPreferences.setMockInitialValues({
         'conversations': '[]',
         'assistants': '[{"id":"a1","name":"测试助手"}]',
+        'per_model_chat_settings': '{}',
+        'selected_model_index': 0,
+        'model_order': '[]',
         'provider_entries': '[]',
         'data_format_version': 2,
       });
@@ -246,7 +249,7 @@ void main() {
       expect(fileNames, contains('chat_data.json'));
       expect(fileNames, isNot(contains('settings.json')));
 
-      // Verify assistants is NOT in chat_data.json (it should be settings)
+      // Verify settings keys are NOT in chat_data.json
       Uint8List? chatDataRaw;
       for (final f in archive) {
         if (f.isFile && f.name == 'chat_data.json') {
@@ -259,7 +262,16 @@ void main() {
           jsonDecode(utf8.decode(chatDataRaw!)) as Map<String, dynamic>;
       expect(chatData.containsKey('assistants'), isFalse,
           reason:
-              'assistants should NOT be in chat_data.json; it should be classified as settings');
+              'assistants should NOT be in chat_data.json; it belongs to settings');
+      expect(chatData.containsKey('per_model_chat_settings'), isFalse,
+          reason:
+              'per_model_chat_settings should NOT be in chat_data.json; it belongs to settings');
+      expect(chatData.containsKey('selected_model_index'), isFalse,
+          reason:
+              'selected_model_index should NOT be in chat_data.json; it belongs to settings');
+      expect(chatData.containsKey('model_order'), isFalse,
+          reason:
+              'model_order should NOT be in chat_data.json; it belongs to settings');
     });
 
     testWidgets(
@@ -268,6 +280,9 @@ void main() {
       SharedPreferences.setMockInitialValues({
         'conversations': '[]',
         'assistants': '[{"id":"a1","name":"测试助手"}]',
+        'per_model_chat_settings': '{}',
+        'selected_model_index': 0,
+        'model_order': '[]',
         'provider_entries': '[]',
         'data_format_version': 2,
       });
@@ -293,7 +308,7 @@ void main() {
       expect(fileNames, contains('settings.json'));
       expect(fileNames, isNot(contains('chat_data.json')));
 
-      // Verify assistants IS in settings.json (it should be classified as settings)
+      // Verify all settings keys ARE in settings.json
       Uint8List? settingsDataRaw;
       for (final f in archive) {
         if (f.isFile && f.name == 'settings.json') {
@@ -307,6 +322,15 @@ void main() {
       expect(settingsData.containsKey('assistants'), isTrue,
           reason:
               'assistants should be in settings.json when settings-only backup is selected');
+      expect(settingsData.containsKey('per_model_chat_settings'), isTrue,
+          reason:
+              'per_model_chat_settings should be in settings.json when settings-only backup is selected');
+      expect(settingsData.containsKey('selected_model_index'), isTrue,
+          reason:
+              'selected_model_index should be in settings.json when settings-only backup is selected');
+      expect(settingsData.containsKey('model_order'), isTrue,
+          reason:
+              'model_order should be in settings.json when settings-only backup is selected');
     });
   });
 
@@ -322,10 +346,11 @@ void main() {
         'conversations': '[{"id":"conv1"}]',
         'active_conversation_id': 'conv1',
         'assistants': '[{"id":"a1","name":"测试助手","prompt":"你好"}]',
-        'provider_entries': '[{"id":"p1","type":"llm"}]',
-        'data_format_version': 2,
+        'per_model_chat_settings': '{"gpt-4":{"reasoningEnabled":true}}',
         'selected_model_index': 0,
         'model_order': '["gpt-4","gpt-3.5"]',
+        'provider_entries': '[{"id":"p1","type":"llm"}]',
+        'data_format_version': 2,
       });
 
       final sel = BackupSelection(
@@ -368,24 +393,35 @@ void main() {
       final chatData =
           jsonDecode(utf8.decode(chatDataRaw!)) as Map<String, dynamic>;
 
-      // assistants should be in settings.json
+      // All settings keys should be in settings.json
       expect(settingsData.containsKey('assistants'), isTrue,
+          reason: 'assistants must be in settings.json (settings, not chat)');
+      expect(settingsData.containsKey('per_model_chat_settings'), isTrue,
           reason:
-              'assistants must be in settings.json (classified as settings, not chat)');
-      expect(settingsData['assistants'],
-          '[{"id":"a1","name":"测试助手","prompt":"你好"}]');
+              'per_model_chat_settings must be in settings.json (settings, not chat)');
+      expect(settingsData.containsKey('selected_model_index'), isTrue,
+          reason:
+              'selected_model_index must be in settings.json (settings, not chat)');
+      expect(settingsData.containsKey('model_order'), isTrue,
+          reason: 'model_order must be in settings.json (settings, not chat)');
 
-      // assistants should NOT be in chat_data.json
+      // All settings keys should NOT be in chat_data.json
       expect(chatData.containsKey('assistants'), isFalse,
-          reason:
-              'assistants must NOT be in chat_data.json; it belongs to settings');
+          reason: 'assistants must NOT be in chat_data.json');
+      expect(chatData.containsKey('per_model_chat_settings'), isFalse,
+          reason: 'per_model_chat_settings must NOT be in chat_data.json');
+      expect(chatData.containsKey('selected_model_index'), isFalse,
+          reason: 'selected_model_index must NOT be in chat_data.json');
+      expect(chatData.containsKey('model_order'), isFalse,
+          reason: 'model_order must NOT be in chat_data.json');
 
-      // conversations should be in chat_data.json
+      // conversations should still be in chat_data.json
       expect(chatData.containsKey('conversations'), isTrue,
           reason: 'conversations should still be in chat_data.json');
-      expect(chatData.containsKey('active_conversation_id'), isTrue);
+      expect(chatData.containsKey('active_conversation_id'), isTrue,
+          reason: 'active_conversation_id should still be in chat_data.json');
 
-      // provider_entries should be in settings.json
+      // provider_entries should still be in settings.json
       expect(settingsData.containsKey('provider_entries'), isTrue,
           reason: 'provider_entries should be in settings.json');
     });
