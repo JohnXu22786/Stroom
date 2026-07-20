@@ -712,6 +712,9 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     if (mounted) {
       Navigator.pop(context);
     }
+    // Yield to the event loop so the pop animation and home page frame
+    // render BEFORE blocking synchronous work (base64Encode) begins.
+    await Future<void>.delayed(Duration.zero);
 
     // Add ALL tasks to the task list first so they appear simultaneously.
     // Each video gets its own background task with a unique title.
