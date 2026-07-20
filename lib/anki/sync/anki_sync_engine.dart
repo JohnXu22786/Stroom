@@ -287,7 +287,7 @@ class AnkiSyncEngine {
 
   /// Login and get host key.
   Future<String> login(String email, String password) async {
-    final uri = Uri.parse('https://sync.ankiweb.net/sync/hostKey');
+    final uri = Uri.parse('$_endpoint/hostKey');
     final body = jsonEncode({'u': email, 'p': password});
     final header = jsonEncode({
       'sync_version': 1,
@@ -315,7 +315,7 @@ class AnkiSyncEngine {
 
   /// Get the host key (used by the sync server).
   Future<String> hostKey() async {
-    final uri = Uri.parse('https://sync.ankiweb.net/sync/hostKey');
+    final uri = Uri.parse('$_endpoint/hostKey');
     final header = jsonEncode({
       'sync_version': 1,
       'sync_key': syncKey,
