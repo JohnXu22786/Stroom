@@ -161,23 +161,25 @@ class AudioSeparationEngine {
     const stscSize = 28; // header + 1 entry
     final stszSize = 20 + sampleCount * 4; // header + per-sample sizes
     const stcoSize = 20; // header + 1 chunk offset
-    final stblSize = stsdSize + sttsSize + stscSize + stszSize + stcoSize;
+    // each level below includes +8 for its own box header
+    final stblSize = 8 + stsdSize + sttsSize + stscSize + stszSize + stcoSize;
 
     const smhdSize = 16;
-    const dinfSize = 28; // includes dref + url
-    final minfSize = smhdSize + dinfSize + stblSize;
+    const dinfSize = 36; // danf header(8) + dref(28)
+    final minfSize = 8 + smhdSize + dinfSize + stblSize;
 
     const mdhdSize = 32;
-    const hdlrSize = 32;
-    final mdiaSize = mdhdSize + hdlrSize + minfSize;
+    const hdlrSize = 33;
+    final mdiaSize = 8 + mdhdSize + hdlrSize + minfSize;
 
     const tkhdSize = 92;
-    final trakSize = tkhdSize + mdiaSize;
+    final trakSize = 8 + tkhdSize + mdiaSize;
 
     const mvhdSize = 108;
-    final moovSize = mvhdSize + trakSize;
+    final moovSize = 8 + mvhdSize + trakSize;
 
-    const ftypSize = 32;
+    // ftyp: header(8) + major(4) + minor(4) + 3 compatible brands(12) = 28
+    const ftypSize = 28;
     final mdatSize = 8 + totalDataSize;
 
     // File layout: ftyp | moov | mdat
