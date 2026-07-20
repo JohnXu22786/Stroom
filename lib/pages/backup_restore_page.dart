@@ -306,7 +306,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('闪卡片组已导出到: $path'), backgroundColor: Colors.green),
+              content: Text('Anki闪卡片组已导出到: $path'), backgroundColor: Colors.green),
         );
       }
     } catch (e) {
@@ -491,8 +491,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
             ),
           ),
           const SizedBox(height: 24),
-          // === 闪卡 .apkg 导出/导入 ===
-          _buildSectionHeader('闪卡牌组'),
+          // === Anki 闪卡 .apkg 导出/导入 ===
+          _buildSectionHeader('Anki闪卡牌组'),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),

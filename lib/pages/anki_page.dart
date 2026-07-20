@@ -19,7 +19,7 @@ class AnkiDroidPage extends ConsumerWidget {
     final decksAsync = ref.watch(ankiDeckListProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('闪卡'),
+        title: const Text('Anki闪卡'),
         centerTitle: true,
         actions: [
           IconButton(

@@ -39,7 +39,7 @@ class AnkiApkgImporter {
     final targetDbPath = p.join(docsDir.path, 'collection.anki2');
     if (!File(targetDbPath).existsSync()) {
       await File(tmpDbPath).delete();
-      throw Exception('目标数据库不存在，请先打开闪卡功能');
+      throw Exception('目标数据库不存在，请先打开Anki闪卡功能');
     }
 
     // 4. Open both databases

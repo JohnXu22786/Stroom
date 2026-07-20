@@ -14,9 +14,9 @@ import '../scheduler/scheduler.dart';
 /// Opens the SQLite database once.
 final ankiDatabaseProvider = FutureProvider<AnkiDatabase>((ref) async {
   if (kIsWeb) {
-    throw UnsupportedError('Web 端仅支持 AnkiWeb 同步登录功能。\n'
-        '请点击右上角 ☁️ 图标登录/注册 AnkiWeb。\n'
-        '管理和学习卡片请使用桌面端或移动端。');
+    throw UnsupportedError('Web 端需要登录 AnkiWeb 后才能管理卡片。\n'
+        '请点击右上角 ☁️ 图标登录或注册 AnkiWeb 账号。\n'
+        '登录后即可使用 AnkiWeb 同步功能浏览和管理卡片。');
   }
   final db = AnkiDatabase();
   await db.open();
