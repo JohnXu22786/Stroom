@@ -1,67 +1,48 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'anki_sync_client.dart';
 
-/// Manages AnkiWeb login state.
+/// Manages custom sync server configuration.
 ///
-/// Persists the session key (hkey) to SharedPreferences so the user
-/// stays logged in across app restarts.
+/// Persists the server URL and enabled state to SharedPreferences.
 class AnkiSyncNotifier extends Notifier<AnkiSyncState> {
+  static const _keyUrl = 'anki_custom_sync_url';
+  static const _keyEnabled = 'anki_custom_sync_enabled';
+
   @override
   AnkiSyncState build() {
     _load();
-    return const AnkiSyncState.loggedOut();
+    return const AnkiSyncState();
   }
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    final key = prefs.getString('anki_sync_key');
-    final email = prefs.getString('anki_sync_email');
-    if (key != null && email != null && key.isNotEmpty) {
-      state = AnkiSyncState.loggedIn(email: email, key: key);
-    }
+    final url = prefs.getString(_keyUrl) ?? '';
+    final enabled = prefs.getBool(_keyEnabled) ?? false;
+    state = AnkiSyncState(url: url, enabled: enabled);
   }
 
-  Future<void> login(String email, String password) async {
-    state = const AnkiSyncState.loading();
-    try {
-      final key = await AnkiSyncClient.login(email, password);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('anki_sync_key', key);
-      await prefs.setString('anki_sync_email', email);
-      state = AnkiSyncState.loggedIn(email: email, key: key);
-    } catch (e) {
-      state = AnkiSyncState.error(e.toString());
-    }
-  }
-
-  Future<void> logout() async {
+  Future<void> setSyncUrl(String url) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('anki_sync_key');
-    await prefs.remove('anki_sync_email');
-    state = const AnkiSyncState.loggedOut();
+    await prefs.setString(_keyUrl, url);
+    state = AnkiSyncState(url: url, enabled: state.enabled);
+  }
+
+  Future<void> setEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyEnabled, enabled);
+    state = AnkiSyncState(url: state.url, enabled: enabled);
   }
 }
 
-/// Login state.
+/// Custom sync server configuration state.
 class AnkiSyncState {
-  final String? email;
-  final String? key;
-  final String? error;
-  final bool isLoading;
+  final String url;
+  final bool enabled;
 
-  const AnkiSyncState._(
-      {this.email, this.key, this.error, this.isLoading = false});
-
-  const AnkiSyncState() : this._();
-  const AnkiSyncState.loggedOut() : this._();
-  const AnkiSyncState.loggedIn({required String email, required String key})
-      : this._(email: email, key: key);
-  const AnkiSyncState.loading() : this._(isLoading: true);
-  const AnkiSyncState.error(String error) : this._(error: error);
-
-  bool get isLoggedIn => key != null && key!.isNotEmpty;
-  bool get isLoggedOut => !isLoggedIn && !isLoading && error == null;
+  const AnkiSyncState({
+    this.url = '',
+    this.enabled = false,
+  });
 }
 
 final ankiSyncProvider = NotifierProvider<AnkiSyncNotifier, AnkiSyncState>(
