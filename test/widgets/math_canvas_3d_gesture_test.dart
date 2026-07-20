@@ -50,8 +50,7 @@ void main() {
       expect(state.camera.theta, lessThan(initialTheta));
     });
 
-    testWidgets('dragging up rotates scene up (phi decreases)',
-        (tester) async {
+    testWidgets('dragging up rotates scene up (phi decreases)', (tester) async {
       final state = await setupCanvas(tester);
       final initialPhi = state.camera.phi;
 
@@ -133,8 +132,7 @@ void main() {
   });
 
   group('MathCanvas3D - construction tap behavior', () {
-    testWidgets('tapping in point tool creates a point object',
-        (tester) async {
+    testWidgets('tapping in point tool creates a point object', (tester) async {
       List<Object3D>? createdObjects;
       final state = await setupCanvas(
         tester,
@@ -184,7 +182,8 @@ void main() {
       expect(objects.first.type, Object3DType.line);
     });
 
-    testWidgets('consecutive taps in point tool all create points (no blockage)',
+    testWidgets(
+        'consecutive taps in point tool all create points (no blockage)',
         (tester) async {
       final objects = <Object3D>[];
       final state = await setupCanvas(

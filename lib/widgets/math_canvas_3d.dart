@@ -82,7 +82,8 @@ class MathCanvas3DState extends State<MathCanvas3D> {
 
   // Gesture state
   Offset? _lastFocalPoint;
-  double? _initialScaleDistance; // camera distance at gesture start (for stable zoom)
+  double?
+      _initialScaleDistance; // camera distance at gesture start (for stable zoom)
   bool _isReady = false;
 
   // Canvas size
@@ -281,12 +282,10 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     // ===== Standard orbit/pan/zoom (Move tool or no construction active)
     if (details.pointerCount == 1) {
       // Single finger: orbit
-      final dx = _lastFocalPoint == null
-          ? 0.0
-          : (focalPoint.dx - _lastFocalPoint!.dx);
-      final dy = _lastFocalPoint == null
-          ? 0.0
-          : (focalPoint.dy - _lastFocalPoint!.dy);
+      final dx =
+          _lastFocalPoint == null ? 0.0 : (focalPoint.dx - _lastFocalPoint!.dx);
+      final dy =
+          _lastFocalPoint == null ? 0.0 : (focalPoint.dy - _lastFocalPoint!.dy);
 
       setState(() {
         _cameraTheta -= dx * 0.01;
