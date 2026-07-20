@@ -379,6 +379,16 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     _persistTasks();
   }
 
+  /// Update the retry data for a task (used to set retry data after
+  /// computing it asynchronously via isolate).
+  void setRetryData(String taskId, Map<String, dynamic>? retryData) {
+    state = state.map((t) {
+      if (t.id != taskId) return t;
+      return t.copyWith(retryData: retryData);
+    }).toList();
+    _persistTasks();
+  }
+
   void _updateTask(
     String taskId,
     TaskStatus status, {
