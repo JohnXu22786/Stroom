@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../anki/sync/anki_sync_engine.dart';
 import '../anki/sync/anki_sync_provider.dart';
 
-/// 自定义同步服务器设置页面。
+/// 自定义同步服务器设置 —— 与 AnkiDroid 相同的交互模式。
 class AnkiSyncSettingsPage extends ConsumerWidget {
   const AnkiSyncSettingsPage({super.key});
 
@@ -23,103 +23,137 @@ class AnkiSyncSettingsPage extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          // ── 自定义服务器 ──
+          // ── 说明区 ──
           Card(
+            color: cs.secondaryContainer.withValues(alpha: 0.3),
             child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
+              padding: const EdgeInsets.all(14),
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Icon(Icons.dns_outlined, color: cs.primary),
-                      const SizedBox(width: 8),
-                      Text('自定义同步服务器',
-                          style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: cs.onSurface)),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '使用自己的 Anki 同步服务器替代 AnkiWeb。',
-                    style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    initialValue: config.url,
-                    decoration: InputDecoration(
-                      labelText: '服务器地址',
-                      hintText: 'http://192.168.1.100:8080/sync/',
-                      prefixIcon: const Icon(Icons.link),
-                      border: const OutlineInputBorder(),
-                      helperText: '自建 Anki 同步服务器的完整 URL，末尾需带 /sync/',
+                  Icon(Icons.info_outline,
+                      size: 20, color: cs.onSecondaryContainer),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      '自建 Anki 同步服务器后在此配置连接信息。\n'
+                      'docker run -p 8080:8080 -e SYNC_USER1=user:pass '
+                      'zweizs/anki-sync-server',
+                      style: TextStyle(
+                          fontSize: 13, color: cs.onSecondaryContainer),
                     ),
-                    keyboardType: TextInputType.url,
-                    onChanged: (v) =>
-                        ref.read(ankiSyncProvider.notifier).setSyncUrl(v),
-                  ),
-                  const SizedBox(height: 12),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('启用自定义同步'),
-                    subtitle: const Text('开启后将使用上方服务器地址同步'),
-                    value: config.enabled,
-                    onChanged: (v) =>
-                        ref.read(ankiSyncProvider.notifier).setEnabled(v),
                   ),
                 ],
               ),
             ),
           ),
 
-          if (config.enabled && config.url.isNotEmpty) ...[
+          const SizedBox(height: 20),
+
+          // ── 服务器地址（含开关）──
+          Card(
+            child: Column(
+              children: [
+                SwitchListTile(
+                  contentPadding: const EdgeInsets.only(left: 16, right: 8),
+                  title: const Text('启用自定义同步'),
+                  subtitle: const Text('使用自建服务器替代 AnkiWeb'),
+                  value: config.enabled,
+                  onChanged: (v) =>
+                      ref.read(ankiSyncProvider.notifier).setEnabled(v),
+                  secondary: Icon(Icons.dns_outlined,
+                      color: config.enabled ? cs.primary : cs.onSurfaceVariant),
+                ),
+                if (config.enabled) ...[
+                  const Divider(height: 1, indent: 16, endIndent: 16),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                    child: TextFormField(
+                      initialValue: config.url,
+                      decoration: InputDecoration(
+                        labelText: '服务器地址',
+                        hintText: 'http://192.168.1.100:8080/sync/',
+                        prefixIcon: const Icon(Icons.link),
+                        border: const OutlineInputBorder(),
+                        helperText: '末尾需带 /sync/',
+                        helperMaxLines: 2,
+                      ),
+                      keyboardType: TextInputType.url,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return '请输入服务器地址';
+                        final uri = Uri.tryParse(v);
+                        if (uri == null ||
+                            !uri.hasScheme ||
+                            !uri.hasAuthority) {
+                          return '无效的 URL';
+                        }
+                        return null;
+                      },
+                      onChanged: (v) =>
+                          ref.read(ankiSyncProvider.notifier).setSyncUrl(v),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+          // ── SSL 证书（可选）──
+          if (config.enabled) ...[
             const SizedBox(height: 16),
-            _SyncSection(),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.security, color: cs.primary, size: 20),
+                        const SizedBox(width: 8),
+                        Text('自定义 SSL 证书（可选）',
+                            style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: cs.onSurface)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text('如果自建服务器使用了自签名证书，粘贴 PEM 格式的 CA 证书。',
+                        style: TextStyle(
+                            fontSize: 13, color: cs.onSurfaceVariant)),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      initialValue: config.certificate,
+                      decoration: const InputDecoration(
+                        hintText: '-----BEGIN CERTIFICATE-----\n...',
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.all(12),
+                      ),
+                      maxLines: 4,
+                      keyboardType: TextInputType.multiline,
+                      onChanged: (v) =>
+                          ref.read(ankiSyncProvider.notifier).setCertificate(v),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
 
-          const SizedBox(height: 24),
-          // ── 使用说明 ──
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.info_outline, color: cs.primary, size: 20),
-                      const SizedBox(width: 8),
-                      Text('如何自建同步服务器',
-                          style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: cs.onSurface)),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '1. 使用官方 Anki 桌面版: anki --syncserver\n'
-                    '2. 或用 Docker:\n'
-                    '   docker run -p 8080:8080 \\\n'
-                    '     -e SYNC_USER1=user:pass \\\n'
-                    '     zweizs/anki-sync-server\n'
-                    '3. 服务器地址填入 http://你IP:8080/sync/\n'
-                    '4. 启用后点"登录服务器"输入你设置的账号密码',
-                    style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          // ── 同步区域 ──
+          if (config.isConfigured) ...[
+            const SizedBox(height: 20),
+            _SyncSection(),
+          ],
         ],
       ),
     );
   }
 }
 
-/// 同步操作区域（登录 / 同步按钮）
+/// 登录 / 同步操作区域。
 class _SyncSection extends ConsumerStatefulWidget {
   @override
   ConsumerState<_SyncSection> createState() => _SyncSectionState();
@@ -130,7 +164,7 @@ class _SyncSectionState extends ConsumerState<_SyncSection> {
   bool _syncing = false;
   String? _sessionKey;
 
-  /// 弹出登录对话框，向自定义服务器认证。
+  /// 弹出登录对话框。
   Future<void> _showLoginDialog() async {
     final config = ref.read(ankiSyncProvider);
     final userCtl = TextEditingController();
@@ -146,7 +180,7 @@ class _SyncSectionState extends ConsumerState<_SyncSection> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('目标: ${config.url}',
+              Text('服务器: ${config.url}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant)),
               const SizedBox(height: 16),
@@ -195,7 +229,7 @@ class _SyncSectionState extends ConsumerState<_SyncSection> {
     }
   }
 
-  /// 向自定义服务器 hostKey 端点认证，获取 session key。
+  /// 向自定义服务器 hostKey 认证。
   Future<void> _connect(String username, String password) async {
     final config = ref.read(ankiSyncProvider);
     setState(() {
@@ -205,7 +239,11 @@ class _SyncSectionState extends ConsumerState<_SyncSection> {
     try {
       final uri = Uri.parse('${config.url}hostKey');
       final body = jsonEncode({'u': username, 'p': password});
-      final client = HttpClient();
+      final client = config.certificate.isNotEmpty
+          ? HttpClient(
+              context: SecurityContext()
+                ..setTrustedCertificatesBytes(utf8.encode(config.certificate)))
+          : HttpClient();
       final request = await client.postUrl(uri);
       request.headers.set('Content-Type', 'application/json; charset=utf-8');
       request.write(body);
@@ -239,8 +277,10 @@ class _SyncSectionState extends ConsumerState<_SyncSection> {
 
       setState(() => _status = '交换元数据...');
       final meta = await engine.meta(SyncMeta());
+
       setState(() => _status = '开始同步...');
       await engine.start(meta.usn, 9999);
+
       setState(() => _status = '获取/发送变更...');
       var chunk = await engine.chunk();
       while (!chunk.done) {
@@ -249,10 +289,13 @@ class _SyncSectionState extends ConsumerState<_SyncSection> {
         }
         chunk = await engine.chunk();
       }
+
       setState(() => _status = '一致性检查...');
       await engine.sanityCheck(0, 0);
+
       setState(() => _status = '完成同步...');
       await engine.finish();
+
       setState(() => _status = '同步完成 ✓');
     } catch (e) {
       setState(() => _status = '同步失败: $e');
@@ -300,13 +343,7 @@ class _SyncSectionState extends ConsumerState<_SyncSection> {
                     label: Text(isLoggedIn ? '登出' : '登录服务器'),
                     onPressed: _syncing
                         ? null
-                        : () {
-                            if (isLoggedIn) {
-                              _logout();
-                            } else {
-                              _showLoginDialog();
-                            }
-                          },
+                        : () => isLoggedIn ? _logout() : _showLoginDialog(),
                   ),
                 ),
                 if (isLoggedIn) ...[
