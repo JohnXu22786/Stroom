@@ -1,9 +1,16 @@
+import 'dart:math' as dart_math;
+
 import 'package:flutter/material.dart';
 
-import '../models/math_expression.dart' show MathExpression;
+import '../models/math_3d_object.dart';
+import '../models/math_3d_tool.dart';
 import '../models/math_drawing_state.dart';
+import '../models/math_expression.dart' show MathExpression;
+import '../models/math_expression_3d.dart';
 import '../models/formula_entry.dart';
 import '../widgets/math_canvas.dart';
+import '../widgets/math_canvas_3d.dart';
+import '../widgets/math_3d_toolbar.dart';
 
 /// 数学绘图页面 — 多公式、等价的公式行、颜色选择、显隐切换。
 class MathDrawingPage extends StatefulWidget {
@@ -24,8 +31,13 @@ class _MathDrawingPageState extends State<MathDrawingPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   final GlobalKey<MathCanvasState> _canvasKey = GlobalKey();
+  final GlobalKey<MathCanvas3DState> _canvas3DKey = GlobalKey();
 
   ViewMode _currentView = ViewMode.mode2D;
+
+  // 3D construction state
+  ConstructionTool _current3DTool = ConstructionTool.move;
+  String _toolInstruction = '';
 
   /// All formula rows (each is equal).
   final List<_FormulaState> _formulas = [];
@@ -77,6 +89,14 @@ class _MathDrawingPageState extends State<MathDrawingPage>
 
   /// Plot all visible formulas that have changes.
   void _plotAll() {
+    if (_currentView == ViewMode.mode2D) {
+      _plotAll2D();
+    } else {
+      _plotAll3D();
+    }
+  }
+
+  void _plotAll2D() {
     final entries = <FormulaEntry>[];
     for (final f in _formulas) {
       final text = f.controller.text.trim();
@@ -108,6 +128,72 @@ class _MathDrawingPageState extends State<MathDrawingPage>
     });
 
     _canvasKey.currentState?.setFormulas(entries);
+  }
+
+  void _plotAll3D() {
+    final objects = <Object3D>[];
+    for (final f in _formulas) {
+      final text = f.controller.text.trim();
+      if (text.isEmpty) continue;
+      if (!f.visible) continue;
+
+      final colorInt = f.color.value;
+
+      // Try parsing as 3D surface z = f(x, y)
+      final surfaceExpr = Expression3D.surface(text);
+      if (surfaceExpr.isValid) {
+        final mesh = surfaceExpr.sampleSurfaceGrid(
+          xMin: -5,
+          xMax: 5,
+          yMin: -5,
+          yMax: 5,
+          gridX: 30,
+          gridY: 30,
+        );
+        if (mesh.vertices.isNotEmpty) {
+          objects.add(Object3D.surface(
+            vertices: mesh.vertices,
+            indices: mesh.indices,
+            normals: mesh.normals,
+            color: colorInt,
+            opacity: 0.85,
+            label: text,
+          ));
+          continue;
+        }
+      }
+
+      // Try parsing as parametric curve
+      final curveExpr =
+          Expression3D.parametricCurve(text, tMax: 2 * dart_math.pi);
+      if (curveExpr.isValid) {
+        final points = curveExpr.sampleCurve(numSamples: 100);
+        if (points.isNotEmpty) {
+          objects.add(Object3D.curve(
+            points: points,
+            color: colorInt,
+            label: text,
+          ));
+          continue;
+        }
+      }
+
+      // If none matched, show error
+      _showError('无法解析为3D表达式: $text');
+      return;
+    }
+
+    setState(() {
+      for (final f in _formulas) {
+        f.committedText = f.controller.text.trim();
+      }
+    });
+
+    if (objects.isEmpty) {
+      _canvas3DKey.currentState?.clearObjects();
+    } else {
+      _canvas3DKey.currentState?.setObjects(objects);
+    }
   }
 
   void _addFormula() {
@@ -221,7 +307,13 @@ class _MathDrawingPageState extends State<MathDrawingPage>
     ));
   }
 
-  void _onResetView() => _canvasKey.currentState?.resetView();
+  void _onResetView() {
+    if (_currentView == ViewMode.mode2D) {
+      _canvasKey.currentState?.resetView();
+    } else {
+      _canvas3DKey.currentState?.resetView();
+    }
+  }
 
   // ==================================================================
   // Build
@@ -247,13 +339,13 @@ class _MathDrawingPageState extends State<MathDrawingPage>
           _buildTabBar(cs),
           // Formula list (always shown)
           _buildFormulaList(cs),
-          // Canvas + 3D placeholder kept alive via IndexedStack
+          // Canvas + 3D canvas kept alive via IndexedStack
           Expanded(
             child: IndexedStack(
               index: _currentView == ViewMode.mode2D ? 0 : 1,
               children: [
                 _buildCanvas(cs),
-                _build3DPlaceholder(cs),
+                _build3DCanvas(cs),
               ],
             ),
           ),
@@ -461,32 +553,146 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   }
 
   // ==================================================================
-  // 3D placeholder
+  // 3D canvas
   // ==================================================================
 
-  Widget _build3DPlaceholder(ColorScheme cs) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+  Widget _build3DCanvas(ColorScheme cs) {
+    return Column(
+      children: [
+        // Construction toolbar
+        Math3DToolbar(
+          activeTool: _current3DTool,
+          instruction: _current3DTool != ConstructionTool.move
+              ? (_canvas3DKey.currentState?.constructionInstruction ??
+                  _toolInstruction)
+              : null,
+          onToolSelected: (tool) {
+            setState(() {
+              _current3DTool = tool;
+              _toolInstruction = '';
+            });
+            _canvas3DKey.currentState?.setTool(tool);
+          },
+        ),
+        // View settings row (projection, axes, grid)
+        if (_current3DTool == ConstructionTool.move) _buildViewSettingsRow(cs),
+        // 3D canvas
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: cs.outlineVariant, width: 0.5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: MathCanvas3D(
+                  key: _canvas3DKey,
+                  currentTool: _current3DTool,
+                  onReady: () {},
+                  onViewportChange: () {},
+                  onObjectCreated: (obj) {
+                    _canvas3DKey.currentState?.setObjects(
+                      [...?_canvas3DKey.currentState?.objects, obj],
+                    );
+                  },
+                  onToolInstruction: (instruction) {
+                    setState(() {
+                      _toolInstruction = instruction;
+                    });
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildViewSettingsRow(ColorScheme cs) {
+    final state3D = _canvas3DKey.currentState;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
           children: [
-            Icon(Icons.view_in_ar,
-                size: 64, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
-            const SizedBox(height: 16),
-            Text('3D 绘图功能即将推出',
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
-                    color: cs.onSurfaceVariant)),
-            const SizedBox(height: 8),
-            Text('敬请期待后续更新',
-                style: TextStyle(
-                    fontSize: 14,
-                    color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
+            // Projection toggle
+            _buildToolButton(
+              icon: state3D?.projectionType == ProjectionType.perspective
+                  ? Icons.view_in_ar
+                  : Icons.grid_3x3,
+              tooltip: '切换投影类型',
+              onPressed: () {
+                final current =
+                    state3D?.projectionType ?? ProjectionType.parallel;
+                state3D?.setProjectionType(
+                  current == ProjectionType.parallel
+                      ? ProjectionType.perspective
+                      : ProjectionType.parallel,
+                );
+                setState(() {});
+              },
+            ),
+            const SizedBox(width: 4),
+            // Reset view
+            _buildToolButton(
+              icon: Icons.center_focus_strong,
+              tooltip: '重置视图',
+              onPressed: () => state3D?.resetView(),
+            ),
+            const SizedBox(width: 4),
+            // Toggle axes
+            _buildToolButton(
+              icon: Icons.crop_square,
+              tooltip: '显示/隐藏坐标轴',
+              isActive: state3D?.showAxes ?? true,
+              onPressed: () {
+                state3D?.toggleAxes();
+                setState(() {});
+              },
+            ),
+            const SizedBox(width: 4),
+            // Toggle grid
+            _buildToolButton(
+              icon: Icons.grid_on,
+              tooltip: '显示/隐藏网格',
+              isActive: state3D?.showGrid ?? true,
+              onPressed: () {
+                state3D?.toggleGrid();
+                setState(() {});
+              },
+            ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildToolButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+    bool isActive = true,
+  }) {
+    return IconButton(
+      icon: Icon(icon, size: 20),
+      tooltip: tooltip,
+      onPressed: onPressed,
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
+          if (states.contains(WidgetState.pressed)) return null;
+          return isActive ? null : Colors.grey.withValues(alpha: 0.1);
+        }),
+        foregroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
+          return isActive ? null : Colors.grey;
+        }),
+      ),
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints(
+          minWidth: 36, minHeight: 36, maxWidth: 36, maxHeight: 36),
     );
   }
 }
