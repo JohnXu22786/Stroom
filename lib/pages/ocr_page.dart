@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -1369,12 +1370,13 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final textNotifier = ref.read(textRecordsProvider.notifier);
 
     // Pop back to home page IMMEDIATELY so user doesn't experience a freeze.
-    // Heavy work (base64Encode for retry data) happens after the pop.
+    // Create task first (without retryData, instant), then compute
+    // retryData in background isolate so the UI never blocks.
     if (mounted) {
       Navigator.pop(context);
     }
-    // Yield to the event loop so the pop animation and home page frame
-    // render BEFORE blocking synchronous work (base64Encode) begins.
+    // Yield to the event loop so the pop transition renders before any
+    // background work begins.
     await Future<void>.delayed(Duration.zero);
 
     // Create a background task for tracking
@@ -1386,25 +1388,36 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         ? 'OCR_${_selectedImages.first.sourceName!}'
         : 'OCR_$timestamp';
 
-    // Build retry data: encode images as base64 so they can be restored on retry
-    final retryImages = _selectedImages.map((img) {
-      return <String, dynamic>{
-        'bytes': base64Encode(img.bytes),
-        'format': img.format,
-        'name': img.sourceName,
-      };
-    }).toList();
-    final retryData = <String, dynamic>{
-      'type': 'ocr',
-      'images': retryImages,
-      'modelIndex': _selectedModelIndex,
-    };
-
+    // Create task WITHOUT retryData first (instant, non-blocking).
+    // RetryData will be computed in background isolate below.
+    final modelIndex = _selectedModelIndex;
     final taskId = bgNotifier.addTask(
       type: BackgroundTaskType.ocr,
       title: title,
-      retryData: retryData,
+      retryData: null,
     );
+
+    // Compute retryData in background isolate (base64Encode is CPU-bound).
+    // Capture image data in plain lists for isolate-safety.
+    final imageBytesList = _selectedImages.map((img) => img.bytes).toList();
+    final imageFormatList = _selectedImages.map((img) => img.format).toList();
+    final imageNameList = _selectedImages.map((img) => img.sourceName).toList();
+    final retryData = await Isolate.run(() {
+      final images = <Map<String, dynamic>>[];
+      for (int i = 0; i < imageBytesList.length; i++) {
+        images.add(<String, dynamic>{
+          'bytes': base64Encode(imageBytesList[i]),
+          'format': imageFormatList[i],
+          'name': imageNameList[i],
+        });
+      }
+      return <String, dynamic>{
+        'type': 'ocr',
+        'images': images,
+        'modelIndex': modelIndex,
+      };
+    });
+    bgNotifier.setRetryData(taskId, retryData);
 
     try {
       await _performOcr(effectiveConfig, taskId, bgNotifier, textNotifier,

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -708,39 +709,49 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     final audioRecordsNotifier = ref.read(audioRecordsProvider.notifier);
 
     // Pop back to home page IMMEDIATELY so user doesn't experience a freeze.
-    // Heavy work (base64Encode for retry data) happens after the pop.
+    // Create tasks first (without retryData, instant), then compute
+    // retryData in background isolate so the UI never blocks.
     if (mounted) {
       Navigator.pop(context);
     }
-    // Yield to the event loop so the pop animation and home page frame
-    // render BEFORE blocking synchronous work (base64Encode) begins.
+    // Yield to the event loop so the pop transition renders before any
+    // background work begins.
     await Future<void>.delayed(Duration.zero);
 
     // Add ALL tasks to the task list first so they appear simultaneously.
-    // Each video gets its own background task with a unique title.
+    // retryData is null initially — computed asynchronously below.
     final taskIds = <String>[];
+    final taskVideoMap = <String, SelectedVideo>{}; // taskId -> video
+    final taskTitleMap = <String, String>{};
     for (final video in videosToProcess) {
       final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
-
-      // Build retry data: encode only the current video bytes as base64
-      // so they can be restored on retry (each task handles one file)
-      final retryData = <String, dynamic>{
-        'type': 'audioSeparation',
-        'videos': [
-          <String, dynamic>{
-            'bytes': base64Encode(video.bytes),
-            'name': video.name,
-            'format': video.format,
-          },
-        ],
-      };
-
       final taskId = bgNotifier.addTask(
         type: BackgroundTaskType.audioSeparation,
         title: title,
-        retryData: retryData,
+        retryData: null, // will be set after async isolate computation
       );
       taskIds.add(taskId);
+      taskVideoMap[taskId] = video;
+      taskTitleMap[taskId] = title;
+    }
+
+    // Compute retryData for each task in a background isolate
+    // (base64Encode is CPU-bound, must not block the main thread).
+    for (final taskId in taskIds) {
+      final video = taskVideoMap[taskId]!;
+      final retryData = await Isolate.run(() {
+        return <String, dynamic>{
+          'type': 'audioSeparation',
+          'videos': [
+            <String, dynamic>{
+              'bytes': base64Encode(video.bytes),
+              'name': video.name,
+              'format': video.format,
+            },
+          ],
+        };
+      });
+      bgNotifier.setRetryData(taskId, retryData);
     }
 
     // Now process each video sequentially
