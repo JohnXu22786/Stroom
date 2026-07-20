@@ -20,7 +20,6 @@ class AnkiSyncClient {
     final header = jsonEncode({
       'sync_version': 1,
       'sync_key': '',
-      'client_ver': 'ankidart:1.0',
       'session_key': _randomSessionId(),
     });
 
@@ -28,7 +27,7 @@ class AnkiSyncClient {
       uri,
       body: body,
       headers: {
-        'Content-Type': 'application/octet-stream',
+        'Content-Type': 'application/json',
         'X-Sync-Header': header,
       },
     );
@@ -54,7 +53,6 @@ class AnkiSyncClient {
     final header = jsonEncode({
       'sync_version': 1,
       'sync_key': key,
-      'client_ver': 'ankidart:1.0',
       'session_key': _randomSessionId(),
     });
 
@@ -62,7 +60,7 @@ class AnkiSyncClient {
       uri,
       body: jsonEncode({'u': key}),
       headers: {
-        'Content-Type': 'application/octet-stream',
+        'Content-Type': 'application/json',
         'X-Sync-Header': header,
       },
     );
@@ -81,12 +79,12 @@ class AnkiSyncClient {
     throw AnkiSyncException('hostKey 获取失败: ${resp.body.trim()}');
   }
 
+  /// Generate a random session ID matching Anki Rust's approach:
+  /// 15 random bytes, base64-encoded → 20 characters.
   static String _randomSessionId() {
-    const chars =
-        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    final rng = Random();
-    return String.fromCharCodes(Iterable.generate(
-        10, (_) => chars.codeUnitAt(rng.nextInt(chars.length))));
+    final rng = Random.secure();
+    final bytes = List<int>.generate(15, (_) => rng.nextInt(256));
+    return base64Url.encode(bytes);
   }
 }
 
