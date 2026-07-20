@@ -1373,6 +1373,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (mounted) {
       Navigator.pop(context);
     }
+    // Yield to the event loop so the pop animation and home page frame
+    // render BEFORE blocking synchronous work (base64Encode) begins.
+    await Future<void>.delayed(Duration.zero);
 
     // Create a background task for tracking
     final timestamp = _currentTimestamp();
