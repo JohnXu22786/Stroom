@@ -78,12 +78,11 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   Point3D? _constGroundPos; // ground (y=0) position during construction
   double _constHeight = 0; // height offset from ground during drag
   Offset? _constStartPoint; // screen position where point gesture started
-  bool _constHeightAdjusted = false; // whether height was adjusted via drag
   bool _constPointPlaced = false; // whether the point was committed
 
   // Gesture state
   Offset? _lastFocalPoint;
-  double? _lastScale;
+  double? _initialScaleDistance; // camera distance at gesture start (for stable zoom)
   bool _isReady = false;
 
   // Canvas size
@@ -202,6 +201,9 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       } else {
         _construction = ConstructionState(tool: tool);
       }
+      _constPointPlaced = false;
+      _constGroundPos = null;
+      _constStartPoint = null;
     });
     widget.onToolInstruction?.call(_construction?.currentInstruction ?? '');
   }
@@ -209,6 +211,11 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   @override
   void initState() {
     super.initState();
+    // Initialize tool from widget, which also creates construction state
+    _currentTool = widget.currentTool;
+    if (_currentTool != ConstructionTool.move) {
+      _construction = ConstructionState(tool: _currentTool);
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (!_isReady) {
@@ -226,19 +233,24 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     }
   }
 
+  @override
+  void dispose() {
+    _construction = null;
+    super.dispose();
+  }
+
   // ==================================================================
   // Gesture handling
   // ==================================================================
   void _onScaleStart(ScaleStartDetails details) {
     _lastFocalPoint = details.focalPoint;
-    _lastScale = 1.0;
+    _initialScaleDistance = _cameraDistance;
 
     // In construction mode, start tracking for point + height placement
     if (_currentTool != ConstructionTool.move && _construction != null) {
       _constStartPoint = details.focalPoint;
       _constGroundPos = null;
       _constHeight = 0;
-      _constHeightAdjusted = false;
       _constPointPlaced = false;
     }
   }
@@ -259,40 +271,67 @@ class MathCanvas3DState extends State<MathCanvas3D> {
         // Subsequent movement: vertical drag adjusts height
         final dy = focalPoint.dy - _lastFocalPoint!.dy;
         _constHeight -= dy * 0.08; // sensitivity: pixels → world units
-        _constHeightAdjusted = true;
         // Recompute ground x,z from current pointer (allows moving point around)
         _constGroundPos = _screenToPointOnPlane(focalPoint.dx, focalPoint.dy);
       }
       _lastFocalPoint = focalPoint;
-      _lastScale = scale;
       return; // Don't orbit during construction
     }
 
-    // ===== Standard orbit/pan/zoom (Move tool mode)
-    if (details.pointerCount == 1 ||
-        (scale == 1.0 && focalPoint != _lastFocalPoint)) {
+    // ===== Standard orbit/pan/zoom (Move tool or no construction active)
+    if (details.pointerCount == 1) {
       // Single finger: orbit
-      final dx =
-          _lastFocalPoint == null ? 0.0 : (focalPoint.dx - _lastFocalPoint!.dx);
-      final dy =
-          _lastFocalPoint == null ? 0.0 : (focalPoint.dy - _lastFocalPoint!.dy);
+      final dx = _lastFocalPoint == null
+          ? 0.0
+          : (focalPoint.dx - _lastFocalPoint!.dx);
+      final dy = _lastFocalPoint == null
+          ? 0.0
+          : (focalPoint.dy - _lastFocalPoint!.dy);
 
       setState(() {
-        _cameraTheta += dx * 0.01;
-        _cameraPhi = (_cameraPhi + dy * 0.01)
+        _cameraTheta -= dx * 0.01;
+        _cameraPhi = (_cameraPhi - dy * 0.01)
             .clamp(-dart_math.pi * 0.49, dart_math.pi * 0.49);
       });
-    } else if (scale != 1.0 && _lastScale != null) {
-      // Two fingers: zoom
-      final scaleChange = scale / _lastScale!;
-      final targetScale = 1 / scaleChange;
-      setState(() {
-        _cameraDistance = (_cameraDistance * targetScale).clamp(0.1, 1000);
-      });
+    } else if (details.pointerCount >= 2) {
+      // Two fingers: detect scale change (zoom) vs focal point change (pan)
+      // Use cumulative scale relative to gesture start for zoom detection
+      final hasScaleChange =
+          (scale - 1.0).abs() > 0.02 && _initialScaleDistance != null;
+      final hasPanMovement = _lastFocalPoint != null &&
+          (focalPoint - _lastFocalPoint!).distance > 2.0;
+
+      if (hasScaleChange) {
+        // Pinch zoom: use cumulative scale from gesture start for stability
+        final newDistance =
+            (_initialScaleDistance! / scale).clamp(0.1, 1000).toDouble();
+        setState(() {
+          _cameraDistance = newDistance;
+        });
+      } else if (hasPanMovement) {
+        // Two-finger drag without scale change = pan
+        final dx = _lastFocalPoint == null
+            ? 0.0
+            : (focalPoint.dx - _lastFocalPoint!.dx);
+        final dy = _lastFocalPoint == null
+            ? 0.0
+            : (focalPoint.dy - _lastFocalPoint!.dy);
+
+        // Build camera for pan computation
+        final cam = Camera3D(
+          target: _cameraTarget,
+          distance: _cameraDistance,
+          theta: _cameraTheta,
+          phi: _cameraPhi,
+        );
+        final panned = cam.pan(deltaX: dx, deltaY: dy);
+        setState(() {
+          _cameraTarget = panned.target;
+        });
+      }
     }
 
     _lastFocalPoint = focalPoint;
-    _lastScale = scale;
   }
 
   void _onScaleEnd(ScaleEndDetails details) {
@@ -312,7 +351,6 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       _constGroundPos = null;
       _constStartPoint = null;
       _lastFocalPoint = null;
-      _lastScale = null;
       widget.onViewportChange?.call();
       return;
     }
@@ -332,13 +370,11 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       _constGroundPos = null;
       _constStartPoint = null;
       _lastFocalPoint = null;
-      _lastScale = null;
       widget.onViewportChange?.call();
       return;
     }
 
     _lastFocalPoint = null;
-    _lastScale = null;
     _constStartPoint = null;
     _constGroundPos = null;
     widget.onViewportChange?.call();
@@ -464,8 +500,11 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     }
     widget.onToolInstruction?.call(_construction?.currentInstruction ?? '');
 
+    // Reset the placement guard so the next gesture can place a point
+    // (needed for tap-based construction where _onScaleStart won't fire again)
+    _constPointPlaced = false;
+
     // Update preview objects
-    final preview = _construction?.previewObject;
     _objectsVersion++;
   }
 
@@ -486,16 +525,6 @@ class MathCanvas3DState extends State<MathCanvas3D> {
           onScaleStart: _onScaleStart,
           onScaleUpdate: _onScaleUpdate,
           onScaleEnd: _onScaleEnd,
-          onTapUp: _currentTool != ConstructionTool.move
-              ? (details) {
-                  if (!_constPointPlaced) {
-                    _constPointPlaced = true;
-                    final pt = _screenToPointOnPlane(
-                        details.localPosition.dx, details.localPosition.dy);
-                    _handleConstructionPoint(pt);
-                  }
-                }
-              : null,
           child: Listener(
             onPointerSignal: _onPointerSignal,
             child: ClipRRect(
