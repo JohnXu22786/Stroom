@@ -27,15 +27,14 @@ class AnkiFullSyncClient {
     final header = jsonEncode({
       'sync_version': 1,
       'sync_key': '',
-      'client_ver': 'ankidart:1.0',
       'session_key': _sessionId(),
     });
     final resp = await http.post(
       uri,
       body: body,
       headers: {
-        'Content-Type': 'application/octet-stream',
-        'X-Sync-Header': header
+        'Content-Type': 'application/json',
+        'X-Sync-Header': header,
       },
     );
     if (resp.statusCode != 200) {
@@ -48,11 +47,11 @@ class AnkiFullSyncClient {
     return SyncAuth()..hkey = key;
   }
 
+  /// 15 random bytes, base64-encoded → 20 chars (matching Anki Rust).
   static String _sessionId() {
-    const c = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    final r = Random();
-    return String.fromCharCodes(
-        Iterable.generate(10, (_) => c.codeUnitAt(r.nextInt(c.length))));
+    final r = Random.secure();
+    final bytes = List<int>.generate(15, (_) => r.nextInt(256));
+    return base64Url.encode(bytes);
   }
 
   /// Login using existing session key.
