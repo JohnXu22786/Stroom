@@ -1035,6 +1035,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     if (mounted) {
       Navigator.pop(context);
     }
+    // Yield to the event loop so the pop animation and home page frame
+    // render BEFORE blocking synchronous work (base64Encode) begins.
+    await Future<void>.delayed(Duration.zero);
 
     // Step 1: Create ALL tasks as waiting first so they appear in the list
     final taskEntries = <_TaskEntry>[];
