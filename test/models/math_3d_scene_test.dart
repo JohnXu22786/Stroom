@@ -153,7 +153,8 @@ void main() {
     });
 
     test('perspective projection produces different results from parallel', () {
-      final parallel = Projection3D.parallel(width: 800, height: 600, scale: 50);
+      final parallel =
+          Projection3D.parallel(width: 800, height: 600, scale: 50);
       final perspective = Projection3D.perspective(
         width: 800,
         height: 600,
@@ -289,10 +290,22 @@ void main() {
       // A = translate(1,2,3), B = scale(2,2,2)
       // A * B means "scale then translate" — translation is unchanged
       final a = <double>[
-        1, 0, 0, 0,
-        0, 1, 0, 0,
-        0, 0, 1, 0,
-        1, 2, 3, 1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        2,
+        3,
+        1,
       ];
       final b = scaleMatrix4(2, 2, 2);
       final result = multiplyMatrix4(a, b);
