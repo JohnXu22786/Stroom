@@ -50,7 +50,8 @@ Uint8List _buildPat(int pmtPid) {
   final data = Uint8List(17); // pointer_field + section data
   data[0] = 0x00; // pointer_field = 0 (section starts at next byte)
   data[1] = 0x00; // table_id = PAT
-  data[2] = 0xB0 | ((sectionLength >> 8) & 0x0F); // section_syntax_indicator=1, length high
+  data[2] = 0xB0 |
+      ((sectionLength >> 8) & 0x0F); // section_syntax_indicator=1, length high
   data[3] = sectionLength & 0xFF; // section_length low
   data[4] = 0x00; // transport_stream_id high byte
   data[5] = 0x01; // transport_stream_id low byte = 1
@@ -88,7 +89,8 @@ Uint8List _buildPmt(int videoPid, int audioPid) {
   final data = Uint8List(27); // pointer_field + section data
   data[0] = 0x00; // pointer_field = 0 (section starts at next byte)
   data[1] = 0x02; // table_id = PMT
-  data[2] = 0xB0 | ((sectionLength >> 8) & 0x0F); // section_syntax_indicator=1, length high
+  data[2] = 0xB0 |
+      ((sectionLength >> 8) & 0x0F); // section_syntax_indicator=1, length high
   data[3] = sectionLength & 0xFF; // section_length low
   data[4] = 0x00; // program_number high = 0
   data[5] = 0x01; // program_number low = 1
@@ -137,8 +139,22 @@ Uint8List _buildH264PesPayload() {
   buffer.add([0x00, 0x00, 0x00, 0x01, 0x68, 0xCE, 0x38, 0x80]);
   // IDR slice NAL unit (0x65) — avoid 0x00000001 inside payload
   buffer.add([
-    0x00, 0x00, 0x00, 0x01, 0x65, 0x88, 0x84, 0xAF,
-    0x60, 0xA0, 0xB0, 0xC0, 0xD0, 0xE0, 0xF0, 0x12,
+    0x00,
+    0x00,
+    0x00,
+    0x01,
+    0x65,
+    0x88,
+    0x84,
+    0xAF,
+    0x60,
+    0xA0,
+    0xB0,
+    0xC0,
+    0xD0,
+    0xE0,
+    0xF0,
+    0x12,
   ]);
   // Non-IDR slice NAL unit (0x41)
   buffer.add([0x00, 0x00, 0x00, 0x01, 0x41, 0x9A, 0x22, 0x00]);
@@ -157,8 +173,7 @@ Uint8List _buildH264PesPayload() {
 ///   [8]: PES_header_data_length — 1 byte
 ///   [9..13]: PTS data (5 bytes) when PTS_DTS_flags = '10'
 ///   [14+]: elementary stream payload
-Uint8List _buildPesPacket(int streamId, Uint8List pesPayload,
-    {int pts = 0}) {
+Uint8List _buildPesPacket(int streamId, Uint8List pesPayload, {int pts = 0}) {
   const pesHeaderLen = 14; // 9 fixed + 5 (PTS) = 14
   final totalLen = pesHeaderLen + pesPayload.length;
   final data = Uint8List(totalLen);
@@ -209,11 +224,11 @@ void main() {
 
     test('returns list of TS packets from valid data', () {
       final patPayload = _buildPat(0x100);
-      final patPacket = _buildTsPacket(0x0000, 0, patPayload,
-          payloadUnitStart: true);
+      final patPacket =
+          _buildTsPacket(0x0000, 0, patPayload, payloadUnitStart: true);
       final pmtPayload = _buildPmt(0x101, 0x102);
-      final pmtPacket = _buildTsPacket(0x0100, 0, pmtPayload,
-          payloadUnitStart: true);
+      final pmtPacket =
+          _buildTsPacket(0x0100, 0, pmtPayload, payloadUnitStart: true);
 
       final allData = Uint8List.fromList([...patPacket, ...pmtPacket]);
       final packets = TsDemuxer.parseTsPackets(allData);
@@ -231,11 +246,11 @@ void main() {
       final pmtPid = 0x100;
 
       final patPayload = _buildPat(pmtPid);
-      final patPacket = _buildTsPacket(0x0000, 0, patPayload,
-          payloadUnitStart: true);
+      final patPacket =
+          _buildTsPacket(0x0000, 0, patPayload, payloadUnitStart: true);
       final pmtPayload = _buildPmt(videoPid, audioPid);
-      final pmtPacket = _buildTsPacket(pmtPid, 0, pmtPayload,
-          payloadUnitStart: true);
+      final pmtPacket =
+          _buildTsPacket(pmtPid, 0, pmtPayload, payloadUnitStart: true);
 
       final allData = Uint8List.fromList([...patPacket, ...pmtPacket]);
       final packets = TsDemuxer.parseTsPackets(allData);
@@ -300,7 +315,13 @@ void main() {
       //   data[5] = (6 << 5) | (0x7FF >> 6 & 0x1F) = 0xC0 | 0x1F = 0xDF
       //   data[6] = (0x7FF & 0x3F) << 2 = 0x3F << 2 = 0xFC
       final adtsHeader = Uint8List.fromList([
-        0xFF, 0xF1, 0x4C, 0x80, 0x03, 0xDF, 0xFC,
+        0xFF,
+        0xF1,
+        0x4C,
+        0x80,
+        0x03,
+        0xDF,
+        0xFC,
       ]);
       // Raw AAC frame data (23 bytes of dummy data)
       final aacFrame = Uint8List(23);
@@ -326,16 +347,29 @@ void main() {
       const frameLen = 30;
       const rawLen = frameLen - 7; // 23
       final adtsHeader = Uint8List.fromList([
-        0xFF, 0xF1, 0x4C, 0x80, 0x03, 0xDF, 0xFC,
+        0xFF,
+        0xF1,
+        0x4C,
+        0x80,
+        0x03,
+        0xDF,
+        0xFC,
       ]);
       final frameData1 = Uint8List(rawLen);
-      final frameData2 = Uint8List(rawLen + 10); // second frame has more data (33 bytes raw)
+      final frameData2 =
+          Uint8List(rawLen + 10); // second frame has more data (33 bytes raw)
       // For the second frame, need a different header with:
       // frame_length = 7 + 33 = 40
       // (40 >> 3) & 0xFF = 5 → data[4] = 0x05
       // (40 & 7) = 0 → data[5] = (0 << 5) | 0x1F = 0x1F
       final adtsHeader2 = Uint8List.fromList([
-        0xFF, 0xF1, 0x4C, 0x80, 0x05, 0x1F, 0xFC,
+        0xFF,
+        0xF1,
+        0x4C,
+        0x80,
+        0x05,
+        0x1F,
+        0xFC,
       ]);
 
       final frame1 = Uint8List.fromList([...adtsHeader, ...frameData1]);
@@ -369,12 +403,23 @@ void main() {
 
   group('Mp4Muxer - buildAvccBox', () {
     test('builds avcC box from SPS and PPS NAL units', () {
-      final spsNal = H264NalUnit(type: 7, data: Uint8List.fromList([
-        0x67, 0x42, 0x00, 0x1E, 0x8D,
-      ]));
-      final ppsNal = H264NalUnit(type: 8, data: Uint8List.fromList([
-        0x68, 0xCE, 0x38, 0x80,
-      ]));
+      final spsNal = H264NalUnit(
+          type: 7,
+          data: Uint8List.fromList([
+            0x67,
+            0x42,
+            0x00,
+            0x1E,
+            0x8D,
+          ]));
+      final ppsNal = H264NalUnit(
+          type: 8,
+          data: Uint8List.fromList([
+            0x68,
+            0xCE,
+            0x38,
+            0x80,
+          ]));
 
       final avcc = Mp4Muxer.buildAvccBox([spsNal], [ppsNal]);
       expect(avcc.length, greaterThan(20));
@@ -441,12 +486,12 @@ void main() {
       // Build PAT + PMT
       final patPid = 0x0000;
       final patPayload = _buildPat(pmtPid);
-      final patPacket = _buildTsPacket(patPid, 0, patPayload,
-          payloadUnitStart: true);
+      final patPacket =
+          _buildTsPacket(patPid, 0, patPayload, payloadUnitStart: true);
 
       final pmtPayload = _buildPmt(videoPid, 0x102);
-      final pmtPacket = _buildTsPacket(pmtPid, 0, pmtPayload,
-          payloadUnitStart: true);
+      final pmtPacket =
+          _buildTsPacket(pmtPid, 0, pmtPayload, payloadUnitStart: true);
 
       // Build larger video PES payload (big enough to split)
       final largePayload = Uint8List.fromList([
@@ -457,11 +502,11 @@ void main() {
 
       // Split PES across multiple TS packets
       final splitPoint = (pesPacket.length ~/ 2);
-      final tsPacket1 = _buildTsPacket(videoPid, 0,
-          pesPacket.sublist(0, splitPoint),
+      final tsPacket1 = _buildTsPacket(
+          videoPid, 0, pesPacket.sublist(0, splitPoint),
           payloadUnitStart: true);
-      final tsPacket2 = _buildTsPacket(videoPid, 1,
-          pesPacket.sublist(splitPoint),
+      final tsPacket2 = _buildTsPacket(
+          videoPid, 1, pesPacket.sublist(splitPoint),
           payloadUnitStart: false);
 
       final allData = Uint8List.fromList([
@@ -494,12 +539,12 @@ void main() {
       // Build PAT + PMT
       final patPid = 0x0000;
       final patPayload = _buildPat(pmtPid);
-      final patPacket = _buildTsPacket(patPid, 0, patPayload,
-          payloadUnitStart: true);
+      final patPacket =
+          _buildTsPacket(patPid, 0, patPayload, payloadUnitStart: true);
 
       final pmtPayload = _buildPmt(0x101, audioPid);
-      final pmtPacket = _buildTsPacket(pmtPid, 0, pmtPayload,
-          payloadUnitStart: true);
+      final pmtPacket =
+          _buildTsPacket(pmtPid, 0, pmtPayload, payloadUnitStart: true);
 
       // Build AAC ADTS frame (frame_length = 7 + 50 = 57)
       // frame_length = 57
@@ -508,7 +553,13 @@ void main() {
       // data[5] = (1 << 5) | (0x7FF >> 6 & 0x1F) = 0x20 | 0x1F = 0x3F
       // data[6] = 0xFC
       final adtsHeader = Uint8List.fromList([
-        0xFF, 0xF1, 0x4C, 0x80, 0x07, 0x3F, 0xFC,
+        0xFF,
+        0xF1,
+        0x4C,
+        0x80,
+        0x07,
+        0x3F,
+        0xFC,
       ]);
       final aacData = Uint8List(50);
       for (int i = 0; i < 50; i++) {
@@ -520,10 +571,11 @@ void main() {
       final pesPacket = _buildPesPacket(0xC0, aacFrame);
 
       // Place in TS packet
-      final tsPacket = _buildTsPacket(audioPid, 0, pesPacket,
-          payloadUnitStart: true);
+      final tsPacket =
+          _buildTsPacket(audioPid, 0, pesPacket, payloadUnitStart: true);
 
-      final allData = Uint8List.fromList([...patPacket, ...pmtPacket, ...tsPacket]);
+      final allData =
+          Uint8List.fromList([...patPacket, ...pmtPacket, ...tsPacket]);
 
       final packets = TsDemuxer.parseTsPackets(allData);
       final pids = TsDemuxer.findProgramMap(packets);
@@ -534,7 +586,9 @@ void main() {
     });
 
     test('returns empty when no audio PID found', () {
-      final packets = <TsPacket>[TsPacket(pid: 0x0000, payload: Uint8List(10), payloadUnitStart: true)];
+      final packets = <TsPacket>[
+        TsPacket(pid: 0x0000, payload: Uint8List(10), payloadUnitStart: true)
+      ];
       final pids = ProgramPids(videoPid: 0x101, audioPid: null);
       final audioData = TsDemuxer.extractAudioBitstream(packets, pids);
       expect(audioData, isEmpty);
@@ -549,35 +603,44 @@ void main() {
 
       // Build PAT
       final patData = _buildPat(pmtPid);
-      final patPacket = _buildTsPacket(0x0000, 0, patData,
-          payloadUnitStart: true);
+      final patPacket =
+          _buildTsPacket(0x0000, 0, patData, payloadUnitStart: true);
 
       // Build PMT
       final pmtData = _buildPmt(videoPid, audioPid);
-      final pmtPacket = _buildTsPacket(pmtPid, 0, pmtData,
-          payloadUnitStart: true);
+      final pmtPacket =
+          _buildTsPacket(pmtPid, 0, pmtData, payloadUnitStart: true);
 
       // Build video data
       final h264Payload = _buildH264PesPayload();
       final videoPes = _buildPesPacket(0xE0, h264Payload);
-      final videoPacket = _buildTsPacket(videoPid, 0, videoPes,
-          payloadUnitStart: true);
+      final videoPacket =
+          _buildTsPacket(videoPid, 0, videoPes, payloadUnitStart: true);
 
       // Build AAC data (frame_length = 7 + 30 = 37)
       // (37 >> 11) = 0, (37 >> 3) = 4 (0x04), (37 & 7) = 5
       // data[4] = 0x04
       // data[5] = (5 << 5) | 0x1F = 0xA0 | 0x1F = 0xBF
       final adtsHeader = Uint8List.fromList([
-        0xFF, 0xF1, 0x4C, 0x80, 0x04, 0xBF, 0xFC,
+        0xFF,
+        0xF1,
+        0x4C,
+        0x80,
+        0x04,
+        0xBF,
+        0xFC,
       ]);
       final aacRaw = Uint8List(30);
       final aacFrame = Uint8List.fromList([...adtsHeader, ...aacRaw]);
       final audioPes = _buildPesPacket(0xC0, aacFrame);
-      final audioPacket = _buildTsPacket(audioPid, 0, audioPes,
-          payloadUnitStart: true);
+      final audioPacket =
+          _buildTsPacket(audioPid, 0, audioPes, payloadUnitStart: true);
 
       final tsData = Uint8List.fromList([
-        ...patPacket, ...pmtPacket, ...videoPacket, ...audioPacket,
+        ...patPacket,
+        ...pmtPacket,
+        ...videoPacket,
+        ...audioPacket,
       ]);
 
       // Write temp TS file

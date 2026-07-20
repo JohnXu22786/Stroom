@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/pages/provider_settings_panel.dart' show validateJsonValue;
+import 'package:stroom/pages/provider_settings_panel.dart'
+    show validateJsonValue;
 
 void main() {
   group('validateJsonValue', () {

@@ -153,7 +153,8 @@ class TsDemuxer {
         offset += 1;
 
         // Parse programs
-        final sectionEnd = offset + sectionLength - 9; // minus CRC (4) and header (5)
+        final sectionEnd =
+            offset + sectionLength - 9; // minus CRC (4) and header (5)
         while (offset + 4 <= sectionEnd && offset + 4 <= payload.length) {
           // program_number (2 bytes)
           final progNum = (payload[offset] << 8) | payload[offset + 1];
@@ -327,8 +328,7 @@ class TsDemuxer {
       // Check for ADTS sync word (0xFFF)
       if (data[i] == 0xFF && (data[i + 1] & 0xF0) == 0xF0) {
         // Parse ADTS frame length (13 bits)
-        final frameLength =
-            ((data[i + 3] & 0x03) << 11) |
+        final frameLength = ((data[i + 3] & 0x03) << 11) |
             (data[i + 4] << 3) |
             ((data[i + 5] >> 5) & 0x07);
 
@@ -496,7 +496,8 @@ class TsDemuxer {
     }
     onProgress?.call(30);
 
-    debugPrint('[TsDemuxer] Found video PID: 0x${pids.videoPid.toRadixString(16)}'
+    debugPrint(
+        '[TsDemuxer] Found video PID: 0x${pids.videoPid.toRadixString(16)}'
         '${pids.audioPid != null ? ", audio PID: 0x${pids.audioPid!.toRadixString(16)}" : ""}');
 
     // Extract video NAL units
@@ -517,8 +518,7 @@ class TsDemuxer {
         : <AacFrame>[];
     onProgress?.call(60);
 
-    debugPrint(
-        '[TsDemuxer] Extracted ${aacFrames.length} AAC frames');
+    debugPrint('[TsDemuxer] Extracted ${aacFrames.length} AAC frames');
 
     // Separate SPS, PPS, and other NAL units
     final spsNalus = <H264NalUnit>[];
@@ -550,7 +550,8 @@ class TsDemuxer {
     await File(outputPath).writeAsBytes(mp4Data);
     onProgress?.call(100);
 
-    debugPrint('[TsDemuxer] MP4 written to $outputPath (${mp4Data.length} bytes)');
+    debugPrint(
+        '[TsDemuxer] MP4 written to $outputPath (${mp4Data.length} bytes)');
     return outputPath;
   }
 }
@@ -696,11 +697,42 @@ class Mp4Muxer {
     content.add(Uint8List(10));
     // matrix (36 bytes) — identity
     content.add([
-      0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00,
+      0x00,
+      0x01,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x01,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x40,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
     ]);
     // pre-defined (24 bytes) — 6 zeros
     content.add(Uint8List(24));
@@ -815,18 +847,50 @@ class Mp4Muxer {
     content.add([0x00, 0x00]);
     // matrix (36 bytes)
     content.add([
-      0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00,
+      0x00,
+      0x01,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x01,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x40,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
     ]);
     // width, height (fixed-point 16.16)
     content.add([0x00, 0x00, 0x00, 0x00]); // 0
     content.add([0x00, 0x00, 0x00, 0x00]); // 0
 
     return buildFullBox('tkhd', content.toBytes(),
-        version: 1, flags: 0x07); // track_enabled | track_in_movie | track_in_preview
+        version: 1,
+        flags: 0x07); // track_enabled | track_in_movie | track_in_preview
   }
 
   /// Build tkhd for audio track.
@@ -841,17 +905,47 @@ class Mp4Muxer {
     content.add([0x00, 0x00, 0x00, 0x00]); // layer, alternate_group
     content.add([0x01, 0x00]); // volume: 1.0
     content.add([
-      0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00,
+      0x00,
+      0x01,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x01,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x40,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
     ]);
     content.add([0x00, 0x00, 0x00, 0x00]); // width
     content.add([0x00, 0x00, 0x00, 0x00]); // height
 
-    return buildFullBox('tkhd', content.toBytes(),
-        version: 1, flags: 0x07);
+    return buildFullBox('tkhd', content.toBytes(), version: 1, flags: 0x07);
   }
 
   /// Build mdhd (media header) box.
@@ -1080,7 +1174,10 @@ class Mp4Muxer {
     esdsContent.add([0x05]); // tag
     esdsContent.add([0x02]); // length (2)
     // AAC audio specific config: 2 channels, 44100 Hz, LC profile
-    esdsContent.add([0x12, 0x10]); // 0x12 = LC(2)<<3 | srate(4)>>1, 0x10 = srate(4)<<7 | 2ch
+    esdsContent.add([
+      0x12,
+      0x10
+    ]); // 0x12 = LC(2)<<3 | srate(4)>>1, 0x10 = srate(4)<<7 | 2ch
 
     final esdsBox = buildBox('esds', esdsContent.toBytes());
     mp4aContent.add(esdsBox);
