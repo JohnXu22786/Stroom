@@ -83,7 +83,8 @@ void main() {
       expect(find.text('Anki闪卡'), findsOneWidget);
     });
 
-    testWidgets('闪卡 card is visible on home page with Anki label', (tester) async {
+    testWidgets('闪卡 card is visible on home page with Anki label',
+        (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 

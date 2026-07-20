@@ -306,7 +306,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Anki闪卡片组已导出到: $path'), backgroundColor: Colors.green),
+              content: Text('Anki闪卡片组已导出到: $path'),
+              backgroundColor: Colors.green),
         );
       }
     } catch (e) {
