@@ -574,38 +574,58 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// Wraps the rendered diagram [child] in gesture detectors that provide
   /// pan and zoom for all input types (mouse, touch, trackpad).
   ///
-  /// Uses [HitTestBehavior.opaque] to absorb all pointer events within the
-  /// Mermaid diagram area, preventing the parent chat scroll view from
-  /// capturing them. This ensures that interactions within the diagram area
-  /// always pan/zoom the diagram instead of scrolling the chat page.
+  /// Uses a [Stack] with a transparent overlay [Container] on top of the
+  /// WebView to absorb ALL pointer events within the Mermaid diagram area,
+  /// even on transparent parts of the SVG where the WebView would otherwise
+  /// pass events through to the parent scroll view. This ensures that
+  /// interactions anywhere within the diagram area always pan/zoom the
+  /// diagram instead of scrolling the chat page.
   ///
-  /// The [GestureDetector] with [onScaleStart]/[onScaleUpdate] handles:
+  /// This approach is similar to how Markdown table horizontal scrolling
+  /// uses [SingleChildScrollView] to create a gesture boundary that
+  /// absorbs events without affecting the parent. The overlay approach is
+  /// necessary because platform views (InAppWebView / WebView2 on Windows)
+  /// can receive touch/pointer events directly from the OS, bypassing
+  /// Flutter's hit testing. A transparent overlay on top of the Stack
+  /// captures every event at the Flutter level before it reaches the
+  /// platform view.
+  ///
+  /// The [GestureDetector] on the overlay with [onScaleStart]/[onScaleUpdate]
+  /// handles:
   /// - Single-finger drag → pan
   /// - Two-finger pinch → zoom (mobile and touchpad)
-  /// - The [ScaleGestureRecognizer] natively supports both single and
-  ///   multi-touch, so the JS touch gesture handlers in the WebView are
-  ///   no longer needed for inline rendering — all gesture logic is
-  ///   handled at the Flutter level.
   ///
-  /// The [Listener] with [onPointerSignal] handles Ctrl/MouseWheel zoom
-  /// on desktop. The opaque hit test also prevents the parent scroll view
-  /// from receiving wheel events while the pointer is over the diagram.
+  /// The [Listener] on the overlay with [onPointerSignal] handles
+  /// Ctrl/MouseWheel zoom on desktop.
   ///
-  /// Note: The inline HTML template still includes touch gesture JS for
-  /// mobile as a fallback when [HitTestBehavior.opaque] does not fully
-  /// absorb all touch sequences on certain platforms.
+  /// All gestures are communicated to the WebView via [evaluateJavascript]
+  /// calls (see [_onScaleUpdate] and [_onPointerSignal]), so the WebView
+  /// JS handlers are no longer needed for inline rendering — all gesture
+  /// logic is handled at the Flutter level.
+  ///
+  /// Note: The inline HTML template still includes touch gesture JS as a
+  /// fallback; it is not actively used by this gesture wrapper.
   Widget _buildGestureWrapper(Widget child) {
-    return Listener(
-      onPointerSignal: _onPointerSignal,
-      child: GestureDetector(
-        onScaleStart: _onScaleStart,
-        onScaleUpdate: _onScaleUpdate,
-        // Use opaque hit testing to absorb all pointer events within the
-        // diagram area, preventing the parent scroll view from receiving
-        // them. This fixes the issue where scrolling the chat page could
-        // sometimes be triggered when interacting with the Mermaid diagram.
-        behavior: HitTestBehavior.opaque,
-        child: child,
+    return ClipRect(
+      child: Stack(
+        children: [
+          // The WebView — positioned below the gesture overlay.
+          Positioned.fill(child: child),
+          // Gesture overlay: a transparent Container on top that captures
+          // ALL pointer events within the Mermaid widget bounds. This
+          // prevents transparent SVG areas from passing events through.
+          Positioned.fill(
+            child: Listener(
+              onPointerSignal: _onPointerSignal,
+              child: GestureDetector(
+                onScaleStart: _onScaleStart,
+                onScaleUpdate: _onScaleUpdate,
+                behavior: HitTestBehavior.opaque,
+                child: Container(color: Colors.transparent),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
