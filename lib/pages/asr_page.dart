@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -1031,38 +1032,50 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     // Capture the list before pop
     final audiosToProcess = List<SelectedAudio>.from(_selectedAudios);
 
-    // Pop back to home page immediately so user can see task progress
+    // Pop back to home page IMMEDIATELY so user can see task progress.
+    // Create task first (without retryData, instant), then compute
+    // retryData in background isolate so the UI never blocks.
     if (mounted) {
       Navigator.pop(context);
     }
+    // Yield to the event loop so the pop transition renders before any
+    // background work begins.
+    await Future<void>.delayed(Duration.zero);
 
-    // Step 1: Create ALL tasks as waiting first so they appear in the list
+    // Step 1: Create ALL tasks as waiting first so they appear in the list.
+    // retryData is null initially — computed asynchronously below.
     final taskEntries = <_TaskEntry>[];
     for (final audio in audiosToProcess) {
       final title = 'ASR_${audio.name}';
-
-      // Build retry data: encode only the current audio bytes as base64
-      // so they can be restored on retry (each task handles one file)
-      final retryData = <String, dynamic>{
-        'type': 'asr',
-        'audios': [
-          <String, dynamic>{
-            'bytes': base64Encode(audio.bytes),
-            'name': audio.name,
-            'format': audio.format,
-          },
-        ],
-        'modelIndex': _selectedModelIndex,
-        'saveFolder': _saveFolder,
-      };
-
       final taskId = bgNotifier.addTask(
         type: BackgroundTaskType.asr,
         title: title,
-        retryData: retryData,
+        retryData: null, // will be set after async isolate computation
         startImmediately: false, // create as waiting
       );
       taskEntries.add(_TaskEntry(taskId, audio, title));
+    }
+
+    // Step 1b: Compute retryData for each task in a background isolate
+    // (base64Encode is CPU-bound, must not block the main thread).
+    final modelIndex = _selectedModelIndex;
+    final saveFolder = _saveFolder;
+    for (final entry in taskEntries) {
+      final retryData = await Isolate.run(() {
+        return <String, dynamic>{
+          'type': 'asr',
+          'audios': [
+            <String, dynamic>{
+              'bytes': base64Encode(entry.audio.bytes),
+              'name': entry.audio.name,
+              'format': entry.audio.format,
+            },
+          ],
+          'modelIndex': modelIndex,
+          'saveFolder': saveFolder,
+        };
+      });
+      bgNotifier.setRetryData(entry.taskId, retryData);
     }
 
     // Step 2: Execute tasks in sequence one-by-one (auto-chain)
