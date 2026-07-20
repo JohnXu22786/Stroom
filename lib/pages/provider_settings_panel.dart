@@ -3,6 +3,21 @@ import 'package:flutter/material.dart';
 import '../providers/provider_config.dart';
 import 'llm_model_config_shared.dart';
 
+/// Validate a value as JSON when the param type is 'json'.
+///
+/// Returns an error string if invalid, or null if valid / not applicable.
+/// Exported for testing.
+String? validateJsonValue(String type, String value) {
+  if (type == 'json' && value.trim().isNotEmpty) {
+    try {
+      jsonDecode(value.trim());
+    } catch (_) {
+      return 'JSON 格式不正确';
+    }
+  }
+  return null;
+}
+
 /// Shows a full-screen dialog to edit provider basic info and parameters.
 /// Pattern follows [showAssistantFullEditDialog] from assistant_selection_page.dart.
 Future<ProviderConfigItem?> showProviderSettingsPanel({
@@ -54,6 +69,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   late final TextEditingController _seedController;
   late List<CustomParam> _customParams;
   late List<ReasoningParam> _reasoningParams;
+  final Map<int, String?> _jsonErrors = {};
 
   bool get _isLlmType => widget.providerType == 'llm';
 
@@ -114,8 +130,29 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   void _removeCustomParam(int index) {
     setState(() {
       _customParams.removeAt(index);
+      _jsonErrors.remove(index);
+      // Shift indices after removal
+      final newErrors = <int, String?>{};
+      for (final entry in _jsonErrors.entries) {
+        final newKey = entry.key > index ? entry.key - 1 : entry.key;
+        newErrors[newKey] = entry.value;
+      }
+      _jsonErrors
+        ..clear()
+        ..addAll(newErrors);
     });
   }
+
+  void _validateJsonField(int index, CustomParam param) {
+    final error = validateJsonValue(param.type, param.defaultValue);
+    if (error != null) {
+      _jsonErrors[index] = error;
+    } else {
+      _jsonErrors.remove(index);
+    }
+  }
+
+  bool _jsonParamHasError(int index) => _jsonErrors.containsKey(index);
 
   // =================================================================
   // Reasoning params (including inference intensity)
@@ -614,7 +651,10 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                                     .toList(),
                                 onChanged: (v) {
                                   if (v != null) {
-                                    setState(() => param.type = v);
+                                    setState(() {
+                                      param.type = v;
+                                      _validateJsonField(i, param);
+                                    });
                                   }
                                 },
                               ),
@@ -636,9 +676,25 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                           labelText: '默认参数值',
                           hintText: param.paramType.defaultValueHint,
                           border: const OutlineInputBorder(),
+                          errorBorder: OutlineInputBorder(
+                            borderSide: BorderSide(
+                              color: _jsonParamHasError(i)
+                                  ? Colors.red
+                                  : Colors.grey.shade400,
+                            ),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderSide: const BorderSide(color: Colors.red),
+                          ),
+                          errorText: _jsonErrors[i],
+                          errorMaxLines: 3,
                           isDense: true,
                         ),
-                        onChanged: (v) => param.defaultValue = v,
+                        onChanged: (v) {
+                          param.defaultValue = v;
+                          _validateJsonField(i, param);
+                          setState(() {});
+                        },
                       ),
                     ],
                   ),

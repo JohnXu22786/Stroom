@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path/path.dart' as p;
 import 'package:dio/dio.dart' show CancelToken;
 import 'package:fvp/mdk.dart' as mdk;
+import 'dart_ts_remuxer.dart';
 
 /// 格式转换器
 ///
@@ -119,13 +120,16 @@ class FFmpegConverter {
       throw FileSystemException('Input file not found', inputPath);
     }
 
-    // 如果输入是 TS 文件，直接复制（不做重新编码）
+    // 如果输入是 TS 文件，使用纯 Dart remuxer 转换为 MP4
     final isTs = inputPath.toLowerCase().endsWith('.ts');
     if (isTs) {
-      onProgress?.call(10);
-      await inputFile.copy(outputPath);
-      onProgress?.call(100);
-      return outputPath;
+      debugPrint(
+          '[FFmpegConverter] Using pure Dart TS remuxer: $inputPath -> $outputPath');
+      return await TsDemuxer.convertTsToMp4(
+        inputPath: inputPath,
+        outputPath: outputPath,
+        onProgress: onProgress,
+      );
     }
 
     debugPrint(
