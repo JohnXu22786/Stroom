@@ -65,7 +65,7 @@ class TaskExecutor {
     } catch (e) {
       if (e is UnsupportedError) {
         throw Exception(
-          '此功能需要原生平台支持 (Android/iOS/Windows/Mac/Linux)，Web 平台不可用',
+          '此功能需要登录账户后使用，请使用右上角浏览器内登录功能',
         );
       }
       rethrow;

@@ -68,11 +68,11 @@ void main() {
       expect(find.text('欢迎使用 Stroom'), findsOneWidget);
     });
 
-    testWidgets('shows 7 module cards on home page', (tester) async {
+    testWidgets('shows 8 module cards on home page', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // Should show 7 module cards
+      // Should show 8 module cards
       expect(find.text('OCR'), findsOneWidget);
       expect(find.text('语音识别'), findsOneWidget);
       expect(find.text('下载网页资源'), findsOneWidget);
@@ -80,6 +80,17 @@ void main() {
       expect(find.text('语音合成'), findsOneWidget);
       expect(find.text('图表制作'), findsOneWidget);
       expect(find.text('数学绘图'), findsOneWidget);
+      expect(find.text('Anki闪卡'), findsOneWidget);
+    });
+
+    testWidgets('闪卡 card is visible on home page with Anki label',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // The flashcard card should be visible with "Anki闪卡" label
+      expect(find.text('Anki闪卡'), findsOneWidget);
+      expect(find.text('记忆辅助系统'), findsOneWidget);
     });
 
     testWidgets('TTSCreatePage import is available', (tester) async {

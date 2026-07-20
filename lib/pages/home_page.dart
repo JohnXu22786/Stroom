@@ -612,7 +612,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                   _buildModuleCard(
                     icon: Icons.auto_stories,
-                    label: '闪卡',
+                    label: 'Anki闪卡',
                     subtitle: '记忆辅助系统',
                     color: Colors.teal,
                     onTap: () {
