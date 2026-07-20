@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:isolate';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
@@ -703,14 +703,26 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
 
     final videosToProcess = List<SelectedVideo>.from(_selectedVideos);
 
-    // Capture notifier references BEFORE Navigator.pop — after the widget is
-    // disposed, ConsumerState.ref may become unreliable for read() calls.
+    // Capture notifier references so they remain valid after Navigator.pop.
     final bgNotifier = ref.read(backgroundTasksProvider.notifier);
     final audioRecordsNotifier = ref.read(audioRecordsProvider.notifier);
 
-    // Pop back to home page IMMEDIATELY so user doesn't experience a freeze.
-    // Create tasks first (without retryData, instant), then compute
-    // retryData in background isolate so the UI never blocks.
+    // Step 1: Add ALL tasks to the list immediately (synchronous, instant).
+    // Tasks are created as "running" and appear in the task list right away.
+    // retryData is null initially — computed asynchronously in the background.
+    final taskIds = <String>[];
+    for (final video in videosToProcess) {
+      final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
+      final taskId = bgNotifier.addTask(
+        type: BackgroundTaskType.audioSeparation,
+        title: title,
+        retryData: null,
+      );
+      taskIds.add(taskId);
+    }
+
+    // Step 2: Pop back to home page immediately — tasks are already visible
+    // in the task list so the user sees progress right away.
     if (mounted) {
       Navigator.pop(context);
     }
@@ -718,48 +730,55 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     // background work begins.
     await Future<void>.delayed(Duration.zero);
 
-    // Add ALL tasks to the task list first so they appear simultaneously.
-    // retryData is null initially — computed asynchronously below.
-    final taskIds = <String>[];
-    final taskVideoMap = <String, SelectedVideo>{}; // taskId -> video
-    final taskTitleMap = <String, String>{};
-    for (final video in videosToProcess) {
-      final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
-      final taskId = bgNotifier.addTask(
-        type: BackgroundTaskType.audioSeparation,
-        title: title,
-        retryData: null, // will be set after async isolate computation
-      );
-      taskIds.add(taskId);
-      taskVideoMap[taskId] = video;
-      taskTitleMap[taskId] = title;
-    }
-
-    // Compute retryData for each task in a background isolate
-    // (base64Encode is CPU-bound, must not block the main thread).
-    for (final taskId in taskIds) {
-      final video = taskVideoMap[taskId]!;
-      final retryData = await Isolate.run(() {
-        return <String, dynamic>{
-          'type': 'audioSeparation',
-          'videos': [
-            <String, dynamic>{
-              'bytes': base64Encode(video.bytes),
-              'name': video.name,
-              'format': video.format,
-            },
-          ],
-        };
-      });
-      bgNotifier.setRetryData(taskId, retryData);
-    }
-
-    // Now process each video sequentially
+    // Step 3: Process each video in the background.
+    // retryData computation and task execution are wrapped in try-catch
+    // so a failure never leaves tasks stuck.
     for (int i = 0; i < videosToProcess.length; i++) {
       final video = videosToProcess[i];
       final taskId = taskIds[i];
       final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
 
+      // Compute retryData in background isolate (base64Encode is CPU-bound).
+      try {
+        final retryData = await Isolate.run(() {
+          return <String, dynamic>{
+            'type': 'audioSeparation',
+            'videos': [
+              <String, dynamic>{
+                'bytes': base64Encode(video.bytes),
+                'name': video.name,
+                'format': video.format,
+              },
+            ],
+          };
+        });
+        bgNotifier.setRetryData(taskId, retryData);
+      } catch (e) {
+        // Isolate may not be available (e.g. Flutter Web).
+        // Fall back to main-thread computation so retryData is still set.
+        debugPrint(
+            '[AudioSeparation] Isolate.run failed, falling back to main thread: $e');
+        try {
+          final retryData = <String, dynamic>{
+            'type': 'audioSeparation',
+            'videos': [
+              <String, dynamic>{
+                'bytes': base64Encode(video.bytes),
+                'name': video.name,
+                'format': video.format,
+              },
+            ],
+          };
+          bgNotifier.setRetryData(taskId, retryData);
+        } catch (retryError) {
+          // If even main-thread computation fails, log and continue.
+          // The task can still execute without retryData.
+          debugPrint(
+              '[AudioSeparation] Failed to compute retryData: $retryError');
+        }
+      }
+
+      // Process video with full error handling.
       try {
         // Step 0: 分离音频 - mark as running
         bgNotifier.updateStep(taskId, 0, running: true);
@@ -792,7 +811,6 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
         // Mark task as completed with file path
         bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
       } catch (e) {
-        // Mark task as failed (notifier is independent of widget lifecycle)
         bgNotifier.failTask(taskId, error: '音频提取失败: $e');
       }
     }
