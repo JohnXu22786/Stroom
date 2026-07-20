@@ -376,7 +376,7 @@ class BackupService {
     await _yieldToEventLoop();
     checkCancelled();
 
-    // 4b. 闪卡 Anki 数据库
+    // 4b. Anki 闪卡数据库
     if (!kIsWeb && !WebFileStore.isTestMode) {
       try {
         final appDir = await AppStorage.directory;

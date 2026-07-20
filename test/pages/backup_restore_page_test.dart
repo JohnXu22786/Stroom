@@ -92,5 +92,20 @@ void main() {
       // The description text should not contain "点击重新选择目录"
       expect(find.textContaining('点击重新选择'), findsNothing);
     });
+
+    testWidgets('anki section header shows Anki闪卡牌组', (tester) async {
+      await tester.pumpWidget(createTestApp());
+      await tester.pump();
+
+      // Scroll to the Anki section
+      await tester.scrollUntilVisible(
+        find.text('Anki闪卡牌组'),
+        200.0,
+        scrollable: find.byType(Scrollable),
+      );
+      await tester.pump();
+      expect(find.text('Anki闪卡牌组'), findsOneWidget);
+      expect(find.text('导入/导出 .apkg 格式的 Anki 牌组'), findsOneWidget);
+    });
   });
 }

@@ -80,10 +80,14 @@ jobs:
         include:
           - label: Core
             pattern: test/*_test.dart
+          - label: Anki
+            pattern: test/anki
           - label: Widgets
             pattern: test/widgets
           - label: Pages
-            pattern: test/pages
+            pattern: test/pages/*_test.dart test/pages/unified_task_list
+          - label: Pages-Chat
+            pattern: test/pages/chat
           - label: Providers
             pattern: test/providers
           - label: Services
