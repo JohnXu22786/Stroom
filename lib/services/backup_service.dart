@@ -67,6 +67,9 @@ class BackupSelection {
   /// 任务文件（synthesis/ + catcatch/）
   final bool tasks;
 
+  /// Anki 闪卡原始数据库（collection.anki2）
+  final bool ankiData;
+
   const BackupSelection({
     this.chatRecordsAndAttachments = true,
     this.settings = true,
@@ -75,6 +78,7 @@ class BackupSelection {
     this.videos = true,
     this.texts = true,
     this.tasks = true,
+    this.ankiData = true,
   });
 
   /// 全量选择（所有类别）。
@@ -90,6 +94,7 @@ class BackupSelection {
     if (videos) labels.add('视频');
     if (texts) labels.add('文本');
     if (tasks) labels.add('任务');
+    if (ankiData) labels.add('Anki闪卡数据');
     return labels;
   }
 }
@@ -376,8 +381,8 @@ class BackupService {
     await _yieldToEventLoop();
     checkCancelled();
 
-    // 4b. Anki 闪卡数据库
-    if (!kIsWeb && !WebFileStore.isTestMode) {
+    // 4b. Anki 闪卡数据库（原始格式）
+    if (selection.ankiData && !kIsWeb && !WebFileStore.isTestMode) {
       try {
         final appDir = await AppStorage.directory;
         final ankiDb = p.join(appDir, 'collection.anki2');
@@ -616,7 +621,8 @@ class BackupService {
       'texts',
       'attachments',
       'synthesis',
-      'catcatch'
+      'catcatch',
+      'anki',
     ];
     final skipFiles = {
       'manifest.json',
@@ -646,6 +652,8 @@ class BackupService {
           return selection.tasks;
         case 'attachments':
           return selection.chatRecordsAndAttachments;
+        case 'anki':
+          return selection.ankiData;
         default:
           return false;
       }

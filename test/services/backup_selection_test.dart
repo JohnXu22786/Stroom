@@ -8,6 +8,7 @@ import 'package:stroom/services/app_log_service.dart';
 import 'package:stroom/services/backup_service.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/utils/web_file_store.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -33,11 +34,12 @@ void main() {
       expect(sel.videos, isTrue);
       expect(sel.texts, isTrue);
       expect(sel.tasks, isTrue);
+      expect(sel.ankiData, isTrue);
     });
 
-    test('BackupSelection.all.selectedLabels returns all 7 labels', () {
+    test('BackupSelection.all.selectedLabels returns all 8 labels', () {
       final labels = BackupSelection.all.selectedLabels;
-      expect(labels.length, equals(7));
+      expect(labels.length, equals(8));
       expect(labels, contains('聊天记录和附件'));
       expect(labels, contains('设置'));
       expect(labels, contains('图片'));
@@ -45,6 +47,7 @@ void main() {
       expect(labels, contains('视频'));
       expect(labels, contains('文本'));
       expect(labels, contains('任务'));
+      expect(labels, contains('Anki闪卡数据'));
     });
 
     test('BackupSelection with pictures-only returns correct labels', () {
@@ -56,6 +59,7 @@ void main() {
         videos: false,
         texts: false,
         tasks: false,
+        ankiData: false,
       );
       final labels = sel.selectedLabels;
       expect(labels.length, equals(1));
@@ -71,6 +75,40 @@ void main() {
       expect(sel.videos, isTrue);
       expect(sel.texts, isTrue);
       expect(sel.tasks, isTrue);
+      expect(sel.ankiData, isTrue);
+    });
+
+    test('ankiData=false excludes Anki from selectedLabels', () {
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+      );
+      final labels = sel.selectedLabels;
+      expect(labels, isEmpty,
+          reason:
+              'With all flags false including ankiData, selectedLabels should be empty');
+    });
+
+    test('ankiData-only shows 1 label', () {
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: true,
+      );
+      final labels = sel.selectedLabels;
+      expect(labels.length, equals(1));
+      expect(labels.first, equals('Anki闪卡数据'));
     });
 
     test('chatRecordsAndAttachments-only shows 1 label', () {
@@ -82,6 +120,7 @@ void main() {
         videos: false,
         texts: false,
         tasks: false,
+        ankiData: false,
       );
       final labels = sel.selectedLabels;
       expect(labels.length, equals(1));
@@ -97,6 +136,7 @@ void main() {
         videos: false,
         texts: false,
         tasks: false,
+        ankiData: false,
       );
       final labels = sel.selectedLabels;
       expect(labels.length, equals(1));
@@ -914,6 +954,106 @@ void main() {
           jsonDecode(utf8.decode(manifestData!)) as Map<String, dynamic>;
       expect((dbJson['image_records'] as List<dynamic>).length, equals(1));
       expect((dbJson['audio_records'] as List<dynamic>).length, equals(1));
+    });
+
+    testWidgets('restore with ankiData:false skips anki/ directory files',
+        (WidgetTester t) async {
+      // Build a backup archive that includes an anki/ file
+      final backupArchive = Archive();
+      backupArchive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': <Map<String, dynamic>>[],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
+      // Add anki data
+      backupArchive.addFile(ArchiveFile(
+          'anki/collection.anki2', 0, utf8.encode('mock anki db content')));
+      final encoded = ZipEncoder().encode(backupArchive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      // Restore with ankiData: false
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
+
+      // Verify anki file was NOT written to WebFileStore
+      final written = await WebFileStore.read('anki/collection.anki2');
+      expect(written, isNull,
+          reason:
+              'anki/collection.anki2 should NOT be restored when ankiData is false');
+    });
+
+    testWidgets('restore with ankiData:true includes anki/ directory files',
+        (WidgetTester t) async {
+      // Build a backup archive that includes an anki/ file
+      final backupArchive = Archive();
+      backupArchive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': <Map<String, dynamic>>[],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
+      // Add anki data
+      final ankiContent = 'mock anki db content for restore test';
+      backupArchive.addFile(
+          ArchiveFile('anki/collection.anki2', 0, utf8.encode(ankiContent)));
+      final encoded = ZipEncoder().encode(backupArchive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      // Restore with ankiData: true (but all others false)
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: true,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
+
+      // Verify anki file WAS written to WebFileStore
+      final written = await WebFileStore.read('anki/collection.anki2');
+      expect(written, isNotNull,
+          reason:
+              'anki/collection.anki2 should be restored when ankiData is true');
+      final content = String.fromCharCodes(written!);
+      expect(content, equals(ankiContent),
+          reason: 'anki/collection.anki2 content should match');
     });
 
     testWidgets(
