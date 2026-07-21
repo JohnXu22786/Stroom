@@ -186,7 +186,8 @@ void main() {
   });
 
   group('MathDrawingPage - UI spacing', () {
-    testWidgets('eye icon is inside TextField as prefixIcon for consistent spacing',
+    testWidgets(
+        'eye icon is inside TextField as prefixIcon for consistent spacing',
         (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
