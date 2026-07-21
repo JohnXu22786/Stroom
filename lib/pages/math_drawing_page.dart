@@ -417,7 +417,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             ),
           ),
 
-          const SizedBox(width: 10),
+          const SizedBox(width: 14),
 
           // ---- Eye / eye-off toggle ----
           GestureDetector(
@@ -429,7 +429,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             ),
           ),
 
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
 
           // ---- Formula text field ----
           Expanded(
@@ -476,33 +476,33 @@ class _MathDrawingPageState extends State<MathDrawingPage>
           // ---- Add formula (+) button (first row only) ----
           if (index == 0)
             IconButton(
-              icon: Icon(Icons.add_circle, size: 20, color: cs.primary),
+              icon: Icon(Icons.add_circle, size: 18, color: cs.primary),
               tooltip: '添加公式',
               onPressed: _addFormula,
               padding: EdgeInsets.zero,
               visualDensity: VisualDensity.compact,
               constraints: const BoxConstraints(
-                  minWidth: 28, maxWidth: 28, minHeight: 28, maxHeight: 28),
+                  minWidth: 24, maxWidth: 24, minHeight: 24, maxHeight: 24),
             ),
 
           // ---- Remove formula (X) button ----
           if (_formulas.length > 1)
             IconButton(
               icon: Icon(Icons.remove_circle_outline,
-                  size: 18, color: cs.error.withValues(alpha: 0.7)),
+                  size: 16, color: cs.error.withValues(alpha: 0.7)),
               tooltip: '删除公式',
               onPressed: () => _confirmRemove(index),
               padding: EdgeInsets.zero,
               visualDensity: VisualDensity.compact,
               constraints: const BoxConstraints(
-                  minWidth: 28, maxWidth: 28, minHeight: 28, maxHeight: 28),
+                  minWidth: 24, maxWidth: 24, minHeight: 24, maxHeight: 24),
             ),
 
           // ---- Plot (✓) button ----
           IconButton(
             icon: Icon(
               Icons.check_circle_outline,
-              size: 22,
+              size: 20,
               color:
                   hasChanged ? cs.primary : cs.onSurface.withValues(alpha: 0.2),
             ),
@@ -511,7 +511,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             padding: EdgeInsets.zero,
             visualDensity: VisualDensity.compact,
             constraints: const BoxConstraints(
-                minWidth: 28, maxWidth: 28, minHeight: 28, maxHeight: 28),
+                minWidth: 24, maxWidth: 24, minHeight: 24, maxHeight: 24),
           ),
         ],
       ),
