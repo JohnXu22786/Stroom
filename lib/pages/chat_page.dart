@@ -594,9 +594,33 @@ class _ChatPageState extends ConsumerState<ChatPage>
       await AppLogService.info('ChatPage', '开始加载 $msgCount 条消息到 _history');
       for (final msg in conv.messages) {
         _history.add(msg);
-        // Restore reasoning content from persisted ChatMessage
-        if (msg.reasoningContent != null && msg.reasoningContent!.isNotEmpty) {
+        // Restore reasoning sections from persisted ChatMessage.
+        // Prefer the new multi-section [reasoningSections] field over the
+        // legacy single-string [reasoningContent] for backward compatibility.
+        if (msg.reasoningSections != null &&
+            msg.reasoningSections!.isNotEmpty) {
+          _reasoningContents[msg.id] =
+              List<String>.from(msg.reasoningSections!);
+        } else if (msg.reasoningContent != null &&
+            msg.reasoningContent!.isNotEmpty) {
           _reasoningContents[msg.id] = [msg.reasoningContent!];
+        }
+        // Restore tool call segments from persisted ChatMessage.
+        // Convert each persisted ToolCallData back into a ToolCallSegment
+        // so the UI renders tool call cards alongside the text content.
+        if (msg.toolCalls != null && msg.toolCalls!.isNotEmpty) {
+          final segments = <MessageSegment>[];
+          // Prepend a TextSegment with the message content so the assistant's
+          // reply text is rendered before the tool call cards. Without this,
+          // the segments list would only contain ToolCallSegment entries and
+          // the text message.content would never be displayed.
+          if (msg.content.isNotEmpty) {
+            segments.add(TextSegment(msg.content));
+          }
+          for (final tc in msg.toolCalls!) {
+            segments.add(ToolCallSegment(tc));
+          }
+          _chatSegments[msg.id] = segments;
         }
       }
       _loadedUpToIndex =
@@ -1190,6 +1214,24 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // is ALWAYS reset to false, even if an unexpected error occurs here.
     // Without this, a stuck streaming flag would permanently block new messages.
     try {
+      // Extract tool calls from _chatSegments for persistence.
+      // Convert ToolCallSegment entries into their underlying ToolCallData.
+      final toolCallsFromSegments = <ToolCallData>[];
+      final segments = _chatSegments[aiMsgId];
+      if (segments != null) {
+        for (final seg in segments) {
+          if (seg is ToolCallSegment) {
+            toolCallsFromSegments.add(seg.data);
+          }
+        }
+      }
+
+      // Extract reasoning sections from _reasoningContents for persistence.
+      final reasoningSectionsFromContent =
+          _reasoningContents[aiMsgId];
+      final hasReasoningSections = reasoningSectionsFromContent != null &&
+          reasoningSectionsFromContent.isNotEmpty;
+
       if (fullReply.isNotEmpty) {
         final isError = fullReply.startsWith('错误:');
         final msg = ChatMessage(
@@ -1200,6 +1242,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
           reasoningContent: reasoningBuffer.isNotEmpty ? reasoningBuffer : null,
           rawRequest: rawRequestCapture,
           rawResponse: rawResponseCapture,
+          toolCalls: toolCallsFromSegments.isNotEmpty
+              ? toolCallsFromSegments
+              : null,
+          reasoningSections: hasReasoningSections
+              ? reasoningSectionsFromContent
+              : null,
         );
         _history.add(msg);
       }

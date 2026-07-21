@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:uuid/uuid.dart';
 
 import '../utils/data_sanitizer.dart';
+import 'tool_call.dart';
 
 /// 简化的聊天消息模型，仅用于持久化到 SharedPreferences
 /// UI 层使用 flutter_chat_ui 的 Message 类型
@@ -116,6 +117,21 @@ class ChatMessage {
   final Map<String, dynamic>? rawRequest;
   final Map<String, dynamic>? rawResponse;
 
+  /// List of tool calls associated with this assistant message.
+  /// Each entry captures the tool name, arguments, execution status, and result.
+  /// Persisted alongside the message so tool call cards survive page reloads.
+  final List<ToolCallData>? toolCalls;
+
+  /// List of reasoning/thinking section texts, one per reasoning round.
+  /// When tool calls create multiple reasoning rounds (multi-step chains),
+  /// each round gets its own entry. The UI displays each as a separate
+  /// clickable reasoning button.
+  ///
+  /// Supersedes the older single-string [reasoningContent] field. When both
+  /// are present, consumers should prefer [reasoningSections] for rendering
+  /// and fall back to [reasoningContent] for backward compatibility.
+  final List<String>? reasoningSections;
+
   ChatMessage({
     String? id,
     required this.role,
@@ -127,6 +143,8 @@ class ChatMessage {
     this.reasoningContent,
     this.rawRequest,
     this.rawResponse,
+    this.toolCalls,
+    this.reasoningSections,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
         attachments = attachments ?? [];
@@ -235,6 +253,12 @@ class ChatMessage {
         // custom objects, etc.) from silently breaking conversation persistence.
         if (rawRequest != null) 'rawRequest': _sanitizeRawMap(rawRequest),
         if (rawResponse != null) 'rawResponse': _sanitizeRawMap(rawResponse),
+        // Persist tool calls if present and non-empty.
+        if (toolCalls != null && toolCalls!.isNotEmpty)
+          'toolCalls': toolCalls!.map((tc) => tc.toMap()).toList(),
+        // Persist reasoning sections if present and non-empty.
+        if (reasoningSections != null && reasoningSections!.isNotEmpty)
+          'reasoningSections': reasoningSections!.toList(),
       };
 
   factory ChatMessage.fromMap(Map<String, dynamic> map) {
@@ -271,6 +295,36 @@ class ChatMessage {
       }
     }
 
+    // Defensive toolCalls parsing: skip non-List entries so a single corrupt
+    // toolCalls field doesn't skip the entire message.
+    List<ToolCallData>? toolCalls;
+    final toolCallsRaw = map['toolCalls'];
+    if (toolCallsRaw is List) {
+      toolCalls = [];
+      for (final e in toolCallsRaw) {
+        if (e is Map) {
+          try {
+            toolCalls.add(ToolCallData.fromMap(Map<String, dynamic>.from(e)));
+          } catch (_) {
+            // Skip corrupt tool call entry
+          }
+        }
+      }
+      if (toolCalls!.isEmpty) toolCalls = null;
+    }
+
+    // Defensive reasoningSections parsing: skip non-List entries and filter
+    // out non-string values so corrupt data doesn't skip the entire message.
+    List<String>? reasoningSections;
+    final sectionsRaw = map['reasoningSections'];
+    if (sectionsRaw is List) {
+      reasoningSections = sectionsRaw
+          .whereType<String>()
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (reasoningSections!.isEmpty) reasoningSections = null;
+    }
+
     return ChatMessage(
       id: map['id'] as String?,
       role: roleStr,
@@ -284,6 +338,8 @@ class ChatMessage {
       // a TypeError, which would skip the ENTIRE message in Conversation.fromMap.
       rawRequest: safeCastToMap(map['rawRequest']),
       rawResponse: safeCastToMap(map['rawResponse']),
+      toolCalls: toolCalls,
+      reasoningSections: reasoningSections,
     );
   }
 

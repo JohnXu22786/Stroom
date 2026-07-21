@@ -26,6 +26,44 @@ class ToolCallData {
         status: status ?? this.status,
         result: result ?? this.result,
       );
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'name': name,
+        'arguments': arguments,
+        'status': status.name,
+        if (result != null) 'result': result,
+      };
+
+  factory ToolCallData.fromMap(Map<String, dynamic> map) {
+    // Parse arguments defensively: handle null, non-Map, or Map types.
+    Map<String, dynamic> parsedArgs;
+    final rawArgs = map['arguments'];
+    if (rawArgs is Map) {
+      try {
+        parsedArgs = Map<String, dynamic>.from(rawArgs);
+      } catch (_) {
+        parsedArgs = <String, dynamic>{};
+      }
+    } else {
+      parsedArgs = <String, dynamic>{};
+    }
+
+    // Parse status defensively: fall back to pending on unknown/null values.
+    final statusStr = map['status'] as String?;
+    final status = ToolCallStatus.values.firstWhere(
+      (s) => s.name == statusStr,
+      orElse: () => ToolCallStatus.pending,
+    );
+
+    return ToolCallData(
+      id: (map['id'] as String?) ?? '',
+      name: (map['name'] as String?) ?? '',
+      arguments: parsedArgs,
+      status: status,
+      result: map['result'] as String?,
+    );
+  }
 }
 
 class ToolDefinition {
