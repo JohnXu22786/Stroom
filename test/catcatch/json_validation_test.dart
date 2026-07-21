@@ -36,7 +36,8 @@ void main() {
     test('returns error message for invalid JSON', () {
       final error = validateJsonValue('json', '{invalid}');
       expect(error, isNotNull);
-      expect(error, contains('JSON'));
+      expect(error, contains('行'));
+      expect(error, contains('列'));
     });
 
     test('returns error for truncated JSON', () {
