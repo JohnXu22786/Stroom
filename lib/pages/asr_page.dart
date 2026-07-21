@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
@@ -10,6 +11,7 @@ import 'package:file_picker/file_picker.dart';
 import '../providers/provider_config.dart';
 import '../providers/tts_state_provider.dart';
 import '../providers/background_task_provider.dart';
+import '../providers/task_provider.dart';
 import '../providers/text_provider.dart';
 import '../services/asr_service.dart';
 import '../utils/audio_utils.dart';
@@ -1024,17 +1026,30 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       model: selectedOption.model.modelId,
     );
 
-    // Capture notifier references BEFORE Navigator.pop — after the widget is
-    // disposed, ConsumerState.ref becomes null and ref.read() would throw.
+    // Capture notifier references so they remain valid after Navigator.pop.
     final bgNotifier = ref.read(backgroundTasksProvider.notifier);
     final textNotifier = ref.read(textRecordsProvider.notifier);
 
     // Capture the list before pop
     final audiosToProcess = List<SelectedAudio>.from(_selectedAudios);
 
-    // Pop back to home page IMMEDIATELY so user can see task progress.
-    // Create task first (without retryData, instant), then compute
-    // retryData in background isolate so the UI never blocks.
+    // Step 1: Create ALL tasks first so they appear in the list immediately.
+    // Tasks are created as "waiting" — the execution chain transitions them
+    // to "running" one by one. retryData is null initially.
+    final taskEntries = <_TaskEntry>[];
+    for (final audio in audiosToProcess) {
+      final title = 'ASR_${audio.name}';
+      final taskId = bgNotifier.addTask(
+        type: BackgroundTaskType.asr,
+        title: title,
+        retryData: null,
+        startImmediately: false, // created as waiting, started by chain
+      );
+      taskEntries.add(_TaskEntry(taskId, audio, title));
+    }
+
+    // Step 2: Pop back to home page immediately — tasks are already visible
+    // in the task list so the user sees progress right away.
     if (mounted) {
       Navigator.pop(context);
     }
@@ -1042,25 +1057,45 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     // background work begins.
     await Future<void>.delayed(Duration.zero);
 
-    // Step 1: Create ALL tasks as waiting first so they appear in the list.
-    // retryData is null initially — computed asynchronously below.
-    final taskEntries = <_TaskEntry>[];
-    for (final audio in audiosToProcess) {
-      final title = 'ASR_${audio.name}';
-      final taskId = bgNotifier.addTask(
-        type: BackgroundTaskType.asr,
-        title: title,
-        retryData: null, // will be set after async isolate computation
-        startImmediately: false, // create as waiting
-      );
-      taskEntries.add(_TaskEntry(taskId, audio, title));
-    }
-
-    // Step 1b: Compute retryData for each task in a background isolate
-    // (base64Encode is CPU-bound, must not block the main thread).
+    // Step 3: Compute retryData for each task.
+    // Each computation is wrapped in try-catch so a failure never prevents
+    // the execution chain from starting.
     final modelIndex = _selectedModelIndex;
     final saveFolder = _saveFolder;
     for (final entry in taskEntries) {
+      await _computeAsrRetryData(entry, modelIndex, saveFolder, bgNotifier);
+    }
+
+    // Step 4: Execute tasks in sequence one-by-one (auto-chain).
+    // Wrapped in try-catch so unexpected errors fail remaining tasks instead
+    // of leaving them stuck in "waiting" state.
+    try {
+      await _executeTaskChain(
+          taskEntries, effectiveConfig, bgNotifier, textNotifier);
+    } catch (e) {
+      debugPrint('[ASR] _executeTaskChain failed: $e');
+      // Fail any tasks still in waiting/running state
+      for (final entry in taskEntries) {
+        final task =
+            bgNotifier.state.where((t) => t.id == entry.taskId).firstOrNull;
+        if (task != null &&
+            (task.status == TaskStatus.waiting ||
+                task.status == TaskStatus.running)) {
+          bgNotifier.failTask(entry.taskId, error: '任务执行异常: $e');
+        }
+      }
+    }
+  }
+
+  /// Compute retryData for a single ASR task in a background isolate.
+  /// Falls back to main-thread computation if Isolate.run is not available.
+  Future<void> _computeAsrRetryData(
+    _TaskEntry entry,
+    int modelIndex,
+    String? saveFolder,
+    BackgroundTaskNotifier bgNotifier,
+  ) async {
+    try {
       final retryData = await Isolate.run(() {
         return <String, dynamic>{
           'type': 'asr',
@@ -1076,11 +1111,28 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         };
       });
       bgNotifier.setRetryData(entry.taskId, retryData);
+    } catch (e) {
+      // Isolate may not be available (e.g. Flutter Web).
+      // Fall back to main-thread computation.
+      debugPrint('[ASR] Isolate.run failed, falling back to main thread: $e');
+      try {
+        final retryData = <String, dynamic>{
+          'type': 'asr',
+          'audios': [
+            <String, dynamic>{
+              'bytes': base64Encode(entry.audio.bytes),
+              'name': entry.audio.name,
+              'format': entry.audio.format,
+            },
+          ],
+          'modelIndex': modelIndex,
+          'saveFolder': saveFolder,
+        };
+        bgNotifier.setRetryData(entry.taskId, retryData);
+      } catch (retryError) {
+        debugPrint('[ASR] Failed to compute retryData: $retryError');
+      }
     }
-
-    // Step 2: Execute tasks in sequence one-by-one (auto-chain)
-    await _executeTaskChain(
-        taskEntries, effectiveConfig, bgNotifier, textNotifier);
   }
 
   /// Execute all tasks in sequence. Each task is started after the previous
