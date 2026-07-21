@@ -706,12 +706,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                   // ScaleGestureRecognizer handles pan + pinch zoom.
                   // It enters the gesture arena via the team, so it
                   // automatically accepts when the immediate recognizer wins.
-                  ScaleGestureRecognizer:
-                      GestureRecognizerFactoryWithHandlers<
-                          ScaleGestureRecognizer>(
+                  ScaleGestureRecognizer: GestureRecognizerFactoryWithHandlers<
+                      ScaleGestureRecognizer>(
                     () {
-                      final recognizer =
-                          ScaleGestureRecognizer()..team = team;
+                      final recognizer = ScaleGestureRecognizer()..team = team;
                       // Set ScaleGestureRecognizer as the team captain so
                       // that when ImmediateMermaidGestureRecognizer wins the
                       // parent arena via the team, the

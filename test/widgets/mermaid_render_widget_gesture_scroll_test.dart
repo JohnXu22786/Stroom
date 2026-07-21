@@ -34,8 +34,7 @@ void main() {
           ScaleGestureRecognizer:
               GestureRecognizerFactoryWithHandlers<ScaleGestureRecognizer>(
             () {
-              final recognizer =
-                  ScaleGestureRecognizer()..team = team;
+              final recognizer = ScaleGestureRecognizer()..team = team;
               // Must set captain so that ScaleGestureRecognizer is accepted
               // when the team wins the arena (otherwise the team would accept
               // ImmediateMermaidGestureRecognizer and reject the scale one).
@@ -162,8 +161,7 @@ void main() {
         'vertical drag within Mermaid area does NOT scroll parent when '
         'gesture wrapper has ImmediateMermaidGestureRecognizer in team',
         (tester) async {
-      final scrollController =
-          await buildScrollTestScaffold(tester);
+      final scrollController = await buildScrollTestScaffold(tester);
 
       // Initial scroll position should be 0
       expect(scrollController.offset, closeTo(0.0, 0.1));
@@ -188,10 +186,8 @@ void main() {
 
     testWidgets(
         'horizontal drag within Mermaid area does NOT scroll parent '
-        '(same fix applies to all directions)',
-        (tester) async {
-      final scrollController =
-          await buildScrollTestScaffold(tester);
+        '(same fix applies to all directions)', (tester) async {
+      final scrollController = await buildScrollTestScaffold(tester);
 
       expect(scrollController.offset, closeTo(0.0, 0.1));
 
@@ -210,11 +206,9 @@ void main() {
       expect(scrollController.offset, closeTo(0.0, 0.1));
     });
 
-    testWidgets(
-        'diagonal drag within Mermaid area does NOT scroll parent',
+    testWidgets('diagonal drag within Mermaid area does NOT scroll parent',
         (tester) async {
-      final scrollController =
-          await buildScrollTestScaffold(tester);
+      final scrollController = await buildScrollTestScaffold(tester);
 
       expect(scrollController.offset, closeTo(0.0, 0.1));
 
@@ -268,9 +262,8 @@ void main() {
                                     GestureRecognizerFactoryWithHandlers<
                                         ScaleGestureRecognizer>(
                                   () {
-                                    final recognizer =
-                                        ScaleGestureRecognizer()
-                                          ..team = team;
+                                    final recognizer = ScaleGestureRecognizer()
+                                      ..team = team;
                                     team.captain = recognizer;
                                     return recognizer;
                                   },
@@ -280,8 +273,7 @@ void main() {
                                     };
                                     instance.onUpdate = (details) {
                                       onUpdateFired = true;
-                                      lastFocalDelta =
-                                          details.focalPointDelta;
+                                      lastFocalDelta = details.focalPointDelta;
                                     };
                                     instance.onEnd = (details) {};
                                   },
@@ -289,15 +281,13 @@ void main() {
                                 ImmediateMermaidGestureRecognizer:
                                     GestureRecognizerFactoryWithHandlers<
                                         ImmediateMermaidGestureRecognizer>(
-                                  () =>
-                                      ImmediateMermaidGestureRecognizer()
-                                        ..team = team,
+                                  () => ImmediateMermaidGestureRecognizer()
+                                    ..team = team,
                                   (instance) {},
                                 ),
                               },
                               behavior: HitTestBehavior.opaque,
-                              child:
-                                  Container(color: Colors.transparent),
+                              child: Container(color: Colors.transparent),
                             ),
                           ),
                         ],
@@ -327,8 +317,7 @@ void main() {
 
     testWidgets(
         'gesture wrapper with ImmediateMermaidGestureRecognizer does not '
-        'interfere with tapping interactive elements',
-        (tester) async {
+        'interfere with tapping interactive elements', (tester) async {
       // Verify that the gesture wrapper still allows taps to pass through.
       // Taps produce no PointerMoveEvent, so ImmediateMermaidGestureRecognizer
       // never resolves, and the tap recognizer wins the arena normally.
@@ -396,15 +385,13 @@ void main() {
   // functions remain intact.
 
   group('Gesture fix - HTML template contract preserved', () {
-    test('buildMermaidHtml still has window.setZoom and window.setPan',
-        () {
+    test('buildMermaidHtml still has window.setZoom and window.setPan', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       expect(html, contains('window.setZoom'));
       expect(html, contains('window.setPan'));
     });
 
-    test('buildMermaidHtml with withJsGestures=true has full gesture JS',
-        () {
+    test('buildMermaidHtml with withJsGestures=true has full gesture JS', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD',
           withJsGestures: true);
       expect(html, contains('mousedown'));
@@ -433,8 +420,7 @@ void main() {
       expect(html, contains("callHandler('onZoomChanged'"));
     });
 
-    test('setZoom still adjusts panX/panY when centerX/centerY provided',
-        () {
+    test('setZoom still adjusts panX/panY when centerX/centerY provided', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       expect(
           html, contains('centerX - (centerX - panX) * (zoomLevel / oldZoom)'));
