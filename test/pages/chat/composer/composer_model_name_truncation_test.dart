@@ -89,6 +89,51 @@ void main() {
   });
 
   // ═══════════════════════════════════════════════════════════════
+  // Widget tests for SettingsChip badge color
+  // ═══════════════════════════════════════════════════════════════
+  group('SettingsChip badge color', () {
+    testWidgets('badge background matches the chip accent color', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: SettingsChip(
+            icon: Icons.build_outlined,
+            label: '工具',
+            color: const Color(0xFF6366F1),
+            onTap: () {},
+            badgeCount: 3,
+          ),
+        ),
+      ));
+
+      // The ChipBadge should use Color(0xFF6366F1), not cs.tertiary
+      final badge = tester.widget<ChipBadge>(find.byType(ChipBadge));
+      expect(badge.color, const Color(0xFF6366F1));
+    });
+
+    testWidgets('badge text has white color', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: SettingsChip(
+            icon: Icons.build_outlined,
+            label: '工具',
+            color: Colors.indigo,
+            onTap: () {},
+            badgeCount: 3,
+          ),
+        ),
+      ));
+
+      // ChipBadge text should be white — find the Text widget inside the badge.
+      // There are multiple Text widgets (label '工具' and badge '3'); pick the
+      // one with the count value and verify its style color is Colors.white.
+      final badgeText = tester.widget<Text>(
+        find.byWidgetPredicate((w) => w is Text && w.data == '3'),
+      );
+      expect(badgeText.style?.color, Colors.white);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
   // Widget tests for ChipBadge (circular badge)
   // ═══════════════════════════════════════════════════════════════
   group('ChipBadge circular shape', () {

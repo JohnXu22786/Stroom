@@ -96,7 +96,7 @@ class SettingsChip extends StatelessWidget {
             ),
             if (showBadge) ...[
               const SizedBox(width: 6),
-              ChipBadge(count: badgeCount!),
+              ChipBadge(count: badgeCount!, color: color),
             ],
           ],
         ),
@@ -108,18 +108,22 @@ class SettingsChip extends StatelessWidget {
 /// A small circular badge showing a number.
 class ChipBadge extends StatelessWidget {
   final int count;
-  const ChipBadge({super.key, required this.count});
+
+  /// The background color of the badge circle. Should match the parent chip's
+  /// accent color so the badge visually ties to the chip icon.
+  final Color color;
+
+  const ChipBadge({super.key, required this.count, required this.color});
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final text = count > 99 ? '99+' : count.toString();
     return Container(
       width: 14,
       height: 14,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: cs.tertiary,
+        color: color,
         shape: BoxShape.circle,
       ),
       child: FittedBox(
