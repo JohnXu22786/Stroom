@@ -230,28 +230,50 @@ class MathCanvasState extends State<MathCanvas> {
   // Internal: expression handling
   // ==================================================================
 
-  /// Sample a single formula at the current viewport.
-  /// Returns polylines (list of point lists). For explicit functions this
-  /// is a single polyline; for implicit equations it's many short segments.
+  /// How much extra to sample beyond the visible viewport, as a fraction
+  /// of the viewport range on each side.
+  ///
+  /// A value of 0.5 means we sample 50% beyond each edge, so the total
+  /// sampled range is 2× the viewport width. This ensures that during
+  /// typical pan gestures the curves remain fully visible without
+  /// requiring a costly resample on every frame.
+  ///
+  /// Tuned to cover a ~50% viewport pan before the edge of the sampled
+  /// data is reached, which comfortably accommodates normal interaction.
+  static const double _renderMarginScale = 0.5;
+
+  /// Sample a single formula at the current viewport, extended by
+  /// [_renderMarginScale] on each side for smooth drag rendering.
+  ///
+  /// For explicit functions this returns a single polyline; for implicit
+  /// equations it returns many short contour segments (marching squares).
   List<List<Map<String, double>>> _sampleCurve(FormulaEntry formula) {
     if (!formula.isValid) return [];
     final parsed = formula.parsed!;
+    final marginX = (_xMax - _xMin) * _renderMarginScale;
     if (parsed.type == MathExpressionType.implicit) {
-      // Contour segments — each is a short line across one grid cell
+      final marginY = (_yMax - _yMin) * _renderMarginScale;
+      // Contour segments — each is a short line across one grid cell.
+      // Extend bounds and proportionally increase grid cells so that
+      // contour detail remains consistent across the visible area.
+      final scale = 1.0 + 2.0 * _renderMarginScale; // e.g. 2.0 for 0.5 margin
       return parsed.sampleContourSegments(
-        xMin: _xMin,
-        xMax: _xMax,
-        yMin: _yMin,
-        yMax: _yMax,
+        xMin: _xMin - marginX,
+        xMax: _xMax + marginX,
+        yMin: _yMin - marginY,
+        yMax: _yMax + marginY,
+        gridX: (80 * scale).round().clamp(80, 200),
+        gridY: (80 * scale).round().clamp(80, 200),
       );
     }
-    // Sample slightly beyond viewport bounds (2% margin) to ensure
-    // curves reach the canvas edges without gaps at certain zoom levels.
-    final margin = (_xMax - _xMin) * 0.02;
+    // Sample well beyond viewport bounds to ensure curves reach the
+    // canvas edges during pan/zoom without visible holes in the graph.
+    // With _renderMarginScale=0.5, this yields scalePoints=2.0 (2× points).
+    final scalePoints = 1.0 + 2.0 * _renderMarginScale;
     final pts = parsed.samplePoints(
-      xMin: _xMin - margin,
-      xMax: _xMax + margin,
-      numPoints: 300,
+      xMin: _xMin - marginX,
+      xMax: _xMax + marginX,
+      numPoints: (300 * scalePoints).round().clamp(300, 1200),
     );
     return pts.isEmpty ? [] : [pts];
   }

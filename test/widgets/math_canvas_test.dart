@@ -413,8 +413,9 @@ void main() {
     });
   });
 
-  group('MathCanvas - edge sampling', () {
-    testWidgets('sampled points extend slightly beyond viewport bounds',
+  group('MathCanvas - extended sampling margin', () {
+    testWidgets(
+        'explicit function sampling extends well beyond viewport bounds',
         (tester) async {
       final key = GlobalKey<MathCanvasState>();
 
@@ -435,19 +436,141 @@ void main() {
       await key.currentState!.setViewport(-5, -5, 5, 5);
       await tester.pump();
 
-      // Set a simple formula
+      // Set a simple linear formula
       await key.currentState!.setExpression('x', null);
       await tester.pump();
 
       final points = key.currentState!.curvePoints;
       expect(points.length, greaterThanOrEqualTo(2));
 
-      // With margin, first sampled x should be slightly less than xMin=-5
-      // and last sampled x should be slightly more than xMax=5
+      // With ~50% margin on each side, sampling range should be ~[-10, 10].
+      // The actual margin is 0.5 × (xMax - xMin) = 0.5 × 10 = 5.
+      // Verify points extend well beyond the viewport bounds (-5, 5).
       final firstX = points.first['x']!;
       final lastX = points.last['x']!;
-      expect(firstX, lessThan(-5.0));
-      expect(lastX, greaterThan(5.0));
+      expect(firstX, lessThanOrEqualTo(-7.0),
+          reason:
+              'First sampled x ($firstX) should extend ~50% beyond xMin=-5');
+      expect(lastX, greaterThanOrEqualTo(7.0),
+          reason: 'Last sampled x ($lastX) should extend ~50% beyond xMax=5');
+    });
+
+    testWidgets('sampled point count scales proportionally with extended range',
+        (tester) async {
+      final key = GlobalKey<MathCanvasState>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 300,
+              height: 300,
+              child: MathCanvas(key: key),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Set viewport [-10, 10] (default) — range = 20, margin = 10,
+      // so sampling range = 40, scalePoints = 40/20 = 2.0.
+      // numPoints = 300 * 2.0 = 600.
+      await key.currentState!.setExpression('x', null);
+      await tester.pump();
+
+      final points = key.currentState!.curvePoints;
+      // For f(x)=x over [-20, 20], all 600 points are finite.
+      expect(points.length, greaterThanOrEqualTo(500),
+          reason:
+              'With 2× range scaling, point count should be ~600, not the base 300');
+    });
+
+    testWidgets(
+        'implicit equation sampling with extended bounds works correctly',
+        (tester) async {
+      final key = GlobalKey<MathCanvasState>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 300,
+              height: 300,
+              child: MathCanvas(key: key),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Set viewport and an implicit equation whose contour extends
+      // beyond the viewport (e.g., x^2 - y = 0 is a broad parabola).
+      await key.currentState!.setViewport(-5, -5, 5, 5);
+      await key.currentState!.setExpression('x^2-y=0', null);
+      await tester.pump();
+
+      final points = key.currentState!.curvePoints;
+      // The implicit should produce contour segments
+      expect(points.length, greaterThan(0),
+          reason: 'Implicit equation should produce contour segments');
+
+      // Verify all points have finite coordinates (no NaN/infinity)
+      for (final p in points) {
+        expect(p['x']!.isFinite, isTrue,
+            reason: 'All implicit segment x values should be finite');
+        expect(p['y']!.isFinite, isTrue,
+            reason: 'All implicit segment y values should be finite');
+      }
+
+      // With 50% margin (y bounds [-7.5, 7.5]), the parabola y=x^2 at x=±2.5
+      // has y=6.25, which should be within the extended y bounds.
+      // Verify y-values extend beyond the original viewport yMax=5.
+      final ys = points.map((p) => p['y']!).toList();
+      final maxY = ys.reduce((a, b) => a > b ? a : b);
+      expect(maxY, greaterThan(5.0),
+          reason:
+              'Implicit contour y-values should extend beyond yMax=5 with extended bounds, got maxY=$maxY');
+    });
+  });
+
+  group('MathCanvas - drag coverage', () {
+    testWidgets('extended sampling range accommodates half-viewport pan',
+        (tester) async {
+      final key = GlobalKey<MathCanvasState>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 300,
+              height: 300,
+              child: MathCanvas(key: key),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Set initial viewport [-10, -10, 10, 10] with a simple function
+      await key.currentState!.setViewport(-10, -10, 10, 10);
+      await key.currentState!.setExpression('x', null);
+      await tester.pump();
+
+      final points = key.currentState!.curvePoints;
+      final xs = points.map((p) => p['x']!).toList()..sort();
+
+      // With 50% margin (= 10 units on each side), sampling range is [-20, 20].
+      // Verify the data extends well beyond the original viewport [-10, 10].
+      expect(xs.first, lessThanOrEqualTo(-19.0),
+          reason:
+              'First sampled x (${xs.first}) should extend ~50% beyond viewport xMin=-10');
+      expect(xs.last, greaterThanOrEqualTo(19.0),
+          reason:
+              'Last sampled x (${xs.last}) should extend ~50% beyond viewport xMax=10');
+
+      // This confirms that if the user pans 50% of viewport width (from [-10,10]
+      // to roughly [0,20]), the already-sampled data at [-20,20] still fully
+      // covers the visible area — curves stay visible without needing a resample.
     });
   });
 
