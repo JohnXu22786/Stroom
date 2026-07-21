@@ -308,12 +308,15 @@ void main() {
 
       expect(restored.reasoningSections, isNotNull);
       expect(restored.reasoningSections!.length, 3);
-      expect(restored.reasoningSections![0], 'First reasoning step with **markdown**');
+      expect(restored.reasoningSections![0],
+          'First reasoning step with **markdown**');
       expect(restored.reasoningSections![1], 'Second step: tool call needed');
       expect(restored.reasoningSections![2], 'Third step: final answer');
     });
 
-    test('both reasoningSections and reasoningContent are preserved in round-trip', () {
+    test(
+        'both reasoningSections and reasoningContent are preserved in round-trip',
+        () {
       final original = ChatMessage(
         role: 'assistant',
         content: 'Final answer',

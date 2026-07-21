@@ -1227,8 +1227,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       }
 
       // Extract reasoning sections from _reasoningContents for persistence.
-      final reasoningSectionsFromContent =
-          _reasoningContents[aiMsgId];
+      final reasoningSectionsFromContent = _reasoningContents[aiMsgId];
       final hasReasoningSections = reasoningSectionsFromContent != null &&
           reasoningSectionsFromContent.isNotEmpty;
 
@@ -1242,12 +1241,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
           reasoningContent: reasoningBuffer.isNotEmpty ? reasoningBuffer : null,
           rawRequest: rawRequestCapture,
           rawResponse: rawResponseCapture,
-          toolCalls: toolCallsFromSegments.isNotEmpty
-              ? toolCallsFromSegments
-              : null,
-          reasoningSections: hasReasoningSections
-              ? reasoningSectionsFromContent
-              : null,
+          toolCalls:
+              toolCallsFromSegments.isNotEmpty ? toolCallsFromSegments : null,
+          reasoningSections:
+              hasReasoningSections ? reasoningSectionsFromContent : null,
         );
         _history.add(msg);
       }

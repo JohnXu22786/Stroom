@@ -318,10 +318,8 @@ class ChatMessage {
     List<String>? reasoningSections;
     final sectionsRaw = map['reasoningSections'];
     if (sectionsRaw is List) {
-      reasoningSections = sectionsRaw
-          .whereType<String>()
-          .where((s) => s.isNotEmpty)
-          .toList();
+      reasoningSections =
+          sectionsRaw.whereType<String>().where((s) => s.isNotEmpty).toList();
       if (reasoningSections!.isEmpty) reasoningSections = null;
     }
 
