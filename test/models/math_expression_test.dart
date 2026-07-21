@@ -425,4 +425,199 @@ void main() {
       expect(e.evaluator(3), closeTo(9, 1e-10));
     });
   });
+
+  group('MathExpression - sampleContourSegments (marching squares)', () {
+    // The marching squares algorithm must detect contour crossings even when
+    // f(x,y) == 0 exactly at a grid point (e.g. at the origin). The condition
+    // v00 * v10 < 0 misses crossings when the product is zero. We fix this by
+    // treating exact-zero corner values as a tiny positive (1e-15) so that the
+    // sign comparison correctly detects zero-value crossings.
+
+    test(
+        'detects contour crossing when f=0 at a corner (origin-crossing curve)',
+        () {
+      // y^2 = 4x  =>  f(x,y) = y^2 - 4x
+      // At origin (0,0): f = 0 - 0 = 0
+      final expr = MathExpression.fromInput('y^2=4x');
+      expect(expr.isValid, isTrue);
+      expect(expr.type, MathExpressionType.implicit);
+
+      final segments = expr.sampleContourSegments(
+        xMin: -2,
+        xMax: 2,
+        yMin: -2,
+        yMax: 2,
+        gridX: 20,
+        gridY: 20,
+      );
+
+      // The contour y^2=4x passes through (0,0). With a 20×20 grid over
+      // [-2,2]×[-2,2], the origin is at a grid point. The algorithm must
+      // produce at least some segments to represent this curve.
+      expect(segments.isNotEmpty, isTrue,
+          reason:
+              'y^2=4x must produce contour segments even though f=0 at origin');
+
+      // The crucial test: the origin (0,0) MUST be part of the contour.
+      // With the zero-value bug (v00*v10 < 0), the cells adjacent to the
+      // origin each have only 1 crossing and produce NO segment, creating a
+      // gap. After the fix, these cells produce segments through (0,0) via
+      // the epsilon-based sign comparison.
+      final atOrigin = segments.expand((s) => s).where((p) {
+        return p['x']!.abs() < 1e-10 && p['y']!.abs() < 1e-10;
+      }).toList();
+      expect(atOrigin.isNotEmpty, isTrue,
+          reason:
+              'y^2=4x must have contour points at the origin (|x|<1e-10, |y|<1e-10). '
+              'The zero-value bug (v00*v10<0) at f=0 grid points creates a gap; '
+              'the epsilon fix ensures crossings through zero-valued corners');
+    });
+
+    test('detects contour crossing for unit circle', () {
+      // x^2 + y^2 = 1
+      // The circle does not pass through the origin (f(0,0) = -1), but it
+      // still exercises the marching squares across the grid to verify
+      // the full contour is produced without gaps or errors.
+      final expr = MathExpression.fromInput('x^2+y^2=1');
+      expect(expr.isValid, isTrue);
+      expect(expr.type, MathExpressionType.implicit);
+
+      final segments = expr.sampleContourSegments(
+        xMin: -2,
+        xMax: 2,
+        yMin: -2,
+        yMax: 2,
+        gridX: 20,
+        gridY: 20,
+      );
+
+      // Circle x^2+y^2=1 should produce contour segments
+      expect(segments.isNotEmpty, isTrue,
+          reason: 'Circle equation must produce contour segments');
+    });
+
+    test('detects contour crossing for x^2=y (implicit, origin-crossing)', () {
+      // x^2 = y  =>  f(x,y) = x^2 - y
+      // At origin (0,0): f = 0 - 0 = 0
+      final expr = MathExpression.fromInput('x^2=y');
+      expect(expr.isValid, isTrue);
+      expect(expr.type, MathExpressionType.implicit);
+
+      final segments = expr.sampleContourSegments(
+        xMin: -2,
+        xMax: 2,
+        yMin: -2,
+        yMax: 2,
+        gridX: 20,
+        gridY: 20,
+      );
+
+      expect(segments.isNotEmpty, isTrue,
+          reason:
+              'x^2=y must produce contour segments even though f=0 at origin');
+
+      // The origin (0,0) MUST be part of the contour.
+      final atOrigin = segments.expand((s) => s).where((p) {
+        return p['x']!.abs() < 1e-10 && p['y']!.abs() < 1e-10;
+      }).toList();
+      expect(atOrigin.isNotEmpty, isTrue,
+          reason: 'x^2=y must have contour points at the origin, no gap');
+    });
+
+    test('detects contour crossing for 4x=y^3 (origin-crossing)', () {
+      // 4x = y^3  =>  f(x,y) = 4x - y^3
+      // At origin (0,0): f = 0 - 0 = 0
+      final expr = MathExpression.fromInput('4x=y^3');
+      expect(expr.isValid, isTrue);
+      expect(expr.type, MathExpressionType.implicit);
+
+      final segments = expr.sampleContourSegments(
+        xMin: -2,
+        xMax: 2,
+        yMin: -2,
+        yMax: 2,
+        gridX: 20,
+        gridY: 20,
+      );
+
+      expect(segments.isNotEmpty, isTrue,
+          reason:
+              '4x=y^3 must produce contour segments even though f=0 at origin');
+
+      // The origin (0,0) MUST be part of the contour.
+      final atOrigin = segments.expand((s) => s).where((p) {
+        return p['x']!.abs() < 1e-10 && p['y']!.abs() < 1e-10;
+      }).toList();
+      expect(atOrigin.isNotEmpty, isTrue,
+          reason: '4x=y^3 must have contour points at the origin, no gap');
+    });
+
+    test('marching squares segments are all finite and properly paired', () {
+      final expr = MathExpression.fromInput('y^2=4x');
+      final segments = expr.sampleContourSegments(
+        xMin: -10,
+        xMax: 10,
+        yMin: -10,
+        yMax: 10,
+        gridX: 80,
+        gridY: 80,
+      );
+
+      // Each segment must have exactly 2 points
+      for (final seg in segments) {
+        expect(seg.length, 2,
+            reason: 'Each contour segment must have 2 points');
+        expect(seg[0]['x']!.isFinite, isTrue);
+        expect(seg[0]['y']!.isFinite, isTrue);
+        expect(seg[1]['x']!.isFinite, isTrue);
+        expect(seg[1]['y']!.isFinite, isTrue);
+      }
+    });
+
+    test('same implicit formula produces same segments (deterministic)', () {
+      final expr1 = MathExpression.fromInput('y^2=4x');
+      final expr2 = MathExpression.fromInput('y^2=4x');
+
+      final segs1 = expr1.sampleContourSegments(
+        xMin: -5,
+        xMax: 5,
+        yMin: -5,
+        yMax: 5,
+        gridX: 40,
+        gridY: 40,
+      );
+      final segs2 = expr2.sampleContourSegments(
+        xMin: -5,
+        xMax: 5,
+        yMin: -5,
+        yMax: 5,
+        gridX: 40,
+        gridY: 40,
+      );
+
+      // Same formula at same grid should produce same number of segments
+      expect(segs1.length, segs2.length,
+          reason: 'Same formula at same grid should produce same segments');
+    });
+
+    test('explicit function (y=x^2) uses samplePoints, not marching squares',
+        () {
+      // y=x^2 is explicit (y= prefix stripped), should use explicit path.
+      final expr = MathExpression.fromInput('y=x^2');
+      expect(expr.isValid, isTrue);
+      expect(expr.type, MathExpressionType.explicit);
+
+      // sampleContourSegments should return empty for explicit
+      final segments = expr.sampleContourSegments(
+        xMin: -10,
+        xMax: 10,
+        yMin: -10,
+        yMax: 10,
+        gridX: 80,
+        gridY: 80,
+      );
+      expect(segments, isEmpty,
+          reason: 'Explicit functions should not produce contour segments');
+    });
+  });
 }
