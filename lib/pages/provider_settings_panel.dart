@@ -99,13 +99,19 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
 
     final maxTokens = (c.typeConfig['maxTokens'] as num?)?.toInt();
     _maxTokensController = TextEditingController(
-        text: maxTokens != null ? maxTokens.toString() : '');
+      text: maxTokens != null ? maxTokens.toString() : '',
+    );
     final seed = c.typeConfig['seed'];
-    _seedController =
-        TextEditingController(text: seed != null ? seed.toString() : '');
+    _seedController = TextEditingController(
+      text: seed != null ? seed.toString() : '',
+    );
 
     _customParams = c.customParams.map((p) => p.copy()).toList();
     _reasoningParams = c.reasoningParams.map((p) => p.copy()).toList();
+    // Initialize JSON validation for existing params
+    for (int i = 0; i < _customParams.length; i++) {
+      _validateJsonField(i, _customParams[i]);
+    }
   }
 
   @override
@@ -124,6 +130,14 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   void _addCustomParam() {
     setState(() {
       _customParams.insert(0, CustomParam(paramName: '', defaultValue: ''));
+      // Shift existing error keys by +1 since a new param was inserted at 0
+      final newErrors = <int, String?>{};
+      for (final entry in _jsonErrors.entries) {
+        newErrors[entry.key + 1] = entry.value;
+      }
+      _jsonErrors
+        ..clear()
+        ..addAll(newErrors);
     });
   }
 
@@ -154,17 +168,87 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
 
   bool _jsonParamHasError(int index) => _jsonErrors.containsKey(index);
 
+  void _showValueFullscreenEditor(
+    BuildContext context,
+    String currentValue,
+    ValueChanged<String> onSave,
+    String hintText,
+  ) {
+    final editingController = TextEditingController(text: currentValue);
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(8),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const Text(
+                    '编辑参数值',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () {
+                      editingController.dispose();
+                      Navigator.pop(ctx);
+                    },
+                    tooltip: '取消',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: TextField(
+                  controller: editingController,
+                  maxLines: null,
+                  expands: true,
+                  textAlignVertical: TextAlignVertical.top,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: hintText,
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.all(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.check, size: 18),
+                  label: const Text('确定'),
+                  onPressed: () {
+                    final text = editingController.text;
+                    editingController.dispose();
+                    Navigator.pop(ctx);
+                    onSave(text);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // =================================================================
   // Reasoning params (including inference intensity)
   // =================================================================
   void _addReasoningParam({bool isToggle = false}) {
     setState(() {
-      _reasoningParams.add(ReasoningParam(
-        paramName: '',
-        enabled: false,
-        isReasoningToggle: isToggle,
-        options: [],
-      ));
+      _reasoningParams.add(
+        ReasoningParam(
+          paramName: '',
+          enabled: false,
+          isReasoningToggle: isToggle,
+          options: [],
+        ),
+      );
     });
   }
 
@@ -186,11 +270,9 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
     });
   }
 
-  ReasoningParam? get _toggleReasoningParam =>
-      _reasoningParams.cast<ReasoningParam?>().firstWhere(
-            (p) => p?.isReasoningToggle ?? false,
-            orElse: () => null,
-          );
+  ReasoningParam? get _toggleReasoningParam => _reasoningParams
+      .cast<ReasoningParam?>()
+      .firstWhere((p) => p?.isReasoningToggle ?? false, orElse: () => null);
 
   // =================================================================
   // Save
@@ -250,8 +332,9 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
 
     // Validate reasoning params
     final toggleParam = _toggleReasoningParam;
-    final hasNonToggleParams = _reasoningParams
-        .any((p) => !p.isReasoningToggle && p.paramName.trim().isNotEmpty);
+    final hasNonToggleParams = _reasoningParams.any(
+      (p) => !p.isReasoningToggle && p.paramName.trim().isNotEmpty,
+    );
 
     if (hasNonToggleParams &&
         (toggleParam == null || !toggleParam.isFilledToggle)) {
@@ -459,11 +542,14 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
           // 推理参数
           // ==========================================================
           if (_isLlmType) ...[
-            Text('推理参数',
-                style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                    color: cs.primary)),
+            Text(
+              '推理参数',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+                color: cs.primary,
+              ),
+            ),
             const SizedBox(height: 4),
             Text(
               '推理开关控制聊天页面中推理功能的开启和关闭。'
@@ -476,15 +562,18 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
             const SizedBox(height: 12),
             Center(
               child: TextButton.icon(
-                icon: Icon(Icons.add,
-                    size: 16,
-                    color: _toggleReasoningParam != null ? null : Colors.grey),
-                label: Text('添加推理参数',
-                    style: TextStyle(
-                        fontSize: 13,
-                        color: _toggleReasoningParam != null
-                            ? null
-                            : Colors.grey)),
+                icon: Icon(
+                  Icons.add,
+                  size: 16,
+                  color: _toggleReasoningParam != null ? null : Colors.grey,
+                ),
+                label: Text(
+                  '添加推理参数',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: _toggleReasoningParam != null ? null : Colors.grey,
+                  ),
+                ),
                 onPressed: _toggleReasoningParam != null
                     ? () => _addReasoningParam()
                     : null,
@@ -497,11 +586,14 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
           // LLM 参数
           // ==========================================================
           if (_isLlmType) ...[
-            Text('LLM 参数',
-                style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                    color: cs.primary)),
+            Text(
+              'LLM 参数',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+                color: cs.primary,
+              ),
+            ),
             const SizedBox(height: 4),
             Text(
               '开启的参数将作为默认值发送到 API 请求中',
@@ -578,8 +670,10 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
           // ==========================================================
           Row(
             children: [
-              const Text('自定义参数',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
+              const Text(
+                '自定义参数',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
               const Spacer(),
               TextButton.icon(
                 icon: const Icon(Icons.add, size: 18),
@@ -602,10 +696,12 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
               final param = _customParams[i];
               final name = param.paramName.trim();
               final isDuplicate = name.isNotEmpty &&
-                  (_customParams
-                          .indexWhere((p) => p.paramName.trim() == name) !=
+                  (_customParams.indexWhere(
+                        (p) => p.paramName.trim() == name,
+                      ) !=
                       i);
               return Card(
+                key: ObjectKey(param),
                 margin: const EdgeInsets.only(bottom: 8),
                 child: Padding(
                   padding: const EdgeInsets.all(12),
@@ -642,12 +738,15 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                                 value: param.type,
                                 isDense: true,
                                 items: ParamType.values
-                                    .map((t) => DropdownMenuItem(
-                                          value: t.value,
-                                          child: Text(t.label,
-                                              style: const TextStyle(
-                                                  fontSize: 13)),
-                                        ))
+                                    .map(
+                                      (t) => DropdownMenuItem(
+                                        value: t.value,
+                                        child: Text(
+                                          t.label,
+                                          style: const TextStyle(fontSize: 13),
+                                        ),
+                                      ),
+                                    )
                                     .toList(),
                                 onChanged: (v) {
                                   if (v != null) {
@@ -662,39 +761,67 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                           ),
                           const SizedBox(width: 4),
                           IconButton(
-                            icon: const Icon(Icons.delete,
-                                color: Colors.red, size: 20),
+                            icon: const Icon(
+                              Icons.delete,
+                              color: Colors.red,
+                              size: 20,
+                            ),
                             onPressed: () => _removeCustomParam(i),
                             tooltip: '删除参数',
                           ),
                         ],
                       ),
                       const SizedBox(height: 8),
-                      TextFormField(
-                        initialValue: param.defaultValue,
-                        decoration: InputDecoration(
-                          labelText: '默认参数值',
-                          hintText: param.paramType.defaultValueHint,
-                          border: const OutlineInputBorder(),
-                          errorBorder: OutlineInputBorder(
-                            borderSide: BorderSide(
-                              color: _jsonParamHasError(i)
-                                  ? Colors.red
-                                  : Colors.grey.shade400,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              initialValue: param.defaultValue,
+                              decoration: InputDecoration(
+                                labelText: '默认参数值',
+                                hintText: param.paramType.defaultValueHint,
+                                border: const OutlineInputBorder(),
+                                errorBorder: OutlineInputBorder(
+                                  borderSide: BorderSide(
+                                    color: _jsonParamHasError(i)
+                                        ? Colors.red
+                                        : Colors.grey.shade400,
+                                  ),
+                                ),
+                                focusedErrorBorder: OutlineInputBorder(
+                                  borderSide: const BorderSide(
+                                    color: Colors.red,
+                                  ),
+                                ),
+                                errorText: _jsonErrors[i],
+                                errorMaxLines: 3,
+                                isDense: true,
+                              ),
+                              onChanged: (v) {
+                                param.defaultValue = v;
+                                _validateJsonField(i, param);
+                                setState(() {});
+                              },
                             ),
                           ),
-                          focusedErrorBorder: OutlineInputBorder(
-                            borderSide: const BorderSide(color: Colors.red),
+                          const SizedBox(width: 4),
+                          IconButton(
+                            icon: const Icon(Icons.fullscreen, size: 20),
+                            tooltip: '全屏编辑',
+                            onPressed: () {
+                              _showValueFullscreenEditor(
+                                context,
+                                param.defaultValue,
+                                (result) {
+                                  param.defaultValue = result;
+                                  _validateJsonField(i, param);
+                                  setState(() {});
+                                },
+                                param.paramType.defaultValueHint,
+                              );
+                            },
                           ),
-                          errorText: _jsonErrors[i],
-                          errorMaxLines: 3,
-                          isDense: true,
-                        ),
-                        onChanged: (v) {
-                          param.defaultValue = v;
-                          _validateJsonField(i, param);
-                          setState(() {});
-                        },
+                        ],
                       ),
                     ],
                   ),
@@ -737,12 +864,14 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                 Icon(Icons.toggle_on_outlined, size: 18, color: cs.primary),
                 const SizedBox(width: 4),
                 Expanded(
-                  child: Text('推理开关',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: cs.primary,
-                      )),
+                  child: Text(
+                    '推理开关',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: cs.primary,
+                    ),
+                  ),
                 ),
                 _buildTypeDropdown(toggle, cs),
                 const SizedBox(width: 4),
@@ -832,9 +961,14 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('推理力度',
-            style: TextStyle(
-                fontWeight: FontWeight.w600, fontSize: 14, color: cs.primary)),
+        Text(
+          '推理力度',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            color: cs.primary,
+          ),
+        ),
         const SizedBox(height: 4),
         Text(
           '推理力度参数支持只填参数名而不添加具体选项值'
@@ -850,11 +984,18 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
           }),
         const SizedBox(height: 4),
         TextButton.icon(
-          icon:
-              Icon(Icons.add, size: 16, color: hasToggle ? null : Colors.grey),
-          label: Text('添加推理力度参数',
-              style: TextStyle(
-                  fontSize: 13, color: hasToggle ? null : Colors.grey)),
+          icon: Icon(
+            Icons.add,
+            size: 16,
+            color: hasToggle ? null : Colors.grey,
+          ),
+          label: Text(
+            '添加推理力度参数',
+            style: TextStyle(
+              fontSize: 13,
+              color: hasToggle ? null : Colors.grey,
+            ),
+          ),
           onPressed: hasToggle
               ? () {
                   final newParam = ReasoningParam(
@@ -874,7 +1015,11 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   }
 
   Widget _buildIntensityParamCard(
-      ReasoningParam param, int actualIndex, int displayIndex, ColorScheme cs) {
+    ReasoningParam param,
+    int actualIndex,
+    int displayIndex,
+    ColorScheme cs,
+  ) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
@@ -910,11 +1055,13 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
               ],
             ),
             const SizedBox(height: 12),
-            Text('选项值（可选，仅填参数名时发送参数名本身）',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
-                )),
+            Text(
+              '选项值（可选，仅填参数名时发送参数名本身）',
+              style: TextStyle(
+                fontSize: 12,
+                color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+              ),
+            ),
             const SizedBox(height: 8),
             ...List.generate(param.options.length, (j) {
               return Padding(
@@ -939,8 +1086,11 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                     const SizedBox(width: 4),
                     if (param.options.length > 1)
                       IconButton(
-                        icon: const Icon(Icons.remove_circle,
-                            color: Colors.red, size: 18),
+                        icon: const Icon(
+                          Icons.remove_circle,
+                          color: Colors.red,
+                          size: 18,
+                        ),
                         onPressed: () => _removeOptionFromParam(actualIndex, j),
                         tooltip: '删除选项',
                       ),
@@ -975,10 +1125,12 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
               : 'string',
           isDense: true,
           items: ParamType.values
-              .map((t) => DropdownMenuItem(
-                    value: t.value,
-                    child: Text(t.label, style: const TextStyle(fontSize: 12)),
-                  ))
+              .map(
+                (t) => DropdownMenuItem(
+                  value: t.value,
+                  child: Text(t.label, style: const TextStyle(fontSize: 12)),
+                ),
+              )
               .toList(),
           onChanged: (v) {
             if (v != null) {
@@ -1011,9 +1163,13 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                 child: Row(
                   children: [
                     Expanded(
-                      child: Text(title,
-                          style: const TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.w600)),
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                     IconButton(
                       icon: const Icon(Icons.close),
