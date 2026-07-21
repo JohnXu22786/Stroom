@@ -92,7 +92,8 @@ void main() {
   // Widget tests for SettingsChip badge color
   // ═══════════════════════════════════════════════════════════════
   group('SettingsChip badge color', () {
-    testWidgets('badge background matches the chip accent color', (tester) async {
+    testWidgets('badge background matches the chip accent color',
+        (tester) async {
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: SettingsChip(

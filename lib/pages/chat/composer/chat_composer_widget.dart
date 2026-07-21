@@ -950,8 +950,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         .length;
     final Color customParamsColor =
         isLingeEnabled ? Colors.grey : toolAccentColor;
-    final int? customParamsBadgeCountOrNull =
-        isLingeEnabled ? null : (customParamsBadgeCount > 0 ? customParamsBadgeCount : null);
+    final int? customParamsBadgeCountOrNull = isLingeEnabled
+        ? null
+        : (customParamsBadgeCount > 0 ? customParamsBadgeCount : null);
 
     return Material(
       type: MaterialType.transparency,

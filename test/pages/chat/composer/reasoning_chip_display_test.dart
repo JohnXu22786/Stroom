@@ -265,8 +265,7 @@ void main() {
     // Tool chip accent color & 灵歌 behavior tests
     // ═══════════════════════════════════════════════════════════
 
-    testWidgets(
-        'tool chip uses accent color when 灵歌 is NOT enabled',
+    testWidgets('tool chip uses accent color when 灵歌 is NOT enabled',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
@@ -287,8 +286,7 @@ void main() {
       expect(chip.badgeCount, 0);
     });
 
-    testWidgets(
-        'tool chip shows badge count for non-灵歌 enabled tools',
+    testWidgets('tool chip shows badge count for non-灵歌 enabled tools',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
@@ -309,8 +307,7 @@ void main() {
       expect(chip.badgeCount, 2);
     });
 
-    testWidgets(
-        'tool chip turns grey and hides badge when 灵歌 is enabled',
+    testWidgets('tool chip turns grey and hides badge when 灵歌 is enabled',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
@@ -369,8 +366,7 @@ void main() {
       expect(chip.badgeCount, 1);
     });
 
-    testWidgets(
-        'custom params chip with no active params shows no badge',
+    testWidgets('custom params chip with no active params shows no badge',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
