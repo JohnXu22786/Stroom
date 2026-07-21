@@ -771,6 +771,98 @@ void showAddCustomParameterDialog(
   final nameController = TextEditingController();
   String type = 'string';
   final valueController = TextEditingController();
+  String? jsonError;
+
+  void validateJsonValue() {
+    if (type == 'json' && valueController.text.trim().isNotEmpty) {
+      try {
+        jsonDecode(valueController.text.trim());
+        jsonError = null;
+      } catch (_) {
+        jsonError = 'JSON 格式不正确';
+      }
+    } else {
+      jsonError = null;
+    }
+  }
+
+  void showValueFullscreenEditor(
+    BuildContext dialogContext,
+    StateSetter setDlgState,
+  ) {
+    final editingController = TextEditingController(text: valueController.text);
+    showDialog(
+      context: dialogContext,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(8),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const Text(
+                    '编辑参数值',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () {
+                      editingController.dispose();
+                      Navigator.pop(ctx);
+                    },
+                    tooltip: '取消',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: TextField(
+                  controller: editingController,
+                  maxLines: null,
+                  expands: true,
+                  textAlignVertical: TextAlignVertical.top,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: type == 'boolean'
+                        ? 'true 或 false'
+                        : type == 'number'
+                            ? '输入数字'
+                            : type == 'json'
+                                ? '例如: {"key": "value"}'
+                                : '输入值',
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.all(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.check, size: 18),
+                  label: const Text('确定'),
+                  onPressed: () {
+                    final text = editingController.text;
+                    editingController.dispose();
+                    Navigator.pop(ctx);
+                    setDlgState(() {
+                      valueController.text = text;
+                      valueController.selection = TextSelection.fromPosition(
+                        TextPosition(offset: text.length),
+                      );
+                      validateJsonValue();
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   showDialog(
     context: context,
@@ -803,23 +895,48 @@ void showAddCustomParameterDialog(
                 DropdownMenuItem(value: 'json', child: Text('JSON')),
               ],
               onChanged: (v) {
-                if (v != null) setDlgState(() => type = v);
+                if (v != null) {
+                  setDlgState(() {
+                    type = v;
+                    validateJsonValue();
+                  });
+                }
               },
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: valueController,
-              decoration: InputDecoration(
-                labelText: '值',
-                hintText: type == 'boolean'
-                    ? 'true 或 false'
-                    : type == 'number'
-                        ? '输入数字'
-                        : type == 'json'
-                            ? '例如: {"key": "value"}'
-                            : '输入值',
-                border: const OutlineInputBorder(),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: valueController,
+                    decoration: InputDecoration(
+                      labelText: '值',
+                      hintText: type == 'boolean'
+                          ? 'true 或 false'
+                          : type == 'number'
+                              ? '输入数字'
+                              : type == 'json'
+                                  ? '例如: {"key": "value"}'
+                                  : '输入值',
+                      border: const OutlineInputBorder(),
+                      errorText: jsonError,
+                      errorMaxLines: 3,
+                    ),
+                    onChanged: (_) {
+                      validateJsonValue();
+                      setDlgState(() {});
+                    },
+                  ),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.fullscreen, size: 20),
+                  tooltip: '全屏编辑',
+                  onPressed: () {
+                    showValueFullscreenEditor(ctx, setDlgState);
+                  },
+                ),
+              ],
             ),
           ],
         ),
@@ -832,6 +949,7 @@ void showAddCustomParameterDialog(
             onPressed: () {
               final name = nameController.text.trim();
               if (name.isEmpty) return;
+              if (jsonError != null) return;
               dynamic value = valueController.text.trim();
               if (type == 'number') {
                 value = double.tryParse(value) ?? int.tryParse(value) ?? value;
@@ -875,6 +993,94 @@ void showEditCustomParameterDialog(
     initialValue = cp.value?.toString() ?? '';
   }
   final valueController = TextEditingController(text: initialValue);
+  String? jsonError;
+
+  void validateJsonValue() {
+    if (type == 'json' && valueController.text.trim().isNotEmpty) {
+      try {
+        jsonDecode(valueController.text.trim());
+        jsonError = null;
+      } catch (_) {
+        jsonError = 'JSON 格式不正确';
+      }
+    } else {
+      jsonError = null;
+    }
+  }
+
+  void showValueFullscreenEditor(
+    BuildContext dialogContext,
+    StateSetter setDlgState,
+  ) {
+    final editingController = TextEditingController(text: valueController.text);
+    showDialog(
+      context: dialogContext,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(8),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const Text(
+                    '编辑参数值',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () {
+                      editingController.dispose();
+                      Navigator.pop(ctx);
+                    },
+                    tooltip: '取消',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: TextField(
+                  controller: editingController,
+                  maxLines: null,
+                  expands: true,
+                  textAlignVertical: TextAlignVertical.top,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.all(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.check, size: 18),
+                  label: const Text('确定'),
+                  onPressed: () {
+                    final text = editingController.text;
+                    editingController.dispose();
+                    Navigator.pop(ctx);
+                    setDlgState(() {
+                      valueController.text = text;
+                      valueController.selection = TextSelection.fromPosition(
+                        TextPosition(offset: text.length),
+                      );
+                      validateJsonValue();
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Initial validation
+  validateJsonValue();
 
   showDialog(
     context: context,
@@ -905,16 +1111,41 @@ void showEditCustomParameterDialog(
                 DropdownMenuItem(value: 'json', child: Text('JSON')),
               ],
               onChanged: (v) {
-                if (v != null) setDlgState(() => type = v);
+                if (v != null) {
+                  setDlgState(() {
+                    type = v;
+                    validateJsonValue();
+                  });
+                }
               },
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: valueController,
-              decoration: const InputDecoration(
-                labelText: '值',
-                border: OutlineInputBorder(),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: valueController,
+                    decoration: InputDecoration(
+                      labelText: '值',
+                      border: const OutlineInputBorder(),
+                      errorText: jsonError,
+                      errorMaxLines: 3,
+                    ),
+                    onChanged: (_) {
+                      validateJsonValue();
+                      setDlgState(() {});
+                    },
+                  ),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.fullscreen, size: 20),
+                  tooltip: '全屏编辑',
+                  onPressed: () {
+                    showValueFullscreenEditor(ctx, setDlgState);
+                  },
+                ),
+              ],
             ),
           ],
         ),
@@ -927,6 +1158,7 @@ void showEditCustomParameterDialog(
             onPressed: () {
               final name = nameController.text.trim();
               if (name.isEmpty) return;
+              if (jsonError != null) return;
               dynamic value = valueController.text.trim();
               if (type == 'number') {
                 value = double.tryParse(value) ?? int.tryParse(value) ?? value;
