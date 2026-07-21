@@ -123,12 +123,10 @@ class Math3DToolbar extends StatelessWidget {
                     width: 34,
                     height: 34,
                     alignment: Alignment.center,
-                    child: Text(
-                      info.iconLabel,
-                      style: TextStyle(
-                        fontSize: 18,
-                        color: iconColor,
-                      ),
+                    child: Icon(
+                      info.iconData,
+                      size: 20,
+                      color: iconColor,
                     ),
                   ),
                 ),

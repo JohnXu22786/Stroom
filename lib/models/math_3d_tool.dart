@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 /// Types of 3D construction tools.
 ///
 /// Each tool represents a construction mode in the 3D view.
@@ -45,14 +47,14 @@ enum ConstructionTool {
 class ToolInfo {
   final ConstructionTool tool;
   final String name;
-  final String iconLabel;
+  final IconData iconData;
   final String tooltip;
   final int group; // 所属工具组 (0-9)
 
   const ToolInfo({
     required this.tool,
     required this.name,
-    required this.iconLabel,
+    required this.iconData,
     required this.tooltip,
     required this.group,
   });
@@ -61,84 +63,84 @@ class ToolInfo {
     ConstructionTool.move: ToolInfo(
       tool: ConstructionTool.move,
       name: '移动',
-      iconLabel: '✋',
+      iconData: Icons.pan_tool,
       tooltip: '拖拽旋转视图',
       group: 0,
     ),
     ConstructionTool.point: ToolInfo(
       tool: ConstructionTool.point,
       name: '点',
-      iconLabel: '•',
+      iconData: Icons.fiber_manual_record,
       tooltip: '点击放置点（按住拖拽调整高度）',
       group: 1,
     ),
     ConstructionTool.line: ToolInfo(
       tool: ConstructionTool.line,
       name: '直线',
-      iconLabel: '╱',
+      iconData: Icons.timeline,
       tooltip: '点击两个点创建直线',
       group: 2,
     ),
     ConstructionTool.polygon: ToolInfo(
       tool: ConstructionTool.polygon,
       name: '多边形',
-      iconLabel: '⬠',
+      iconData: Icons.star,
       tooltip: '依次点击顶点，再点第一个顶点闭合',
       group: 3,
     ),
     ConstructionTool.plane: ToolInfo(
       tool: ConstructionTool.plane,
       name: '平面',
-      iconLabel: '▭',
+      iconData: Icons.crop_square,
       tooltip: '点击三个不共线点创建平面',
       group: 4,
     ),
     ConstructionTool.sphere: ToolInfo(
       tool: ConstructionTool.sphere,
       name: '球体',
-      iconLabel: '◯',
+      iconData: Icons.language,
       tooltip: '点击球心，再点击球面点',
       group: 5,
     ),
     ConstructionTool.circle: ToolInfo(
       tool: ConstructionTool.circle,
       name: '圆',
-      iconLabel: '○',
+      iconData: Icons.radio_button_unchecked,
       tooltip: '点击圆心，再点击圆周上一点',
       group: 5,
     ),
     ConstructionTool.cube: ToolInfo(
       tool: ConstructionTool.cube,
       name: '立方体',
-      iconLabel: '▣',
+      iconData: Icons.view_in_ar,
       tooltip: '点击两个点作为底面棱边',
       group: 6,
     ),
     ConstructionTool.extrudePrism: ToolInfo(
       tool: ConstructionTool.extrudePrism,
       name: '拉伸棱柱',
-      iconLabel: '⏍',
+      iconData: Icons.layers,
       tooltip: '点击多边形底面，拖拽或输入高度',
       group: 6,
     ),
     ConstructionTool.cone: ToolInfo(
       tool: ConstructionTool.cone,
       name: '圆锥',
-      iconLabel: '▲',
+      iconData: Icons.expand_less,
       tooltip: '点击底面圆心，再点击顶点',
       group: 6,
     ),
     ConstructionTool.cylinder: ToolInfo(
       tool: ConstructionTool.cylinder,
       name: '圆柱',
-      iconLabel: '⬡',
+      iconData: Icons.wifi_tethering,
       tooltip: '点击底面圆心，再点击顶面圆心',
       group: 6,
     ),
     ConstructionTool.pyramid: ToolInfo(
       tool: ConstructionTool.pyramid,
       name: '棱锥',
-      iconLabel: '△',
+      iconData: Icons.change_history,
       tooltip: '点击多边形底面，再点击顶点',
       group: 6,
     ),
