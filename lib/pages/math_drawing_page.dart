@@ -217,6 +217,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
       _formulas[index].controller.dispose();
       _formulas.removeAt(index);
     });
+    // Re-plot after deletion so the canvas reflects the remaining formulas
+    _plotAll();
   }
 
   void _confirmRemove(int index) {
