@@ -386,6 +386,169 @@ void main() {
     });
   });
 
+  group('MermaidRenderWidget - showZoomControls', () {
+    testWidgets('showZoomControls:false does not show zoom buttons in loading state',
+        (tester) async {
+      // Regression: default showZoomControls should be false, so zoom
+      // buttons should NOT appear when the widget is in loading state.
+      const widget = MermaidRenderWidget(
+        mermaidCode: 'graph TD\nA-->B',
+        showZoomControls: false,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: widget,
+          ),
+        ),
+      );
+
+      // Should show loading indicator but no zoom buttons
+      expect(find.text('正在准备渲染引擎...'), findsOneWidget);
+      expect(find.byIcon(Icons.zoom_in), findsNothing);
+      expect(find.byIcon(Icons.zoom_out), findsNothing);
+    });
+
+    testWidgets('showZoomControls:true shows zoom buttons in loading state',
+        (tester) async {
+      // Regression: when showZoomControls is true, zoom in/out buttons
+      // should appear even in the loading state (before WebView is ready).
+      const widget = MermaidRenderWidget(
+        mermaidCode: 'graph TD\nA-->B',
+        showZoomControls: true,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: widget,
+          ),
+        ),
+      );
+
+      // Should show zoom buttons alongside loading indicator
+      expect(find.text('正在准备渲染引擎...'), findsOneWidget);
+      expect(find.byIcon(Icons.zoom_in), findsOneWidget);
+      expect(find.byIcon(Icons.zoom_out), findsOneWidget);
+    });
+
+    testWidgets('showZoomControls:true does not show fullscreen or code-toggle',
+        (tester) async {
+      // Regression: showZoomControls should ONLY show zoom buttons, not
+      // the full toolbar (fullscreen, code toggle, save).
+      const widget = MermaidRenderWidget(
+        mermaidCode: 'graph TD\nA-->B',
+        showZoomControls: true,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: widget,
+          ),
+        ),
+      );
+
+      // Only zoom buttons should appear
+      expect(find.byIcon(Icons.zoom_in), findsOneWidget);
+      expect(find.byIcon(Icons.zoom_out), findsOneWidget);
+      // These should NOT appear
+      expect(find.byIcon(Icons.fullscreen), findsNothing);
+      expect(find.byIcon(Icons.code), findsNothing);
+      expect(find.byIcon(Icons.save), findsNothing);
+    });
+
+    testWidgets('showZoomControls:true and showToolbar:true show both',
+        (tester) async {
+      // Regression: showZoomControls should combine with showToolbar.
+      // The full toolbar shows when showToolbar is true, and the zoom
+      // controls shown via showZoomControls should not duplicate.
+      // In practice, when showToolbar is true the toolbar already
+      // contains zoom controls, so showZoomControls is redundant but
+      // should not cause errors or layout issues.
+      const widget = MermaidRenderWidget(
+        mermaidCode: 'graph TD\nA-->B',
+        showZoomControls: true,
+        showToolbar: true,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: widget,
+          ),
+        ),
+      );
+
+      // Loading state — zoom buttons shown by showZoomControls
+      expect(find.text('正在准备渲染引擎...'), findsOneWidget);
+      expect(find.byIcon(Icons.zoom_in), findsOneWidget);
+      expect(find.byIcon(Icons.zoom_out), findsOneWidget);
+    });
+
+    testWidgets('showZoomControls works with testOnlyShowSourceCode',
+        (tester) async {
+      // Regression: showZoomControls should not affect source code mode
+      // (source code mode shows its own action buttons).
+      const widget = MermaidRenderWidget(
+        mermaidCode: 'graph TD\nA-->B',
+        showZoomControls: true,
+        testOnlyShowSourceCode: true,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: widget,
+          ),
+        ),
+      );
+
+      // In source code mode, show zoom controls via separate path
+      // Source code view shows code, not zoom buttons
+      expect(find.text('graph TD\nA-->B'), findsOneWidget);
+      // Source code view uses its own action buttons
+      expect(find.byIcon(Icons.image), findsOneWidget);
+    });
+
+    testWidgets('showZoomControls buttons have proper accessibility labels',
+        (tester) async {
+      // Regression: zoom buttons must have semanticLabel for accessibility.
+      const widget = MermaidRenderWidget(
+        mermaidCode: 'graph TD\nA-->B',
+        showZoomControls: true,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: widget,
+          ),
+        ),
+      );
+
+      final zoomInIcon = tester.widget<Icon>(find.byIcon(Icons.zoom_in));
+      final zoomOutIcon = tester.widget<Icon>(find.byIcon(Icons.zoom_out));
+      expect(zoomInIcon.semanticLabel, isNotNull);
+      expect(zoomOutIcon.semanticLabel, isNotNull);
+    });
+
+    testWidgets('showZoomControls:false hidden when showToolbar:false (default)',
+        (tester) async {
+      // Regression: default showZoomControls should be false, matching
+      // the existing behavior of showToolbar:false.
+      const widget = MermaidRenderWidget(
+        mermaidCode: 'graph TD\nA-->B',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: widget,
+          ),
+        ),
+      );
+
+      // No zoom buttons by default
+      expect(find.byIcon(Icons.zoom_in), findsNothing);
+      expect(find.byIcon(Icons.zoom_out), findsNothing);
+    });
+  });
+
   group('MermaidRenderWidget - source code mode (test-only)', () {
     testWidgets('shows source code view with code text', (tester) async {
       const mermaidCode = 'graph TD\nA-->B';

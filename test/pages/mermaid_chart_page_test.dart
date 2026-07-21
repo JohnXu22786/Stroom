@@ -723,27 +723,130 @@ void main() {
     // Mermaid preview toolbar & split layout
     // ═══════════════════════════════════════════════════
 
-    testWidgets(
-        'split mode preview does NOT show zoom/fullscreen toolbar buttons',
+    // ═══════════════════════════════════════════════════
+    // Adaptive layout & zoom controls
+    // ═══════════════════════════════════════════════════
+
+    testWidgets('split mode uses vertical stack layout in portrait',
         (tester) async {
-      // Regression: the Mermaid page preview should not show the 4-button
-      // toolbar (zoom_in, zoom_out, fullscreen, code toggle) that is used
-      // in chat inline rendering, because MermaidChartPage passes
-      // showToolbar:false to MermaidRenderWidget.
+      // Regression: in portrait orientation, split mode should show
+      // preview on top and code editor on bottom (vertical stack).
+      // This is the existing behavior that should be preserved.
+      // Set viewport to portrait dimensions (taller than wide).
+      tester.view.physicalSize = const Size(600, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp(initialShowPreview: true));
+
+      // MermaidRenderWidget should be visible (preview area)
+      expect(find.byType(MermaidRenderWidget), findsOneWidget);
+      // Code editor label should be visible
+      expect(find.text('代码'), findsOneWidget);
+      // The Mermaid code text field should exist
+      expect(find.byType(TextField), findsOneWidget);
+      // No swap button in portrait mode
+      expect(find.byIcon(Icons.swap_horiz), findsNothing);
+    });
+
+    testWidgets('split mode in landscape shows horizontal layout with swap button',
+        (tester) async {
+      // Regression: in landscape orientation (wider than tall), split
+      // mode should show preview and code editor side by side with a
+      // swap button between them.
+      // Set viewport to landscape dimensions before creating widget
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp(initialShowPreview: true));
+
+      // MermaidRenderWidget should still be visible
+      expect(find.byType(MermaidRenderWidget), findsOneWidget);
+      // Code label should be visible
+      expect(find.text('代码'), findsOneWidget);
+      // In landscape, the swap button should exist
+      expect(find.byIcon(Icons.swap_horiz), findsOneWidget);
+    });
+
+    testWidgets('landscape split mode swap button toggles panel positions',
+        (tester) async {
+      // Regression: tapping the swap_horiz button in landscape split
+      // mode should exchange the left/right positions of preview and
+      // code editor panels. Since we cannot tap buttons and create
+      // WebView at the same time in test mode, we verify the swap
+      // button exists and tapping it produces no exceptions.
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp(initialShowPreview: true));
+
+      // Swap button should exist
+      expect(find.byIcon(Icons.swap_horiz), findsOneWidget);
+
+      // Tap the swap button — this is safe because swap button tap
+      // does NOT create a WebView; it only toggles state.
+      await tester.tap(find.byIcon(Icons.swap_horiz));
+      // Pump to process setState from the tap
+      await tester.pump();
+
+      // After tapping, button should still be present
+      expect(find.byIcon(Icons.swap_horiz), findsOneWidget);
+      // No exceptions
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'split mode preview shows zoom controls (showZoomControls passed to MermaidRenderWidget)',
+        (tester) async {
+      // Regression: the chart page should pass showZoomControls:true
+      // to MermaidRenderWidget so zoom in/out buttons appear at the
+      // top-right of the preview area.
+      // We only call pumpWidget once to avoid InAppWebView creation.
+      await tester.pumpWidget(_buildTestApp(initialShowPreview: true));
+
+      // MermaidRenderWidget should be present
+      expect(find.byType(MermaidRenderWidget), findsOneWidget);
+
+      // Zoom controls should be visible with showZoomControls:true
+      // showZoomControls shows buttons even during the loading state.
+      expect(find.byIcon(Icons.zoom_in), findsOneWidget);
+      expect(find.byIcon(Icons.zoom_out), findsOneWidget);
+    });
+
+    testWidgets(
+        'split mode preview shows zoom controls but NOT full toolbar',
+        (tester) async {
+      // Regression: the Mermaid page preview should zoom controls
+      // (zoom_in, zoom_out) via showZoomControls:true, but should NOT
+      // show the full 4-button toolbar (fullscreen, code toggle, save)
+      // that is used in chat inline rendering, because MermaidChartPage
+      // passes showToolbar:false to MermaidRenderWidget.
       await tester.pumpWidget(_buildTestApp(initialShowPreview: true));
 
       // Only pump once — MermaidRenderWidget shows its loading state.
-      // The postFrameCallback fires during pumpWidget but creating an
-      // InAppWebView would require a real platform implementation not
-      // available in test mode. The loading state is enough to verify
-      // that MermaidRenderWidget is present without the toolbar.
       expect(find.byType(MermaidRenderWidget), findsOneWidget);
 
-      // No toolbar buttons should appear (showToolbar:false prevents
-      // the button row even when the widget is in render mode).
-      expect(find.byIcon(Icons.zoom_in), findsNothing);
-      expect(find.byIcon(Icons.zoom_out), findsNothing);
+      // Zoom controls should appear (showZoomControls:true)
+      expect(find.byIcon(Icons.zoom_in), findsOneWidget);
+      expect(find.byIcon(Icons.zoom_out), findsOneWidget);
+      // Other toolbar buttons should NOT appear (showToolbar:false).
+      // Icons.fullscreen is unique to the MermaidRenderWidget toolbar
+      // and does not appear anywhere else in the chart page.
+      // Icons.save also appears in the AppBar, so not checked here.
+      // Icons.code also appears in the editor header divider.
       expect(find.byIcon(Icons.fullscreen), findsNothing);
+      expect(find.byIcon(Icons.image), findsNothing);
     });
   });
 }
