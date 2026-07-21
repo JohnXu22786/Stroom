@@ -708,9 +708,11 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     final audioRecordsNotifier = ref.read(audioRecordsProvider.notifier);
 
     // Step 1: Add ALL tasks to the list immediately (synchronous, instant).
-    // Tasks are created as "running" and appear in the task list right away.
-    // retryData is null initially — computed asynchronously in the background.
+    // retryData is null — it is computed asynchronously in the background
+    // via _computeSeparationRetryData (fire-and-forget) so it never delays
+    // the return to home page or the start of video processing.
     final taskIds = <String>[];
+    final taskVideoMap = <String, SelectedVideo>{};
     for (final video in videosToProcess) {
       final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
       final taskId = bgNotifier.addTask(
@@ -719,66 +721,29 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
         retryData: null,
       );
       taskIds.add(taskId);
+      taskVideoMap[taskId] = video;
     }
 
-    // Step 2: Pop back to home page immediately — tasks are already visible
-    // in the task list so the user sees progress right away.
+    // Step 2: Pop back to home page immediately — tasks are already visible.
     if (mounted) {
       Navigator.pop(context);
     }
-    // Yield to the event loop so the pop transition renders before any
-    // background work begins.
+    // Yield to the event loop so the pop transition renders.
     await Future<void>.delayed(Duration.zero);
 
-    // Step 3: Process each video in the background.
-    // retryData computation and task execution are wrapped in try-catch
-    // so a failure never leaves tasks stuck.
+    // Step 3: Fire-and-forget retryData computation — this is the only
+    // CPU-bound work (base64Encode) and must NOT block task processing.
+    for (final taskId in taskIds) {
+      final video = taskVideoMap[taskId]!;
+      unawaited(_computeSeparationRetryData(taskId, video, bgNotifier));
+    }
+
+    // Step 4: Process each video immediately, no waiting for retryData.
     for (int i = 0; i < videosToProcess.length; i++) {
       final video = videosToProcess[i];
       final taskId = taskIds[i];
       final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
 
-      // Compute retryData in background isolate (base64Encode is CPU-bound).
-      try {
-        final retryData = await Isolate.run(() {
-          return <String, dynamic>{
-            'type': 'audioSeparation',
-            'videos': [
-              <String, dynamic>{
-                'bytes': base64Encode(video.bytes),
-                'name': video.name,
-                'format': video.format,
-              },
-            ],
-          };
-        });
-        bgNotifier.setRetryData(taskId, retryData);
-      } catch (e) {
-        // Isolate may not be available (e.g. Flutter Web).
-        // Fall back to main-thread computation so retryData is still set.
-        debugPrint(
-            '[AudioSeparation] Isolate.run failed, falling back to main thread: $e');
-        try {
-          final retryData = <String, dynamic>{
-            'type': 'audioSeparation',
-            'videos': [
-              <String, dynamic>{
-                'bytes': base64Encode(video.bytes),
-                'name': video.name,
-                'format': video.format,
-              },
-            ],
-          };
-          bgNotifier.setRetryData(taskId, retryData);
-        } catch (retryError) {
-          // If even main-thread computation fails, log and continue.
-          // The task can still execute without retryData.
-          debugPrint(
-              '[AudioSeparation] Failed to compute retryData: $retryError');
-        }
-      }
-
-      // Process video with full error handling.
       try {
         // Step 0: 分离音频 - mark as running
         bgNotifier.updateStep(taskId, 0, running: true);
@@ -817,6 +782,49 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
 
     // Fire-and-forget: refresh the audio library list after all tasks complete
     unawaited(audioRecordsNotifier.loadRecords());
+  }
+
+  /// Compute retryData for a single audio separation task in the background.
+  /// This is fire-and-forget — the task can execute without retryData.
+  Future<void> _computeSeparationRetryData(
+    String taskId,
+    SelectedVideo video,
+    BackgroundTaskNotifier bgNotifier,
+  ) async {
+    try {
+      final retryData = await Isolate.run(() {
+        return <String, dynamic>{
+          'type': 'audioSeparation',
+          'videos': [
+            <String, dynamic>{
+              'bytes': base64Encode(video.bytes),
+              'name': video.name,
+              'format': video.format,
+            },
+          ],
+        };
+      });
+      bgNotifier.setRetryData(taskId, retryData);
+    } catch (e) {
+      debugPrint(
+          '[AudioSeparation] Isolate.run failed, falling back to main thread: $e');
+      try {
+        final retryData = <String, dynamic>{
+          'type': 'audioSeparation',
+          'videos': [
+            <String, dynamic>{
+              'bytes': base64Encode(video.bytes),
+              'name': video.name,
+              'format': video.format,
+            },
+          ],
+        };
+        bgNotifier.setRetryData(taskId, retryData);
+      } catch (retryError) {
+        debugPrint(
+            '[AudioSeparation] Failed to compute retryData: $retryError');
+      }
+    }
   }
 
   /// 保存音频到音频库，并返回保存的文件路径。如果获取路径失败则返回 null。
