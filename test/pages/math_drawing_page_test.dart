@@ -186,17 +186,78 @@ void main() {
   });
 
   group('MathDrawingPage - UI spacing', () {
-    testWidgets('formula row left side has adequate spacing', (tester) async {
+    testWidgets('eye icon is inside TextField as prefixIcon for consistent spacing',
+        (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
-      // Color circle and eye icon should both be present
-      expect(find.byIcon(Icons.visibility), findsOneWidget);
+      // The eye icon should be rendered inside the TextField's InputDecoration
+      // as a prefixIcon, not as a standalone GestureDetector in the Row.
+      final tf = tester.widget<TextField>(find.byType(TextField));
+      final decoration = tf.decoration;
+      expect(decoration, isNotNull);
 
-      // The color indicator is a Container with circle shape
-      // Check that the Row has appropriate spacing
-      // (verified indirectly by layout not crashing)
-      expect(tester.takeException(), isNull);
+      // prefixIcon should be present and wrap an Icon with Icons.visibility
+      final prefixIcon = decoration!.prefixIcon;
+      expect(prefixIcon, isNotNull);
+
+      // Verify the prefixIcon widget tree contains Icons.visibility
+      final iconInPrefix = find.descendant(
+        of: find.byWidgetPredicate((w) => w == prefixIcon),
+        matching: find.byWidgetPredicate(
+          (w) => w is Icon && w.icon == Icons.visibility,
+        ),
+      );
+      expect(iconInPrefix, findsOneWidget);
+
+      // Ensure no standalone eye icon exists directly in the Row
+      // (the only eye icon should be inside the TextField as prefixIcon)
+      expect(find.byIcon(Icons.visibility), findsOneWidget);
+    });
+
+    testWidgets('eye icon as prefixIcon toggles visibility when tapped',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      await tester.enterText(find.byType(TextField), 'x^2');
+      await tester.pump();
+
+      // Tap the visibility icon (now inside the TextField as prefixIcon)
+      await tester.tap(find.byIcon(Icons.visibility));
+      await tester.pump();
+
+      // Should now show visibility_off icon
+      expect(find.byIcon(Icons.visibility_off), findsOneWidget);
+
+      // Tap again to toggle back
+      await tester.tap(find.byIcon(Icons.visibility_off));
+      await tester.pump();
+
+      expect(find.byIcon(Icons.visibility), findsOneWidget);
+    });
+
+    testWidgets(
+        'prefixIcon and suffixIcon both exist inside TextField decoration with balanced spacing',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      // Enter text to make the undo suffixIcon appear
+      await tester.enterText(find.byType(TextField), 'x^2');
+      await tester.pump();
+
+      final tf = tester.widget<TextField>(find.byType(TextField));
+      final decoration = tf.decoration;
+      expect(decoration, isNotNull);
+
+      // Both prefixIcon (eye) and suffixIcon (undo) should be present
+      expect(decoration!.prefixIcon, isNotNull);
+      expect(decoration.suffixIcon, isNotNull);
+
+      // Both use the same contentPadding for balanced spacing
+      expect(decoration.contentPadding,
+          const EdgeInsets.symmetric(horizontal: 8, vertical: 6));
     });
 
     testWidgets(
