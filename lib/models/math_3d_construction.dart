@@ -66,6 +66,9 @@ class ConstructionState {
   /// Add a point to the construction and return the action to take.
   ConstructionAction addPoint(Point3D point) {
     _points.add(point);
+    // Advance to next step, capped at the last workflow step
+    final maxStep = totalSteps - 1;
+    _stepIndex = _points.length < totalSteps ? _points.length : maxStep;
 
     // Determine if we have enough points based on tool type
     switch (tool) {
