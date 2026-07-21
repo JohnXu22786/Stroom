@@ -3,6 +3,27 @@ import 'package:flutter/material.dart';
 import '../providers/provider_config.dart';
 import 'llm_model_config_shared.dart';
 
+/// Format a JSON parse error with detailed position information.
+///
+/// Extracts line and column numbers from the exception's offset and the
+/// source text, producing a Chinese message like
+/// "第 3 行第 10 列: Unexpected token".
+String formatJsonError(String source, dynamic error) {
+  if (error is FormatException) {
+    final offset = error.offset;
+    final msg = error.message;
+    if (offset != null && offset >= 0 && offset <= source.length) {
+      final before = source.substring(0, offset);
+      final lines = before.split('\n');
+      final line = lines.length;
+      final col = lines.last.length + 1;
+      return '第 $line 行第 $col 列: $msg';
+    }
+    return 'JSON 格式错误: $msg';
+  }
+  return 'JSON 格式不正确';
+}
+
 /// Validate a value as JSON when the param type is 'json'.
 ///
 /// Returns an error string if invalid, or null if valid / not applicable.
@@ -11,8 +32,8 @@ String? validateJsonValue(String type, String value) {
   if (type == 'json' && value.trim().isNotEmpty) {
     try {
       jsonDecode(value.trim());
-    } catch (_) {
-      return 'JSON 格式不正确';
+    } catch (e) {
+      return formatJsonError(value, e);
     }
   }
   return null;
@@ -168,68 +189,245 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
 
   bool _jsonParamHasError(int index) => _jsonErrors.containsKey(index);
 
+  Widget _buildCodeEditorTextField(
+    TextEditingController controller,
+    String hintText,
+    String type,
+  ) {
+    final lines = controller.text.split('\n');
+    final lineCount = lines.length;
+    final digitCount = lineCount.toString().length;
+    final lineNumWidth = (digitCount * 8.0 + 20.0).clamp(36.0, 80.0);
+    const lineHeight = 16.0;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Line numbers
+        Container(
+          width: lineNumWidth,
+          padding: const EdgeInsets.only(top: 12, right: 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: List.generate(lineCount, (i) {
+              return SizedBox(
+                height: lineHeight,
+                child: Text(
+                  '${i + 1}',
+                  style: TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                    color: Colors.grey.shade500,
+                    height: 1.3,
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+        Container(width: 1, color: Colors.grey.shade300),
+        // Editable text area
+        Expanded(
+          child: TextField(
+            controller: controller,
+            maxLines: null,
+            expands: true,
+            textAlignVertical: TextAlignVertical.top,
+            autofocus: true,
+            style: const TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 13,
+              height: 1.3,
+            ),
+            decoration: InputDecoration(
+              hintText: hintText,
+              hintStyle: TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 13,
+                color: Colors.grey.shade400,
+              ),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.fromLTRB(8, 11, 8, 12),
+              isCollapsed: true,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   void _showValueFullscreenEditor(
     BuildContext context,
     String currentValue,
     ValueChanged<String> onSave,
-    String hintText,
-  ) {
+    String hintText, {
+    String type = 'string',
+  }) {
     final editingController = TextEditingController(text: currentValue);
+    String? liveError;
+
+    void validateLive() {
+      if (type == 'json' && editingController.text.trim().isNotEmpty) {
+        try {
+          jsonDecode(editingController.text.trim());
+          liveError = null;
+        } catch (e) {
+          liveError = formatJsonError(editingController.text, e);
+        }
+      } else {
+        liveError = null;
+      }
+    }
+
+    validateLive();
+
     showDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        insetPadding: const EdgeInsets.all(8),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  const Text(
-                    '编辑参数值',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () {
-                      editingController.dispose();
-                      Navigator.pop(ctx);
-                    },
-                    tooltip: '取消',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: TextField(
-                  controller: editingController,
-                  maxLines: null,
-                  expands: true,
-                  textAlignVertical: TextAlignVertical.top,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: hintText,
-                    border: const OutlineInputBorder(),
-                    contentPadding: const EdgeInsets.all(12),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => Dialog(
+          insetPadding: const EdgeInsets.all(8),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                // Title bar
+                Row(
+                  children: [
+                    Icon(
+                      type == 'json' ? Icons.data_object : Icons.edit_note,
+                      size: 20,
+                      color: type == 'json' ? Colors.amber.shade700 : null,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '编辑参数值',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (type == 'json')
+                      Container(
+                        margin: const EdgeInsets.only(left: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade100,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'JSON',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.amber.shade900,
+                          ),
+                        ),
+                      ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () {
+                        editingController.dispose();
+                        Navigator.pop(ctx);
+                      },
+                      tooltip: '取消',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // Code editor area
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xfff5f5f5),
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: _buildCodeEditorTextField(
+                      editingController,
+                      hintText,
+                      type,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton.icon(
-                  icon: const Icon(Icons.check, size: 18),
-                  label: const Text('确定'),
-                  onPressed: () {
-                    final text = editingController.text;
-                    editingController.dispose();
-                    Navigator.pop(ctx);
-                    onSave(text);
-                  },
+                // Error message bar
+                if (liveError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.error_outline,
+                            size: 16,
+                            color: Colors.red.shade700,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              liveError!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.red.shade800,
+                                fontFamily: 'monospace',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                // Action buttons
+                Row(
+                  children: [
+                    if (liveError != null)
+                      Text(
+                        'JSON 格式有误，请修正后再保存',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.red.shade400,
+                        ),
+                      ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () {
+                        editingController.dispose();
+                        Navigator.pop(ctx);
+                      },
+                      child: const Text('取消'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                      icon: const Icon(Icons.check, size: 18),
+                      label: const Text('确定'),
+                      onPressed: liveError != null
+                          ? null
+                          : () {
+                              final text = editingController.text;
+                              editingController.dispose();
+                              Navigator.pop(ctx);
+                              onSave(text);
+                            },
+                    ),
+                  ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -818,6 +1016,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                                   setState(() {});
                                 },
                                 param.paramType.defaultValueHint,
+                                type: param.type,
                               );
                             },
                           ),
