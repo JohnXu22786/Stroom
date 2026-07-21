@@ -1393,11 +1393,33 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (mounted) {
       Navigator.pop(context);
     }
-    // Yield to the event loop so the pop transition renders before any
-    // background work begins.
+    // Yield to the event loop so the pop transition renders.
     await Future<void>.delayed(Duration.zero);
 
-    // Step 3: Compute retryData in background isolate.
+    // Step 3: Fire-and-forget retryData computation — this is the only
+    // CPU-bound work (base64Encode) and must NOT block OCR execution.
+    unawaited(_computeOcrRetryData(taskId, imageBytesList, imageFormatList,
+        imageNameList, modelIndex, bgNotifier));
+
+    // Step 4: Execute OCR immediately — no waiting for retryData.
+    try {
+      await _performOcr(effectiveConfig, taskId, bgNotifier, textNotifier,
+          title: title);
+    } catch (e) {
+      bgNotifier.failTask(taskId, error: 'OCR启动失败: $e');
+    }
+  }
+
+  /// Compute retryData for an OCR task in the background.
+  /// This is fire-and-forget — the task can execute without retryData.
+  Future<void> _computeOcrRetryData(
+    String taskId,
+    List<Uint8List> imageBytesList,
+    List<String> imageFormatList,
+    List<String?> imageNameList,
+    int modelIndex,
+    BackgroundTaskNotifier bgNotifier,
+  ) async {
     try {
       final retryData = await Isolate.run(() {
         final images = <Map<String, dynamic>>[];
@@ -1416,8 +1438,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       });
       bgNotifier.setRetryData(taskId, retryData);
     } catch (e) {
-      // Isolate may not be available (e.g. Flutter Web).
-      // Fall back to main-thread computation so retryData is still set.
       debugPrint('[OCR] Isolate.run failed, falling back to main thread: $e');
       try {
         final images = <Map<String, dynamic>>[];
@@ -1437,14 +1457,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       } catch (retryError) {
         debugPrint('[OCR] Failed to compute retryData: $retryError');
       }
-    }
-
-    // Step 4: Execute OCR with full error handling.
-    try {
-      await _performOcr(effectiveConfig, taskId, bgNotifier, textNotifier,
-          title: title);
-    } catch (e) {
-      bgNotifier.failTask(taskId, error: 'OCR启动失败: $e');
     }
   }
 

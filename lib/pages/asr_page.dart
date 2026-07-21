@@ -1035,7 +1035,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
     // Step 1: Create ALL tasks first so they appear in the list immediately.
     // Tasks are created as "waiting" — the execution chain transitions them
-    // to "running" one by one. retryData is null initially.
+    // to "running" one by one. retryData is null — it is computed
+    // asynchronously in the background (fire-and-forget) so it never delays
+    // the return to home page or the start of task execution.
     final taskEntries = <_TaskEntry>[];
     for (final audio in audiosToProcess) {
       final title = 'ASR_${audio.name}';
@@ -1053,22 +1055,20 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     if (mounted) {
       Navigator.pop(context);
     }
-    // Yield to the event loop so the pop transition renders before any
-    // background work begins.
+    // Yield to the event loop so the pop transition renders.
     await Future<void>.delayed(Duration.zero);
 
-    // Step 3: Compute retryData for each task.
-    // Each computation is wrapped in try-catch so a failure never prevents
-    // the execution chain from starting.
+    // Step 3: Fire-and-forget retryData computation — this is the only
+    // CPU-bound work (base64Encode) and must NOT block task execution.
     final modelIndex = _selectedModelIndex;
     final saveFolder = _saveFolder;
     for (final entry in taskEntries) {
-      await _computeAsrRetryData(entry, modelIndex, saveFolder, bgNotifier);
+      unawaited(
+          _computeAsrRetryData(entry, modelIndex, saveFolder, bgNotifier));
     }
 
-    // Step 4: Execute tasks in sequence one-by-one (auto-chain).
-    // Wrapped in try-catch so unexpected errors fail remaining tasks instead
-    // of leaving them stuck in "waiting" state.
+    // Step 4: Execute tasks in sequence one-by-one (auto-chain) immediately,
+    // without waiting for retryData computation to finish.
     try {
       await _executeTaskChain(
           taskEntries, effectiveConfig, bgNotifier, textNotifier);
@@ -1088,7 +1088,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   }
 
   /// Compute retryData for a single ASR task in a background isolate.
-  /// Falls back to main-thread computation if Isolate.run is not available.
+  /// This is fire-and-forget — the task can execute without retryData.
   Future<void> _computeAsrRetryData(
     _TaskEntry entry,
     int modelIndex,
