@@ -959,6 +959,201 @@ void main() {
   });
 
   // ====================================================================
+  // Built-in vendor MCP providers always have tool definitions even when
+  // their servers are unreachable — no distinction between "pure Dart"
+  // HTTP tools and SSE MCP tools.
+  // ====================================================================
+
+  group('Built-in vendor MCP providers always have tool definitions', () {
+    /// The 5 built-in vendor SSE MCP providers as they appear in
+    /// _createBuiltinMcpConfigs() (transport='sse', isVendor=true).
+    final vendorSseConfigs = [
+      ('Exa', '通过 Exa MCP 接口进行网络搜索、内容提取和深度研究'),
+      ('Tavily', 'AI 原生搜索引擎，专为大语言模型优化的实时网络搜索服务'),
+      ('Jina AI', '多模态 AI 服务，支持网页内容提取、Embedding 和搜索结果抓取'),
+      ('Firecrawl', '网页抓取与内容提取服务，可将任意网页转为干净的 Markdown 或结构化数据'),
+      ('Zhipu', '智谱 AI 开放平台的网页阅读器 MCP 服务'),
+    ];
+
+    late ChatAdapter adapter;
+
+    setUp(() {
+      adapter = ChatAdapter();
+    });
+
+    tearDown(() {
+      adapter.dispose();
+    });
+
+    test(
+        'initializeMcpServers creates placeholder tool definitions for '
+        'vendor SSE providers whose servers are unreachable', () async {
+      // Configs with isVendor=true, isHttpTool=false, transport=sse
+      // These simulate the 5 built-in MCP (SSE) providers.
+      final configs = vendorSseConfigs.map((entry) {
+        final (name, desc) = entry;
+        return ProviderConfigItem(
+          providerName: name,
+          host: 'https://mcp.example.com/mcp',
+          key: '',
+          models: [
+            ModelConfig(
+              name: name,
+              modelId: 'sse',
+              typeConfig: {
+                'transport': 'sse',
+                'url': 'https://mcp.example.com/mcp',
+                'isVendor': true,
+                'description': desc,
+              },
+            ),
+          ],
+        );
+      }).toList();
+
+      final state = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_mcp',
+            type: 'mcp',
+            name: 'MCP供应商',
+            configs: configs,
+          ),
+        ],
+      );
+
+      // This will attempt to connect to mcp.example.com (unreachable in tests).
+      // The catch block in initializeMcpServers should create placeholder
+      // tool definitions from the vendor configs' descriptions.
+      await adapter.initializeMcpServers(state);
+
+      final allDefs = adapter.getAllToolDefinitions();
+      final names = allDefs.map((d) => d.name).toSet();
+
+      // All 5 vendor SSE providers should have tool definitions even though
+      // the servers are unreachable.
+      expect(names, contains('exa_mcp'),
+          reason: 'Exa should have a placeholder tool definition');
+      expect(names, contains('tavily_mcp'),
+          reason: 'Tavily should have a placeholder tool definition');
+      expect(names, contains('jina_ai_mcp'),
+          reason: 'Jina AI should have a placeholder tool definition');
+      expect(names, contains('firecrawl_mcp'),
+          reason: 'Firecrawl should have a placeholder tool definition');
+      expect(names, contains('zhipu_mcp'),
+          reason: 'Zhipu should have a placeholder tool definition');
+    });
+
+    test(
+        'getAllToolDefinitions includes HTTP tools after initializeBuiltinTools',
+        () {
+      // Register HTTP tools
+      final mcpEntryState = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_mcp',
+            type: 'mcp',
+            name: 'MCP供应商',
+            configs: [
+              ProviderConfigItem(
+                providerName: 'Brave Search',
+                host: 'https://api.search.brave.com',
+                key: '',
+                models: [
+                  ModelConfig(
+                    name: 'Brave Search',
+                    modelId: 'http',
+                    typeConfig: {
+                      'transport': 'http',
+                      'isHttpTool': true,
+                    },
+                  ),
+                ],
+              ),
+              // Also include a vendor SSE config to test mixing
+              ProviderConfigItem(
+                providerName: 'Exa',
+                host: 'https://mcp.exa.ai/mcp',
+                key: '',
+                models: [
+                  ModelConfig(
+                    name: 'Exa',
+                    modelId: 'sse',
+                    typeConfig: {
+                      'transport': 'sse',
+                      'url': 'https://mcp.exa.ai/mcp',
+                      'isVendor': true,
+                      'description': 'Exa MCP search tool',
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+
+      adapter.initializeBuiltinTools(mcpEntryState);
+      // Don't call initializeMcpServers to avoid real network connections.
+      // This test verifies that getAllToolDefinitions returns HTTP tools,
+      // while MCP tools come from initializeMcpServers separately.
+
+      final defs = adapter.getAllToolDefinitions();
+      final names = defs.map((d) => d.name).toSet();
+
+      // HTTP tools are registered
+      expect(names, contains('brave_web_search'));
+      expect(names, contains('bocha_web_search'));
+      expect(names, contains('querit_search'));
+      expect(names, contains('searxng_search'));
+    });
+
+    test('vendor SSE placeholder tools are visible via mcpToolDefinitions',
+        () async {
+      // Single vendor SSE config (Exa)
+      final state = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_mcp',
+            type: 'mcp',
+            name: 'MCP供应商',
+            configs: [
+              ProviderConfigItem(
+                providerName: 'Exa',
+                host: 'https://mcp.exa.ai/mcp',
+                key: '',
+                models: [
+                  ModelConfig(
+                    name: 'Exa',
+                    modelId: 'sse',
+                    typeConfig: {
+                      'transport': 'sse',
+                      'url': 'https://mcp.exa.ai/mcp',
+                      'isVendor': true,
+                      'description': '通过 Exa MCP 接口进行网络搜索',
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+
+      await adapter.initializeMcpServers(state);
+
+      expect(adapter.mcpToolDefinitions, isNotEmpty,
+          reason: 'Exa should have a placeholder tool definition');
+      final exaTools = adapter.mcpToolDefinitions.where(
+        (t) => t.name == 'exa_mcp',
+      );
+      expect(exaTools, isNotEmpty, reason: 'exa_mcp placeholder should exist');
+      expect(exaTools.first.description, contains('Exa MCP'),
+          reason: 'Description should be preserved from config');
+    });
+  });
+
+  // ====================================================================
   // Auto-enable all available tools by default — built-in SSE MCPs must
   // be visible in the conversation page's tool list without manual
   // toggling.
