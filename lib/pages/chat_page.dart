@@ -879,6 +879,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
     /// Used to ensure the reasoning button appears on the very first
     /// ReasoningEvent even when throttled by [reasoningMinInterval].
     bool hasShownFirstReasoning = false;
+
+    /// Tracks the index of the currently active (in-progress) reasoning
+    /// segment in [_chatSegments[aiMsgId]]. When a new reasoning section
+    /// starts (first ReasoningEvent after ReasoningSectionEndEvent or at
+    /// stream start), a [ReasoningSegment] is appended to the segments list
+    /// and its index is stored here so it can be updated when the section
+    /// completes (isStreaming → false).
+    int? activeReasoningSegIndex;
     // Reset reasoning providers at start of new streaming session.
     // Initialize sections as empty list — they are populated on first
     // ReasoningEvent (not with a placeholder empty string).
@@ -1006,6 +1014,26 @@ class _ChatPageState extends ConsumerState<ChatPage>
               sections.add(reasoningBuffer);
             }
             _reasoningContents[aiMsgId] = sections;
+
+            // When this ReasoningEvent starts a NEW reasoning section
+            // (not a continuation of an existing one), add a ReasoningSegment
+            // to the segments list at the correct position. This integrates
+            // the reasoning button inline with the message flow instead of
+            // grouping all reasoning sections at the top.
+            if (activeReasoningSegIndex == null) {
+              final segIndex = _chatSegments[aiMsgId]!.length;
+              // Use isStreaming:true because this section is still being
+              // accumulated. It will be set to false when the section ends
+              // (via ReasoningSectionEndEvent or stream completion).
+              _chatSegments[aiMsgId]!.add(
+                ReasoningSegment(
+                  sectionIndex: sections.length - 1,
+                  isStreaming: true,
+                ),
+              );
+              activeReasoningSegIndex = segIndex;
+            }
+
             final now = DateTime.now();
             if (now.difference(lastReasoningUpdate) >= reasoningMinInterval) {
               lastReasoningUpdate = now;
@@ -1040,6 +1068,21 @@ class _ChatPageState extends ConsumerState<ChatPage>
             ref.read(streamingReasoningSectionsProvider.notifier).state =
                 sections;
             _reasoningContents[aiMsgId] = sections;
+
+            // Mark the active reasoning segment as completed (isStreaming → false)
+            // so the button shows "思考完成" instead of "思考中 ›››".
+            // Clear the tracking index so the next ReasoningEvent starts a
+            // new ReasoningSegment for the next round.
+            if (activeReasoningSegIndex != null &&
+                activeReasoningSegIndex! <
+                    (_chatSegments[aiMsgId]?.length ?? 0)) {
+              _chatSegments[aiMsgId]![activeReasoningSegIndex!] =
+                  ReasoningSegment(
+                sectionIndex: sections.length - 2, // the just-finalized section
+                isStreaming: false,
+              );
+            }
+            activeReasoningSegIndex = null;
             if (mounted) setState(() {});
 
           case ToolCallStartEvent e:
@@ -1184,6 +1227,21 @@ class _ChatPageState extends ConsumerState<ChatPage>
       if (reasoningBuffer.isNotEmpty) {
         _isReasoningCompletedForMsg[aiMsgId] = true;
       }
+
+      // Finalize any remaining active reasoning segment (the last in-progress
+      // section that never received a ReasoningSectionEndEvent). This updates
+      // the segment's isStreaming flag from true to false so the button shows
+      // "思考完成" instead of "思考中 ›››" after streaming completes.
+      if (activeReasoningSegIndex != null &&
+          activeReasoningSegIndex! <
+              (_chatSegments[aiMsgId]?.length ?? 0) &&
+          finalSections.isNotEmpty) {
+        _chatSegments[aiMsgId]![activeReasoningSegIndex!] = ReasoningSegment(
+          sectionIndex: finalSections.length - 1,
+          isStreaming: false,
+        );
+      }
+      activeReasoningSegIndex = null;
     }
 
     // Wrap post-stream processing in try-catch so that isStreamingProvider
@@ -2570,27 +2628,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                             CrossAxisAlignment.start,
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          if (reasoningSections != null &&
-                                              reasoningSections.isNotEmpty)
-                                            ReasoningSection(
-                                              sections: ReasoningSectionData(
-                                                texts: reasoningSections,
-                                                // Streaming is true only while
-                                                // reasoning events are still
-                                                // being received. Once text
-                                                // content starts (reasoning
-                                                // complete), streaming becomes
-                                                // false so the button shows
-                                                // "推理过程" instead of "推理中".
-                                                streaming: isStreaming &&
-                                                    message.id ==
-                                                        _streamingMsgId &&
-                                                    _isReasoningCompletedForMsg[
-                                                            message.id] !=
-                                                        true,
-                                              ),
-                                              messageId: message.id,
-                                            ),
                                           // During streaming, when first token hasn't arrived
                                           // and we don't have reasoning content, show JumpingDots.
                                           // Reasoning content already shows "推理中" button.
@@ -2641,7 +2678,49 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                                   ),
                                                 ToolCallSegment s =>
                                                   ToolCallCard(data: s.data),
+                                                ReasoningSegment s =>
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                      bottom: 4,
+                                                    ),
+                                                    child: ReasoningSection(
+                                                      sections:
+                                                          ReasoningSectionData(
+                                                        texts: (s.sectionIndex <
+                                                                (_reasoningContents[
+                                                                            message
+                                                                                .id]
+                                                                        ?.length ??
+                                                                    0))
+                                                            ? [
+                                                                _reasoningContents[
+                                                                        message
+                                                                            .id]![
+                                                                    s.sectionIndex]
+                                                              ]
+                                                            : [''],
+                                                        streaming:
+                                                            s.isStreaming,
+                                                      ),
+                                                      messageId: message.id,
+                                                    ),
+                                                  ),
                                               },
+                                            )
+                                          // Historical messages: segments may be null (loaded from
+                                          // persistence), but reasoning sections can still exist
+                                          // via _reasoningContents (restored from ChatMessage.
+                                          // reasoningContent). Show the reasoning buttons as a
+                                          // group at the top, same as the pre-inline layout.
+                                          else if (reasoningSections != null &&
+                                              reasoningSections.isNotEmpty)
+                                            ReasoningSection(
+                                              sections: ReasoningSectionData(
+                                                texts: reasoningSections,
+                                                streaming: false,
+                                              ),
+                                              messageId: message.id,
                                             )
                                           else if (hasSearchMatch)
                                             _buildHighlightedText(
