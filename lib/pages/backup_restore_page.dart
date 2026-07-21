@@ -27,7 +27,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   bool _isAnkiImporting = false;
 
   // 统一选择（对应新 BackupSelection 字段）
-  // 聊天记录和附件、设置、图片、音频、视频、文本、任务
+  // 聊天记录和附件、设置、图片、音频、视频、文本、任务、Anki数据
   bool _chatRecordsAndAttachments = true;
   bool _settings = true;
   bool _pictures = true;
@@ -35,6 +35,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   bool _videos = true;
   bool _texts = true;
   bool _tasks = true;
+  bool _ankiData = true;
 
   BackupSelection get _selection => BackupSelection(
         chatRecordsAndAttachments: _chatRecordsAndAttachments,
@@ -44,6 +45,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         videos: _videos,
         texts: _texts,
         tasks: _tasks,
+        ankiData: _ankiData,
       );
 
   @override
@@ -74,7 +76,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         _audio ||
         _videos ||
         _texts ||
-        _tasks;
+        _tasks ||
+        _ankiData;
   }
 
   Future<void> _onExport() async {
@@ -203,6 +206,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     if (selection.videos) restoreWarnings.add('视频将被覆盖');
     if (selection.texts) restoreWarnings.add('文本将被覆盖');
     if (selection.tasks) restoreWarnings.add('任务将被覆盖');
+    if (selection.ankiData) restoreWarnings.add('Anki闪卡数据库将被覆盖');
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -686,6 +690,15 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
               subtitle: '后台任务记录',
               icon: Icons.assignment_outlined,
               iconColor: Colors.brown,
+            ),
+            const Divider(height: 1),
+            _buildCheckboxItem(
+              value: _ankiData,
+              onChanged: (v) => setState(() => _ankiData = v ?? false),
+              title: 'Anki闪卡数据',
+              subtitle: 'Anki 原始数据库',
+              icon: Icons.extension,
+              iconColor: Colors.green,
             ),
             const SizedBox(height: 4),
           ],

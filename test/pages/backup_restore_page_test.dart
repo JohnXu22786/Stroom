@@ -84,6 +84,24 @@ void main() {
       expect(find.text('选择要备份或恢复的数据类别'), findsOneWidget);
     });
 
+    testWidgets('anki data checkbox appears in unified selection card',
+        (tester) async {
+      await tester.pumpWidget(createTestApp());
+      await tester.pump();
+
+      // Scroll to find the Anki闪卡数据 checkbox in the unified selection
+      await tester.scrollUntilVisible(
+        find.text('Anki闪卡数据'),
+        200.0,
+        scrollable: find.byType(Scrollable),
+      );
+      await tester.pump();
+      expect(find.text('Anki闪卡数据'), findsAtLeast(1));
+
+      // Should show the subtitle describing it's the original data format
+      expect(find.textContaining('Anki 原始数据库'), findsAtLeast(1));
+    });
+
     testWidgets('auto backup path display does not contain 点击重新选择',
         (tester) async {
       await tester.pumpWidget(createTestApp());
