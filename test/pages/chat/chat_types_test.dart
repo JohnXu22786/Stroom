@@ -164,7 +164,9 @@ void main() {
         expect((merged[2] as TextSegment).text, 'End');
       });
 
-      test('mixed ReasoningSegment, ToolCallSegment, TextSegment are kept separate', () {
+      test(
+          'mixed ReasoningSegment, ToolCallSegment, TextSegment are kept separate',
+          () {
         final data = ToolCallData(
           id: 'call_1',
           name: 'search',
@@ -199,7 +201,9 @@ void main() {
         expect(merged[0], isA<ReasoningSegment>());
       });
 
-      test('ReasoningSegment between two TextSegment blocks after ToolCallSegment', () {
+      test(
+          'ReasoningSegment between two TextSegment blocks after ToolCallSegment',
+          () {
         final data = ToolCallData(
           id: 'call_a',
           name: 'tool_a',

@@ -1233,8 +1233,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // the segment's isStreaming flag from true to false so the button shows
       // "思考完成" instead of "思考中 ›››" after streaming completes.
       if (activeReasoningSegIndex != null &&
-          activeReasoningSegIndex! <
-              (_chatSegments[aiMsgId]?.length ?? 0) &&
+          activeReasoningSegIndex! < (_chatSegments[aiMsgId]?.length ?? 0) &&
           finalSections.isNotEmpty) {
         _chatSegments[aiMsgId]![activeReasoningSegIndex!] = ReasoningSegment(
           sectionIndex: finalSections.length - 1,
@@ -2678,8 +2677,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                                   ),
                                                 ToolCallSegment s =>
                                                   ToolCallCard(data: s.data),
-                                                ReasoningSegment s =>
-                                                  Padding(
+                                                ReasoningSegment s => Padding(
                                                     padding:
                                                         const EdgeInsets.only(
                                                       bottom: 4,
@@ -2688,16 +2686,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                                       sections:
                                                           ReasoningSectionData(
                                                         texts: (s.sectionIndex <
-                                                                (_reasoningContents[
-                                                                            message
-                                                                                .id]
+                                                                (_reasoningContents[message
+                                                                            .id]
                                                                         ?.length ??
                                                                     0))
                                                             ? [
                                                                 _reasoningContents[
-                                                                        message
-                                                                            .id]![
-                                                                    s.sectionIndex]
+                                                                    message
+                                                                        .id]![s
+                                                                    .sectionIndex]
                                                               ]
                                                             : [''],
                                                         streaming:
