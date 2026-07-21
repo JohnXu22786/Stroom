@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -1364,14 +1365,31 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       model: selectedOption.model.modelId,
     );
 
-    // Capture notifier references BEFORE Navigator.pop — after the widget is
-    // disposed, ConsumerState.ref becomes null and ref.read() would throw.
+    // Capture notifier references so they remain valid after Navigator.pop.
     final bgNotifier = ref.read(backgroundTasksProvider.notifier);
     final textNotifier = ref.read(textRecordsProvider.notifier);
 
-    // Pop back to home page IMMEDIATELY so user doesn't experience a freeze.
-    // Create task first (without retryData, instant), then compute
-    // retryData in background isolate so the UI never blocks.
+    // Step 1: Create the task immediately (synchronous, instant).
+    // The task appears in the task list right away.
+    // Capture image data in plain lists BEFORE Navigator.pop for consistency
+    // and to avoid depending on instance state after widget disposal.
+    final timestamp = _currentTimestamp();
+    final allHaveSourceNames =
+        _selectedImages.every((img) => img.sourceName != null);
+    final title = allHaveSourceNames
+        ? 'OCR_${_selectedImages.first.sourceName!}'
+        : 'OCR_$timestamp';
+    final modelIndex = _selectedModelIndex;
+    final imageBytesList = _selectedImages.map((img) => img.bytes).toList();
+    final imageFormatList = _selectedImages.map((img) => img.format).toList();
+    final imageNameList = _selectedImages.map((img) => img.sourceName).toList();
+    final taskId = bgNotifier.addTask(
+      type: BackgroundTaskType.ocr,
+      title: title,
+      retryData: null,
+    );
+
+    // Step 2: Pop back to home page immediately — task is already visible.
     if (mounted) {
       Navigator.pop(context);
     }
@@ -1379,52 +1397,53 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     // background work begins.
     await Future<void>.delayed(Duration.zero);
 
-    // Create a background task for tracking
-    final timestamp = _currentTimestamp();
-    // Determine naming: if all images have source names (imported), use prefix + original name
-    final allHaveSourceNames =
-        _selectedImages.every((img) => img.sourceName != null);
-    final title = allHaveSourceNames
-        ? 'OCR_${_selectedImages.first.sourceName!}'
-        : 'OCR_$timestamp';
-
-    // Create task WITHOUT retryData first (instant, non-blocking).
-    // RetryData will be computed in background isolate below.
-    final modelIndex = _selectedModelIndex;
-    final taskId = bgNotifier.addTask(
-      type: BackgroundTaskType.ocr,
-      title: title,
-      retryData: null,
-    );
-
-    // Compute retryData in background isolate (base64Encode is CPU-bound).
-    // Capture image data in plain lists for isolate-safety.
-    final imageBytesList = _selectedImages.map((img) => img.bytes).toList();
-    final imageFormatList = _selectedImages.map((img) => img.format).toList();
-    final imageNameList = _selectedImages.map((img) => img.sourceName).toList();
-    final retryData = await Isolate.run(() {
-      final images = <Map<String, dynamic>>[];
-      for (int i = 0; i < imageBytesList.length; i++) {
-        images.add(<String, dynamic>{
-          'bytes': base64Encode(imageBytesList[i]),
-          'format': imageFormatList[i],
-          'name': imageNameList[i],
-        });
+    // Step 3: Compute retryData in background isolate.
+    try {
+      final retryData = await Isolate.run(() {
+        final images = <Map<String, dynamic>>[];
+        for (int i = 0; i < imageBytesList.length; i++) {
+          images.add(<String, dynamic>{
+            'bytes': base64Encode(imageBytesList[i]),
+            'format': imageFormatList[i],
+            'name': imageNameList[i],
+          });
+        }
+        return <String, dynamic>{
+          'type': 'ocr',
+          'images': images,
+          'modelIndex': modelIndex,
+        };
+      });
+      bgNotifier.setRetryData(taskId, retryData);
+    } catch (e) {
+      // Isolate may not be available (e.g. Flutter Web).
+      // Fall back to main-thread computation so retryData is still set.
+      debugPrint('[OCR] Isolate.run failed, falling back to main thread: $e');
+      try {
+        final images = <Map<String, dynamic>>[];
+        for (int i = 0; i < imageBytesList.length; i++) {
+          images.add(<String, dynamic>{
+            'bytes': base64Encode(imageBytesList[i]),
+            'format': imageFormatList[i],
+            'name': imageNameList[i],
+          });
+        }
+        final retryData = <String, dynamic>{
+          'type': 'ocr',
+          'images': images,
+          'modelIndex': modelIndex,
+        };
+        bgNotifier.setRetryData(taskId, retryData);
+      } catch (retryError) {
+        debugPrint('[OCR] Failed to compute retryData: $retryError');
       }
-      return <String, dynamic>{
-        'type': 'ocr',
-        'images': images,
-        'modelIndex': modelIndex,
-      };
-    });
-    bgNotifier.setRetryData(taskId, retryData);
+    }
 
+    // Step 4: Execute OCR with full error handling.
     try {
       await _performOcr(effectiveConfig, taskId, bgNotifier, textNotifier,
           title: title);
     } catch (e) {
-      // If an unexpected error occurs before _performOcr's own catch,
-      // mark the task as failed so it doesn't stay in limbo.
       bgNotifier.failTask(taskId, error: 'OCR启动失败: $e');
     }
   }

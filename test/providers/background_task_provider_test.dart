@@ -689,5 +689,111 @@ void main() {
       expect(notifier.state[0].title, '待启动任务');
       expect(notifier.state[0].type, BackgroundTaskType.asr);
     });
+
+    // ==================================================================
+    // RetryData tests (background computation resilience)
+    // ==================================================================
+
+    test('setRetryData updates retryData on existing task', () {
+      final notifier = BackgroundTaskNotifier();
+
+      final id = notifier.addTask(
+        type: BackgroundTaskType.ocr,
+        title: 'OCR任务',
+        retryData: null, // initially no retryData
+      );
+      expect(notifier.state[0].retryData, isNull);
+
+      const retryData = <String, dynamic>{
+        'type': 'ocr',
+        'modelIndex': 0,
+        'images': [],
+      };
+      notifier.setRetryData(id, retryData);
+
+      expect(notifier.state[0].retryData, retryData);
+    });
+
+    test(
+        'setRetryData with null preserves existing retryData (use clearRetryData to clear)',
+        () {
+      final notifier = BackgroundTaskNotifier();
+
+      final id = notifier.addTask(
+        type: BackgroundTaskType.asr,
+        title: 'ASR任务',
+        retryData: <String, dynamic>{'key': 'value'},
+      );
+      expect(notifier.state[0].retryData, isNotNull);
+
+      // setRetryData with null should NOT clear existing data
+      // (the copyWith pattern distinguishes between "not provided" and "clear")
+      notifier.setRetryData(id, null);
+
+      expect(notifier.state[0].retryData, isNotNull,
+          reason: 'setRetryData(null) should not clear existing retryData');
+    });
+
+    test('setRetryData on non-existent task does nothing', () {
+      final notifier = BackgroundTaskNotifier();
+
+      notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
+      expect(() => notifier.setRetryData('non-existent', <String, dynamic>{}),
+          returnsNormally);
+      expect(notifier.state.length, 1);
+      expect(notifier.state[0].retryData, isNull);
+    });
+
+    test('waiting task with no retryData can still be started and failed', () {
+      final notifier = BackgroundTaskNotifier();
+
+      // Create task with startImmediately=false AND no retryData
+      // (simulating the flow where retryData computation failed)
+      final id = notifier.addTask(
+        type: BackgroundTaskType.asr,
+        title: '无retryData的任务',
+        retryData: null,
+        startImmediately: false,
+      );
+      expect(notifier.state[0].status, TaskStatus.waiting);
+      expect(notifier.state[0].retryData, isNull);
+
+      // Start the task as _executeTaskChain would
+      notifier.startTask(id);
+      expect(notifier.state[0].status, TaskStatus.running);
+
+      // Fail the task as processing would on error
+      notifier.failTask(id, error: '处理失败');
+      expect(notifier.state[0].status, TaskStatus.failed);
+      expect(notifier.state[0].error, '处理失败');
+    });
+
+    test('retryData can be set lazily after task creation', () {
+      final notifier = BackgroundTaskNotifier();
+
+      // Simulate: task created without retryData, then retryData
+      // computed in background isolate and set later
+      final id = notifier.addTask(
+        type: BackgroundTaskType.audioSeparation,
+        title: '音频分离',
+        retryData: null,
+      );
+      expect(notifier.state[0].retryData, isNull);
+
+      // Background computation completes, set the retryData
+      const retryData = <String, dynamic>{
+        'type': 'audioSeparation',
+        'videos': [
+          {'name': 'test.mp4', 'format': 'mp4'},
+        ],
+      };
+      notifier.setRetryData(id, retryData);
+
+      expect(notifier.state[0].retryData, retryData);
+
+      // Task execution should still work after retryData is set
+      notifier.completeTask(id);
+      expect(notifier.state[0].status, TaskStatus.completed);
+    });
   });
 }
