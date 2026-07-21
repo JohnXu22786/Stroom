@@ -476,6 +476,8 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
                           isStreaming: m.isStreaming,
                           isError: m.isError,
                           reasoningContent: m.reasoningContent,
+                          toolCalls: m.toolCalls,
+                          reasoningSections: m.reasoningSections,
                         ))
                     .toList(),
                 isPinned: c.isPinned,
