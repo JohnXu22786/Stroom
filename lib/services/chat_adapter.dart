@@ -186,8 +186,7 @@ class ChatAdapter {
     for (final entry in mcpConfigs) {
       if (entry.config.isVendor && entry.description.isNotEmpty) {
         allTools.add(ToolDefinition(
-          name:
-              '${entry.config.name.toLowerCase().replaceAll(' ', '_')}_mcp',
+          name: '${entry.config.name.toLowerCase().replaceAll(' ', '_')}_mcp',
           description: entry.description,
           parameters: const {
             'type': 'object',

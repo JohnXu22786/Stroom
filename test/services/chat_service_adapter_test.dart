@@ -1147,8 +1147,7 @@ void main() {
       final exaTools = adapter.mcpToolDefinitions.where(
         (t) => t.name == 'exa_mcp',
       );
-      expect(exaTools, isNotEmpty,
-          reason: 'exa_mcp placeholder should exist');
+      expect(exaTools, isNotEmpty, reason: 'exa_mcp placeholder should exist');
       expect(exaTools.first.description, contains('Exa MCP'),
           reason: 'Description should be preserved from config');
     });
