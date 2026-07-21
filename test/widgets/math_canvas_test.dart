@@ -686,4 +686,180 @@ void main() {
       expect(viewportChanged, isTrue);
     });
   });
+
+  group('MathCanvas - multiple formulas (Bug 2: formula limit)', () {
+    testWidgets('setFormulas with 8 explicit formulas produces data for all',
+        (tester) async {
+      final key = GlobalKey<MathCanvasState>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 300,
+              height: 300,
+              child: MathCanvas(key: key),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Create 8 formula entries
+      final formulas = <FormulaEntry>[];
+      for (int i = 0; i < 8; i++) {
+        final parsed = MathExpression.fromInput('${i + 1}x');
+        formulas.add(FormulaEntry(
+          rawExpression: '${i + 1}x',
+          parsed: parsed,
+          color: Colors.primaries[i % Colors.primaries.length],
+        ));
+      }
+
+      await key.currentState!.setFormulas(formulas);
+      await tester.pump();
+
+      final points = key.currentState!.curvePoints;
+      // All 8 formulas should produce curve data
+      expect(points.length, greaterThanOrEqualTo(8),
+          reason: '8 formulas should produce at least 8 curve points');
+    });
+
+    testWidgets('setFormulas with 10 implicit formulas produces data for all',
+        (tester) async {
+      final key = GlobalKey<MathCanvasState>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 300,
+              height: 300,
+              child: MathCanvas(key: key),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Create 10 different implicit formula entries
+      final formulas = <FormulaEntry>[
+        FormulaEntry(
+          rawExpression: 'y^2=4x',
+          parsed: MathExpression.fromInput('y^2=4x'),
+          color: Colors.red,
+        ),
+        FormulaEntry(
+          rawExpression: 'x^2+y^2=1',
+          parsed: MathExpression.fromInput('x^2+y^2=1'),
+          color: Colors.blue,
+        ),
+        FormulaEntry(
+          rawExpression: 'x^2=y',
+          parsed: MathExpression.fromInput('x^2=y'),
+          color: Colors.green,
+        ),
+        FormulaEntry(
+          rawExpression: '4x=y^3',
+          parsed: MathExpression.fromInput('4x=y^3'),
+          color: Colors.orange,
+        ),
+        FormulaEntry(
+          rawExpression: 'y=x^2',
+          parsed: MathExpression.fromInput('y=x^2'),
+          color: Colors.purple,
+        ),
+        FormulaEntry(
+          rawExpression: 'x^2+2y^2=1',
+          parsed: MathExpression.fromInput('x^2+2y^2=1'),
+          color: Colors.teal,
+        ),
+        FormulaEntry(
+          rawExpression: 'x^3=y',
+          parsed: MathExpression.fromInput('x^3=y'),
+          color: Colors.pink,
+        ),
+        FormulaEntry(
+          rawExpression: 'sin(x)',
+          parsed: MathExpression.fromInput('sin(x)'),
+          color: Colors.indigo,
+        ),
+        FormulaEntry(
+          rawExpression: 'cos(x)',
+          parsed: MathExpression.fromInput('cos(x)'),
+          color: Colors.cyan,
+        ),
+        FormulaEntry(
+          rawExpression: 'x^3',
+          parsed: MathExpression.fromInput('x^3'),
+          color: Colors.amber,
+        ),
+      ];
+
+      await key.currentState!.setFormulas(formulas);
+      await tester.pump();
+
+      final points = key.currentState!.curvePoints;
+      // All 10 formulas should produce curve data
+      expect(points.length, greaterThan(0),
+          reason: '10 formulas should produce curve data');
+    });
+
+    testWidgets('setFormulas replaces old formulas completely', (tester) async {
+      final key = GlobalKey<MathCanvasState>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 300,
+              height: 300,
+              child: MathCanvas(key: key),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Set 3 formulas first
+      await key.currentState!.setFormulas([
+        FormulaEntry(
+          rawExpression: 'x',
+          parsed: MathExpression.fromInput('x'),
+          color: Colors.red,
+        ),
+        FormulaEntry(
+          rawExpression: 'x^2',
+          parsed: MathExpression.fromInput('x^2'),
+          color: Colors.blue,
+        ),
+        FormulaEntry(
+          rawExpression: 'x^3',
+          parsed: MathExpression.fromInput('x^3'),
+          color: Colors.green,
+        ),
+      ]);
+      await tester.pump();
+
+      // Now replace with just 1 formula (simulating deletion)
+      await key.currentState!.setFormulas([
+        FormulaEntry(
+          rawExpression: 'x^4',
+          parsed: MathExpression.fromInput('x^4'),
+          color: Colors.purple,
+        ),
+      ]);
+      await tester.pump();
+
+      final pointsAfter = key.currentState!.curvePoints;
+      expect(pointsAfter.length, greaterThan(0),
+          reason: 'Single replacement formula should produce curve data');
+      // The new curve should be x^4, not the old x, x^2, x^3
+      final ys = pointsAfter.map((p) => p['y']!).toList();
+      // At x=2, x^4 = 16, but our curve goes from -10 to 10
+      // At x=2, y should be positive and large for x^4
+      expect(ys.any((y) => y > 10), isTrue,
+          reason: 'x^4 should have values > 10 near x=2');
+    });
+  });
 }

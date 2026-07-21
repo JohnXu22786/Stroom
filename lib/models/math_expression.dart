@@ -276,23 +276,35 @@ class MathExpression {
         final x = xMin + ix * stepX;
         final y = yMin + iy * stepY;
 
-        // Collect crossing info for each edge
+        // Collect crossing info for each edge.
+        // Use a small epsilon to handle exact-zero values at grid points.
+        // When f(x,y) == 0 at a grid point (e.g. at the origin for y²=4x,
+        // x²=y, etc.), the product v00*v10 == 0 which fails the < 0 check,
+        // causing the crossing through that corner to be missed.
+        // Treating 0 as a tiny positive (1e-15) ensures the sign comparison
+        // correctly detects crossings at zero-valued corners.
+        const double zeroEps = 1e-15;
+        final s00 = v00 == 0.0 ? zeroEps : v00;
+        final s10 = v10 == 0.0 ? zeroEps : v10;
+        final s01 = v01 == 0.0 ? zeroEps : v01;
+        final s11 = v11 == 0.0 ? zeroEps : v11;
+
         double? bottomT, topT, leftT, rightT;
 
         // Bottom edge (v00-v10)
-        if (v00 * v10 < 0) {
+        if (s00 * s10 < 0) {
           bottomT = v00.abs() / (v00.abs() + v10.abs());
         }
         // Top edge (v01-v11)
-        if (v01 * v11 < 0) {
+        if (s01 * s11 < 0) {
           topT = v01.abs() / (v01.abs() + v11.abs());
         }
         // Left edge (v00-v01)
-        if (v00 * v01 < 0) {
+        if (s00 * s01 < 0) {
           leftT = v00.abs() / (v00.abs() + v01.abs());
         }
         // Right edge (v10-v11)
-        if (v10 * v11 < 0) {
+        if (s10 * s11 < 0) {
           rightT = v10.abs() / (v10.abs() + v11.abs());
         }
 
