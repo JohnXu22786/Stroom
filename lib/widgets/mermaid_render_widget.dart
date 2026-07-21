@@ -10,6 +10,66 @@ import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
 import 'code_block_source_widget.dart';
 
+/// A [OneSequenceGestureRecognizer] that immediately accepts any drag gesture
+/// on the very first [PointerMoveEvent], before the parent [ScrollView]'s
+/// [VerticalDragGestureRecognizer] can accept (which typically requires ~1px
+/// of vertical movement for mouse devices).
+///
+/// This recognizer is used in a [GestureArenaTeam] alongside the
+/// [ScaleGestureRecognizer] so that when the [ImmediateMermaidGestureRecognizer]
+/// wins Flutter's gesture arena, the [ScaleGestureRecognizer] also accepts,
+/// ensuring both horizontal AND vertical drags within the Mermaid diagram area
+/// are captured for pan/zoom instead of scrolling the parent chat page.
+///
+/// When paired with a [ScaleGestureRecognizer] in a [GestureArenaTeam]:
+/// - **Taps / clicks** produce no [PointerMoveEvent], so this recognizer never
+///   resolves, allowing toolbar buttons and other tap handlers to work normally.
+/// - **Drags of any direction** produce a [PointerMoveEvent] immediately on
+///   the first movement, at which point this recognizer resolves with
+///   [GestureDisposition.accepted], winning the arena before the parent
+///   [ScrollView] can detect the drag direction.
+/// - **Pinch zoom** also triggers a [PointerMoveEvent] from one of the two
+///   pointers, causing the same early acceptance and team win.
+class ImmediateMermaidGestureRecognizer extends OneSequenceGestureRecognizer {
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    // OneSequenceGestureRecognizer.addAllowedPointer already calls
+    // startTrackingPointer, which registers with the pointer router and
+    // adds this recognizer to the gesture arena.
+    super.addAllowedPointer(event);
+  }
+
+  @override
+  void handleEvent(PointerEvent event) {
+    if (event is PointerMoveEvent) {
+      // Accept on the very first movement (any direction, any distance),
+      // winning the gesture arena before the parent ScrollView's
+      // VerticalDragGestureRecognizer can accept (which needs ~1px for mouse).
+      resolve(GestureDisposition.accepted);
+    } else if (event is PointerUpEvent || event is PointerCancelEvent) {
+      stopTrackingPointer(event.pointer);
+    }
+  }
+
+  @override
+  void didStopTrackingLastPointer(int pointer) {
+    // No cleanup needed.
+  }
+
+  @override
+  void acceptGesture(int pointer) {
+    // No action needed — just winning the arena is sufficient.
+  }
+
+  @override
+  void rejectGesture(int pointer) {
+    stopTrackingPointer(pointer);
+  }
+
+  @override
+  String get debugDescription => 'immediate_mermaid_gesture';
+}
+
 /// A reusable widget that renders Mermaid diagram code using [InAppWebView]
 /// with mermaid.js loaded from CDN.
 ///
@@ -590,10 +650,30 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// captures every event at the Flutter level before it reaches the
   /// platform view.
   ///
-  /// The [GestureDetector] on the overlay with [onScaleStart]/[onScaleUpdate]
-  /// handles:
-  /// - Single-finger drag → pan
-  /// - Two-finger pinch → zoom (mobile and touchpad)
+  /// The overlay uses [RawGestureDetector] with a [GestureArenaTeam]
+  /// containing two recognizers:
+  ///
+  /// 1. [ImmediateMermaidGestureRecognizer] — wins the arena on the very
+  ///    first [PointerMoveEvent] in ANY direction, before the parent
+  ///    [ScrollView]'s [VerticalDragGestureRecognizer] can determine the
+  ///    drag direction (which typically needs ~1px of vertical movement
+  ///    for mouse devices, or ~18px for touch devices).
+  /// 2. [ScaleGestureRecognizer] — handles pan (single-finger drag) and
+  ///    pinch zoom (two-finger pinch), communicating with the WebView via
+  ///    [evaluateJavascript].
+  ///
+  /// Both recognizers are in the same [GestureArenaTeam] so that when the
+  /// [ImmediateMermaidGestureRecognizer] wins the arena, the
+  /// [ScaleGestureRecognizer] also accepts, capturing the gesture for
+  /// the diagram regardless of drag direction.
+  ///
+  /// This ensures both horizontal AND vertical drags are captured by the
+  /// Mermaid diagram area, preventing the parent chat scroll view from
+  /// scrolling while the user pans or zooms the diagram.
+  ///
+  /// Taps (clicks without movement) produce no [PointerMoveEvent], so the
+  /// [ImmediateMermaidGestureRecognizer] never resolves, and toolbar button
+  /// taps and other click handlers work normally above the overlay.
   ///
   /// The [Listener] on the overlay with [onPointerSignal] handles
   /// Ctrl/MouseWheel zoom on desktop.
@@ -606,6 +686,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// Note: The inline HTML template still includes touch gesture JS as a
   /// fallback; it is not actively used by this gesture wrapper.
   Widget _buildGestureWrapper(Widget child) {
+    // Shared gesture arena team: when the immediate recognizer wins the arena
+    // on first pointer move, the ScaleGestureRecognizer also accepts.
+    final team = GestureArenaTeam();
+
     return ClipRect(
       child: Stack(
         children: [
@@ -617,9 +701,46 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
           Positioned.fill(
             child: Listener(
               onPointerSignal: _onPointerSignal,
-              child: GestureDetector(
-                onScaleStart: _onScaleStart,
-                onScaleUpdate: _onScaleUpdate,
+              child: RawGestureDetector(
+                gestures: <Type, GestureRecognizerFactory>{
+                  // ScaleGestureRecognizer handles pan + pinch zoom.
+                  // It enters the gesture arena via the team, so it
+                  // automatically accepts when the immediate recognizer wins.
+                  ScaleGestureRecognizer:
+                      GestureRecognizerFactoryWithHandlers<
+                          ScaleGestureRecognizer>(
+                    () {
+                      final recognizer =
+                          ScaleGestureRecognizer()..team = team;
+                      // Set ScaleGestureRecognizer as the team captain so
+                      // that when ImmediateMermaidGestureRecognizer wins the
+                      // parent arena via the team, the
+                      // ScaleGestureRecognizer's acceptGesture is called
+                      // (instead of being rejected). Without a captain, the
+                      // team would accept the immediately-resolved recognizer
+                      // and reject the ScaleGestureRecognizer, breaking
+                      // pan/zoom entirely.
+                      team.captain = recognizer;
+                      return recognizer;
+                    },
+                    (instance) {
+                      instance.onStart = _onScaleStart;
+                      instance.onUpdate = _onScaleUpdate;
+                      instance.onEnd = (_) {};
+                    },
+                  ),
+                  // ImmediateMermaidGestureRecognizer: wins the gesture arena
+                  // on the very first PointerMoveEvent (any direction).
+                  // Defined after ScaleGestureRecognizer so it enters the
+                  // arena second, ensuring ScaleGestureRecognizer is in
+                  // 'possible' state before the team resolves.
+                  ImmediateMermaidGestureRecognizer:
+                      GestureRecognizerFactoryWithHandlers<
+                          ImmediateMermaidGestureRecognizer>(
+                    () => ImmediateMermaidGestureRecognizer()..team = team,
+                    (instance) {},
+                  ),
+                },
                 behavior: HitTestBehavior.opaque,
                 child: Container(color: Colors.transparent),
               ),
