@@ -753,7 +753,8 @@ void main() {
       expect(find.byIcon(Icons.swap_horiz), findsNothing);
     });
 
-    testWidgets('split mode uses horizontal layout when space is wider than tall',
+    testWidgets(
+        'split mode uses horizontal layout when space is wider than tall',
         (tester) async {
       // Regression: when available space is wider than tall (e.g.
       // landscape device, wide desktop window, wide split-screen),
@@ -826,8 +827,7 @@ void main() {
       expect(find.byIcon(Icons.zoom_out), findsOneWidget);
     });
 
-    testWidgets(
-        'split mode preview shows zoom controls but NOT full toolbar',
+    testWidgets('split mode preview shows zoom controls but NOT full toolbar',
         (tester) async {
       // Regression: the Mermaid page preview should zoom controls
       // (zoom_in, zoom_out) via showZoomControls:true, but should NOT

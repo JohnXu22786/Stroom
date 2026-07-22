@@ -497,9 +497,8 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         }
 
         // Vertical layout for narrow split mode, edit mode, or preview mode
-        final editorHeight = isSplitMode
-            ? availableHeight * _splitEditorHeightRatio
-            : 0.0;
+        final editorHeight =
+            isSplitMode ? availableHeight * _splitEditorHeightRatio : 0.0;
 
         return Stack(
           children: [

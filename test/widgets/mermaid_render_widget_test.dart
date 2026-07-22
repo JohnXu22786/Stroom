@@ -387,7 +387,8 @@ void main() {
   });
 
   group('MermaidRenderWidget - showZoomControls', () {
-    testWidgets('showZoomControls:false does not show zoom buttons in loading state',
+    testWidgets(
+        'showZoomControls:false does not show zoom buttons in loading state',
         (tester) async {
       // Regression: default showZoomControls should be false, so zoom
       // buttons should NOT appear when the widget is in loading state.
@@ -528,7 +529,8 @@ void main() {
       expect(zoomOutIcon.semanticLabel, isNotNull);
     });
 
-    testWidgets('showZoomControls:false hidden when showToolbar:false (default)',
+    testWidgets(
+        'showZoomControls:false hidden when showToolbar:false (default)',
         (tester) async {
       // Regression: default showZoomControls should be false, matching
       // the existing behavior of showToolbar:false.
