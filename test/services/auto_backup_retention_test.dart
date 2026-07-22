@@ -243,8 +243,7 @@ void main() {
       await dir.delete(recursive: true);
     });
 
-    test(
-        'prefers day diversity: keeps 1 per day from old days, not multiple from same day',
+    test('keeps 2 previous days (1 each) + today (up to 3) — day diversity',
         () async {
       final root = await DataMigrationService.getExternalBackupRootPath();
       final dir = Directory(root);
@@ -252,14 +251,14 @@ void main() {
         await dir.create(recursive: true);
       }
 
-      // === Key scenario demonstrating the new behavior ===
-      // within 24h: 2 backups (not filling the 3 slots)
-      // beyond 24h: 3 from yesterday, 1 from 2-days-ago, 1 from 3-days-ago
+      // === Key scenario ===
+      // 当天 24h 内: 2 个备份
+      // 前日: 3 个备份（同一天），2-days-ago: 1 个，3-days-ago: 1 个
       // Total: 7
       //
-      // Old behavior: keeps 2 today + 2 yesterday + 1 from 2-days-ago = 5
-      // New behavior: keeps 2 today + 1 yesterday (last) + 1 2-days-ago + 1 3-days-ago = 5
-      // New prefers DAY DIVERSITY — 1 per day from more distant days.
+      // 新规则：当天最多 3 个，前 2 天各保留最后 1 个
+      // → 保留: 2 个今天 + 1 个昨天的最后备份 + 1 个 2-days-ago = 4
+      // → 删除: 2 个旧昨天备份 + 1 个 3-days-ago = 3
 
       final now = DateTime.now();
 
@@ -319,7 +318,9 @@ void main() {
         if (fThreeDaysAgoSurvived) 'three_days_ago',
       ];
 
-      expect(kept.length, equals(5), reason: 'Should keep max 5. Kept: $kept');
+      expect(kept.length, equals(4),
+          reason:
+              'Should keep 2 today + 1 yesterday (latest) + 1 2-days-ago = 4. Kept: $kept');
 
       // Day diversity: keep 1 from yesterday (latest), not multiple
       expect(fToday1Survived, isTrue, reason: 'Should keep today_1');
@@ -334,27 +335,27 @@ void main() {
               'Should delete older yesterday backup (afternoon) for day diversity');
       expect(fTwoDaysAgoSurvived, isTrue,
           reason: 'Should keep backup from 2 days ago');
-      expect(fThreeDaysAgoSurvived, isTrue,
-          reason:
-              'Should prefer keeping 1 from 3-days-ago over a 2nd from yesterday (day diversity)');
+      expect(fThreeDaysAgoSurvived, isFalse,
+          reason: 'Should delete 3-days-ago (only keep 2 previous days)');
 
       // Cleanup
       await dir.delete(recursive: true);
     });
 
-    test('fills up to 5 from more days when within-24h count < 3', () async {
+    test('1 today + 2 previous days = 3 (minimum), no fill-up to 5', () async {
       final root = await DataMigrationService.getExternalBackupRootPath();
       final dir = Directory(root);
       if (!await dir.exists()) {
         await dir.create(recursive: true);
       }
 
-      // within 24h: 1 backup
-      // beyond 24h: 5 different days (yesterday, ..., 5-days-ago)
-      // Total: 6 → should keep 5 using 1 per day
+      // 当天: 1 个备份
+      // 前日: 5 个不同日期 (yesterday ~ 5-days-ago)
+      // 总共 6 个, > 3, 进入清理
+      // 新规则: 保留 1 个当天 + 2 个前日(各 1 个) = 3
+      // 不填满到 5
 
       final now = DateTime.now();
-      // Track filenames for verification
       final filePaths = <String>[];
 
       // 1 from today (within 24h)
@@ -381,30 +382,28 @@ void main() {
         }
       }
 
-      expect(kept.length, equals(5),
-          reason: 'Should keep 5 total (1 today + 4 old days)');
+      expect(kept.length, equals(3),
+          reason: 'Should keep 3 (1 today + 2 previous days), not fill to 5');
 
-      // Should keep: 1 today + yesterday + 2-days-ago + 3-days-ago + 4-days-ago
-      // Should delete: 5-days-ago
       final keptStr = kept.join(', ');
 
       // today should be kept
       expect(kept.any((p) => p == fToday), isTrue,
           reason: 'Should keep today backup');
 
-      // old_day_1 through old_day_4 should be kept
+      // old_day_1 (yesterday) and old_day_2 (2-days-ago) should be kept
       expect(kept.any((p) => p == filePaths[1]), isTrue,
           reason: 'Should keep old_day_1 (yesterday). Kept: $keptStr');
       expect(kept.any((p) => p == filePaths[2]), isTrue,
           reason: 'Should keep old_day_2 (2-days-ago). Kept: $keptStr');
-      expect(kept.any((p) => p == filePaths[3]), isTrue,
-          reason: 'Should keep old_day_3 (3-days-ago). Kept: $keptStr');
-      expect(kept.any((p) => p == filePaths[4]), isTrue,
-          reason: 'Should keep old_day_4 (4-days-ago). Kept: $keptStr');
 
-      // old_day_5 should be deleted
+      // old_day_3,4,5 should be deleted
+      expect(kept.any((p) => p == filePaths[3]), isFalse,
+          reason: 'Should delete old_day_3 (3-days-ago). Kept: $keptStr');
+      expect(kept.any((p) => p == filePaths[4]), isFalse,
+          reason: 'Should delete old_day_4 (4-days-ago)');
       expect(kept.any((p) => p == filePaths[5]), isFalse,
-          reason: 'Should delete the oldest day (old_day_5) when filling to 5');
+          reason: 'Should delete old_day_5 (5-days-ago)');
 
       // Cleanup
       await dir.delete(recursive: true);
@@ -418,7 +417,7 @@ void main() {
         await dir.create(recursive: true);
       }
 
-      // 3 within 24h, 1 from yesterday = 4 total → keep all (between min 3 and max 5)
+      // 3 within 24h, 1 from yesterday = 4 total → keep all (4 is between min 3 and max 5)
       final now = DateTime.now();
       for (int i = 0; i < 3; i++) {
         final t = now.subtract(Duration(hours: 2 * (i + 1)));
@@ -486,16 +485,19 @@ void main() {
       await AutoBackupService.cleanupOldBackups();
     });
 
-    test('all beyond 24h with no within-24h backups fills toward 5', () async {
+    test('0 today + 4 old days → keeps 3 (min guarantee: last 2 days + 1 more)',
+        () async {
       final root = await DataMigrationService.getExternalBackupRootPath();
       final dir = Directory(root);
       if (!await dir.exists()) {
         await dir.create(recursive: true);
       }
 
-      // 4 old days, no within-24h backups
-      // Total: 4 > 3, but algorithm fills toward 5 → keeps all 4
-      // (4 is between min 3 and max 5)
+      // 当天 0 备份，4 个不同前日
+      // Total: 4 > 3, 进入清理
+      // 前 2 天各 1 个 = 2，低于 3 → 补足到 3
+      // 保留: yesterday, 2-days-ago, 3-days-ago = 3
+      // 删除: 4-days-ago
       final now = DateTime.now();
       final filePaths = <String>[];
       for (int i = 1; i <= 4; i++) {
@@ -515,16 +517,17 @@ void main() {
       }
 
       final keptStr = kept.join(', ');
-      // With 0 within-24h and 4 old days, algorithm fills toward 5 → keeps all 4
-      expect(kept.length, equals(4),
+      expect(kept.length, equals(3),
           reason:
-              'Should keep all 4 (fills toward 5 from 0 within-24h). Kept: $keptStr');
+              'Should keep 3 (2 previous days + 1 more to reach min 3). Kept: $keptStr');
 
-      // All 4 days should be kept (between min 3 and max 5)
-      for (int i = 0; i < 4; i++) {
+      // yesterday, 2-days-ago, 3-days-ago kept; 4-days-ago deleted
+      for (int i = 0; i < 3; i++) {
         expect(kept.any((p) => p == filePaths[i]), isTrue,
             reason: 'Should keep old_day_${i + 1}. Kept: $keptStr');
       }
+      expect(kept.any((p) => p == filePaths[3]), isFalse,
+          reason: 'Should delete the oldest day (old_day_4)');
 
       // Cleanup
       await dir.delete(recursive: true);
