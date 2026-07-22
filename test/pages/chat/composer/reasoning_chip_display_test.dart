@@ -21,6 +21,8 @@ Widget createComposerTestApp({
   required bool reasoningEnabled,
   required bool reasoningEffortEnabled,
   Map<String, String> reasoningParamValues = const {},
+  Set<String> enabledTools = const {},
+  List<ReasoningParam> extraReasoningParams = const [],
 }) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
@@ -46,11 +48,13 @@ Widget createComposerTestApp({
           selectedModelIndex: 0,
           onModelSelected: (idx) {},
           onEnabledToolsChanged: (tools) {},
+          enabledTools: enabledTools,
           reasoningParams: [
             ReasoningParam(
                 paramName: 'reasoning_effort',
                 isEffortParam: true,
                 options: ['low', 'medium', 'high']),
+            ...extraReasoningParams,
           ],
         ),
       ),
@@ -255,6 +259,170 @@ void main() {
       // When reasoning_effort is not in the map, show "推理" in purple
       expect(find.text('推理'), findsOneWidget);
       expect(find.text('enabled'), findsNothing);
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // Tool chip accent color & zero-tools grey-state tests
+    // ═══════════════════════════════════════════════════════════
+
+    testWidgets('tool chip uses accent color when tools are enabled',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      await tester.pumpWidget(createComposerTestApp(
+        reasoningEnabled: false,
+        reasoningEffortEnabled: false,
+        enabledTools: {'some_tool'},
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      expect(find.byIcon(Icons.build_outlined), findsOneWidget);
+      final toolChip = find.byWidgetPredicate(
+        (w) => w is SettingsChip && w.label == '工具',
+      );
+      expect(toolChip, findsOneWidget);
+      final chip = tester.widget<SettingsChip>(toolChip);
+      expect(chip.color, const Color(0xFF6366F1));
+      expect(chip.badgeCount, 1);
+    });
+
+    testWidgets('tool chip shows badge count for multiple enabled tools',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      await tester.pumpWidget(createComposerTestApp(
+        reasoningEnabled: false,
+        reasoningEffortEnabled: false,
+        enabledTools: {'brave_web_search', 'bocha_web_search'},
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      final toolChip = find.byWidgetPredicate(
+        (w) => w is SettingsChip && w.label == '工具',
+      );
+      expect(toolChip, findsOneWidget);
+      final chip = tester.widget<SettingsChip>(toolChip);
+      expect(chip.color, const Color(0xFF6366F1));
+      expect(chip.badgeCount, 2);
+    });
+
+    testWidgets(
+        'tool chip turns grey and hides badge when no tools are enabled',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      await tester.pumpWidget(createComposerTestApp(
+        reasoningEnabled: false,
+        reasoningEffortEnabled: false,
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      expect(find.byIcon(Icons.build_outlined), findsOneWidget);
+      final toolChip = find.byWidgetPredicate(
+        (w) => w is SettingsChip && w.label == '工具',
+      );
+      expect(toolChip, findsOneWidget);
+      final chip = tester.widget<SettingsChip>(toolChip);
+      expect(chip.color, Colors.grey);
+      expect(chip.badgeCount, isNull);
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // Custom params chip accent color & badge tests
+    // ═══════════════════════════════════════════════════════════
+
+    testWidgets(
+        'custom params chip uses accent color and shows badge when params active and tools enabled',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      await tester.pumpWidget(createComposerTestApp(
+        reasoningEnabled: true,
+        reasoningEffortEnabled: true,
+        enabledTools: {'some_tool'},
+        reasoningParamValues: {
+          'reasoning_effort': 'medium',
+          'custom_param_1': 'value1',
+        },
+        extraReasoningParams: [
+          ReasoningParam(
+            paramName: 'custom_param_1',
+            isEffortParam: false,
+            isReasoningToggle: false,
+            options: ['value1', 'value2'],
+          ),
+        ],
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      final customChip = find.byWidgetPredicate(
+        (w) => w is SettingsChip && w.label == '自定义参数',
+      );
+      expect(customChip, findsOneWidget);
+      final chip = tester.widget<SettingsChip>(customChip);
+      expect(chip.color, const Color(0xFF6366F1));
+      expect(chip.badgeCount, 1);
+    });
+
+    testWidgets(
+        'custom params chip with no active params shows no badge when tools enabled',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      await tester.pumpWidget(createComposerTestApp(
+        reasoningEnabled: true,
+        reasoningEffortEnabled: true,
+        enabledTools: {'some_tool'},
+        reasoningParamValues: {
+          'reasoning_effort': 'medium',
+        },
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      final customChip = find.byWidgetPredicate(
+        (w) => w is SettingsChip && w.label == '自定义参数',
+      );
+      expect(customChip, findsOneWidget);
+      final chip = tester.widget<SettingsChip>(customChip);
+      // No non-effort/non-toggle params have values, so badgeCount should be null
+      expect(chip.badgeCount, isNull);
+    });
+
+    testWidgets('custom params chip turns grey when no tools are enabled',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      await tester.pumpWidget(createComposerTestApp(
+        reasoningEnabled: true,
+        reasoningEffortEnabled: true,
+        reasoningParamValues: {
+          'reasoning_effort': 'medium',
+          'custom_param_1': 'value1',
+        },
+        extraReasoningParams: [
+          ReasoningParam(
+            paramName: 'custom_param_1',
+            isEffortParam: false,
+            isReasoningToggle: false,
+            options: ['value1', 'value2'],
+          ),
+        ],
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      final customChip = find.byWidgetPredicate(
+        (w) => w is SettingsChip && w.label == '自定义参数',
+      );
+      expect(customChip, findsOneWidget);
+      final chip = tester.widget<SettingsChip>(customChip);
+      expect(chip.color, Colors.grey);
+      expect(chip.badgeCount, isNull);
     });
 
     testWidgets('shows 推理 when no effort param exists (isEffortParam=false)',

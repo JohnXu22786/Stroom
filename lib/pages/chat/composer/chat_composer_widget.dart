@@ -929,6 +929,30 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     }
     final reasoningColor = reasoningEnabled ? Colors.purple : Colors.grey;
 
+    // ═══════════════════════════════════════════════════════════
+    // Tool chip & custom params chip: unified accent color
+    // ═══════════════════════════════════════════════════════════
+    // When no tools are enabled ("零个工具"), both chips turn grey
+    // and hide their badge (matching the reasoning disabled state).
+    const Color toolAccentColor = Color(0xFF6366F1);
+    final bool noToolsEnabled = widget.enabledTools.isEmpty;
+
+    // Tool chip
+    final Color toolColor = noToolsEnabled ? Colors.grey : toolAccentColor;
+    final int? toolBadgeCount =
+        noToolsEnabled ? null : widget.enabledTools.length;
+
+    // Custom params chip — count non-toggle, non-effort params with values
+    final int customParamsBadgeCount = widget.reasoningParams
+        .where((p) => !p.isReasoningToggle && !p.isEffortParam)
+        .where((p) => reasoningParamValues.containsKey(p.paramName))
+        .length;
+    final Color customParamsColor =
+        noToolsEnabled ? Colors.grey : toolAccentColor;
+    final int? customParamsBadgeCountOrNull = noToolsEnabled
+        ? null
+        : (customParamsBadgeCount > 0 ? customParamsBadgeCount : null);
+
     return Material(
       type: MaterialType.transparency,
       child: Container(
@@ -1004,9 +1028,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                       _SettingsChip(
                         icon: Icons.build_outlined,
                         label: '工具',
-                        color: Colors.indigo,
+                        color: toolColor,
                         onTap: _showToolsPanel,
-                        badgeCount: widget.enabledTools.length,
+                        badgeCount: toolBadgeCount,
                       ),
                       _SettingsChip(
                         icon: Icons.psychology_outlined,
@@ -1022,9 +1046,10 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                       _SettingsChip(
                         icon: Icons.tune,
                         label: '自定义参数',
-                        color: Colors.blue,
+                        color: customParamsColor,
                         onTap: _showCustomParamsPanel,
                         enabled: true,
+                        badgeCount: customParamsBadgeCountOrNull,
                       ),
                     ],
                   );
