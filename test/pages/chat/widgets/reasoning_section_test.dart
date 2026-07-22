@@ -30,9 +30,10 @@ void main() {
         ),
       );
 
-      // Should show the text line with "思考完成 ›" label
+      // Should show the "思考完成" label without any trailing chevrons
+      // (chevrons are only shown during active streaming)
       expect(find.text('思考完成'), findsOneWidget);
-      expect(find.text('›'), findsOneWidget);
+      expect(find.text('›'), findsNothing);
       // The content should NOT be visible inline (it's a panel now)
       expect(find.text('Test reasoning content'), findsNothing);
     });
