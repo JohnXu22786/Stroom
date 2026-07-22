@@ -33,8 +33,8 @@ import 'data_migration_service.dart';
 // 备份保留策略：
 // - 1 小时规则：如果最近 1 小时内有备份，则跳过本次备份
 // - 24 小时限制：24 小时内最多保留 3 个备份
-// - 总数限制：最多保留 5 个备份
-// - 使用天数：额外保留最近 2 次使用日的最后一个备份
+// - 前日保留规则：超出 24h 的备份按日分组，保留最近 2 个有使用日的最后 1 个备份
+// - 总数限制：最多保留 5 个（当天 3 个 + 前日 2 个），最少保留 3 个
 // ====================================================================
 
 /// 自动后台备份服务。
@@ -62,9 +62,9 @@ class AutoBackupService {
   ///
   /// 保留策略：
   /// - 1 小时规则：如果最近 1 小时内有备份，则跳过本次备份
-  /// - 24 小时限制：24 小时内最多保留 3 个备份
-  /// - 总数限制：最多保留 5 个备份
-  /// - 使用天数：额外保留最近 2 次使用日的最后一个备份
+  /// - 24 小时内最多保留 3 个备份（当天）
+  /// - 超出 24h 的备份只保留最近 2 个有使用日的最后 1 个备份
+  /// - 总数上限 5 个（当天 3 + 前日 2），下限 3 个
   ///
   /// 在 Android SAF 模式下，备份写入系统临时目录后通过 SAF
   /// 写入用户选择的 Documents 目录，确保文件持久化到公共位置。
@@ -382,27 +382,23 @@ class AutoBackupService {
   /// 根据保留策略决定要删除的备份文件。
   ///
   /// 策略：
-  /// 1. 最多保留 5 个备份（总数限制）
-  /// 2. 24 小时内最多保留 3 个备份
-  /// 3. 额外保留最近 2 次使用日的最后一个备份（超出 24h 的）
+  /// 1. 当天（24h 内）最多保留 3 个备份（遵循 1 小时不重复规则）
+  /// 2. 超出 24h 的备份：按使用日分组，保留最近 2 个有使用日的最后 1 个备份
+  ///    （即「前两天的最后备份各一个」）
+  /// 3. 总数上限为 5 个（3 个当天 + 2 个前日），下限为 3 个
+  /// 4. 低于 3 个时不清理
   ///
   /// 返回需要删除的文件路径列表。
   static List<_BackupFileInfo> _selectBackupsToDelete(
       List<_BackupFileInfo> infos) {
-    // 如果备份总数不超过 3 个（24h 内的限制），则无需删除
+    // 最少保留 3 个，低于此数不清理
     if (infos.length <= 3) return [];
 
     final now = DateTime.now();
 
-    // 步骤 1: 从最新的开始，挑选需要保留的
-    final keepList = <_BackupFileInfo>[];
-    final deleteList = <_BackupFileInfo>[];
-
-    // 获取 24h 内的备份（最新的 3 个）
+    // 分为 24h 内和超出 24h
     final within24h = <_BackupFileInfo>[];
-    // 获取超出 24h 的备份
     final beyond24h = <_BackupFileInfo>[];
-
     for (final info in infos) {
       if (info.modified.isAfter(now.subtract(const Duration(hours: 24)))) {
         within24h.add(info);
@@ -411,32 +407,17 @@ class AutoBackupService {
       }
     }
 
-    // 24h 内最多保留 3 个
-    if (within24h.length > 3) {
-      // 只保留最新的 3 个
-      for (var i = 3; i < within24h.length; i++) {
-        deleteList.add(within24h[i]);
-      }
-      keepList.addAll(within24h.sublist(0, 3));
-    } else {
-      keepList.addAll(within24h);
-    }
-
-    // 对于超出 24h 的备份，保留最近 2 次使用日的最后一个备份
-    // "使用日" = 备份文件所在的不同日期
-    final keptUsageDays = <String>{};
-    for (final info in keepList) {
-      final dayKey =
-          '${info.modified.year}-${info.modified.month}-${info.modified.day}';
-      keptUsageDays.add(dayKey);
-    }
-
-    // 从超出 24h 的备份中，按日期分组，取每个日期最新的一个
+    // 当天（24h 内）：最多保留最新 3 个
+    within24h.sort((a, b) => b.modified.compareTo(a.modified));
+    final keepList = <_BackupFileInfo>[
+      ...within24h.take(3),
+    ];
+    // 前日（超出 24h）：按日历日分组，每日期保留最新一个
+    // dayKey 必须补零，使字典序与时间序一致
     final dayToLatest = <String, _BackupFileInfo>{};
     for (final info in beyond24h) {
       final dayKey =
-          '${info.modified.year}-${info.modified.month}-${info.modified.day}';
-      // 如果该日期已有条目，取时间更新的
+          '${info.modified.year}-${_padDay(info.modified.month)}-${_padDay(info.modified.day)}';
       final existing = dayToLatest[dayKey];
       if (existing == null || info.modified.isAfter(existing.modified)) {
         dayToLatest[dayKey] = info;
@@ -447,70 +428,42 @@ class AutoBackupService {
     final sortedDays = dayToLatest.entries.toList()
       ..sort((a, b) => b.key.compareTo(a.key));
 
-    // 额外保留最多 2 个非 24h 内的不同使用日的最后一个备份
-    for (final entry in sortedDays) {
-      if (keepList.length >= 5) break;
-      if (keptUsageDays.contains(entry.key)) continue; // 已在保留列表中
-      keepList.add(entry.value);
-      keptUsageDays.add(entry.key);
+    // 取最近 2 个有使用日的最后备份（"前两天的最后备份各一个"）
+    final beyondDaysToKeep = sortedDays.length < 2 ? sortedDays.length : 2;
+    for (var i = 0; i < beyondDaysToKeep; i++) {
+      keepList.add(sortedDays[i].value);
     }
 
-    final keepPaths = keepList.map((e) => e.path).toSet();
-
-    // 如果 keepList 仍未满 5 个，从 beyond24h 中按时间顺序补充
-    if (keepList.length < 5) {
+    // 最小值保证：如果不足 3 个，从 beyond24h 补足（确保 >= 3）
+    if (keepList.length < 3) {
+      beyond24h.sort((a, b) => b.modified.compareTo(a.modified));
+      final keepPaths = keepList.map((e) => e.path).toSet();
       for (final info in beyond24h) {
-        if (keepList.length >= 5) break;
-        if (keepPaths.contains(info.path)) continue; // 已在保留列表中
-        final dayKey =
-            '${info.modified.year}-${info.modified.month}-${info.modified.day}';
-        if (keptUsageDays.contains(dayKey)) {
-          // 该日期已经有代表，但可以添加额外的（非当天的最后一个）
+        if (keepList.length >= 3) break;
+        if (keepPaths.add(info.path)) {
           keepList.add(info);
-        } else {
-          // 该日期没有代表，先添加这个
-          keepList.add(info);
-          keptUsageDays.add(dayKey);
         }
-        keepPaths.add(info.path);
       }
     }
 
-    // 标记所有不在 keepList 中的为删除
-    final deletePaths = deleteList.map((e) => e.path).toSet();
+    // 标记删除：不在 keepList 中的全部删除
+    final keepPaths = keepList.map((e) => e.path).toSet();
+    final deleteList = <_BackupFileInfo>[];
     for (final info in infos) {
-      if (!keepPaths.contains(info.path) && !deletePaths.contains(info.path)) {
+      if (!keepPaths.contains(info.path)) {
         deleteList.add(info);
-      }
-    }
-
-    // 确保不超过 5 个（以防逻辑错误）
-    final finalKeepCount = infos.length - deleteList.length;
-    if (finalKeepCount > 5) {
-      // 需要额外删除
-      final toRemove = finalKeepCount - 5;
-      // 从 infos 中最旧的开始删除
-      final sortedByOldest = List<_BackupFileInfo>.from(infos)
-        ..sort((a, b) => a.modified.compareTo(b.modified));
-      for (final info in sortedByOldest) {
-        if (toRemove <= 0) break;
-        if (!deletePaths.contains(info.path) && !keepPaths.contains(info.path))
-          continue; // 已经在标记循环中处理
-        if (deletePaths.contains(info.path)) continue;
-        deleteList.add(info);
-        deletePaths.add(info.path);
       }
     }
 
     return deleteList;
   }
 
-  /// 清理旧备份（非 SAF 模式），按新保留策略执行。
+  /// 清理旧备份（非 SAF 模式），按保留策略执行。
   ///
-  /// 新策略：
-  /// - 最多保留 5 个备份（总数限制）
+  /// 保留策略：
   /// - 24 小时内最多保留 3 个备份
-  /// - 额外保留最近 2 次使用日的最后一个备份（超出 24h 的）
+  /// - 超出 24h 保留最近 2 个有使用日的最后 1 个备份
+  /// - 总数上限 5 个，下限 3 个
   static Future<void> _cleanupOldBackups(String backupRoot) async {
     try {
       final dir = Directory(backupRoot);
@@ -582,7 +535,7 @@ class AutoBackupService {
     }
   }
 
-  /// 清理备份目录中的旧备份，按新保留策略执行。
+  /// 清理备份目录中的旧备份，按保留策略执行。
   ///
   /// 供 [DataMigrationService] 等外部调用。
   static Future<void> cleanupOldBackups() async {
@@ -616,6 +569,9 @@ class AutoBackupService {
     }
   }
 }
+
+/// 将 1..12 → "01".."12"，1..31 → "01".."31"，确保字典序与时间序一致。
+String _padDay(int n) => n.toString().padLeft(2, '0');
 
 /// 备份文件信息，用于保留策略排序。
 class _BackupFileInfo {

@@ -103,12 +103,12 @@ void main() {
     });
   });
 
-  // ==================================================================
-  // cleanupOldBackups — new retention policy (max 5 total, max 3 within 24h,
-  // keep last backup from last 2 usage days)
-  // ==================================================================
+// ==================================================================
+// cleanupOldBackups — new retention policy (max 5 total, max 3 within 24h,
+// keep last backup from last 2 usage days, prefer day diversity)
+// ==================================================================
 
-  group('cleanupOldBackups — new retention policy', () {
+  group('cleanupOldBackups — retention policy', () {
     test('keeps max 3 within 24h and max 5 total', () async {
       final root = await DataMigrationService.getExternalBackupRootPath();
       final dir = Directory(root);
@@ -151,14 +151,45 @@ void main() {
       await dir.delete(recursive: true);
     });
 
-    test('keeps all when fewer than 5 backups exist', () async {
+    test('keeps all when fewer than 3 backups exist', () async {
       final root = await DataMigrationService.getExternalBackupRootPath();
       final dir = Directory(root);
       if (!await dir.exists()) {
         await dir.create(recursive: true);
       }
 
-      // Create only 3 backups
+      // Create only 2 backups (less than min 3)
+      final now = DateTime.now();
+      for (int i = 0; i < 2; i++) {
+        final t = now.subtract(Duration(hours: 2 * (i + 1)));
+        final timeStr = '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
+            '${_pad(t.hour)}-${_pad(t.minute)}-${_pad(t.second)}';
+        final file = File('${dir.path}/backup_$timeStr.zip');
+        await file.writeAsString('backup_$i');
+      }
+
+      await AutoBackupService.cleanupOldBackups();
+
+      final entries = await dir.list().toList();
+      final zips = entries
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.zip'))
+          .toList();
+      expect(zips.length, equals(2),
+          reason: 'Should keep all 2 when below min threshold');
+
+      // Cleanup
+      await dir.delete(recursive: true);
+    });
+
+    test('keeps all when exactly 3 backups exist', () async {
+      final root = await DataMigrationService.getExternalBackupRootPath();
+      final dir = Directory(root);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+
+      // Create exactly 3 backups (at the min threshold)
       final now = DateTime.now();
       for (int i = 0; i < 3; i++) {
         final t = now.subtract(Duration(hours: 2 * (i + 1)));
@@ -176,7 +207,7 @@ void main() {
           .where((f) => f.path.endsWith('.zip'))
           .toList();
       expect(zips.length, equals(3),
-          reason: 'Should keep all 3 when below thresholds');
+          reason: 'Should keep all 3 at min threshold');
 
       // Cleanup
       await dir.delete(recursive: true);
@@ -207,6 +238,207 @@ void main() {
           .toList();
       expect(zips.length, equals(3),
           reason: 'Should keep max 3 when all are within 24h');
+
+      // Cleanup
+      await dir.delete(recursive: true);
+    });
+
+    test('keeps 2 previous days (1 each) + today (up to 3) — day diversity',
+        () async {
+      final root = await DataMigrationService.getExternalBackupRootPath();
+      final dir = Directory(root);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+
+      // === Key scenario ===
+      // 当天 24h 内: 2 个备份
+      // 前日: 3 个备份（同一天），2-days-ago: 1 个，3-days-ago: 1 个
+      // Total: 7
+      //
+      // 新规则：当天最多 3 个，前 2 天各保留最后 1 个
+      // → 保留: 2 个今天 + 1 个昨天的最后备份 + 1 个 2-days-ago = 4
+      // → 删除: 2 个旧昨天备份 + 1 个 3-days-ago = 3
+      //
+      // 注意：使用较小的时差确保 "yesterday" 系列都在同一天历日，
+      // "twoDaysAgo" 在另一个不同天历日，避免跨日边界混淆。
+
+      final now = DateTime.now();
+
+      // 2 from today (2h and 4h ago — within 24h)
+      final today1 = now.subtract(const Duration(hours: 2));
+      final fToday1 = '${dir.path}/backup_${_ts(today1)}.zip';
+      await File(fToday1).writeAsString('today_1');
+      final today2 = now.subtract(const Duration(hours: 4));
+      final fToday2 = '${dir.path}/backup_${_ts(today2)}.zip';
+      await File(fToday2).writeAsString('today_2');
+
+      // 3 from yesterday (same calendar day, different times)
+      // Use offsets 25-28h ago — all clearly on yesterday's calendar day
+      final yesterdayEvening = now.subtract(const Duration(hours: 25));
+      final fYesterdayEvening =
+          '${dir.path}/backup_${_ts(yesterdayEvening)}.zip';
+      await File(fYesterdayEvening).writeAsString('yesterday_evening');
+      final yesterdayAfternoon = now.subtract(const Duration(hours: 26));
+      final fYesterdayAfternoon =
+          '${dir.path}/backup_${_ts(yesterdayAfternoon)}.zip';
+      await File(fYesterdayAfternoon).writeAsString('yesterday_afternoon');
+      final yesterdayMorning = now.subtract(const Duration(hours: 28));
+      final fYesterdayMorning =
+          '${dir.path}/backup_${_ts(yesterdayMorning)}.zip';
+      await File(fYesterdayMorning).writeAsString('yesterday_morning');
+
+      // 1 from 2 days ago (50h ago — clearly a different calendar day)
+      final twoDaysAgo = now.subtract(const Duration(hours: 50));
+      final fTwoDaysAgo = '${dir.path}/backup_${_ts(twoDaysAgo)}.zip';
+      await File(fTwoDaysAgo).writeAsString('two_days_ago');
+
+      // 1 from 3 days ago (74h ago)
+      final threeDaysAgo = now.subtract(const Duration(hours: 74));
+      final fThreeDaysAgo = '${dir.path}/backup_${_ts(threeDaysAgo)}.zip';
+      await File(fThreeDaysAgo).writeAsString('three_days_ago');
+
+      await AutoBackupService.cleanupOldBackups();
+
+      // Check which files survived
+      final fToday1Survived = await File(fToday1).exists();
+      final fToday2Survived = await File(fToday2).exists();
+      final fYesterdayMorningSurvived = await File(fYesterdayMorning).exists();
+      final fYesterdayAfternoonSurvived =
+          await File(fYesterdayAfternoon).exists();
+      final fYesterdayEveningSurvived = await File(fYesterdayEvening).exists();
+      final fTwoDaysAgoSurvived = await File(fTwoDaysAgo).exists();
+      final fThreeDaysAgoSurvived = await File(fThreeDaysAgo).exists();
+
+      final kept = [
+        if (fToday1Survived) 'today_1',
+        if (fToday2Survived) 'today_2',
+        if (fYesterdayMorningSurvived) 'yesterday_morning',
+        if (fYesterdayAfternoonSurvived) 'yesterday_afternoon',
+        if (fYesterdayEveningSurvived) 'yesterday_evening',
+        if (fTwoDaysAgoSurvived) 'two_days_ago',
+        if (fThreeDaysAgoSurvived) 'three_days_ago',
+      ];
+
+      expect(kept.length, equals(4),
+          reason:
+              'Should keep 2 today + 1 yesterday (latest) + 1 2-days-ago = 4. Kept: $kept');
+
+      // Day diversity: keep 1 from yesterday (latest), not multiple
+      expect(fToday1Survived, isTrue, reason: 'Should keep today_1');
+      expect(fToday2Survived, isTrue, reason: 'Should keep today_2');
+      expect(fYesterdayEveningSurvived, isTrue,
+          reason: 'Should keep the latest yesterday backup');
+      expect(fYesterdayMorningSurvived, isFalse,
+          reason:
+              'Should delete older yesterday backup (morning) for day diversity');
+      expect(fYesterdayAfternoonSurvived, isFalse,
+          reason:
+              'Should delete older yesterday backup (afternoon) for day diversity');
+      expect(fTwoDaysAgoSurvived, isTrue,
+          reason: 'Should keep backup from 2 days ago');
+      expect(fThreeDaysAgoSurvived, isFalse,
+          reason: 'Should delete 3-days-ago (only keep 2 previous days)');
+
+      // Cleanup
+      await dir.delete(recursive: true);
+    });
+
+    test('1 today + 2 previous days = 3 (minimum), no fill-up to 5', () async {
+      final root = await DataMigrationService.getExternalBackupRootPath();
+      final dir = Directory(root);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+
+      // 当天: 1 个备份
+      // 前日: 5 个不同日期 (yesterday ~ 5-days-ago)
+      // 总共 6 个, > 3, 进入清理
+      // 新规则: 保留 1 个当天 + 2 个前日(各 1 个) = 3
+      // 不填满到 5
+
+      final now = DateTime.now();
+      final filePaths = <String>[];
+
+      // 1 from today (within 24h)
+      final today = now.subtract(const Duration(hours: 2));
+      final fToday = '${dir.path}/backup_${_ts(today)}.zip';
+      await File(fToday).writeAsString('today');
+      filePaths.add(fToday);
+
+      // 5 from different old days
+      for (int i = 1; i <= 5; i++) {
+        final t = now.subtract(Duration(days: i, hours: 2));
+        final f = '${dir.path}/backup_${_ts(t)}.zip';
+        await File(f).writeAsString('old_day_$i');
+        filePaths.add(f);
+      }
+
+      await AutoBackupService.cleanupOldBackups();
+
+      // Check which survived
+      final kept = <String>[];
+      for (final f in filePaths) {
+        if (await File(f).exists()) {
+          kept.add(f);
+        }
+      }
+
+      expect(kept.length, equals(3),
+          reason: 'Should keep 3 (1 today + 2 previous days), not fill to 5');
+
+      final keptStr = kept.join(', ');
+
+      // today should be kept
+      expect(kept.any((p) => p == fToday), isTrue,
+          reason: 'Should keep today backup');
+
+      // old_day_1 (yesterday) and old_day_2 (2-days-ago) should be kept
+      expect(kept.any((p) => p == filePaths[1]), isTrue,
+          reason: 'Should keep old_day_1 (yesterday). Kept: $keptStr');
+      expect(kept.any((p) => p == filePaths[2]), isTrue,
+          reason: 'Should keep old_day_2 (2-days-ago). Kept: $keptStr');
+
+      // old_day_3,4,5 should be deleted
+      expect(kept.any((p) => p == filePaths[3]), isFalse,
+          reason: 'Should delete old_day_3 (3-days-ago). Kept: $keptStr');
+      expect(kept.any((p) => p == filePaths[4]), isFalse,
+          reason: 'Should delete old_day_4 (4-days-ago)');
+      expect(kept.any((p) => p == filePaths[5]), isFalse,
+          reason: 'Should delete old_day_5 (5-days-ago)');
+
+      // Cleanup
+      await dir.delete(recursive: true);
+    });
+
+    test('keeps 4 when within 24h is full (3) and only 1 old day exists',
+        () async {
+      final root = await DataMigrationService.getExternalBackupRootPath();
+      final dir = Directory(root);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+
+      // 3 within 24h, 1 from yesterday = 4 total → keep all (4 is between min 3 and max 5)
+      final now = DateTime.now();
+      for (int i = 0; i < 3; i++) {
+        final t = now.subtract(Duration(hours: 2 * (i + 1)));
+        await File('${dir.path}/backup_${_ts(t)}.zip')
+            .writeAsString('today_$i');
+      }
+      final yesterday = now.subtract(const Duration(hours: 30));
+      await File('${dir.path}/backup_${_ts(yesterday)}.zip')
+          .writeAsString('yesterday');
+
+      await AutoBackupService.cleanupOldBackups();
+
+      final entries = await dir.list().toList();
+      final remaining = entries
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.zip'))
+          .toList();
+      expect(remaining.length, equals(4),
+          reason: 'Should keep 4 when within-24h is 3 and only 1 old day');
 
       // Cleanup
       await dir.delete(recursive: true);
@@ -254,6 +486,54 @@ void main() {
       // Should not throw
       await AutoBackupService.cleanupOldBackups();
     });
+
+    test('0 today + 4 old days → keeps 3 (min guarantee: last 2 days + 1 more)',
+        () async {
+      final root = await DataMigrationService.getExternalBackupRootPath();
+      final dir = Directory(root);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+
+      // 当天 0 备份，4 个不同前日
+      // Total: 4 > 3, 进入清理
+      // 前 2 天各 1 个 = 2，低于 3 → 补足到 3
+      // 保留: yesterday, 2-days-ago, 3-days-ago = 3
+      // 删除: 4-days-ago
+      final now = DateTime.now();
+      final filePaths = <String>[];
+      for (int i = 1; i <= 4; i++) {
+        final t = now.subtract(Duration(days: i, hours: 2));
+        final f = '${dir.path}/backup_${_ts(t)}.zip';
+        await File(f).writeAsString('old_day_$i');
+        filePaths.add(f);
+      }
+
+      await AutoBackupService.cleanupOldBackups();
+
+      final kept = <String>[];
+      for (final f in filePaths) {
+        if (await File(f).exists()) {
+          kept.add(f);
+        }
+      }
+
+      final keptStr = kept.join(', ');
+      expect(kept.length, equals(3),
+          reason:
+              'Should keep 3 (2 previous days + 1 more to reach min 3). Kept: $keptStr');
+
+      // yesterday, 2-days-ago, 3-days-ago kept; 4-days-ago deleted
+      for (int i = 0; i < 3; i++) {
+        expect(kept.any((p) => p == filePaths[i]), isTrue,
+            reason: 'Should keep old_day_${i + 1}. Kept: $keptStr');
+      }
+      expect(kept.any((p) => p == filePaths[3]), isFalse,
+          reason: 'Should delete the oldest day (old_day_4)');
+
+      // Cleanup
+      await dir.delete(recursive: true);
+    });
   });
 
   // ==================================================================
@@ -269,3 +549,8 @@ void main() {
 }
 
 String _pad(int n) => n.toString().padLeft(2, '0');
+
+/// Format a [DateTime] into the backup filename timestamp format:
+/// YYYY-MM-DDTHH-MM-SS
+String _ts(DateTime t) => '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
+    '${_pad(t.hour)}-${_pad(t.minute)}-${_pad(t.second)}';
