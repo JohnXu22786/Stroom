@@ -86,8 +86,9 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   bool _isSaving = false;
   late EditorMode _editorMode;
 
-  /// Whether the left/right panels in landscape split mode are swapped.
-  bool _isLandscapeSwapped = false;
+  /// Whether the left/right panels in wide split mode are swapped.
+  /// Wide mode occurs when the available space is wider than tall.
+  bool _isSplitSwapped = false;
 
   // Debounced preview code — passed to MermaidRenderWidget so the WebView
   // is only updated after the user stops typing (debounce in _onCodeChanged).
@@ -466,14 +467,17 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       builder: (context, constraints) {
         final availableWidth = constraints.maxWidth;
         final availableHeight = constraints.maxHeight;
-        final isLandscape = availableWidth > availableHeight;
+        // Use horizontal side-by-side layout when the available space
+        // is wider than tall (e.g. landscape window, wide split-screen,
+        // desktop window dragged wide, tablet in landscape orientation).
+        final bool useHorizontalLayout = availableWidth > availableHeight;
 
-        // Horizontal split layout for landscape split mode
-        if (isSplitMode && isLandscape) {
-          final leftPanel = _isLandscapeSwapped
+        // Horizontal split layout — side by side when space is wide
+        if (isSplitMode && useHorizontalLayout) {
+          final leftPanel = _isSplitSwapped
               ? _buildSplitEditorPart(cs)
               : _buildPreviewPanel(cs);
-          final rightPanel = _isLandscapeSwapped
+          final rightPanel = _isSplitSwapped
               ? _buildPreviewPanel(cs)
               : _buildSplitEditorPart(cs);
 
@@ -492,7 +496,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
           );
         }
 
-        // Vertical layout for portrait split mode, edit mode, or preview mode
+        // Vertical layout for narrow split mode, edit mode, or preview mode
         final editorHeight = isSplitMode
             ? availableHeight * _splitEditorHeightRatio
             : 0.0;
@@ -549,9 +553,10 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
     );
   }
 
-  /// Builds the swap button that appears between the two panels in
-  /// landscape split mode. Tapping it exchanges the left/right positions
-  /// of the preview and code editor panels.
+  /// Builds the swap button that appears between the two panels when
+  /// the available space is wider than tall (horizontal split mode).
+  /// Tapping it exchanges the left/right positions of the preview and
+  /// code editor panels.
   Widget _buildSwapButton(ColorScheme cs) {
     return Tooltip(
       message: '交换预览和编辑面板',
@@ -561,7 +566,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
           borderRadius: BorderRadius.circular(14),
           onTap: () {
             setState(() {
-              _isLandscapeSwapped = !_isLandscapeSwapped;
+              _isSplitSwapped = !_isSplitSwapped;
             });
           },
           child: Container(

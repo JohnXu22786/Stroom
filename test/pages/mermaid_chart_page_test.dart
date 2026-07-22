@@ -727,12 +727,13 @@ void main() {
     // Adaptive layout & zoom controls
     // ═══════════════════════════════════════════════════
 
-    testWidgets('split mode uses vertical stack layout in portrait',
+    testWidgets('split mode uses vertical stack when space is taller than wide',
         (tester) async {
-      // Regression: in portrait orientation, split mode should show
-      // preview on top and code editor on bottom (vertical stack).
-      // This is the existing behavior that should be preserved.
-      // Set viewport to portrait dimensions (taller than wide).
+      // Regression: when available space is taller than wide (e.g.
+      // portrait phone, narrow window, tall split-screen), split mode
+      // should show preview on top and code editor on bottom (vertical
+      // stack). This is the existing behavior that should be preserved.
+      // Set viewport to tall dimensions (600 wide x 1000 tall).
       tester.view.physicalSize = const Size(600, 1000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -748,16 +749,17 @@ void main() {
       expect(find.text('代码'), findsOneWidget);
       // The Mermaid code text field should exist
       expect(find.byType(TextField), findsOneWidget);
-      // No swap button in portrait mode
+      // No swap button in narrow mode
       expect(find.byIcon(Icons.swap_horiz), findsNothing);
     });
 
-    testWidgets('split mode in landscape shows horizontal layout with swap button',
+    testWidgets('split mode uses horizontal layout when space is wider than tall',
         (tester) async {
-      // Regression: in landscape orientation (wider than tall), split
-      // mode should show preview and code editor side by side with a
-      // swap button between them.
-      // Set viewport to landscape dimensions before creating widget
+      // Regression: when available space is wider than tall (e.g.
+      // landscape device, wide desktop window, wide split-screen),
+      // split mode should show preview and code editor side by side
+      // with a swap button between them.
+      // Set viewport to wide dimensions (1600 wide x 900 tall).
       tester.view.physicalSize = const Size(1600, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -771,17 +773,17 @@ void main() {
       expect(find.byType(MermaidRenderWidget), findsOneWidget);
       // Code label should be visible
       expect(find.text('代码'), findsOneWidget);
-      // In landscape, the swap button should exist
+      // In wide mode, the swap button should exist
       expect(find.byIcon(Icons.swap_horiz), findsOneWidget);
     });
 
-    testWidgets('landscape split mode swap button toggles panel positions',
+    testWidgets('wide split mode swap button toggles panel positions',
         (tester) async {
-      // Regression: tapping the swap_horiz button in landscape split
-      // mode should exchange the left/right positions of preview and
-      // code editor panels. Since we cannot tap buttons and create
-      // WebView at the same time in test mode, we verify the swap
-      // button exists and tapping it produces no exceptions.
+      // Regression: tapping the swap_horiz button in wide split mode
+      // should exchange the left/right positions of preview and code
+      // editor panels. Since we cannot tap buttons and create WebView
+      // at the same time in test mode, we verify the swap button
+      // exists and tapping it produces no exceptions.
       tester.view.physicalSize = const Size(1600, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
