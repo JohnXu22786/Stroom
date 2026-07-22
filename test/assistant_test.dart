@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/assistant.dart';
+import 'package:stroom/models/built_in_prompts.dart';
 import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 
@@ -397,6 +398,49 @@ void main() {
       expect(restored.enableSeed, true);
       expect(restored.temperature, 0.7);
       expect(restored.customParameters.length, 1);
+    });
+  });
+
+  group('BuiltInPrompt', () {
+    test('builtInPrompts list is non-empty', () {
+      expect(builtInPrompts, isNotEmpty);
+    });
+
+    test('every built-in prompt has required fields', () {
+      for (final p in builtInPrompts) {
+        expect(p.name, isNotEmpty, reason: 'Prompt name must not be empty');
+        expect(p.prompt, isNotEmpty, reason: 'Prompt text must not be empty');
+        expect(p.emoji, isNotEmpty, reason: 'Prompt emoji must not be empty');
+        // description is optional (can be empty)
+      }
+    });
+
+    test('builtInPrompts have unique names', () {
+      final names = builtInPrompts.map((p) => p.name).toList();
+      expect(names.toSet().length, names.length,
+          reason: 'Each built-in prompt must have a unique name');
+    });
+
+    test('BuiltInPrompt stores all fields correctly', () {
+      final prompt = BuiltInPrompt(
+        name: '测试助手',
+        emoji: '🧪',
+        description: '测试描述',
+        prompt: '测试系统提示词',
+      );
+      expect(prompt.name, '测试助手');
+      expect(prompt.emoji, '🧪');
+      expect(prompt.description, '测试描述');
+      expect(prompt.prompt, '测试系统提示词');
+    });
+
+    test('BuiltInPrompt with empty description defaults to empty string', () {
+      final prompt = BuiltInPrompt(
+        name: '测试',
+        emoji: '🤖',
+        prompt: '你好',
+      );
+      expect(prompt.description, '');
     });
   });
 

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/assistant.dart';
+import 'package:stroom/models/built_in_prompts.dart';
 import 'package:stroom/pages/assistant_selection_page.dart';
 import 'package:stroom/pages/topic_selection_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
@@ -375,6 +376,161 @@ void main() {
 
       // Should navigate to topic selection page (now titled "选择对话")
       expect(find.text('选择对话'), findsOneWidget);
+    });
+  });
+
+  group('BuiltInPromptSelector', () {
+    testWidgets('shows new icon button in AppBar next to + button', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [
+            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Should show the built-in prompt icon button
+      expect(find.byIcon(Icons.auto_awesome), findsOneWidget);
+      // The + button should still be there
+      expect(find.byIcon(Icons.add), findsOneWidget);
+    });
+
+    testWidgets('tapping built-in prompt button opens selector dialog', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [
+            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap the built-in prompt button
+      await tester.tap(find.byIcon(Icons.auto_awesome));
+      await tester.pumpAndSettle();
+
+      // Dialog should be visible
+      expect(find.text('内置助手'), findsOneWidget);
+    });
+
+    testWidgets('built-in prompt dialog shows prompt cards', (tester) async {
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [
+            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open the dialog
+      await tester.tap(find.byIcon(Icons.auto_awesome));
+      await tester.pumpAndSettle();
+
+      // Should show the first built-in prompt's name
+      final firstPrompt = builtInPrompts.first;
+      expect(find.text(firstPrompt.name), findsOneWidget);
+    });
+
+    testWidgets('built-in prompt cards show prompt text read-only', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [
+            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open the dialog
+      await tester.tap(find.byIcon(Icons.auto_awesome));
+      await tester.pumpAndSettle();
+
+      // No text editing fields should be present for the prompts
+      expect(find.byType(TextField), findsNothing);
+    });
+
+    testWidgets(
+        'selecting a built-in prompt creates new assistant and closes dialog', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [], // Start with no assistants; the default will be auto-created
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open the dialog
+      await tester.tap(find.byIcon(Icons.auto_awesome));
+      await tester.pumpAndSettle();
+
+      // Tap the first built-in prompt to create
+      final firstPrompt = builtInPrompts.first;
+      await tester.tap(find.text(firstPrompt.name).first);
+      await tester.pumpAndSettle();
+
+      // Dialog should be closed
+      expect(find.text('内置助手'), findsNothing);
+      // The new assistant should appear in the grid
+      expect(find.text(firstPrompt.name), findsOneWidget);
+    });
+
+    testWidgets('built-in prompt button also works in empty state', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            assistantProvider.overrideWith((ref) {
+              return AssistantsNotifier();
+            }),
+          ],
+          child: const MaterialApp(home: AssistantSelectionPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The empty state appbar should have the new icon button
+      expect(find.byIcon(Icons.auto_awesome), findsAtLeast(1));
+      // The + button should also be present
+      expect(find.byIcon(Icons.add), findsAtLeast(1));
+    });
+
+    testWidgets('closing dialog via X button does not create any assistant', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [
+            Assistant(name: '现有助手', prompt: 'P1', emoji: '🤖'),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open dialog
+      await tester.tap(find.byIcon(Icons.auto_awesome));
+      await tester.pumpAndSettle();
+
+      // Close using the X (close) icon button
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+
+      // Dialog should be closed
+      expect(find.text('内置助手'), findsNothing);
+      // Original assistant should still be there
+      expect(find.text('现有助手'), findsOneWidget);
     });
   });
 

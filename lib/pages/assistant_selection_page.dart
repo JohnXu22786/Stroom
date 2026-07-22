@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/assistant.dart';
 import '../providers/assistant_provider.dart';
 import 'assistant/assistant_shared.dart';
+import 'assistant/built_in_prompt_selector.dart';
 export 'assistant/assistant_shared.dart';
 
 /// First page in the chat flow: select an assistant.
@@ -26,6 +27,11 @@ class AssistantSelectionPage extends ConsumerWidget {
         elevation: 0,
         backgroundColor: cs.surface,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.auto_awesome),
+            tooltip: '内置助手',
+            onPressed: () => showBuiltInPromptSelector(context, ref),
+          ),
           IconButton(
             icon: const Icon(Icons.add),
             tooltip: '新建助手',
