@@ -1012,6 +1012,47 @@ void main() {
     });
   });
 
+  group('Background Task (ASR) - Open File button', () {
+    testWidgets('completed ASR bg task with file path shows open file button',
+        (tester) async {
+      await pumpPageWithBackground(tester, [
+        _createCompletedBgTask(
+          id: 'asr-file',
+          type: BackgroundTaskType.asr,
+          title: '音频转写结果',
+          downloadedFilePath: 'C:\\asr\\result.txt',
+        ),
+      ]);
+
+      await tester.tap(find.text('音频转写结果'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('打开文件'), findsOneWidget,
+          reason: '有文件路径的ASR转写任务应显示"打开文件"按钮');
+    });
+
+    testWidgets(
+        'completed ASR bg task without file path hides open file button',
+        (tester) async {
+      await pumpPageWithBackground(tester, [
+        _createCompletedBgTask(
+          id: 'asr-no-file',
+          type: BackgroundTaskType.asr,
+          title: '无路径转写',
+          downloadedFilePath: null,
+        ),
+      ]);
+
+      await tester.tap(find.text('无路径转写'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('打开文件'), findsNothing,
+          reason: '没有文件路径的ASR转写任务不应显示"打开文件"按钮');
+    });
+  });
+
   group('Synthesis Task - Open File button', () {
     testWidgets(
         'completed synthesis task with file path shows open file button',
