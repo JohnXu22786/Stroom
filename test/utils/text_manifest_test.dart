@@ -367,6 +367,37 @@ void main() {
     });
   });
 
+  // ====== writeText returns file path (used by ASR/OCR open file button) ======
+
+  group('TextManifest writeText returns file path', () {
+    test('writeText returns non-null non-empty file path for valid content',
+        () async {
+      const content = '测试文本内容 for ASR transcription result';
+      final fileName = 'test_asr_result.txt';
+      final filePath = await TextManifest.writeText(fileName, content);
+
+      expect(filePath, isNotNull,
+          reason: 'writeText must return a non-null file path');
+      expect(filePath, isNotEmpty,
+          reason: 'writeText must return a non-empty file path');
+      // Path should contain the file name
+      expect(filePath, contains(fileName),
+          reason: 'Returned file path must contain the requested filename');
+    });
+
+    test('writeText returns unique path for each file', () async {
+      final path1 =
+          await TextManifest.writeText('unique_test_1.txt', 'content one');
+      final path2 =
+          await TextManifest.writeText('unique_test_2.txt', 'content two');
+
+      expect(path1, isNot(equals(path2)),
+          reason: 'Different files must return different paths');
+      expect(path1, contains('unique_test_1.txt'));
+      expect(path2, contains('unique_test_2.txt'));
+    });
+  });
+
   // ====== Empty file handling ======
 
   group('TextManifest empty file handling', () {

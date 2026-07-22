@@ -1178,10 +1178,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         bgNotifier.updateStep(taskId, 3, completed: true);
         bgNotifier.updateStep(taskId, 4, running: true);
 
-        await _saveTranscriptionResult(result.text, title: entry.title);
+        final filePath =
+            await _saveTranscriptionResult(result.text, title: entry.title);
 
         bgNotifier.updateStep(taskId, 4, completed: true);
-        bgNotifier.completeTask(taskId);
+        bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
 
         // Refresh text records
         unawaited(textNotifier.loadRecords());
@@ -1211,14 +1212,15 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   }
 
   /// Save the transcription result as a text record, named by the task title.
-  Future<void> _saveTranscriptionResult(String text, {String? title}) async {
+  /// Returns the file path of the saved text file for the "open file" button.
+  Future<String> _saveTranscriptionResult(String text, {String? title}) async {
     final now = DateTime.now();
 
     final bytes = Uint8List.fromList(utf8.encode(text));
     final hash = computeTextHash(bytes);
     final storageFileName = '$hash.txt';
 
-    await TextManifest.writeText(storageFileName, text);
+    final filePath = await TextManifest.writeText(storageFileName, text);
     await TextManifest.addRecord(
       TextRecord(
         name: title ??
@@ -1231,6 +1233,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         textLength: text.length,
       ),
     );
+    return filePath;
   }
 
   // ==================================================================
