@@ -27,8 +27,8 @@ class AppStorage {
   ///
   /// The result is cached after the first successful resolution.
   static Future<String> get directory async {
-    await AppLogService.info('AppStorage', '获取应用文档目录');
     if (_resolved != null) return _resolved!;
+    await AppLogService.info('AppStorage', '获取应用文档目录');
 
     try {
       final dir = await getApplicationDocumentsDirectory();
