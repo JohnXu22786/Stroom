@@ -51,7 +51,7 @@ final ankiSchedulerProvider = Provider<AnkiScheduler>((ref) {
 
 /// Watches ColDao and returns the deck list.  Rebuilds whenever
 /// any deck-mutating notifier method is called (see [ankiRefreshProvider]).
-final ankiDeckListProvider = FutureProvider<List<AnkiDeck>>((ref) async {
+final ankiDeckListProvider = FutureProvider<List<Deck>>((ref) async {
   ref.watch(ankiRefreshProvider); // trigger rebuild
   final col = await ref.watch(ankiColDaoProvider.future);
   return col.deckList;
@@ -79,7 +79,7 @@ final ankiDeckStatsProvider =
 /// ── Cards by deck ────────────────────────────────────────
 
 final ankiCardsByDeckProvider =
-    FutureProvider.family<List<AnkiCard>, int>((ref, did) async {
+    FutureProvider.family<List<Card>, int>((ref, did) async {
   final dao = await ref.watch(ankiCardDaoProvider.future);
   return dao.listByDeck(did);
 });
@@ -87,7 +87,7 @@ final ankiCardsByDeckProvider =
 /// ── Single deck ──────────────────────────────────────────
 
 final ankiDeckByIdProvider =
-    FutureProvider.family<AnkiDeck?, int>((ref, did) async {
+    FutureProvider.family<Deck?, int>((ref, did) async {
   final col = await ref.watch(ankiColDaoProvider.future);
   return col.getDeck(did);
 });
@@ -95,14 +95,14 @@ final ankiDeckByIdProvider =
 /// ── Single card ──────────────────────────────────────────
 
 final ankiCardByIdProvider =
-    FutureProvider.family<AnkiCard?, int>((ref, cid) async {
+    FutureProvider.family<Card?, int>((ref, cid) async {
   final dao = await ref.watch(ankiCardDaoProvider.future);
   return dao.get(cid);
 });
 
 /// ── Model list ───────────────────────────────────────────
 
-final ankiModelListProvider = FutureProvider<List<AnkiModel>>((ref) async {
+final ankiModelListProvider = FutureProvider<List<Notetype>>((ref) async {
   final col = await ref.watch(ankiColDaoProvider.future);
   return col.modelList;
 });
