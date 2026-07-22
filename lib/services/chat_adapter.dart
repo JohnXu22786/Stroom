@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import '../models/assistant.dart' show AssistantSettings, CustomParameter;
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
@@ -443,6 +443,15 @@ class ChatAdapter {
   /// 取消当前流
   void cancel() {
     _chatService?.cancel();
+  }
+
+  /// Injects a [ChatService] instance for testing.
+  /// Overwrites any existing service. Only intended for test use.
+  @visibleForTesting
+  void forceService(ChatService service) {
+    _chatService = service;
+    currentConfigIndex = 0;
+    currentModelIndex = 0;
   }
 
   /// 释放资源
