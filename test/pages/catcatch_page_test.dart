@@ -306,7 +306,8 @@ void main() {
       expect(filledButton.onPressed, isNotNull);
     });
 
-    testWidgets('Multi-line URL input: invalid URLs are filtered and not counted', (
+    testWidgets(
+        'Multi-line URL input: invalid URLs are filtered and not counted', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -396,7 +397,8 @@ void main() {
       await tester.pump();
 
       // Find the URL TextFormField and get its validator
-      final urlField = tester.widget<TextFormField>(find.byType(TextFormField).first);
+      final urlField =
+          tester.widget<TextFormField>(find.byType(TextFormField).first);
       final validator = urlField.validator;
       expect(validator, isNotNull);
 
@@ -416,7 +418,8 @@ void main() {
       await tester.pump();
 
       // Get the validator
-      final urlField = tester.widget<TextFormField>(find.byType(TextFormField).first);
+      final urlField =
+          tester.widget<TextFormField>(find.byType(TextFormField).first);
       final validator = urlField.validator;
       expect(validator, isNotNull);
 
@@ -434,7 +437,8 @@ void main() {
       await tester.pump();
 
       // Get the validator
-      final urlField = tester.widget<TextFormField>(find.byType(TextFormField).first);
+      final urlField =
+          tester.widget<TextFormField>(find.byType(TextFormField).first);
       final validator = urlField.validator;
       expect(validator, isNotNull);
 
@@ -450,7 +454,8 @@ void main() {
       await tester.pump();
 
       // Get the validator
-      final urlField = tester.widget<TextFormField>(find.byType(TextFormField).first);
+      final urlField =
+          tester.widget<TextFormField>(find.byType(TextFormField).first);
       final validator = urlField.validator;
       expect(validator, isNotNull);
 

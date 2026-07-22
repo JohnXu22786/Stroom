@@ -379,7 +379,8 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                     '时:分:秒',
                     style: TextStyle(
                       fontSize: 11,
-                      color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                      color:
+                          colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
                     ),
                   ),
                 ],
@@ -651,7 +652,8 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
               const SizedBox(width: 8),
               Text(
                 label,
-                style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                style: TextStyle(
+                    fontSize: 12, color: colorScheme.onSurfaceVariant),
               ),
               const SizedBox(width: 4),
               Text(
