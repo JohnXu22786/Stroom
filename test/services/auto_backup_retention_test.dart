@@ -259,6 +259,9 @@ void main() {
       // 新规则：当天最多 3 个，前 2 天各保留最后 1 个
       // → 保留: 2 个今天 + 1 个昨天的最后备份 + 1 个 2-days-ago = 4
       // → 删除: 2 个旧昨天备份 + 1 个 3-days-ago = 3
+      //
+      // 注意：使用较小的时差确保 "yesterday" 系列都在同一天历日，
+      // "twoDaysAgo" 在另一个不同天历日，避免跨日边界混淆。
 
       final now = DateTime.now();
 
@@ -270,29 +273,28 @@ void main() {
       final fToday2 = '${dir.path}/backup_${_ts(today2)}.zip';
       await File(fToday2).writeAsString('today_2');
 
-      // 3 from yesterday (same day, different times)
-      final yesterdayBase = now.subtract(const Duration(hours: 30));
-      final yesterdayMorning = yesterdayBase.subtract(const Duration(hours: 6));
-      final fYesterdayMorning =
-          '${dir.path}/backup_${_ts(yesterdayMorning)}.zip';
-      await File(fYesterdayMorning).writeAsString('yesterday_morning');
-      final yesterdayAfternoon =
-          yesterdayBase.subtract(const Duration(hours: 3));
-      final fYesterdayAfternoon =
-          '${dir.path}/backup_${_ts(yesterdayAfternoon)}.zip';
-      await File(fYesterdayAfternoon).writeAsString('yesterday_afternoon');
-      final yesterdayEvening = yesterdayBase;
+      // 3 from yesterday (same calendar day, different times)
+      // Use offsets 25-28h ago — all clearly on yesterday's calendar day
+      final yesterdayEvening = now.subtract(const Duration(hours: 25));
       final fYesterdayEvening =
           '${dir.path}/backup_${_ts(yesterdayEvening)}.zip';
       await File(fYesterdayEvening).writeAsString('yesterday_evening');
+      final yesterdayAfternoon = now.subtract(const Duration(hours: 26));
+      final fYesterdayAfternoon =
+          '${dir.path}/backup_${_ts(yesterdayAfternoon)}.zip';
+      await File(fYesterdayAfternoon).writeAsString('yesterday_afternoon');
+      final yesterdayMorning = now.subtract(const Duration(hours: 28));
+      final fYesterdayMorning =
+          '${dir.path}/backup_${_ts(yesterdayMorning)}.zip';
+      await File(fYesterdayMorning).writeAsString('yesterday_morning');
 
-      // 1 from 2 days ago
-      final twoDaysAgo = now.subtract(const Duration(hours: 54));
+      // 1 from 2 days ago (50h ago — clearly a different calendar day)
+      final twoDaysAgo = now.subtract(const Duration(hours: 50));
       final fTwoDaysAgo = '${dir.path}/backup_${_ts(twoDaysAgo)}.zip';
       await File(fTwoDaysAgo).writeAsString('two_days_ago');
 
-      // 1 from 3 days ago
-      final threeDaysAgo = now.subtract(const Duration(hours: 78));
+      // 1 from 3 days ago (74h ago)
+      final threeDaysAgo = now.subtract(const Duration(hours: 74));
       final fThreeDaysAgo = '${dir.path}/backup_${_ts(threeDaysAgo)}.zip';
       await File(fThreeDaysAgo).writeAsString('three_days_ago');
 
