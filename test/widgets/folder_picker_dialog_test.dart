@@ -123,11 +123,10 @@ void main() {
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
 
-      // Tap on "work" folder
+      // Tap on "work" folder (selection is immediate with manual timer-based detection)
       await tester.tap(find.text('work'));
-      // GestureDetector with both onTap and onDoubleTap delays onTap by the
-      // double-tap timeout. Pump past it so the callback fires.
-      await tester.pump(const Duration(milliseconds: 500));
+      // Use a short pump to flush any pending microtasks
+      await tester.pump(const Duration(milliseconds: 50));
       await tester.pumpAndSettle();
 
       // Tap confirm button
@@ -322,9 +321,9 @@ void main() {
       await tester.tap(find.text('photos'));
       await tester.pumpAndSettle();
 
-      // Select 'work' (single tap) - pump past double-tap timeout
+      // Select 'work' (single tap) - selection is immediate
       await tester.tap(find.text('work'));
-      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 50));
       await tester.pumpAndSettle();
 
       // Confirm
@@ -332,6 +331,51 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(result, 'photos/work');
+    });
+
+    testWidgets(
+        'double-tap navigating into folder also selects it (no prior selection)',
+        (tester) async {
+      String? result;
+      await tester.pumpWidget(_buildTestApp(
+        Builder(builder: (context) {
+          return ElevatedButton(
+            onPressed: () async {
+              result = await FolderPickerDialog.show(
+                context,
+                availableFolders: {
+                  'photos',
+                  'photos/vacation',
+                  'photos/vacation/beach',
+                },
+              );
+            },
+            child: const Text('Open'),
+          );
+        }),
+      ));
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      // Double tap on 'photos' to navigate into it
+      await tester.tap(find.text('photos'));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.text('photos'));
+      await tester.pumpAndSettle();
+
+      // Now double tap on 'vacation' to navigate into it
+      await tester.tap(find.text('vacation'));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.text('vacation'));
+      await tester.pumpAndSettle();
+
+      // Confirm without any single-tap selection
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+
+      // The result should be 'photos/vacation' (navigated into, thus selected)
+      expect(result, 'photos/vacation');
     });
 
     testWidgets(
