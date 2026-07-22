@@ -65,7 +65,15 @@ class _StartupAppState extends State<StartupApp>
   final GlobalKey<NavigatorState> _overlayNavigatorKey =
       GlobalKey<NavigatorState>();
 
+  /// Minimum display time for the splash screen (ms).
   static const int _minimumDisplayMs = 1500;
+
+  /// Post-check delay (ms) to ensure each progress status is visible in the UI
+  /// before being overwritten by the next check's status.
+  ///
+  /// Value chosen to allow ~9 frames at 60fps (16.67ms/frame), which is
+  /// sufficient even during startup when frame scheduling may be delayed.
+  static const int _statusVisibilityDelayMs = 150;
 
   @override
   void initState() {
@@ -164,6 +172,11 @@ class _StartupAppState extends State<StartupApp>
       }
       if (!mounted) return;
 
+      // Ensure "1/5" status is visible in the UI before moving on
+      await Future<void>.delayed(
+          Duration(milliseconds: _statusVisibilityDelayMs));
+      if (!mounted) return;
+
       // ---- Task 2: 验证数据格式 ----
       _setStatus('正在验证数据格式...', '2/5');
       await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -182,6 +195,11 @@ class _StartupAppState extends State<StartupApp>
       }
       if (!mounted) return;
 
+      // Ensure "2/5" status is visible in the UI before moving on
+      await Future<void>.delayed(
+          Duration(milliseconds: _statusVisibilityDelayMs));
+      if (!mounted) return;
+
       // ---- Task 3: 检查数据完整性 ----
       _setStatus('正在检查数据完整性...', '3/5');
       await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -198,6 +216,11 @@ class _StartupAppState extends State<StartupApp>
         await AppLogService.error('StartupApp', '检查数据完整性失败', e);
         integrityIssues = <StartupIssue>[];
       }
+      if (!mounted) return;
+
+      // Ensure "3/5" status is visible in the UI before moving on
+      await Future<void>.delayed(
+          Duration(milliseconds: _statusVisibilityDelayMs));
       if (!mounted) return;
 
       final didMigration = migrationResult.needsMigration;
