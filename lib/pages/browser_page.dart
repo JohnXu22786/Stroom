@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,6 +18,40 @@ const _desktopUserAgent =
 /// Mobile user agent string for mobile-mode browsing.
 const _mobileUserAgent =
     'Mozilla/5.0 (Linux; Android 13; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+
+/// Builds the [InAppWebViewSettings] appropriate for the given mode.
+///
+/// Key difference from the previous always-wide-viewport approach:
+/// - **Mobile mode** ([isDesktopMode] == false): Uses the device viewport
+///   (`useWideViewPort: false`) so mobile-optimized pages render at the
+///   actual device width. This ensures touch/click coordinates map correctly
+///   to visual elements, fixing issues where buttons like Baidu's search
+///   button were unclickable.
+/// - **Desktop mode** ([isDesktopMode] == true): Uses a wide viewport
+///   (`useWideViewPort: true` with `loadWithOverviewMode: true`) so
+///   desktop-optimized pages render correctly at ~1280px viewport width
+///   and are properly zoomed to fit.
+InAppWebViewSettings _buildSettings({required bool isDesktopMode}) {
+  return InAppWebViewSettings(
+    javaScriptEnabled: true,
+    // Privacy: disable persistent DOM storage.
+    // All data stays in memory and is discarded when the browser closes.
+    domStorageEnabled: false,
+    mixedContentMode: MixedContentMode.MIXED_CONTENT_COMPATIBILITY_MODE,
+    // Mobile mode: use device viewport for correct touch targeting.
+    // Desktop mode: use wide viewport to show full desktop pages.
+    useWideViewPort: isDesktopMode,
+    // Desktop mode: zoom out to fit the wide page in the available width.
+    loadWithOverviewMode: isDesktopMode,
+    supportZoom: true,
+    // Android overscroll indicator; does not affect touch event handling.
+    overScrollMode: OverScrollMode.ALWAYS,
+    // Enable scrollbars for scrollable content.
+    verticalScrollBarEnabled: true,
+    horizontalScrollBarEnabled: true,
+    userAgent: isDesktopMode ? _desktopUserAgent : _mobileUserAgent,
+  );
+}
 
 class UserScript {
   final String name;
@@ -75,6 +110,12 @@ class _BrowserPageState extends State<BrowserPage> {
   /// Whether cookie retention mode is enabled.
   /// When enabled, cookies are not deleted on browser close.
   bool _cookieRetentionEnabled = false;
+
+  /// Current position offset of the floating panel, managed by the parent
+  /// (BrowserPage) instead of internally by DraggableFloatingPanel.
+  /// This avoids the need for a full-screen compositing layer inside the
+  /// panel, which would interfere with the WebView's pointer event routing.
+  Offset _panelOffset = const Offset(8, 8);
 
   @override
   void initState() {
@@ -258,19 +299,8 @@ class _BrowserPageState extends State<BrowserPage> {
               Expanded(
                 child: InAppWebView(
                   initialUrlRequest: URLRequest(url: WebUri(widget.initialUrl)),
-                  initialSettings: InAppWebViewSettings(
-                    javaScriptEnabled: true,
-                    // Privacy: disable persistent DOM storage.
-                    // All data stays in memory and is discarded when the
-                    // browser closes.
-                    domStorageEnabled: false,
-                    mixedContentMode:
-                        MixedContentMode.MIXED_CONTENT_COMPATIBILITY_MODE,
-                    useWideViewPort: true,
-                    supportZoom: true,
-                    userAgent:
-                        _isDesktopMode ? _desktopUserAgent : _mobileUserAgent,
-                  ),
+                  initialSettings:
+                      _buildSettings(isDesktopMode: _isDesktopMode),
                   onWebViewCreated: (controller) {
                     _webViewController = controller;
 
@@ -327,22 +357,36 @@ class _BrowserPageState extends State<BrowserPage> {
           ),
 
           // --- Draggable Floating Panel ---
-          // Visibility is controlled by the parent via [visible] so that
-          // the panel persists across page navigations until the user
-          // manually closes or toggles it.
-          DraggableFloatingPanel(
-            key: const ValueKey('catcatch_panel'),
-            visible: _catCatchPanelVisible,
-            detectedUrls: _detectedUrls,
-            onConfirmCapture: _onConfirmCapture,
-            onClose: () {
-              setState(() {
-                _catCatchPanelVisible = false;
-                _detectedUrls.clear();
-              });
-            },
-            initialPosition: const Offset(8, 8),
-          ),
+          // Positioned by the parent (BrowserPage) rather than internally
+          // by the panel itself. This avoids the panel creating a full-screen
+          // compositing layer (Stack + IgnorePointer + SizedBox.expand())
+          // that interferes with the WebView's platform-level event routing.
+          // The panel now only renders within its own natural content bounds.
+          if (_catCatchPanelVisible)
+            Positioned(
+              left: _panelOffset.dx,
+              top: _panelOffset.dy,
+              child: DraggableFloatingPanel(
+                key: const ValueKey('catcatch_panel'),
+                visible: true,
+                detectedUrls: _detectedUrls,
+                onConfirmCapture: _onConfirmCapture,
+                onClose: () {
+                  setState(() {
+                    _catCatchPanelVisible = false;
+                    _detectedUrls.clear();
+                  });
+                },
+                onDragUpdate: (delta) {
+                  setState(() {
+                    _panelOffset = Offset(
+                      max(0.0, _panelOffset.dx + delta.dx),
+                      max(0.0, _panelOffset.dy + delta.dy),
+                    );
+                  });
+                },
+              ),
+            ),
         ],
       ),
       bottomNavigationBar: BottomAppBar(
@@ -372,25 +416,13 @@ class _BrowserPageState extends State<BrowserPage> {
                 setState(() {
                   _isDesktopMode = !_isDesktopMode;
                 });
-                // Apply the new user agent while preserving other settings
-                final currentSettings = await _webViewController?.getSettings();
-                final ua =
-                    _isDesktopMode ? _desktopUserAgent : _mobileUserAgent;
-                if (currentSettings != null) {
-                  await _webViewController?.setSettings(
-                    settings: InAppWebViewSettings(
-                      userAgent: ua,
-                      javaScriptEnabled:
-                          currentSettings.javaScriptEnabled ?? true,
-                      domStorageEnabled:
-                          currentSettings.domStorageEnabled ?? false,
-                      mixedContentMode: currentSettings.mixedContentMode ??
-                          MixedContentMode.MIXED_CONTENT_COMPATIBILITY_MODE,
-                      useWideViewPort: currentSettings.useWideViewPort ?? true,
-                      supportZoom: currentSettings.supportZoom ?? true,
-                    ),
-                  );
-                }
+                // Apply all mode-appropriate settings atomically before
+                // reloading. This ensures useWideViewPort,
+                // loadWithOverviewMode, and userAgent are all consistent
+                // with the selected mode when the page starts loading.
+                await _webViewController?.setSettings(
+                  settings: _buildSettings(isDesktopMode: _isDesktopMode),
+                );
                 _webViewController?.reload();
               },
             ),
