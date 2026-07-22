@@ -319,6 +319,7 @@ class AutoBackupService {
           } else {
             final stat = await entry.stat();
             modified = stat.modified;
+            debugPrint('[DEBUG] _listBackupInfos: fell back to stat for $name, ts was null');
           }
           infos.add(_BackupFileInfo(
             path: entry.path,
@@ -326,6 +327,7 @@ class AutoBackupService {
             modified: modified,
             isDirectory: false,
           ));
+          debugPrint('[DEBUG] _listBackupInfos: $name → modified=$modified');
         } catch (e) {
           debugPrint('[AutoBackupService] 无法获取文件信息 ${entry.path}: $e');
         }
@@ -395,6 +397,7 @@ class AutoBackupService {
     if (infos.length <= 3) return [];
 
     final now = DateTime.now();
+    debugPrint('[DEBUG] now=$now');
 
     // 分为 24h 内和超出 24h
     final within24h = <_BackupFileInfo>[];
@@ -406,12 +409,16 @@ class AutoBackupService {
         beyond24h.add(info);
       }
     }
+    debugPrint('[DEBUG] size: total=${infos.length}, within24h=${within24h.length}, beyond24h=${beyond24h.length}');
+    debugPrint('[DEBUG] all files: ${infos.map((e)=>e.name).join(', ')}');
+    debugPrint('[DEBUG] all modified: ${infos.map((e)=>e.modified.toIso8601String()).join(', ')}');
 
     // 当天（24h 内）：最多保留最新 3 个
     within24h.sort((a, b) => b.modified.compareTo(a.modified));
     final keepList = <_BackupFileInfo>[
       ...within24h.take(3),
     ];
+    debugPrint('[DEBUG] keepList after within24h: ${keepList.map((e)=>e.name).join(',')}');
 
     // 前日（超出 24h）：按日历日分组，每日期保留最新一个
     // dayKey 必须补零，使字典序与时间序一致
@@ -424,16 +431,21 @@ class AutoBackupService {
         dayToLatest[dayKey] = info;
       }
     }
+    debugPrint('[DEBUG] dayToLatest keys: ${dayToLatest.keys.join(',')}');
+    debugPrint('[DEBUG] dayToLatest values: ${dayToLatest.values.map((e)=>e.name).join(',')}');
 
     // 按日期从新到旧排序
     final sortedDays = dayToLatest.entries.toList()
       ..sort((a, b) => b.key.compareTo(a.key));
+    debugPrint('[DEBUG] sortedDays keys: ${sortedDays.map((e)=>e.key).join(',')}');
 
     // 取最近 2 个有使用日的最后备份（"前两天的最后备份各一个"）
     final beyondDaysToKeep = sortedDays.length < 2 ? sortedDays.length : 2;
+    debugPrint('[DEBUG] beyondDaysToKeep=$beyondDaysToKeep');
     for (var i = 0; i < beyondDaysToKeep; i++) {
       keepList.add(sortedDays[i].value);
     }
+    debugPrint('[DEBUG] keepList after beyond: ${keepList.length}');
 
     // 最小值保证：如果不足 3 个，从 beyond24h 补足（确保 >= 3）
     if (keepList.length < 3) {
@@ -446,6 +458,7 @@ class AutoBackupService {
         }
       }
     }
+    debugPrint('[DEBUG] final keepList: ${keepList.length} files: ${keepList.map((e)=>e.name).join(',')}');
 
     // 标记删除：不在 keepList 中的全部删除
     final keepPaths = keepList.map((e) => e.path).toSet();
