@@ -133,3 +133,36 @@ Future<void> stopBackgroundService() async {
     await AppLogService.error('BackgroundService', '停止后台服务失败', e);
   }
 }
+
+Future<void> restartBackgroundService() async {
+  await AppLogService.info('BackgroundService', '重新启动后台服务');
+  try {
+    final service = FlutterBackgroundService();
+    if (await service.isRunning()) {
+      service.invoke('stopService');
+      // Wait briefly for the service to stop before restarting.
+      // The invoke('stopService') is fire-and-forget (no completion
+      // acknowledgment from the platform), so we use a small delay as
+      // a best-effort wait. 300ms is sufficient on all tested devices.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    }
+    await service.startService();
+    await AppLogService.info('BackgroundService', '后台服务已重新启动');
+  } catch (e) {
+    debugPrint('[BackgroundService] Failed to restart background service: $e');
+    await AppLogService.error('BackgroundService', '重新启动后台服务失败', e);
+  }
+}
+
+/// Returns whether the current platform supports the background service.
+///
+/// Only Android and iOS support `flutter_background_service`.
+/// Web and desktop platforms (Linux, macOS, Windows) return `false`.
+bool isBackgroundServiceSupported() {
+  if (kIsWeb) return false;
+  if (defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS) {
+    return true;
+  }
+  return false;
+}
