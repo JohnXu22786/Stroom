@@ -1019,11 +1019,16 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
     // Build config from the selected model's own source config,
     // ensuring host/API key match the model's provider.
+    // Also passes through the model's typeConfig and customParams
+    // for built-in ASR parameters and custom parameters.
     final selectedOption = modelOptions[_selectedModelIndex];
     final effectiveConfig = AsrConfig(
       host: selectedOption.host,
       apiKey: selectedOption.apiKey,
       model: selectedOption.model.modelId,
+      typeConfig: Map<String, dynamic>.from(selectedOption.model.typeConfig),
+      customParams:
+          selectedOption.model.customParams.map((p) => p.copy()).toList(),
     );
 
     // Capture notifier references so they remain valid after Navigator.pop.
