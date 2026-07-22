@@ -37,7 +37,7 @@ void main() {
   }
 
   group('MathCanvas3D - gesture direction fixes', () {
-    testWidgets('dragging right rotates scene right (theta decreases)',
+    testWidgets('dragging right rotates scene right (theta increases)',
         (tester) async {
       final state = await setupCanvas(tester);
       final initialTheta = state.camera.theta;
@@ -46,23 +46,36 @@ void main() {
       await tester.drag(find.byType(MathCanvas3D), const Offset(100, 0));
       await tester.pump();
 
-      // Theta should DECREASE when dragging right
-      expect(state.camera.theta, lessThan(initialTheta));
+      // Theta should INCREASE when dragging right (camera orbits right)
+      expect(state.camera.theta, greaterThan(initialTheta));
     });
 
     testWidgets('dragging up rotates scene up (phi decreases)', (tester) async {
       final state = await setupCanvas(tester);
       final initialPhi = state.camera.phi;
 
-      // Simulate dragging down (positive dy) — on screen, positive dy is DOWN
-      await tester.drag(find.byType(MathCanvas3D), const Offset(0, 100));
+      // Simulate dragging up (negative dy) — on screen, negative dy is UP
+      await tester.drag(find.byType(MathCanvas3D), const Offset(0, -100));
       await tester.pump();
 
-      // When dragging DOWN, phi should DECREASE (scene tilts down = shows more bottom)
+      // When dragging UP, phi should DECREASE (camera goes down to look up)
       expect(state.camera.phi, lessThan(initialPhi));
     });
 
-    testWidgets('dragging left rotates scene left (theta increases)',
+    testWidgets('dragging down rotates scene down (phi increases)',
+        (tester) async {
+      final state = await setupCanvas(tester);
+      final initialPhi = state.camera.phi;
+
+      // Simulate dragging down (positive dy)
+      await tester.drag(find.byType(MathCanvas3D), const Offset(0, 100));
+      await tester.pump();
+
+      // When dragging DOWN, phi should INCREASE (camera goes up to look down)
+      expect(state.camera.phi, greaterThan(initialPhi));
+    });
+
+    testWidgets('dragging left rotates scene left (theta decreases)',
         (tester) async {
       final state = await setupCanvas(tester);
       final initialTheta = state.camera.theta;
@@ -70,7 +83,8 @@ void main() {
       await tester.drag(find.byType(MathCanvas3D), const Offset(-100, 0));
       await tester.pump();
 
-      expect(state.camera.theta, greaterThan(initialTheta));
+      // Theta should DECREASE when dragging left (camera orbits left)
+      expect(state.camera.theta, lessThan(initialTheta));
     });
 
     testWidgets('resetView restores default camera after orbit',
@@ -81,8 +95,9 @@ void main() {
       await tester.drag(find.byType(MathCanvas3D), const Offset(100, 50));
       await tester.pump();
 
-      // Verify camera changed
-      final afterDrag = state.camera;
+      // Verify camera changed after orbit
+      expect(state.camera.theta, isNot(closeTo(0, 1e-10)));
+      expect(state.camera.phi, isNot(closeTo(dart_math.pi / 4, 1e-10)));
 
       // Reset
       state.resetView();
@@ -97,33 +112,74 @@ void main() {
   });
 
   group('MathCanvas3D - pinch zoom', () {
-    testWidgets('scale gesture changes camera distance', (tester) async {
+    testWidgets('pinch in (scale<1) zooms out (distance increases)',
+        (tester) async {
       final state = await setupCanvas(tester);
       final initialDistance = state.camera.distance;
 
-      // Simulate a scale gesture by starting two pointers and moving them apart
-      // We can use the lower-level gesture API
-      final gesture = await tester.startGesture(
-        const Offset(400, 300),
+      // Simulate a two-pointer pinch gesture: move pointers closer together
+      final pointer1 = await tester.startGesture(
+        const Offset(440, 300),
         pointer: 7,
       );
       await tester.pump();
 
-      // Add second pointer and spread them
+      final pointer2 = await tester.startGesture(
+        const Offset(360, 300),
+        pointer: 8,
+      );
       await tester.pump(const Duration(milliseconds: 50));
 
-      // End the gesture as a tap (no movement = no zoom change)
-      await gesture.up();
+      // Move pointers closer together (scale < 1 = pinch in)
+      await pointer1.moveTo(const Offset(410, 300));
+      await tester.pump(const Duration(milliseconds: 50));
+      await pointer2.moveTo(const Offset(390, 300));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await pointer1.up();
+      await pointer2.up();
       await tester.pump();
 
-      // Distance should remain same for a tap
-      expect(state.camera.distance, closeTo(initialDistance, 0.1));
+      // Pinch in (scale < 1) should increase distance (zoom out)
+      expect(state.camera.distance, greaterThan(initialDistance));
+    });
+
+    testWidgets('pinch out (scale>1) zooms in (distance decreases)',
+        (tester) async {
+      final state = await setupCanvas(tester);
+      final initialDistance = state.camera.distance;
+
+      // Simulate two-pointer spread (pinch out)
+      final pointer1 = await tester.startGesture(
+        const Offset(390, 300),
+        pointer: 7,
+      );
+      await tester.pump();
+
+      final pointer2 = await tester.startGesture(
+        const Offset(410, 300),
+        pointer: 8,
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Move pointers apart (spread out = pinch out = scale > 1)
+      await pointer1.moveTo(const Offset(300, 300));
+      await tester.pump(const Duration(milliseconds: 50));
+      await pointer2.moveTo(const Offset(500, 300));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await pointer1.up();
+      await pointer2.up();
+      await tester.pump();
+
+      // Pinch out (scale > 1) should decrease distance (zoom in)
+      expect(state.camera.distance, lessThan(initialDistance));
     });
   });
 
   group('MathCanvas3D - scroll wheel zoom', () {
     // Scroll wheel events are difficult to simulate in widget tests.
-    // This is tested at the unit level via Camera3D.zoom().
+    // The direction is tested via unit-level Camera3D.zoom() semantics.
     test('zoom factor math is correct', () {
       final cam = Camera3D(distance: 10);
       final zoomed = cam.zoom(factor: 2); // zoom in
