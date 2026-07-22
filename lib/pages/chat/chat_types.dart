@@ -2,7 +2,8 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:stroom/models/tool_call.dart';
 
 /// Segments that make up an AI message, rendered in order.
-/// Each segment is either text content or a tool call card.
+/// Each segment is either text content, a tool call card,
+/// or a reasoning section marker.
 sealed class MessageSegment {}
 
 class TextSegment extends MessageSegment {
@@ -13,6 +14,25 @@ class TextSegment extends MessageSegment {
 class ToolCallSegment extends MessageSegment {
   final ToolCallData data;
   ToolCallSegment(this.data);
+}
+
+/// A reasoning section segment that displays a "思考完成/思考中" button
+/// inline in the message flow. Each instance corresponds to one reasoning
+/// section at the position where it occurred in the event stream.
+///
+/// [sectionIndex] refers to the index in the message's reasoning sections
+/// list (_reasoningContents[messageId]). The actual reasoning text is stored
+/// in that map and updated live during streaming. This segment acts as a
+/// positional marker for rendering the reasoning button at the correct
+/// place relative to text and tool call segments.
+class ReasoningSegment extends MessageSegment {
+  final int sectionIndex;
+  final bool isStreaming;
+
+  ReasoningSegment({
+    required this.sectionIndex,
+    this.isStreaming = false,
+  });
 }
 
 /// Metadata for a search match within a message.
