@@ -34,10 +34,11 @@ class _InterceptorWithCallback extends Interceptor {
   final void Function(RequestOptions options, RequestInterceptorHandler handler)
       _callback;
 
-  _InterceptorWithCallback({required void Function(
-    RequestOptions options,
-    RequestInterceptorHandler handler,
-  ) callback})
+  _InterceptorWithCallback(
+      {required void Function(
+        RequestOptions options,
+        RequestInterceptorHandler handler,
+      ) callback})
       : _callback = callback;
 
   @override
@@ -560,8 +561,7 @@ void main() {
         expect(service.lastRequestBody?['top_p'], equals(0.9));
       });
 
-      test('request body includes seed from typeConfig when enabled',
-          () async {
+      test('request body includes seed from typeConfig when enabled', () async {
         final dio = _mockDioWithSuccess({
           'choices': [
             {
@@ -638,8 +638,7 @@ void main() {
           imageBytes: Uint8List.fromList([1, 2, 3]),
           imageFormat: 'jpeg',
         );
-        expect(
-            service.lastRequestBody?['response_format'], equals('json'));
+        expect(service.lastRequestBody?['response_format'], equals('json'));
       });
 
       test('custom param supports number type parsing', () async {

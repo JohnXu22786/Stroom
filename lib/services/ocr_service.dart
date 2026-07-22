@@ -48,8 +48,7 @@ class OcrConfig {
       systemPrompt ?? '请提取图片中的所有文字内容，保持原始格式和排版。只返回提取的文字，不要添加额外说明。';
 
   /// Get the image detail level from typeConfig (default: 'high').
-  String get effectiveDetail =>
-      (typeConfig['detail'] as String?) ?? 'high';
+  String get effectiveDetail => (typeConfig['detail'] as String?) ?? 'high';
 
   /// Get max_tokens from typeConfig, or default 4096.
   int get effectiveMaxTokens {
@@ -360,15 +359,13 @@ class OcrService {
     // frequency_penalty
     if (tc['enableFrequencyPenalty'] == true &&
         tc.containsKey('frequencyPenalty')) {
-      body['frequency_penalty'] =
-          (tc['frequencyPenalty'] as num?)?.toDouble();
+      body['frequency_penalty'] = (tc['frequencyPenalty'] as num?)?.toDouble();
     }
 
     // presence_penalty
     if (tc['enablePresencePenalty'] == true &&
         tc.containsKey('presencePenalty')) {
-      body['presence_penalty'] =
-          (tc['presencePenalty'] as num?)?.toDouble();
+      body['presence_penalty'] = (tc['presencePenalty'] as num?)?.toDouble();
     }
 
     // seed
@@ -380,8 +377,11 @@ class OcrService {
     if (tc['enableStop'] == true && tc.containsKey('stop')) {
       final stopStr = tc['stop'] as String? ?? '';
       if (stopStr.contains(',')) {
-        body['stop'] =
-            stopStr.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+        body['stop'] = stopStr
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
       } else if (stopStr.trim().isNotEmpty) {
         body['stop'] = stopStr.trim();
       }

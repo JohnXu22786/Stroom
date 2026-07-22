@@ -1366,9 +1366,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       apiKey: selectedOption.apiKey,
       model: selectedOption.model.modelId,
       typeConfig: Map<String, dynamic>.from(selectedOption.model.typeConfig),
-      customParams: selectedOption.model.customParams
-          .map((p) => p.copy())
-          .toList(),
+      customParams:
+          selectedOption.model.customParams.map((p) => p.copy()).toList(),
     );
 
     // Capture notifier references so they remain valid after Navigator.pop.
