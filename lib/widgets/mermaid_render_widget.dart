@@ -121,6 +121,18 @@ class MermaidRenderWidget extends StatefulWidget {
   /// provides its own navigation and mode controls.
   final bool showToolbar;
 
+  /// If true, shows zoom in/out buttons at the top-right of the preview
+  /// area, independently of [showToolbar]. This allows the chart page to
+  /// provide zoom controls without showing the full toolbar (fullscreen,
+  /// save, code toggle) which is handled elsewhere in the chart page UI.
+  ///
+  /// Unlike [showToolbar], zoom controls are visible even during the
+  /// loading state (before the WebView is ready), so users can zoom
+  /// in/out as soon as the preview area appears.
+  ///
+  /// Defaults to false for backward compatibility.
+  final bool showZoomControls;
+
   /// {@template mermaid_render_widget_test_only_show_source_code}
   /// Test-only: if true, the widget starts in source-code view mode instead of
   /// render mode. This allows widget tests to verify the source code view and
@@ -135,6 +147,7 @@ class MermaidRenderWidget extends StatefulWidget {
     this.height,
     this.expand = false,
     this.showToolbar = true,
+    this.showZoomControls = false,
     this.testOnlyShowSourceCode,
   });
 
@@ -938,7 +951,21 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       return _buildBorderedContainer(
         height: effectiveHeight,
         cs: cs,
-        child: _buildLoadingIndicator(cs, '正在准备渲染引擎...'),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: _buildLoadingIndicator(cs, '正在准备渲染引擎...'),
+            ),
+            // Zoom controls overlay — visible even during loading when
+            // showZoomControls is true.
+            if (widget.showZoomControls)
+              Positioned(
+                top: 4,
+                right: 4,
+                child: _buildZoomControls(cs),
+              ),
+          ],
+        ),
       );
     }
 
@@ -1027,6 +1054,18 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
               top: 4,
               right: 4,
               child: _buildButtonRow(cs),
+            ),
+
+          // Zoom controls overlay — shown independently of showToolbar.
+          // When showToolbar is also true and the widget is ready, the
+          // toolbar already includes zoom controls (in render mode), so
+          // we skip to avoid duplication.
+          if (widget.showZoomControls &&
+              (!widget.showToolbar || showLoading || showErrorOverlay))
+            Positioned(
+              top: 4,
+              right: 4,
+              child: _buildZoomControls(cs),
             ),
         ],
       ),
@@ -1196,6 +1235,38 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Builds a compact row of zoom in/out buttons, shown when
+  /// [showZoomControls] is true independently of the full toolbar.
+  Widget _buildZoomControls(ColorScheme cs) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(
+        minWidth: 48,
+        minHeight: 48,
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildActionButton(
+              icon: Icons.zoom_out,
+              label: '缩小',
+              onTap: _zoomOut,
+            ),
+            _buildActionButton(
+              icon: Icons.zoom_in,
+              label: '放大',
+              onTap: _zoomIn,
+            ),
+          ],
         ),
       ),
     );
