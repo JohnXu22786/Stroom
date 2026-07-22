@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/provider_config.dart';
+import 'asr_model_config_page.dart';
 import 'llm_model_config_page.dart';
 import 'model_config_page.dart';
+import 'ocr_model_config_page.dart';
 import 'simple_model_config_page.dart';
 import 'provider_settings_panel.dart';
 
@@ -186,6 +188,32 @@ class _ProviderConfigDetailPageState
           }
           break;
         }
+      case ModelConfigStyle.asr:
+        {
+          final result = await Navigator.push<ModelConfig>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const AsrModelConfigPage(),
+            ),
+          );
+          if (result != null && mounted) {
+            await _insertModelResult(result);
+          }
+          break;
+        }
+      case ModelConfigStyle.ocr:
+        {
+          final result = await Navigator.push<ModelConfig>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const OcrModelConfigPage(),
+            ),
+          );
+          if (result != null && mounted) {
+            await _insertModelResult(result);
+          }
+          break;
+        }
       case ModelConfigStyle.simple:
         {
           final result = await Navigator.push<ModelConfig>(
@@ -288,6 +316,82 @@ class _ProviderConfigDetailPageState
               context,
               MaterialPageRoute(
                 builder: (_) => LlmModelConfigPage(
+                  model: _pendingModels[modelIndex].copy(),
+                ),
+              ),
+            );
+            if (result != null && mounted) {
+              _pendingModels[modelIndex] = result;
+              if (mounted) setState(() {});
+            }
+          }
+          break;
+        }
+      case ModelConfigStyle.asr:
+        {
+          if (widget.configIndex >= 0) {
+            final config = _config;
+            if (config == null ||
+                modelIndex < 0 ||
+                modelIndex >= config.models.length) {
+              return;
+            }
+
+            final result = await Navigator.push<ModelConfig>(
+              context,
+              MaterialPageRoute(
+                builder: (_) => AsrModelConfigPage(
+                  model: config.models[modelIndex].copy(),
+                ),
+              ),
+            );
+            if (result != null && mounted) {
+              await _updateModelInConfig(modelIndex, result);
+            }
+          } else {
+            if (modelIndex < 0 || modelIndex >= _pendingModels.length) return;
+            final result = await Navigator.push<ModelConfig>(
+              context,
+              MaterialPageRoute(
+                builder: (_) => AsrModelConfigPage(
+                  model: _pendingModels[modelIndex].copy(),
+                ),
+              ),
+            );
+            if (result != null && mounted) {
+              _pendingModels[modelIndex] = result;
+              if (mounted) setState(() {});
+            }
+          }
+          break;
+        }
+      case ModelConfigStyle.ocr:
+        {
+          if (widget.configIndex >= 0) {
+            final config = _config;
+            if (config == null ||
+                modelIndex < 0 ||
+                modelIndex >= config.models.length) {
+              return;
+            }
+
+            final result = await Navigator.push<ModelConfig>(
+              context,
+              MaterialPageRoute(
+                builder: (_) => OcrModelConfigPage(
+                  model: config.models[modelIndex].copy(),
+                ),
+              ),
+            );
+            if (result != null && mounted) {
+              await _updateModelInConfig(modelIndex, result);
+            }
+          } else {
+            if (modelIndex < 0 || modelIndex >= _pendingModels.length) return;
+            final result = await Navigator.push<ModelConfig>(
+              context,
+              MaterialPageRoute(
+                builder: (_) => OcrModelConfigPage(
                   model: _pendingModels[modelIndex].copy(),
                 ),
               ),

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dio/dio.dart';
 import 'package:stroom/services/asr_service.dart';
+import 'package:stroom/providers/provider_config.dart';
 
 /// A mock [HttpClientAdapter] that captures the request data for inspection
 /// and returns a success response.
@@ -511,6 +512,264 @@ void main() {
           true,
           reason: 'Diagnostics should contain audio/mpeg MIME type',
         );
+      });
+    });
+
+    group('typeConfig parameters', () {
+      test('request includes language from typeConfig', () async {
+        final adapter = _CapturingAdapter();
+        final mockDio = Dio()..httpClientAdapter = adapter;
+
+        final config = AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com',
+          typeConfig: {
+            'enableLanguage': true,
+            'language': 'en',
+          },
+        );
+        final service = AsrService(config: config, dio: mockDio);
+
+        await service.transcribe(
+          audioBytes: Uint8List.fromList([1, 2, 3]),
+          audioFormat: 'wav',
+        );
+
+        final bodyBytes = adapter.capturedBodyBytes;
+        expect(bodyBytes, isNotNull);
+        expect(
+          _multipartFieldContains(bodyBytes!, 'language', 'en'),
+          isTrue,
+          reason: 'Multipart body should contain language=en from typeConfig',
+        );
+      });
+
+      test('request includes response_format from typeConfig', () async {
+        final adapter = _CapturingAdapter();
+        final mockDio = Dio()..httpClientAdapter = adapter;
+
+        final config = AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com',
+          typeConfig: {
+            'enableResponseFormat': true,
+            'responseFormat': 'verbose_json',
+          },
+        );
+        final service = AsrService(config: config, dio: mockDio);
+
+        await service.transcribe(
+          audioBytes: Uint8List.fromList([1, 2, 3]),
+          audioFormat: 'wav',
+        );
+
+        final bodyBytes = adapter.capturedBodyBytes;
+        expect(bodyBytes, isNotNull);
+        expect(
+          _multipartFieldContains(
+              bodyBytes!, 'response_format', 'verbose_json'),
+          isTrue,
+          reason: 'Multipart body should contain response_format=verbose_json',
+        );
+        expect(service.lastRequestBody!['response_format'],
+            equals('verbose_json'));
+      });
+
+      test('request includes temperature from typeConfig', () async {
+        final adapter = _CapturingAdapter();
+        final mockDio = Dio()..httpClientAdapter = adapter;
+
+        final config = AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com',
+          typeConfig: {
+            'enableTemperature': true,
+            'temperature': 0.5,
+          },
+        );
+        final service = AsrService(config: config, dio: mockDio);
+
+        await service.transcribe(
+          audioBytes: Uint8List.fromList([1, 2, 3]),
+          audioFormat: 'wav',
+        );
+
+        final bodyBytes = adapter.capturedBodyBytes;
+        expect(bodyBytes, isNotNull);
+        expect(
+          _multipartFieldContains(bodyBytes!, 'temperature', '0.5'),
+          isTrue,
+          reason:
+              'Multipart body should contain temperature=0.5 from typeConfig',
+        );
+        expect(service.lastRequestBody!['temperature'], equals(0.5));
+      });
+
+      test('request includes timestamp_granularities from typeConfig',
+          () async {
+        final adapter = _CapturingAdapter();
+        final mockDio = Dio()..httpClientAdapter = adapter;
+
+        final config = AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com',
+          typeConfig: {
+            'enableTimestampGranularities': true,
+            'timestampGranularities': 'word',
+          },
+        );
+        final service = AsrService(config: config, dio: mockDio);
+
+        await service.transcribe(
+          audioBytes: Uint8List.fromList([1, 2, 3]),
+          audioFormat: 'wav',
+        );
+
+        final bodyBytes = adapter.capturedBodyBytes;
+        expect(bodyBytes, isNotNull);
+        expect(
+          _multipartFieldContains(
+              bodyBytes!, 'timestamp_granularities', 'word'),
+          isTrue,
+          reason: 'Multipart body should contain timestamp_granularities=word',
+        );
+        expect(service.lastRequestBody!['timestamp_granularities'],
+            equals('word'));
+      });
+
+      test('request includes prompt from typeConfig', () async {
+        final adapter = _CapturingAdapter();
+        final mockDio = Dio()..httpClientAdapter = adapter;
+
+        final config = AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com',
+          typeConfig: {
+            'enablePrompt': true,
+            'prompt': 'Zhou Jie Lun, Listen to the rhythm',
+          },
+        );
+        final service = AsrService(config: config, dio: mockDio);
+
+        await service.transcribe(
+          audioBytes: Uint8List.fromList([1, 2, 3]),
+          audioFormat: 'wav',
+        );
+
+        final bodyBytes = adapter.capturedBodyBytes;
+        expect(bodyBytes, isNotNull);
+        expect(
+          _multipartFieldContains(bodyBytes!, 'prompt', 'Zhou Jie Lun'),
+          isTrue,
+          reason: 'Multipart body should contain prompt from typeConfig',
+        );
+        expect(
+          service.lastRequestBody!['prompt'],
+          equals('Zhou Jie Lun, Listen to the rhythm'),
+        );
+      });
+
+      test('language from typeConfig is omitted when toggle is off', () async {
+        final adapter = _CapturingAdapter();
+        final mockDio = Dio()..httpClientAdapter = adapter;
+
+        final config = AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com',
+          typeConfig: {
+            'enableLanguage': false,
+            'language': 'ja',
+          },
+        );
+        final service = AsrService(config: config, dio: mockDio);
+
+        await service.transcribe(
+          audioBytes: Uint8List.fromList([1, 2, 3]),
+          audioFormat: 'wav',
+        );
+
+        final bodyBytes = adapter.capturedBodyBytes;
+        expect(bodyBytes, isNotNull);
+        expect(
+          _multipartFieldContains(bodyBytes!, 'language', 'ja'),
+          isFalse,
+          reason:
+              'Multipart body should NOT contain language when toggle is off',
+        );
+      });
+
+      test('request includes custom params from typeConfig', () async {
+        final adapter = _CapturingAdapter();
+        final mockDio = Dio()..httpClientAdapter = adapter;
+
+        final config = AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com',
+          typeConfig: {},
+          customParams: [
+            CustomParam(
+              paramName: 'custom_field',
+              defaultValue: 'custom_value',
+            ),
+          ],
+        );
+        final service = AsrService(config: config, dio: mockDio);
+
+        await service.transcribe(
+          audioBytes: Uint8List.fromList([1, 2, 3]),
+          audioFormat: 'wav',
+        );
+
+        final bodyBytes = adapter.capturedBodyBytes;
+        expect(bodyBytes, isNotNull);
+        expect(
+          _multipartFieldContains(bodyBytes!, 'custom_field', 'custom_value'),
+          isTrue,
+          reason: 'Multipart body should contain custom_field=custom_value',
+        );
+        expect(
+          service.lastRequestBody!['custom_field'],
+          equals('custom_value'),
+        );
+      });
+
+      test('effectiveLanguage falls back to legacy language field', () {
+        const config = AsrConfig(
+          apiKey: 'key',
+          host: 'https://api.test.com',
+          language: 'fr',
+        );
+        expect(config.effectiveLanguage, equals('fr'));
+      });
+
+      test('effectiveLanguage prefers typeConfig over legacy field', () {
+        final config = AsrConfig(
+          apiKey: 'key',
+          host: 'https://api.test.com',
+          language: 'fr',
+          typeConfig: {
+            'enableLanguage': true,
+            'language': 'de',
+          },
+        );
+        expect(config.effectiveLanguage, equals('de'));
+      });
+    });
+
+    group('createAsrServiceFromConfig with typeConfig', () {
+      test('creates service with typeConfig and customParams', () {
+        final service = createAsrServiceFromConfig(
+          host: 'https://api.test.com',
+          apiKey: 'key',
+          model: 'whisper-1',
+          typeConfig: {'enableLanguage': true, 'language': 'zh'},
+          customParams: [
+            CustomParam(paramName: 'test', defaultValue: 'value'),
+          ],
+        );
+        expect(service.config.typeConfig['language'], equals('zh'));
+        expect(service.config.customParams.length, equals(1));
+        expect(service.config.customParams[0].paramName, equals('test'));
       });
     });
   });

@@ -18,8 +18,14 @@ enum ModelConfigStyle {
   /// LLM 样式：模型ID、上下文长度、自定义参数
   llm,
 
-  /// 简洁样式：模型ID、自定义参数（无上下文长度要求），用于 OCR、ASR
+  /// 简洁样式：模型ID、自定义参数（无上下文长度要求），用于 ASR
   simple,
+
+  /// OCR 样式：模型ID、自定义参数、OCR 专有参数（temperature、detail 等）
+  ocr,
+
+  /// ASR 样式：模型ID、自定义参数、ASR 专有参数（language、response_format 等）
+  asr,
 }
 
 class ProviderTypeDefinition {
@@ -71,14 +77,14 @@ void registerBuiltinProviderTypes() {
     const ProviderTypeDefinition(
       type: 'ocr',
       hostHint: '例如: https://api.openai.com/v1/chat/completions',
-      modelConfigStyle: ModelConfigStyle.simple,
+      modelConfigStyle: ModelConfigStyle.ocr,
     ),
   );
   ProviderTypeRegistry.register(
     const ProviderTypeDefinition(
       type: 'asr',
       hostHint: '例如: https://api.openai.com/v1/audio/transcriptions',
-      modelConfigStyle: ModelConfigStyle.simple,
+      modelConfigStyle: ModelConfigStyle.asr,
     ),
   );
   ProviderTypeRegistry.register(
