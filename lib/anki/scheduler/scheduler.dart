@@ -13,7 +13,7 @@ class AnkiScheduler {
   AnkiScheduler({SM2Scheduler? sm2}) : _sm2 = sm2 ?? SM2Scheduler();
 
   /// Gets the next card to study in a deck (learning → review → new).
-  Future<AnkiCard?> getNextCard(ColDao col, CardDao cards, int did) async {
+  Future<Card?> getNextCard(ColDao col, CardDao cards, int did) async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
     // 1. Learning cards (time-sensitive)
@@ -53,9 +53,9 @@ class AnkiScheduler {
     final card = await cards.get(cid);
     if (card == null) return;
 
-    final lastIvl = card.ivl;
+    final lastIvl = card.interval;
 
-    switch (card.queue) {
+    switch (card.queue.value) {
       case 0: // new
         _sm2.scheduleLearning(card, nowMs);
         card.answerLearning(nowMs,
@@ -82,18 +82,21 @@ class AnkiScheduler {
         return; // suspended / buried
     }
 
-    card.mod = nowSec;
+    card.mtime = nowSec;
     await cards.update(card);
 
     // Log the review
-    await col.revlog.insert(AnkiRevlog(
+    await col.revlog.insert(RevlogEntry(
       cid: cid,
-      ease: rating,
-      ivl: card.ivl,
-      lastIvl: lastIvl,
-      factor: card.factor,
-      time: reviewDuration,
-      type: card.type == 1 || card.type == 3 ? 2 : 1, // 2=relearning, 1=review
+      button_chosen: rating,
+      interval: card.interval,
+      last_interval: lastIvl,
+      ease_factor: card.ease_factor,
+      taken_millis: reviewDuration,
+      review_kind:
+          card.ctype == CardType.learn || card.ctype == CardType.relearn
+              ? RevlogReviewKind.relearning
+              : RevlogReviewKind.review,
     ));
 
     await col.save();

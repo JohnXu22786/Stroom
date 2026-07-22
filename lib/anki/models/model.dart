@@ -1,31 +1,41 @@
-/// Anki note type (model) — JSON shape matches Anki's col blob.
-class AnkiModel {
+/// Anki NoteType (model) — JSON shape matches Anki's col blob.
+///
+/// In the upstream code, "model" is referred to as "note type" or "notetype"
+/// (`rslib/src/notetype/`). The class name `Notetype` follows the upstream
+/// Rust / protobuf naming (`notetypes.proto`).
+///
+/// ## Version reference
+/// - AnkiDroid target release: **2.24.0** (May 2026)
+/// - Upstream anki commit tracked at proto import time
+
+/// Note type (model) matching Anki's col blob JSON format.
+class Notetype {
   int id;
   String name;
   int type; // 0=normal, 1=cloze
-  int mod;
+  int mtime; // last modified (was: mod)
   int usn;
-  int sortf; // sort field index
-  int did; // default deck id
-  List<ModelField> flds;
-  List<ModelTemplate> tmpls;
+  int sortFieldIndex; // sort field index (was: sortf)
+  int defaultDeckId; // default deck id (was: did)
+  List<NoteField> fields; // (was: flds)
+  List<NoteTemplate> templates; // (was: tmpls)
   String css;
   List<dynamic> req; // [[ord, "all"|"any", [field ords...]], ...]
   List<String> tags;
   String latexPre;
   String latexPost;
-  late String latex;
+  String latex;
 
-  AnkiModel({
+  Notetype({
     required this.id,
     required this.name,
     this.type = 0,
-    this.mod = 0,
+    this.mtime = 0,
     this.usn = -1,
-    this.sortf = 0,
-    this.did = 1,
-    List<ModelField>? flds,
-    List<ModelTemplate>? tmpls,
+    this.sortFieldIndex = 0,
+    this.defaultDeckId = 1,
+    List<NoteField>? fields,
+    List<NoteTemplate>? templates,
     this.css =
         '.card {\n  font-family: arial;\n  font-size: 20px;\n  text-align: center;\n  color: black;\n  background-color: white;\n}\n',
     List<dynamic>? req,
@@ -34,22 +44,22 @@ class AnkiModel {
         r'\documentclass[12pt]{article}\usepackage{amsmath}\usepackage{amssymb}\usepackage[utf8]{inputenc}\usepackage{pgfpages}\pagestyle{empty}\setlength{\parindent}{0pt}\begin{document}',
     this.latexPost = r'\end{document}',
     this.latex = 'dvipng',
-  })  : flds = flds ?? [],
-        tmpls = tmpls ?? [],
+  })  : fields = fields ?? [],
+        templates = templates ?? [],
         req = req ?? [],
         tags = tags ?? [];
 
-  factory AnkiModel.createBasic() {
+  factory Notetype.createBasic() {
     final now = DateTime.now().microsecondsSinceEpoch;
-    return AnkiModel(
+    return Notetype(
       id: now,
       name: 'Basic',
-      flds: [
-        ModelField(name: 'Front', ord: 0, font: 'Arial', size: 20),
-        ModelField(name: 'Back', ord: 1, font: 'Arial', size: 20),
+      fields: [
+        NoteField(name: 'Front', ord: 0, font: 'Arial', size: 20),
+        NoteField(name: 'Back', ord: 1, font: 'Arial', size: 20),
       ],
-      tmpls: [
-        ModelTemplate(
+      templates: [
+        NoteTemplate(
           name: 'Card 1',
           ord: 0,
           qfmt: '{{Front}}',
@@ -61,23 +71,23 @@ class AnkiModel {
         0,
         [0]
       ], // ord 0, all, field 0
-      sortf: 0,
+      sortFieldIndex: 0,
     );
   }
 
-  /// Creates a "Cloze" model.
-  factory AnkiModel.createCloze() {
+  /// Creates a "Cloze" note type.
+  factory Notetype.createCloze() {
     final now = DateTime.now().microsecondsSinceEpoch;
-    return AnkiModel(
+    return Notetype(
       id: now + 1,
       name: 'Cloze',
       type: 1, // cloze
-      flds: [
-        ModelField(name: 'Text', ord: 0, font: 'Arial', size: 20),
-        ModelField(name: 'Extra', ord: 1, font: 'Arial', size: 20),
+      fields: [
+        NoteField(name: 'Text', ord: 0, font: 'Arial', size: 20),
+        NoteField(name: 'Extra', ord: 1, font: 'Arial', size: 20),
       ],
-      tmpls: [
-        ModelTemplate(
+      templates: [
+        NoteTemplate(
           name: 'Cloze',
           ord: 0,
           qfmt: '{{cloze:Text}}',
@@ -89,7 +99,7 @@ class AnkiModel {
         0,
         [0]
       ],
-      sortf: 0,
+      sortFieldIndex: 0,
     );
   }
 
@@ -97,12 +107,12 @@ class AnkiModel {
         'id': id,
         'name': name,
         'type': type,
-        'mod': mod,
+        'mod': mtime,
         'usn': usn,
-        'sortf': sortf,
-        'did': did,
-        'flds': flds.map((f) => f.toJson()).toList(),
-        'tmpls': tmpls.map((t) => t.toJson()).toList(),
+        'sortf': sortFieldIndex,
+        'did': defaultDeckId,
+        'flds': fields.map((f) => f.toJson()).toList(),
+        'tmpls': templates.map((t) => t.toJson()).toList(),
         'css': css,
         'req': req,
         'tags': tags,
@@ -111,20 +121,20 @@ class AnkiModel {
         'latex': latex,
       };
 
-  factory AnkiModel.fromJson(Map<String, dynamic> j) => AnkiModel(
+  factory Notetype.fromJson(Map<String, dynamic> j) => Notetype(
         id: j['id'] as int,
         name: j['name'] as String,
         type: j['type'] as int? ?? 0,
-        mod: j['mod'] as int? ?? 0,
+        mtime: j['mod'] as int? ?? 0,
         usn: j['usn'] as int? ?? -1,
-        sortf: j['sortf'] as int? ?? 0,
-        did: j['did'] as int? ?? 1,
-        flds: (j['flds'] as List?)
-                ?.map((f) => ModelField.fromJson(f as Map<String, dynamic>))
+        sortFieldIndex: j['sortf'] as int? ?? 0,
+        defaultDeckId: j['did'] as int? ?? 1,
+        fields: (j['flds'] as List?)
+                ?.map((f) => NoteField.fromJson(f as Map<String, dynamic>))
                 .toList() ??
             [],
-        tmpls: (j['tmpls'] as List?)
-                ?.map((t) => ModelTemplate.fromJson(t as Map<String, dynamic>))
+        templates: (j['tmpls'] as List?)
+                ?.map((t) => NoteTemplate.fromJson(t as Map<String, dynamic>))
                 .toList() ??
             [],
         css: j['css'] as String? ?? '',
@@ -135,7 +145,8 @@ class AnkiModel {
       );
 }
 
-class ModelField {
+/// A field within a note type (was: ModelField).
+class NoteField {
   String name;
   int ord;
   String font;
@@ -144,7 +155,7 @@ class ModelField {
   bool rtl;
   List<String> media;
 
-  ModelField({
+  NoteField({
     required this.name,
     this.ord = 0,
     this.font = 'Arial',
@@ -164,7 +175,7 @@ class ModelField {
         'media': media,
       };
 
-  factory ModelField.fromJson(Map<String, dynamic> j) => ModelField(
+  factory NoteField.fromJson(Map<String, dynamic> j) => NoteField(
         name: j['name'] as String,
         ord: j['ord'] as int? ?? 0,
         font: j['font'] as String? ?? 'Arial',
@@ -175,23 +186,24 @@ class ModelField {
       );
 }
 
-class ModelTemplate {
+/// A card template within a note type (was: ModelTemplate).
+class NoteTemplate {
   String name;
   int ord;
   String qfmt;
   String afmt;
   String bqfmt;
   String bafmt;
-  int? did; // deck override
+  int? deckId; // deck override (was: did)
 
-  ModelTemplate({
+  NoteTemplate({
     required this.name,
     this.ord = 0,
     this.qfmt = '',
     this.afmt = '',
     this.bqfmt = '',
     this.bafmt = '',
-    this.did,
+    this.deckId,
   });
 
   Map<String, dynamic> toJson() => {
@@ -201,16 +213,16 @@ class ModelTemplate {
         'afmt': afmt,
         if (bqfmt.isNotEmpty) 'bqfmt': bqfmt,
         if (bafmt.isNotEmpty) 'bafmt': bafmt,
-        if (did != null) 'did': did,
+        if (deckId != null) 'did': deckId,
       };
 
-  factory ModelTemplate.fromJson(Map<String, dynamic> j) => ModelTemplate(
+  factory NoteTemplate.fromJson(Map<String, dynamic> j) => NoteTemplate(
         name: j['name'] as String,
         ord: j['ord'] as int? ?? 0,
         qfmt: j['qfmt'] as String? ?? '',
         afmt: j['afmt'] as String? ?? '',
         bqfmt: j['bqfmt'] as String? ?? '',
         bafmt: j['bafmt'] as String? ?? '',
-        did: j['did'] as int?,
+        deckId: j['did'] as int?,
       );
 }
