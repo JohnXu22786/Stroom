@@ -32,18 +32,18 @@ class ColDao {
   bool _loaded = false;
 
   // Decks parsed from JSON, keyed by deck id
-  Map<int, AnkiDeck> _decks = {};
+  Map<int, Deck> _decks = {};
   // Models parsed from JSON, keyed by model id
-  Map<int, AnkiModel> _models = {};
+  Map<int, Notetype> _models = {};
 
   ColDao(this._db, this.cards, this.notes, this.revlog, this.graves);
 
   /// Seed initial col row on fresh database.
   static Future<void> seed(Database db) async {
     final now = DateTime.now().millisecondsSinceEpoch;
-    final deck = AnkiDeck.createNew(name: 'Default');
+    final deck = Deck.createNew(name: 'Default');
     // Default Basic model
-    final basic = AnkiModel.createBasic();
+    final basic = Notetype.createBasic();
     // Default deck preset
     final dconf = {
       '1': {
@@ -115,9 +115,9 @@ class ColDao {
     confJson = row['conf'] as String;
     tagsJson = row['tags'] as String;
 
-    _decks = _parseJsonMap<AnkiDeck>(row['decks'] as String, AnkiDeck.fromJson);
+    _decks = _parseJsonMap<Deck>(row['decks'] as String, Deck.fromJson);
     _models =
-        _parseJsonMap<AnkiModel>(row['models'] as String, AnkiModel.fromJson);
+        _parseJsonMap<Notetype>(row['models'] as String, Notetype.fromJson);
     _loaded = true;
   }
 
@@ -139,14 +139,14 @@ class ColDao {
 
   // ── Decks ────────────────────────────────────────────────
 
-  List<AnkiDeck> get deckList =>
+  List<Deck> get deckList =>
       _decks.values.toList()..sort((a, b) => a.name.compareTo(b.name));
-  AnkiDeck? getDeck(int id) => _decks[id];
+  Deck? getDeck(int id) => _decks[id];
 
-  AnkiDeck addDeck(String name, {String desc = ''}) {
+  Deck addDeck(String name, {String desc = ''}) {
     final existing = _decks.values.where((d) => d.name == name).toList();
     if (existing.isNotEmpty) return existing.first;
-    final deck = AnkiDeck.createNew(name: name, description: desc);
+    final deck = Deck.createNew(name: name, description: desc);
     _decks[deck.id] = deck;
     return deck;
   }
@@ -163,9 +163,9 @@ class ColDao {
 
   // ── Models ────────────────────────────────────────────────
 
-  List<AnkiModel> get modelList => _models.values.toList();
-  AnkiModel? getModel(int id) => _models[id];
-  void addModel(AnkiModel m) => _models[m.id] = m;
+  List<Notetype> get modelList => _models.values.toList();
+  Notetype? getModel(int id) => _models[id];
+  void addModel(Notetype m) => _models[m.id] = m;
 
   // ── High-level operations ─────────────────────────────────
 

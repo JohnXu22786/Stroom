@@ -101,13 +101,13 @@ class SM2Scheduler {
   }
 
   /// Starts learning for a new card, placing it in the learning queue.
-  void scheduleLearning(AnkiCard card, int nowMs) {
+  void scheduleLearning(Card card, int nowMs) {
     card.startLearning(nowMs, steps: learningSteps);
   }
 
   /// Schedules a review card after answering.
   /// Passes scheduler configuration to the card's answerReview method.
-  void scheduleReview(AnkiCard card, int nowMs, {required int rating}) {
+  void scheduleReview(Card card, int nowMs, {required int rating}) {
     card.answerReview(nowMs,
         rating: rating,
         hardMult: hardMultiplier,
