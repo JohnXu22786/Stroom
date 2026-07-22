@@ -251,8 +251,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           onTap: () {
             Navigator.push(
               context,
-              MaterialPageRoute(
-                  builder: (_) => const BrowserCookiesPage()),
+              MaterialPageRoute(builder: (_) => const BrowserCookiesPage()),
             );
           },
         ),

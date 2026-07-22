@@ -402,7 +402,9 @@ class _BrowserPageState extends State<BrowserPage> {
                     ? Colors.orange
                     : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
-              tooltip: _cookieRetentionEnabled ? 'Cookies持久化(已开启)' : 'Cookies持久化(已关闭)',
+              tooltip: _cookieRetentionEnabled
+                  ? 'Cookies持久化(已开启)'
+                  : 'Cookies持久化(已关闭)',
               onPressed: () async {
                 final messenger = ScaffoldMessenger.of(context);
                 final newValue =

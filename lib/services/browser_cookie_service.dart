@@ -120,8 +120,7 @@ class BrowserCookieService {
   /// Returns `true` if the operation was successful, `false` otherwise.
   static Future<bool> deleteCookie(String domain, String name) async {
     try {
-      final cleanDomain =
-          domain.startsWith('.') ? domain.substring(1) : domain;
+      final cleanDomain = domain.startsWith('.') ? domain.substring(1) : domain;
       if (cleanDomain.isEmpty) return false;
 
       final httpsUrl = WebUri('https://$cleanDomain');

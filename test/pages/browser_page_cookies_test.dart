@@ -45,7 +45,8 @@ void main() {
       await BrowserCookieService.toggleRetentionMode();
       await BrowserCookieService.toggleRetentionMode();
 
-      expect(await BrowserCookieService.getRetentionMode(), equals(initialState));
+      expect(
+          await BrowserCookieService.getRetentionMode(), equals(initialState));
     });
   });
 

@@ -145,7 +145,9 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
         child: ListTile(
           leading: Icon(
             Icons.cookie,
-            color: _retentionEnabled ? Colors.orange : colorScheme.onSurfaceVariant,
+            color: _retentionEnabled
+                ? Colors.orange
+                : colorScheme.onSurfaceVariant,
           ),
           title: const Text('退出保留Cookies数据'),
           subtitle: Text(
@@ -330,7 +332,8 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
                           cookie.path!,
                           style: TextStyle(
                             fontSize: 11,
-                            color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                            color: colorScheme.onSurfaceVariant
+                                .withValues(alpha: 0.6),
                           ),
                         ),
                       ),

@@ -65,8 +65,7 @@ void main() {
   // ====================================================================
 
   group('Clear All cookies', () {
-    testWidgets('tapping Clear All shows confirmation dialog',
-        (tester) async {
+    testWidgets('tapping Clear All shows confirmation dialog', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(home: BrowserCookiesPage()),
       );
