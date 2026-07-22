@@ -3,6 +3,42 @@ import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:dio/dio.dart' show CancelToken;
 import 'audio_utils.dart' show pcmToWav;
 
+/// Synchronous audio extraction for use with [Isolate.run].
+/// Extracts audio from MP4 video bytes without blocking the main isolate.
+/// Returns the extracted audio bytes (WAV for PCM, ADTS-wrapped AAC).
+///
+/// This must be a top-level function (not a method) so it can be sent to
+/// a background isolate via Isolate.run.
+Uint8List extractAudioSync({
+  required Uint8List videoBytes,
+  required String videoFormat,
+}) {
+  if (videoBytes.isEmpty) {
+    throw Exception('Video data is empty');
+  }
+  if (!AudioSeparationEngine._supportedFormats
+      .contains(videoFormat.toLowerCase().trim())) {
+    throw Exception('Unsupported video format: $videoFormat');
+  }
+
+  // Step 1: Parse MP4 container and find audio track
+  final mp4 = _Mp4Demuxer(videoBytes);
+  final audioTrack = mp4.findAudioTrack();
+  if (audioTrack == null) {
+    throw Exception('No audio track found in video');
+  }
+
+  // Step 2: Extract audio sample data
+  final frames = mp4.extractAudioFrames(audioTrack);
+  if (frames.isEmpty) {
+    throw Exception('No audio data extracted');
+  }
+
+  // Step 3: Package into playable format
+  final engine = AudioSeparationEngine();
+  return engine._packageFrames(frames, audioTrack);
+}
+
 /// Pure-Dart MP4/ISOBMFF audio extraction engine.
 ///
 /// Parses MP4/MOV/M4V/3GP container format and extracts the audio track.

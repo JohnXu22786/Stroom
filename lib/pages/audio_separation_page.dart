@@ -731,13 +731,12 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
         // Step 0: 分离音频 - mark as running
         bgNotifier.updateStep(taskId, 0, running: true);
 
-        final audioBytes = await _engine.extractAudio(
-          videoBytes: video.bytes,
-          videoFormat: video.format,
-          onProgress: (progress) {
-            bgNotifier.setResult(taskId, '正在提取音频... $progress%');
-          },
-        );
+        // Run CPU-bound MP4 parsing in a background isolate so the main
+        // thread stays responsive for the pop transition and UI updates.
+        final audioBytes = await Isolate.run(() => extractAudioSync(
+              videoBytes: video.bytes,
+              videoFormat: video.format,
+            ));
 
         // Step 0: 分离音频 - mark as completed
         bgNotifier.updateStep(taskId, 0, completed: true);
