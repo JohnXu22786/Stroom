@@ -111,6 +111,18 @@ class _ReasoningButtonState extends ConsumerState<_ReasoningButton> {
   }
 
   @override
+  void didUpdateWidget(_ReasoningButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // When streaming completes (isStreaming transitions from true to false),
+    // cancel the chevron animation timer so the ">>>" animation stops.
+    if (oldWidget.isStreaming && !widget.isStreaming) {
+      _chevronTimer?.cancel();
+      _chevronTimer = null;
+      _chevronCount = 0;
+    }
+  }
+
+  @override
   void dispose() {
     _chevronTimer?.cancel();
     super.dispose();
@@ -120,7 +132,6 @@ class _ReasoningButtonState extends ConsumerState<_ReasoningButton> {
   Widget build(BuildContext context) {
     final label = widget.isStreaming ? '思考中' : '思考完成';
     final prefix = widget.isMulti ? '思考 ${widget.index + 1} ' : '';
-    final chevrons = '›' * _chevronCount;
     final accentColor = Colors.orange[700]!;
 
     return GestureDetector(
@@ -138,15 +149,20 @@ class _ReasoningButtonState extends ConsumerState<_ReasoningButton> {
                 color: accentColor,
               ),
             ),
-            const SizedBox(width: 2),
-            Text(
-              chevrons,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: accentColor,
+            // Only show animated chevrons (› ›› ›››) when the reasoning
+            // section is still being streamed. Completed sections show
+            // "思考完成" without any trailing chevrons.
+            if (widget.isStreaming) ...[
+              const SizedBox(width: 2),
+              Text(
+                '›' * _chevronCount,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: accentColor,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
