@@ -5,13 +5,13 @@ class GraveDao {
   final Database _db;
   GraveDao(this._db);
 
-  Future<void> insert(AnkiGrave grave) async {
+  Future<void> insert(Grave grave) async {
     await _db.insert('graves', grave.toMap());
   }
 
-  Future<List<AnkiGrave>> all() async {
+  Future<List<Grave>> all() async {
     final rows = await _db.query('graves');
-    return rows.map(AnkiGrave.fromMap).toList();
+    return rows.map(Grave.fromMap).toList();
   }
 
   Future<void> clear() async {

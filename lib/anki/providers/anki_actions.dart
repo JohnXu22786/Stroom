@@ -32,7 +32,7 @@ class AnkiActions {
 
   // ── Decks ──────────────────────────────────────────────
 
-  Future<AnkiDeck> addDeck(String name, {String desc = ''}) async {
+  Future<Deck> addDeck(String name, {String desc = ''}) async {
     final col = await _col;
     final deck = col.addDeck(name, desc: desc);
     await col.save();
@@ -64,17 +64,23 @@ class AnkiActions {
 
     // Ensure model exists; if not, seed both Basic and Cloze
     if (models.isEmpty) {
-      col.addModel(AnkiModel.createBasic());
+      col.addModel(Notetype.createBasic());
     }
     // Ensure Cloze model exists
     if (!col.modelList.any((m) => m.name == 'Cloze')) {
-      col.addModel(AnkiModel.createCloze());
+      col.addModel(Notetype.createCloze());
     }
 
-    final flds = [front, back].join(String.fromCharCode(0x1f));
-    final note = AnkiNote.createNew(mid: mid, flds: flds, tags: tags);
+    final tagList = tags.trim().isEmpty
+        ? <String>[]
+        : tags.trim().split(' ').where((t) => t.isNotEmpty).toList();
+    final note = Note.createNew(
+      notetype_id: mid,
+      fields: [front, back],
+      tags: tagList,
+    );
     await col.notes.insert(note);
-    final card = AnkiCard.createNew(nid: note.id, did: did);
+    final card = Card.createNew(note_id: note.id, deck_id: did);
     await col.cards.insert(card);
     await col.save();
     _refresh();
@@ -102,7 +108,7 @@ class AnkiActions {
     _refresh();
   }
 
-  Future<AnkiCard?> getNextCard(int did) async {
+  Future<Card?> getNextCard(int did) async {
     final col = await _col;
     final cardDao = await _cardDao;
     return _scheduler.getNextCard(col, cardDao, did);
