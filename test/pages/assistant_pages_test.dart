@@ -457,7 +457,8 @@ void main() {
       expect(find.byType(TextField), findsNothing);
     });
 
-    testWidgets('selecting a built-in prompt creates new assistant and closes dialog', (
+    testWidgets(
+        'selecting a built-in prompt creates new assistant and closes dialog', (
       tester,
     ) async {
       SharedPreferences.setMockInitialValues({});

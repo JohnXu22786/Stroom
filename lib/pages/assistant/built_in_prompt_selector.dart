@@ -167,7 +167,8 @@ class _PromptCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Center(
-                      child: Text(prompt.emoji, style: const TextStyle(fontSize: 22)),
+                      child: Text(prompt.emoji,
+                          style: const TextStyle(fontSize: 22)),
                     ),
                   ),
                   const SizedBox(width: 12),
