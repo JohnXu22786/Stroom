@@ -19,15 +19,12 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
   late final TextEditingController _modelIdController;
   late final TextEditingController _maxTokensController;
   late final TextEditingController _seedController;
-  late final TextEditingController _stopController;
   late List<CustomParam> _customParams;
   final Map<int, String?> _jsonErrors = {};
 
   // Slider values
   double _temperature = 0.0;
   double _topP = 1.0;
-  double _frequencyPenalty = 0.0;
-  double _presencePenalty = 0.0;
 
   // Detail level
   String _detail = 'high';
@@ -38,9 +35,6 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
   bool _enableMaxTokens = false;
   bool _enableDetail = false;
   bool _enableSeed = false;
-  bool _enableFrequencyPenalty = false;
-  bool _enablePresencePenalty = false;
-  bool _enableStop = false;
 
   bool _isSaving = false;
 
@@ -58,19 +52,13 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
           _enableTopP ||
           _enableMaxTokens ||
           _enableDetail ||
-          _enableSeed ||
-          _enableFrequencyPenalty ||
-          _enablePresencePenalty ||
-          _enableStop) {
+          _enableSeed) {
         return true;
       }
       if (_maxTokensController.text.isNotEmpty) return true;
       if (_seedController.text.isNotEmpty) return true;
-      if (_stopController.text.isNotEmpty) return true;
       if (_temperature != 0.0) return true;
       if (_topP != 1.0) return true;
-      if (_frequencyPenalty != 0.0) return true;
-      if (_presencePenalty != 0.0) return true;
       if (_detail != 'high') return true;
       return false;
     }
@@ -84,14 +72,6 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       return true;
     }
     if (((m.typeConfig['topP'] as num?)?.toDouble() ?? 1.0) != _topP) {
-      return true;
-    }
-    if (((m.typeConfig['frequencyPenalty'] as num?)?.toDouble() ?? 0.0) !=
-        _frequencyPenalty) {
-      return true;
-    }
-    if (((m.typeConfig['presencePenalty'] as num?)?.toDouble() ?? 0.0) !=
-        _presencePenalty) {
       return true;
     }
     if ((m.typeConfig['detail'] as String? ?? 'high') != _detail) {
@@ -114,25 +94,11 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     if ((m.typeConfig['enableSeed'] as bool? ?? false) != _enableSeed) {
       return true;
     }
-    if ((m.typeConfig['enableFrequencyPenalty'] as bool? ?? false) !=
-        _enableFrequencyPenalty) {
-      return true;
-    }
-    if ((m.typeConfig['enablePresencePenalty'] as bool? ?? false) !=
-        _enablePresencePenalty) {
-      return true;
-    }
-    if ((m.typeConfig['enableStop'] as bool? ?? false) != _enableStop) {
-      return true;
-    }
     if ((m.typeConfig['maxTokens']?.toString() ?? '') !=
         _maxTokensController.text) {
       return true;
     }
     if ((m.typeConfig['seed']?.toString() ?? '') != _seedController.text) {
-      return true;
-    }
-    if ((m.typeConfig['stop'] as String? ?? '') != _stopController.text) {
       return true;
     }
     // Custom params (simple check via serialization)
@@ -152,10 +118,6 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     // Initialize OCR-specific params from typeConfig
     _temperature = (m?.typeConfig['temperature'] as num?)?.toDouble() ?? 0.0;
     _topP = (m?.typeConfig['topP'] as num?)?.toDouble() ?? 1.0;
-    _frequencyPenalty =
-        (m?.typeConfig['frequencyPenalty'] as num?)?.toDouble() ?? 0.0;
-    _presencePenalty =
-        (m?.typeConfig['presencePenalty'] as num?)?.toDouble() ?? 0.0;
     _detail = (m?.typeConfig['detail'] as String?) ?? 'high';
 
     // Read enable flags from typeConfig
@@ -164,11 +126,6 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     _enableMaxTokens = m?.typeConfig['enableMaxTokens'] as bool? ?? false;
     _enableDetail = m?.typeConfig['enableDetail'] as bool? ?? false;
     _enableSeed = m?.typeConfig['enableSeed'] as bool? ?? false;
-    _enableFrequencyPenalty =
-        m?.typeConfig['enableFrequencyPenalty'] as bool? ?? false;
-    _enablePresencePenalty =
-        m?.typeConfig['enablePresencePenalty'] as bool? ?? false;
-    _enableStop = m?.typeConfig['enableStop'] as bool? ?? false;
 
     final maxTokens = (m?.typeConfig['maxTokens'] as num?)?.toInt();
     _maxTokensController = TextEditingController(
@@ -178,10 +135,6 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     final seed = m?.typeConfig['seed'];
     _seedController = TextEditingController(
       text: seed != null ? seed.toString() : '',
-    );
-
-    _stopController = TextEditingController(
-      text: m?.typeConfig['stop'] as String? ?? '',
     );
 
     _customParams = (m?.customParams ?? []).map((p) => p.copy()).toList();
@@ -197,7 +150,6 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     _modelIdController.dispose();
     _maxTokensController.dispose();
     _seedController.dispose();
-    _stopController.dispose();
     super.dispose();
   }
 
@@ -587,22 +539,12 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     if (_enableDetail) {
       typeConfig['detail'] = _detail;
     }
-    if (_enableFrequencyPenalty) {
-      typeConfig['frequencyPenalty'] = _frequencyPenalty;
-    }
-    if (_enablePresencePenalty) {
-      typeConfig['presencePenalty'] = _presencePenalty;
-    }
-
     // Always save toggle states so they persist
     typeConfig['enableTemperature'] = _enableTemperature;
     typeConfig['enableTopP'] = _enableTopP;
     typeConfig['enableMaxTokens'] = _enableMaxTokens;
     typeConfig['enableDetail'] = _enableDetail;
     typeConfig['enableSeed'] = _enableSeed;
-    typeConfig['enableFrequencyPenalty'] = _enableFrequencyPenalty;
-    typeConfig['enablePresencePenalty'] = _enablePresencePenalty;
-    typeConfig['enableStop'] = _enableStop;
 
     // Parse optional maxTokens
     final maxTokensStr = _maxTokensController.text.trim();
@@ -654,23 +596,6 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       );
       setState(() => _isSaving = false);
       return;
-    }
-
-    // Parse optional stop sequences — only save when toggle is on
-    if (_enableStop) {
-      final stopStr = _stopController.text.trim();
-      if (stopStr.isNotEmpty) {
-        typeConfig['stop'] = stopStr;
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('停止序列已启用但未填写'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        setState(() => _isSaving = false);
-        return;
-      }
     }
 
     final result = ModelConfig(
@@ -807,32 +732,6 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
               description: '核采样参数，控制词汇选择的累积概率',
             ),
 
-            // Frequency Penalty
-            LlmToggleSlider(
-              label: '频率惩罚 (Frequency Penalty)',
-              value: _frequencyPenalty,
-              min: -2.0,
-              max: 2.0,
-              divisions: 40,
-              enabled: _enableFrequencyPenalty,
-              onChanged: (v) => setState(() => _frequencyPenalty = v),
-              onToggle: (v) => setState(() => _enableFrequencyPenalty = v),
-              description: '减少重复词的频率，负值增加重复',
-            ),
-
-            // Presence Penalty
-            LlmToggleSlider(
-              label: '存在惩罚 (Presence Penalty)',
-              value: _presencePenalty,
-              min: -2.0,
-              max: 2.0,
-              divisions: 40,
-              enabled: _enablePresencePenalty,
-              onChanged: (v) => setState(() => _presencePenalty = v),
-              onToggle: (v) => setState(() => _enablePresencePenalty = v),
-              description: '鼓励讨论新话题，负值鼓励重复话题',
-            ),
-
             // Max Tokens
             LlmToggleTextField(
               label: '最大 Token 数',
@@ -857,16 +756,6 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
 
             // Detail level
             _buildDetailSection(cs),
-
-            // Stop sequences
-            LlmToggleTextField(
-              label: '停止序列 (Stop)',
-              controller: _stopController,
-              enabled: _enableStop,
-              onToggle: (v) => setState(() => _enableStop = v),
-              hintText: '用逗号分隔多个停止词',
-              description: '遇到这些序列时停止生成',
-            ),
 
             const SizedBox(height: 24),
 

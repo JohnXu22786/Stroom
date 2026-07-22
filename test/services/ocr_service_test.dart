@@ -587,35 +587,6 @@ void main() {
         expect(service.lastRequestBody?['seed'], equals(42));
       });
 
-      test('request body includes stop sequences when enabled', () async {
-        final dio = _mockDioWithSuccess({
-          'choices': [
-            {
-              'message': {'content': 'test'},
-            },
-          ],
-        });
-        final config = OcrConfig(
-          model: 'gpt-4o',
-          apiKey: 'key',
-          host: 'https://api.test.com',
-          typeConfig: {
-            'enableStop': true,
-            'stop': 'STOP,END',
-            'maxTokens': 4096,
-          },
-        );
-        final service = OcrService(config: config, dio: dio);
-        await service.recognize(
-          imageBytes: Uint8List.fromList([1, 2, 3]),
-          imageFormat: 'jpeg',
-        );
-        expect(service.lastRequestBody?['stop'], isA<List>());
-        final stopList = service.lastRequestBody?['stop'] as List;
-        expect(stopList, contains('STOP'));
-        expect(stopList, contains('END'));
-      });
-
       test('request body includes custom params', () async {
         final dio = _mockDioWithSuccess({
           'choices': [
@@ -760,58 +731,6 @@ void main() {
         expect(service.lastRequestBody?['max_tokens'], isNull);
       });
 
-      test('request body includes frequency_penalty when enabled', () async {
-        final dio = _mockDioWithSuccess({
-          'choices': [
-            {
-              'message': {'content': 'test'},
-            },
-          ],
-        });
-        final config = OcrConfig(
-          model: 'gpt-4o',
-          apiKey: 'key',
-          host: 'https://api.test.com',
-          typeConfig: {
-            'enableFrequencyPenalty': true,
-            'frequencyPenalty': 0.5,
-            'maxTokens': 4096,
-          },
-        );
-        final service = OcrService(config: config, dio: dio);
-        await service.recognize(
-          imageBytes: Uint8List.fromList([1, 2, 3]),
-          imageFormat: 'jpeg',
-        );
-        expect(service.lastRequestBody?['frequency_penalty'], equals(0.5));
-      });
-
-      test('request body includes presence_penalty when enabled', () async {
-        final dio = _mockDioWithSuccess({
-          'choices': [
-            {
-              'message': {'content': 'test'},
-            },
-          ],
-        });
-        final config = OcrConfig(
-          model: 'gpt-4o',
-          apiKey: 'key',
-          host: 'https://api.test.com',
-          typeConfig: {
-            'enablePresencePenalty': true,
-            'presencePenalty': -0.5,
-            'maxTokens': 4096,
-          },
-        );
-        final service = OcrService(config: config, dio: dio);
-        await service.recognize(
-          imageBytes: Uint8List.fromList([1, 2, 3]),
-          imageFormat: 'jpeg',
-        );
-        expect(service.lastRequestBody?['presence_penalty'], equals(-0.5));
-      });
-
       test('top_p omitted when not enabled', () async {
         final dio = _mockDioWithSuccess({
           'choices': [
@@ -862,59 +781,6 @@ void main() {
           imageFormat: 'jpeg',
         );
         expect(service.lastRequestBody?['seed'], isNull);
-      });
-
-      test('stop omitted when not enabled', () async {
-        final dio = _mockDioWithSuccess({
-          'choices': [
-            {
-              'message': {'content': 'test'},
-            },
-          ],
-        });
-        final config = OcrConfig(
-          model: 'gpt-4o',
-          apiKey: 'key',
-          host: 'https://api.test.com',
-          typeConfig: {
-            'enableStop': false,
-            'stop': 'STOP',
-            'maxTokens': 4096,
-          },
-        );
-        final service = OcrService(config: config, dio: dio);
-        await service.recognize(
-          imageBytes: Uint8List.fromList([1, 2, 3]),
-          imageFormat: 'jpeg',
-        );
-        expect(service.lastRequestBody?['stop'], isNull);
-      });
-
-      test('stop with single value (no comma) is sent as string', () async {
-        final dio = _mockDioWithSuccess({
-          'choices': [
-            {
-              'message': {'content': 'test'},
-            },
-          ],
-        });
-        final config = OcrConfig(
-          model: 'gpt-4o',
-          apiKey: 'key',
-          host: 'https://api.test.com',
-          typeConfig: {
-            'enableStop': true,
-            'stop': 'STOP',
-            'maxTokens': 4096,
-          },
-        );
-        final service = OcrService(config: config, dio: dio);
-        await service.recognize(
-          imageBytes: Uint8List.fromList([1, 2, 3]),
-          imageFormat: 'jpeg',
-        );
-        expect(service.lastRequestBody?['stop'], equals('STOP'));
-        expect(service.lastRequestBody?['stop'], isA<String>());
       });
 
       test('detail defaults to omitted when enableDetail is false', () async {

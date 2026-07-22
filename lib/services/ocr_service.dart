@@ -356,35 +356,9 @@ class OcrService {
       body['top_p'] = (tc['topP'] as num?)?.toDouble();
     }
 
-    // frequency_penalty
-    if (tc['enableFrequencyPenalty'] == true &&
-        tc.containsKey('frequencyPenalty')) {
-      body['frequency_penalty'] = (tc['frequencyPenalty'] as num?)?.toDouble();
-    }
-
-    // presence_penalty
-    if (tc['enablePresencePenalty'] == true &&
-        tc.containsKey('presencePenalty')) {
-      body['presence_penalty'] = (tc['presencePenalty'] as num?)?.toDouble();
-    }
-
     // seed
     if (tc['enableSeed'] == true && tc.containsKey('seed')) {
       body['seed'] = (tc['seed'] as num?)?.toInt();
-    }
-
-    // stop sequences (comma-separated)
-    if (tc['enableStop'] == true && tc.containsKey('stop')) {
-      final stopStr = tc['stop'] as String? ?? '';
-      if (stopStr.contains(',')) {
-        body['stop'] = stopStr
-            .split(',')
-            .map((s) => s.trim())
-            .where((s) => s.isNotEmpty)
-            .toList();
-      } else if (stopStr.trim().isNotEmpty) {
-        body['stop'] = stopStr.trim();
-      }
     }
 
     // Apply custom parameters
