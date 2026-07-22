@@ -366,6 +366,28 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         break;
       }
     }
+    // If the exact tag match failed, try to find a release with the same
+    // base version (major.minor.patch). This handles cases where the current
+    // installed version has a pre-release/hotfix suffix (e.g. "0.2.13-hotfix")
+    // while the GitHub tag is "v0.2.13" (without suffix). Using the same-base
+    // release's published_at ensures correct date-based comparison.
+    if (cutoffDate == null) {
+      final parsedCurrent = Version.parse(currentVersionStr);
+      for (final release in releases) {
+        final tagName = release['tag_name'] as String? ?? '';
+        final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
+        final parsed = Version.parse(versionStr);
+        if (parsed.major == parsedCurrent.major &&
+            parsed.minor == parsedCurrent.minor &&
+            parsed.patch == parsedCurrent.patch) {
+          final publishedAtStr = release['published_at'] as String?;
+          if (publishedAtStr != null) {
+            cutoffDate = DateTime.tryParse(publishedAtStr);
+          }
+          break;
+        }
+      }
+    }
     // Fall back to version-based comparison when the current version is not
     // found in the releases list (e.g., very old version or custom build).
     currentVersion ??= Version.parse(currentVersionStr);
@@ -393,9 +415,18 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       // Date-based comparison (when we found the current version's publish date)
       if (cutoffDate != null) {
         final publishedAtStr = release['published_at'] as String?;
-        if (publishedAtStr == null) continue;
-        final publishedAt = DateTime.tryParse(publishedAtStr);
-        if (publishedAt == null || !publishedAt.isAfter(cutoffDate)) continue;
+        if (publishedAtStr != null) {
+          final publishedAt = DateTime.tryParse(publishedAtStr);
+          if (publishedAt != null) {
+            if (!publishedAt.isAfter(cutoffDate)) continue;
+          } else {
+            // published_at string is unparseable, fall back to version comparison
+            if (!(parsed > currentVersion)) continue;
+          }
+        } else {
+          // No published_at available, fall back to version comparison
+          if (!(parsed > currentVersion)) continue;
+        }
       } else {
         // Fall back to version-based comparison when the current version
         // is not in the releases list or has no published_at field.
