@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../anki/providers/anki_provider.dart';
 import '../anki/providers/anki_actions.dart';
 import '../anki/models/deck.dart';
-import '../anki/models/card.dart';
+import '../anki/models/card.dart' as model;
 import '../anki/models/note.dart';
 import '../anki/models/model.dart';
 import '../anki/pages/card_browser.dart';
@@ -94,10 +94,9 @@ class AnkiDroidPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildDeckList(
-      BuildContext context, WidgetRef ref, List<AnkiDeck> decks) {
+  Widget _buildDeckList(BuildContext context, WidgetRef ref, List<Deck> decks) {
     // Sort hierarchically: top-level first, then children nested under parents
-    final sorted = List<AnkiDeck>.from(decks)
+    final sorted = List<Deck>.from(decks)
       ..sort((a, b) {
         final aParts = a.name.split('::');
         final bParts = b.name.split('::');
@@ -223,7 +222,7 @@ class AnkiDroidPage extends ConsumerWidget {
 
     // Load models synchronously from the last known value.
     // If not ready, fall back to Basic model id 1.
-    final models = ref.read(ankiModelListProvider).value ?? <AnkiModel>[];
+    final models = ref.read(ankiModelListProvider).value ?? <Notetype>[];
     if (models.isNotEmpty) selectedModelId = models.first.id;
 
     showDialog(
@@ -303,7 +302,7 @@ class AnkiDroidPage extends ConsumerWidget {
 // ── Deck card ─────────────────────────────────────────────
 
 class _DeckCard extends ConsumerWidget {
-  final AnkiDeck deck;
+  final Deck deck;
   final int deckId;
   final VoidCallback onTap, onAddCard, onRename, onDelete;
 
@@ -434,8 +433,8 @@ class AnkiStudyPage extends ConsumerStatefulWidget {
 }
 
 class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
-  AnkiCard? _current;
-  AnkiNote? _note;
+  model.Card? _current;
+  Note? _note;
   bool _showAnswer = false;
   bool _studying = true;
   bool _whiteboardOn = false;
@@ -451,11 +450,11 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
 
   Future<void> _load() async {
     final card = await ref.read(ankiActionsProvider).getNextCard(widget.deckId);
-    AnkiNote? note;
+    Note? note;
     if (card != null) {
       try {
         final dao = ref.read(ankiNoteDaoProvider).requireValue;
-        note = await dao.get(card.nid);
+        note = await dao.get(card.note_id);
       } catch (_) {}
     }
     if (mounted)
@@ -476,13 +475,13 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
   }
 
   String get _frontText {
-    if (_note == null || _note!.fieldList.isEmpty) return '(无内容)';
-    return _note!.fieldList[0];
+    if (_note == null || _note!.fields.isEmpty) return '(无内容)';
+    return _note!.fields[0];
   }
 
   String get _backText {
-    if (_note == null || _note!.fieldList.length < 2) return '(无内容)';
-    return _note!.fieldList[1];
+    if (_note == null || _note!.fields.length < 2) return '(无内容)';
+    return _note!.fields[1];
   }
 
   @override

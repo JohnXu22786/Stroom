@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Card;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/anki_provider.dart';
 import '../providers/anki_actions.dart';
@@ -17,8 +17,8 @@ class AnkiCardBrowser extends ConsumerStatefulWidget {
 
 class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
   final _searchCtl = TextEditingController();
-  List<AnkiCard> _allCards = [];
-  List<AnkiCard> _filtered = [];
+  List<Card> _allCards = [];
+  List<Card> _filtered = [];
   bool _loaded = false;
 
   @override
@@ -30,7 +30,7 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
   Future<void> _load() async {
     final cardDao = ref.read(ankiCardDaoProvider).value;
     if (cardDao == null) return;
-    List<AnkiCard> cards;
+    List<Card> cards;
     if (widget.deckId != null) {
       cards = await cardDao.listByDeck(widget.deckId!);
     } else {
@@ -55,7 +55,7 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
     });
   }
 
-  Future<AnkiNote?> _loadNote(int nid) async {
+  Future<Note?> _loadNote(int nid) async {
     final noteDao = ref.read(ankiNoteDaoProvider).value;
     if (noteDao == null) return null;
     return noteDao.get(nid);
@@ -103,20 +103,20 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
                         itemCount: _filtered.length,
                         itemBuilder: (ctx, i) {
                           final card = _filtered[i];
-                          return FutureBuilder<AnkiNote?>(
-                            future: _loadNote(card.nid),
+                          return FutureBuilder<Note?>(
+                            future: _loadNote(card.note_id),
                             builder: (ctx, snap) {
                               final note = snap.data;
-                              final front = note?.fieldList.isNotEmpty == true
-                                  ? note!.fieldList[0]
+                              final front = note?.fields.isNotEmpty == true
+                                  ? note!.fields[0]
                                   : '(无内容)';
                               return ListTile(
-                                leading: _queueIcon(card.queue),
+                                leading: _queueIcon(card.queue.value),
                                 title: Text(front,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis),
                                 subtitle: Text(
-                                  'ivl=${card.ivl}d  factor=${(card.factor / 10).round()}%  reps=${card.reps}',
+                                  'ivl=${card.interval}d  factor=${(card.ease_factor / 10).round()}%  reps=${card.reps}',
                                   style: TextStyle(
                                       fontSize: 12, color: cs.onSurfaceVariant),
                                 ),
@@ -126,7 +126,7 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
                                   onPressed: () {
                                     ref
                                         .read(ankiActionsProvider)
-                                        .removeNote(card.nid);
+                                        .removeNote(card.note_id);
                                     _load();
                                   },
                                 ),

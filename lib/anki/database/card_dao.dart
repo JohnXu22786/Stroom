@@ -6,69 +6,71 @@ class CardDao {
   final Database _db;
   CardDao(this._db);
 
-  Future<AnkiCard?> get(int id) async {
+  Future<Card?> get(int id) async {
     final rows = await _db.query('cards', where: 'id = ?', whereArgs: [id]);
     if (rows.isEmpty) return null;
-    return AnkiCard.fromMap(rows.first);
+    return Card.fromMap(rows.first);
   }
 
-  Future<List<AnkiCard>> listByDeck(int did) async {
-    final rows = await _db.query('cards', where: 'did = ?', whereArgs: [did]);
-    return rows.map(AnkiCard.fromMap).toList();
+  Future<List<Card>> listByDeck(int deckId) async {
+    final rows =
+        await _db.query('cards', where: 'did = ?', whereArgs: [deckId]);
+    return rows.map(Card.fromMap).toList();
   }
 
-  Future<List<AnkiCard>> listByNote(int nid) async {
-    final rows = await _db.query('cards', where: 'nid = ?', whereArgs: [nid]);
-    return rows.map(AnkiCard.fromMap).toList();
+  Future<List<Card>> listByNote(int noteId) async {
+    final rows =
+        await _db.query('cards', where: 'nid = ?', whereArgs: [noteId]);
+    return rows.map(Card.fromMap).toList();
   }
 
-  Future<List<AnkiCard>> listDue(int did, int nowSec) async {
+  Future<List<Card>> listDue(int deckId, int nowSec) async {
     final rows = await _db.query(
       'cards',
       where: 'did = ? AND queue >= 0 AND due <= ?',
-      whereArgs: [did, nowSec],
+      whereArgs: [deckId, nowSec],
     );
-    return rows.map(AnkiCard.fromMap).toList();
+    return rows.map(Card.fromMap).toList();
   }
 
-  Future<List<AnkiCard>> listDueInDeck(int did, int nowSec) async {
+  Future<List<Card>> listDueInDeck(int deckId, int nowSec) async {
     final rows = await _db.query(
       'cards',
       where: 'did = ? AND ((queue = 0) OR (queue > 0 AND due <= ?))',
-      whereArgs: [did, nowSec],
+      whereArgs: [deckId, nowSec],
     );
-    return rows.map(AnkiCard.fromMap).toList();
+    return rows.map(Card.fromMap).toList();
   }
 
-  Future<List<AnkiCard>> listByQueue(int did, int queue) async {
+  Future<List<Card>> listByQueue(int deckId, int queueValue) async {
     final rows = await _db.query('cards',
-        where: 'did = ? AND queue = ?', whereArgs: [did, queue]);
-    return rows.map(AnkiCard.fromMap).toList();
+        where: 'did = ? AND queue = ?', whereArgs: [deckId, queueValue]);
+    return rows.map(Card.fromMap).toList();
   }
 
-  Future<int> countByQueue(int did, int queue) async {
+  Future<int> countByQueue(int deckId, int queueValue) async {
     final result = await _db.rawQuery(
       'SELECT COUNT(*) AS cnt FROM cards WHERE did = ? AND queue = ?',
-      [did, queue],
+      [deckId, queueValue],
     );
     return result.first['cnt'] as int;
   }
 
-  Future<int> countDue(int did, int nowSec) async {
+  Future<int> countDue(int deckId, int nowSec) async {
     final result = await _db.rawQuery(
       'SELECT COUNT(*) AS cnt FROM cards WHERE did = ? AND ((queue = 0) OR (queue > 0 AND due <= ?))',
-      [did, nowSec],
+      [deckId, nowSec],
     );
     return result.first['cnt'] as int;
   }
 
-  Future<int> insert(AnkiCard card) async {
+  Future<int> insert(Card card) async {
     await _db.insert('cards', card.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace);
     return card.id;
   }
 
-  Future<void> update(AnkiCard card) async {
+  Future<void> update(Card card) async {
     await _db
         .update('cards', card.toMap(), where: 'id = ?', whereArgs: [card.id]);
   }
@@ -77,9 +79,9 @@ class CardDao {
     await _db.delete('cards', where: 'id = ?', whereArgs: [id]);
   }
 
-  Future<int> totalCount(int did) async {
+  Future<int> totalCount(int deckId) async {
     final result = await _db
-        .rawQuery('SELECT COUNT(*) AS cnt FROM cards WHERE did = ?', [did]);
+        .rawQuery('SELECT COUNT(*) AS cnt FROM cards WHERE did = ?', [deckId]);
     return result.first['cnt'] as int;
   }
 
@@ -88,14 +90,14 @@ class CardDao {
     return result.first['cnt'] as int;
   }
 
-  Future<int> countByQueueAll(int queue) async {
-    final result = await _db
-        .rawQuery('SELECT COUNT(*) AS cnt FROM cards WHERE queue = ?', [queue]);
+  Future<int> countByQueueAll(int queueValue) async {
+    final result = await _db.rawQuery(
+        'SELECT COUNT(*) AS cnt FROM cards WHERE queue = ?', [queueValue]);
     return result.first['cnt'] as int;
   }
 
-  Future<List<AnkiCard>> all() async {
+  Future<List<Card>> all() async {
     final rows = await _db.query('cards');
-    return rows.map(AnkiCard.fromMap).toList();
+    return rows.map(Card.fromMap).toList();
   }
 }

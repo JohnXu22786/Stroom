@@ -5,24 +5,25 @@ class NoteDao {
   final Database _db;
   NoteDao(this._db);
 
-  Future<AnkiNote?> get(int id) async {
+  Future<Note?> get(int id) async {
     final rows = await _db.query('notes', where: 'id = ?', whereArgs: [id]);
     if (rows.isEmpty) return null;
-    return AnkiNote.fromMap(rows.first);
+    return Note.fromMap(rows.first);
   }
 
-  Future<List<AnkiNote>> listByModel(int mid) async {
-    final rows = await _db.query('notes', where: 'mid = ?', whereArgs: [mid]);
-    return rows.map(AnkiNote.fromMap).toList();
+  Future<List<Note>> listByModel(int notetypeId) async {
+    final rows =
+        await _db.query('notes', where: 'mid = ?', whereArgs: [notetypeId]);
+    return rows.map(Note.fromMap).toList();
   }
 
-  Future<int> insert(AnkiNote note) async {
+  Future<int> insert(Note note) async {
     await _db.insert('notes', note.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace);
     return note.id;
   }
 
-  Future<void> update(AnkiNote note) async {
+  Future<void> update(Note note) async {
     await _db
         .update('notes', note.toMap(), where: 'id = ?', whereArgs: [note.id]);
   }
@@ -31,8 +32,8 @@ class NoteDao {
     await _db.delete('notes', where: 'id = ?', whereArgs: [id]);
   }
 
-  Future<List<AnkiNote>> all() async {
+  Future<List<Note>> all() async {
     final rows = await _db.query('notes');
-    return rows.map(AnkiNote.fromMap).toList();
+    return rows.map(Note.fromMap).toList();
   }
 }
