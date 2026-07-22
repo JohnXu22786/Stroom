@@ -288,8 +288,8 @@ class MathCanvas3DState extends State<MathCanvas3D> {
           _lastFocalPoint == null ? 0.0 : (focalPoint.dy - _lastFocalPoint!.dy);
 
       setState(() {
-        _cameraTheta -= dx * 0.01;
-        _cameraPhi = (_cameraPhi - dy * 0.01)
+        _cameraTheta += dx * 0.01;
+        _cameraPhi = (_cameraPhi + dy * 0.01)
             .clamp(-dart_math.pi * 0.49, dart_math.pi * 0.49);
       });
     } else if (details.pointerCount >= 2) {
@@ -386,7 +386,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       final clampedFactor = zoomFactor.clamp(0.1, 10.0);
 
       setState(() {
-        _cameraDistance = (_cameraDistance / clampedFactor).clamp(0.1, 1000);
+        _cameraDistance = (_cameraDistance * clampedFactor).clamp(0.1, 1000);
       });
       widget.onViewportChange?.call();
     }
