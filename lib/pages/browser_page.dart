@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../catcatch/engine/js_hook_script.dart';
 import '../catcatch/widgets/draggable_floating_panel.dart';
+import '../services/browser_cookie_service.dart';
 
 const _scriptsKey = 'browser_user_scripts';
 
@@ -71,24 +72,32 @@ class _BrowserPageState extends State<BrowserPage> {
   /// the show/hide button in the bottom bar.
   bool _catCatchPanelVisible = true;
 
+  /// Whether cookie retention mode is enabled.
+  /// When enabled, cookies are not deleted on browser close.
+  bool _cookieRetentionEnabled = false;
+
   @override
   void initState() {
     super.initState();
     _urlController.text = widget.initialUrl;
     _loadScripts();
+    _loadRetentionMode();
+  }
+
+  Future<void> _loadRetentionMode() async {
+    final enabled = await BrowserCookieService.getRetentionMode();
+    setState(() => _cookieRetentionEnabled = enabled);
   }
 
   @override
   void dispose() {
     _urlController.dispose();
 
-    // Privacy mode: delete all cookies when browser is closed.
-    // This ensures no history/cookies persist after the browser exits.
-    // Fire-and-forget is acceptable for cleanup operations during dispose.
-    try {
-      unawaited(CookieManager.instance().deleteAllCookies());
-    } catch (_) {
-      // Silently ignore errors during dispose
+    // When cookie retention is disabled (privacy mode), delete all cookies
+    // on browser close to ensure no history/cookies persist after exit.
+    // When retention is enabled, cookies are preserved across sessions.
+    if (!_cookieRetentionEnabled) {
+      BrowserCookieService.clearAllCookies();
     }
 
     super.dispose();
@@ -383,6 +392,32 @@ class _BrowserPageState extends State<BrowserPage> {
                   );
                 }
                 _webViewController?.reload();
+              },
+            ),
+            // Cookie retention toggle
+            IconButton(
+              icon: Icon(
+                Icons.cookie,
+                color: _cookieRetentionEnabled
+                    ? Colors.orange
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              tooltip: _cookieRetentionEnabled
+                  ? 'Cookies持久化(已开启)'
+                  : 'Cookies持久化(已关闭)',
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                final newValue =
+                    await BrowserCookieService.toggleRetentionMode();
+                setState(() => _cookieRetentionEnabled = newValue);
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      newValue ? '已启用Cookies持久化' : '已关闭Cookies持久化',
+                    ),
+                    duration: const Duration(seconds: 1),
+                  ),
+                );
               },
             ),
             // CatCatch panel show/hide toggle

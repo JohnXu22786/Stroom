@@ -12,6 +12,7 @@ import 'provider_config_page.dart';
 import 'backup_restore_page.dart';
 import 'background_optimization_page.dart';
 import 'notification_settings_page.dart';
+import 'browser_cookies_page.dart';
 import 'log_viewer_page.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
@@ -45,6 +46,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           const SizedBox(height: 24),
           _buildSectionHeader('数据备份'),
           _buildBackupSection(),
+          const SizedBox(height: 24),
+          _buildSectionHeader('浏览器数据'),
+          _buildBrowserDataSection(),
           const SizedBox(height: 24),
           _buildSectionHeader('日志'),
           _buildLogSection(),
@@ -228,6 +232,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const BackupRestorePage()),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBrowserDataSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: _buildListTile(
+          leading: const Icon(Icons.cookie, color: Colors.orange),
+          title: 'Cookies与浏览器数据',
+          subtitle: '管理持久化的Cookies和浏览器存储数据',
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const BrowserCookiesPage()),
             );
           },
         ),
