@@ -1026,18 +1026,24 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       model: selectedOption.model.modelId,
     );
 
-    // Capture notifier references so they remain valid after Navigator.pop.
-    final bgNotifier = ref.read(backgroundTasksProvider.notifier);
-    final textNotifier = ref.read(textRecordsProvider.notifier);
-
     // Capture the list before pop
     final audiosToProcess = List<SelectedAudio>.from(_selectedAudios);
 
-    // Step 1: Create ALL tasks first so they appear in the list immediately.
-    // Tasks are created as "waiting" — the execution chain transitions them
-    // to "running" one by one. retryData is null — it is computed
-    // asynchronously in the background (fire-and-forget) so it never delays
-    // the return to home page or the start of task execution.
+    // Step 1: Pop back to home page immediately — matching the original
+    // working flow. This avoids any Riverpod rebuild delay from addTask().
+    if (mounted) {
+      Navigator.pop(context);
+    }
+    // Yield to the event loop so the pop transition renders.
+    await Future<void>.delayed(Duration.zero);
+
+    // Capture notifier references after pop (ref is still valid).
+    final bgNotifier = ref.read(backgroundTasksProvider.notifier);
+    final textNotifier = ref.read(textRecordsProvider.notifier);
+
+    // Step 2: Create tasks as "waiting" — the execution chain transitions
+    // them to "running" one by one. retryData is null — it is computed
+    // asynchronously in the background (fire-and-forget below).
     final taskEntries = <_TaskEntry>[];
     for (final audio in audiosToProcess) {
       final title = 'ASR_${audio.name}';
@@ -1045,21 +1051,12 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         type: BackgroundTaskType.asr,
         title: title,
         retryData: null,
-        startImmediately: false, // created as waiting, started by chain
+        startImmediately: false,
       );
       taskEntries.add(_TaskEntry(taskId, audio, title));
     }
 
-    // Step 2: Pop back to home page immediately — tasks are already visible
-    // in the task list so the user sees progress right away.
-    if (mounted) {
-      Navigator.pop(context);
-    }
-    // Yield to the event loop so the pop transition renders.
-    await Future<void>.delayed(Duration.zero);
-
-    // Step 3: Fire-and-forget retryData computation — this is the only
-    // CPU-bound work (base64Encode) and must NOT block task execution.
+    // Step 3: Fire-and-forget retryData computation (only needed for retry).
     final modelIndex = _selectedModelIndex;
     final saveFolder = _saveFolder;
     for (final entry in taskEntries) {
@@ -1067,14 +1064,12 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           _computeAsrRetryData(entry, modelIndex, saveFolder, bgNotifier));
     }
 
-    // Step 4: Execute tasks in sequence one-by-one (auto-chain) immediately,
-    // without waiting for retryData computation to finish.
+    // Step 4: Execute tasks in sequence one-by-one (auto-chain) immediately.
     try {
       await _executeTaskChain(
           taskEntries, effectiveConfig, bgNotifier, textNotifier);
     } catch (e) {
       debugPrint('[ASR] _executeTaskChain failed: $e');
-      // Fail any tasks still in waiting/running state
       for (final entry in taskEntries) {
         final task =
             bgNotifier.state.where((t) => t.id == entry.taskId).firstOrNull;
@@ -1088,7 +1083,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   }
 
   /// Compute retryData for a single ASR task in a background isolate.
-  /// This is fire-and-forget — the task can execute without retryData.
+  /// Fire-and-forget — the task can execute without retryData.
   Future<void> _computeAsrRetryData(
     _TaskEntry entry,
     int modelIndex,

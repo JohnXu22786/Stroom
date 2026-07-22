@@ -1365,14 +1365,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       model: selectedOption.model.modelId,
     );
 
-    // Capture notifier references so they remain valid after Navigator.pop.
+    // Step 1: Pop back to home page immediately — matching the original
+    // working flow. This avoids any Riverpod rebuild delay from addTask().
+    if (mounted) {
+      Navigator.pop(context);
+    }
+    // Yield to the event loop so the pop transition renders.
+    await Future<void>.delayed(Duration.zero);
+
+    // Capture notifier references after pop (ref is still valid).
     final bgNotifier = ref.read(backgroundTasksProvider.notifier);
     final textNotifier = ref.read(textRecordsProvider.notifier);
 
-    // Step 1: Create the task immediately (synchronous, instant).
-    // The task appears in the task list right away.
-    // Capture image data in plain lists BEFORE Navigator.pop for consistency
-    // and to avoid depending on instance state after widget disposal.
+    // Step 2: Create the task (appears in the task list instantly).
     final timestamp = _currentTimestamp();
     final allHaveSourceNames =
         _selectedImages.every((img) => img.sourceName != null);
@@ -1389,19 +1394,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       retryData: null,
     );
 
-    // Step 2: Pop back to home page immediately — task is already visible.
-    if (mounted) {
-      Navigator.pop(context);
-    }
-    // Yield to the event loop so the pop transition renders.
-    await Future<void>.delayed(Duration.zero);
-
-    // Step 3: Fire-and-forget retryData computation — this is the only
-    // CPU-bound work (base64Encode) and must NOT block OCR execution.
+    // Step 3: Fire-and-forget retryData computation (only needed for retry).
     unawaited(_computeOcrRetryData(taskId, imageBytesList, imageFormatList,
         imageNameList, modelIndex, bgNotifier));
 
-    // Step 4: Execute OCR immediately — no waiting for retryData.
+    // Step 4: Execute OCR immediately.
     try {
       await _performOcr(effectiveConfig, taskId, bgNotifier, textNotifier,
           title: title);
@@ -1411,7 +1408,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   /// Compute retryData for an OCR task in the background.
-  /// This is fire-and-forget — the task can execute without retryData.
+  /// Fire-and-forget — the task can execute without retryData.
   Future<void> _computeOcrRetryData(
     String taskId,
     List<Uint8List> imageBytesList,
