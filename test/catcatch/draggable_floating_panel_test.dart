@@ -217,18 +217,38 @@ void main() {
       expect(find.textContaining('暂无'), findsNothing);
     });
 
-    testWidgets('panel position changes when dragged', (tester) async {
+    testWidgets('panel position changes when dragged (parent-managed)', (
+      tester,
+    ) async {
+      // Simulates the parent (BrowserPage) managing position state.
+      // The parent uses Positioned + onDragUpdate to reposition the panel.
+      Offset panelOffset = const Offset(8, 8);
+
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: Stack(
-              children: [
-                DraggableFloatingPanel(
-                  detectedUrls: const [],
-                  onConfirmCapture: (_) {},
-                  initialPosition: const Offset(8, 8),
-                ),
-              ],
+            body: StatefulBuilder(
+              builder: (context, setLocalState) => Stack(
+                children: [
+                  const SizedBox.expand(),
+                  Positioned(
+                    left: panelOffset.dx,
+                    top: panelOffset.dy,
+                    child: DraggableFloatingPanel(
+                      detectedUrls: const [],
+                      onConfirmCapture: (_) {},
+                      onDragUpdate: (delta) {
+                        setLocalState(() {
+                          panelOffset = Offset(
+                            panelOffset.dx + delta.dx,
+                            panelOffset.dy + delta.dy,
+                          );
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
