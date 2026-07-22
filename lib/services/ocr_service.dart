@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import '../providers/chat_api_provider.dart';
+import '../providers/provider_config.dart';
 
 import '../utils/http_utils.dart';
 import 'app_log_service.dart';
@@ -18,11 +19,19 @@ class OcrConfig {
   final String host;
   final String? systemPrompt;
 
+  /// Type-specific config (temperature, topP, detail, maxTokens, etc.)
+  final Map<String, dynamic> typeConfig;
+
+  /// Custom parameters that the user defined
+  final List<CustomParam> customParams;
+
   const OcrConfig({
     this.model = 'gpt-4o',
     required this.apiKey,
     required this.host,
     this.systemPrompt,
+    this.typeConfig = const {},
+    this.customParams = const [],
   });
 
   /// Returns the host without a trailing slash.
@@ -38,17 +47,36 @@ class OcrConfig {
   String get effectiveSystemPrompt =>
       systemPrompt ?? '请提取图片中的所有文字内容，保持原始格式和排版。只返回提取的文字，不要添加额外说明。';
 
+  /// Get the image detail level from typeConfig (default: 'high').
+  String get effectiveDetail =>
+      (typeConfig['detail'] as String?) ?? 'high';
+
+  /// Get max_tokens from typeConfig, or default 4096.
+  int get effectiveMaxTokens {
+    final value = typeConfig['maxTokens'];
+    if (value is num) return value.toInt();
+    return 4096;
+  }
+
+  /// Get temperature from typeConfig, or default 0.0.
+  double get effectiveTemperature =>
+      (typeConfig['temperature'] as num?)?.toDouble() ?? 0.0;
+
   OcrConfig copyWith({
     String? model,
     String? apiKey,
     String? host,
     String? systemPrompt,
+    Map<String, dynamic>? typeConfig,
+    List<CustomParam>? customParams,
   }) =>
       OcrConfig(
         model: model ?? this.model,
         apiKey: apiKey ?? this.apiKey,
         host: host ?? this.host,
         systemPrompt: systemPrompt ?? this.systemPrompt,
+        typeConfig: typeConfig ?? this.typeConfig,
+        customParams: customParams ?? this.customParams,
       );
 }
 
@@ -297,7 +325,7 @@ class OcrService {
   Map<String, dynamic> _buildRequestBody(
     List<Map<String, dynamic>> contentList,
   ) {
-    return {
+    final body = <String, dynamic>{
       'model': config.model,
       'messages': [
         {
@@ -309,19 +337,104 @@ class OcrService {
           'content': contentList,
         },
       ],
-      'max_tokens': 4096,
-      'temperature': 0.0,
     };
+
+    // Apply built-in parameters from typeConfig
+    final tc = config.typeConfig;
+
+    // max_tokens (respects enableMaxTokens toggle)
+    if (tc['enableMaxTokens'] == true && tc.containsKey('maxTokens')) {
+      body['max_tokens'] = config.effectiveMaxTokens;
+    }
+
+    // temperature
+    if (tc['enableTemperature'] == true && tc.containsKey('temperature')) {
+      body['temperature'] = config.effectiveTemperature;
+    }
+
+    // top_p
+    if (tc['enableTopP'] == true && tc.containsKey('topP')) {
+      body['top_p'] = (tc['topP'] as num?)?.toDouble();
+    }
+
+    // frequency_penalty
+    if (tc['enableFrequencyPenalty'] == true &&
+        tc.containsKey('frequencyPenalty')) {
+      body['frequency_penalty'] =
+          (tc['frequencyPenalty'] as num?)?.toDouble();
+    }
+
+    // presence_penalty
+    if (tc['enablePresencePenalty'] == true &&
+        tc.containsKey('presencePenalty')) {
+      body['presence_penalty'] =
+          (tc['presencePenalty'] as num?)?.toDouble();
+    }
+
+    // seed
+    if (tc['enableSeed'] == true && tc.containsKey('seed')) {
+      body['seed'] = (tc['seed'] as num?)?.toInt();
+    }
+
+    // stop sequences (comma-separated)
+    if (tc['enableStop'] == true && tc.containsKey('stop')) {
+      final stopStr = tc['stop'] as String? ?? '';
+      if (stopStr.contains(',')) {
+        body['stop'] =
+            stopStr.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      } else if (stopStr.trim().isNotEmpty) {
+        body['stop'] = stopStr.trim();
+      }
+    }
+
+    // Apply custom parameters
+    for (final param in config.customParams) {
+      final name = param.paramName.trim();
+      if (name.isEmpty) continue;
+      final value = param.defaultValue.trim();
+      if (value.isEmpty) continue;
+      body[name] = _parseParamValue(value, param.type);
+    }
+
+    return body;
+  }
+
+  /// Parse a parameter value string into its proper type.
+  static dynamic _parseParamValue(String value, String type) {
+    switch (type) {
+      case 'number':
+        final numVal = num.tryParse(value);
+        return numVal ?? value;
+      case 'boolean':
+        if (value.toLowerCase() == 'true') return true;
+        if (value.toLowerCase() == 'false') return false;
+        return value;
+      case 'json':
+        try {
+          return jsonDecode(value);
+        } catch (_) {
+          return value;
+        }
+      case 'string':
+      default:
+        return value;
+    }
   }
 
   /// Build an image content block for the chat API.
   Map<String, dynamic> _buildImageContent(String dataUri) {
+    final imageUrl = <String, dynamic>{
+      'url': dataUri,
+    };
+    // Only set detail when enableDetail is true, honoring the toggle.
+    // When disabled, omit detail so the API uses its default.
+    if (config.typeConfig['enableDetail'] == true &&
+        config.typeConfig.containsKey('detail')) {
+      imageUrl['detail'] = config.effectiveDetail;
+    }
     return {
       'type': 'image_url',
-      'image_url': {
-        'url': dataUri,
-        'detail': 'high',
-      },
+      'image_url': imageUrl,
     };
   }
 
@@ -402,12 +515,16 @@ OcrService createOcrServiceFromConfig({
   required String host,
   required String apiKey,
   required String model,
+  Map<String, dynamic> typeConfig = const {},
+  List<CustomParam> customParams = const [],
 }) {
   return OcrService(
     config: OcrConfig(
       host: host,
       apiKey: apiKey,
       model: model,
+      typeConfig: typeConfig,
+      customParams: customParams,
     ),
   );
 }
