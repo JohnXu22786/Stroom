@@ -1587,11 +1587,13 @@ void main() {
       expect(notifier.state.availableVersions, isNull);
     });
 
-    test('non-current release without published_at is skipped in date mode',
+    test(
+        'non-current release without published_at falls back to version comparison in date mode',
         () async {
       SharedPreferences.setMockInitialValues({});
-      // Create a raw JSON list where v0.2.14 has no published_at
-      // while the current version v0.2.13 does have it
+      // Current version 0.2.13 is found with published_at (date mode active).
+      // v0.2.14 has NO published_at field → should fall back to version
+      // comparison instead of being silently skipped.
       final dio = _createMockDioForList('''
 [
   {
@@ -1611,11 +1613,157 @@ void main() {
 
       await notifier.checkForUpdate();
 
-      // Current version 0.2.13 found with published_at → date mode
-      // v0.2.14 has no published_at → skipped (null check)
-      // No releases pass the filter → no update
+      // v0.2.14 has no published_at → fallback to version comparison
+      // 0.2.14 > 0.2.13 → included
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.latestVersion, '0.2.14');
+      expect(notifier.state.availableVersions, isNotNull);
+      expect(notifier.state.availableVersions!.length, 1);
+    });
+
+    test(
+        'non-current release with unparseable published_at falls back to version comparison in date mode',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      // Current version 0.2.13 is found with valid published_at (date mode).
+      // v0.2.14 has an invalid published_at string that fails DateTime.tryParse.
+      final dio = _createMockDioForList('''
+[
+  {
+    "tag_name": "v0.2.14",
+    "body": "Bad date",
+    "published_at": "not-a-valid-date",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.14"
+  },
+  {
+    "tag_name": "v0.2.13",
+    "body": "Current with published_at",
+    "published_at": "2024-06-15T10:00:00Z",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.13"
+  }
+]
+''');
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // v0.2.14 has unparseable published_at → fallback to version comparison
+      // 0.2.14 > 0.2.13 → included
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.latestVersion, '0.2.14');
+      expect(notifier.state.availableVersions, isNotNull);
+      expect(notifier.state.availableVersions!.length, 1);
+    });
+
+    test(
+        'older release without published_at in date mode is excluded by version fallback',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      // v0.2.12 is older than current 0.2.13 and has no published_at.
+      // Date mode is active (current version found).
+      // Fallback to version comparison: 0.2.12 < 0.2.13 → excluded
+      final dio = _createMockDioForList('''
+[
+  {
+    "tag_name": "v0.2.12",
+    "body": "Older no date",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.12"
+  },
+  {
+    "tag_name": "v0.2.13",
+    "body": "Current with published_at",
+    "published_at": "2024-06-15T10:00:00Z",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.13"
+  }
+]
+''');
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // 0.2.12 < 0.2.13 → excluded
       expect(notifier.state.updateAvailable, false);
       expect(notifier.state.availableVersions, isNull);
+    });
+
+    test(
+        'current version not in releases but same base version exists uses its date as cutoff',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      // Current app version is "0.2.13-hotfix" (pre-release suffix).
+      // Exact tag match fails but "v0.2.13" (same base) exists with published_at.
+      // Should use v0.2.13's date as cutoff and include releases after it.
+      final dio = _createMockDioForList('''
+[
+  {
+    "tag_name": "v0.2.14",
+    "prerelease": false,
+    "published_at": "2024-07-20T10:00:00Z",
+    "body": "Newer version",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.14"
+  },
+  {
+    "tag_name": "v0.2.13",
+    "prerelease": false,
+    "published_at": "2024-06-15T10:00:00Z",
+    "body": "Current base version",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.13"
+  },
+  {
+    "tag_name": "v39.0.0",
+    "prerelease": false,
+    "published_at": "2024-01-01T10:00:00Z",
+    "body": "Old version line",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/v39.0.0"
+  }
+]
+''');
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // v0.2.14 published after cutoff → included
+      // v39.0.0 published before cutoff → excluded
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions, isNotNull);
+      expect(notifier.state.availableVersions!.length, 1);
+      expect(notifier.state.availableVersions![0].version, '0.2.14');
+    });
+
+    test(
+        'same-base version found without published_at falls back to version comparison',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      // Current app version is "0.2.13-hotfix". The release with tag "v0.2.13"
+      // (same base) exists but has no published_at. Since cutoffDate is null,
+      // should fall back to version comparison.
+      final dio = _createMockDioForList('''
+[
+  {
+    "tag_name": "v0.2.14",
+    "prerelease": false,
+    "published_at": "2024-07-20T10:00:00Z",
+    "body": "Newer version",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.14"
+  },
+  {
+    "tag_name": "v0.2.13",
+    "prerelease": false,
+    "body": "Same base no published_at",
+    "html_url": "https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.13"
+  }
+]
+''');
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // Same-base version (0.2.13) found but has no published_at → cutoffDate is null
+      // Falls back to version comparison: 0.2.14 > 0.2.13 → included
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.latestVersion, '0.2.14');
+      expect(notifier.state.availableVersions, isNotNull);
+      expect(notifier.state.availableVersions!.length, 1);
     });
   });
 
