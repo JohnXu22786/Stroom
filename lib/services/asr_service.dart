@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import '../providers/chat_api_provider.dart';
+import '../providers/provider_config.dart';
 import '../utils/audio_utils.dart';
 import 'app_log_service.dart';
 import '../utils/http_utils.dart';
@@ -42,11 +44,19 @@ class AsrConfig {
   final String host;
   final String? language;
 
+  /// Type-specific config (language, responseFormat, temperature, etc.)
+  final Map<String, dynamic> typeConfig;
+
+  /// Custom parameters that the user defined
+  final List<CustomParam> customParams;
+
   const AsrConfig({
     this.model = 'whisper-1',
     required this.apiKey,
     required this.host,
     this.language,
+    this.typeConfig = const {},
+    this.customParams = const [],
   });
 
   /// Returns the host without a trailing slash.
@@ -59,21 +69,34 @@ class AsrConfig {
   }
 
   /// The full transcription endpoint URL.
-  /// The user provides the full endpoint URL including the path,
-  /// so normalizedHost is used directly without appending /audio/transcriptions.
   String get transcribeUrl => normalizedHost;
+
+  /// Get the effective language from typeConfig, falling back to the
+  /// legacy `language` field for backward compatibility.
+  String? get effectiveLanguage {
+    if (typeConfig['enableLanguage'] == true &&
+        typeConfig.containsKey('language')) {
+      final lang = typeConfig['language'] as String?;
+      if (lang != null && lang.isNotEmpty) return lang;
+    }
+    return language;
+  }
 
   AsrConfig copyWith({
     String? model,
     String? apiKey,
     String? host,
     String? language,
+    Map<String, dynamic>? typeConfig,
+    List<CustomParam>? customParams,
   }) =>
       AsrConfig(
         model: model ?? this.model,
         apiKey: apiKey ?? this.apiKey,
         host: host ?? this.host,
         language: language ?? this.language,
+        typeConfig: typeConfig ?? this.typeConfig,
+        customParams: customParams ?? this.customParams,
       );
 }
 
@@ -200,6 +223,68 @@ class AsrService {
     final mimeType = mimeTypeString.contains('/')
         ? DioMediaType.parse(mimeTypeString)
         : null;
+
+    final extraFormFields = <String, dynamic>{};
+    final diagnosticFields = <String, dynamic>{
+      'file': '$fileName (${audioBytes.length} bytes, $mimeTypeString)',
+      'model': config.model,
+    };
+
+    final tc = config.typeConfig;
+
+    // response_format
+    if (tc['enableResponseFormat'] == true &&
+        tc.containsKey('responseFormat')) {
+      final rf = tc['responseFormat'] as String;
+      extraFormFields['response_format'] = rf;
+      diagnosticFields['response_format'] = rf;
+    } else {
+      extraFormFields['response_format'] = 'json';
+      diagnosticFields['response_format'] = 'json';
+    }
+
+    // language
+    final effectiveLang = config.effectiveLanguage;
+    if (effectiveLang != null && effectiveLang.isNotEmpty) {
+      extraFormFields['language'] = effectiveLang;
+      diagnosticFields['language'] = effectiveLang;
+    }
+
+    // temperature
+    if (tc['enableTemperature'] == true && tc.containsKey('temperature')) {
+      final temp = (tc['temperature'] as num).toDouble();
+      extraFormFields['temperature'] = temp.toString();
+      diagnosticFields['temperature'] = temp;
+    }
+
+    // timestamp_granularities (only for verbose_json)
+    if (tc['enableTimestampGranularities'] == true &&
+        tc.containsKey('timestampGranularities')) {
+      final tg = tc['timestampGranularities'] as String;
+      extraFormFields['timestamp_granularities'] = tg;
+      diagnosticFields['timestamp_granularities'] = tg;
+    }
+
+    // prompt
+    if (tc['enablePrompt'] == true && tc.containsKey('prompt')) {
+      final prompt = tc['prompt'] as String;
+      if (prompt.trim().isNotEmpty) {
+        extraFormFields['prompt'] = prompt;
+        diagnosticFields['prompt'] = prompt;
+      }
+    }
+
+    // Custom parameters
+    for (final param in config.customParams) {
+      final name = param.paramName.trim();
+      if (name.isEmpty) continue;
+      final value = param.defaultValue.trim();
+      if (value.isEmpty) continue;
+      final parsed = _parseParamValue(value, param.type);
+      extraFormFields[name] = parsed is String ? parsed : parsed.toString();
+      diagnosticFields[name] = parsed;
+    }
+
     final formData = FormData.fromMap({
       'file': MultipartFile.fromBytes(
         audioBytes,
@@ -207,19 +292,11 @@ class AsrService {
         contentType: mimeType,
       ),
       'model': config.model,
-      'response_format': 'json',
-      if (config.language != null && config.language!.isNotEmpty)
-        'language': config.language,
+      ...extraFormFields,
     });
 
     // Capture request diagnostics (for error details dialog).
-    lastRequestBody = {
-      'file': '$fileName (${audioBytes.length} bytes, $mimeTypeString)',
-      'model': config.model,
-      'response_format': 'json',
-      if (config.language != null && config.language!.isNotEmpty)
-        'language': config.language,
-    };
+    lastRequestBody = diagnosticFields;
     lastRequestUrl = config.transcribeUrl;
     lastRequestHeaders = {
       if (config.apiKey.isNotEmpty)
@@ -276,6 +353,28 @@ class AsrService {
     lastResponseHeaders = e.response?.headers.map;
   }
 
+  /// Parse a parameter value string into its proper type.
+  static dynamic _parseParamValue(String value, String type) {
+    switch (type) {
+      case 'number':
+        final numVal = num.tryParse(value);
+        return numVal ?? value;
+      case 'boolean':
+        if (value.toLowerCase() == 'true') return true;
+        if (value.toLowerCase() == 'false') return false;
+        return value;
+      case 'json':
+        try {
+          return jsonDecode(value);
+        } catch (_) {
+          return value;
+        }
+      case 'string':
+      default:
+        return value;
+    }
+  }
+
   /// Extract text from the standard OpenAI transcription response.
   String _extractText(dynamic responseData) {
     try {
@@ -303,6 +402,8 @@ AsrService createAsrServiceFromConfig({
   required String apiKey,
   String model = 'whisper-1',
   String? language,
+  Map<String, dynamic> typeConfig = const {},
+  List<CustomParam> customParams = const [],
 }) {
   return AsrService(
     config: AsrConfig(
@@ -310,6 +411,8 @@ AsrService createAsrServiceFromConfig({
       apiKey: apiKey,
       model: model,
       language: language,
+      typeConfig: typeConfig,
+      customParams: customParams,
     ),
   );
 }

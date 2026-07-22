@@ -4,7 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:stroom/pages/provider_config_detail_page.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/pages/asr_model_config_page.dart';
 import 'package:stroom/pages/llm_model_config_page.dart';
+import 'package:stroom/pages/ocr_model_config_page.dart';
 import 'package:stroom/pages/simple_model_config_page.dart';
 import 'package:stroom/pages/model_config_page.dart';
 
@@ -140,7 +142,7 @@ void main() {
       expect(find.byType(SimpleModelConfigPage), findsNothing);
     });
 
-    testWidgets('OCR type renders SimpleModelConfigPage when adding model', (
+    testWidgets('OCR type renders OcrModelConfigPage when adding model', (
       tester,
     ) async {
       await tester.pumpDetailPage(entryType: 'ocr', entryName: 'OCR供应商');
@@ -150,13 +152,13 @@ void main() {
       await tester.tap(find.text('添加'));
       await tester.pumpAndSettle();
 
-      // Should navigate to SimpleModelConfigPage
-      expect(find.byType(SimpleModelConfigPage), findsOneWidget);
-      // LlmModelConfigPage should not be shown
+      // Should navigate to OcrModelConfigPage (not SimpleModelConfigPage)
+      expect(find.byType(OcrModelConfigPage), findsOneWidget);
+      expect(find.byType(SimpleModelConfigPage), findsNothing);
       expect(find.byType(LlmModelConfigPage), findsNothing);
     });
 
-    testWidgets('ASR type renders SimpleModelConfigPage when adding model', (
+    testWidgets('ASR type renders AsrModelConfigPage when adding model', (
       tester,
     ) async {
       await tester.pumpDetailPage(entryType: 'asr', entryName: '音频转写供应商');
@@ -166,8 +168,9 @@ void main() {
       await tester.tap(find.text('添加'));
       await tester.pumpAndSettle();
 
-      // Should navigate to SimpleModelConfigPage
-      expect(find.byType(SimpleModelConfigPage), findsOneWidget);
+      // Should navigate to AsrModelConfigPage (not SimpleModelConfigPage)
+      expect(find.byType(AsrModelConfigPage), findsOneWidget);
+      expect(find.byType(SimpleModelConfigPage), findsNothing);
       expect(find.byType(LlmModelConfigPage), findsNothing);
     });
 
