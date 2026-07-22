@@ -262,15 +262,16 @@ void main() {
     });
 
     // ═══════════════════════════════════════════════════════════
-    // Tool chip accent color & 灵歌 behavior tests
+    // Tool chip accent color & zero-tools grey-state tests
     // ═══════════════════════════════════════════════════════════
 
-    testWidgets('tool chip uses accent color when 灵歌 is NOT enabled',
+    testWidgets('tool chip uses accent color when tools are enabled',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
         reasoningEnabled: false,
         reasoningEffortEnabled: false,
+        enabledTools: {'some_tool'},
       ));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
@@ -283,10 +284,10 @@ void main() {
       expect(toolChip, findsOneWidget);
       final chip = tester.widget<SettingsChip>(toolChip);
       expect(chip.color, const Color(0xFF6366F1));
-      expect(chip.badgeCount, 0);
+      expect(chip.badgeCount, 1);
     });
 
-    testWidgets('tool chip shows badge count for non-灵歌 enabled tools',
+    testWidgets('tool chip shows badge count for multiple enabled tools',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
@@ -307,13 +308,13 @@ void main() {
       expect(chip.badgeCount, 2);
     });
 
-    testWidgets('tool chip turns grey and hides badge when 灵歌 is enabled',
+    testWidgets(
+        'tool chip turns grey and hides badge when no tools are enabled',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
         reasoningEnabled: false,
         reasoningEffortEnabled: false,
-        enabledTools: {'灵歌'},
       ));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
@@ -334,12 +335,13 @@ void main() {
     // ═══════════════════════════════════════════════════════════
 
     testWidgets(
-        'custom params chip uses accent color and shows badge when params active',
+        'custom params chip uses accent color and shows badge when params active and tools enabled',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
         reasoningEnabled: true,
         reasoningEffortEnabled: true,
+        enabledTools: {'some_tool'},
         reasoningParamValues: {
           'reasoning_effort': 'medium',
           'custom_param_1': 'value1',
@@ -366,12 +368,14 @@ void main() {
       expect(chip.badgeCount, 1);
     });
 
-    testWidgets('custom params chip with no active params shows no badge',
+    testWidgets(
+        'custom params chip with no active params shows no badge when tools enabled',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
         reasoningEnabled: true,
         reasoningEffortEnabled: true,
+        enabledTools: {'some_tool'},
         reasoningParamValues: {
           'reasoning_effort': 'medium',
         },
@@ -389,8 +393,7 @@ void main() {
       expect(chip.badgeCount, isNull);
     });
 
-    testWidgets(
-        'custom params chip turns grey and hides badge when 灵歌 is enabled',
+    testWidgets('custom params chip turns grey when no tools are enabled',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
@@ -400,7 +403,6 @@ void main() {
           'reasoning_effort': 'medium',
           'custom_param_1': 'value1',
         },
-        enabledTools: {'灵歌'},
         extraReasoningParams: [
           ReasoningParam(
             paramName: 'custom_param_1',

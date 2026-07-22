@@ -932,16 +932,15 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     // ═══════════════════════════════════════════════════════════
     // Tool chip & custom params chip: unified accent color
     // ═══════════════════════════════════════════════════════════
-    // When the "灵歌" tool is enabled, both chips turn grey and
-    // hide their badge (matching the reasoning disabled state).
+    // When no tools are enabled ("零个工具"), both chips turn grey
+    // and hide their badge (matching the reasoning disabled state).
     const Color toolAccentColor = Color(0xFF6366F1);
-    const String lingeToolName = '灵歌';
-    final bool isLingeEnabled = widget.enabledTools.contains(lingeToolName);
+    final bool noToolsEnabled = widget.enabledTools.isEmpty;
 
     // Tool chip
-    final Color toolColor = isLingeEnabled ? Colors.grey : toolAccentColor;
+    final Color toolColor = noToolsEnabled ? Colors.grey : toolAccentColor;
     final int? toolBadgeCount =
-        isLingeEnabled ? null : widget.enabledTools.length;
+        noToolsEnabled ? null : widget.enabledTools.length;
 
     // Custom params chip — count non-toggle, non-effort params with values
     final int customParamsBadgeCount = widget.reasoningParams
@@ -949,8 +948,8 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         .where((p) => reasoningParamValues.containsKey(p.paramName))
         .length;
     final Color customParamsColor =
-        isLingeEnabled ? Colors.grey : toolAccentColor;
-    final int? customParamsBadgeCountOrNull = isLingeEnabled
+        noToolsEnabled ? Colors.grey : toolAccentColor;
+    final int? customParamsBadgeCountOrNull = noToolsEnabled
         ? null
         : (customParamsBadgeCount > 0 ? customParamsBadgeCount : null);
 
