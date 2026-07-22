@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 
+import '../services/background_service.dart';
 import 'platform_tutorial_page.dart';
 
 /// A page that detects current system environment, checks background optimization
@@ -27,6 +28,8 @@ class _BackgroundOptimizationPageState
   bool _isServiceRunning = false;
   String _optimizationStatus = '';
   bool _isCheckingService = true;
+  bool _isOperating = false;
+  bool _isServiceSupported = false;
 
   @override
   void initState() {
@@ -96,6 +99,8 @@ class _BackgroundOptimizationPageState
       _isCheckingService = true;
     });
 
+    _isServiceSupported = isBackgroundServiceSupported();
+
     try {
       final service = FlutterBackgroundService();
       _isServiceRunning = await service.isRunning();
@@ -108,6 +113,83 @@ class _BackgroundOptimizationPageState
     if (mounted) {
       setState(() {
         _isCheckingService = false;
+      });
+    }
+  }
+
+  // ── Service Control ──────────────────────────────────────────────────
+
+  Future<void> _startService() async {
+    setState(() {
+      _isOperating = true;
+    });
+
+    try {
+      await startBackgroundService();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _optimizationStatus = '启动服务失败';
+          _isOperating = false;
+        });
+      }
+      return;
+    }
+
+    await _checkBackgroundService();
+    if (mounted) {
+      setState(() {
+        _isOperating = false;
+      });
+    }
+  }
+
+  Future<void> _stopService() async {
+    setState(() {
+      _isOperating = true;
+    });
+
+    try {
+      await stopBackgroundService();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _optimizationStatus = '停止服务失败';
+          _isOperating = false;
+        });
+      }
+      return;
+    }
+
+    await _checkBackgroundService();
+    if (mounted) {
+      setState(() {
+        _isOperating = false;
+      });
+    }
+  }
+
+  Future<void> _restartService() async {
+    setState(() {
+      _isOperating = true;
+    });
+
+    try {
+      await restartBackgroundService();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _optimizationStatus = '重启服务失败';
+          _isOperating = false;
+        });
+      }
+      return;
+    }
+
+    await _checkBackgroundService();
+    if (mounted) {
+      setState(() {
+        _isOperating = false;
       });
     }
   }
@@ -141,7 +223,7 @@ class _BackgroundOptimizationPageState
             theme,
           ),
           const SizedBox(height: 12),
-          ..._buildPlatformTutorialCards(theme),
+          ..._buildPlatformTutorialCards(),
           const SizedBox(height: 24),
         ],
       ),
@@ -238,26 +320,93 @@ class _BackgroundOptimizationPageState
             ),
             const SizedBox(height: 12),
             Text(
-              _isCheckingService
-                  ? '正在检测后台服务状态...'
-                  : _isServiceRunning
-                      ? '后台服务正在运行，任务将在后台正常执行。'
-                      : '后台服务未启动或当前平台不支持后台运行。'
-                          '请查看下方教程了解如何优化后台运行设置。',
+              _getStatusDescription(),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
                 height: 1.5,
               ),
             ),
-            if (!_isServiceRunning && !_isCheckingService) ...[
-              const SizedBox(height: 12),
+            // ── Action buttons (visible when not checking and platform is supported) ──
+            if (!_isCheckingService && _isServiceSupported) ...[
+              const SizedBox(height: 16),
+              // Primary action: start / stop
+              if (_isServiceRunning)
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.tonalIcon(
+                        onPressed: _isOperating ? null : _stopService,
+                        icon: _isOperating
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.stop, size: 18),
+                        label: const Text('停止服务'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _isOperating ? null : _restartService,
+                        icon: _isOperating
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.restart_alt, size: 18),
+                        label: const Text('重新启动服务'),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.tonalIcon(
+                    onPressed: _isOperating ? null : _startService,
+                    icon: _isOperating
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.play_arrow, size: 18),
+                    label: const Text('启动服务'),
+                  ),
+                ),
+              // Re-detect button
+              const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: _checkBackgroundService,
+                  onPressed: _isOperating ? null : _checkBackgroundService,
                   icon: const Icon(Icons.refresh, size: 18),
                   label: const Text('重新检测'),
                 ),
+              ),
+            ],
+            // ── Unsupported platform info ──
+            if (!_isCheckingService && !_isServiceSupported) ...[
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Icon(Icons.info_outline,
+                      size: 18, color: theme.colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '当前平台不支持后台服务控制。',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ],
@@ -268,7 +417,7 @@ class _BackgroundOptimizationPageState
 
   // ── Platform Tutorial Cards ──────────────────────────────────────────
 
-  List<Widget> _buildPlatformTutorialCards(ThemeData theme) {
+  List<Widget> _buildPlatformTutorialCards() {
     final platforms = [
       PlatformTutorialConfig(
         platformName: 'Android',
@@ -334,6 +483,27 @@ class _BackgroundOptimizationPageState
         ),
       );
     }).toList();
+  }
+
+  // ── Status Description ──────────────────────────────────────────────
+
+  String _getStatusDescription() {
+    if (_isCheckingService) return '正在检测后台服务状态...';
+
+    if (_isServiceRunning) return '后台服务正在运行，任务将在后台正常执行。';
+
+    // Platform-specific messaging when service is not running
+    if (kIsWeb) {
+      return 'Web 浏览器环境不支持后台服务运行。请保持页面打开以继续任务。';
+    }
+    if (defaultTargetPlatform == TargetPlatform.linux ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.windows) {
+      return '桌面平台后台服务支持有限。'
+          '请保持应用窗口打开以确保任务正常执行。';
+    }
+    return '后台服务未启动。请点击下方「启动服务」按钮启动后台服务，'
+        '或查看平台教程了解如何优化后台运行设置。';
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────
