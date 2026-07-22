@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 /// 文件夹选择器对话框
@@ -82,6 +84,10 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
   bool _isCreating = false;
   String? _createError;
 
+  // 双击检测：第一次点击立即更新 UI，第二次点击在超时内则视为双击。
+  Timer? _doubleTapTimer;
+  String? _lastTappedFolder;
+
   @override
   void initState() {
     super.initState();
@@ -91,6 +97,7 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
 
   @override
   void dispose() {
+    _doubleTapTimer?.cancel();
     _newFolderController.dispose();
     super.dispose();
   }
@@ -119,18 +126,20 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
   /// 判断当前是否在子文件夹中
   bool get _isInSubFolder => _currentPath.isNotEmpty;
 
-  /// 进入子文件夹
+  /// 进入子文件夹（同时自动选中该文件夹）
   void _navigateInto(String folderPath) {
     setState(() {
       _currentPath = folderPath;
+      _selectedFolder = folderPath;
     });
   }
 
-  /// 返回上级
+  /// 返回上级（同时将选中项更新为返回后的文件夹）
   void _navigateBack() {
     setState(() {
       final idx = _currentPath.lastIndexOf('/');
       _currentPath = idx == -1 ? '' : _currentPath.substring(0, idx);
+      _selectedFolder = _currentPath;
     });
   }
 
@@ -261,7 +270,7 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                         '根目录 > $_currentPath',
                         style: Theme.of(context)
                             .textTheme
-                            .bodySmall
+                            .bodyMedium
                             ?.copyWith(color: cs.onSurfaceVariant),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -385,45 +394,64 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
     final isSelected = _selectedFolder == folder;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
-      child: GestureDetector(
-        onDoubleTap: () {
-          if (folder.isNotEmpty) {
-            _navigateInto(folder);
-          }
-        },
-        child: Material(
-          color: isSelected ? cs.primaryContainer : Colors.transparent,
+      child: Material(
+        color: isSelected ? cs.primaryContainer : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
           borderRadius: BorderRadius.circular(8),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: () => setState(() => _selectedFolder = folder),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: Row(
-                children: [
-                  Icon(
-                    icon,
-                    size: 20,
-                    color: isSelected
-                        ? cs.onPrimaryContainer
-                        : cs.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      displayName,
-                      style: TextStyle(
-                        fontWeight:
-                            isSelected ? FontWeight.bold : FontWeight.normal,
-                        color:
-                            isSelected ? cs.onPrimaryContainer : cs.onSurface,
-                      ),
+          onTap: () {
+            // 先上 UI：立即更新选中状态
+            setState(() => _selectedFolder = folder);
+
+            // 再检测是否构成双击（在超时内再次点击同一文件夹）
+            final isDoubleTap = _lastTappedFolder == folder &&
+                _doubleTapTimer != null &&
+                _doubleTapTimer!.isActive;
+
+            _doubleTapTimer?.cancel();
+            _doubleTapTimer = null;
+            _lastTappedFolder = null;
+
+            if (isDoubleTap) {
+              // 视为双击 - 进入文件夹
+              if (folder.isNotEmpty) {
+                _navigateInto(folder);
+              }
+            } else {
+              // 第一次点击 - 启动双击等待计时器
+              _lastTappedFolder = folder;
+              _doubleTapTimer = Timer(
+                const Duration(milliseconds: 300),
+                () {
+                  _doubleTapTimer = null;
+                  _lastTappedFolder = null;
+                },
+              );
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 20,
+                  color:
+                      isSelected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    displayName,
+                    style: TextStyle(
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.normal,
+                      color: isSelected ? cs.onPrimaryContainer : cs.onSurface,
                     ),
                   ),
-                  if (isSelected)
-                    Icon(Icons.check, size: 18, color: cs.primary),
-                ],
-              ),
+                ),
+                if (isSelected) Icon(Icons.check, size: 18, color: cs.primary),
+              ],
             ),
           ),
         ),
