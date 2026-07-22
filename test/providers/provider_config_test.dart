@@ -501,10 +501,10 @@ void main() {
       expect(def!.modelConfigStyle, equals(ModelConfigStyle.tts));
     });
 
-    test('ocr type has ModelConfigStyle.simple', () {
+    test('ocr type has ModelConfigStyle.ocr', () {
       registerBuiltinProviderTypes();
       final def = ProviderTypeRegistry.get('ocr');
-      expect(def!.modelConfigStyle, equals(ModelConfigStyle.simple));
+      expect(def!.modelConfigStyle, equals(ModelConfigStyle.ocr));
     });
 
     test('asr type has ModelConfigStyle.simple', () {
