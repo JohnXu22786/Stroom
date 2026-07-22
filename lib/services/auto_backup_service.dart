@@ -439,11 +439,9 @@ class AutoBackupService {
     final targetTotal = 5;
     final minBeyondDays = 2;
     final fillDays = targetTotal - keepList.length;
-    final daysToKeep =
-        fillDays > minBeyondDays ? fillDays : minBeyondDays;
-    final actualDaysToKeep = daysToKeep < sortedDays.length
-        ? daysToKeep
-        : sortedDays.length;
+    final daysToKeep = fillDays > minBeyondDays ? fillDays : minBeyondDays;
+    final actualDaysToKeep =
+        daysToKeep < sortedDays.length ? daysToKeep : sortedDays.length;
 
     // 保留每个选中日期的最后一个备份
     for (var i = 0; i < actualDaysToKeep; i++) {
