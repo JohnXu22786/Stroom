@@ -345,7 +345,7 @@ void main() {
       final def = ProviderTypeRegistry.get('asr');
       expect(def, isNotNull);
       expect(def!.type, equals('asr'));
-      expect(def.modelConfigStyle, equals(ModelConfigStyle.simple));
+      expect(def.modelConfigStyle, equals(ModelConfigStyle.asr));
     });
 
     test('ASR provider entry can be created', () {
@@ -507,10 +507,10 @@ void main() {
       expect(def!.modelConfigStyle, equals(ModelConfigStyle.ocr));
     });
 
-    test('asr type has ModelConfigStyle.simple', () {
+    test('asr type has ModelConfigStyle.asr', () {
       registerBuiltinProviderTypes();
       final def = ProviderTypeRegistry.get('asr');
-      expect(def!.modelConfigStyle, equals(ModelConfigStyle.simple));
+      expect(def!.modelConfigStyle, equals(ModelConfigStyle.asr));
     });
   });
 
