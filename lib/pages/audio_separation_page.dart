@@ -47,6 +47,15 @@ class SelectedVideo {
   });
 }
 
+/// Top-level helper: runs extractAudioSync inside Isolate.run.
+/// Must be a top-level function (not a method) so the closure does NOT
+/// capture `this` (which would fail sendability check for Isolate.run).
+Future<Uint8List> _extractAudioIsolate(
+    Uint8List videoBytes, String videoFormat) {
+  return Isolate.run(
+      () => extractAudioSync(videoBytes: videoBytes, videoFormat: videoFormat));
+}
+
 class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   // 音频分离引擎
   final AudioSeparationEngine _engine = AudioSeparationEngine();
@@ -732,11 +741,11 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
         bgNotifier.updateStep(taskId, 0, running: true);
 
         // Run CPU-bound MP4 parsing in a background isolate so the main
-        // thread stays responsive for the pop transition and UI updates.
-        final audioBytes = await Isolate.run(() => extractAudioSync(
-              videoBytes: video.bytes,
-              videoFormat: video.format,
-            ));
+        // thread stays responsive.  Isolate.run 的闭包不能在实例方法中创建
+        //（会隐式捕获 _AudioSeparationPageState，不可发送），
+        // 因此通过顶层辅助函数 _extractAudioIsolate 来创建隔离的闭包。
+        final audioBytes =
+            await _extractAudioIsolate(video.bytes, video.format);
 
         // Step 0: 分离音频 - mark as completed
         bgNotifier.updateStep(taskId, 0, completed: true);
