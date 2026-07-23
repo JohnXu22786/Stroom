@@ -5,6 +5,7 @@ import '../../catcatch/providers/catcatch_provider.dart';
 import '../../providers/background_task_provider.dart';
 import '../../providers/task_provider.dart';
 import '../../task_flow/models/task_flow_execution.dart';
+import '../../task_flow/providers/task_flow_execution_provider.dart';
 import 'background_task_card.dart';
 import 'catcatch_task_card.dart';
 import 'synthesis_task_card.dart';
@@ -91,6 +92,20 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
                       color: cs.onSurfaceVariant,
                       size: 20,
                     ),
+                    const SizedBox(width: 4),
+                    // Delete button
+                    GestureDetector(
+                      onLongPress: () => _confirmDelete(context, cs),
+                      child: IconButton(
+                        icon: Icon(Icons.delete_outline,
+                            size: 18, color: cs.error),
+                        onPressed: () => _confirmDelete(context, cs),
+                        padding: EdgeInsets.zero,
+                        constraints:
+                            const BoxConstraints(minWidth: 32, minHeight: 32),
+                        tooltip: '删除',
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -122,6 +137,31 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
       case FlowExecutionStatus.failed:
         return Icon(Icons.error, size: 20, color: cs.error);
     }
+  }
+
+  void _confirmDelete(BuildContext context, ColorScheme cs) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除任务流记录'),
+        content: Text('确定删除「${widget.execution.flowName}」？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              ref
+                  .read(taskFlowExecutionsProvider.notifier)
+                  .removeExecution(widget.execution.id);
+              Navigator.pop(ctx);
+            },
+            child: const Text('确定', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Build a sub-task row that can expand to show the underlying task card.
