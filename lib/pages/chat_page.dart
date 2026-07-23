@@ -525,9 +525,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _isLoadingMessages = true;
     try {
       final activeId = ref.read(activeConversationIdProvider);
+      final convs = ref.read(conversationsProvider);
+      print(
+          '[PERSIST] _loadConversationMessages: activeId=$activeId allConvCount=${convs.length}');
       await AppLogService.info(
           'ChatPage', '开始加载对话消息, activeConversationId=$activeId');
       if (activeId == null) {
+        print('[PERSIST] _loadConversationMessages: ABORT activeId null');
         await AppLogService.warning(
             'ChatPage', 'activeConversationId 为 null，跳过加载对话消息');
         return;
@@ -536,6 +540,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
       final convs = ref.read(conversationsProvider);
       await AppLogService.info('ChatPage', '当前共有 ${convs.length} 个对话');
       final conv = convs.where((c) => c.id == activeId).firstOrNull;
+      print(
+          '[PERSIST] _loadConversationMessages: foundConv=${conv != null} convMsgCount=${conv?.messages.length ?? -1}');
       if (conv == null) {
         await AppLogService.warning(
             'ChatPage', '未找到 activeConversationId=$activeId 对应的对话');
@@ -681,10 +687,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Future<void> _saveMessages({String? capturedConvId}) async {
     try {
       final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
-      if (convId == null) return;
+      print(
+          '[PERSIST] _saveMessages: convId=$convId capturedConvId=$capturedConvId historyLen=${_history.length}');
+      if (convId == null) {
+        print('[PERSIST] _saveMessages: ABORT convId is null');
+        return;
+      }
+      final msgCount = _history.length;
       await ref.read(conversationsProvider.notifier).updateMessages(convId, [
         ..._history,
       ]);
+      print('[PERSIST] _saveMessages: OK convId=$convId msgCount=$msgCount');
     } catch (e, s) {
       // Fallback: save directly to SharedPreferences if the notifier is
       // unavailable (e.g. during background streaming after page disposal).
@@ -862,7 +875,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
       ),
     );
 
+    print(
+        '[PERSIST] _onMessageSend: sending message, convId=$convId historyLen=${_history.length}');
     await _startStreaming(text, capturedConvId: convId);
+    print(
+        '[PERSIST] _onMessageSend: streaming done, convId=$convId historyLen=${_history.length}');
   }
 
   Future<void> _startStreaming(String text, {String? capturedConvId}) async {
@@ -933,12 +950,18 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _history.clear();
     _history.addAll(result.history);
 
+    print(
+        '[PERSIST] _startStreaming: stream done, convId=${effectiveConvId} capturedConvId=$capturedConvId resultHistoryLen=${result.history.length}');
+
     // Persist now using the page's own ref. This MUST happen before any
     // ref.read() calls below, because after widget disposal those calls may
     // throw and prevent the save from ever executing.
     try {
+      print('[PERSIST] _startStreaming: saving messages...');
       await _saveMessages(capturedConvId: capturedConvId);
+      print('[PERSIST] _startStreaming: save OK, convId=${capturedConvId}');
     } catch (e) {
+      print('[PERSIST] _startStreaming: save FAILED: $e');
       debugPrint('[ChatPage] _saveMessages failed: $e');
     }
 
