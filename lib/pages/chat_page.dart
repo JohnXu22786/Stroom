@@ -536,8 +536,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
             'ChatPage', 'activeConversationId 为 null，跳过加载对话消息');
         return;
       }
-
-      final convs = ref.read(conversationsProvider);
       await AppLogService.info('ChatPage', '当前共有 ${convs.length} 个对话');
       final conv = convs.where((c) => c.id == activeId).firstOrNull;
       print(
