@@ -22,6 +22,7 @@ import '../services/chat_adapter.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/chat_stream_provider.dart';
 import '../providers/chat_manager_provider.dart';
+import '../services/chat_stream_manager.dart' show StreamResult;
 import '../providers/provider_config.dart';
 import '../providers/assistant_provider.dart' show selectedAssistantProvider;
 import '../widgets/llm/jumping_dots.dart';
@@ -323,32 +324,31 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   /// Restores the streaming message UI when the page is re-initialized after
   /// having been disposed during active streaming (user navigated away during
-  /// generation and came back). Only restores if the streaming conversation
-  /// matches the currently active conversation.
+  /// generation and came back). Uses per-conversation state from the manager
+  /// to restore the correct conversation's streaming content.
   void _restoreStreamingState() {
-    if (!ref.read(isStreamingProvider)) return;
-    final msgId = ref.read(streamingMsgIdProvider);
-    if (msgId == null) return;
+    final activeConvId = ref.read(activeConversationIdProvider);
+    if (activeConvId == null) return;
 
     final manager = ref.read(chatStreamManagerProvider);
-    final activeConvId = ref.read(activeConversationIdProvider);
-    final streamConvId = manager.streamingConvId;
+    if (!manager.isStreamingFor(activeConvId)) return;
 
-    // 如果流式请求属于其他对话，不在此页面恢复
-    if (streamConvId != null &&
-        activeConvId != null &&
-        streamConvId != activeConvId) {
-      return;
-    }
+    final msgId = manager.streamingMsgIdFor(activeConvId);
+    if (msgId == null) return;
+
+    final fullReply = manager.fullReplyFor(activeConvId);
+    final reasoningSections = manager.reasoningSectionsFor(activeConvId);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final fullReply = ref.read(streamingFullReplyProvider);
-      final reasoningSections = ref.read(streamingReasoningSectionsProvider);
+      // Also activate the conversation in the manager so provider updates
+      // from the manager's throttle loop reach this page's listeners.
+      manager.activateConversation(activeConvId);
+
       _streamingMsgId = msgId;
       _chatSegments[msgId] = [];
       _streamingRenderedLengths[msgId] = 0;
-      // Restore reasoning sections from provider so the buttons show up
+      // Restore reasoning sections from provider/manager so the buttons show up
       if (reasoningSections.isNotEmpty) {
         _reasoningContents[msgId] = List.of(reasoningSections);
       }
@@ -916,21 +916,21 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // (for retry/edit which don't capture convId).
     final effectiveConvId =
         capturedConvId ?? ref.read(activeConversationIdProvider) ?? '';
-    await ref.read(chatStreamManagerProvider).startStreaming(
-          text: text,
-          convId: effectiveConvId,
-          history: List.from(_history),
-          tools: filteredTools,
-          reasoning: ref.read(reasoningEnabledProvider),
-          reasoningEffort: ref.read(reasoningEffortProvider),
-          reasoningParamValues: ref.read(reasoningParamValuesProvider),
-        );
+    final StreamResult result =
+        await ref.read(chatStreamManagerProvider).startStreaming(
+              text: text,
+              convId: effectiveConvId,
+              history: List.from(_history),
+              tools: filteredTools,
+              reasoning: ref.read(reasoningEnabledProvider),
+              reasoningEffort: ref.read(reasoningEffortProvider),
+              reasoningParamValues: ref.read(reasoningParamValuesProvider),
+            );
 
     // ── Post-stream completion update ──
-    // The manager has processed the stream, persisted the assistant message,
-    // and updated its internal history. Update the page's local state directly
-    // from the manager's result, avoiding fragile _loadConversationMessages().
-    final manager = ref.read(chatStreamManagerProvider);
+    // The manager has processed the stream, persisted the assistant message
+    // into the conversation provider. Use the returned StreamResult to update
+    // local page state directly.
     _streamingMsgId = null;
     _isStreamingActive = false;
     ref.read(isStreamingProvider.notifier).state = false;
@@ -938,23 +938,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
     ref.read(streamingFullReplyProvider.notifier).state = '';
     ref.read(streamingHasFirstTokenProvider.notifier).state = false;
 
-    // Update local _history from manager's final state
-    // (the manager has the complete history including assistant message)
+    // Update local _history from the stream result
     _history.clear();
-    _history.addAll(manager.history);
+    _history.addAll(result.history);
 
     // Update the controller: replace streaming placeholder with final message
     if (mounted) {
-      ChatMessage? finalMsg;
-      try {
-        finalMsg = manager.history.firstWhere(
-          (m) => m.id == aiMsgId,
-        );
-      } catch (_) {
-        if (manager.history.isNotEmpty) {
-          finalMsg = manager.history.last;
-        }
-      }
+      final finalMsg = result.assistantMessage;
       if (finalMsg != null) {
         // Update the streaming placeholder to show the final text
         _controller?.updateMessage(
@@ -1423,7 +1413,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
   void _stopStreaming() {
     _isStreamingActive = false;
     try {
-      ref.read(chatStreamManagerProvider).cancel();
+      final convId = ref.read(activeConversationIdProvider);
+      ref.read(chatStreamManagerProvider).cancel(convId);
     } catch (e) {
       debugPrint('[ChatPage] cancel error: $e');
     }
@@ -1763,9 +1754,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final adapterConfigured = _adapter.isConfigured;
     final controller = _controller;
 
-    // Reactively load messages when the active conversation changes
+    // Reactively load messages when the active conversation changes.
+    // Also activate the conversation in the streaming manager so the
+    // global providers reflect this conversation's streaming state.
     ref.listen(activeConversationIdProvider, (prev, next) {
       if (next != null && next != prev) {
+        ref.read(chatStreamManagerProvider).activateConversation(next);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _loadConversationMessages();
         });

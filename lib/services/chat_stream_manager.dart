@@ -18,46 +18,122 @@ import 'chat_adapter.dart';
 // 职责：
 // - 持有 [ChatAdapter] 实例，管理其生命周期
 // - 独立于页面 Widget 运行流式请求循环
-// - 通过 Riverpod providers 向页面暴露流式状态
+// - 支持每条对话独立跟踪流式状态，最多一个流在运行（adapter 限制）
+// - 通过 Riverpod providers 向页面暴露当前活跃对话的流式状态
 // - 在流式过程中定期持久化部分结果，防止应用中断丢失
 // - 在流式完成后自动持久化完整消息
 // - 支持取消和销毁
-// - 每条对话独立跟踪流式状态
 //
 // 与 ChatPage 的关系：
 // - ChatStreamManager 是 app 级单例，不依赖任何页面 Widget
 // - ChatPage 通过 chatStreamManagerProvider 获取管理器引用
 // - ChatPage 将发送请求、取消等操作委托给管理器
 // - ChatPage 通过 watch providers 获取实时流式状态
+// - ChatPage 调用 activateConversation 切换 providers 输出到指定对话
+// ============================================================================
+
+// ============================================================================
+// StreamResult — 流式请求完成后返回的结果
+// ============================================================================
+
+/// The result of a streaming request, returned by [ChatStreamManager.startStreaming].
+///
+/// Contains the final message history (including the assistant's response),
+/// the accumulated reply text, and any tool calls or reasoning content.
+class StreamResult {
+  /// The conversation message history after the assistant message was appended.
+  final List<ChatMessage> history;
+
+  /// The newly created assistant message, or null if no text was received.
+  final ChatMessage? assistantMessage;
+
+  /// The full accumulated reply text from the stream.
+  final String fullReply;
+
+  /// The accumulated reasoning buffer, or empty if no reasoning events.
+  final String reasoningBuffer;
+
+  /// All reasoning sections (for multi-step tool call rounds).
+  final List<String> reasoningSections;
+
+  /// Tool calls accumulated during the stream.
+  final List<ToolCallData> toolCalls;
+
+  /// Whether the stream was cancelled by the user.
+  final bool cancelled;
+
+  const StreamResult({
+    required this.history,
+    this.assistantMessage,
+    this.fullReply = '',
+    this.reasoningBuffer = '',
+    this.reasoningSections = const [],
+    this.toolCalls = const [],
+    this.cancelled = false,
+  });
+
+  /// Whether the stream completed with an error (not cancelled).
+  bool get isError => fullReply.startsWith('错误:') && !cancelled;
+
+  /// Whether the stream produced any content.
+  bool get hasContent => fullReply.isNotEmpty;
+}
+
+// ============================================================================
+// _ConversationStreamState — per-conversation mutable streaming state
+// ============================================================================
+
+class _ConversationStreamState {
+  final String convId;
+  bool cancelledByUser = false;
+  String? streamingMsgId;
+  String fullReply = '';
+  String reasoningBuffer = '';
+  List<String> reasoningSections = [];
+  List<ToolCallData> toolCalls = [];
+  List<ChatMessage> history = [];
+  bool hasReceivedFirstToken = false;
+  bool isComplete = false;
+
+  /// Accumulator for tool calls across streaming rounds (used for history).
+  final List<ToolCallData> accumulatedToolCalls = [];
+
+  /// Throttle timers
+  DateTime lastTextUpdate = DateTime.now();
+  DateTime lastReasoningUpdate = DateTime.now();
+
+  /// Periodic persistence timer
+  Timer? persistTimer;
+
+  /// Completer used to return the same future for duplicate startStreaming
+  /// calls on the same conversation.
+  Completer<StreamResult>? resultCompleter;
+
+  _ConversationStreamState({required this.convId});
+}
+
+// ============================================================================
+// ChatStreamManager
 // ============================================================================
 
 class ChatStreamManager {
   final Ref? _ref;
   final ChatAdapter _adapter = ChatAdapter();
 
-  // ── 流式状态 ──
-  bool _isStreaming = false;
-  bool _cancelledByUser = false;
-  String? _streamingMsgId;
-  String? _streamingConvId;
-  String _fullReply = '';
-  String _reasoningBuffer = '';
-  List<String> _reasoningSections = [];
-  List<ToolCallData> _toolCalls = [];
-  List<ChatMessage> _history = [];
-  bool _hasReceivedFirstToken = false;
+  // ── Per-conversation stream states ──
+  final Map<String, _ConversationStreamState> _streams = {};
 
-  /// Accumulator for tool calls across streaming rounds (used for history).
-  final List<ToolCallData> _accumulatedToolCalls = [];
+  /// The conversation whose state is currently pushed to providers.
+  String? _activeConvId;
 
-  // ── 节流控制 ──
-  DateTime _lastTextUpdate = DateTime.now();
-  DateTime _lastReasoningUpdate = DateTime.now();
+  // ── Throttle constants ──
   static const Duration _textThrottle = Duration(milliseconds: 200); // 5次/秒
   static const Duration _reasoningThrottle = Duration(milliseconds: 200);
 
-  // ── 定期持久化 ──
-  Timer? _persistTimer;
+  /// Public constant for testing / verification.
+  static const int textThrottleMs = 200;
+
+  // ── Periodic persistence interval ──
   static const Duration _persistInterval = Duration(seconds: 5);
 
   ChatStreamManager([this._ref]);
@@ -66,24 +142,71 @@ class ChatStreamManager {
 
   ChatAdapter get adapter => _adapter;
 
-  bool get isStreaming => _isStreaming;
+  /// Whether ANY conversation is currently streaming.
+  bool get isStreaming => _streams.isNotEmpty;
 
-  /// 当前正在流式的对话 ID，用于页面判断是否属于本对话
-  String? get streamingConvId => _streamingConvId;
+  /// The currently active conversation ID (the one whose data is in providers).
+  String? get activeStreamingConvId => _activeConvId;
 
-  String? get streamingMsgId => _streamingMsgId;
+  // ── Legacy getters (operate on the active conversation) ──
 
-  String get fullReply => _fullReply;
+  /// The streaming conversation ID for the active conversation.
+  String? get streamingConvId => _activeConvId;
 
-  String get reasoningBuffer => _reasoningBuffer;
+  /// The streaming message ID for the active conversation.
+  String? get streamingMsgId =>
+      _activeConvId != null ? _streams[_activeConvId]?.streamingMsgId : null;
 
-  List<String> get reasoningSections => List.unmodifiable(_reasoningSections);
+  /// The full reply for the active conversation.
+  String get fullReply =>
+      _activeConvId != null ? (_streams[_activeConvId]?.fullReply ?? '') : '';
 
-  List<ToolCallData> get toolCalls => List.unmodifiable(_toolCalls);
+  /// The reasoning buffer for the active conversation.
+  String get reasoningBuffer => _activeConvId != null
+      ? (_streams[_activeConvId]?.reasoningBuffer ?? '')
+      : '';
 
-  List<ChatMessage> get history => List.unmodifiable(_history);
+  /// Reasoning sections for the active conversation.
+  List<String> get reasoningSections => _activeConvId != null
+      ? List.unmodifiable(_streams[_activeConvId]?.reasoningSections ?? [])
+      : const [];
 
-  bool get hasReceivedFirstToken => _hasReceivedFirstToken;
+  /// Tool calls for the active conversation.
+  List<ToolCallData> get toolCalls => _activeConvId != null
+      ? List.unmodifiable(_streams[_activeConvId]?.toolCalls ?? [])
+      : const [];
+
+  /// Message history for the active conversation.
+  List<ChatMessage> get history => _activeConvId != null
+      ? List.unmodifiable(_streams[_activeConvId]?.history ?? [])
+      : const [];
+
+  bool get hasReceivedFirstToken =>
+      _activeConvId != null &&
+      (_streams[_activeConvId]?.hasReceivedFirstToken ?? false);
+
+  // ── Per-conversation queries ──
+
+  /// Whether [convId] is currently streaming.
+  bool isStreamingFor(String convId) => _streams.containsKey(convId);
+
+  /// The streaming message ID for a specific conversation.
+  String? streamingMsgIdFor(String convId) => _streams[convId]?.streamingMsgId;
+
+  /// The full reply for a specific conversation.
+  String fullReplyFor(String convId) => _streams[convId]?.fullReply ?? '';
+
+  /// The history for a specific conversation.
+  List<ChatMessage> historyFor(String convId) =>
+      List.unmodifiable(_streams[convId]?.history ?? []);
+
+  /// Reasoning sections for a specific conversation.
+  List<String> reasoningSectionsFor(String convId) =>
+      List.unmodifiable(_streams[convId]?.reasoningSections ?? []);
+
+  /// Tool calls for a specific conversation.
+  List<ToolCallData> toolCallsFor(String convId) =>
+      List.unmodifiable(_streams[convId]?.toolCalls ?? []);
 
   // ── Provider 更新辅助 ──
 
@@ -94,6 +217,22 @@ class ChatStreamManager {
 
   // ── 公共 API ──
 
+  /// Sets the active conversation for provider output.
+  ///
+  /// When the user switches conversations in the chat page, call this to
+  /// ensure the global providers reflect the newly selected conversation's
+  /// streaming state (if any).
+  void activateConversation(String convId) {
+    if (_activeConvId == convId) return;
+    _activeConvId = convId;
+    final state = _streams[convId];
+    if (state != null) {
+      _pushStateToProviders(state);
+    } else {
+      _clearProviders();
+    }
+  }
+
   /// 启动流式请求，独立于页面 Widget 在后台运行。
   ///
   /// [text] 用户消息文本
@@ -102,8 +241,8 @@ class ChatStreamManager {
   /// [tools] 启用的工具列表
   /// [reasoning] 是否启用推理
   ///
-  /// 返回 Future，在流式完成后完成。调用方可以 await 但不需要。
-  Future<void> startStreaming({
+  /// 返回 [StreamResult]，包含最终的对话历史和助手消息。
+  Future<StreamResult> startStreaming({
     required String text,
     required String convId,
     required List<ChatMessage> history,
@@ -112,39 +251,35 @@ class ChatStreamManager {
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
   }) async {
-    if (_isStreaming) {
-      debugPrint('[ChatStreamManager] 已有流式请求进行中，忽略');
-      return;
+    // If this conversation already has a stream running, return the
+    // pending future so the caller awaits the same result.
+    if (_streams.containsKey(convId)) {
+      debugPrint('[ChatStreamManager] 对话 $convId 已有流式请求进行中');
+      return _streams[convId]!.resultCompleter!.future;
     }
 
-    _isStreaming = true;
-    _cancelledByUser = false;
-    _streamingConvId = convId;
-    _history = List.from(history);
-    _fullReply = '';
-    _reasoningBuffer = '';
-    _reasoningSections = [];
-    _toolCalls = [];
-    _accumulatedToolCalls.clear();
-    _hasReceivedFirstToken = false;
-    _lastTextUpdate = DateTime.now();
-    _lastReasoningUpdate = DateTime.now();
+    // Create per-conversation state and its result completer
+    final resultCompleter = Completer<StreamResult>();
+    final state = _ConversationStreamState(convId: convId)
+      ..resultCompleter = resultCompleter;
+    state.history = List.from(history);
+    state.lastTextUpdate = DateTime.now();
+    state.lastReasoningUpdate = DateTime.now();
 
     final aiMsgId = 'a${DateTime.now().millisecondsSinceEpoch}';
-    _streamingMsgId = aiMsgId;
+    state.streamingMsgId = aiMsgId;
 
-    // 更新 providers (同步执行，页面立即可见)
-    _setProvider(isStreamingProvider, true);
-    _setProvider(streamingMsgIdProvider, aiMsgId);
-    _setProvider(streamingFullReplyProvider, '');
-    _setProvider(streamingHasFirstTokenProvider, false);
-    _setProvider(streamingReasoningProvider, '');
-    _setProvider(streamingReasoningSectionsProvider, []);
-    _setProvider(streamingToolCallsProvider, []);
+    _streams[convId] = state;
 
-    // 启动定期持久化定时器（每5秒保存一次部分结果）
-    _persistTimer = Timer.periodic(_persistInterval, (_) {
-      _doPeriodicPersist();
+    // If no active conversation yet, set this one as active
+    if (_activeConvId == null || _activeConvId == convId) {
+      _activeConvId = convId;
+      _pushStateToProviders(state);
+    }
+
+    // Start periodic persistence timer
+    state.persistTimer = Timer.periodic(_persistInterval, (_) {
+      _doPeriodicPersist(state);
     });
 
     await AppLogService.info('ChatStreamManager', '开始流式请求, convId=$convId');
@@ -156,7 +291,7 @@ class ChatStreamManager {
     try {
       final stream = _adapter.sendStreamWithTools(
         text,
-        history: _history,
+        history: state.history,
         reasoning: reasoning,
         reasoningEffort: reasoningEffort,
         reasoningParamValues: reasoningParamValues,
@@ -164,44 +299,49 @@ class ChatStreamManager {
       );
 
       await for (final event in stream) {
-        if (_cancelledByUser) break;
+        if (state.cancelledByUser) break;
 
         switch (event) {
           case TextEvent e:
-            if (!_hasReceivedFirstToken) {
-              _hasReceivedFirstToken = true;
-              _setProvider(streamingHasFirstTokenProvider, true);
+            if (!state.hasReceivedFirstToken) {
+              state.hasReceivedFirstToken = true;
+              _maybeSetProvider(convId, streamingHasFirstTokenProvider, true);
             }
-            _fullReply += e.text;
+            state.fullReply += e.text;
             // 节流：最长200ms更新一次 provider
             final now = DateTime.now();
-            if (now.difference(_lastTextUpdate) >= _textThrottle) {
-              _lastTextUpdate = now;
-              _setProvider(streamingFullReplyProvider, _fullReply);
+            if (now.difference(state.lastTextUpdate) >= _textThrottle) {
+              state.lastTextUpdate = now;
+              _maybeSetProvider(
+                  convId, streamingFullReplyProvider, state.fullReply);
             }
 
           case ReasoningEvent e:
-            _reasoningBuffer += e.text;
-            final sections = List<String>.from(_reasoningSections);
+            state.reasoningBuffer += e.text;
+            final sections = List<String>.from(state.reasoningSections);
             if (sections.isNotEmpty) {
-              sections[sections.length - 1] = _reasoningBuffer;
+              sections[sections.length - 1] = state.reasoningBuffer;
             } else {
-              sections.add(_reasoningBuffer);
+              sections.add(state.reasoningBuffer);
             }
-            _reasoningSections = sections;
+            state.reasoningSections = sections;
             // 节流
             final now = DateTime.now();
-            if (now.difference(_lastReasoningUpdate) >= _reasoningThrottle) {
-              _lastReasoningUpdate = now;
-              _setProvider(streamingReasoningProvider, _reasoningBuffer);
-              _setProvider(streamingReasoningSectionsProvider, sections);
+            if (now.difference(state.lastReasoningUpdate) >=
+                _reasoningThrottle) {
+              state.lastReasoningUpdate = now;
+              _maybeSetProvider(
+                  convId, streamingReasoningProvider, state.reasoningBuffer);
+              _maybeSetProvider(
+                  convId, streamingReasoningSectionsProvider, sections);
             }
 
           case ReasoningSectionEndEvent():
-            final sections = List<String>.from(_reasoningSections);
+            final sections = List<String>.from(state.reasoningSections);
             sections.add('');
-            _reasoningSections = sections;
-            _setProvider(streamingReasoningSectionsProvider, sections);
+            state.reasoningSections = sections;
+            _maybeSetProvider(
+                convId, streamingReasoningSectionsProvider, sections);
 
           case ToolCallStartEvent e:
             final toolCallData = ToolCallData(
@@ -210,53 +350,58 @@ class ChatStreamManager {
               arguments: Map<String, dynamic>.from(e.toolCall.arguments),
               status: ToolCallStatus.running,
             );
-            _toolCalls.add(toolCallData);
-            _accumulatedToolCalls.add(toolCallData);
-            _setProvider(streamingToolCallsProvider,
-                List<ToolCallData>.from(_toolCalls));
+            state.toolCalls.add(toolCallData);
+            state.accumulatedToolCalls.add(toolCallData);
+            _maybeSetProvider(convId, streamingToolCallsProvider,
+                List<ToolCallData>.from(state.toolCalls));
 
           case ToolCallCompleteEvent e:
-            for (var i = 0; i < _toolCalls.length; i++) {
-              if (_toolCalls[i].id == e.toolCallId) {
-                _toolCalls[i] = _toolCalls[i].copyWith(
+            for (var i = 0; i < state.toolCalls.length; i++) {
+              if (state.toolCalls[i].id == e.toolCallId) {
+                state.toolCalls[i] = state.toolCalls[i].copyWith(
                   status: ToolCallStatus.completed,
                   result: e.result,
                 );
                 break;
               }
             }
-            for (var i = 0; i < _accumulatedToolCalls.length; i++) {
-              if (_accumulatedToolCalls[i].id == e.toolCallId) {
-                _accumulatedToolCalls[i] = _accumulatedToolCalls[i].copyWith(
+            for (var i = 0; i < state.accumulatedToolCalls.length; i++) {
+              if (state.accumulatedToolCalls[i].id == e.toolCallId) {
+                state.accumulatedToolCalls[i] =
+                    state.accumulatedToolCalls[i].copyWith(
                   status: ToolCallStatus.completed,
                   result: e.result,
                 );
                 break;
               }
             }
-            _setProvider(streamingToolCallsProvider,
-                List<ToolCallData>.from(_toolCalls));
+            _maybeSetProvider(convId, streamingToolCallsProvider,
+                List<ToolCallData>.from(state.toolCalls));
         }
       }
     } catch (e, s) {
       streamError = e;
-      if (!_cancelledByUser) {
+      if (!state.cancelledByUser) {
         debugPrint('[ChatStreamManager] 流式请求异常: $e\n$s');
-        await AppLogService.error('ChatStreamManager', '流式请求异常', e, s);
-        _fullReply = '错误: ${e.toString()}';
-        _setProvider(streamingFullReplyProvider, _fullReply);
-        _toolCalls.clear();
-        _setProvider(streamingToolCallsProvider, []);
+        try {
+          await AppLogService.error('ChatStreamManager', '流式请求异常', e, s);
+        } catch (_) {
+          // Best effort: logging failure should not prevent cleanup
+        }
+        state.fullReply = '错误: ${e.toString()}';
+        _maybeSetProvider(convId, streamingFullReplyProvider, state.fullReply);
+        state.toolCalls.clear();
+        _maybeSetProvider(convId, streamingToolCallsProvider, []);
       }
     } finally {
-      // 停止定期持久化
-      _persistTimer?.cancel();
-      _persistTimer = null;
+      // Stop periodic persistence
+      state.persistTimer?.cancel();
+      state.persistTimer = null;
 
-      // 最后一次节流刷新：确保最后的文本到达 UI
-      _setProvider(streamingFullReplyProvider, _fullReply);
+      // Final throttle flush: push the last text to the UI
+      _maybeSetProvider(convId, streamingFullReplyProvider, state.fullReply);
 
-      // 捕获请求/响应原始数据
+      // Capture request/response raw data
       try {
         final reqBody = _adapter.lastRequestBody;
         final headers = _adapter.lastRequestHeaders;
@@ -284,120 +429,199 @@ class ChatStreamManager {
         }
       } catch (_) {}
 
-      // 捕获推理内容
-      final finalReasoning = _adapter.reasoningContent;
-      if (finalReasoning.isNotEmpty) {
-        _reasoningBuffer = finalReasoning;
-        final sections = List<String>.from(_reasoningSections);
-        if (sections.isNotEmpty) {
-          sections[sections.length - 1] = finalReasoning;
-        } else {
-          sections.add(finalReasoning);
+      // Capture reasoning content (safe: getter returns a String, should never throw)
+      try {
+        final finalReasoning = _adapter.reasoningContent;
+        if (finalReasoning.isNotEmpty) {
+          state.reasoningBuffer = finalReasoning;
+          final sections = List<String>.from(state.reasoningSections);
+          if (sections.isNotEmpty) {
+            sections[sections.length - 1] = finalReasoning;
+          } else {
+            sections.add(finalReasoning);
+          }
+          state.reasoningSections = sections;
+          _maybeSetProvider(convId, streamingReasoningProvider, finalReasoning);
+          _maybeSetProvider(
+              convId, streamingReasoningSectionsProvider, sections);
         }
-        _reasoningSections = sections;
-        _setProvider(streamingReasoningProvider, finalReasoning);
-        _setProvider(streamingReasoningSectionsProvider, sections);
+      } catch (_) {
+        // Best effort: reasoning capture failure should not crash the stream
       }
     }
 
-    // ── 流式完成后处理 ──
+    // ── Post-stream processing ──
+    ChatMessage? assistantMessage;
+    final wasCancelled = state.cancelledByUser;
+
     try {
-      if (_fullReply.isNotEmpty) {
-        final isError = _fullReply.startsWith('错误:');
+      if (state.fullReply.isNotEmpty) {
+        final isError = state.fullReply.startsWith('错误:');
         final msg = ChatMessage(
           role: 'assistant',
-          content: _fullReply,
-          id: _streamingMsgId ?? '',
+          content: state.fullReply,
+          id: state.streamingMsgId ?? '',
           isError: isError,
           reasoningContent:
-              _reasoningBuffer.isNotEmpty ? _reasoningBuffer : null,
+              state.reasoningBuffer.isNotEmpty ? state.reasoningBuffer : null,
           rawRequest: rawRequestCapture,
           rawResponse: rawResponseCapture,
-          toolCalls:
-              _accumulatedToolCalls.isNotEmpty ? _accumulatedToolCalls : null,
-          reasoningSections:
-              _reasoningSections.isNotEmpty ? _reasoningSections : null,
+          toolCalls: state.accumulatedToolCalls.isNotEmpty
+              ? List<ToolCallData>.from(state.accumulatedToolCalls)
+              : null,
+          reasoningSections: state.reasoningSections.isNotEmpty
+              ? List<String>.from(state.reasoningSections)
+              : null,
         );
-        _history.add(msg);
+        state.history.add(msg);
+        assistantMessage = msg;
       }
     } catch (e, s) {
       debugPrint('[ChatStreamManager] 后处理错误: $e\n$s');
-    } finally {
-      _isStreaming = false;
-      _streamingMsgId = null;
-      _setProvider(isStreamingProvider, false);
-      _setProvider(streamingFullReplyProvider, '');
-      _setProvider(streamingHasFirstTokenProvider, false);
-      _setProvider(streamingToolCallsProvider, []);
     }
 
-    // 持久化完整消息
-    if (_streamingConvId != null && _history.isNotEmpty) {
-      await _saveMessages(convId: _streamingConvId!);
+    // Build the result and complete the resultCompleter BEFORE cleaning up
+    // the stream state, so duplicate callers get the final result.
+    final result = StreamResult(
+      history: List.from(state.history),
+      assistantMessage: assistantMessage,
+      fullReply: state.fullReply,
+      reasoningBuffer: state.reasoningBuffer,
+      reasoningSections: List.from(state.reasoningSections),
+      toolCalls: List.from(state.accumulatedToolCalls),
+      cancelled: wasCancelled,
+    );
+
+    // Complete the result completer so duplicate startStreaming calls
+    // await the same future and get the final result.
+    if (!state.resultCompleter!.isCompleted) {
+      state.resultCompleter!.complete(result);
     }
+
+    // Clean up this conversation's stream
+    state.isComplete = true;
+    state.resultCompleter = null;
+    _streams.remove(convId);
+
+    // If this was the active conversation, clear or switch providers
+    if (_activeConvId == convId) {
+      _activeConvId = null;
+      // Try to switch to another active stream
+      if (_streams.isNotEmpty) {
+        _activeConvId = _streams.keys.first;
+        _pushStateToProviders(_streams[_activeConvId]!);
+      } else {
+        _clearProviders();
+      }
+    }
+
+    // Persist complete messages
+    if (state.history.isNotEmpty) {
+      await _saveMessages(convId: convId, history: state.history);
+    }
+
+    return result;
   }
 
-  /// 取消当前流式请求。
-  ///
-  /// 只属于当前对话的取消才生效，防止误取消其他对话的流。
+  /// 取消指定对话的流式请求。如果 [convId] 为 null，取消所有。
   void cancel([String? convId]) {
-    if (!_isStreaming) return;
-    // 如果指定了 convId 且不匹配，说明取消的是其他对话，忽略
-    if (convId != null && convId != _streamingConvId) return;
-    _cancelledByUser = true;
+    if (convId != null) {
+      final state = _streams[convId];
+      if (state == null) return;
+      state.cancelledByUser = true;
+    } else {
+      if (_streams.isEmpty) return;
+      for (final s in _streams.values) {
+        s.cancelledByUser = true;
+      }
+    }
     _adapter.cancel();
   }
 
   /// 释放资源。
   void dispose() {
-    _persistTimer?.cancel();
-    _persistTimer = null;
-    cancel();
+    for (final s in _streams.values) {
+      s.persistTimer?.cancel();
+      s.persistTimer = null;
+    }
+    _streams.clear();
+    _activeConvId = null;
     _adapter.dispose();
   }
 
   // ── 私有方法 ──
 
-  /// 定期持久化部分结果。在流式进行中每5秒保存一次，
-  /// 防止应用突然终止导致已接收的数据丢失。
-  void _doPeriodicPersist() {
-    if (!_isStreaming || _streamingConvId == null) return;
-    if (_fullReply.isEmpty && _reasoningBuffer.isEmpty) return;
+  /// Pushes the state of the given conversation to global providers.
+  void _pushStateToProviders(_ConversationStreamState s) {
+    _setProvider(isStreamingProvider, true);
+    _setProvider(streamingMsgIdProvider, s.streamingMsgId);
+    _setProvider(streamingFullReplyProvider, s.fullReply);
+    _setProvider(streamingHasFirstTokenProvider, s.hasReceivedFirstToken);
+    _setProvider(streamingReasoningProvider, s.reasoningBuffer);
+    _setProvider(streamingReasoningSectionsProvider,
+        List<String>.from(s.reasoningSections));
+    _setProvider(
+        streamingToolCallsProvider, List<ToolCallData>.from(s.toolCalls));
+  }
+
+  /// Clears all global streaming providers.
+  void _clearProviders() {
+    _setProvider(isStreamingProvider, false);
+    _setProvider(streamingMsgIdProvider, null);
+    _setProvider(streamingFullReplyProvider, '');
+    _setProvider(streamingHasFirstTokenProvider, false);
+    _setProvider(streamingReasoningProvider, '');
+    _setProvider(streamingReasoningSectionsProvider, []);
+    _setProvider(streamingToolCallsProvider, []);
+  }
+
+  /// Only pushes a provider update if [convId] matches the active conversation.
+  void _maybeSetProvider<T>(String convId, StateProvider<T> provider, T value) {
+    if (_activeConvId != convId) return;
+    _setProvider(provider, value);
+  }
+
+  /// Periodic partial persistence for the given conversation's stream.
+  void _doPeriodicPersist(_ConversationStreamState s) {
+    if (s.cancelledByUser) return;
+    if (s.fullReply.isEmpty && s.reasoningBuffer.isEmpty) return;
     if (_ref == null) return;
     try {
-      // 构建包含当前部分结果的消息历史
-      // 注意：_history 可能还没有包含当前流式的消息
-      final partialHistory = List<ChatMessage>.from(_history);
-      if (_fullReply.isNotEmpty) {
-        final exists = partialHistory.any((m) => m.id == _streamingMsgId);
+      final partialHistory = List<ChatMessage>.from(s.history);
+      if (s.fullReply.isNotEmpty) {
+        final exists = partialHistory.any((m) => m.id == s.streamingMsgId);
         if (!exists) {
           partialHistory.add(ChatMessage(
             role: 'assistant',
-            content: _fullReply,
-            id: _streamingMsgId ?? '',
+            content: s.fullReply,
+            id: s.streamingMsgId ?? '',
             reasoningContent:
-                _reasoningBuffer.isNotEmpty ? _reasoningBuffer : null,
-            toolCalls: _accumulatedToolCalls.isNotEmpty
-                ? List<ToolCallData>.from(_accumulatedToolCalls)
+                s.reasoningBuffer.isNotEmpty ? s.reasoningBuffer : null,
+            toolCalls: s.accumulatedToolCalls.isNotEmpty
+                ? List<ToolCallData>.from(s.accumulatedToolCalls)
                 : null,
-            reasoningSections:
-                _reasoningSections.isNotEmpty ? _reasoningSections : null,
+            reasoningSections: s.reasoningSections.isNotEmpty
+                ? List<String>.from(s.reasoningSections)
+                : null,
           ));
         }
       }
       _ref!
           .read(conversationsProvider.notifier)
-          .updateMessages(_streamingConvId!, partialHistory);
+          .updateMessages(s.convId, partialHistory);
     } catch (e) {
       debugPrint('[ChatStreamManager] 定期持久化失败: $e');
     }
   }
 
-  Future<void> _saveMessages({required String convId}) async {
+  Future<void> _saveMessages({
+    required String convId,
+    required List<ChatMessage> history,
+  }) async {
     try {
       await _ref
           ?.read(conversationsProvider.notifier)
-          .updateMessages(convId, List<ChatMessage>.from(_history));
+          .updateMessages(convId, List<ChatMessage>.from(history));
     } catch (e, s) {
       debugPrint('[ChatStreamManager] 保存消息失败: $e\n$s');
       await AppLogService.error('ChatStreamManager', '保存消息失败', e, s);
