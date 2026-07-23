@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../catcatch/engine/js_hook_script.dart';
@@ -454,11 +455,16 @@ class _BrowserPageState extends State<BrowserPage> {
             ),
             // CatCatch panel show/hide toggle
             IconButton(
-              icon: Icon(
-                Icons.pets,
-                color: _catCatchPanelVisible
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.onSurfaceVariant,
+              icon: SvgPicture.asset(
+                'assets/images/cat_head.svg',
+                width: 24,
+                height: 24,
+                colorFilter: ColorFilter.mode(
+                  _catCatchPanelVisible
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                  BlendMode.srcIn,
+                ),
               ),
               tooltip: _catCatchPanelVisible ? '隐藏嗅探面板' : '显示嗅探面板',
               onPressed: () {
