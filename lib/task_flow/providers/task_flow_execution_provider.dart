@@ -9,8 +9,7 @@ final taskFlowExecutionsProvider =
   (ref) => TaskFlowExecutionNotifier(),
 );
 
-class TaskFlowExecutionNotifier
-    extends StateNotifier<List<TaskFlowExecution>> {
+class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>> {
   TaskFlowExecutionNotifier() : super([]);
 
   /// Create a new execution entry.
@@ -37,8 +36,8 @@ class TaskFlowExecutionNotifier
   }
 
   /// Update a sub-task's status.
-  void updateSubTaskStatus(String executionId, String subTaskId,
-      TaskStatus status) {
+  void updateSubTaskStatus(
+      String executionId, String subTaskId, TaskStatus status) {
     state = state.map((e) {
       if (e.id != executionId) return e;
       final updated = e.subTasks.map((st) {
@@ -56,7 +55,9 @@ class TaskFlowExecutionNotifier
       final allDone =
           e.subTasks.every((st) => st.status == TaskStatus.completed);
       return e.copyWith(
-        status: allDone ? FlowExecutionStatus.completed : FlowExecutionStatus.failed,
+        status: allDone
+            ? FlowExecutionStatus.completed
+            : FlowExecutionStatus.failed,
         completedAt: DateTime.now(),
       );
     }).toList();

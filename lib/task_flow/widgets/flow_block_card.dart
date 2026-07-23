@@ -45,9 +45,8 @@ class FlowBlockCard extends StatelessWidget {
       // Compare against the definition's default value
       if (dv != null && dv == e.value) return false;
       if (dv == null &&
-          (e.value.toString().isEmpty ||
-              e.value == 0 ||
-              e.value == false)) return false;
+          (e.value.toString().isEmpty || e.value == 0 || e.value == false))
+        return false;
       return true;
     }).toList();
 
@@ -115,23 +114,21 @@ class FlowBlockCard extends StatelessWidget {
                       ),
                       // Settings button
                       IconButton(
-                        icon: Icon(Icons.settings,
-                            size: 16, color: cs.primary),
+                        icon: Icon(Icons.settings, size: 16, color: cs.primary),
                         onPressed: onSettings ?? onTap,
                         padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                            minWidth: 28, minHeight: 28),
+                        constraints:
+                            const BoxConstraints(minWidth: 28, minHeight: 28),
                         tooltip: '设置参数',
                       ),
                       // Delete button (only shown for last block)
                       if (onDelete != null)
                         IconButton(
-                          icon: Icon(Icons.close,
-                              size: 16, color: cs.error),
+                          icon: Icon(Icons.close, size: 16, color: cs.error),
                           onPressed: onDelete,
                           padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                              minWidth: 28, minHeight: 28),
+                          constraints:
+                              const BoxConstraints(minWidth: 28, minHeight: 28),
                           tooltip: '删除',
                         ),
                     ],
@@ -244,7 +241,8 @@ class FlowBlockCard extends StatelessWidget {
                     ),
                     Text(
                       '该功能块类型未注册',
-                      style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                      style:
+                          TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                     ),
                   ],
                 ),

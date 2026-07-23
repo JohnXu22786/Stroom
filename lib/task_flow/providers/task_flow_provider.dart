@@ -16,8 +16,9 @@ import '../../services/storage_service.dart';
 /// Provider for the list of task flow definitions.
 ///
 /// Flows are ordered by [updatedAt] descending (newest first).
-final taskFlowListProvider = StateNotifierProvider<TaskFlowNotifier,
-    List<TaskFlowDefinition>>((ref) => TaskFlowNotifier());
+final taskFlowListProvider =
+    StateNotifierProvider<TaskFlowNotifier, List<TaskFlowDefinition>>(
+        (ref) => TaskFlowNotifier());
 
 // ============================================================================
 // Notifier
