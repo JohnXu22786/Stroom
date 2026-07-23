@@ -11,6 +11,11 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    BrowserCookieService.enableTestMode();
+  });
+
+  tearDown(() {
+    BrowserCookieService.disableTestMode();
   });
 
   // ====================================================================
@@ -33,10 +38,6 @@ void main() {
     test('persists retention state across set/get cycles', () async {
       await BrowserCookieService.setRetentionMode(true);
       expect(await BrowserCookieService.getRetentionMode(), isTrue);
-
-      // Simulate reload by creating a new SharedPreferences instance
-      await BrowserCookieService.setRetentionMode(true);
-      expect(await BrowserCookieService.getRetentionMode(), isTrue);
     });
 
     test('toggling twice returns to original state', () async {
@@ -51,25 +52,72 @@ void main() {
   });
 
   // ====================================================================
-  // Cookie manager calls (service-level)
+  // Cookie persistence integration
   // ====================================================================
 
-  group('BrowserCookieService cookie operations', () {
-    test('clearAllCookies handles errors gracefully', () async {
-      // This should not throw even if CookieManager is not available
-      // (e.g., in test environment without platform implementation)
-      final result = await BrowserCookieService.clearAllCookies();
-      // In test environment, this may return false (exception caught)
-      // or true (if CookieManager somehow works).
-      // The important thing is it doesn't throw.
-      expect(result, isA<bool>());
+  group('Cookie persistence integration', () {
+    test('persistCookiesToFile with retention enabled stores cookies',
+        () async {
+      await BrowserCookieService.setRetentionMode(true);
+
+      final testCookies = [
+        {
+          'domain': 'example.com',
+          'name': 'session',
+          'value': 'abc',
+          'path': '/',
+        },
+      ];
+
+      await BrowserCookieService.persistCookiesRawForTest(testCookies);
+      final cookies = await BrowserCookieService.getCookiesFromFile();
+      expect(cookies, isNotEmpty);
+      expect(cookies['example.com']?.first['name'], equals('session'));
     });
 
-    test('getAllCookiesGrouped returns empty on error', () async {
-      final result = await BrowserCookieService.getAllCookiesGrouped();
-      // In test environment without platform, should return empty map
-      expect(result, isA<Map<String, dynamic>>());
-      // Empty is expected since CookieManager requires platform
+    test('clearPersistedCookies called when retention disabled', () async {
+      // When retention is disabled and browser closes, cookies should be cleared
+      await BrowserCookieService.setRetentionMode(false);
+
+      final testCookies = [
+        {
+          'domain': 'example.com',
+          'name': 'session',
+          'value': 'abc',
+          'path': '/',
+        },
+      ];
+
+      await BrowserCookieService.persistCookiesRawForTest(testCookies);
+      await BrowserCookieService.clearPersistedCookies();
+
+      final cookies = await BrowserCookieService.getCookiesFromFile();
+      expect(cookies, isEmpty);
+    });
+
+    test('getCookiesGrouped returns combined data from file', () async {
+      final testCookies = [
+        {
+          'domain': 'store.example.com',
+          'name': 'token',
+          'value': 'xyz',
+          'path': '/',
+        },
+      ];
+
+      await BrowserCookieService.persistCookiesRawForTest(testCookies);
+      final grouped = await BrowserCookieService.getCookiesGrouped();
+
+      expect(grouped.containsKey('store.example.com'), isTrue);
+      expect(grouped['store.example.com']!.first['name'], equals('token'));
+    });
+
+    test('persistCookiesToFile with empty cookies is safe', () async {
+      await BrowserCookieService.setRetentionMode(true);
+      // Should not throw when there are no cookies
+      await BrowserCookieService.persistCookiesRawForTest([]);
+      final cookies = await BrowserCookieService.getCookiesFromFile();
+      expect(cookies, isEmpty);
     });
   });
 }

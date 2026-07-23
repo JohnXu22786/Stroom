@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../services/browser_cookie_service.dart';
 
@@ -7,7 +6,8 @@ import '../services/browser_cookie_service.dart';
 ///
 /// Allows users to:
 /// - Toggle cookie retention mode
-/// - View all stored cookies grouped by domain
+/// - View all stored cookies grouped by domain (from both the platform
+///   CookieManager and the persisted file store)
 /// - Clear all cookies
 /// - Clear individual cookies by domain
 class BrowserCookiesPage extends StatefulWidget {
@@ -19,7 +19,7 @@ class BrowserCookiesPage extends StatefulWidget {
 
 class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
   bool _retentionEnabled = false;
-  Map<String, List<Cookie>> _cookiesByDomain = {};
+  Map<String, List<Map<String, dynamic>>> _cookiesByDomain = {};
   bool _isLoadingCookies = true;
   bool _isClearing = false;
 
@@ -32,7 +32,7 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
   Future<void> _loadData() async {
     setState(() => _isLoadingCookies = true);
     final retention = await BrowserCookieService.getRetentionMode();
-    final cookies = await BrowserCookieService.getAllCookiesGrouped();
+    final cookies = await BrowserCookieService.getCookiesGrouped();
     if (mounted) {
       setState(() {
         _retentionEnabled = retention;
@@ -151,7 +151,9 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
           ),
           title: const Text('退出保留Cookies数据'),
           subtitle: Text(
-            _retentionEnabled ? '已启用 - 退出时保留Cookies' : '已禁用 - 退出时清除Cookies',
+            _retentionEnabled
+                ? '已启用 - 退出时保留Cookies'
+                : '已禁用 - 退出时清除Cookies',
           ),
           trailing: Switch(
             value: _retentionEnabled,
@@ -270,7 +272,7 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
   }
 
   Widget _buildDomainCard(
-      String domain, List<Cookie> cookies, ColorScheme colorScheme) {
+      String domain, List<Map<String, dynamic>> cookies, ColorScheme colorScheme) {
     final totalCookies = cookies.length;
 
     return Card(
@@ -306,7 +308,7 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            cookie.name,
+                            cookie['name'] as String? ?? '',
                             style: const TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
@@ -314,7 +316,7 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            _maskValue('${cookie.value}'),
+                            _maskValue(cookie['value'] as String? ?? ''),
                             style: TextStyle(
                               fontSize: 12,
                               color: colorScheme.onSurfaceVariant,
@@ -325,11 +327,11 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
                         ],
                       ),
                     ),
-                    if (cookie.path != null)
+                    if (cookie['path'] != null)
                       Padding(
                         padding: const EdgeInsets.only(right: 8),
                         child: Text(
-                          cookie.path!,
+                          cookie['path'] as String? ?? '',
                           style: TextStyle(
                             fontSize: 11,
                             color: colorScheme.onSurfaceVariant
@@ -345,7 +347,8 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
                         padding: EdgeInsets.zero,
                         color: Colors.red.shade300,
                         tooltip: '删除此Cookie',
-                        onPressed: () => _deleteSingleCookie(domain, cookie),
+                        onPressed: () =>
+                            _deleteSingleCookie(domain, cookie),
                       ),
                     ),
                   ],
@@ -358,8 +361,10 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
     );
   }
 
-  Future<void> _deleteSingleCookie(String domain, Cookie cookie) async {
-    await BrowserCookieService.deleteCookie(domain, cookie.name);
+  Future<void> _deleteSingleCookie(
+      String domain, Map<String, dynamic> cookie) async {
+    final name = cookie['name'] as String? ?? '';
+    await BrowserCookieService.deleteCookie(domain, name);
     await _loadData();
   }
 
