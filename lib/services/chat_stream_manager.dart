@@ -480,8 +480,18 @@ class ChatStreamManager {
       debugPrint('[ChatStreamManager] 后处理错误: $e\n$s');
     }
 
-    // Build the result and complete the resultCompleter BEFORE cleaning up
-    // the stream state, so duplicate callers get the final result.
+    // ── Persist BEFORE cleaning up stream state ──
+    // This guard ensures save always runs, even if the code below throws.
+    // It's the single persistence path for all streaming results.
+    try {
+      if (state.history.isNotEmpty) {
+        await _saveMessages(convId: convId, history: state.history);
+      }
+    } catch (_) {
+      // Best effort: save failure must not crash the stream completion
+    }
+
+    // Build the result and complete the resultCompleter AFTER save
     final result = StreamResult(
       history: List.from(state.history),
       assistantMessage: assistantMessage,
@@ -513,11 +523,6 @@ class ChatStreamManager {
       } else {
         _clearProviders();
       }
-    }
-
-    // Persist complete messages
-    if (state.history.isNotEmpty) {
-      await _saveMessages(convId: convId, history: state.history);
     }
 
     return result;
