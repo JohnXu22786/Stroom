@@ -625,19 +625,20 @@ class ChatStreamManager {
   }) async {
     final ref = _ref;
     if (ref == null) {
-      print(
-          '[PERSIST-MGR] _saveMessages: _ref is null, convId=$convId historyLen=${history.length}');
+      await AppLogService.warning(
+          'ChatStreamManager', '保存消息失败: _ref is null, convId=$convId');
       return;
     }
     try {
       await ref
           .read(conversationsProvider.notifier)
           .updateMessages(convId, List<ChatMessage>.from(history));
-      print(
-          '[PERSIST-MGR] _saveMessages: OK convId=$convId historyLen=${history.length}');
+      await AppLogService.info('ChatStreamManager',
+          '保存消息成功, convId=$convId, historyLen=${history.length}');
     } catch (e, s) {
-      print('[PERSIST-MGR] _saveMessages: FAILED convId=$convId $e');
-      await AppLogService.error('ChatStreamManager', '保存消息失败', e, s);
+      try {
+        await AppLogService.error('ChatStreamManager', '保存消息失败', e, s);
+      } catch (_) {}
     }
   }
 }
