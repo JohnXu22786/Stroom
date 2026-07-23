@@ -1062,7 +1062,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final index = _history.indexWhere((m) => m.id == messageId);
     if (index == -1 || index >= _history.length) return;
 
-    // Remove this message and all after from history
+    // Remove this message and all after from history and controller.
     try {
       if (index < _history.length) {
         final removed = _history.sublist(index);
@@ -1087,9 +1087,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
       debugPrint('[ChatPage] _editUserMessageWithText remove failed: $e');
     }
 
-    // Persist the truncated history immediately so the conversationsProvider
-    // listener (which watches for length changes) doesn't reload the old
-    // messages from the provider before the new stream starts.
+    // Force the UI to reflect the truncated history BEFORE any provider
+    // listener fires _loadConversationMessages (which would reload old
+    // messages from the provider before _saveMessages below runs).
+    if (mounted) setState(() {});
+
+    // Now persist the truncated history. This must happen before
+    // _onMessageSend calls _saveEnabledToolsToConversation which
+    // triggers the conversationsProvider listener.
     await _saveMessages();
 
     // Send with edited text and the combined attachments (original + new)
@@ -1124,6 +1129,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
     } catch (e) {
       debugPrint('[ChatPage] _retryAssistantMessage remove failed: $e');
     }
+
+    // Force UI rebuild and sync provider before re-streaming
+    if (mounted) setState(() {});
+    await _saveMessages();
 
     // Re-generate using the preceding user message
     final userMsg = _history[index - 1];
