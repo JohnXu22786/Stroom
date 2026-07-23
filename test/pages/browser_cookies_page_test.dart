@@ -199,7 +199,8 @@ void main() {
 
       // Find and tap the delete button for the domain
       // The delete button is an IconButton with tooltip '清除此域名下的所有Cookies'
-      final deleteButtons = find.widgetWithIcon(IconButton, Icons.delete_outline);
+      final deleteButtons =
+          find.widgetWithIcon(IconButton, Icons.delete_outline);
       expect(deleteButtons, findsAtLeast(1));
     });
   });

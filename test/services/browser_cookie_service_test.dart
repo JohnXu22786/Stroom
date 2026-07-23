@@ -189,8 +189,7 @@ void main() {
   // ====================================================================
 
   group('getCookiesGrouped', () {
-    test('getCookiesGrouped returns empty map when no cookies exist',
-        () async {
+    test('getCookiesGrouped returns empty map when no cookies exist', () async {
       final result = await BrowserCookieService.getCookiesGrouped();
       // In test mode without platform CookieManager, should return file-based
       // data (which is empty)
