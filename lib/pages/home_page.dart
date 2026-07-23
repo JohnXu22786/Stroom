@@ -762,7 +762,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ],
                 ),
               ),
-              // Add button
+              // Arrow indicator
               Container(
                 width: 32,
                 height: 32,
@@ -771,7 +771,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
-                  taskFlows.isEmpty ? Icons.add : Icons.chevron_right,
+                  Icons.chevron_right,
                   size: 18,
                   color: cs.tertiary,
                 ),
