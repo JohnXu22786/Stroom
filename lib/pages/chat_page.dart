@@ -1087,6 +1087,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
       debugPrint('[ChatPage] _editUserMessageWithText remove failed: $e');
     }
 
+    // Persist the truncated history immediately so the conversationsProvider
+    // listener (which watches for length changes) doesn't reload the old
+    // messages from the provider before the new stream starts.
+    await _saveMessages();
+
     // Send with edited text and the combined attachments (original + new)
     await _onMessageSend(newText, newAttachments);
   }
