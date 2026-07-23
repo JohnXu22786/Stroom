@@ -638,8 +638,12 @@ class ChatStreamManager {
       await ref
           .read(conversationsProvider.notifier)
           .updateMessages(convId, List<ChatMessage>.from(history));
-      await AppLogService.info('ChatStreamManager',
-          '保存消息成功, convId=$convId, historyLen=${history.length}');
+      final lastMsg = history.isNotEmpty ? history.last : null;
+      await AppLogService.info(
+          'ChatStreamManager',
+          '保存消息成功, convId=$convId, historyLen=${history.length}, '
+              'hasToolCalls=${lastMsg?.toolCalls?.isNotEmpty ?? false}, '
+              'hasReasoning=${lastMsg?.reasoningSections?.isNotEmpty ?? false}');
     } catch (e, s) {
       try {
         await AppLogService.error('ChatStreamManager', '保存消息失败', e, s);
