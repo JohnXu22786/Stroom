@@ -70,6 +70,9 @@ class BackupSelection {
   /// Anki 闪卡原始数据库（collection.anki2）
   final bool ankiData;
 
+  /// 浏览器Cookies持久化数据（browser_cookies.json）
+  final bool browserCookies;
+
   const BackupSelection({
     this.chatRecordsAndAttachments = true,
     this.settings = true,
@@ -79,6 +82,7 @@ class BackupSelection {
     this.texts = true,
     this.tasks = true,
     this.ankiData = true,
+    this.browserCookies = true,
   });
 
   /// 全量选择（所有类别）。
@@ -95,6 +99,7 @@ class BackupSelection {
     if (texts) labels.add('文本');
     if (tasks) labels.add('任务');
     if (ankiData) labels.add('Anki闪卡数据');
+    if (browserCookies) labels.add('浏览器Cookies');
     return labels;
   }
 }
@@ -392,6 +397,18 @@ class BackupService {
       } catch (_) {}
     }
 
+    // 4c. 浏览器Cookies持久化数据
+    if (selection.browserCookies && !kIsWeb && !WebFileStore.isTestMode) {
+      try {
+        final appDir = await AppStorage.directory;
+        final cookiesFile = p.join(appDir, 'browser_cookies.json');
+        if (File(cookiesFile).existsSync()) {
+          await addTaskFileToArchive(
+              archive, 'browser_cookies.json', cookiesFile);
+        }
+      } catch (_) {}
+    }
+
     // 5. 二进制文件（按存储格式：pictures/, tts_audio/, videos/, texts/, attachments/）
     debugPrint('[BackupService] _buildBackupBytes: adding binary files');
 
@@ -631,7 +648,16 @@ class BackupService {
       'preferences.json',
       'chat_data.json',
       'settings.json',
+      'browser_cookies.json',
     };
+
+    // 恢复浏览器Cookies持久化数据
+    if (selection.browserCookies) {
+      final bcData = fileMap['browser_cookies.json'];
+      if (bcData != null) {
+        await writeBackupFile('', 'browser_cookies.json', bcData);
+      }
+    }
 
     // 根据 selection 决定哪些目录需要恢复
     // v1 格式：attachments 由旧的 conversations 标志控制（因为 v1 的

@@ -131,14 +131,28 @@ class _BrowserPageState extends State<BrowserPage> {
     setState(() => _cookieRetentionEnabled = enabled);
   }
 
+  /// Restores persisted cookies to the WebView (if retention is enabled).
+  /// Should be called after the WebView is created.
+  Future<void> _restoreCookies() async {
+    await BrowserCookieService.restoreCookiesFromFile();
+  }
+
+  /// Persists current cookies to file (if retention is enabled).
+  /// Should be called after page loads and on browser close.
+  Future<void> _persistCookies() async {
+    await BrowserCookieService.persistCookiesToFile();
+  }
+
   @override
   void dispose() {
     _urlController.dispose();
 
-    // When cookie retention is disabled (privacy mode), delete all cookies
-    // on browser close to ensure no history/cookies persist after exit.
-    // When retention is enabled, cookies are preserved across sessions.
-    if (!_cookieRetentionEnabled) {
+    // When cookie retention is enabled, persist cookies to file so they
+    // survive the browser close. When disabled, clear everything.
+    // clearAllCookies already clears the persisted store internally.
+    if (_cookieRetentionEnabled) {
+      BrowserCookieService.persistCookiesToFile();
+    } else {
       BrowserCookieService.clearAllCookies();
     }
 
@@ -314,6 +328,9 @@ class _BrowserPageState extends State<BrowserPage> {
                         }
                       },
                     );
+
+                    // Restore persisted cookies if retention is enabled
+                    _restoreCookies();
                   },
                   onLoadStart: (controller, url) {
                     setState(() => _isLoading = true);
@@ -330,6 +347,8 @@ class _BrowserPageState extends State<BrowserPage> {
                     if (!_catCatchHookInjected) {
                       _injectCatCatchHook();
                     }
+                    // Persist cookies after page load (if retention enabled)
+                    _persistCookies();
                     // Also run a DOM scan after page load
                     controller.evaluateJavascript(
                       source: '''
@@ -414,6 +433,7 @@ class _BrowserPageState extends State<BrowserPage> {
               ),
               tooltip: _isDesktopMode ? '切换到手机版' : '切换到电脑版',
               onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
                 setState(() {
                   _isDesktopMode = !_isDesktopMode;
                 });
@@ -425,6 +445,14 @@ class _BrowserPageState extends State<BrowserPage> {
                   settings: _buildSettings(isDesktopMode: _isDesktopMode),
                 );
                 _webViewController?.reload();
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      _isDesktopMode ? '已切换到电脑版UA' : '已切换到手机版UA',
+                    ),
+                    duration: const Duration(seconds: 1),
+                  ),
+                );
               },
             ),
             // Cookie retention toggle
