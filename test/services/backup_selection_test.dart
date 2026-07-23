@@ -35,11 +35,12 @@ void main() {
       expect(sel.texts, isTrue);
       expect(sel.tasks, isTrue);
       expect(sel.ankiData, isTrue);
+      expect(sel.browserCookies, isTrue);
     });
 
-    test('BackupSelection.all.selectedLabels returns all 8 labels', () {
+    test('BackupSelection.all.selectedLabels returns all 9 labels', () {
       final labels = BackupSelection.all.selectedLabels;
-      expect(labels.length, equals(8));
+      expect(labels.length, equals(9));
       expect(labels, contains('聊天记录和附件'));
       expect(labels, contains('设置'));
       expect(labels, contains('图片'));
@@ -48,6 +49,7 @@ void main() {
       expect(labels, contains('文本'));
       expect(labels, contains('任务'));
       expect(labels, contains('Anki闪卡数据'));
+      expect(labels, contains('浏览器Cookies'));
     });
 
     test('BackupSelection with pictures-only returns correct labels', () {
@@ -60,6 +62,7 @@ void main() {
         texts: false,
         tasks: false,
         ankiData: false,
+        browserCookies: false,
       );
       final labels = sel.selectedLabels;
       expect(labels.length, equals(1));
@@ -76,6 +79,7 @@ void main() {
       expect(sel.texts, isTrue);
       expect(sel.tasks, isTrue);
       expect(sel.ankiData, isTrue);
+      expect(sel.browserCookies, isTrue);
     });
 
     test('ankiData=false excludes Anki from selectedLabels', () {
@@ -88,6 +92,7 @@ void main() {
         texts: false,
         tasks: false,
         ankiData: false,
+        browserCookies: false,
       );
       final labels = sel.selectedLabels;
       expect(labels, isEmpty,
@@ -105,6 +110,7 @@ void main() {
         texts: false,
         tasks: false,
         ankiData: true,
+        browserCookies: false,
       );
       final labels = sel.selectedLabels;
       expect(labels.length, equals(1));
@@ -121,6 +127,7 @@ void main() {
         texts: false,
         tasks: false,
         ankiData: false,
+        browserCookies: false,
       );
       final labels = sel.selectedLabels;
       expect(labels.length, equals(1));
@@ -137,10 +144,28 @@ void main() {
         texts: false,
         tasks: false,
         ankiData: false,
+        browserCookies: false,
       );
       final labels = sel.selectedLabels;
       expect(labels.length, equals(1));
       expect(labels.first, equals('设置'));
+    });
+
+    test('browserCookies-only shows 1 label', () {
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: true,
+      );
+      final labels = sel.selectedLabels;
+      expect(labels.length, equals(1));
+      expect(labels.first, equals('浏览器Cookies'));
     });
   });
 

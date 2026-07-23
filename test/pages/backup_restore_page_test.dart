@@ -44,6 +44,7 @@ void main() {
       expect(find.text('视频'), findsAtLeast(1));
       expect(find.text('文本'), findsAtLeast(1));
       expect(find.text('任务'), findsAtLeast(1));
+      expect(find.text('浏览器Cookies'), findsAtLeast(1));
     });
 
     testWidgets('export and import buttons both exist', (tester) async {

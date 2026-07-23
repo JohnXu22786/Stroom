@@ -27,7 +27,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   bool _isAnkiImporting = false;
 
   // 统一选择（对应新 BackupSelection 字段）
-  // 聊天记录和附件、设置、图片、音频、视频、文本、任务、Anki数据
+  // 聊天记录和附件、设置、图片、音频、视频、文本、任务、Anki数据、浏览器Cookies
   bool _chatRecordsAndAttachments = true;
   bool _settings = true;
   bool _pictures = true;
@@ -36,6 +36,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   bool _texts = true;
   bool _tasks = true;
   bool _ankiData = true;
+  bool _browserCookies = true;
 
   BackupSelection get _selection => BackupSelection(
         chatRecordsAndAttachments: _chatRecordsAndAttachments,
@@ -46,6 +47,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         texts: _texts,
         tasks: _tasks,
         ankiData: _ankiData,
+        browserCookies: _browserCookies,
       );
 
   @override
@@ -77,7 +79,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         _videos ||
         _texts ||
         _tasks ||
-        _ankiData;
+        _ankiData ||
+        _browserCookies;
   }
 
   Future<void> _onExport() async {
@@ -207,6 +210,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     if (selection.texts) restoreWarnings.add('文本将被覆盖');
     if (selection.tasks) restoreWarnings.add('任务将被覆盖');
     if (selection.ankiData) restoreWarnings.add('Anki闪卡数据库将被覆盖');
+    if (selection.browserCookies) restoreWarnings.add('浏览器Cookies将被覆盖');
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -699,6 +703,15 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
               subtitle: 'Anki 原始数据库',
               icon: Icons.extension,
               iconColor: Colors.green,
+            ),
+            const Divider(height: 1),
+            _buildCheckboxItem(
+              value: _browserCookies,
+              onChanged: (v) => setState(() => _browserCookies = v ?? false),
+              title: '浏览器Cookies',
+              subtitle: '内置浏览器持久化的Cookies数据',
+              icon: Icons.cookie,
+              iconColor: Colors.orange,
             ),
             const SizedBox(height: 4),
           ],
