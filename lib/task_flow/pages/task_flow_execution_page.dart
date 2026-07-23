@@ -12,6 +12,13 @@ import '../models/io_type.dart';
 import '../providers/task_flow_provider.dart';
 import '../providers/task_flow_execution_provider.dart';
 
+/// Thrown when the execution page is disposed during a block execution.
+/// Catched in [_startFlow] to stop the loop without marking the flow as failed.
+class _FlowDisposedException implements Exception {
+  @override
+  String toString() => 'FlowDisposedException';
+}
+
 /// Page for executing a task flow.
 ///
 /// The user provides the initial input (based on the first block's input type),
@@ -501,6 +508,13 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
         currentData = result;
 
         await Future.delayed(const Duration(milliseconds: 300));
+      } on _FlowDisposedException {
+        // Widget was disposed while a block was running (e.g., CatCatch download).
+        // The underlying task continues independently — the flow stays "running"
+        // and the user can check progress in the task list.
+        _stepResults.add('⏸ ${def.label} 后台继续');
+        allSucceeded = false;
+        break;
       } catch (e) {
         _stepResults.add('❌ ${def.label} 失败: $e');
         execNotifier.failExecution(execId, error: '$e');
@@ -711,8 +725,10 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
       }
     }
 
-    // Widget disposed — mark sub-task as failed before throwing
-    execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
-    throw Exception('页面已关闭，任务流中断');
+    // Widget disposed while CatCatch task is still running.
+    // Do NOT throw or mark as failed — the CatCatch task runs independently
+    // in the provider and will continue. The flow execution stays "running"
+    // and the user can check the task's progress in the task list.
+    throw _FlowDisposedException();
   }
 }

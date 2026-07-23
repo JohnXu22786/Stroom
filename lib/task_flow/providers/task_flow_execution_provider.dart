@@ -36,6 +36,10 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>> {
   }
 
   /// Update a sub-task's status.
+  ///
+  /// If the execution is still "running" and all sub-tasks have reached a
+  /// terminal state (completed or failed), this method will automatically
+  /// mark the execution as completed/failed.
   void updateSubTaskStatus(
       String executionId, String subTaskId, TaskStatus status) {
     state = state.map((e) {
@@ -44,7 +48,28 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>> {
         if (st.id != subTaskId) return st;
         return st.copyWithStatus(status);
       }).toList();
-      return e.copyWith(subTasks: updated);
+      e = e.copyWith(subTasks: updated);
+      // Auto-complete/auto-fail if all sub-tasks reached terminal state.
+      // This handles the case where the execution page was disposed mid-flow
+      // and the underlying tasks continued running in the background.
+      if (e.status == FlowExecutionStatus.running) {
+        final allTerminal = updated.every(
+          (st) =>
+              st.status == TaskStatus.completed ||
+              st.status == TaskStatus.failed,
+        );
+        if (allTerminal && updated.isNotEmpty) {
+          final allCompleted =
+              updated.every((st) => st.status == TaskStatus.completed);
+          return e.copyWith(
+            status: allCompleted
+                ? FlowExecutionStatus.completed
+                : FlowExecutionStatus.failed,
+            completedAt: DateTime.now(),
+          );
+        }
+      }
+      return e;
     }).toList();
   }
 
