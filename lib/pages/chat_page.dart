@@ -943,25 +943,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
             );
 
     // ── Post-stream completion ──
-    // Update _history IMMEDIATELY from the StreamResult (no ref.read needed,
-    // so this works even if the widget was disposed during background streaming).
+    // Update _history from the StreamResult (no ref.read needed, so this
+    // works even if the widget was disposed during background streaming).
+    // Persistence is handled by ChatStreamManager._saveMessages which uses
+    // the manager's own Ref (from Provider creation, survives widget dispose).
     _history.clear();
     _history.addAll(result.history);
-
-    print(
-        '[PERSIST] _startStreaming: stream done, convId=${effectiveConvId} capturedConvId=$capturedConvId resultHistoryLen=${result.history.length}');
-
-    // Persist now using the page's own ref. This MUST happen before any
-    // ref.read() calls below, because after widget disposal those calls may
-    // throw and prevent the save from ever executing.
-    try {
-      print('[PERSIST] _startStreaming: saving messages...');
-      await _saveMessages(capturedConvId: capturedConvId);
-      print('[PERSIST] _startStreaming: save OK, convId=${capturedConvId}');
-    } catch (e) {
-      print('[PERSIST] _startStreaming: save FAILED: $e');
-      debugPrint('[ChatPage] _saveMessages failed: $e');
-    }
 
     // Clean up local streaming state and providers. Wrap in try-catch
     // because ref.read() may fail if the widget was disposed while the
