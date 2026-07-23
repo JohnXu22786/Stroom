@@ -3,9 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/ai_stream_event.dart';
-import 'package:stroom/models/chat_event.dart';
 import 'package:stroom/models/chat_message.dart';
-import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/chat_api_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_adapter.dart';
@@ -366,29 +364,11 @@ void main() {
         'interference', () async {
       final manager = ChatStreamManager();
 
-      // Providers will each have a separate mock
-      final providerA = _MockProvider([
-        [AIStreamEvent('Hello from A')],
-      ]);
-      final providerB = _MockProvider([
-        [AIStreamEvent('Hello from B')],
-      ]);
-      // Both use the same adapter, but forceService is called per-stream
-      // so we need two separate managers OR we accept that a single
-      // manager uses one adapter. Let's use one adapter with a single
-      // provider that handles multi-round.
-      // For this test, simulate: first stream holds, second stream starts.
       final completerA = Completer<void>();
-      final completerB = Completer<void>();
 
-      // We need two separate adapter setups.
-      // ChatStreamManager uses ONE ChatAdapter. So to test concurrent
-      // streams with different provider behavior, we need either:
-      // a) A mock adapter, or
-      // b) Sequential testing (convA completes, then check convB still runs)
-      //
-      // Let's test: Start convA (long-running), start convB (quick), verify
-      // both run independently, cancel convA, verify convB still completes.
+      // Use sequential testing: Start convA while it blocks, cancel it,
+      // then verify convB streams normally afterward. (True concurrency
+      // is limited by the single ChatAdapter.)
       final providerA2 = _MockProvider(
         [
           [AIStreamEvent('Slow A response')]
