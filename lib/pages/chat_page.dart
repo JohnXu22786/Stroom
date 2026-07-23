@@ -641,18 +641,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
         final msg = _history[i];
         await _controller?.insertMessage(
           Message.text(
-            id: userMsgId,
-            authorId: _currentUser.id,
-            text: text,
-            createdAt: DateTime.now(),
+            id: msg.id,
+            authorId: msg.role == 'user' ? _currentUser.id : _aiUser.id,
+            text: msg.content,
+            createdAt: msg.createdAt,
           ),
         );
-
-        print(
-            '[DEBUG-HIST] _onMessageSend BEFORE stream: _history.length=${_history.length}');
-        await _startStreaming(text, capturedConvId: convId);
-        print(
-            '[DEBUG-HIST] _onMessageSend AFTER stream: _history.length=${_history.length}');
       }
       await AppLogService.info(
           'ChatPage', '控制器消息插入完成，共 ${_controller?.messages.length ?? 0} 条');
@@ -880,8 +874,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
 
     print(
-        '[PERSIST] _onMessageSend: sending message, convId=$convId historyLen=${_history.length}');
+        '[DEBUG-HIST] _onMessageSend: BEFORE stream, _history.length=${_history.length}');
     await _startStreaming(text, capturedConvId: convId);
+    print(
+        '[DEBUG-HIST] _onMessageSend: AFTER stream, _history.length=${_history.length}');
     print(
         '[PERSIST] _onMessageSend: streaming done, convId=$convId historyLen=${_history.length}');
   }
