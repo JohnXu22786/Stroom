@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import '../../catcatch/models/catcatch_task.dart' as catcatch;
 import '../../providers/task_provider.dart';
 import '../../providers/background_task_provider.dart';
+import '../../task_flow/models/task_flow_execution.dart';
 import '../../services/storage_service.dart';
 import '../../utils/text_manifest.dart';
 import '../audio_player_page.dart';
@@ -308,18 +309,22 @@ class UnifiedTaskItem {
   final DateTime createdAt;
   final bool isCatCatch;
   final bool isBackground;
+  final bool isTaskFlow;
   final catcatch.CatCatchTask? catCatchTask;
   final SynthesisTask? synthesisTask;
   final BackgroundTask? backgroundTask;
+  final TaskFlowExecution? taskFlowExecution;
 
   const UnifiedTaskItem({
     required this.id,
     required this.createdAt,
-    required this.isCatCatch,
+    this.isCatCatch = false,
     this.isBackground = false,
+    this.isTaskFlow = false,
     this.catCatchTask,
     this.synthesisTask,
     this.backgroundTask,
+    this.taskFlowExecution,
   });
 }
 

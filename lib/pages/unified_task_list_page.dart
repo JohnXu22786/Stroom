@@ -5,9 +5,11 @@ import '../catcatch/models/catcatch_task.dart' as catcatch;
 import '../catcatch/providers/catcatch_provider.dart';
 import '../providers/task_provider.dart';
 import '../providers/background_task_provider.dart';
+import '../task_flow/providers/task_flow_execution_provider.dart';
 import 'unified_task_list/catcatch_task_card.dart';
 import 'unified_task_list/synthesis_task_card.dart';
 import 'unified_task_list/background_task_card.dart';
+import 'unified_task_list/task_flow_card.dart';
 import 'unified_task_list/task_utils.dart';
 
 // Re-export public APIs for backward compatibility
@@ -31,7 +33,19 @@ enum TaskTab { all, inProgress, completed, failed }
 
 /// Map a [UnifiedTaskItem] to its [TaskTab] category.
 TaskTab _taskTab(UnifiedTaskItem item) {
-  if (item.isCatCatch) {
+  if (item.isTaskFlow) {
+    final status = item.taskFlowExecution!.taskStatus;
+    switch (status) {
+      case TaskStatus.running:
+      case TaskStatus.paused:
+      case TaskStatus.waiting:
+        return TaskTab.inProgress;
+      case TaskStatus.completed:
+        return TaskTab.completed;
+      case TaskStatus.failed:
+        return TaskTab.failed;
+    }
+  } else if (item.isCatCatch) {
     final t = item.catCatchTask!;
     switch (t.status) {
       case catcatch.TaskStatus.running:
@@ -122,6 +136,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
     final catcatchTasks = ref.watch(catcatchTasksProvider);
     final synthesisTasks = ref.watch(taskListProvider);
     final backgroundTasks = ref.watch(backgroundTasksProvider);
+    final taskFlowExecutions = ref.watch(taskFlowExecutionsProvider);
 
     final allTasks = <UnifiedTaskItem>[
       for (final t in catcatchTasks)
@@ -147,6 +162,13 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
           isCatCatch: false,
           isBackground: true,
           backgroundTask: t,
+        ),
+      for (final t in taskFlowExecutions)
+        UnifiedTaskItem(
+          id: t.id,
+          createdAt: t.createdAt,
+          isTaskFlow: true,
+          taskFlowExecution: t,
         ),
     ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
@@ -353,6 +375,14 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
       itemBuilder: (_, i) {
         final item = tasks[i];
         final lastRead = ref.watch(taskListLastReadProvider);
+        if (item.isTaskFlow) {
+          final exec = item.taskFlowExecution!;
+          return TaskFlowCard(
+            key: ValueKey(item.id),
+            execution: exec,
+            isUnread: exec.createdAt.isAfter(lastRead),
+          );
+        }
         if (item.isCatCatch) {
           final t = item.catCatchTask!;
           final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);
