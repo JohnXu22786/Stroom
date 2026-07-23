@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../catcatch/models/catcatch_task.dart' as catcatch;
 import '../../catcatch/providers/catcatch_provider.dart';
 import '../../providers/background_task_provider.dart';
 import '../../providers/task_provider.dart';
+import '../../providers/task_provider_shared.dart';
 import '../../task_flow/models/task_flow_execution.dart';
 import '../../task_flow/providers/task_flow_execution_provider.dart';
 import 'background_task_card.dart';
@@ -37,6 +39,12 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final exec = widget.execution;
+
+    // Sync sub-task statuses with underlying real tasks.
+    // When the execution page is disposed mid-flow, the polling loop stops
+    // but the CatCatch/Background tasks continue running. This keeps the
+    // sub-task statuses in sync so auto-completion works.
+    _syncSubTaskStatuses();
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
@@ -162,6 +170,70 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
         ],
       ),
     );
+  }
+
+  /// Sync sub-task statuses with the underlying real tasks.
+  ///
+  /// When the execution page is disposed mid-flow (user navigated away),
+  /// the CatCatch/Background/Synthesis tasks continue running in their
+  /// respective providers. This method keeps the flow execution's sub-task
+  /// statuses in sync, which triggers [updateSubTaskStatus] auto-completion.
+  void _syncSubTaskStatuses() {
+    final exec = widget.execution;
+    if (exec.status != FlowExecutionStatus.running) return;
+
+    final execNotifier = ref.read(taskFlowExecutionsProvider.notifier);
+    final catcatchTasks = ref.read(catcatchTasksProvider);
+    final bgTasks = ref.read(backgroundTasksProvider);
+    final synthTasks = ref.read(taskListProvider);
+
+    for (final st in exec.subTasks) {
+      // Skip already-terminal sub-tasks (no need to update)
+      if (st.status == TaskStatus.completed || st.status == TaskStatus.failed) {
+        continue;
+      }
+
+      // Check CatCatch tasks (uses a different TaskStatus enum)
+      final ccTask =
+          catcatchTasks.where((t) => t.id == st.subTaskId).firstOrNull;
+      if (ccTask != null) {
+        final newStatus = _convertCatCatchStatus(ccTask.status);
+        if (newStatus != st.status) {
+          execNotifier.updateSubTaskStatus(exec.id, st.id, newStatus);
+        }
+        continue;
+      }
+
+      // Check Background tasks
+      final bgTask = bgTasks.where((t) => t.id == st.subTaskId).firstOrNull;
+      if (bgTask != null && bgTask.status != st.status) {
+        execNotifier.updateSubTaskStatus(exec.id, st.id, bgTask.status);
+        continue;
+      }
+
+      // Check Synthesis tasks
+      final synthTask =
+          synthTasks.where((t) => t.id == st.subTaskId).firstOrNull;
+      if (synthTask != null && synthTask.status != st.status) {
+        execNotifier.updateSubTaskStatus(exec.id, st.id, synthTask.status);
+      }
+    }
+  }
+
+  /// Convert CatCatch's [TaskStatus] enum to the shared [TaskStatus] enum.
+  TaskStatus _convertCatCatchStatus(catcatch.TaskStatus status) {
+    switch (status) {
+      case catcatch.TaskStatus.waiting:
+        return TaskStatus.waiting;
+      case catcatch.TaskStatus.running:
+        return TaskStatus.running;
+      case catcatch.TaskStatus.completed:
+        return TaskStatus.completed;
+      case catcatch.TaskStatus.failed:
+        return TaskStatus.failed;
+      case catcatch.TaskStatus.paused:
+        return TaskStatus.paused;
+    }
   }
 
   /// Build a sub-task row that can expand to show the underlying task card.
