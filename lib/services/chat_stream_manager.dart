@@ -265,6 +265,8 @@ class ChatStreamManager {
     state.history = List.from(history);
     state.lastTextUpdate = DateTime.now();
     state.lastReasoningUpdate = DateTime.now();
+    print(
+        '[DEBUG-HIST-MGR] startStreaming: received historyLen=${history.length}, convId=$convId');
 
     final aiMsgId = 'a${DateTime.now().millisecondsSinceEpoch}';
     state.streamingMsgId = aiMsgId;
@@ -485,10 +487,14 @@ class ChatStreamManager {
     // It's the single persistence path for all streaming results.
     try {
       if (state.history.isNotEmpty) {
+        print(
+            '[DEBUG-HIST-MGR] about to save: state.history.length=${state.history.length}, fullReply.isNotEmpty=${state.fullReply.isNotEmpty}');
         await _saveMessages(convId: convId, history: state.history);
+        print(
+            '[DEBUG-HIST-MGR] save completed: state.history.length=${state.history.length}');
       }
     } catch (_) {
-      // Best effort: save failure must not crash the stream completion
+      print('[DEBUG-HIST-MGR] save failed');
     }
 
     // Build the result and complete the resultCompleter AFTER save
