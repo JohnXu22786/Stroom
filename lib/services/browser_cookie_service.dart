@@ -200,7 +200,8 @@ class BrowserCookieService {
         return sortedMap;
       }
     } catch (e) {
-      debugPrint('BrowserCookieService.getCookiesGrouped error (CookieManager): $e');
+      debugPrint(
+          'BrowserCookieService.getCookiesGrouped error (CookieManager): $e');
     }
 
     // Fall back to file-based store
@@ -242,8 +243,7 @@ class BrowserCookieService {
       // Also remove from persisted store
       await _removeDomainFromFile(domain);
 
-      final cleanDomain =
-          domain.startsWith('.') ? domain.substring(1) : domain;
+      final cleanDomain = domain.startsWith('.') ? domain.substring(1) : domain;
       if (cleanDomain.isEmpty) return false;
 
       final httpsUrl = WebUri('https://$cleanDomain');
@@ -298,8 +298,7 @@ class BrowserCookieService {
       // Also remove from persisted store
       await _removeCookieFromFile(domain, name);
 
-      final cleanDomain =
-          domain.startsWith('.') ? domain.substring(1) : domain;
+      final cleanDomain = domain.startsWith('.') ? domain.substring(1) : domain;
       if (cleanDomain.isEmpty) return false;
 
       final httpsUrl = WebUri('https://$cleanDomain');
@@ -329,7 +328,8 @@ class BrowserCookieService {
 
   /// Writes cookies list to the persistence file (or in-memory store in
   /// test mode).
-  static Future<void> _writeCookiesFile(List<Map<String, dynamic>> cookies) async {
+  static Future<void> _writeCookiesFile(
+      List<Map<String, dynamic>> cookies) async {
     if (_testMode) {
       _testCookies = cookies;
       return;
@@ -359,8 +359,7 @@ class BrowserCookieService {
   static Future<void> _removeDomainFromFile(String domain) async {
     try {
       final list = await _readCookiesFile();
-      final cleanDomain =
-          domain.startsWith('.') ? domain.substring(1) : domain;
+      final cleanDomain = domain.startsWith('.') ? domain.substring(1) : domain;
       list.removeWhere((c) {
         final d = (c['domain'] as String?) ?? '';
         final cleanD = d.startsWith('.') ? d.substring(1) : d;
@@ -376,8 +375,7 @@ class BrowserCookieService {
   static Future<void> _removeCookieFromFile(String domain, String name) async {
     try {
       final list = await _readCookiesFile();
-      final cleanDomain =
-          domain.startsWith('.') ? domain.substring(1) : domain;
+      final cleanDomain = domain.startsWith('.') ? domain.substring(1) : domain;
       list.removeWhere((c) {
         final d = (c['domain'] as String?) ?? '';
         final cleanD = d.startsWith('.') ? d.substring(1) : d;
@@ -398,7 +396,8 @@ class BrowserCookieService {
   @visibleForTesting
   static Future<void> persistCookiesRawForTest(
       List<Map<String, dynamic>> cookies) async {
-    assert(_testMode, 'persistCookiesRawForTest should only be called in test mode');
+    assert(_testMode,
+        'persistCookiesRawForTest should only be called in test mode');
     _testCookies = List.from(cookies);
   }
 }

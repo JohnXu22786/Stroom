@@ -151,9 +151,7 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
           ),
           title: const Text('退出保留Cookies数据'),
           subtitle: Text(
-            _retentionEnabled
-                ? '已启用 - 退出时保留Cookies'
-                : '已禁用 - 退出时清除Cookies',
+            _retentionEnabled ? '已启用 - 退出时保留Cookies' : '已禁用 - 退出时清除Cookies',
           ),
           trailing: Switch(
             value: _retentionEnabled,
@@ -271,8 +269,8 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
     );
   }
 
-  Widget _buildDomainCard(
-      String domain, List<Map<String, dynamic>> cookies, ColorScheme colorScheme) {
+  Widget _buildDomainCard(String domain, List<Map<String, dynamic>> cookies,
+      ColorScheme colorScheme) {
     final totalCookies = cookies.length;
 
     return Card(
@@ -347,8 +345,7 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
                         padding: EdgeInsets.zero,
                         color: Colors.red.shade300,
                         tooltip: '删除此Cookie',
-                        onPressed: () =>
-                            _deleteSingleCookie(domain, cookie),
+                        onPressed: () => _deleteSingleCookie(domain, cookie),
                       ),
                     ),
                   ],
