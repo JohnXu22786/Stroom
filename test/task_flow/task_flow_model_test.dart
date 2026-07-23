@@ -93,8 +93,8 @@ void main() {
       // A block that outputs text (like ASR) should be compatible with
       // blocks that accept text as input (like TTS)
       final outputText = BlockTypeDefinition.asr;
-      final compatible = BlockTypeDefinition.getCompatibleNextBlocks(
-          outputText.outputType);
+      final compatible =
+          BlockTypeDefinition.getCompatibleNextBlocks(outputText.outputType);
       expect(compatible.any((b) => b.typeKey == 'tts'), isTrue);
       // ASR outputs text, so it should NOT be compatible with blocks
       // that need audio as input (like ASR itself)
@@ -180,10 +180,7 @@ void main() {
       final block2 = TaskFlowBlock(typeKey: 'audioSeparation');
       final block3 = TaskFlowBlock(typeKey: 'asr');
 
-      final updated = flow
-          .addBlock(block1)
-          .addBlock(block2)
-          .addBlock(block3);
+      final updated = flow.addBlock(block1).addBlock(block2).addBlock(block3);
 
       expect(updated.blocks.length, 3);
     });
@@ -261,7 +258,7 @@ void main() {
       final flow = TaskFlowDefinition(name: '测试')
           .addBlock(TaskFlowBlock(typeKey: 'catcatch'))
           .addBlock(TaskFlowBlock(typeKey: 'asr'));
-      
+
       final updated = flow.moveBlock(oldIndex: 1, newIndex: 0);
       expect(updated.blocks[0].typeKey, 'asr');
       expect(updated.blocks[1].typeKey, 'catcatch');
