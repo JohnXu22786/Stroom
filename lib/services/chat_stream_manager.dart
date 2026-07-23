@@ -585,7 +585,11 @@ class ChatStreamManager {
   void _doPeriodicPersist(_ConversationStreamState s) {
     if (s.cancelledByUser) return;
     if (s.fullReply.isEmpty && s.reasoningBuffer.isEmpty) return;
-    if (_ref == null) return;
+    final ref = _ref;
+    if (ref == null) {
+      debugPrint('[ChatStreamManager] 定期持久化失败: _ref is null');
+      return;
+    }
     try {
       final partialHistory = List<ChatMessage>.from(s.history);
       if (s.fullReply.isNotEmpty) {
@@ -606,9 +610,10 @@ class ChatStreamManager {
           ));
         }
       }
-      _ref!
-          .read(conversationsProvider.notifier)
-          .updateMessages(s.convId, partialHistory);
+      ref.read(conversationsProvider.notifier).updateMessages(
+            s.convId,
+            partialHistory,
+          );
     } catch (e) {
       debugPrint('[ChatStreamManager] 定期持久化失败: $e');
     }
@@ -618,12 +623,20 @@ class ChatStreamManager {
     required String convId,
     required List<ChatMessage> history,
   }) async {
+    final ref = _ref;
+    if (ref == null) {
+      debugPrint(
+          '[ChatStreamManager] _saveMessages: _ref is null, convId=$convId, historyLen=${history.length}');
+      return;
+    }
     try {
-      await _ref
-          ?.read(conversationsProvider.notifier)
+      await ref
+          .read(conversationsProvider.notifier)
           .updateMessages(convId, List<ChatMessage>.from(history));
+      debugPrint(
+          '[ChatStreamManager] _saveMessages: success, convId=$convId, historyLen=${history.length}');
     } catch (e, s) {
-      debugPrint('[ChatStreamManager] 保存消息失败: $e\n$s');
+      debugPrint('[ChatStreamManager] _saveMessages失败: $e\n$s');
       await AppLogService.error('ChatStreamManager', '保存消息失败', e, s);
     }
   }
