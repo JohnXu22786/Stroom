@@ -62,6 +62,6 @@ enum IOType {
   String toJson() => name;
 
   /// Deserialize from string.
-  static IOType fromJson(String value) =>
-      IOType.values.firstWhere((e) => e.name == value, orElse: () => IOType.any);
+  static IOType fromJson(String value) => IOType.values
+      .firstWhere((e) => e.name == value, orElse: () => IOType.any);
 }

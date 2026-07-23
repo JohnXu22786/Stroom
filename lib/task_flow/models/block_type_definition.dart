@@ -119,7 +119,8 @@ class BlockTypeDefinition {
     icon: Icons.text_snippet,
     color: Color(0xFF009688),
     params: [
-      BlockParamDefinition(key: 'saveFolder', label: '保存文件夹', type: BlockParamType.filePath),
+      BlockParamDefinition(
+          key: 'saveFolder', label: '保存文件夹', type: BlockParamType.filePath),
     ],
   );
 
@@ -172,8 +173,10 @@ class BlockTypeDefinition {
     icon: Icons.language,
     color: Color(0xFF9C27B0),
     params: [
-      BlockParamDefinition(key: 'videoFolder', label: '视频保存文件夹', type: BlockParamType.filePath),
-      BlockParamDefinition(key: 'audioFolder', label: '音频保存文件夹', type: BlockParamType.filePath),
+      BlockParamDefinition(
+          key: 'videoFolder', label: '视频保存文件夹', type: BlockParamType.filePath),
+      BlockParamDefinition(
+          key: 'audioFolder', label: '音频保存文件夹', type: BlockParamType.filePath),
     ],
   );
 
@@ -269,8 +272,8 @@ class BlockTypeDefinition {
       icon: Icons.extension,
       color: Colors.grey,
       params: (map['params'] as List?)
-              ?.map((p) =>
-                  BlockParamDefinition.fromMap(Map<String, dynamic>.from(p as Map)))
+              ?.map((p) => BlockParamDefinition.fromMap(
+                  Map<String, dynamic>.from(p as Map)))
               .toList() ??
           [],
     );

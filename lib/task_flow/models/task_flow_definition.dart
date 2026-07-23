@@ -246,10 +246,12 @@ class TaskFlowDefinition {
         name: name,
         description: description,
         inputType: inputType,
-        blocks: blocks.map((b) => TaskFlowBlock(
-              typeKey: b.typeKey,
-              params: Map<String, dynamic>.from(b.params),
-            )).toList(),
+        blocks: blocks
+            .map((b) => TaskFlowBlock(
+                  typeKey: b.typeKey,
+                  params: Map<String, dynamic>.from(b.params),
+                ))
+            .toList(),
       );
 
   /// Create a modified copy.
@@ -265,9 +267,7 @@ class TaskFlowDefinition {
         name: name ?? this.name,
         description: description ?? this.description,
         inputType: inputType ?? this.inputType,
-        blocks: blocks != null
-            ? List<TaskFlowBlock>.from(blocks)
-            : this.blocks,
+        blocks: blocks != null ? List<TaskFlowBlock>.from(blocks) : this.blocks,
         createdAt: createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );
@@ -297,7 +297,8 @@ class TaskFlowDefinition {
         blocks: (map['blocks'] as List?)
                 ?.map((b) =>
                     TaskFlowBlock.fromMap(Map<String, dynamic>.from(b as Map)))
-                .toList() ?? [],
+                .toList() ??
+            [],
         createdAt: map['createdAt'] != null
             ? DateTime.parse(map['createdAt'] as String)
             : null,

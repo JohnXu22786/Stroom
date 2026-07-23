@@ -28,7 +28,9 @@ class TaskFlowListPage extends ConsumerWidget {
         onPressed: () => _createNewFlow(context, ref),
         child: const Icon(Icons.add),
       ),
-      body: flows.isEmpty ? _buildEmptyState(cs, context) : _buildFlowList(flows, cs, context, ref),
+      body: flows.isEmpty
+          ? _buildEmptyState(cs, context)
+          : _buildFlowList(flows, cs, context, ref),
     );
   }
 
@@ -173,7 +175,8 @@ class TaskFlowListPage extends ConsumerWidget {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.layers, size: 14, color: cs.onSurfaceVariant),
+                        Icon(Icons.layers,
+                            size: 14, color: cs.onSurfaceVariant),
                         const SizedBox(width: 4),
                         Text(
                           '${flow.blocks.length} 个功能块',
@@ -247,8 +250,7 @@ class TaskFlowListPage extends ConsumerWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) =>
-                        TaskFlowBuilderPage(flowId: flow.id),
+                    builder: (_) => TaskFlowBuilderPage(flowId: flow.id),
                   ),
                 );
               },

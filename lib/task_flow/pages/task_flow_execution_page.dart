@@ -25,8 +25,7 @@ class TaskFlowExecutionPage extends ConsumerStatefulWidget {
       _TaskFlowExecutionPageState();
 }
 
-class _TaskFlowExecutionPageState
-    extends ConsumerState<TaskFlowExecutionPage> {
+class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
   final _inputController = TextEditingController();
   bool _isRunning = false;
   int _currentStep = -1;
@@ -50,7 +49,10 @@ class _TaskFlowExecutionPageState
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final flow = ref.watch(taskFlowListProvider).where((f) => f.id == widget.flowId).firstOrNull;
+    final flow = ref
+        .watch(taskFlowListProvider)
+        .where((f) => f.id == widget.flowId)
+        .firstOrNull;
 
     if (flow == null) {
       return Scaffold(
@@ -68,9 +70,8 @@ class _TaskFlowExecutionPageState
         actions: [
           if (!_isRunning && flow.blocks.isNotEmpty)
             TextButton.icon(
-              onPressed: _inputController.text.trim().isNotEmpty
-                  ? _startFlow
-                  : null,
+              onPressed:
+                  _inputController.text.trim().isNotEmpty ? _startFlow : null,
               icon: const Icon(Icons.play_arrow, size: 18),
               label: const Text('开始任务流'),
             ),
@@ -95,7 +96,8 @@ class _TaskFlowExecutionPageState
             final def = block.getDefinition();
             final isActive = _isRunning && i == _currentStep;
             final isDone = _currentStep > i;
-            final isFailed = _isRunning && _currentStep == i &&
+            final isFailed = _isRunning &&
+                _currentStep == i &&
                 _stepResults.length > i &&
                 _stepResults[i].startsWith('❌');
 
@@ -170,7 +172,8 @@ class _TaskFlowExecutionPageState
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: def?.color.withValues(alpha: 0.12) ?? Colors.grey.withValues(alpha: 0.12),
+                        color: def?.color.withValues(alpha: 0.12) ??
+                            Colors.grey.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
@@ -192,7 +195,8 @@ class _TaskFlowExecutionPageState
     );
   }
 
-  Widget _buildInputSection(IOType inputType, TaskFlowDefinition flow, ColorScheme cs) {
+  Widget _buildInputSection(
+      IOType inputType, TaskFlowDefinition flow, ColorScheme cs) {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -305,9 +309,7 @@ class _TaskFlowExecutionPageState
               child: Icon(
                 isDone
                     ? Icons.check_circle
-                    : (isActive
-                        ? Icons.play_circle
-                        : Icons.arrow_downward),
+                    : (isActive ? Icons.play_circle : Icons.arrow_downward),
                 size: 18,
                 color: isDone
                     ? Colors.green
@@ -321,9 +323,7 @@ class _TaskFlowExecutionPageState
               side: BorderSide(
                 color: isActive
                     ? cs.primary
-                    : (isFailed
-                        ? cs.error
-                        : cs.outlineVariant),
+                    : (isFailed ? cs.error : cs.outlineVariant),
                 width: isActive || isFailed ? 1.5 : 0.5,
               ),
             ),
@@ -354,9 +354,7 @@ class _TaskFlowExecutionPageState
                           size: 16,
                           color: isDone
                               ? Colors.green
-                              : (isActive
-                                  ? cs.primary
-                                  : cs.onSurfaceVariant),
+                              : (isActive ? cs.primary : cs.onSurfaceVariant),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -408,9 +406,7 @@ class _TaskFlowExecutionPageState
   }
 
   Widget _buildFinalResult(ColorScheme cs) {
-    final lastResult = _stepResults.isNotEmpty
-        ? _stepResults.last
-        : '';
+    final lastResult = _stepResults.isNotEmpty ? _stepResults.last : '';
     final isError = lastResult.startsWith('❌');
 
     return Card(
@@ -492,7 +488,8 @@ class _TaskFlowExecutionPageState
       }
 
       try {
-        final result = await _executeBlock(def, block, currentData, execId, execNotifier);
+        final result =
+            await _executeBlock(def, block, currentData, execId, execNotifier);
         _stepResults.add('✅ ${def.label} 完成');
         currentData = result;
 
@@ -549,7 +546,8 @@ class _TaskFlowExecutionPageState
 
         await Future.delayed(const Duration(seconds: 2));
         bgNotifier.completeTask(taskId);
-        execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.completed);
+        execNotifier.updateSubTaskStatus(
+            execId, subTask.id, TaskStatus.completed);
         return '音频文件';
 
       case 'asr':
@@ -570,7 +568,8 @@ class _TaskFlowExecutionPageState
         await Future.delayed(const Duration(seconds: 2));
         bgNotifier.setResult(taskId, '识别结果文本...');
         bgNotifier.completeTask(taskId);
-        execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.completed);
+        execNotifier.updateSubTaskStatus(
+            execId, subTask.id, TaskStatus.completed);
         return '识别文本结果';
 
       case 'ocr':
@@ -589,7 +588,8 @@ class _TaskFlowExecutionPageState
 
         await Future.delayed(const Duration(seconds: 2));
         bgNotifier.completeTask(taskId);
-        execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.completed);
+        execNotifier.updateSubTaskStatus(
+            execId, subTask.id, TaskStatus.completed);
         return 'OCR文本结果';
 
       case 'tts':
@@ -605,7 +605,8 @@ class _TaskFlowExecutionPageState
         execNotifier.addSubTask(execId, subTask);
 
         await Future.delayed(const Duration(seconds: 2));
-        execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.completed);
+        execNotifier.updateSubTaskStatus(
+            execId, subTask.id, TaskStatus.completed);
         return '音频文件: tts_output.mp3';
 
       default:

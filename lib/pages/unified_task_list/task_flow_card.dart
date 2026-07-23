@@ -78,9 +78,7 @@ class _TaskFlowCardState extends State<TaskFlowCard> {
                     ),
                     // Expand icon
                     Icon(
-                      _expanded
-                          ? Icons.expand_less
-                          : Icons.expand_more,
+                      _expanded ? Icons.expand_less : Icons.expand_more,
                       color: cs.onSurfaceVariant,
                       size: 20,
                     ),
@@ -91,8 +89,7 @@ class _TaskFlowCardState extends State<TaskFlowCard> {
 
             // === Level 2: Sub-tasks (when expanded) ===
             if (_expanded)
-              ...exec.subTasks.map((subTask) =>
-                  _buildSubTaskTile(subTask, cs)),
+              ...exec.subTasks.map((subTask) => _buildSubTaskTile(subTask, cs)),
           ],
         ),
       ),
@@ -192,7 +189,8 @@ class _TaskFlowCardState extends State<TaskFlowCard> {
       case TaskStatus.paused:
         return Icon(Icons.pause_circle, size: 16, color: Colors.orange);
       case TaskStatus.waiting:
-        return Icon(Icons.hourglass_empty, size: 16, color: cs.onSurfaceVariant);
+        return Icon(Icons.hourglass_empty,
+            size: 16, color: cs.onSurfaceVariant);
     }
   }
 

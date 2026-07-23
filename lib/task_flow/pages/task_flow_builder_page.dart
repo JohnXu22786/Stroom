@@ -336,14 +336,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     List<BlockTypeDefinition> availableTypes;
     if (_blocks.isEmpty) {
       // No blocks yet — filter by compatibility with initial input
-      availableTypes =
-          BlockTypeDefinition.getCompatibleNextBlocks(_inputType);
+      availableTypes = BlockTypeDefinition.getCompatibleNextBlocks(_inputType);
     } else {
       // Filter by last block's output type
-      final lastOutput =
-          _blocks.last.getDefinition()?.outputType ?? IOType.any;
-      availableTypes =
-          BlockTypeDefinition.getCompatibleNextBlocks(lastOutput);
+      final lastOutput = _blocks.last.getDefinition()?.outputType ?? IOType.any;
+      availableTypes = BlockTypeDefinition.getCompatibleNextBlocks(lastOutput);
     }
 
     showModalBottomSheet(
@@ -397,7 +394,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   child: Center(
                     child: Text(
                       '没有与当前类型兼容的功能块',
-                      style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
+                      style:
+                          TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
                     ),
                   ),
                 )
@@ -408,8 +406,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                     children: availableTypes
                         .map((type) => Padding(
                               padding: const EdgeInsets.only(bottom: 8),
-                              child:
-                                  _buildBlockTypeOption(type, cs, ctx),
+                              child: _buildBlockTypeOption(type, cs, ctx),
                             ))
                         .toList(),
                   ),
