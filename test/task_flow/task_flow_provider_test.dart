@@ -94,7 +94,9 @@ void main() {
       final notifier = TaskFlowNotifier();
       final originalId = notifier.addFlow(
         name: '原流程',
-        blocks: [TaskFlowBlock(typeKey: 'asr', params: {'saveFolder': 'test'})],
+        blocks: [
+          TaskFlowBlock(typeKey: 'asr', params: {'saveFolder': 'test'})
+        ],
       );
 
       final newId = notifier.duplicateFlow(originalId);
