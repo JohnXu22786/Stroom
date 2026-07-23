@@ -641,12 +641,18 @@ class _ChatPageState extends ConsumerState<ChatPage>
         final msg = _history[i];
         await _controller?.insertMessage(
           Message.text(
-            id: msg.id,
-            authorId: msg.role == 'user' ? _currentUser.id : _aiUser.id,
-            text: msg.content,
-            createdAt: msg.createdAt,
+            id: userMsgId,
+            authorId: _currentUser.id,
+            text: text,
+            createdAt: DateTime.now(),
           ),
         );
+
+        print(
+            '[DEBUG-HIST] _onMessageSend BEFORE stream: _history.length=${_history.length}');
+        await _startStreaming(text, capturedConvId: convId);
+        print(
+            '[DEBUG-HIST] _onMessageSend AFTER stream: _history.length=${_history.length}');
       }
       await AppLogService.info(
           'ChatPage', '控制器消息插入完成，共 ${_controller?.messages.length ?? 0} 条');
@@ -931,16 +937,21 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // (for retry/edit which don't capture convId).
     final effectiveConvId =
         capturedConvId ?? ref.read(activeConversationIdProvider) ?? '';
+    final histBefore = List<ChatMessage>.from(_history);
+    print(
+        '[DEBUG-HIST] _startStreaming: sending to manager, _history.length=${histBefore.length}');
     final StreamResult result =
         await ref.read(chatStreamManagerProvider).startStreaming(
               text: text,
               convId: effectiveConvId,
-              history: List.from(_history),
+              history: histBefore,
               tools: filteredTools,
               reasoning: ref.read(reasoningEnabledProvider),
               reasoningEffort: ref.read(reasoningEffortProvider),
               reasoningParamValues: ref.read(reasoningParamValuesProvider),
             );
+    print(
+        '[DEBUG-HIST] _startStreaming: manager returned, result.history.length=${result.history.length}');
 
     // ── Post-stream completion ──
     // Update _history from the StreamResult (no ref.read needed, so this
@@ -949,6 +960,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // the manager's own Ref (from Provider creation, survives widget dispose).
     _history.clear();
     _history.addAll(result.history);
+    print(
+        '[DEBUG-HIST] _startStreaming: after result apply, _history.length=${_history.length}');
 
     // Clean up local streaming state and providers. Wrap in try-catch
     // because ref.read() may fail if the widget was disposed while the
