@@ -1,12 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../catcatch/providers/catcatch_provider.dart';
+import '../../providers/background_task_provider.dart';
+import '../../providers/task_provider.dart';
 import '../../task_flow/models/task_flow_execution.dart';
-import '../../providers/task_provider_shared.dart';
+import 'background_task_card.dart';
+import 'catcatch_task_card.dart';
+import 'synthesis_task_card.dart';
 
 /// Card for a task flow execution in the unified task list.
 /// Two-level expand:
-///   Level 1: Flow → shows sub-tasks (one per block)
-///   Level 2: Sub-task → shows original task progress (delegated)
-class TaskFlowCard extends StatefulWidget {
+///   Level 1: Flow header → expands to show sub-tasks (one per block)
+///   Level 2: Sub-task tile → expands to show the underlying task's card
+///            (CatCatchTaskCard / BackgroundTaskCard / SynthesisTaskCard)
+class TaskFlowCard extends ConsumerStatefulWidget {
   final TaskFlowExecution execution;
   final bool isUnread;
 
@@ -17,11 +25,12 @@ class TaskFlowCard extends StatefulWidget {
   });
 
   @override
-  State<TaskFlowCard> createState() => _TaskFlowCardState();
+  ConsumerState<TaskFlowCard> createState() => _TaskFlowCardState();
 }
 
-class _TaskFlowCardState extends State<TaskFlowCard> {
+class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
   bool _expanded = false;
+  final Set<String> _expandedSubTasks = {};
 
   @override
   Widget build(BuildContext context) {
@@ -87,9 +96,10 @@ class _TaskFlowCardState extends State<TaskFlowCard> {
               ),
             ),
 
-            // === Level 2: Sub-tasks (when expanded) ===
+            // === Level 2: Sub-tasks (when flow is expanded) ===
             if (_expanded)
-              ...exec.subTasks.map((subTask) => _buildSubTaskTile(subTask, cs)),
+              ...exec.subTasks
+                  .map((subTask) => _buildSubTaskSection(subTask, cs)),
           ],
         ),
       ),
@@ -114,62 +124,218 @@ class _TaskFlowCardState extends State<TaskFlowCard> {
     }
   }
 
-  Widget _buildSubTaskTile(FlowSubTask subTask, ColorScheme cs) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: cs.outlineVariant, width: 0.3),
+  /// Build a sub-task row that can expand to show the underlying task card.
+  Widget _buildSubTaskSection(FlowSubTask subTask, ColorScheme cs) {
+    final isExpanded = _expandedSubTasks.contains(subTask.id);
+
+    return Column(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(color: cs.outlineVariant, width: 0.3),
+            ),
+          ),
+          child: InkWell(
+            onTap: () {
+              setState(() {
+                if (isExpanded) {
+                  _expandedSubTasks.remove(subTask.id);
+                } else {
+                  _expandedSubTasks.add(subTask.id);
+                }
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: Row(
+                children: [
+                  // Sub-task status
+                  _subTaskIcon(subTask.status, cs),
+                  const SizedBox(width: 10),
+                  // Sub-task label
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          subTask.blockLabel,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: cs.onSurface,
+                          ),
+                        ),
+                        Text(
+                          _statusText(subTask.status),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Status badge
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _subTaskColor(subTask.status, cs)
+                          .withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      _shortStatusText(subTask.status),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: _subTaskColor(subTask.status, cs),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  // Expand arrow
+                  Icon(
+                    isExpanded ? Icons.expand_less : Icons.expand_more,
+                    size: 16,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
-      ),
-      child: Row(
-        children: [
-          // Sub-task status
-          _subTaskIcon(subTask.status, cs),
-          const SizedBox(width: 10),
-          // Sub-task label
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+
+        // === Level 3: Nested task detail card (when sub-task is expanded) ===
+        if (isExpanded) _buildSubTaskDetail(subTask, cs),
+      ],
+    );
+  }
+
+  /// Build the underlying task's detail card inside an expanded sub-task.
+  Widget _buildSubTaskDetail(FlowSubTask subTask, ColorScheme cs) {
+    switch (subTask.subTaskType) {
+      case 'catcatch':
+        return _buildCatCatchDetail(subTask, cs);
+      case 'background':
+        return _buildBackgroundDetail(subTask, cs);
+      case 'synthesis':
+        return _buildSynthesisDetail(subTask, cs);
+      default:
+        return _buildGenericDetail(subTask, cs);
+    }
+  }
+
+  /// Look up and render the real CatCatch task card.
+  Widget _buildCatCatchDetail(FlowSubTask subTask, ColorScheme cs) {
+    final tasks = ref.watch(catcatchTasksProvider);
+    final task = tasks.where((t) => t.id == subTask.subTaskId).firstOrNull;
+
+    if (task != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: CatCatchTaskCard(
+          key: ValueKey('catcatch_${task.id}'),
+          task: task,
+          isUnread: false,
+        ),
+      );
+    }
+
+    return _buildGenericDetail(subTask, cs);
+  }
+
+  /// Look up and render the real Background task card.
+  Widget _buildBackgroundDetail(FlowSubTask subTask, ColorScheme cs) {
+    final tasks = ref.watch(backgroundTasksProvider);
+    final task = tasks.where((t) => t.id == subTask.subTaskId).firstOrNull;
+
+    if (task != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: BackgroundTaskCard(
+          key: ValueKey('bg_${task.id}'),
+          task: task,
+          isUnread: false,
+        ),
+      );
+    }
+
+    return _buildGenericDetail(subTask, cs);
+  }
+
+  /// Look up and render the real Synthesis task card.
+  Widget _buildSynthesisDetail(FlowSubTask subTask, ColorScheme cs) {
+    final tasks = ref.watch(taskListProvider);
+    final task = tasks.where((t) => t.id == subTask.subTaskId).firstOrNull;
+
+    if (task != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: SynthesisTaskCard(
+          key: ValueKey('synth_${task.id}'),
+          task: task,
+          isUnread: false,
+        ),
+      );
+    }
+
+    return _buildGenericDetail(subTask, cs);
+  }
+
+  /// Fallback generic detail view when the real task is not found.
+  Widget _buildGenericDetail(FlowSubTask subTask, ColorScheme cs) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 4, 16, 8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: cs.outlineVariant, width: 0.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
+                _subTaskIcon(subTask.status, cs),
+                const SizedBox(width: 8),
                 Text(
-                  subTask.blockLabel,
+                  '${subTask.blockLabel} · ${_statusText(subTask.status)}',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                     color: cs.onSurface,
                   ),
                 ),
-                Text(
-                  _statusText(subTask.status),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: cs.onSurfaceVariant,
-                  ),
-                ),
               ],
             ),
-          ),
-          // Status badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: _subTaskColor(subTask.status, cs).withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(4),
+            const SizedBox(height: 6),
+            Text(
+              '类型: ${subTask.subTaskType}',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
-            child: Text(
-              _shortStatusText(subTask.status),
-              style: TextStyle(
-                fontSize: 10,
-                color: _subTaskColor(subTask.status, cs),
-                fontWeight: FontWeight.w500,
+            if (subTask.subTaskId.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                '任务ID: ${subTask.subTaskId}',
+                style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            ),
-          ),
-        ],
+            ],
+          ],
+        ),
       ),
     );
   }
+
+  // =========================================================================
+  // Sub-task status helpers
+  // =========================================================================
 
   Widget _subTaskIcon(TaskStatus status, ColorScheme cs) {
     switch (status) {
