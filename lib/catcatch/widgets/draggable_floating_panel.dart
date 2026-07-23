@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../utils/audio_utils.dart';
 
@@ -190,10 +191,14 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
                 ),
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.pets,
-                      size: 16,
-                      color: colorScheme.onPrimaryContainer,
+                    SvgPicture.asset(
+                      'assets/images/cat_head.svg',
+                      width: 16,
+                      height: 16,
+                      colorFilter: ColorFilter.mode(
+                        colorScheme.onPrimaryContainer,
+                        BlendMode.srcIn,
+                      ),
                     ),
                     const SizedBox(width: 6),
                     Text(
