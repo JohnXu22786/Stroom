@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../catcatch/models/catcatch_task.dart' as catcatch;
+import '../../catcatch/providers/catcatch_provider.dart';
 import '../../providers/background_task_provider.dart';
 import '../../providers/task_provider_shared.dart';
 import '../models/task_flow_definition.dart';
@@ -474,9 +476,13 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     );
 
     String currentData = _inputController.text.trim();
+    bool allSucceeded = true;
 
     for (int i = 0; i < flow.blocks.length; i++) {
-      if (!mounted) break;
+      if (!mounted) {
+        allSucceeded = false;
+        break;
+      }
       setState(() => _currentStep = i);
 
       final block = flow.blocks[i];
@@ -484,6 +490,7 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
       if (def == null) {
         _stepResults.add('❌ 未知功能块类型');
         execNotifier.failExecution(execId, error: '未知功能块类型');
+        allSucceeded = false;
         break;
       }
 
@@ -497,12 +504,16 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
       } catch (e) {
         _stepResults.add('❌ ${def.label} 失败: $e');
         execNotifier.failExecution(execId, error: '$e');
+        allSucceeded = false;
         break;
       }
     }
 
-    if (mounted) {
-      setState(() => _currentStep = flow.blocks.length - 1);
+    if (!mounted) return;
+
+    setState(() => _currentStep = flow.blocks.length - 1);
+
+    if (allSucceeded) {
       execNotifier.completeExecution(execId);
     }
   }
@@ -516,18 +527,7 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
   ) async {
     switch (def.typeKey) {
       case 'catcatch':
-        // Track as sub-task (real CatCatch execution requires user's API config)
-        final subTask = FlowSubTask(
-          blockTypeKey: 'catcatch',
-          blockLabel: def.label,
-          subTaskId: 'catcatch_${DateTime.now().millisecondsSinceEpoch}',
-          subTaskType: 'catcatch',
-        );
-        execNotifier.addSubTask(execId, subTask);
-        await Future.delayed(const Duration(seconds: 2));
-        execNotifier.updateSubTaskStatus(
-            execId, subTask.id, TaskStatus.completed);
-        return '视频文件: downloaded_video.mp4';
+        return await _executeCatCatchBlock(def, input, execId, execNotifier);
 
       case 'audioSeparation':
         // Create a real background audio separation task
@@ -612,5 +612,100 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
       default:
         throw Exception('不支持的功能块: ${def.typeKey}');
     }
+  }
+
+  /// Execute a CatCatch block by creating a real CatCatch task, waiting for
+  /// completion, and returning the downloaded file path.
+  ///
+  /// If the task pauses at user selection (multiple media detected), the
+  /// first resource is auto-selected to continue the flow.
+  Future<String> _executeCatCatchBlock(
+    BlockTypeDefinition def,
+    String input,
+    String execId,
+    TaskFlowExecutionNotifier execNotifier,
+  ) async {
+    // Create a real CatCatch task and start the download pipeline
+    final catcatchNotifier = ref.read(catcatchTasksProvider.notifier);
+    final taskId = catcatchNotifier.addTask(input, 0);
+
+    final subTask = FlowSubTask(
+      blockTypeKey: 'catcatch',
+      blockLabel: def.label,
+      subTaskId: taskId,
+      subTaskType: 'catcatch',
+    );
+    execNotifier.addSubTask(execId, subTask);
+
+    // Poll until the CatCatch task completes or fails
+    final startTime = DateTime.now();
+    const maxWait = Duration(minutes: 10);
+    bool _autoSelected = false;
+
+    while (mounted) {
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      final task = ref
+          .read(catcatchTasksProvider)
+          .where((t) => t.id == taskId)
+          .firstOrNull;
+
+      if (task == null) {
+        execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
+        throw Exception('CatCatch 任务丢失');
+      }
+
+      // Completed
+      if (task.status == TaskStatus.completed) {
+        execNotifier.updateSubTaskStatus(
+            execId, subTask.id, TaskStatus.completed);
+        return task.downloadedFilePath ?? '下载完成（无文件路径）';
+      }
+
+      // Failed
+      if (task.status == TaskStatus.failed) {
+        execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
+        throw Exception(task.error ?? 'CatCatch 任务失败');
+      }
+
+      // Paused (user likely paused it outside the flow)
+      if (task.status == TaskStatus.paused) {
+        execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.paused);
+        throw Exception('CatCatch 任务已暂停（可能需要在任务列表中手动继续）');
+      }
+
+      // Waiting for user to select media — auto-select first and continue
+      // Guarded by _autoSelected to prevent repeated calls
+      if (!_autoSelected) {
+        final userSelectStep = task.steps.where(
+          (s) => s.type == catcatch.StepType.userSelecting,
+        );
+        if (userSelectStep.isNotEmpty &&
+            !userSelectStep.first.completed &&
+            !userSelectStep.first.skipped) {
+          _autoSelected = true;
+          if (task.detectedMedia.isNotEmpty) {
+            catcatchNotifier.selectMedia(taskId, task.detectedMedia.first);
+            // Mark sub-task as running and continue polling
+            execNotifier.updateSubTaskStatus(
+                execId, subTask.id, TaskStatus.running);
+          } else {
+            execNotifier.updateSubTaskStatus(
+                execId, subTask.id, TaskStatus.failed);
+            throw Exception('未检测到可用媒体资源');
+          }
+        }
+      }
+
+      // Timeout
+      if (DateTime.now().difference(startTime) > maxWait) {
+        execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
+        throw Exception('CatCatch 下载超时（${maxWait.inMinutes}分钟）');
+      }
+    }
+
+    // Widget disposed — mark sub-task as failed before throwing
+    execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
+    throw Exception('页面已关闭，任务流中断');
   }
 }
