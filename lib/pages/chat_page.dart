@@ -927,24 +927,34 @@ class _ChatPageState extends ConsumerState<ChatPage>
               reasoningParamValues: ref.read(reasoningParamValuesProvider),
             );
 
-    // ── Post-stream completion update ──
-    // The manager has processed the stream. Persist the final messages
-    // using the page's own ref (guaranteed to work with the provider tree)
-    // and update local page state from the returned StreamResult.
-    _streamingMsgId = null;
-    _isStreamingActive = false;
-    ref.read(isStreamingProvider.notifier).state = false;
-    ref.read(streamingMsgIdProvider.notifier).state = null;
-    ref.read(streamingFullReplyProvider.notifier).state = '';
-    ref.read(streamingHasFirstTokenProvider.notifier).state = false;
-
-    // Update local _history from the stream result
+    // ── Post-stream completion ──
+    // Update _history IMMEDIATELY from the StreamResult (no ref.read needed,
+    // so this works even if the widget was disposed during background streaming).
     _history.clear();
     _history.addAll(result.history);
 
-    // Persist via the page's own provider context (not the manager's ref,
-    // which may not resolve to the same Riverpod container).
-    _saveMessages(capturedConvId: capturedConvId);
+    // Persist now using the page's own ref. This MUST happen before any
+    // ref.read() calls below, because after widget disposal those calls may
+    // throw and prevent the save from ever executing.
+    try {
+      await _saveMessages(capturedConvId: capturedConvId);
+    } catch (e) {
+      debugPrint('[ChatPage] _saveMessages failed: $e');
+    }
+
+    // Clean up local streaming state and providers. Wrap in try-catch
+    // because ref.read() may fail if the widget was disposed while the
+    // manager was streaming in the background.
+    try {
+      _streamingMsgId = null;
+      _isStreamingActive = false;
+      ref.read(isStreamingProvider.notifier).state = false;
+      ref.read(streamingMsgIdProvider.notifier).state = null;
+      ref.read(streamingFullReplyProvider.notifier).state = '';
+      ref.read(streamingHasFirstTokenProvider.notifier).state = false;
+    } catch (e) {
+      debugPrint('[ChatPage] post-stream provider cleanup failed: $e');
+    }
 
     // Update the controller: replace streaming placeholder with final message
     if (mounted) {
