@@ -172,8 +172,20 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
         ),
     ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
+    // Filter out tasks that are already nested inside a task flow execution.
+    // These tasks were created by the flow and should only be visible when
+    // expanding the flow card, not as independent top-level items.
+    final flowSubTaskIds = <String>{
+      for (final exec in taskFlowExecutions)
+        for (final st in exec.subTasks) st.subTaskId,
+    };
+    final filteredByFlow = allTasks.where((item) {
+      if (item.isTaskFlow) return true; // always show flow cards
+      return !flowSubTaskIds.contains(item.id);
+    }).toList();
+
     // Filter tasks based on selected tab
-    final filteredTasks = _filteredTasks(allTasks, _tabController.index);
+    final filteredTasks = _filteredTasks(filteredByFlow, _tabController.index);
 
     return Scaffold(
       appBar: AppBar(

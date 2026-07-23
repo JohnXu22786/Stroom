@@ -509,7 +509,14 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
       }
     }
 
-    if (!mounted) return;
+    if (!mounted) {
+      // Widget disposed — still mark execution as completed/failed so the
+      // task list shows the correct status.
+      if (allSucceeded) {
+        execNotifier.completeExecution(execId);
+      }
+      return;
+    }
 
     setState(() => _currentStep = flow.blocks.length - 1);
 
