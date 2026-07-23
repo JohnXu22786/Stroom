@@ -992,9 +992,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
             );
 
     // ── Post-stream completion update ──
-    // The manager has processed the stream, persisted the assistant message
-    // into the conversation provider. Use the returned StreamResult to update
-    // local page state directly.
+    // The manager has processed the stream. Persist the final messages
+    // using the page's own ref (guaranteed to work with the provider tree)
+    // and update local page state from the returned StreamResult.
     _streamingMsgId = null;
     _isStreamingActive = false;
     ref.read(isStreamingProvider.notifier).state = false;
@@ -1005,6 +1005,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // Update local _history from the stream result
     _history.clear();
     _history.addAll(result.history);
+
+    // Persist via the page's own provider context (not the manager's ref,
+    // which may not resolve to the same Riverpod container).
+    _saveMessages(capturedConvId: capturedConvId);
 
     // Update the controller: replace streaming placeholder with final message
     if (mounted) {
