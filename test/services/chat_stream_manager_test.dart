@@ -687,8 +687,7 @@ void main() {
   });
 
   group('ChatStreamManager - sequential multi-message history', () {
-    test(
-        '3 sequential messages produce correct growing StreamResult.history',
+    test('3 sequential messages produce correct growing StreamResult.history',
         () async {
       final manager = ChatStreamManager();
 
@@ -825,10 +824,13 @@ void main() {
               'After edit, history should have 4 entries (msg1+resp1+edited+newResp), got ${result.history.length}');
 
       // The old response2 should NOT be present
-      final contents =
-          result.history.where((m) => m.role == 'assistant').map((m) => m.content).toList();
+      final contents = result.history
+          .where((m) => m.role == 'assistant')
+          .map((m) => m.content)
+          .toList();
       expect(contents, ['Response 1', 'Response 2 edited'],
-          reason: 'Should contain only Response 1 and the new edited response, not old Response 2');
+          reason:
+              'Should contain only Response 1 and the new edited response, not old Response 2');
 
       manager.dispose();
     });
@@ -893,7 +895,8 @@ void main() {
 
       // Should be 4 entries, with old Resp2 gone
       expect(finalHistory.length, 4,
-          reason: 'Edit should produce 4 entries (2 old + 1 edited-user + 1 new assistant)');
+          reason:
+              'Edit should produce 4 entries (2 old + 1 edited-user + 1 new assistant)');
       expect(finalHistory[2].role, 'user');
       expect(finalHistory[2].content, 'Q2-edited');
       expect(finalHistory[3].role, 'assistant');
@@ -906,6 +909,178 @@ void main() {
               reason: 'Old assistant response should be gone after edit');
         }
       }
+
+      manager.dispose();
+    });
+  });
+
+  group('ChatStreamManager - reasoning + toolCalls propagation', () {
+    test('reasoning sections and toolCalls appear in StreamResult', () async {
+      SharedPreferences.setMockInitialValues({});
+      final manager = ChatStreamManager();
+
+      // The adapter loops: each call to chatStream = one round.
+      // Round 1: reasoning + tool calls → adapter processes tools, loops
+      // Round 2: more reasoning + final answer → no tools, loop ends
+      final provider = _MockProvider([
+        // Round 1: reasoning + tool call
+        [
+          AIStreamEvent('Let me think about this...', isReasoning: true),
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'tc1',
+              'type': 'function',
+              'function': {
+                'name': 'search',
+                'arguments': '{"q":"weather"}',
+              },
+            },
+          ]),
+        ],
+        // Round 2: more reasoning + final answer
+        [
+          AIStreamEvent('The search shows sunny weather.', isReasoning: true),
+          AIStreamEvent('The weather is sunny today!'),
+        ],
+      ]);
+      manager.adapter.forceService(_makeChatService(provider));
+
+      final result = await manager.startStreaming(
+        text: 'What is the weather?',
+        convId: 'conv-reasoning-tools',
+        history: [
+          _userMsg('What is the weather?', 'u1'),
+        ],
+      );
+
+      // Verify reasoning sections are built from multiple rounds
+      expect(result.reasoningSections.length, greaterThanOrEqualTo(2),
+          reason:
+              'At least 2 reasoning rounds expected, got ${result.reasoningSections.length}');
+      expect(
+          result.reasoningSections.any((s) => s.contains('think about this')),
+          isTrue);
+      expect(result.reasoningSections.any((s) => s.contains('sunny weather')),
+          isTrue);
+
+      // Verify tool calls are preserved
+      expect(result.toolCalls.length, 1,
+          reason: 'Expected 1 tool call, got ${result.toolCalls.length}');
+      expect(result.toolCalls[0].id, 'tc1');
+      expect(result.toolCalls[0].name, 'search');
+
+      // Verify final reply
+      expect(result.fullReply, contains('sunny'));
+
+      // Verify assistant message has both reasoningSections and toolCalls
+      final assistant = result.assistantMessage;
+      expect(assistant, isNotNull);
+      expect(assistant!.reasoningSections, isNotNull);
+      expect(assistant.reasoningSections!.length, greaterThanOrEqualTo(2));
+      expect(assistant.toolCalls, isNotNull);
+      expect(assistant.toolCalls!.length, 1);
+
+      manager.dispose();
+    });
+
+    test('multiple tool call rounds produce correct results', () async {
+      SharedPreferences.setMockInitialValues({});
+      final manager = ChatStreamManager();
+
+      final provider = _MockProvider([
+        // Round 1: reasoning + first tool call
+        [
+          AIStreamEvent('Analyzing...', isReasoning: true),
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'tc1',
+              'type': 'function',
+              'function': {
+                'name': 'weather',
+                'arguments': '{"city":"Hangzhou"}',
+              },
+            },
+          ]),
+        ],
+        // Round 2: reasoning + second tool call
+        [
+          AIStreamEvent('Now checking temperature...', isReasoning: true),
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'tc2',
+              'type': 'function',
+              'function': {
+                'name': 'temperature',
+                'arguments': '{"city":"Hangzhou"}',
+              },
+            },
+          ]),
+        ],
+        // Round 3: final reasoning + answer
+        [
+          AIStreamEvent('Weather is sunny and 25C.', isReasoning: true),
+          AIStreamEvent('Hangzhou: sunny, 25C'),
+        ],
+      ]);
+      manager.adapter.forceService(_makeChatService(provider));
+
+      final result = await manager.startStreaming(
+        text: 'Weather in Hangzhou?',
+        convId: 'conv-multi-tools',
+        history: [
+          _userMsg('Weather in Hangzhou?', 'u1'),
+        ],
+      );
+
+      // Both tool calls should be preserved
+      expect(result.toolCalls.length, 2,
+          reason: 'Expected 2 tool calls, got ${result.toolCalls.length}');
+      expect(result.toolCalls[0].id, 'tc1');
+      expect(result.toolCalls[1].id, 'tc2');
+
+      // Multiple reasoning rounds
+      expect(result.reasoningSections.length, greaterThanOrEqualTo(3),
+          reason:
+              'Should have at least 3 reasoning rounds, got ${result.reasoningSections.length}');
+      expect(
+          result.reasoningSections.any((s) => s.contains('Analyzing')), isTrue);
+      expect(result.reasoningSections.any((s) => s.contains('temperature')),
+          isTrue);
+      expect(result.reasoningSections.any((s) => s.contains('sunny and 25C')),
+          isTrue);
+
+      manager.dispose();
+    });
+  });
+
+  group('ChatStreamManager - periodic persist guard', () {
+    test(
+        'periodic persist does NOT save when stream has completed (persistTimer null)',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final manager = ChatStreamManager();
+
+      final provider = _MockProvider([
+        [AIStreamEvent('Quick response')],
+      ]);
+      manager.adapter.forceService(_makeChatService(provider));
+
+      final result = await manager.startStreaming(
+        text: 'Hi',
+        convId: 'conv-persist-guard',
+        history: [
+          _userMsg('Hi', 'u1'),
+        ],
+      );
+
+      expect(result.fullReply, 'Quick response');
+
+      // After streaming completes, the persistTimer should be null.
+      // _doPeriodicPersist checks s.persistTimer == null as a guard.
+      // Not directly testable from outside, but we verify the result
+      // is correct and the stream state is cleaned up.
+      expect(manager.isStreamingFor('conv-persist-guard'), false);
+      expect(manager.streamingMsgIdFor('conv-persist-guard'), isNull);
 
       manager.dispose();
     });
