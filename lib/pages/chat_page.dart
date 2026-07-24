@@ -614,21 +614,30 @@ class _ChatPageState extends ConsumerState<ChatPage>
             msg.reasoningContent!.isNotEmpty) {
           _reasoningContents[msg.id] = [msg.reasoningContent!];
         }
-        // Restore tool call segments from persisted ChatMessage.
-        // Convert each persisted ToolCallData back into a ToolCallSegment
-        // so the UI renders tool call cards alongside the text content.
-        if (msg.toolCalls != null && msg.toolCalls!.isNotEmpty) {
-          final segments = <MessageSegment>[];
-          // Prepend a TextSegment with the message content so the assistant's
-          // reply text is rendered before the tool call cards. Without this,
-          // the segments list would only contain ToolCallSegment entries and
-          // the text message.content would never be displayed.
-          if (msg.content.isNotEmpty) {
-            segments.add(TextSegment(msg.content));
+
+        // Build unified segments for the full Agent chain.
+        // This ensures reasoning, tool calls, and text are all rendered
+        // in the correct order when the message has multiple components.
+        final segments = <MessageSegment>[];
+        final sections = msg.reasoningSections;
+        if (sections != null && sections.isNotEmpty) {
+          for (var i = 0; i < sections.length; i++) {
+            segments.add(ReasoningSegment(
+              sectionIndex: i,
+              isStreaming: false,
+            ));
           }
-          for (final tc in msg.toolCalls!) {
+        }
+        final toolCalls = msg.toolCalls;
+        if (toolCalls != null && toolCalls.isNotEmpty) {
+          for (final tc in toolCalls) {
             segments.add(ToolCallSegment(tc));
           }
+        }
+        if (msg.content.isNotEmpty) {
+          segments.add(TextSegment(msg.content));
+        }
+        if (segments.isNotEmpty) {
           _chatSegments[msg.id] = segments;
         }
       }
@@ -1015,12 +1024,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
             createdAt: finalMsg.createdAt,
           ),
         );
-        // If there are tool calls, add them as segments for rendering
-        if (finalMsg.toolCalls != null && finalMsg.toolCalls!.isNotEmpty) {
-          _chatSegments[finalMsg.id] =
-              finalMsg.toolCalls!.map((tc) => ToolCallSegment(tc)).toList();
-        }
-        // Restore reasoning sections for rendering
+
+        // Build a unified segments list representing the full Agent chain:
+        // Reasoning → ToolCall → Reasoning → ... → Text (answer)
+        // This preserves reasoning visibility alongside tool calls and text.
+        _buildFinalSegments(finalMsg);
+
+        // Also store in _reasoningContents for backward compatibility
+        // with any code paths that read that map directly.
         if (finalMsg.reasoningSections != null &&
             finalMsg.reasoningSections!.isNotEmpty) {
           _reasoningContents[finalMsg.id] = finalMsg.reasoningSections!;
@@ -1029,6 +1040,42 @@ class _ChatPageState extends ConsumerState<ChatPage>
       setState(() {});
     }
     _streamingRenderedLengths.remove(aiMsgId);
+  }
+
+  /// Builds the final [_chatSegments] entry for a completed assistant message,
+  /// preserving the full Agent chain: reasoning sections, tool calls, and text.
+  void _buildFinalSegments(ChatMessage msg) {
+    final segments = <MessageSegment>[];
+
+    // 1. Reasoning sections (thinking blocks) — prepended so they appear first
+    final sections = msg.reasoningSections;
+    if (sections != null && sections.isNotEmpty) {
+      for (var i = 0; i < sections.length; i++) {
+        segments.add(ReasoningSegment(
+          sectionIndex: i,
+          isStreaming: false,
+        ));
+      }
+    }
+
+    // 2. Tool calls — each as a ToolCallSegment
+    final toolCalls = msg.toolCalls;
+    if (toolCalls != null && toolCalls.isNotEmpty) {
+      for (final tc in toolCalls) {
+        segments.add(ToolCallSegment(tc));
+      }
+    }
+
+    // 3. Text content (the answer) — only if non-empty
+    if (msg.content.isNotEmpty) {
+      segments.add(TextSegment(msg.content));
+    }
+
+    // Only set if we built segments; otherwise let the fallback rendering
+    // (reasoning-only or plain text) handle it via the existing code paths.
+    if (segments.isNotEmpty) {
+      _chatSegments[msg.id] = segments;
+    }
   }
 
   void _confirmRetryOrEdit(String messageId) {
