@@ -132,6 +132,13 @@ class ChatMessage {
   /// and fall back to [reasoningContent] for backward compatibility.
   final List<String>? reasoningSections;
 
+  /// Per-round text chunks that mirror the Agent chain structure.
+  /// Each entry is the assistant's spoken text belonging to one reasoning
+  /// / tool call round, allowing the UI to interleave speech between
+  /// thinking and tool call blocks instead of showing all text at the end.
+  /// When null or empty, fall back to [content] as a single block.
+  final List<String>? textSections;
+
   ChatMessage({
     String? id,
     required this.role,
@@ -145,6 +152,7 @@ class ChatMessage {
     this.rawResponse,
     this.toolCalls,
     this.reasoningSections,
+    this.textSections,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
         attachments = attachments ?? [];
@@ -259,6 +267,9 @@ class ChatMessage {
         // Persist reasoning sections if present and non-empty.
         if (reasoningSections != null && reasoningSections!.isNotEmpty)
           'reasoningSections': reasoningSections!.toList(),
+        // Persist per-round text sections if present and non-empty.
+        if (textSections != null && textSections!.isNotEmpty)
+          'textSections': textSections!.toList(),
       };
 
   factory ChatMessage.fromMap(Map<String, dynamic> map) {
@@ -323,6 +334,17 @@ class ChatMessage {
       if (reasoningSections!.isEmpty) reasoningSections = null;
     }
 
+    // Defensive textSections parsing: same as reasoningSections.
+    List<String>? textSections;
+    final textSectionsRaw = map['textSections'];
+    if (textSectionsRaw is List) {
+      textSections = textSectionsRaw
+          .whereType<String>()
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (textSections!.isEmpty) textSections = null;
+    }
+
     return ChatMessage(
       id: map['id'] as String?,
       role: roleStr,
@@ -338,6 +360,7 @@ class ChatMessage {
       rawResponse: safeCastToMap(map['rawResponse']),
       toolCalls: toolCalls,
       reasoningSections: reasoningSections,
+      textSections: textSections,
     );
   }
 
