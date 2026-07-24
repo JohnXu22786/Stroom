@@ -526,19 +526,20 @@ class _ChatPageState extends ConsumerState<ChatPage>
     try {
       final activeId = ref.read(activeConversationIdProvider);
       final convs = ref.read(conversationsProvider);
-      print(
+      await AppLogService.debug('ChatPage',
           '[PERSIST] _loadConversationMessages: activeId=$activeId allConvCount=${convs.length}');
       await AppLogService.info(
           'ChatPage', '开始加载对话消息, activeConversationId=$activeId');
       if (activeId == null) {
-        print('[PERSIST] _loadConversationMessages: ABORT activeId null');
+        await AppLogService.debug('ChatPage',
+            '[PERSIST] _loadConversationMessages: ABORT activeId null');
         await AppLogService.warning(
             'ChatPage', 'activeConversationId 为 null，跳过加载对话消息');
         return;
       }
       await AppLogService.info('ChatPage', '当前共有 ${convs.length} 个对话');
       final conv = convs.where((c) => c.id == activeId).firstOrNull;
-      print(
+      await AppLogService.debug('ChatPage',
           '[PERSIST] _loadConversationMessages: foundConv=${conv != null} convMsgCount=${conv?.messages.length ?? -1}');
       if (conv == null) {
         await AppLogService.warning(
@@ -685,17 +686,19 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Future<void> _saveMessages({String? capturedConvId}) async {
     try {
       final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
-      print(
+      await AppLogService.debug('ChatPage',
           '[PERSIST] _saveMessages: convId=$convId capturedConvId=$capturedConvId historyLen=${_history.length}');
       if (convId == null) {
-        print('[PERSIST] _saveMessages: ABORT convId is null');
+        await AppLogService.debug(
+            'ChatPage', '[PERSIST] _saveMessages: ABORT convId is null');
         return;
       }
       final msgCount = _history.length;
       await ref.read(conversationsProvider.notifier).updateMessages(convId, [
         ..._history,
       ]);
-      print('[PERSIST] _saveMessages: OK convId=$convId msgCount=$msgCount');
+      await AppLogService.debug('ChatPage',
+          '[PERSIST] _saveMessages: OK convId=$convId msgCount=$msgCount');
     } catch (e, s) {
       // Fallback: save directly to SharedPreferences if the notifier is
       // unavailable (e.g. during background streaming after page disposal).
@@ -873,12 +876,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
       ),
     );
 
-    print(
+    await AppLogService.debug('ChatPage',
         '[DEBUG-HIST] _onMessageSend: BEFORE stream, _history.length=${_history.length}');
     await _startStreaming(text, capturedConvId: convId);
-    print(
+    await AppLogService.debug('ChatPage',
         '[DEBUG-HIST] _onMessageSend: AFTER stream, _history.length=${_history.length}');
-    print(
+    await AppLogService.debug('ChatPage',
         '[PERSIST] _onMessageSend: streaming done, convId=$convId historyLen=${_history.length}');
   }
 
@@ -934,7 +937,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final effectiveConvId =
         capturedConvId ?? ref.read(activeConversationIdProvider) ?? '';
     final histBefore = List<ChatMessage>.from(_history);
-    print(
+    await AppLogService.debug('ChatPage',
         '[DEBUG-HIST] _startStreaming: sending to manager, _history.length=${histBefore.length}');
     final StreamResult result =
         await ref.read(chatStreamManagerProvider).startStreaming(
@@ -946,7 +949,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
               reasoningEffort: ref.read(reasoningEffortProvider),
               reasoningParamValues: ref.read(reasoningParamValuesProvider),
             );
-    print(
+    await AppLogService.debug('ChatPage',
         '[DEBUG-HIST] _startStreaming: manager returned, result.history.length=${result.history.length}');
 
     // ── Post-stream completion ──
@@ -956,7 +959,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // the manager's own Ref (from Provider creation, survives widget dispose).
     _history.clear();
     _history.addAll(result.history);
-    print(
+    await AppLogService.debug('ChatPage',
         '[DEBUG-HIST] _startStreaming: after result apply, _history.length=${_history.length}');
 
     // Clean up local streaming state and providers. Wrap in try-catch

@@ -258,15 +258,15 @@ class ChatStreamManager {
       return _streams[convId]!.resultCompleter!.future;
     }
 
-    // Create per-conversation state and its result completer
+    // Create per-conversation state and its result completer.
+    // ALL synchronous setup must happen BEFORE the first await so
+    // that isStreaming / isStreamingFor are correct immediately.
     final resultCompleter = Completer<StreamResult>();
     final state = _ConversationStreamState(convId: convId)
       ..resultCompleter = resultCompleter;
     state.history = List.from(history);
     state.lastTextUpdate = DateTime.now();
     state.lastReasoningUpdate = DateTime.now();
-    print(
-        '[DEBUG-HIST-MGR] startStreaming: received historyLen=${history.length}, convId=$convId');
 
     final aiMsgId = 'a${DateTime.now().millisecondsSinceEpoch}';
     state.streamingMsgId = aiMsgId;
@@ -284,6 +284,9 @@ class ChatStreamManager {
       _doPeriodicPersist(state);
     });
 
+    // Now safe to yield to event loop — all state is established.
+    await AppLogService.debug('ChatStreamManager',
+        '[DEBUG-HIST-MGR] startStreaming: received historyLen=${history.length}, convId=$convId');
     await AppLogService.info('ChatStreamManager', '开始流式请求, convId=$convId');
 
     Object? streamError;
@@ -487,14 +490,15 @@ class ChatStreamManager {
     // It's the single persistence path for all streaming results.
     try {
       if (state.history.isNotEmpty) {
-        print(
+        await AppLogService.debug('ChatStreamManager',
             '[DEBUG-HIST-MGR] about to save: state.history.length=${state.history.length}, fullReply.isNotEmpty=${state.fullReply.isNotEmpty}');
         await _saveMessages(convId: convId, history: state.history);
-        print(
+        await AppLogService.debug('ChatStreamManager',
             '[DEBUG-HIST-MGR] save completed: state.history.length=${state.history.length}');
       }
     } catch (_) {
-      print('[DEBUG-HIST-MGR] save failed');
+      await AppLogService.debug(
+          'ChatStreamManager', '[DEBUG-HIST-MGR] save failed');
     }
 
     // Build the result and complete the resultCompleter AFTER save
