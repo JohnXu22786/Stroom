@@ -600,6 +600,10 @@ class ChatStreamManager {
 
   /// Periodic partial persistence for the given conversation's stream.
   void _doPeriodicPersist(_ConversationStreamState s) {
+    // Guard: if the timer was cancelled (stream ended), the state might
+    // still be referenced from a late-arriving timer callback. The final
+    // save has already run by now; don't overwrite it with partial data.
+    if (s.persistTimer == null) return;
     if (s.cancelledByUser) return;
     if (s.fullReply.isEmpty && s.reasoningBuffer.isEmpty) return;
     final ref = _ref;
