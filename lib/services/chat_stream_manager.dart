@@ -337,6 +337,8 @@ class ChatStreamManager {
               state.lastTextUpdate = now;
               _maybeSetProvider(
                   convId, streamingFullReplyProvider, state.fullReply);
+              _maybeSetProvider(convId, streamingTextSectionsProvider,
+                  List<String>.from(state.textChunks));
             }
 
           case ReasoningEvent e:
@@ -385,6 +387,8 @@ class ChatStreamManager {
             }
             _maybeSetProvider(convId, streamingToolCallsProvider,
                 List<ToolCallData>.from(state.toolCalls));
+            _maybeSetProvider(convId, streamingTextSectionsProvider,
+                List<String>.from(state.textChunks));
 
           case ToolCallCompleteEvent e:
             for (var i = 0; i < state.toolCalls.length; i++) {
@@ -421,6 +425,8 @@ class ChatStreamManager {
         }
         state.fullReply = '错误: ${e.toString()}';
         _maybeSetProvider(convId, streamingFullReplyProvider, state.fullReply);
+        _maybeSetProvider(convId, streamingTextSectionsProvider,
+            List<String>.from(state.textChunks));
         state.toolCalls.clear();
         _maybeSetProvider(convId, streamingToolCallsProvider, []);
       }
@@ -431,6 +437,8 @@ class ChatStreamManager {
 
       // Final throttle flush: push the last text to the UI
       _maybeSetProvider(convId, streamingFullReplyProvider, state.fullReply);
+      _maybeSetProvider(convId, streamingTextSectionsProvider,
+          List<String>.from(state.textChunks));
 
       // Capture request/response raw data
       try {
@@ -594,6 +602,8 @@ class ChatStreamManager {
         List<String>.from(s.reasoningSections));
     _setProvider(
         streamingToolCallsProvider, List<ToolCallData>.from(s.toolCalls));
+    _setProvider(
+        streamingTextSectionsProvider, List<String>.from(s.textChunks));
   }
 
   /// Clears all global streaming providers.
@@ -605,6 +615,7 @@ class ChatStreamManager {
     _setProvider(streamingReasoningProvider, '');
     _setProvider(streamingReasoningSectionsProvider, []);
     _setProvider(streamingToolCallsProvider, []);
+    _setProvider(streamingTextSectionsProvider, ['']);
   }
 
   /// Only pushes a provider update if [convId] matches the active conversation.
@@ -642,6 +653,9 @@ class ChatStreamManager {
                 : null,
             reasoningSections: s.reasoningSections.isNotEmpty
                 ? List<String>.from(s.reasoningSections)
+                : null,
+            textSections: s.textChunks.any((c) => c.isNotEmpty)
+                ? List<String>.from(s.textChunks)
                 : null,
           ));
         }

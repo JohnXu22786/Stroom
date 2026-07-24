@@ -1166,5 +1166,80 @@ void main() {
 
       manager.dispose();
     });
+
+    test('textSections correctly partitioned at tool call boundaries', () async {
+      SharedPreferences.setMockInitialValues({});
+      final manager = ChatStreamManager();
+
+      final provider = _MockProvider([
+        // Round 1: reasoning + text + tool call
+        [
+          AIStreamEvent('Think about A', isReasoning: true),
+          AIStreamEvent('Intermediate text 1'),
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'tc1',
+              'type': 'function',
+              'function': {
+                'name': 'search',
+                'arguments': '{"q":"A"}',
+              },
+            },
+          ]),
+        ],
+        // Round 2: second reasoning + more text + second tool call
+        [
+          AIStreamEvent('Think about B', isReasoning: true),
+          AIStreamEvent('Intermediate text 2'),
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'tc2',
+              'type': 'function',
+              'function': {
+                'name': 'web_fetch',
+                'arguments': '{"url":"b.com"}',
+              },
+            },
+          ]),
+        ],
+        // Round 3: final reasoning + final answer
+        [
+          AIStreamEvent('Final thought', isReasoning: true),
+          AIStreamEvent('Final answer text'),
+        ],
+      ]);
+      manager.adapter.forceService(_makeChatService(provider));
+
+      final result = await manager.startStreaming(
+        text: 'Query',
+        convId: 'conv-text-section',
+        history: [_userMsg('Query', 'u1')],
+      );
+
+      // Check textSections is present and correctly partitioned
+      final ts = result.textSections;
+      expect(ts, isNotNull);
+      expect(ts.length, 3, reason:
+          'Expected 3 text sections (one per round), got ${ts.length}');
+      expect(ts[0], contains('Intermediate text 1'));
+      expect(ts[1], contains('Intermediate text 2'));
+      expect(ts[2], contains('Final answer text'));
+
+      // Each text section should contain ONLY its round's text
+      expect(ts[0], isNot(contains('Intermediate text 2')));
+      expect(ts[1], isNot(contains('Intermediate text 1')));
+      expect(ts[2], isNot(contains('Intermediate text 1')));
+
+      // Verify ChatMessage.textSessions matches
+      final msg = result.assistantMessage;
+      expect(msg, isNotNull);
+      expect(msg!.textSections, isNotNull);
+      expect(msg.textSections!.length, 3);
+      expect(msg.textSections![0], contains('Intermediate text 1'));
+      expect(msg.textSections![1], contains('Intermediate text 2'));
+      expect(msg.textSections![2], contains('Final answer text'));
+
+      manager.dispose();
+    });
   });
 }
