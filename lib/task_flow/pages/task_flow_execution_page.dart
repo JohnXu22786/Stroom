@@ -254,7 +254,6 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     );
   }
 
-  /// Simple step card — icon + label + index, no status tracking.
   Widget _buildStepCard({
     required TaskFlowBlock block,
     required int index,
@@ -305,7 +304,7 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
   }
 
   // ========================================================================
-  // Flow Execution — pop immediately, run in background
+  // Flow Execution — pop immediately, all sub-tasks pre-created
   // ========================================================================
 
   Future<void> _startFlow() async {
@@ -320,6 +319,23 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
       flowId: flow.id,
       flowName: flow.name,
     );
+
+    // Pre-create placeholder sub-tasks for ALL blocks so the task list
+    // card shows the correct count immediately — even before blocks execute.
+    final placeholders = <int, FlowSubTask>{};
+    for (int i = 0; i < flow.blocks.length; i++) {
+      final block = flow.blocks[i];
+      final def = block.getDefinition();
+      final subTask = FlowSubTask(
+        blockTypeKey: def?.typeKey ?? block.typeKey,
+        blockLabel: def?.label ?? block.typeKey,
+        subTaskId: 'pending_${block.typeKey}_$i',
+        subTaskType: _subTaskType(def?.typeKey),
+        status: TaskStatus.waiting,
+      );
+      execNotifier.addSubTask(execId, subTask);
+      placeholders[i] = subTask;
+    }
 
     final inputText = _inputController.text.trim();
 
@@ -338,8 +354,9 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
         return;
       }
 
-      final result =
-          await _executeBlock(def, block, currentData, execId, execNotifier);
+      final result = await _executeBlock(
+          def, block, currentData, execId, execNotifier,
+          flowSubTask: placeholders[i]!);
 
       if (result.startsWith('[')) {
         execNotifier.failExecution(execId, error: result);
@@ -351,25 +368,42 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     execNotifier.completeExecution(execId);
   }
 
+  String _subTaskType(String? typeKey) {
+    switch (typeKey) {
+      case 'catcatch':
+        return 'catcatch';
+      case 'tts':
+        return 'synthesis';
+      default:
+        return 'background';
+    }
+  }
+
   Future<String> _executeBlock(
     BlockTypeDefinition def,
     TaskFlowBlock block,
     String input,
     String execId,
-    TaskFlowExecutionNotifier execNotifier,
-  ) async {
+    TaskFlowExecutionNotifier execNotifier, {
+    required FlowSubTask flowSubTask,
+  }) async {
     switch (def.typeKey) {
       case 'catcatch':
-        return await _executeCatCatchBlock(def, input, execId, execNotifier);
+        return await _executeCatCatchBlock(def, input, execId, execNotifier,
+            flowSubTask: flowSubTask);
       case 'audioSeparation':
         return await _executeAudioSeparationBlock(
-            def, input, execId, execNotifier);
+            def, input, execId, execNotifier,
+            flowSubTask: flowSubTask);
       case 'asr':
-        return await _executeAsrBlock(block, def, input, execId, execNotifier);
+        return await _executeAsrBlock(block, def, input, execId, execNotifier,
+            flowSubTask: flowSubTask);
       case 'ocr':
-        return await _executeOcrBlock(block, def, input, execId, execNotifier);
+        return await _executeOcrBlock(block, def, input, execId, execNotifier,
+            flowSubTask: flowSubTask);
       case 'tts':
-        return await _executeTtsBlock(block, def, input, execId, execNotifier);
+        return await _executeTtsBlock(block, def, input, execId, execNotifier,
+            flowSubTask: flowSubTask);
       default:
         execNotifier.failExecution(execId, error: '不支持的功能块: ${def.typeKey}');
         return '[${def.typeKey}] 不支持的功能块';
@@ -384,18 +418,14 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     BlockTypeDefinition def,
     String input,
     String execId,
-    TaskFlowExecutionNotifier execNotifier,
-  ) async {
+    TaskFlowExecutionNotifier execNotifier, {
+    required FlowSubTask flowSubTask,
+  }) async {
     final catcatchNotifier = ref.read(catcatchTasksProvider.notifier);
     final taskId = catcatchNotifier.addTask(input, 0);
-
-    final subTask = FlowSubTask(
-      blockTypeKey: 'catcatch',
-      blockLabel: def.label,
-      subTaskId: taskId,
-      subTaskType: 'catcatch',
-    );
-    execNotifier.addSubTask(execId, subTask);
+    execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
+    execNotifier.updateSubTaskStatus(
+        execId, flowSubTask.id, TaskStatus.running);
 
     final startTime = DateTime.now();
     const maxWait = Duration(minutes: 10);
@@ -404,23 +434,24 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     // ignore: literal_only_boolean_expressions
     while (true) {
       await Future.delayed(const Duration(milliseconds: 500));
-
       final task = ref
           .read(catcatchTasksProvider)
           .where((t) => t.id == taskId)
           .firstOrNull;
 
       if (task == null) {
-        execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
+        execNotifier.updateSubTaskStatus(
+            execId, flowSubTask.id, TaskStatus.failed);
         return '[CatCatch] 任务丢失';
       }
       if (task.status == TaskStatus.completed) {
         execNotifier.updateSubTaskStatus(
-            execId, subTask.id, TaskStatus.completed);
+            execId, flowSubTask.id, TaskStatus.completed);
         return task.downloadedFilePath ?? '下载完成（无文件路径）';
       }
       if (task.status == TaskStatus.failed) {
-        execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
+        execNotifier.updateSubTaskStatus(
+            execId, flowSubTask.id, TaskStatus.failed);
         return '[CatCatch] ${task.error ?? '任务失败'}';
       }
 
@@ -432,21 +463,23 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
           if (task.detectedMedia.isNotEmpty) {
             catcatchNotifier.selectMedia(taskId, task.detectedMedia.first);
             execNotifier.updateSubTaskStatus(
-                execId, subTask.id, TaskStatus.running);
+                execId, flowSubTask.id, TaskStatus.running);
           } else {
             execNotifier.updateSubTaskStatus(
-                execId, subTask.id, TaskStatus.failed);
+                execId, flowSubTask.id, TaskStatus.failed);
             return '[CatCatch] 未检测到可用媒体资源';
           }
         }
       }
 
       if (task.status == TaskStatus.paused) {
-        execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.paused);
+        execNotifier.updateSubTaskStatus(
+            execId, flowSubTask.id, TaskStatus.paused);
         return '[CatCatch] 任务已暂停';
       }
       if (DateTime.now().difference(startTime) > maxWait) {
-        execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
+        execNotifier.updateSubTaskStatus(
+            execId, flowSubTask.id, TaskStatus.failed);
         return '[CatCatch] 下载超时';
       }
     }
@@ -460,47 +493,42 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     BlockTypeDefinition def,
     String input,
     String execId,
-    TaskFlowExecutionNotifier execNotifier,
-  ) async {
+    TaskFlowExecutionNotifier execNotifier, {
+    required FlowSubTask flowSubTask,
+  }) async {
     final bgNotifier = ref.read(backgroundTasksProvider.notifier);
-
     final inputBasename = p.basename(input);
     final inputFormat = p.extension(input).replaceFirst('.', '').toLowerCase();
     final title = '音频分离_${p.basenameWithoutExtension(inputBasename)}';
 
     final taskId = bgNotifier.addTask(
         type: BackgroundTaskType.audioSeparation, title: title);
-    final subTask = FlowSubTask(
-      blockTypeKey: 'audioSeparation',
-      blockLabel: def.label,
-      subTaskId: taskId,
-      subTaskType: 'background',
-    );
-    execNotifier.addSubTask(execId, subTask);
+    execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
 
     Uint8List videoBytes;
     try {
       final file = File(input);
       if (!await file.exists()) {
-        bgNotifier.failTask(taskId, error: '输入文件不存在: $input');
-        execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
+        _failSubTask(bgNotifier, taskId, execNotifier, execId, flowSubTask.id,
+            '输入文件不存在: $input');
         return '[AudioSeparation] 输入文件不存在';
       }
       videoBytes = await file.readAsBytes();
       if (videoBytes.isEmpty) {
-        bgNotifier.failTask(taskId, error: '输入文件为空: $input');
-        execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
+        _failSubTask(
+            bgNotifier, taskId, execNotifier, execId, flowSubTask.id, '输入文件为空');
         return '[AudioSeparation] 输入文件为空';
       }
     } catch (e) {
-      bgNotifier.failTask(taskId, error: '无法读取输入文件: $e');
-      execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
+      _failSubTask(bgNotifier, taskId, execNotifier, execId, flowSubTask.id,
+          '无法读取输入文件: $e');
       return '[AudioSeparation] 无法读取输入文件';
     }
 
     try {
       bgNotifier.updateStep(taskId, 0, running: true);
-      execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.running);
+      execNotifier.updateSubTaskStatus(
+          execId, flowSubTask.id, TaskStatus.running);
 
       final audioBytes = await _extractAudioIsolate(videoBytes, inputFormat);
       bgNotifier.updateStep(taskId, 0, completed: true);
@@ -511,11 +539,11 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
 
       bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
       execNotifier.updateSubTaskStatus(
-          execId, subTask.id, TaskStatus.completed);
+          execId, flowSubTask.id, TaskStatus.completed);
       return filePath ?? title;
     } catch (e) {
-      bgNotifier.failTask(taskId, error: '音频提取失败: $e');
-      execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
+      _failSubTask(bgNotifier, taskId, execNotifier, execId, flowSubTask.id,
+          '音频提取失败: $e');
       return '[AudioSeparation] $e';
     }
   }
@@ -530,7 +558,7 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
   }
 
   // ========================================================================
-  // ASR — real speech-to-text
+  // ASR
   // ========================================================================
 
   Future<String> _executeAsrBlock(
@@ -538,29 +566,23 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     BlockTypeDefinition def,
     String input,
     String execId,
-    TaskFlowExecutionNotifier execNotifier,
-  ) async {
+    TaskFlowExecutionNotifier execNotifier, {
+    required FlowSubTask flowSubTask,
+  }) async {
     final bgNotifier = ref.read(backgroundTasksProvider.notifier);
     final inputBasename = p.basename(input);
     final title = '语音识别_${p.basenameWithoutExtension(inputBasename)}';
 
     final taskId =
         bgNotifier.addTask(type: BackgroundTaskType.asr, title: title);
-    final subTask = FlowSubTask(
-      blockTypeKey: 'asr',
-      blockLabel: def.label,
-      subTaskId: taskId,
-      subTaskType: 'background',
-    );
-    execNotifier.addSubTask(execId, subTask);
+    execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
 
-    // Read audio file
     Uint8List audioBytes;
     String audioFormat;
     try {
       final file = File(input);
       if (!await file.exists()) {
-        _failSubTask(bgNotifier, taskId, execNotifier, execId, subTask.id,
+        _failSubTask(bgNotifier, taskId, execNotifier, execId, flowSubTask.id,
             '输入文件不存在: $input');
         return '[ASR] 输入文件不存在';
       }
@@ -568,23 +590,22 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
       audioFormat = p.extension(input).replaceFirst('.', '').toLowerCase();
       if (audioBytes.isEmpty) {
         _failSubTask(
-            bgNotifier, taskId, execNotifier, execId, subTask.id, '输入文件为空');
+            bgNotifier, taskId, execNotifier, execId, flowSubTask.id, '输入文件为空');
         return '[ASR] 输入文件为空';
       }
     } catch (e) {
-      _failSubTask(
-          bgNotifier, taskId, execNotifier, execId, subTask.id, '读取文件失败: $e');
+      _failSubTask(bgNotifier, taskId, execNotifier, execId, flowSubTask.id,
+          '读取文件失败: $e');
       return '[ASR] 读取文件失败';
     }
 
-    // Get ASR config
     final modelIndex = int.tryParse(block.params['modelIndex'] ?? '0') ?? 0;
     final entries = ref.read(providerEntriesProvider).entries;
     final configs =
         entries.where((e) => e.type == 'asr').expand((e) => e.configs).toList();
 
     if (configs.isEmpty || modelIndex >= configs.length) {
-      _failSubTask(bgNotifier, taskId, execNotifier, execId, subTask.id,
+      _failSubTask(bgNotifier, taskId, execNotifier, execId, flowSubTask.id,
           '未配置ASR模型或索引越界');
       return '[ASR] 未配置ASR模型';
     }
@@ -592,23 +613,24 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     final config = configs[modelIndex];
     final model = config.models.isNotEmpty ? config.models.first : null;
     if (model == null) {
-      _failSubTask(
-          bgNotifier, taskId, execNotifier, execId, subTask.id, 'ASR模型配置为空');
+      _failSubTask(bgNotifier, taskId, execNotifier, execId, flowSubTask.id,
+          'ASR模型配置为空');
       return '[ASR] 模型配置为空';
     }
 
     try {
       bgNotifier.updateStep(taskId, 0, running: true);
-      execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.running);
+      execNotifier.updateSubTaskStatus(
+          execId, flowSubTask.id, TaskStatus.running);
 
       final result = await _callAsrApi(
-          audioBytes: audioBytes,
-          audioFormat: audioFormat,
-          host: config.host,
-          apiKey: config.key,
-          modelId: model.modelId,
-          typeConfig: model.typeConfig,
-          customParams: model.customParams);
+        audioBytes: audioBytes,
+        audioFormat: audioFormat,
+        host: config.host,
+        apiKey: config.key,
+        modelId: model.modelId,
+        typeConfig: model.typeConfig,
+      );
 
       bgNotifier.updateStep(taskId, 0, completed: true);
       bgNotifier.setResult(taskId, result);
@@ -616,16 +638,15 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
       final textPath = await _saveTextForFlow(result, title);
       bgNotifier.completeTask(taskId, downloadedFilePath: textPath);
       execNotifier.updateSubTaskStatus(
-          execId, subTask.id, TaskStatus.completed);
+          execId, flowSubTask.id, TaskStatus.completed);
       return result;
     } catch (e) {
       _failSubTask(
-          bgNotifier, taskId, execNotifier, execId, subTask.id, '识别失败: $e');
+          bgNotifier, taskId, execNotifier, execId, flowSubTask.id, '识别失败: $e');
       return '[ASR] $e';
     }
   }
 
-  /// Call the OpenAI-compatible Whisper API.
   Future<String> _callAsrApi({
     required Uint8List audioBytes,
     required String audioFormat,
@@ -633,7 +654,6 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     required String apiKey,
     required String modelId,
     Map<String, dynamic> typeConfig = const {},
-    List<dynamic> customParams = const [],
   }) async {
     final dio = Dio();
     final mimeStr = audioFormat == 'wav' ? 'audio/wav' : 'audio/$audioFormat';
@@ -650,14 +670,12 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
         data: formData,
         options: Options(headers: {'Authorization': 'Bearer $apiKey'}));
 
-    if (response.data is Map) {
-      return (response.data['text'] as String?) ?? '';
-    }
+    if (response.data is Map) return (response.data['text'] as String?) ?? '';
     return response.data.toString();
   }
 
   // ========================================================================
-  // OCR — real image-to-text
+  // OCR
   // ========================================================================
 
   Future<String> _executeOcrBlock(
@@ -665,28 +683,23 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     BlockTypeDefinition def,
     String input,
     String execId,
-    TaskFlowExecutionNotifier execNotifier,
-  ) async {
+    TaskFlowExecutionNotifier execNotifier, {
+    required FlowSubTask flowSubTask,
+  }) async {
     final bgNotifier = ref.read(backgroundTasksProvider.notifier);
     final inputBasename = p.basename(input);
     final title = '文字识别_${p.basenameWithoutExtension(inputBasename)}';
 
     final taskId =
         bgNotifier.addTask(type: BackgroundTaskType.ocr, title: title);
-    final subTask = FlowSubTask(
-      blockTypeKey: 'ocr',
-      blockLabel: def.label,
-      subTaskId: taskId,
-      subTaskType: 'background',
-    );
-    execNotifier.addSubTask(execId, subTask);
+    execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
 
     Uint8List imageBytes;
     String imageFormat;
     try {
       final file = File(input);
       if (!await file.exists()) {
-        _failSubTask(bgNotifier, taskId, execNotifier, execId, subTask.id,
+        _failSubTask(bgNotifier, taskId, execNotifier, execId, flowSubTask.id,
             '输入文件不存在: $input');
         return '[OCR] 输入文件不存在';
       }
@@ -694,44 +707,45 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
       imageFormat = p.extension(input).replaceFirst('.', '').toLowerCase();
       if (imageBytes.isEmpty) {
         _failSubTask(
-            bgNotifier, taskId, execNotifier, execId, subTask.id, '输入文件为空');
+            bgNotifier, taskId, execNotifier, execId, flowSubTask.id, '输入文件为空');
         return '[OCR] 输入文件为空';
       }
     } catch (e) {
-      _failSubTask(
-          bgNotifier, taskId, execNotifier, execId, subTask.id, '读取文件失败: $e');
+      _failSubTask(bgNotifier, taskId, execNotifier, execId, flowSubTask.id,
+          '读取文件失败: $e');
       return '[OCR] 读取文件失败';
     }
 
-    // Get OCR config
     final entries = ref.read(providerEntriesProvider).entries;
     final configs =
         entries.where((e) => e.type == 'ocr').expand((e) => e.configs).toList();
 
     if (configs.isEmpty) {
       _failSubTask(
-          bgNotifier, taskId, execNotifier, execId, subTask.id, '未配置OCR模型');
+          bgNotifier, taskId, execNotifier, execId, flowSubTask.id, '未配置OCR模型');
       return '[OCR] 未配置OCR模型';
     }
 
     final config = configs.first;
     final model = config.models.isNotEmpty ? config.models.first : null;
     if (model == null) {
-      _failSubTask(
-          bgNotifier, taskId, execNotifier, execId, subTask.id, 'OCR模型配置为空');
+      _failSubTask(bgNotifier, taskId, execNotifier, execId, flowSubTask.id,
+          'OCR模型配置为空');
       return '[OCR] 模型配置为空';
     }
 
     try {
       bgNotifier.updateStep(taskId, 0, running: true);
-      execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.running);
+      execNotifier.updateSubTaskStatus(
+          execId, flowSubTask.id, TaskStatus.running);
 
       final result = await _callOcrApi(
-          imageBytes: imageBytes,
-          imageFormat: imageFormat,
-          host: config.host,
-          apiKey: config.key,
-          modelId: model.modelId);
+        imageBytes: imageBytes,
+        imageFormat: imageFormat,
+        host: config.host,
+        apiKey: config.key,
+        modelId: model.modelId,
+      );
 
       bgNotifier.updateStep(taskId, 0, completed: true);
       bgNotifier.setResult(taskId, result);
@@ -739,16 +753,15 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
       final textPath = await _saveTextForFlow(result, title);
       bgNotifier.completeTask(taskId, downloadedFilePath: textPath);
       execNotifier.updateSubTaskStatus(
-          execId, subTask.id, TaskStatus.completed);
+          execId, flowSubTask.id, TaskStatus.completed);
       return result;
     } catch (e) {
       _failSubTask(
-          bgNotifier, taskId, execNotifier, execId, subTask.id, '识别失败: $e');
+          bgNotifier, taskId, execNotifier, execId, flowSubTask.id, '识别失败: $e');
       return '[OCR] $e';
     }
   }
 
-  /// Call the OpenAI-compatible Chat Completions API with image input.
   Future<String> _callOcrApi({
     required Uint8List imageBytes,
     required String imageFormat,
@@ -796,7 +809,7 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
   }
 
   // ========================================================================
-  // TTS — real text-to-speech via taskListProvider
+  // TTS
   // ========================================================================
 
   Future<String> _executeTtsBlock(
@@ -804,8 +817,9 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     BlockTypeDefinition def,
     String input,
     String execId,
-    TaskFlowExecutionNotifier execNotifier,
-  ) async {
+    TaskFlowExecutionNotifier execNotifier, {
+    required FlowSubTask flowSubTask,
+  }) async {
     final taskListNotifier = ref.read(taskListProvider.notifier);
 
     final entries = ref.read(providerEntriesProvider).entries;
@@ -839,44 +853,35 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
           'speed': speed,
         },
       );
+      execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
 
-      final subTask = FlowSubTask(
-        blockTypeKey: 'tts',
-        blockLabel: def.label,
-        subTaskId: taskId,
-        subTaskType: 'synthesis',
-      );
-      execNotifier.addSubTask(execId, subTask);
-
-      // Poll until synthesis completes
       final startTime = DateTime.now();
       const maxWait = Duration(minutes: 5);
 
       // ignore: literal_only_boolean_expressions
       while (true) {
         await Future.delayed(const Duration(milliseconds: 500));
-
         final task =
             ref.read(taskListProvider).where((t) => t.id == taskId).firstOrNull;
 
         if (task == null) {
           execNotifier.updateSubTaskStatus(
-              execId, subTask.id, TaskStatus.failed);
+              execId, flowSubTask.id, TaskStatus.failed);
           return '[TTS] 任务丢失';
         }
         if (task.status == TaskStatus.completed) {
           execNotifier.updateSubTaskStatus(
-              execId, subTask.id, TaskStatus.completed);
+              execId, flowSubTask.id, TaskStatus.completed);
           return task.downloadedFilePath ?? 'tts_${task.id}.wav';
         }
         if (task.status == TaskStatus.failed) {
           execNotifier.updateSubTaskStatus(
-              execId, subTask.id, TaskStatus.failed);
+              execId, flowSubTask.id, TaskStatus.failed);
           return '[TTS] ${task.error ?? '任务失败'}';
         }
         if (DateTime.now().difference(startTime) > maxWait) {
           execNotifier.updateSubTaskStatus(
-              execId, subTask.id, TaskStatus.failed);
+              execId, flowSubTask.id, TaskStatus.failed);
           return '[TTS] 合成超时';
         }
       }
@@ -895,11 +900,11 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     String taskId,
     TaskFlowExecutionNotifier execNotifier,
     String execId,
-    String subTaskId,
+    String flowSubTaskId,
     String error,
   ) {
     bgNotifier.failTask(taskId, error: error);
-    execNotifier.updateSubTaskStatus(execId, subTaskId, TaskStatus.failed);
+    execNotifier.updateSubTaskStatus(execId, flowSubTaskId, TaskStatus.failed);
   }
 
   Future<String?> _saveTextForFlow(String text, String title) async {

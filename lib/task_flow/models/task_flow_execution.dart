@@ -37,6 +37,15 @@ class FlowSubTask {
         subTaskType: subTaskType,
         status: newStatus,
       );
+
+  FlowSubTask copyWith({String? subTaskId}) => FlowSubTask(
+        id: id,
+        blockTypeKey: blockTypeKey,
+        blockLabel: blockLabel,
+        subTaskId: subTaskId ?? this.subTaskId,
+        subTaskType: subTaskType,
+        status: status,
+      );
 }
 
 /// Tracks a running/completed task flow execution.

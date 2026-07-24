@@ -43,114 +43,112 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
     // Sync sub-task statuses with underlying real tasks
     _syncSubTaskStatuses();
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-      child: Card(
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(
-            color: widget.isUnread ? cs.primary : cs.outlineVariant,
-            width: widget.isUnread ? 1 : 0.5,
-          ),
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: widget.isUnread ? cs.primary : cs.outlineVariant,
+          width: widget.isUnread ? 1 : 0.5,
         ),
-        child: Column(
-          children: [
-            // === Level 0: Flow summary (always visible) ===
-            InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () => setState(() => _expanded = !_expanded),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    // Status icon (based on sub-task states, not exec.status)
-                    _computedStatusIcon(cs),
-                    const SizedBox(width: 10),
-                    // Flow name + tag
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              // "任务流" tag
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 4, vertical: 1),
-                                margin: const EdgeInsets.only(right: 6),
-                                decoration: BoxDecoration(
-                                  color: cs.primary.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(3),
-                                ),
-                                child: Text(
-                                  '任务流',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: cs.primary,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+      ),
+      child: Column(
+        children: [
+          // === Level 0: Flow summary (always visible) ===
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  // Status icon (based on sub-task states, not exec.status)
+                  _computedStatusIcon(cs),
+                  const SizedBox(width: 10),
+                  // Flow name + tag
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            // "任务流" tag
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 4, vertical: 1),
+                              margin: const EdgeInsets.only(right: 6),
+                              decoration: BoxDecoration(
+                                color: cs.primary.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                              child: Text(
+                                '任务流',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: cs.primary,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              // Flow name
-                              Flexible(
-                                child: Text(
-                                  exec.flowName,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: cs.onSurface,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          // Progress line
-                          Text(
-                            _progressText(exec),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: cs.onSurfaceVariant,
                             ),
+                            // Flow name
+                            Flexible(
+                              child: Text(
+                                exec.flowName,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: cs.onSurface,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        // Progress line
+                        Text(
+                          _progressText(exec),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: cs.onSurfaceVariant,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                    // Expand arrow
-                    Icon(
-                      _expanded ? Icons.expand_less : Icons.expand_more,
-                      color: cs.onSurfaceVariant,
-                      size: 20,
-                    ),
-                  ],
+                  ),
+                  // Expand arrow
+                  Icon(
+                    _expanded ? Icons.expand_less : Icons.expand_more,
+                    color: cs.onSurfaceVariant,
+                    size: 20,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // === Level 1: Direct sub-task cards (when flow is expanded) ===
+          if (_expanded) ...[
+            for (int i = 0; i < exec.subTasks.length; i++)
+              _buildSubTaskCard(exec.subTasks[i], cs),
+            // Delete button at the bottom of expanded view
+            Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: TextButton.icon(
+                  onPressed: () => _confirmDelete(context, cs),
+                  icon: Icon(Icons.delete_outline, size: 16, color: cs.error),
+                  label: Text('删除',
+                      style: TextStyle(fontSize: 13, color: cs.error)),
                 ),
               ),
             ),
-
-            // === Level 1: Direct sub-task cards (when flow is expanded) ===
-            if (_expanded) ...[
-              for (int i = 0; i < exec.subTasks.length; i++)
-                _buildSubTaskCard(exec.subTasks[i], cs),
-              // Delete button at the bottom of expanded view
-              Align(
-                alignment: Alignment.centerRight,
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: TextButton.icon(
-                    onPressed: () => _confirmDelete(context, cs),
-                    icon: Icon(Icons.delete_outline, size: 16, color: cs.error),
-                    label: Text('删除',
-                        style: TextStyle(fontSize: 13, color: cs.error)),
-                  ),
-                ),
-              ),
-            ],
           ],
-        ),
+        ],
       ),
     );
   }
