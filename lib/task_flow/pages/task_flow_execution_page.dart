@@ -504,6 +504,8 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     final taskId = bgNotifier.addTask(
         type: BackgroundTaskType.audioSeparation, title: title);
     execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
+    execNotifier.updateSubTaskStatus(
+        execId, flowSubTask.id, TaskStatus.running);
 
     Uint8List videoBytes;
     try {
@@ -527,8 +529,6 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
 
     try {
       bgNotifier.updateStep(taskId, 0, running: true);
-      execNotifier.updateSubTaskStatus(
-          execId, flowSubTask.id, TaskStatus.running);
 
       final audioBytes = await _extractAudioIsolate(videoBytes, inputFormat);
       bgNotifier.updateStep(taskId, 0, completed: true);
@@ -576,6 +576,8 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     final taskId =
         bgNotifier.addTask(type: BackgroundTaskType.asr, title: title);
     execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
+    execNotifier.updateSubTaskStatus(
+        execId, flowSubTask.id, TaskStatus.running);
 
     Uint8List audioBytes;
     String audioFormat;
@@ -620,8 +622,6 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
 
     try {
       bgNotifier.updateStep(taskId, 0, running: true);
-      execNotifier.updateSubTaskStatus(
-          execId, flowSubTask.id, TaskStatus.running);
 
       final result = await _callAsrApi(
         audioBytes: audioBytes,
@@ -693,6 +693,8 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     final taskId =
         bgNotifier.addTask(type: BackgroundTaskType.ocr, title: title);
     execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
+    execNotifier.updateSubTaskStatus(
+        execId, flowSubTask.id, TaskStatus.running);
 
     Uint8List imageBytes;
     String imageFormat;
@@ -736,8 +738,6 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
 
     try {
       bgNotifier.updateStep(taskId, 0, running: true);
-      execNotifier.updateSubTaskStatus(
-          execId, flowSubTask.id, TaskStatus.running);
 
       final result = await _callOcrApi(
         imageBytes: imageBytes,
