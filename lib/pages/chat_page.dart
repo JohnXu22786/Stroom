@@ -91,12 +91,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
   final Map<String, bool> _isReasoningCompletedForMsg = {};
   final Map<String, List<MessageSegment>> _chatSegments = {};
 
-  /// Tracks how many characters of [_history] text have been rendered as
-  /// [TextSegment] entries in [_chatSegments] for each streaming message.
-  /// Used for incremental markdown rendering: only new text chunks are
-  /// added as new [TextSegment]s, avoiding full re-render of the entire
-  /// accumulated content on each throttle cycle.
-  final Map<String, int> _streamingRenderedLengths = {};
   String? _streamingMsgId;
 
   // ── Auto-scroll / scroll-to-bottom state ──
@@ -170,31 +164,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Used during streaming to avoid splitting math formulas across
   /// segment boundaries. If the last segment ends with unclosed math,
   /// new text is merged into it instead of creating a new segment.
-  static bool _hasUnclosedMath(String text) {
-    if (text.isEmpty) return false;
-    int i = 0;
-    int inlineCount = 0;
-    int blockCount = 0;
-    while (i < text.length) {
-      if (text[i] == r'\' && i + 1 < text.length) {
-        i += 2; // skip escaped character (e.g. \$)
-        continue;
-      }
-      if (text[i] == r'$') {
-        if (i + 1 < text.length && text[i + 1] == r'$') {
-          blockCount++;
-          i += 2;
-        } else {
-          inlineCount++;
-          i++;
-        }
-      } else {
-        i++;
-      }
-    }
-    return (inlineCount % 2 == 1) || (blockCount % 2 == 1);
-  }
-
   @override
   void initState() {
     super.initState();
@@ -353,7 +322,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
       _streamingMsgId = msgId;
       _chatSegments[msgId] = [];
-      _streamingRenderedLengths[msgId] = 0;
       // Restore reasoning sections from provider/manager so the buttons show up
       if (reasoningSections.isNotEmpty) {
         _reasoningContents[msgId] = List.of(reasoningSections);
@@ -516,12 +484,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     }
 
     // Guard: do NOT reload messages while streaming is active. The
-    // streaming loop relies on _chatSegments, _streamingRenderedLengths,
-    // and other per-message state that would be cleared by a reload.
-    // Reloading mid-stream would cause null-assert crashes (e.g.
-    // "Null check operator used on a null value") when the streaming
-    // loop accesses _streamingRenderedLengths[aiMsgId]! after the
-    // map was cleared.
+    // streaming loop relies on _chatSegments and other per-message
+    // state that would be cleared by a reload.
     if (_isStreamingActive) {
       await AppLogService.debug(
           'ChatPage', '_loadConversationMessages: 流式传输进行中，跳过');
@@ -579,7 +543,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
       _history.clear();
       _chatSegments.clear();
       _reasoningContents.clear();
-      _streamingRenderedLengths.clear();
       _streamingMsgId = null;
       _controller?.dispose();
       _messageKeys.clear();
@@ -622,33 +585,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
         }
 
         // Build unified segments for the full Agent chain.
-        // Interleave: Reasoning(i) → Text(i) → ToolCall(i) → ...
-        final segments = <MessageSegment>[];
-        final sections = msg.reasoningSections;
-        final toolCalls = msg.toolCalls;
-        final chunks = msg.textSections;
-        final sLen = sections?.length ?? 0;
-        final tLen = toolCalls?.length ?? 0;
-        final cLen = chunks?.length ?? 0;
-        final maxLen = [sLen, tLen, cLen].fold(0, (a, b) => a > b ? a : b);
-        for (var i = 0; i < maxLen; i++) {
-          if (i < sLen && sections![i].isNotEmpty) {
-            segments.add(ReasoningSegment(
-              sectionIndex: i,
-              isStreaming: false,
-            ));
-          }
-          if (i < cLen && chunks![i].isNotEmpty) {
-            segments.add(TextSegment(chunks[i]));
-          }
-          if (i < tLen) {
-            segments.add(ToolCallSegment(toolCalls![i]));
-          }
-        }
-        // Fallback: if no textSections, use content as single trailing block
+        final segments = buildAgentChainSegments(
+          reasoningSections: msg.reasoningSections ?? [],
+          textChunks: msg.textSections ?? [],
+          toolCalls: msg.toolCalls ?? [],
+        );
+        // Fallback: no textSections, use content as single trailing block
         if (segments.isEmpty && msg.content.isNotEmpty) {
           segments.add(TextSegment(msg.content));
-        } else if (chunks == null && msg.content.isNotEmpty) {
+        } else if (msg.textSections == null && msg.content.isNotEmpty) {
           segments.add(TextSegment(msg.content));
         }
         if (segments.isNotEmpty) {
@@ -940,7 +885,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final aiMsgId = 'a${DateTime.now().millisecondsSinceEpoch}';
     _streamingMsgId = aiMsgId;
     _chatSegments[aiMsgId] = [];
-    _streamingRenderedLengths[aiMsgId] = 0;
     _reasoningContents[aiMsgId] = [];
 
     // 1. Insert streaming placeholder message into the controller
@@ -1054,60 +998,38 @@ class _ChatPageState extends ConsumerState<ChatPage>
       }
       setState(() {});
     }
-    _streamingRenderedLengths.remove(aiMsgId);
   }
 
-  /// Builds the final [_chatSegments] entry for a completed assistant message,
-  /// preserving the full Agent chain: reasoning → text → toolCall → reasoning → ...
-  /// Each reasoning section is paired with its corresponding text chunk and tool
-  /// call, reflecting the natural Agent loop. Text chunks are sourced from
-  /// [msg.textSections] (per-round tracking) or fall back to [msg.content] as a
-  /// single trailing block.
+  /// Builds the final [_chatSegments] entry for a completed assistant message.
   void _buildFinalSegments(ChatMessage msg) {
-    final segments = <MessageSegment>[];
-    final sections = msg.reasoningSections ?? [];
-    final toolCalls = msg.toolCalls ?? [];
-    final chunks = msg.textSections;
+    final segments = buildAgentChainSegments(
+      reasoningSections: msg.reasoningSections ?? [],
+      textChunks: msg.textSections ?? [],
+      toolCalls: msg.toolCalls ?? [],
+    );
 
-    for (var i = 0; i < sections.length; i++) {
-      // Skip empty reasoning sections (e.g. trailing empty from SectionEndEvent)
-      if (sections[i].isEmpty) continue;
-
-      segments.add(ReasoningSegment(
-        sectionIndex: i,
-        isStreaming: false,
-      ));
-
-      // Text chunk for this round (before the tool call)
-      if (chunks != null && i < chunks.length && chunks[i].isNotEmpty) {
-        segments.add(TextSegment(chunks[i]));
-      }
-
-      if (i < toolCalls.length) {
-        segments.add(ToolCallSegment(toolCalls[i]));
-      }
-    }
-
-    // Remaining tool calls without matching reasoning
-    for (var i = sections.length; i < toolCalls.length; i++) {
-      segments.add(ToolCallSegment(toolCalls[i]));
-    }
-
-    // Remaining text chunks without matching reasoning
-    if (chunks != null) {
-      for (var i = sections.length; i < chunks.length; i++) {
-        if (chunks[i].isNotEmpty) {
-          segments.add(TextSegment(chunks[i]));
-        }
-      }
-    } else if (msg.content.isNotEmpty) {
-      // Fallback: no textSections, put all content at the end
+    // Fallback: no textSections at all, put content at the end
+    if (segments.isEmpty && msg.content.isNotEmpty) {
       segments.add(TextSegment(msg.content));
     }
 
     if (segments.isNotEmpty) {
       _chatSegments[msg.id] = segments;
     }
+  }
+
+  /// Rebuilds the live [_chatSegments] for [msgId] by reading current
+  /// provider state and using the same interleaving logic as post-stream.
+  void _rebuildLiveSegments(String msgId) {
+    final segments = buildAgentChainSegments(
+      reasoningSections:
+          List<String>.from(ref.read(streamingReasoningSectionsProvider)),
+      textChunks: List<String>.from(ref.read(streamingTextSectionsProvider)),
+      toolCalls: List<ToolCallData>.from(ref.read(streamingToolCallsProvider)),
+      isLastReasoningStreaming: _isReasoningCompletedForMsg[msgId] != true,
+    );
+
+    _chatSegments[msgId] = segments;
   }
 
   void _confirmRetryOrEdit(String messageId) {
@@ -1195,7 +1117,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
             _chatSegments.remove(r.id);
             _reasoningContents.remove(r.id);
             _isReasoningCompletedForMsg.remove(r.id);
-            _streamingRenderedLengths.remove(r.id);
             _messageKeys.remove(r.id);
           }
           // Safety: keep pagination index within bounds
@@ -1243,7 +1164,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
             _chatSegments.remove(r.id);
             _reasoningContents.remove(r.id);
             _isReasoningCompletedForMsg.remove(r.id);
-            _streamingRenderedLengths.remove(r.id);
             _messageKeys.remove(r.id);
           }
           // Safety: keep pagination index within bounds
@@ -1268,7 +1188,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   Future<void> _deleteMessage(String messageId) async {
     // Prevent deleting the currently streaming message — the streaming loop
-    // relies on _chatSegments and _streamingRenderedLengths entries for this
+    // relies on _chatSegments entries for this
     // message, and removing them mid-stream would cause null-assert crashes.
     if (messageId == _streamingMsgId) return;
     if (ref.read(isStreamingProvider)) return;
@@ -1295,7 +1215,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
       _chatSegments.remove(messageId);
       _reasoningContents.remove(messageId);
       _isReasoningCompletedForMsg.remove(messageId);
-      _streamingRenderedLengths.remove(messageId);
       _messageKeys.remove(messageId);
       // Adjust pagination state: if the deleted message was before the loaded
       // region, shift _loadedUpToIndex to keep it pointing at the same messages.
@@ -1802,23 +1721,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
   }
 
-  /// Updates [_chatSegments] with new text content delta for the streaming
-  /// message. Called by [build]'s listener on [streamingFullReplyProvider]
-  /// changes to incrementally build rendering segments.
-  void _appendStreamingSegments(String msgId, String fullText) {
-    final renderedLen = _streamingRenderedLengths[msgId] ?? 0;
-    if (fullText.length <= renderedLen) return;
-    final newChunk = fullText.substring(renderedLen);
-    final segments = _chatSegments.putIfAbsent(msgId, () => []);
-    final lastSeg = segments.isNotEmpty ? segments.last : null;
-    if (lastSeg is TextSegment && _hasUnclosedMath(lastSeg.text)) {
-      segments[segments.length - 1] = TextSegment(lastSeg.text + newChunk);
-    } else {
-      segments.add(TextSegment(newChunk));
-    }
-    _streamingRenderedLengths[msgId] = fullText.length;
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1855,16 +1757,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
       final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider);
       if (msgId == null) return;
       _updateStreamingMessage(msgId, next);
-      _appendStreamingSegments(msgId, next);
+      // Rebuild all segments from live provider data to maintain
+      // correct per-round interleaving (reasoning → text → toolCall).
+      _rebuildLiveSegments(msgId);
     });
 
     // Keep reasoning sections in sync: the manager updates
-    // streamingReasoningSectionsProvider on each ReasoningEvent. Update
-    // _reasoningContents so textStreamMessageBuilder shows the button.
-    // Also add ReasoningSegments to _chatSegments so they survive the
-    // textStream→text message type transition when the first text token
-    // arrives (textMessageBuilder reads _chatSegments, not _reasoningContents
-    // when segments are non-empty).
+    // streamingReasoningSectionsProvider on each ReasoningEvent.
+    // _rebuildLiveSegments handles the per-round interleaving with
+    // text and tool calls.
     ref.listen(streamingReasoningSectionsProvider,
         (List<String>? prev, List<String> next) {
       if (!mounted || next.isEmpty || identical(prev, next)) return;
@@ -1873,25 +1774,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       if (msgId == null) return;
       _reasoningContents[msgId] = List<String>.from(next);
 
-      // Inject ReasoningSegments into _chatSegments at the front so
-      // they appear before any text or tool call segments. Remove any
-      // existing ReasoningSegments first (they're rebuilt each update).
-      // Skip empty sections (trailing placeholder from SectionEndEvent).
-      final segments =
-          _chatSegments.putIfAbsent(msgId, () => <MessageSegment>[]);
-      segments.removeWhere((s) => s is ReasoningSegment);
-      var insertIdx = 0;
-      for (var i = 0; i < next.length; i++) {
-        if (next[i].isEmpty) continue;
-        segments.insert(
-          insertIdx,
-          ReasoningSegment(
-            sectionIndex: i,
-            isStreaming: i == next.length - 1,
-          ),
-        );
-        insertIdx++;
-      }
+      _rebuildLiveSegments(msgId);
 
       final hasFirstToken = ref.read(streamingHasFirstTokenProvider);
       if (hasFirstToken && next.isNotEmpty) {
@@ -1914,29 +1797,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
     });
 
     // Keep tool call segments in sync: the manager accumulates
-    // ToolCallData in streamingToolCallsProvider. Rebuild the tool call
-    // segment list whenever it changes so cards appear live during stream.
+    // ToolCallData in streamingToolCallsProvider. _rebuildLiveSegments
+    // handles the per-round interleaving.
     ref.listen(streamingToolCallsProvider,
         (List<ToolCallData>? prev, List<ToolCallData> next) {
       if (!mounted || next.isEmpty || identical(prev, next)) return;
       if (!_isStreamingForCurrentConv()) return;
       final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider);
       if (msgId == null) return;
-      // Flush any pending text segment before adding tool call segments
-      final fullReply = ref.read(streamingFullReplyProvider);
-      final renderedLen = _streamingRenderedLengths[msgId] ?? 0;
-      if (fullReply.length > renderedLen) {
-        _chatSegments.putIfAbsent(msgId, () => []).add(
-              TextSegment(fullReply.substring(renderedLen)),
-            );
-        _streamingRenderedLengths[msgId] = fullReply.length;
-      }
-      // Replace all tool call segments with the latest data from provider
-      final segments = _chatSegments.putIfAbsent(msgId, () => []);
-      segments.removeWhere((s) => s is ToolCallSegment);
-      for (final tc in next) {
-        segments.add(ToolCallSegment(tc));
-      }
+      _rebuildLiveSegments(msgId);
       if (mounted) setState(() {});
     });
     final adapterConfigured = _adapter.isConfigured;

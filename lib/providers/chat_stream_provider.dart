@@ -31,3 +31,12 @@ final streamingReasoningSectionsProvider =
 /// returning to the page.
 final streamingToolCallsProvider =
     StateProvider<List<ToolCallData>>((ref) => []);
+
+/// Per-round text chunks for the currently streaming message.
+/// Mirrors [ChatMessage.textSections]: each entry is the assistant's
+/// speech for one tool-call round. New chunks are started at tool call
+/// boundaries so the UI can interleave text between reasoning and tool
+/// blocks during live streaming. The last entry is the currently growing
+/// chunk.
+final streamingTextSectionsProvider =
+    StateProvider<List<String>>((ref) => ['']);
