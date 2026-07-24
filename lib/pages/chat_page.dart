@@ -74,6 +74,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Tracks streaming state locally so dispose() can check it without
   /// calling ref.read() (which throws after the widget is marked disposed).
   bool _isStreamingActive = false;
+
+  /// True while _editUserMessageWithText or _retryAssistantMessage is
+  /// mutating history and controller messages, preventing
+  /// _loadConversationMessages from interfering with the edit.
+  bool _isModifyingHistory = false;
+
   final Map<String, List<String>> _reasoningContents = {};
 
   /// Tracks whether reasoning has completed for a given message.
@@ -616,26 +622,33 @@ class _ChatPageState extends ConsumerState<ChatPage>
         }
 
         // Build unified segments for the full Agent chain.
-        // Interleave: Reasoning(i) → ToolCall(i) → Reasoning(i+1) → ...
+        // Interleave: Reasoning(i) → Text(i) → ToolCall(i) → ...
         final segments = <MessageSegment>[];
         final sections = msg.reasoningSections;
         final toolCalls = msg.toolCalls;
+        final chunks = msg.textSections;
         final sLen = sections?.length ?? 0;
         final tLen = toolCalls?.length ?? 0;
-        for (var i = 0; i < sLen; i++) {
-          segments.add(ReasoningSegment(
-            sectionIndex: i,
-            isStreaming: false,
-          ));
+        final cLen = chunks?.length ?? 0;
+        final maxLen = [sLen, tLen, cLen].fold(0, (a, b) => a > b ? a : b);
+        for (var i = 0; i < maxLen; i++) {
+          if (i < sLen && sections![i].isNotEmpty) {
+            segments.add(ReasoningSegment(
+              sectionIndex: i,
+              isStreaming: false,
+            ));
+          }
+          if (i < cLen && chunks![i].isNotEmpty) {
+            segments.add(TextSegment(chunks[i]));
+          }
           if (i < tLen) {
             segments.add(ToolCallSegment(toolCalls![i]));
           }
         }
-        // Any remaining tool calls without matching reasoning
-        for (var i = sLen; i < tLen; i++) {
-          segments.add(ToolCallSegment(toolCalls![i]));
-        }
-        if (msg.content.isNotEmpty) {
+        // Fallback: if no textSections, use content as single trailing block
+        if (segments.isEmpty && msg.content.isNotEmpty) {
+          segments.add(TextSegment(msg.content));
+        } else if (chunks == null && msg.content.isNotEmpty) {
           segments.add(TextSegment(msg.content));
         }
         if (segments.isNotEmpty) {
@@ -1045,31 +1058,50 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   /// Builds the final [_chatSegments] entry for a completed assistant message,
-  /// preserving the full Agent chain: reasoning → toolCall → reasoning → ...
-  /// Each reasoning section is paired with its corresponding tool call (the one
-  /// immediately following it in the stream), reflecting the natural Agent loop:
-  /// "think → act → think → act → ... → answer".
+  /// preserving the full Agent chain: reasoning → text → toolCall → reasoning → ...
+  /// Each reasoning section is paired with its corresponding text chunk and tool
+  /// call, reflecting the natural Agent loop. Text chunks are sourced from
+  /// [msg.textSections] (per-round tracking) or fall back to [msg.content] as a
+  /// single trailing block.
   void _buildFinalSegments(ChatMessage msg) {
     final segments = <MessageSegment>[];
     final sections = msg.reasoningSections ?? [];
     final toolCalls = msg.toolCalls ?? [];
+    final chunks = msg.textSections;
 
-    // Interleave: Reasoning(i) → ToolCall(i) for each pair
     for (var i = 0; i < sections.length; i++) {
+      // Skip empty reasoning sections (e.g. trailing empty from SectionEndEvent)
+      if (sections[i].isEmpty) continue;
+
       segments.add(ReasoningSegment(
         sectionIndex: i,
         isStreaming: false,
       ));
+
+      // Text chunk for this round (before the tool call)
+      if (chunks != null && i < chunks.length && chunks[i].isNotEmpty) {
+        segments.add(TextSegment(chunks[i]));
+      }
+
       if (i < toolCalls.length) {
         segments.add(ToolCallSegment(toolCalls[i]));
       }
     }
-    // Any remaining tool calls without matching reasoning
+
+    // Remaining tool calls without matching reasoning
     for (var i = sections.length; i < toolCalls.length; i++) {
       segments.add(ToolCallSegment(toolCalls[i]));
     }
-    // Text content (the final answer) at the end
-    if (msg.content.isNotEmpty) {
+
+    // Remaining text chunks without matching reasoning
+    if (chunks != null) {
+      for (var i = sections.length; i < chunks.length; i++) {
+        if (chunks[i].isNotEmpty) {
+          segments.add(TextSegment(chunks[i]));
+        }
+      }
+    } else if (msg.content.isNotEmpty) {
+      // Fallback: no textSections, put all content at the end
       segments.add(TextSegment(msg.content));
     }
 
@@ -1143,85 +1175,95 @@ class _ChatPageState extends ConsumerState<ChatPage>
     String newText,
     List<Attachment> newAttachments,
   ) async {
-    final index = _history.indexWhere((m) => m.id == messageId);
-    if (index == -1 || index >= _history.length) return;
-
-    // Remove this message and all after from history and controller.
+    _isModifyingHistory = true;
     try {
-      if (index < _history.length) {
-        final removed = _history.sublist(index);
-        _history.removeRange(index, _history.length);
-        for (final r in removed) {
-          final ctrlMsg =
-              _controller?.messages.where((m) => m.id == r.id).firstOrNull;
-          if (ctrlMsg != null) {
-            await _controller?.removeMessage(ctrlMsg);
+      final index = _history.indexWhere((m) => m.id == messageId);
+      if (index == -1 || index >= _history.length) return;
+
+      // Remove this message and all after from history and controller.
+      try {
+        if (index < _history.length) {
+          final removed = _history.sublist(index);
+          _history.removeRange(index, _history.length);
+          for (final r in removed) {
+            final ctrlMsg =
+                _controller?.messages.where((m) => m.id == r.id).firstOrNull;
+            if (ctrlMsg != null) {
+              await _controller?.removeMessage(ctrlMsg);
+            }
+            // Clean up cached maps for removed messages to prevent memory leaks.
+            _chatSegments.remove(r.id);
+            _reasoningContents.remove(r.id);
+            _isReasoningCompletedForMsg.remove(r.id);
+            _streamingRenderedLengths.remove(r.id);
+            _messageKeys.remove(r.id);
           }
-          // Clean up cached maps for removed messages to prevent memory leaks.
-          _chatSegments.remove(r.id);
-          _reasoningContents.remove(r.id);
-          _isReasoningCompletedForMsg.remove(r.id);
-          _streamingRenderedLengths.remove(r.id);
-          _messageKeys.remove(r.id);
+          // Safety: keep pagination index within bounds
+          _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
         }
-        // Safety: keep pagination index within bounds
-        _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
+      } catch (e) {
+        debugPrint('[ChatPage] _editUserMessageWithText remove failed: $e');
       }
-    } catch (e) {
-      debugPrint('[ChatPage] _editUserMessageWithText remove failed: $e');
+
+      // Force the UI to reflect the truncated history BEFORE any provider
+      // listener fires _loadConversationMessages (which would reload old
+      // messages from the provider before _saveMessages below runs).
+      if (mounted) setState(() {});
+
+      // Now persist the truncated history. This must happen before
+      // _onMessageSend calls _saveEnabledToolsToConversation which
+      // triggers the conversationsProvider listener.
+      await _saveMessages();
+
+      // Send with edited text and the combined attachments (original + new)
+      await _onMessageSend(newText, newAttachments);
+    } finally {
+      _isModifyingHistory = false;
     }
-
-    // Force the UI to reflect the truncated history BEFORE any provider
-    // listener fires _loadConversationMessages (which would reload old
-    // messages from the provider before _saveMessages below runs).
-    if (mounted) setState(() {});
-
-    // Now persist the truncated history. This must happen before
-    // _onMessageSend calls _saveEnabledToolsToConversation which
-    // triggers the conversationsProvider listener.
-    await _saveMessages();
-
-    // Send with edited text and the combined attachments (original + new)
-    await _onMessageSend(newText, newAttachments);
   }
 
   Future<void> _retryAssistantMessage(String messageId) async {
-    final index = _history.indexWhere((m) => m.id == messageId);
-    if (index == -1 || index == 0 || index >= _history.length) return;
-
-    // Remove this assistant message and all after from history
+    _isModifyingHistory = true;
     try {
-      if (index < _history.length) {
-        final removed = _history.sublist(index);
-        _history.removeRange(index, _history.length);
-        for (final r in removed) {
-          final ctrlMsg =
-              _controller?.messages.where((m) => m.id == r.id).firstOrNull;
-          if (ctrlMsg != null) {
-            await _controller?.removeMessage(ctrlMsg);
+      final index = _history.indexWhere((m) => m.id == messageId);
+      if (index == -1 || index == 0 || index >= _history.length) return;
+
+      // Remove this assistant message and all after from history
+      try {
+        if (index < _history.length) {
+          final removed = _history.sublist(index);
+          _history.removeRange(index, _history.length);
+          for (final r in removed) {
+            final ctrlMsg =
+                _controller?.messages.where((m) => m.id == r.id).firstOrNull;
+            if (ctrlMsg != null) {
+              await _controller?.removeMessage(ctrlMsg);
+            }
+            // Clean up cached maps for removed messages to prevent memory leaks.
+            _chatSegments.remove(r.id);
+            _reasoningContents.remove(r.id);
+            _isReasoningCompletedForMsg.remove(r.id);
+            _streamingRenderedLengths.remove(r.id);
+            _messageKeys.remove(r.id);
           }
-          // Clean up cached maps for removed messages to prevent memory leaks.
-          _chatSegments.remove(r.id);
-          _reasoningContents.remove(r.id);
-          _isReasoningCompletedForMsg.remove(r.id);
-          _streamingRenderedLengths.remove(r.id);
-          _messageKeys.remove(r.id);
+          // Safety: keep pagination index within bounds
+          _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
         }
-        // Safety: keep pagination index within bounds
-        _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
+      } catch (e) {
+        debugPrint('[ChatPage] _retryAssistantMessage remove failed: $e');
       }
-    } catch (e) {
-      debugPrint('[ChatPage] _retryAssistantMessage remove failed: $e');
+
+      // Force UI rebuild and sync provider before re-streaming
+      if (mounted) setState(() {});
+      await _saveMessages();
+
+      // Re-generate using the preceding user message
+      final userMsg = _history[index - 1];
+      await _startStreaming(userMsg.content);
+      await _syncHistoryFromProvider();
+    } finally {
+      _isModifyingHistory = false;
     }
-
-    // Force UI rebuild and sync provider before re-streaming
-    if (mounted) setState(() {});
-    await _saveMessages();
-
-    // Re-generate using the preceding user message
-    final userMsg = _history[index - 1];
-    await _startStreaming(userMsg.content);
-    await _syncHistoryFromProvider();
   }
 
   Future<void> _deleteMessage(String messageId) async {
@@ -1834,19 +1876,21 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // Inject ReasoningSegments into _chatSegments at the front so
       // they appear before any text or tool call segments. Remove any
       // existing ReasoningSegments first (they're rebuilt each update).
+      // Skip empty sections (trailing placeholder from SectionEndEvent).
       final segments =
           _chatSegments.putIfAbsent(msgId, () => <MessageSegment>[]);
       segments.removeWhere((s) => s is ReasoningSegment);
-      final lastIdx = next.length - 1;
+      var insertIdx = 0;
       for (var i = 0; i < next.length; i++) {
+        if (next[i].isEmpty) continue;
         segments.insert(
-          i,
+          insertIdx,
           ReasoningSegment(
             sectionIndex: i,
-            // Only the last section is still streaming; previous are done
-            isStreaming: i == lastIdx,
+            isStreaming: i == next.length - 1,
           ),
         );
+        insertIdx++;
       }
 
       final hasFirstToken = ref.read(streamingHasFirstTokenProvider);
@@ -1936,7 +1980,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
             if (_history.isEmpty ||
                 (_history.length < activeConv.messages.length &&
                     !_isStreamingActive &&
-                    !_isLoadingMessages)) {
+                    !_isLoadingMessages &&
+                    !_isModifyingHistory)) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (mounted) _loadConversationMessages();
               });
