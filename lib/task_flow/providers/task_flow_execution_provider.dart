@@ -35,6 +35,20 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>> {
     }).toList();
   }
 
+  /// Update a placeholder sub-task's [subTaskId] with the real task ID
+  /// after the actual task has been created.
+  void updateSubTaskId(
+      String executionId, String subTaskId, String newSubTaskId) {
+    state = state.map((e) {
+      if (e.id != executionId) return e;
+      final updated = e.subTasks.map((st) {
+        if (st.id != subTaskId) return st;
+        return st.copyWith(subTaskId: newSubTaskId);
+      }).toList();
+      return e.copyWith(subTasks: updated);
+    }).toList();
+  }
+
   /// Update a sub-task's status.
   ///
   /// Recomputes the execution status from the current sub-task states
