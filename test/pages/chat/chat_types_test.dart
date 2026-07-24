@@ -227,4 +227,161 @@ void main() {
       });
     });
   });
+
+  group('buildAgentChainSegments', () {
+    ToolCallData _tc(String id, String name) => ToolCallData(
+          id: id,
+          name: name,
+          arguments: {},
+          status: ToolCallStatus.completed,
+        );
+
+    test('empty inputs returns empty list', () {
+      final segments = buildAgentChainSegments(
+        reasoningSections: [],
+        textChunks: [],
+        toolCalls: [],
+      );
+      expect(segments, isEmpty);
+    });
+
+    test('single reasoning section + text + tool call', () {
+      final segments = buildAgentChainSegments(
+        reasoningSections: ['think1'],
+        textChunks: ['text1'],
+        toolCalls: [_tc('1', 'web_search')],
+      );
+      expect(segments.length, 3);
+      expect(segments[0], isA<ReasoningSegment>());
+      expect((segments[0] as ReasoningSegment).sectionIndex, 0);
+      expect(segments[1], isA<TextSegment>());
+      expect((segments[1] as TextSegment).text, 'text1');
+      expect(segments[2], isA<ToolCallSegment>());
+      expect((segments[2] as ToolCallSegment).data.name, 'web_search');
+    });
+
+    test('two round Agent chain: R1 T1 TC1 R2 T2 TC2', () {
+      final segments = buildAgentChainSegments(
+        reasoningSections: ['think1', 'think2'],
+        textChunks: ['text1', 'text2'],
+        toolCalls: [_tc('1', 'search1'), _tc('2', 'search2')],
+      );
+      expect(segments.length, 6);
+      expect(segments[0], isA<ReasoningSegment>());
+      expect((segments[0] as ReasoningSegment).sectionIndex, 0);
+      expect(segments[1], isA<TextSegment>());
+      expect((segments[1] as TextSegment).text, 'text1');
+      expect(segments[2], isA<ToolCallSegment>());
+      expect((segments[2] as ToolCallSegment).data.name, 'search1');
+      expect(segments[3], isA<ReasoningSegment>());
+      expect((segments[3] as ReasoningSegment).sectionIndex, 1);
+      expect(segments[4], isA<TextSegment>());
+      expect((segments[4] as TextSegment).text, 'text2');
+      expect(segments[5], isA<ToolCallSegment>());
+      expect((segments[5] as ToolCallSegment).data.name, 'search2');
+    });
+
+    test('final round has text but no tool call', () {
+      final segments = buildAgentChainSegments(
+        reasoningSections: ['think1', 'think2'],
+        textChunks: ['text1', 'text2'],
+        toolCalls: [_tc('1', 'search1')],
+      );
+      expect(segments.length, 5);
+      expect(segments[0], isA<ReasoningSegment>());
+      expect(segments[1], isA<TextSegment>());
+      expect((segments[1] as TextSegment).text, 'text1');
+      expect(segments[2], isA<ToolCallSegment>());
+      expect(segments[3], isA<ReasoningSegment>());
+      expect(segments[4], isA<TextSegment>());
+      expect((segments[4] as TextSegment).text, 'text2');
+    });
+
+    test('extra tool calls without reasoning are interleaved', () {
+      final segments = buildAgentChainSegments(
+        reasoningSections: ['think1'],
+        textChunks: ['text1', 'text2'],
+        toolCalls: [_tc('1', 's1'), _tc('2', 's2')],
+      );
+      expect(segments.length, 5);
+      expect(segments[0], isA<ReasoningSegment>());
+      expect(segments[1], isA<TextSegment>());
+      expect((segments[1] as TextSegment).text, 'text1');
+expect(segments[2], isA<ToolCallSegment>());
+expect((segments[2] as ToolCallSegment).data.name, 's1');
+      expect(segments[3], isA<TextSegment>());
+      expect((segments[3] as TextSegment).text, 'text2');
+      expect(segments[4], isA<ToolCallSegment>());
+      expect((segments[4] as ToolCallSegment).data.name, 's2');
+    });
+
+    test('text and tool calls without reasoning: T1 TC1 T2', () {
+      final segments = buildAgentChainSegments(
+        reasoningSections: [],
+        textChunks: ['before search', 'after search'],
+        toolCalls: [_tc('1', 'web_search')],
+      );
+      expect(segments.length, 3);
+      expect(segments[0], isA<TextSegment>());
+      expect((segments[0] as TextSegment).text, 'before search');
+      expect(segments[1], isA<ToolCallSegment>());
+      expect((segments[1] as ToolCallSegment).data.name, 'web_search');
+      expect(segments[2], isA<TextSegment>());
+      expect((segments[2] as TextSegment).text, 'after search');
+    });
+
+    test('text and tool calls without reasoning: 2 rounds', () {
+      final segments = buildAgentChainSegments(
+        reasoningSections: [],
+        textChunks: ['t1', 't2', 't3'],
+        toolCalls: [_tc('1', 'tc1'), _tc('2', 'tc2')],
+      );
+      expect(segments.length, 5);
+      expect(segments[0], isA<TextSegment>());
+      expect((segments[0] as TextSegment).text, 't1');
+      expect(segments[1], isA<ToolCallSegment>());
+      expect((segments[1] as ToolCallSegment).data.name, 'tc1');
+      expect(segments[2], isA<TextSegment>());
+      expect((segments[2] as TextSegment).text, 't2');
+      expect(segments[3], isA<ToolCallSegment>());
+      expect((segments[3] as ToolCallSegment).data.name, 'tc2');
+      expect(segments[4], isA<TextSegment>());
+      expect((segments[4] as TextSegment).text, 't3');
+    });
+
+    test('empty reasoning sections are skipped', () {
+      final segments = buildAgentChainSegments(
+        reasoningSections: ['', 'real thinking'],
+        textChunks: ['orphan text', 'visible text'],
+        toolCalls: [],
+      );
+      expect(segments.length, 2);
+      expect(segments[0], isA<ReasoningSegment>());
+      expect((segments[0] as ReasoningSegment).sectionIndex, 1);
+      expect(segments[1], isA<TextSegment>());
+      expect((segments[1] as TextSegment).text, 'visible text');
+    });
+
+    test('isLastReasoningStreaming marks last section', () {
+      final segments = buildAgentChainSegments(
+        reasoningSections: ['r1', 'r2'],
+        textChunks: [],
+        toolCalls: [],
+        isLastReasoningStreaming: true,
+      );
+      expect((segments[0] as ReasoningSegment).isStreaming, false);
+      expect((segments[1] as ReasoningSegment).isStreaming, true);
+    });
+
+    test('only text, no reasoning, no tool calls', () {
+      final segments = buildAgentChainSegments(
+        reasoningSections: [],
+        textChunks: ['simple text'],
+        toolCalls: [],
+      );
+      expect(segments.length, 1);
+      expect(segments[0], isA<TextSegment>());
+      expect((segments[0] as TextSegment).text, 'simple text');
+    });
+  });
 }
