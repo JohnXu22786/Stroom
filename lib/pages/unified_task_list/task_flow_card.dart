@@ -8,12 +8,18 @@ import '../../providers/task_provider.dart';
 import '../../providers/task_provider_shared.dart';
 import '../../task_flow/models/task_flow_execution.dart';
 import '../../task_flow/providers/task_flow_execution_provider.dart';
+import 'background_task_card.dart';
+import 'catcatch_task_card.dart';
+import 'synthesis_task_card.dart';
 
 /// Card for a task flow execution in the unified task list.
 ///
 /// Layout:
 ///   Level 0: Flow header — "任务流" tag, flow name, progress, status icon
-///   Level 1 (expanded): Unified sub-task rows showing status + block label
+///   Level 1 (expanded): Directly shows the real task cards for each sub-task
+///     (CatCatchTaskCard / BackgroundTaskCard / SynthesisTaskCard).
+///     Width alignment: nested cards use their own built-in Card margin (12px),
+///     matching the header's inner Padding(12). No extra wrapper padding.
 class TaskFlowCard extends ConsumerStatefulWidget {
   final TaskFlowExecution execution;
   final bool isUnread;
@@ -219,20 +225,75 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
   }
 
   // =========================================================================
-  // Sub-task → unified row (consistent width for all block types)
+  // Sub-task → real task card mapping
   // =========================================================================
 
-  /// Build a unified row for a single sub-task.
+  /// Build the card for a single sub-task.
   ///
-  /// Uses a consistent layout for all block types — no nested real task
-  /// cards (which have incompatible built-in margins).  The row shows
-  /// status icon, block label, and status text.
+  /// No extra wrapper padding — each real task card uses its own built-in Card
+  /// margin (12 px), which matches the header's inner Padding(12).
   Widget _buildSubTaskCard(FlowSubTask subTask, ColorScheme cs) {
+    switch (subTask.subTaskType) {
+      case 'catcatch':
+        return _buildCatCatchCard(subTask, cs);
+      case 'background':
+        return _buildBackgroundCard(subTask, cs);
+      case 'synthesis':
+        return _buildSynthesisCard(subTask, cs);
+      default:
+        return _buildFallbackCard(subTask, cs);
+    }
+  }
+
+  Widget _buildCatCatchCard(FlowSubTask subTask, ColorScheme cs) {
+    final tasks = ref.watch(catcatchTasksProvider);
+    final task = tasks.where((t) => t.id == subTask.subTaskId).firstOrNull;
+
+    if (task != null) {
+      return CatCatchTaskCard(
+        key: ValueKey('catcatch_${task.id}_${task.status.name}'),
+        task: task,
+        isUnread: false,
+      );
+    }
+    return _buildFallbackCard(subTask, cs);
+  }
+
+  Widget _buildBackgroundCard(FlowSubTask subTask, ColorScheme cs) {
+    final tasks = ref.watch(backgroundTasksProvider);
+    final task = tasks.where((t) => t.id == subTask.subTaskId).firstOrNull;
+
+    if (task != null) {
+      return BackgroundTaskCard(
+        key: ValueKey('bg_${task.id}_${task.status.name}'),
+        task: task,
+        isUnread: false,
+      );
+    }
+    return _buildFallbackCard(subTask, cs);
+  }
+
+  Widget _buildSynthesisCard(FlowSubTask subTask, ColorScheme cs) {
+    final tasks = ref.watch(taskListProvider);
+    final task = tasks.where((t) => t.id == subTask.subTaskId).firstOrNull;
+
+    if (task != null) {
+      return SynthesisTaskCard(
+        key: ValueKey('synth_${task.id}_${task.status.name}'),
+        task: task,
+        isUnread: false,
+      );
+    }
+    return _buildFallbackCard(subTask, cs);
+  }
+
+  /// Fallback card when the real task is not found in the provider.
+  Widget _buildFallbackCard(FlowSubTask subTask, ColorScheme cs) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: cs.surfaceContainerLow,
           borderRadius: BorderRadius.circular(8),
@@ -242,17 +303,15 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
           children: [
             _statusIcon(subTask.status, cs),
             const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                subTask.blockLabel,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: cs.onSurface,
-                ),
+            Text(
+              subTask.blockLabel,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: cs.onSurface,
               ),
             ),
-            const SizedBox(width: 8),
+            const Spacer(),
             Text(
               _statusText(subTask.status),
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
