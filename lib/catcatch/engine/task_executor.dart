@@ -373,6 +373,14 @@ class TaskExecutor {
       // If Dart sniffer says needsWebViewFallback, skip Tier 2 and go directly
       // to WebView sniffing
       if (dartResult.needsWebViewFallback) {
+        // On web, HeadlessInAppWebView opens a visible browser window.
+        // Skip WebView sniffing and fail with a clear message instead.
+        if (kIsWeb) {
+          throw Exception(
+            '网页无法直接获取资源（需要浏览器环境），请尝试在移动端或桌面端使用该功能。'
+            '或者直接粘贴视频/音频文件的直链地址。',
+          );
+        }
         debugPrint(
             '[TaskExecutor] DartCatCatchSniffer recommends WebView fallback');
         return await _fallbackToWebView(
@@ -386,7 +394,12 @@ class TaskExecutor {
       }
     } catch (e) {
       debugPrint('[TaskExecutor] DartCatCatchSniffer failed: $e');
-      // Non-fatal — fall through to Tier 2
+      // On web, if direct HTTP sniffing fails, don't fall through to Tier 2/3
+      // because WebView will open a visible browser window.
+      if (kIsWeb) {
+        rethrow;
+      }
+      // Non-fatal — fall through to Tier 2 (on non-web platforms)
     } finally {
       dartSniffer.dispose();
     }
@@ -411,6 +424,14 @@ class TaskExecutor {
           (resources.length == 1 &&
               !SniffingEngine.isMediaExtension(resources.first.ext));
       if (needsWebView && !(cancelToken?.isCancelled ?? false)) {
+        // On web, HeadlessInAppWebView opens a visible browser window.
+        // Skip WebView sniffing and fail with a clear message instead.
+        if (kIsWeb) {
+          throw Exception(
+            '网页无法直接获取资源（需要浏览器环境），请尝试在移动端或桌面端使用该功能。'
+            '或者直接粘贴视频/音频文件的直链地址。',
+          );
+        }
         var (webViewResources, pageTitle) = await _fallbackToWebView(
           task: task,
           steps: steps,
