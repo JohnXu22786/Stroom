@@ -285,8 +285,10 @@ class ChatStreamManager {
     });
 
     // Now safe to yield to event loop — all state is established.
-    await AppLogService.debug('ChatStreamManager',
-        '[DEBUG-HIST-MGR] startStreaming: received historyLen=${history.length}, convId=$convId');
+    try {
+      await AppLogService.debug('ChatStreamManager',
+          '[DEBUG-HIST-MGR] startStreaming: received historyLen=${history.length}, convId=$convId');
+    } catch (_) {}
     await AppLogService.info('ChatStreamManager', '开始流式请求, convId=$convId');
 
     Object? streamError;
