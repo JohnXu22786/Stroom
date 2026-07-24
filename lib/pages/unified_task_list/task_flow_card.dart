@@ -125,29 +125,30 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
                       color: cs.onSurfaceVariant,
                       size: 20,
                     ),
-                    const SizedBox(width: 4),
-                    // Delete button
-                    GestureDetector(
-                      onLongPress: () => _confirmDelete(context, cs),
-                      child: IconButton(
-                        icon: Icon(Icons.delete_outline,
-                            size: 18, color: cs.error),
-                        onPressed: () => _confirmDelete(context, cs),
-                        padding: EdgeInsets.zero,
-                        constraints:
-                            const BoxConstraints(minWidth: 32, minHeight: 32),
-                        tooltip: '删除',
-                      ),
-                    ),
                   ],
                 ),
               ),
             ),
 
             // === Level 1: Direct sub-task cards (when flow is expanded) ===
-            if (_expanded)
+            if (_expanded) ...[
               for (int i = 0; i < exec.subTasks.length; i++)
                 _buildSubTaskCard(exec.subTasks[i], cs),
+              // Delete button at the bottom of expanded view
+              Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: TextButton.icon(
+                    onPressed: () => _confirmDelete(context, cs),
+                    icon: Icon(Icons.delete_outline, size: 16, color: cs.error),
+                    label: Text('删除',
+                        style: TextStyle(fontSize: 13, color: cs.error)),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

@@ -1,16 +1,33 @@
+import 'dart:io';
+import 'dart:isolate';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 import '../../catcatch/models/catcatch_task.dart' as catcatch;
 import '../../catcatch/providers/catcatch_provider.dart';
 import '../../providers/background_task_provider.dart';
 import '../../providers/task_provider_shared.dart';
+import '../../utils/audio_separation.dart';
+import '../../utils/audio_utils.dart';
+import '../../utils/file_manifest.dart';
 import '../models/task_flow_definition.dart';
 import '../models/task_flow_execution.dart';
 import '../models/block_type_definition.dart';
 import '../models/io_type.dart';
 import '../providers/task_flow_provider.dart';
 import '../providers/task_flow_execution_provider.dart';
+
+/// Top-level helper: runs extractAudioSync inside Isolate.run.
+/// Must be a top-level function (not a method) so the closure does NOT
+/// capture `this` (which would fail sendability check for Isolate.run).
+Future<Uint8List> _extractAudioIsolate(
+    Uint8List videoBytes, String videoFormat) {
+  return Isolate.run(
+      () => extractAudioSync(videoBytes: videoBytes, videoFormat: videoFormat));
+}
 
 /// Page for executing a task flow.
 ///
@@ -115,10 +132,6 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
               cs: cs,
             );
           }),
-
-          // Final result
-          if (_isRunning && _currentStep >= flow.blocks.length - 1)
-            _buildFinalResult(cs),
         ],
       ),
     );
@@ -407,50 +420,6 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     );
   }
 
-  Widget _buildFinalResult(ColorScheme cs) {
-    final lastResult = _stepResults.isNotEmpty ? _stepResults.last : '';
-    final isError = lastResult.startsWith('❌');
-
-    return Card(
-      elevation: 0,
-      color: isError
-          ? cs.errorContainer.withValues(alpha: 0.3)
-          : cs.primaryContainer.withValues(alpha: 0.3),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Icon(
-              isError ? Icons.error_outline : Icons.check_circle,
-              size: 32,
-              color: isError ? cs.error : cs.primary,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              isError ? '任务流执行失败' : '任务流执行完成',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: isError ? cs.error : cs.primary,
-              ),
-            ),
-            if (lastResult.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                lastResult,
-                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
   // ========================================================================
   // Flow Execution — creates real tasks using existing providers
   // ========================================================================
@@ -537,25 +506,8 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
         return await _executeCatCatchBlock(def, input, execId, execNotifier);
 
       case 'audioSeparation':
-        // Create a real background audio separation task
-        final bgNotifier = ref.read(backgroundTasksProvider.notifier);
-        final taskId = bgNotifier.addTask(
-          type: BackgroundTaskType.audioSeparation,
-          title: '音频分离: $input',
-        );
-        final subTask = FlowSubTask(
-          blockTypeKey: 'audioSeparation',
-          blockLabel: def.label,
-          subTaskId: taskId,
-          subTaskType: 'background',
-        );
-        execNotifier.addSubTask(execId, subTask);
-
-        await Future.delayed(const Duration(seconds: 2));
-        bgNotifier.completeTask(taskId);
-        execNotifier.updateSubTaskStatus(
-            execId, subTask.id, TaskStatus.completed);
-        return '音频文件';
+        return await _executeAudioSeparationBlock(
+            def, input, execId, execNotifier);
 
       case 'asr':
         // Create a real background ASR task
@@ -716,5 +668,98 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     // Widget disposed while CatCatch task is still running.
     // The task continues in the background — don't mark anything as failed.
     return '[CatCatch] 后台运行中';
+  }
+
+  /// Execute an AudioSeparation block: read the file produced by the previous
+  /// block, run the real Dart MP4 demuxer in an isolate, save the extracted
+  /// audio via FileManifest, and return the output file path.
+  ///
+  /// The [input] is expected to be a file path from the previous block
+  /// (e.g., a downloaded video from CatCatch).
+  Future<String> _executeAudioSeparationBlock(
+    BlockTypeDefinition def,
+    String input,
+    String execId,
+    TaskFlowExecutionNotifier execNotifier,
+  ) async {
+    final bgNotifier = ref.read(backgroundTasksProvider.notifier);
+
+    // Extract the basename from input (FileManifest stores by basename).
+    final inputBasename = p.basename(input);
+    final inputFormat = p.extension(input).replaceFirst('.', '').toLowerCase();
+
+    // Read the file bytes directly from the file system.
+    // CatCatch saves files to {appDir}/catcatch/completed/ (not FileManifest).
+    Uint8List videoBytes;
+    try {
+      final file = File(input);
+      if (!await file.exists()) {
+        execNotifier.failExecution(execId, error: '输入文件不存在: $input');
+        return '[AudioSeparation] 输入文件不存在';
+      }
+      videoBytes = await file.readAsBytes();
+      if (videoBytes.isEmpty) {
+        execNotifier.failExecution(execId, error: '输入文件为空: $input');
+        return '[AudioSeparation] 输入文件为空';
+      }
+    } catch (e) {
+      execNotifier.failExecution(execId, error: '无法读取输入文件: $input ($e)');
+      return '[AudioSeparation] 无法读取输入文件';
+    }
+
+    final title = '音频分离_${p.basenameWithoutExtension(inputBasename)}';
+    final taskId = bgNotifier.addTask(
+      type: BackgroundTaskType.audioSeparation,
+      title: title,
+    );
+    final subTask = FlowSubTask(
+      blockTypeKey: 'audioSeparation',
+      blockLabel: def.label,
+      subTaskId: taskId,
+      subTaskType: 'background',
+    );
+    execNotifier.addSubTask(execId, subTask);
+
+    try {
+      // Step 0: 分离音频
+      bgNotifier.updateStep(taskId, 0, running: true);
+      execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.running);
+
+      final audioBytes = await _extractAudioIsolate(videoBytes, inputFormat);
+
+      bgNotifier.updateStep(taskId, 0, completed: true);
+
+      // Step 1: 保存到文件
+      bgNotifier.updateStep(taskId, 1, running: true);
+
+      final filePath = await _saveAudioForFlow(audioBytes);
+
+      bgNotifier.updateStep(taskId, 1, completed: true);
+      bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
+      execNotifier.updateSubTaskStatus(
+          execId, subTask.id, TaskStatus.completed);
+
+      return filePath ?? title;
+    } catch (e) {
+      bgNotifier.failTask(taskId, error: '音频提取失败: $e');
+      execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
+      return '[AudioSeparation] $e';
+    }
+  }
+
+  /// Save extracted audio bytes to the audio library via FileManifest,
+  /// following the same pattern as [AudioSeparationPage].
+  Future<String?> _saveAudioForFlow(Uint8List audioBytes) async {
+    if (audioBytes.isEmpty) {
+      throw Exception('提取的音频数据为空');
+    }
+
+    final hash = computeAudioHash(audioBytes);
+    final detectedFormat = detectAudioFormat(audioBytes);
+    final format = normalizeAudioFormat(detectedFormat);
+
+    await FileManifest.writeFile('$hash.$format', audioBytes);
+
+    return await FileManifest.readFilePath('$hash.$format');
   }
 }
