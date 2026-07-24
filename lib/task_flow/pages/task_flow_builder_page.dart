@@ -81,19 +81,22 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Name & description
-          _buildHeader(cs),
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: Column(
+          children: [
+            // Name & description
+            _buildHeader(cs),
 
-          // Flow content with initial input + blocks (scrollable)
-          Expanded(
-            child: _buildFlowContent(cs),
-          ),
+            // Flow content with initial input + blocks (scrollable)
+            Expanded(
+              child: _buildFlowContent(cs),
+            ),
 
-          // Bottom bar: add block button
-          _buildBottomBar(cs),
-        ],
+            // Bottom bar: add block button
+            _buildBottomBar(cs),
+          ],
+        ),
       ),
     );
   }
