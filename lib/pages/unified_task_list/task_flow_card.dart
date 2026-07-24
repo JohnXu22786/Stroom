@@ -333,9 +333,12 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
   // =========================================================================
 
   /// Sync sub-task statuses with the underlying real tasks.
+  ///
+  /// ALWAYS syncs, even when the execution is not "running". This allows
+  /// the flow to reflect the current state of its sub-tasks (e.g., if a
+  /// CatCatch task was retried and succeeded after the flow failed).
   void _syncSubTaskStatuses() {
     final exec = widget.execution;
-    if (exec.status != FlowExecutionStatus.running) return;
 
     final execNotifier = ref.read(taskFlowExecutionsProvider.notifier);
     final catcatchTasks = ref.read(catcatchTasksProvider);
@@ -343,10 +346,6 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
     final synthTasks = ref.read(taskListProvider);
 
     for (final st in exec.subTasks) {
-      if (st.status == TaskStatus.completed || st.status == TaskStatus.failed) {
-        continue;
-      }
-
       final ccTask =
           catcatchTasks.where((t) => t.id == st.subTaskId).firstOrNull;
       if (ccTask != null) {
