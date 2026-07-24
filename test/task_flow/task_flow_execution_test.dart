@@ -237,19 +237,20 @@ void main() {
               subTaskType: 'catcatch',
             ));
 
-        // Manually complete
-        notifier.completeExecution(execId);
+        // Complete the sub-task first so completeExecution can work
+        final stId = notifier.state[0].subTasks[0].id;
+        notifier.updateSubTaskStatus(execId, stId, TaskStatus.completed);
         expect(notifier.state[0].status, FlowExecutionStatus.completed);
 
-        // Even if sub-task is still running, execution stays completed
-        final stId = notifier.state[0].subTasks[0].id;
-        notifier.updateSubTaskStatus(execId, stId, TaskStatus.running);
+        // Calling completeExecution again on an already-completed flow
+        // is a no-op
+        notifier.completeExecution(execId);
         expect(notifier.state[0].status, FlowExecutionStatus.completed);
       });
     });
 
     group('completeExecution', () {
-      test('always sets status to completed regardless of sub-task status', () {
+      test('sets status to completed when all sub-tasks are completed', () {
         final execId = notifier.addExecution(
           flowId: 'flow-1',
           flowName: '测试流程',
@@ -263,10 +264,60 @@ void main() {
               subTaskType: 'catcatch',
             ));
 
-        // Complete even though sub-task is still running (default)
+        // Complete the sub-task first
+        final stId = notifier.state[0].subTasks[0].id;
+        notifier.updateSubTaskStatus(execId, stId, TaskStatus.completed);
+
+        // Then call completeExecution
         notifier.completeExecution(execId);
 
         expect(notifier.state[0].status, FlowExecutionStatus.completed);
+        expect(notifier.state[0].completedAt, isNotNull);
+      });
+
+      test('stays running when sub-tasks are still in progress', () {
+        final execId = notifier.addExecution(
+          flowId: 'flow-1',
+          flowName: '测试流程',
+        );
+        notifier.addSubTask(
+            execId,
+            FlowSubTask(
+              blockTypeKey: 'catcatch',
+              blockLabel: '获取网页资源',
+              subTaskId: 'task-1',
+              subTaskType: 'catcatch',
+            ));
+
+        // completeExecution while sub-task is still running
+        notifier.completeExecution(execId);
+
+        // Should stay running; auto-complete will handle transition
+        expect(notifier.state[0].status, FlowExecutionStatus.running);
+      });
+
+      test('sets status to failed when any sub-task failed', () {
+        final execId = notifier.addExecution(
+          flowId: 'flow-1',
+          flowName: '测试流程',
+        );
+        notifier.addSubTask(
+            execId,
+            FlowSubTask(
+              blockTypeKey: 'catcatch',
+              blockLabel: '获取网页资源',
+              subTaskId: 'task-1',
+              subTaskType: 'catcatch',
+            ));
+
+        // Complete sub-task as failed
+        final stId = notifier.state[0].subTasks[0].id;
+        notifier.updateSubTaskStatus(execId, stId, TaskStatus.failed);
+
+        // Then call completeExecution
+        notifier.completeExecution(execId);
+
+        expect(notifier.state[0].status, FlowExecutionStatus.failed);
         expect(notifier.state[0].completedAt, isNotNull);
       });
     });
