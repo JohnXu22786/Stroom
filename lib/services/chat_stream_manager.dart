@@ -56,6 +56,11 @@ class StreamResult {
   /// All reasoning sections (for multi-step tool call rounds).
   final List<String> reasoningSections;
 
+  /// Per-round text chunks that mirror the Agent chain structure,
+  /// allowing assistant speech to be interleaved between reasoning
+  /// and tool call blocks instead of all appearing at the end.
+  final List<String> textSections;
+
   /// Tool calls accumulated during the stream.
   final List<ToolCallData> toolCalls;
 
@@ -68,6 +73,7 @@ class StreamResult {
     this.fullReply = '',
     this.reasoningBuffer = '',
     this.reasoningSections = const [],
+    this.textSections = const [],
     this.toolCalls = const [],
     this.cancelled = false,
   });
@@ -90,6 +96,13 @@ class _ConversationStreamState {
   String fullReply = '';
   String reasoningBuffer = '';
   List<String> reasoningSections = [];
+
+  /// Per-round text chunks that mirror reasoning sections: each time a new
+  /// tool call round begins, a new chunk is started so that post-stream
+  /// segment building can interleave assistant speech between reasoning and
+  /// tool call blocks in the correct Agent chain order.
+  List<String> textChunks = [''];
+
   List<ToolCallData> toolCalls = [];
   List<ChatMessage> history = [];
   bool hasReceivedFirstToken = false;
@@ -317,6 +330,7 @@ class ChatStreamManager {
               _maybeSetProvider(convId, streamingHasFirstTokenProvider, true);
             }
             state.fullReply += e.text;
+            state.textChunks[state.textChunks.length - 1] += e.text;
             // 节流：最长200ms更新一次 provider
             final now = DateTime.now();
             if (now.difference(state.lastTextUpdate) >= _textThrottle) {
@@ -362,6 +376,13 @@ class ChatStreamManager {
             );
             state.toolCalls.add(toolCallData);
             state.accumulatedToolCalls.add(toolCallData);
+            // Start a new text chunk at tool call boundary so that
+            // assistant speech is interleaved between tool call rounds
+            // rather than all appearing at the end.
+            if (state.textChunks.last.isNotEmpty ||
+                state.textChunks.length == 1) {
+              state.textChunks.add('');
+            }
             _maybeSetProvider(convId, streamingToolCallsProvider,
                 List<ToolCallData>.from(state.toolCalls));
 
@@ -469,6 +490,9 @@ class ChatStreamManager {
           reasoningSections: state.reasoningSections.isNotEmpty
               ? List<String>.from(state.reasoningSections)
               : null,
+          textSections: state.textChunks.isNotEmpty
+              ? List<String>.from(state.textChunks)
+              : null,
         );
         state.history.add(msg);
         assistantMessage = msg;
@@ -500,6 +524,7 @@ class ChatStreamManager {
       fullReply: state.fullReply,
       reasoningBuffer: state.reasoningBuffer,
       reasoningSections: List.from(state.reasoningSections),
+      textSections: List.from(state.textChunks),
       toolCalls: List.from(state.accumulatedToolCalls),
       cancelled: wasCancelled,
     );
