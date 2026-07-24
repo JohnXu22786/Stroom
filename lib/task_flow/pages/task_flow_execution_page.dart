@@ -31,16 +31,9 @@ Future<Uint8List> _extractAudioIsolate(
       () => extractAudioSync(videoBytes: videoBytes, videoFormat: videoFormat));
 }
 
-/// Page for executing a task flow.
-///
-/// Shows the flow overview and input field. When the user starts the flow,
-/// the page pops back to the main page immediately and the flow runs in the
-/// background — just like individual CatCatch / ASR / OCR tasks.
 class TaskFlowExecutionPage extends ConsumerStatefulWidget {
   final String flowId;
-
   const TaskFlowExecutionPage({super.key, required this.flowId});
-
   @override
   ConsumerState<TaskFlowExecutionPage> createState() =>
       _TaskFlowExecutionPageState();
@@ -78,13 +71,8 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
       );
     }
 
-    final inputType = flow.inputType;
-
     return Scaffold(
-      appBar: AppBar(
-        title: Text(flow.name),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: Text(flow.name), centerTitle: true),
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
         child: ListView(
@@ -92,15 +80,10 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
           children: [
             _buildFlowOverviewCard(flow, cs),
             const SizedBox(height: 20),
-            _buildInputSection(inputType, flow, cs),
+            _buildInputSection(flow.inputType, cs),
             const SizedBox(height: 16),
-            ...flow.blocks.asMap().entries.map((entry) {
-              return _buildStepCard(
-                block: entry.value,
-                index: entry.key,
-                cs: cs,
-              );
-            }),
+            ...flow.blocks.asMap().entries.map((entry) =>
+                _buildStepCard(block: entry.value, index: entry.key, cs: cs)),
           ],
         ),
       ),
@@ -110,69 +93,58 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
   Widget _buildFlowOverviewCard(TaskFlowDefinition flow, ColorScheme cs) {
     return Container(
       decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-      ),
+          color: cs.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(16)),
       padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.account_tree, size: 20, color: cs.primary),
-              const SizedBox(width: 8),
-              Text(flow.name,
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: cs.onSurface)),
-            ],
-          ),
-          if (flow.description.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(flow.description,
-                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
-          ],
-          const SizedBox(height: 12),
-          SingleChildScrollView(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(Icons.account_tree, size: 20, color: cs.primary),
+          const SizedBox(width: 8),
+          Text(flow.name,
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: cs.onSurface)),
+        ]),
+        if (flow.description.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(flow.description,
+              style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
+        ],
+        const SizedBox(height: 12),
+        SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: flow.blocks.asMap().entries.map((entry) {
-                final def = entry.value.getDefinition();
-                return Row(children: [
-                  if (entry.key > 0)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: Icon(Icons.arrow_forward,
-                          size: 14, color: cs.onSurfaceVariant),
-                    ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: def?.color.withValues(alpha: 0.12) ??
-                          Colors.grey.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      def?.label ?? entry.value.typeKey,
+                children: flow.blocks.asMap().entries.map((entry) {
+              final def = entry.value.getDefinition();
+              return Row(children: [
+                if (entry.key > 0)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Icon(Icons.arrow_forward,
+                        size: 14, color: cs.onSurfaceVariant),
+                  ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: def?.color.withValues(alpha: 0.12) ??
+                        Colors.grey.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(def?.label ?? entry.value.typeKey,
                       style: TextStyle(
                           fontSize: 11,
                           color: def?.color ?? Colors.grey,
-                          fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                ]);
-              }).toList(),
-            ),
-          ),
-        ],
-      ),
+                          fontWeight: FontWeight.w500)),
+                ),
+              ]);
+            }).toList()))
+      ]),
     );
   }
 
-  Widget _buildInputSection(
-      IOType inputType, TaskFlowDefinition flow, ColorScheme cs) {
+  Widget _buildInputSection(IOType inputType, ColorScheme cs) {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -181,75 +153,71 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Icon(Icons.input, size: 18, color: cs.primary),
-              const SizedBox(width: 8),
-              Text('输入（${inputType.label}）',
-                  style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: cs.onSurface)),
-            ]),
-            const SizedBox(height: 8),
-            if (inputType == IOType.url)
-              TextField(
-                controller: _inputController,
-                decoration: InputDecoration(
-                  hintText: '输入网页链接',
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                  prefixIcon: const Icon(Icons.link, size: 18),
-                  filled: true,
-                  fillColor: cs.surface,
-                ),
-                style: const TextStyle(fontSize: 14),
-                keyboardType: TextInputType.url,
-              )
-            else if (inputType == IOType.text)
-              TextField(
-                controller: _inputController,
-                decoration: InputDecoration(
-                  hintText: '输入文本',
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                  prefixIcon: const Icon(Icons.text_fields, size: 18),
-                  filled: true,
-                  fillColor: cs.surface,
-                ),
-                style: const TextStyle(fontSize: 14),
-                maxLines: 3,
-              )
-            else
-              TextField(
-                controller: _inputController,
-                decoration: InputDecoration(
-                  hintText: '输入 ${inputType.label} 路径或标识',
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                  filled: true,
-                  fillColor: cs.surface,
-                ),
-                style: const TextStyle(fontSize: 14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Icon(Icons.input, size: 18, color: cs.primary),
+            const SizedBox(width: 8),
+            Text('输入（${inputType.label}）',
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurface)),
+          ]),
+          const SizedBox(height: 8),
+          if (inputType == IOType.url)
+            TextField(
+              controller: _inputController,
+              decoration: InputDecoration(
+                hintText: '输入网页链接',
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                prefixIcon: const Icon(Icons.link, size: 18),
+                filled: true,
+                fillColor: cs.surface,
               ),
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: SizedBox(
-                width: double.infinity,
-                height: 44,
-                child: FilledButton.icon(
-                  onPressed: _inputController.text.trim().isNotEmpty
-                      ? _startFlow
-                      : null,
-                  icon: const Icon(Icons.play_arrow, size: 18),
-                  label: const Text('开始任务流'),
-                ),
+              style: const TextStyle(fontSize: 14),
+              keyboardType: TextInputType.url,
+            )
+          else if (inputType == IOType.text)
+            TextField(
+              controller: _inputController,
+              decoration: InputDecoration(
+                hintText: '输入文本',
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                prefixIcon: const Icon(Icons.text_fields, size: 18),
+                filled: true,
+                fillColor: cs.surface,
+              ),
+              style: const TextStyle(fontSize: 14),
+              maxLines: 3,
+            )
+          else
+            TextField(
+              controller: _inputController,
+              decoration: InputDecoration(
+                hintText: '输入 ${inputType.label} 路径或标识',
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                filled: true,
+                fillColor: cs.surface,
+              ),
+              style: const TextStyle(fontSize: 14),
+            ),
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: FilledButton.icon(
+                onPressed:
+                    _inputController.text.trim().isNotEmpty ? _startFlow : null,
+                icon: const Icon(Icons.play_arrow, size: 18),
+                label: const Text('开始任务流'),
               ),
             ),
-          ],
-        ),
+          ),
+        ]),
       ),
     );
   }
@@ -279,15 +247,13 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
             padding: const EdgeInsets.all(12),
             child: Row(children: [
               Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(def?.icon ?? Icons.extension,
-                    size: 16, color: cs.onSurfaceVariant),
-              ),
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                      color: cs.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(8)),
+                  child: Icon(def?.icon ?? Icons.extension,
+                      size: 16, color: cs.onSurfaceVariant)),
               const SizedBox(width: 10),
               Expanded(
                 child: Text('${index + 1}. ${def?.label ?? block.typeKey}',
@@ -304,7 +270,7 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
   }
 
   // ========================================================================
-  // Flow Execution — pop immediately, all sub-tasks pre-created
+  // Flow Execution — capture all notifiers BEFORE pop, then run in background
   // ========================================================================
 
   Future<void> _startFlow() async {
@@ -314,14 +280,19 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
         );
     if (flow.blocks.isEmpty) return;
 
+    // ── Capture ALL notifiers BEFORE any await (before pop + dispose) ──
     final execNotifier = ref.read(taskFlowExecutionsProvider.notifier);
+    final catcatchNotifier = ref.read(catcatchTasksProvider.notifier);
+    final bgNotifier = ref.read(backgroundTasksProvider.notifier);
+    final taskListNotifier = ref.read(taskListProvider.notifier);
+    final providerState = ref.read(providerEntriesProvider);
+
     final execId = execNotifier.addExecution(
       flowId: flow.id,
       flowName: flow.name,
     );
 
-    // Pre-create placeholder sub-tasks for ALL blocks so the task list
-    // card shows the correct count immediately — even before blocks execute.
+    // Pre-create placeholder sub-tasks for ALL blocks
     final placeholders = <int, FlowSubTask>{};
     for (int i = 0; i < flow.blocks.length; i++) {
       final block = flow.blocks[i];
@@ -339,11 +310,13 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
 
     final inputText = _inputController.text.trim();
 
+    // ── Pop immediately ──
     if (mounted) {
       Navigator.pop(context);
     }
     await Future<void>.delayed(Duration.zero);
 
+    // ── Now use captured notifiers, NEVER ref.read() ──
     String currentData = inputText;
 
     for (int i = 0; i < flow.blocks.length; i++) {
@@ -355,8 +328,17 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
       }
 
       final result = await _executeBlock(
-          def, block, currentData, execId, execNotifier,
-          flowSubTask: placeholders[i]!);
+        def,
+        block,
+        currentData,
+        execId,
+        execNotifier,
+        flowSubTask: placeholders[i]!,
+        catcatchNotifier: catcatchNotifier,
+        bgNotifier: bgNotifier,
+        taskListNotifier: taskListNotifier,
+        providerEntries: providerState,
+      );
 
       if (result.startsWith('[')) {
         execNotifier.failExecution(execId, error: result);
@@ -386,24 +368,34 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     String execId,
     TaskFlowExecutionNotifier execNotifier, {
     required FlowSubTask flowSubTask,
+    required CatCatchNotifier catcatchNotifier,
+    required BackgroundTaskNotifier bgNotifier,
+    required TaskListNotifier taskListNotifier,
+    required ProviderEntriesState providerEntries,
   }) async {
     switch (def.typeKey) {
       case 'catcatch':
         return await _executeCatCatchBlock(def, input, execId, execNotifier,
-            flowSubTask: flowSubTask);
+            flowSubTask: flowSubTask, catcatchNotifier: catcatchNotifier);
       case 'audioSeparation':
         return await _executeAudioSeparationBlock(
             def, input, execId, execNotifier,
-            flowSubTask: flowSubTask);
+            flowSubTask: flowSubTask, bgNotifier: bgNotifier);
       case 'asr':
         return await _executeAsrBlock(block, def, input, execId, execNotifier,
-            flowSubTask: flowSubTask);
+            flowSubTask: flowSubTask,
+            bgNotifier: bgNotifier,
+            providerEntries: providerEntries);
       case 'ocr':
         return await _executeOcrBlock(block, def, input, execId, execNotifier,
-            flowSubTask: flowSubTask);
+            flowSubTask: flowSubTask,
+            bgNotifier: bgNotifier,
+            providerEntries: providerEntries);
       case 'tts':
         return await _executeTtsBlock(block, def, input, execId, execNotifier,
-            flowSubTask: flowSubTask);
+            flowSubTask: flowSubTask,
+            taskListNotifier: taskListNotifier,
+            providerEntries: providerEntries);
       default:
         execNotifier.failExecution(execId, error: '不支持的功能块: ${def.typeKey}');
         return '[${def.typeKey}] 不支持的功能块';
@@ -411,7 +403,7 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
   }
 
   // ========================================================================
-  // CatCatch
+  // CatCatch — uses captured notifier.state for polling
   // ========================================================================
 
   Future<String> _executeCatCatchBlock(
@@ -420,8 +412,8 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     String execId,
     TaskFlowExecutionNotifier execNotifier, {
     required FlowSubTask flowSubTask,
+    required CatCatchNotifier catcatchNotifier,
   }) async {
-    final catcatchNotifier = ref.read(catcatchTasksProvider.notifier);
     final taskId = catcatchNotifier.addTask(input, 0);
     execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
     execNotifier.updateSubTaskStatus(
@@ -431,13 +423,12 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     const maxWait = Duration(minutes: 10);
     bool autoSelected = false;
 
+    // Use captured notifier's .state — never ref.read()
     // ignore: literal_only_boolean_expressions
     while (true) {
       await Future.delayed(const Duration(milliseconds: 500));
-      final task = ref
-          .read(catcatchTasksProvider)
-          .where((t) => t.id == taskId)
-          .firstOrNull;
+      final task =
+          catcatchNotifier.state.where((t) => t.id == taskId).firstOrNull;
 
       if (task == null) {
         execNotifier.updateSubTaskStatus(
@@ -495,8 +486,8 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     String execId,
     TaskFlowExecutionNotifier execNotifier, {
     required FlowSubTask flowSubTask,
+    required BackgroundTaskNotifier bgNotifier,
   }) async {
-    final bgNotifier = ref.read(backgroundTasksProvider.notifier);
     final inputBasename = p.basename(input);
     final inputFormat = p.extension(input).replaceFirst('.', '').toLowerCase();
     final title = '音频分离_${p.basenameWithoutExtension(inputBasename)}';
@@ -529,7 +520,6 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
 
     try {
       bgNotifier.updateStep(taskId, 0, running: true);
-
       final audioBytes = await _extractAudioIsolate(videoBytes, inputFormat);
       bgNotifier.updateStep(taskId, 0, completed: true);
 
@@ -551,8 +541,7 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
   Future<String?> _saveAudioForFlow(Uint8List audioBytes) async {
     if (audioBytes.isEmpty) throw Exception('提取的音频数据为空');
     final hash = computeAudioHash(audioBytes);
-    final detectedFormat = detectAudioFormat(audioBytes);
-    final format = normalizeAudioFormat(detectedFormat);
+    final format = normalizeAudioFormat(detectAudioFormat(audioBytes));
     await FileManifest.writeFile('$hash.$format', audioBytes);
     return await FileManifest.readFilePath('$hash.$format');
   }
@@ -568,8 +557,9 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     String execId,
     TaskFlowExecutionNotifier execNotifier, {
     required FlowSubTask flowSubTask,
+    required BackgroundTaskNotifier bgNotifier,
+    required ProviderEntriesState providerEntries,
   }) async {
-    final bgNotifier = ref.read(backgroundTasksProvider.notifier);
     final inputBasename = p.basename(input);
     final title = '语音识别_${p.basenameWithoutExtension(inputBasename)}';
 
@@ -602,9 +592,10 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     }
 
     final modelIndex = int.tryParse(block.params['modelIndex'] ?? '0') ?? 0;
-    final entries = ref.read(providerEntriesProvider).entries;
-    final configs =
-        entries.where((e) => e.type == 'asr').expand((e) => e.configs).toList();
+    final configs = providerEntries.entries
+        .where((e) => e.type == 'asr')
+        .expand((e) => e.configs)
+        .toList();
 
     if (configs.isEmpty || modelIndex >= configs.length) {
       _failSubTask(bgNotifier, taskId, execNotifier, execId, flowSubTask.id,
@@ -622,7 +613,6 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
 
     try {
       bgNotifier.updateStep(taskId, 0, running: true);
-
       final result = await _callAsrApi(
         audioBytes: audioBytes,
         audioFormat: audioFormat,
@@ -631,7 +621,6 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
         modelId: model.modelId,
         typeConfig: model.typeConfig,
       );
-
       bgNotifier.updateStep(taskId, 0, completed: true);
       bgNotifier.setResult(taskId, result);
 
@@ -665,11 +654,9 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
       'response_format': 'json',
       ...typeConfig,
     });
-
     final response = await dio.post(host,
         data: formData,
         options: Options(headers: {'Authorization': 'Bearer $apiKey'}));
-
     if (response.data is Map) return (response.data['text'] as String?) ?? '';
     return response.data.toString();
   }
@@ -685,8 +672,9 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     String execId,
     TaskFlowExecutionNotifier execNotifier, {
     required FlowSubTask flowSubTask,
+    required BackgroundTaskNotifier bgNotifier,
+    required ProviderEntriesState providerEntries,
   }) async {
-    final bgNotifier = ref.read(backgroundTasksProvider.notifier);
     final inputBasename = p.basename(input);
     final title = '文字识别_${p.basenameWithoutExtension(inputBasename)}';
 
@@ -718,10 +706,10 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
       return '[OCR] 读取文件失败';
     }
 
-    final entries = ref.read(providerEntriesProvider).entries;
-    final configs =
-        entries.where((e) => e.type == 'ocr').expand((e) => e.configs).toList();
-
+    final configs = providerEntries.entries
+        .where((e) => e.type == 'ocr')
+        .expand((e) => e.configs)
+        .toList();
     if (configs.isEmpty) {
       _failSubTask(
           bgNotifier, taskId, execNotifier, execId, flowSubTask.id, '未配置OCR模型');
@@ -738,7 +726,6 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
 
     try {
       bgNotifier.updateStep(taskId, 0, running: true);
-
       final result = await _callOcrApi(
         imageBytes: imageBytes,
         imageFormat: imageFormat,
@@ -746,7 +733,6 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
         apiKey: config.key,
         modelId: model.modelId,
       );
-
       bgNotifier.updateStep(taskId, 0, completed: true);
       bgNotifier.setResult(taskId, result);
 
@@ -770,9 +756,8 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     required String modelId,
   }) async {
     final dio = Dio();
-    final base64Image = base64Encode(imageBytes);
-    final dataUri = 'data:image/$imageFormat;base64,$base64Image';
-
+    final dataUri =
+        'data:image/$imageFormat;base64,${base64Encode(imageBytes)}';
     final body = {
       'model': modelId,
       'max_tokens': 4096,
@@ -790,14 +775,12 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
         }
       ]
     };
-
     final response = await dio.post(host,
         data: body,
         options: Options(headers: {
           'Authorization': 'Bearer $apiKey',
           'Content-Type': 'application/json',
         }));
-
     if (response.data is Map) {
       final choices = response.data['choices'] as List<dynamic>?;
       if (choices != null && choices.isNotEmpty) {
@@ -819,13 +802,13 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     String execId,
     TaskFlowExecutionNotifier execNotifier, {
     required FlowSubTask flowSubTask,
+    required TaskListNotifier taskListNotifier,
+    required ProviderEntriesState providerEntries,
   }) async {
-    final taskListNotifier = ref.read(taskListProvider.notifier);
-
-    final entries = ref.read(providerEntriesProvider).entries;
-    final configs =
-        entries.where((e) => e.type == 'tts').expand((e) => e.configs).toList();
-
+    final configs = providerEntries.entries
+        .where((e) => e.type == 'tts')
+        .expand((e) => e.configs)
+        .toList();
     if (configs.isEmpty) {
       execNotifier.failExecution(execId, error: '未配置TTS模型');
       return '[TTS] 未配置TTS模型';
@@ -854,15 +837,18 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
         },
       );
       execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
+      execNotifier.updateSubTaskStatus(
+          execId, flowSubTask.id, TaskStatus.running);
 
       final startTime = DateTime.now();
       const maxWait = Duration(minutes: 5);
 
+      // Use captured notifier's .state — never ref.read()
       // ignore: literal_only_boolean_expressions
       while (true) {
         await Future.delayed(const Duration(milliseconds: 500));
         final task =
-            ref.read(taskListProvider).where((t) => t.id == taskId).firstOrNull;
+            taskListNotifier.state.where((t) => t.id == taskId).firstOrNull;
 
         if (task == null) {
           execNotifier.updateSubTaskStatus(
