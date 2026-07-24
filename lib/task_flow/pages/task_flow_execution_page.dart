@@ -12,13 +12,6 @@ import '../models/io_type.dart';
 import '../providers/task_flow_provider.dart';
 import '../providers/task_flow_execution_provider.dart';
 
-/// Thrown when the execution page is disposed during a block execution.
-/// Catched in [_startFlow] to stop the loop without marking the flow as failed.
-class _FlowDisposedException implements Exception {
-  @override
-  String toString() => 'FlowDisposedException';
-}
-
 /// Page for executing a task flow.
 ///
 /// The user provides the initial input (based on the first block's input type),
@@ -508,13 +501,6 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
         currentData = result;
 
         await Future.delayed(const Duration(milliseconds: 300));
-      } on _FlowDisposedException {
-        // Widget was disposed while a block was running (e.g., CatCatch download).
-        // The underlying task continues independently — the flow stays "running"
-        // and the user can check progress in the task list.
-        _stepResults.add('⏸ ${def.label} 后台继续');
-        allSucceeded = false;
-        break;
       } catch (e) {
         _stepResults.add('❌ ${def.label} 失败: $e');
         execNotifier.failExecution(execId, error: '$e');
@@ -638,8 +624,10 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
   /// Execute a CatCatch block by creating a real CatCatch task, waiting for
   /// completion, and returning the downloaded file path.
   ///
-  /// If the task pauses at user selection (multiple media detected), the
-  /// first resource is auto-selected to continue the flow.
+  /// This method NEVER throws — all errors are handled by updating the sub-task
+  /// status and returning an error string. The flow execution stays "running"
+  /// and the TaskFlowCard's [_syncSubTaskStatuses] plus [updateSubTaskStatus]
+  /// auto-completion logic handle the final flow status transition.
   Future<String> _executeCatCatchBlock(
     BlockTypeDefinition def,
     String input,
@@ -658,7 +646,8 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     );
     execNotifier.addSubTask(execId, subTask);
 
-    // Poll until the CatCatch task completes or fails
+    // Poll until the CatCatch task reaches a terminal state or the widget
+    // is disposed. Never throw — update sub-task status and return gracefully.
     final startTime = DateTime.now();
     const maxWait = Duration(minutes: 10);
     bool _autoSelected = false;
@@ -671,26 +660,26 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
           .where((t) => t.id == taskId)
           .firstOrNull;
 
+      // Task not found in provider — mark sub-task as failed
       if (task == null) {
         execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
-        throw Exception('CatCatch 任务丢失');
+        return '[CatCatch] 任务丢失';
       }
 
-      // Check CatCatch task status in polling loop
+      // Completed
       if (task.status == TaskStatus.completed) {
         execNotifier.updateSubTaskStatus(
             execId, subTask.id, TaskStatus.completed);
         return task.downloadedFilePath ?? '下载完成（无文件路径）';
       }
 
+      // Failed
       if (task.status == TaskStatus.failed) {
         execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
-        throw Exception(task.error ?? 'CatCatch 任务失败');
+        return '[CatCatch] ${task.error ?? '任务失败'}';
       }
 
-      // Auto-select: pipeline paused at userSelecting step (multiple media found).
-      // Must check BEFORE the generic "paused" check, because the pipeline sets
-      // status to paused when waiting for user selection.
+      // Auto-select: pipeline paused at userSelecting step (multiple media).
       if (!_autoSelected) {
         final userSelectStep = task.steps.where(
           (s) => s.type == catcatch.StepType.userSelecting,
@@ -706,7 +695,7 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
           } else {
             execNotifier.updateSubTaskStatus(
                 execId, subTask.id, TaskStatus.failed);
-            throw Exception('未检测到可用媒体资源');
+            return '[CatCatch] 未检测到可用媒体资源';
           }
         }
       }
@@ -714,20 +703,18 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
       // Generic paused (user manually paused outside the flow)
       if (task.status == TaskStatus.paused) {
         execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.paused);
-        throw Exception('CatCatch 任务已暂停（可能需要在任务列表中手动继续）');
+        return '[CatCatch] 任务已暂停（需要在任务列表中手动继续）';
       }
 
       // Timeout
       if (DateTime.now().difference(startTime) > maxWait) {
         execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
-        throw Exception('CatCatch 下载超时（${maxWait.inMinutes}分钟）');
+        return '[CatCatch] 下载超时';
       }
     }
 
     // Widget disposed while CatCatch task is still running.
-    // Do NOT throw or mark as failed — the CatCatch task runs independently
-    // in the provider and will continue. The flow execution stays "running"
-    // and the user can check the task's progress in the task list.
-    throw _FlowDisposedException();
+    // The task continues in the background — don't mark anything as failed.
+    return '[CatCatch] 后台运行中';
   }
 }
