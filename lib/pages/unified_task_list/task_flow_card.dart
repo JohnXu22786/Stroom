@@ -13,10 +13,11 @@ import 'catcatch_task_card.dart';
 import 'synthesis_task_card.dart';
 
 /// Card for a task flow execution in the unified task list.
-/// Two-level expand:
-///   Level 1: Flow header → expands to show sub-tasks (one per block)
-///   Level 2: Sub-task tile → expands to show the underlying task's card
-///            (CatCatchTaskCard / BackgroundTaskCard / SynthesisTaskCard)
+///
+/// Layout:
+///   Level 0: Flow header — "任务流" tag, flow name, progress, status icon
+///   Level 1 (expanded): Directly shows the real task cards for each sub-task
+///     (CatCatchTaskCard / BackgroundTaskCard / SynthesisTaskCard)
 class TaskFlowCard extends ConsumerStatefulWidget {
   final TaskFlowExecution execution;
   final bool isUnread;
@@ -33,17 +34,13 @@ class TaskFlowCard extends ConsumerStatefulWidget {
 
 class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
   bool _expanded = false;
-  final Set<String> _expandedSubTasks = {};
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final exec = widget.execution;
 
-    // Sync sub-task statuses with underlying real tasks.
-    // When the execution page is disposed mid-flow, the polling loop stops
-    // but the CatCatch/Background tasks continue running. This keeps the
-    // sub-task statuses in sync so auto-completion works.
+    // Sync sub-task statuses with underlying real tasks
     _syncSubTaskStatuses();
 
     return Padding(
@@ -59,7 +56,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
         ),
         child: Column(
           children: [
-            // === Level 1: Flow summary (always visible) ===
+            // === Level 0: Flow summary (always visible) ===
             InkWell(
               borderRadius: BorderRadius.circular(12),
               onTap: () => setState(() => _expanded = !_expanded),
@@ -67,25 +64,53 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    // Status icon
-                    _statusIcon(exec.status, cs),
+                    // Status icon (based on sub-task states, not exec.status)
+                    _computedStatusIcon(cs),
                     const SizedBox(width: 10),
-                    // Flow name + count
+                    // Flow name + tag
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            exec.flowName,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: cs.onSurface,
-                            ),
+                          Row(
+                            children: [
+                              // "任务流" tag
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 4, vertical: 1),
+                                margin: const EdgeInsets.only(right: 6),
+                                decoration: BoxDecoration(
+                                  color: cs.primary.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                                child: Text(
+                                  '任务流',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: cs.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              // Flow name
+                              Flexible(
+                                child: Text(
+                                  exec.flowName,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: cs.onSurface,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 2),
+                          // Progress line
                           Text(
-                            '任务流 · ${exec.subTasks.length} 个步骤',
+                            _progressText(exec),
                             style: TextStyle(
                               fontSize: 11,
                               color: cs.onSurfaceVariant,
@@ -94,7 +119,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
                         ],
                       ),
                     ),
-                    // Expand icon
+                    // Expand arrow
                     Icon(
                       _expanded ? Icons.expand_less : Icons.expand_more,
                       color: cs.onSurfaceVariant,
@@ -119,32 +144,56 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
               ),
             ),
 
-            // === Level 2: Sub-tasks (when flow is expanded) ===
+            // === Level 1: Direct sub-task cards (when flow is expanded) ===
             if (_expanded)
-              ...exec.subTasks
-                  .map((subTask) => _buildSubTaskSection(subTask, cs)),
+              for (int i = 0; i < exec.subTasks.length; i++)
+                _buildSubTaskCard(exec.subTasks[i], cs),
           ],
         ),
       ),
     );
   }
 
-  Widget _statusIcon(FlowExecutionStatus status, ColorScheme cs) {
-    switch (status) {
-      case FlowExecutionStatus.running:
-        return SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(
-            strokeWidth: 2.5,
-            color: cs.primary,
-          ),
-        );
-      case FlowExecutionStatus.completed:
-        return Icon(Icons.check_circle, size: 20, color: Colors.green);
-      case FlowExecutionStatus.failed:
-        return Icon(Icons.error, size: 20, color: cs.error);
+  /// Build the status icon based on sub-task states.
+  Widget _computedStatusIcon(ColorScheme cs) {
+    final exec = widget.execution;
+    final anyRunning =
+        exec.subTasks.any((st) => st.status == TaskStatus.running);
+    final anyFailed = exec.subTasks.any((st) => st.status == TaskStatus.failed);
+    final allCompleted =
+        exec.subTasks.every((st) => st.status == TaskStatus.completed);
+
+    if (exec.subTasks.isEmpty || anyRunning) {
+      return SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(
+          strokeWidth: 2.5,
+          color: cs.primary,
+        ),
+      );
     }
+    if (allCompleted) {
+      return Icon(Icons.check_circle, size: 20, color: Colors.green);
+    }
+    if (anyFailed) {
+      return Icon(Icons.error, size: 20, color: cs.error);
+    }
+    return Icon(Icons.check_circle, size: 20, color: Colors.green);
+  }
+
+  /// Progress text: "2/3 已完成" or "2 个步骤"
+  String _progressText(TaskFlowExecution exec) {
+    final total = exec.subTasks.length;
+    if (total == 0) return '0 个步骤';
+    final done =
+        exec.subTasks.where((st) => st.status == TaskStatus.completed).length;
+    final failed =
+        exec.subTasks.where((st) => st.status == TaskStatus.failed).length;
+    if (failed > 0) {
+      return '$done/$total 已完成 · $failed 个失败';
+    }
+    return '$done/$total 已完成';
   }
 
   void _confirmDelete(BuildContext context, ColorScheme cs) {
@@ -172,12 +221,118 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
     );
   }
 
-  /// Sync sub-task statuses with the underlying real tasks.
+  // =========================================================================
+  // Sub-task → real task card mapping
+  // =========================================================================
+
+  /// Build the card for a single sub-task.
   ///
-  /// When the execution page is disposed mid-flow (user navigated away),
-  /// the CatCatch/Background/Synthesis tasks continue running in their
-  /// respective providers. This method keeps the flow execution's sub-task
-  /// statuses in sync, which triggers [updateSubTaskStatus] auto-completion.
+  /// No intermediate row — directly renders the underlying real task card.
+  /// Uses [subTask.blockLabel] as the card's title (e.g., "获取网页资源").
+  Widget _buildSubTaskCard(FlowSubTask subTask, ColorScheme cs) {
+    switch (subTask.subTaskType) {
+      case 'catcatch':
+        return _buildCatCatchCard(subTask, cs);
+      case 'background':
+        return _buildBackgroundCard(subTask, cs);
+      case 'synthesis':
+        return _buildSynthesisCard(subTask, cs);
+      default:
+        return _buildFallbackCard(subTask, cs);
+    }
+  }
+
+  Widget _buildCatCatchCard(FlowSubTask subTask, ColorScheme cs) {
+    final tasks = ref.watch(catcatchTasksProvider);
+    final task = tasks.where((t) => t.id == subTask.subTaskId).firstOrNull;
+
+    if (task != null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 2, 12, 2),
+        child: CatCatchTaskCard(
+          key: ValueKey('catcatch_${task.id}_${task.status.name}'),
+          task: task,
+          isUnread: false,
+        ),
+      );
+    }
+    return _buildFallbackCard(subTask, cs);
+  }
+
+  Widget _buildBackgroundCard(FlowSubTask subTask, ColorScheme cs) {
+    final tasks = ref.watch(backgroundTasksProvider);
+    final task = tasks.where((t) => t.id == subTask.subTaskId).firstOrNull;
+
+    if (task != null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 2, 12, 2),
+        child: BackgroundTaskCard(
+          key: ValueKey('bg_${task.id}_${task.status.name}'),
+          task: task,
+          isUnread: false,
+        ),
+      );
+    }
+    return _buildFallbackCard(subTask, cs);
+  }
+
+  Widget _buildSynthesisCard(FlowSubTask subTask, ColorScheme cs) {
+    final tasks = ref.watch(taskListProvider);
+    final task = tasks.where((t) => t.id == subTask.subTaskId).firstOrNull;
+
+    if (task != null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 2, 12, 2),
+        child: SynthesisTaskCard(
+          key: ValueKey('synth_${task.id}_${task.status.name}'),
+          task: task,
+          isUnread: false,
+        ),
+      );
+    }
+    return _buildFallbackCard(subTask, cs);
+  }
+
+  /// Fallback card when the real task is not found in the provider.
+  Widget _buildFallbackCard(FlowSubTask subTask, ColorScheme cs) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: cs.outlineVariant, width: 0.5),
+        ),
+        child: Row(
+          children: [
+            _statusIcon(subTask.status, cs),
+            const SizedBox(width: 8),
+            Text(
+              subTask.blockLabel,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: cs.onSurface,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              _statusText(subTask.status),
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // =========================================================================
+  // Status sync between flow sub-tasks and real provider tasks
+  // =========================================================================
+
+  /// Sync sub-task statuses with the underlying real tasks.
   void _syncSubTaskStatuses() {
     final exec = widget.execution;
     if (exec.status != FlowExecutionStatus.running) return;
@@ -188,12 +343,10 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
     final synthTasks = ref.read(taskListProvider);
 
     for (final st in exec.subTasks) {
-      // Skip already-terminal sub-tasks (no need to update)
       if (st.status == TaskStatus.completed || st.status == TaskStatus.failed) {
         continue;
       }
 
-      // Check CatCatch tasks (uses a different TaskStatus enum)
       final ccTask =
           catcatchTasks.where((t) => t.id == st.subTaskId).firstOrNull;
       if (ccTask != null) {
@@ -204,14 +357,12 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
         continue;
       }
 
-      // Check Background tasks
       final bgTask = bgTasks.where((t) => t.id == st.subTaskId).firstOrNull;
       if (bgTask != null && bgTask.status != st.status) {
         execNotifier.updateSubTaskStatus(exec.id, st.id, bgTask.status);
         continue;
       }
 
-      // Check Synthesis tasks
       final synthTask =
           synthTasks.where((t) => t.id == st.subTaskId).firstOrNull;
       if (synthTask != null && synthTask.status != st.status) {
@@ -220,7 +371,6 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
     }
   }
 
-  /// Convert CatCatch's [TaskStatus] enum to the shared [TaskStatus] enum.
   TaskStatus _convertCatCatchStatus(catcatch.TaskStatus status) {
     switch (status) {
       case catcatch.TaskStatus.waiting:
@@ -236,220 +386,11 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
     }
   }
 
-  /// Build a sub-task row that can expand to show the underlying task card.
-  Widget _buildSubTaskSection(FlowSubTask subTask, ColorScheme cs) {
-    final isExpanded = _expandedSubTasks.contains(subTask.id);
-
-    return Column(
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            border: Border(
-              top: BorderSide(color: cs.outlineVariant, width: 0.3),
-            ),
-          ),
-          child: InkWell(
-            onTap: () {
-              setState(() {
-                if (isExpanded) {
-                  _expandedSubTasks.remove(subTask.id);
-                } else {
-                  _expandedSubTasks.add(subTask.id);
-                }
-              });
-            },
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: Row(
-                children: [
-                  // Sub-task status
-                  _subTaskIcon(subTask.status, cs),
-                  const SizedBox(width: 10),
-                  // Sub-task label
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          subTask.blockLabel,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: cs.onSurface,
-                          ),
-                        ),
-                        Text(
-                          _statusText(subTask.status),
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Status badge
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: _subTaskColor(subTask.status, cs)
-                          .withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      _shortStatusText(subTask.status),
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: _subTaskColor(subTask.status, cs),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  // Expand arrow
-                  Icon(
-                    isExpanded ? Icons.expand_less : Icons.expand_more,
-                    size: 16,
-                    color: cs.onSurfaceVariant,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-
-        // === Level 3: Nested task detail card (when sub-task is expanded) ===
-        if (isExpanded) _buildSubTaskDetail(subTask, cs),
-      ],
-    );
-  }
-
-  /// Build the underlying task's detail card inside an expanded sub-task.
-  Widget _buildSubTaskDetail(FlowSubTask subTask, ColorScheme cs) {
-    switch (subTask.subTaskType) {
-      case 'catcatch':
-        return _buildCatCatchDetail(subTask, cs);
-      case 'background':
-        return _buildBackgroundDetail(subTask, cs);
-      case 'synthesis':
-        return _buildSynthesisDetail(subTask, cs);
-      default:
-        return _buildGenericDetail(subTask, cs);
-    }
-  }
-
-  /// Look up and render the real CatCatch task card.
-  Widget _buildCatCatchDetail(FlowSubTask subTask, ColorScheme cs) {
-    final tasks = ref.watch(catcatchTasksProvider);
-    final task = tasks.where((t) => t.id == subTask.subTaskId).firstOrNull;
-
-    if (task != null) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: CatCatchTaskCard(
-          key: ValueKey('catcatch_${task.id}'),
-          task: task,
-          isUnread: false,
-        ),
-      );
-    }
-
-    return _buildGenericDetail(subTask, cs);
-  }
-
-  /// Look up and render the real Background task card.
-  Widget _buildBackgroundDetail(FlowSubTask subTask, ColorScheme cs) {
-    final tasks = ref.watch(backgroundTasksProvider);
-    final task = tasks.where((t) => t.id == subTask.subTaskId).firstOrNull;
-
-    if (task != null) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: BackgroundTaskCard(
-          key: ValueKey('bg_${task.id}'),
-          task: task,
-          isUnread: false,
-        ),
-      );
-    }
-
-    return _buildGenericDetail(subTask, cs);
-  }
-
-  /// Look up and render the real Synthesis task card.
-  Widget _buildSynthesisDetail(FlowSubTask subTask, ColorScheme cs) {
-    final tasks = ref.watch(taskListProvider);
-    final task = tasks.where((t) => t.id == subTask.subTaskId).firstOrNull;
-
-    if (task != null) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: SynthesisTaskCard(
-          key: ValueKey('synth_${task.id}'),
-          task: task,
-          isUnread: false,
-        ),
-      );
-    }
-
-    return _buildGenericDetail(subTask, cs);
-  }
-
-  /// Fallback generic detail view when the real task is not found.
-  Widget _buildGenericDetail(FlowSubTask subTask, ColorScheme cs) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 4, 16, 8),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: cs.outlineVariant, width: 0.5),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                _subTaskIcon(subTask.status, cs),
-                const SizedBox(width: 8),
-                Text(
-                  '${subTask.blockLabel} · ${_statusText(subTask.status)}',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: cs.onSurface,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '类型: ${subTask.subTaskType}',
-              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-            ),
-            if (subTask.subTaskId.isNotEmpty) ...[
-              const SizedBox(height: 2),
-              Text(
-                '任务ID: ${subTask.subTaskId}',
-                style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
   // =========================================================================
-  // Sub-task status helpers
+  // Status helpers
   // =========================================================================
 
-  Widget _subTaskIcon(TaskStatus status, ColorScheme cs) {
+  Widget _statusIcon(TaskStatus status, ColorScheme cs) {
     switch (status) {
       case TaskStatus.running:
         return SizedBox(
@@ -472,21 +413,6 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
     }
   }
 
-  Color _subTaskColor(TaskStatus status, ColorScheme cs) {
-    switch (status) {
-      case TaskStatus.running:
-        return cs.primary;
-      case TaskStatus.completed:
-        return Colors.green;
-      case TaskStatus.failed:
-        return cs.error;
-      case TaskStatus.paused:
-        return Colors.orange;
-      case TaskStatus.waiting:
-        return cs.onSurfaceVariant;
-    }
-  }
-
   String _statusText(TaskStatus status) {
     switch (status) {
       case TaskStatus.running:
@@ -499,21 +425,6 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
         return '已暂停';
       case TaskStatus.waiting:
         return '等待中';
-    }
-  }
-
-  String _shortStatusText(TaskStatus status) {
-    switch (status) {
-      case TaskStatus.running:
-        return '运行中';
-      case TaskStatus.completed:
-        return '完成';
-      case TaskStatus.failed:
-        return '失败';
-      case TaskStatus.paused:
-        return '暂停';
-      case TaskStatus.waiting:
-        return '等待';
     }
   }
 }

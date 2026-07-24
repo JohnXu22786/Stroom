@@ -75,17 +75,36 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>> {
 
   /// Mark execution as completed.
   ///
-  /// Always marks as [FlowExecutionStatus.completed] because this is only
-  /// called when all blocks have finished successfully. The previous logic
-  /// checked `subTasks.every(completed)` which was fragile — a sub-task
-  /// could still be in a non-completed state due to timing.
+  /// Sets status based on sub-task states:
+  /// - All completed → completed
+  /// - Any running → stays running (wait for auto-complete)
+  /// - Any failed → failed
   void completeExecution(String executionId) {
     state = state.map((e) {
       if (e.id != executionId) return e;
-      return e.copyWith(
-        status: FlowExecutionStatus.completed,
-        completedAt: DateTime.now(),
-      );
+      // Compute status from sub-tasks
+      if (e.subTasks.isEmpty) {
+        return e.copyWith(
+          status: FlowExecutionStatus.completed,
+          completedAt: DateTime.now(),
+        );
+      }
+      final allCompleted =
+          e.subTasks.every((st) => st.status == TaskStatus.completed);
+      final anyFailed = e.subTasks.any((st) => st.status == TaskStatus.failed);
+      if (allCompleted) {
+        return e.copyWith(
+          status: FlowExecutionStatus.completed,
+          completedAt: DateTime.now(),
+        );
+      } else if (anyFailed) {
+        return e.copyWith(
+          status: FlowExecutionStatus.failed,
+          completedAt: DateTime.now(),
+        );
+      }
+      // Still running — leave as is; auto-complete will handle it
+      return e;
     }).toList();
   }
 
