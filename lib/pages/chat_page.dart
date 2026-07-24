@@ -881,12 +881,28 @@ class _ChatPageState extends ConsumerState<ChatPage>
           '[DEBUG-HIST] _onMessageSend: BEFORE stream, _history.length=${_history.length}');
     } catch (_) {}
     await _startStreaming(text, capturedConvId: convId);
+
+    // Reload _history from conversation provider to ensure it reflects the
+    // manager's persisted messages. Post-stream code in _startStreaming may
+    // not execute reliably if the widget was disposed or an async error
+    // occurred during background streaming.
+    await _syncHistoryFromProvider(capturedConvId: convId);
+
     try {
       await AppLogService.debug('ChatPage',
-          '[DEBUG-HIST] _onMessageSend: AFTER stream, _history.length=${_history.length}');
+          '[DEBUG-HIST] _onMessageSend: AFTER sync, _history.length=${_history.length}');
     } catch (_) {}
-    await AppLogService.debug('ChatPage',
-        '[PERSIST] _onMessageSend: streaming done, convId=$convId historyLen=${_history.length}');
+  }
+
+  Future<void> _syncHistoryFromProvider({String? capturedConvId}) async {
+    final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
+    if (convId == null || convId.isEmpty) return;
+    final convs = ref.read(conversationsProvider);
+    final conv = convs.where((c) => c.id == convId).firstOrNull;
+    if (conv != null) {
+      _history.clear();
+      _history.addAll(conv.messages);
+    }
   }
 
   Future<void> _startStreaming(String text, {String? capturedConvId}) async {
@@ -1158,6 +1174,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // Re-generate using the preceding user message
     final userMsg = _history[index - 1];
     await _startStreaming(userMsg.content);
+    await _syncHistoryFromProvider();
   }
 
   Future<void> _deleteMessage(String messageId) async {
