@@ -876,11 +876,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
       ),
     );
 
-    await AppLogService.debug('ChatPage',
-        '[DEBUG-HIST] _onMessageSend: BEFORE stream, _history.length=${_history.length}');
+    try {
+      await AppLogService.debug('ChatPage',
+          '[DEBUG-HIST] _onMessageSend: BEFORE stream, _history.length=${_history.length}');
+    } catch (_) {}
     await _startStreaming(text, capturedConvId: convId);
-    await AppLogService.debug('ChatPage',
-        '[DEBUG-HIST] _onMessageSend: AFTER stream, _history.length=${_history.length}');
+    try {
+      await AppLogService.debug('ChatPage',
+          '[DEBUG-HIST] _onMessageSend: AFTER stream, _history.length=${_history.length}');
+    } catch (_) {}
     await AppLogService.debug('ChatPage',
         '[PERSIST] _onMessageSend: streaming done, convId=$convId historyLen=${_history.length}');
   }
@@ -937,8 +941,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final effectiveConvId =
         capturedConvId ?? ref.read(activeConversationIdProvider) ?? '';
     final histBefore = List<ChatMessage>.from(_history);
-    await AppLogService.debug('ChatPage',
-        '[DEBUG-HIST] _startStreaming: sending to manager, _history.length=${histBefore.length}');
+    try {
+      await AppLogService.debug('ChatPage',
+          '[DEBUG-HIST] _startStreaming: sending to manager, _history.length=${histBefore.length}');
+    } catch (_) {}
     final StreamResult result =
         await ref.read(chatStreamManagerProvider).startStreaming(
               text: text,
@@ -949,18 +955,21 @@ class _ChatPageState extends ConsumerState<ChatPage>
               reasoningEffort: ref.read(reasoningEffortProvider),
               reasoningParamValues: ref.read(reasoningParamValuesProvider),
             );
-    await AppLogService.debug('ChatPage',
-        '[DEBUG-HIST] _startStreaming: manager returned, result.history.length=${result.history.length}');
 
     // ── Post-stream completion ──
-    // Update _history from the StreamResult (no ref.read needed, so this
-    // works even if the widget was disposed during background streaming).
-    // Persistence is handled by ChatStreamManager._saveMessages which uses
-    // the manager's own Ref (from Provider creation, survives widget dispose).
+    // CRITICAL: Update _history FIRST, before any debug/log calls that
+    // could throw and prevent the update. Without this, the next message
+    // sees stale _history missing previous assistant messages.
     _history.clear();
     _history.addAll(result.history);
-    await AppLogService.debug('ChatPage',
-        '[DEBUG-HIST] _startStreaming: after result apply, _history.length=${_history.length}');
+
+    // Best-effort debug logging (must not block history update above)
+    try {
+      await AppLogService.debug('ChatPage',
+          '[DEBUG-HIST] _startStreaming: manager returned, result.history.length=${result.history.length}');
+      await AppLogService.debug('ChatPage',
+          '[DEBUG-HIST] _startStreaming: after result apply, _history.length=${_history.length}');
+    } catch (_) {}
 
     // Clean up local streaming state and providers. Wrap in try-catch
     // because ref.read() may fail if the widget was disposed while the
