@@ -16,11 +16,13 @@ import '../services/attachment_storage.dart';
 
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
-import '../models/tool_call.dart';
+import '../models/tool_call.dart' show ToolCallData;
 import '../services/app_log_service.dart';
 import '../services/chat_adapter.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/chat_stream_provider.dart';
+import '../providers/chat_manager_provider.dart';
+import '../services/chat_stream_manager.dart' show StreamResult;
 import '../providers/provider_config.dart';
 import '../providers/assistant_provider.dart' show selectedAssistantProvider;
 import '../widgets/llm/jumping_dots.dart';
@@ -29,7 +31,6 @@ import 'message_search_page.dart';
 import 'provider_config_page.dart';
 
 import 'chat/chat_types.dart';
-import 'chat/utils/format_chat_error.dart';
 
 export 'chat/utils/format_chat_error.dart' show formatChatErrorMessage;
 import 'chat/widgets/action_button.dart';
@@ -60,17 +61,25 @@ class _ChatPageState extends ConsumerState<ChatPage>
   InMemoryChatController? _controller;
   late final User _currentUser;
   late final User _aiUser;
-  late final ChatAdapter _adapter;
   final List<ChatMessage> _history = [];
+
+  /// Shortcut to the app-level [ChatAdapter] managed by [ChatStreamManager].
+  /// The manager owns the adapter lifecycle, not the page.
+  ChatAdapter get _adapter => ref.read(chatStreamManagerProvider).adapter;
   int _selectedModelIndex = 0;
 
   /// Saved model display name order for drag-sort persistence.
   List<String>? _savedModelOrder;
-  bool _cancelledByUser = false;
 
   /// Tracks streaming state locally so dispose() can check it without
   /// calling ref.read() (which throws after the widget is marked disposed).
   bool _isStreamingActive = false;
+
+  /// True while _editUserMessageWithText or _retryAssistantMessage is
+  /// mutating history and controller messages, preventing
+  /// _loadConversationMessages from interfering with the edit.
+  bool _isModifyingHistory = false;
+
   final Map<String, List<String>> _reasoningContents = {};
 
   /// Tracks whether reasoning has completed for a given message.
@@ -82,12 +91,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
   final Map<String, bool> _isReasoningCompletedForMsg = {};
   final Map<String, List<MessageSegment>> _chatSegments = {};
 
-  /// Tracks how many characters of [_history] text have been rendered as
-  /// [TextSegment] entries in [_chatSegments] for each streaming message.
-  /// Used for incremental markdown rendering: only new text chunks are
-  /// added as new [TextSegment]s, avoiding full re-render of the entire
-  /// accumulated content on each throttle cycle.
-  final Map<String, int> _streamingRenderedLengths = {};
   String? _streamingMsgId;
 
   // ── Auto-scroll / scroll-to-bottom state ──
@@ -161,38 +164,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Used during streaming to avoid splitting math formulas across
   /// segment boundaries. If the last segment ends with unclosed math,
   /// new text is merged into it instead of creating a new segment.
-  static bool _hasUnclosedMath(String text) {
-    if (text.isEmpty) return false;
-    int i = 0;
-    int inlineCount = 0;
-    int blockCount = 0;
-    while (i < text.length) {
-      if (text[i] == r'\' && i + 1 < text.length) {
-        i += 2; // skip escaped character (e.g. \$)
-        continue;
-      }
-      if (text[i] == r'$') {
-        if (i + 1 < text.length && text[i + 1] == r'$') {
-          blockCount++;
-          i += 2;
-        } else {
-          inlineCount++;
-          i++;
-        }
-      } else {
-        i++;
-      }
-    }
-    return (inlineCount % 2 == 1) || (blockCount % 2 == 1);
-  }
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _currentUser = User(id: 'user1', name: 'You');
     _aiUser = User(id: 'ai1', name: 'Stroom');
-    _adapter = ChatAdapter();
     _controller = InMemoryChatController();
     _chatScrollController = ScrollController();
     _chatScrollController.addListener(_onChatScroll);
@@ -213,13 +190,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    if (!_isStreamingActive) {
-      // Only cancel the adapter when NOT streaming. If streaming is active,
-      // the adapter must stay alive so the stream can continue in the
-      // background and save results when it completes.
-      _adapter.cancel();
-      _adapter.dispose();
-    }
+    // The ChatStreamManager owns the adapter lifecycle. We do NOT cancel
+    // or dispose it here — if streaming is active, it continues in the
+    // background and saves results when complete. The adapter is cleaned
+    // up when the manager is disposed (app lifecycle).
     _controller?.dispose();
     _searchTextController.dispose();
     _chatScrollController.removeListener(_onChatScroll);
@@ -325,22 +299,30 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   /// Restores the streaming message UI when the page is re-initialized after
   /// having been disposed during active streaming (user navigated away during
-  /// generation and came back). Re-inserts the streaming message placeholder
-  /// into the controller and restores accumulated content providers so the UI
-  /// shows the loading indicator and any partial text already received.
+  /// generation and came back). Uses per-conversation state from the manager
+  /// to restore the correct conversation's streaming content.
   void _restoreStreamingState() {
-    if (!ref.read(isStreamingProvider)) return;
-    final msgId = ref.read(streamingMsgIdProvider);
+    final activeConvId = ref.read(activeConversationIdProvider);
+    if (activeConvId == null) return;
+
+    final manager = ref.read(chatStreamManagerProvider);
+    if (!manager.isStreamingFor(activeConvId)) return;
+
+    final msgId = manager.streamingMsgIdFor(activeConvId);
     if (msgId == null) return;
+
+    final fullReply = manager.fullReplyFor(activeConvId);
+    final reasoningSections = manager.reasoningSectionsFor(activeConvId);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final fullReply = ref.read(streamingFullReplyProvider);
-      final reasoningSections = ref.read(streamingReasoningSectionsProvider);
+      // Also activate the conversation in the manager so provider updates
+      // from the manager's throttle loop reach this page's listeners.
+      manager.activateConversation(activeConvId);
+
       _streamingMsgId = msgId;
       _chatSegments[msgId] = [];
-      _streamingRenderedLengths[msgId] = 0;
-      // Restore reasoning sections from provider so the buttons show up
+      // Restore reasoning sections from provider/manager so the buttons show up
       if (reasoningSections.isNotEmpty) {
         _reasoningContents[msgId] = List.of(reasoningSections);
       }
@@ -364,10 +346,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
               createdAt: DateTime.now(),
             ),
           );
-          // If first token already received, the streaming message
-          // content will be displayed via textMessageBuilder reading
-          // message.text. The JumpingDots indicator is hidden because
-          // isWaitingForFirstToken checks streamingHasFirstTokenProvider.
         }
         setState(() {});
       });
@@ -506,12 +484,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     }
 
     // Guard: do NOT reload messages while streaming is active. The
-    // streaming loop relies on _chatSegments, _streamingRenderedLengths,
-    // and other per-message state that would be cleared by a reload.
-    // Reloading mid-stream would cause null-assert crashes (e.g.
-    // "Null check operator used on a null value") when the streaming
-    // loop accesses _streamingRenderedLengths[aiMsgId]! after the
-    // map was cleared.
+    // streaming loop relies on _chatSegments and other per-message
+    // state that would be cleared by a reload.
     if (_isStreamingActive) {
       await AppLogService.debug(
           'ChatPage', '_loadConversationMessages: 流式传输进行中，跳过');
@@ -521,17 +495,22 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _isLoadingMessages = true;
     try {
       final activeId = ref.read(activeConversationIdProvider);
+      final convs = ref.read(conversationsProvider);
+      await AppLogService.debug('ChatPage',
+          '[PERSIST] _loadConversationMessages: activeId=$activeId allConvCount=${convs.length}');
       await AppLogService.info(
           'ChatPage', '开始加载对话消息, activeConversationId=$activeId');
       if (activeId == null) {
+        await AppLogService.debug('ChatPage',
+            '[PERSIST] _loadConversationMessages: ABORT activeId null');
         await AppLogService.warning(
             'ChatPage', 'activeConversationId 为 null，跳过加载对话消息');
         return;
       }
-
-      final convs = ref.read(conversationsProvider);
       await AppLogService.info('ChatPage', '当前共有 ${convs.length} 个对话');
       final conv = convs.where((c) => c.id == activeId).firstOrNull;
+      await AppLogService.debug('ChatPage',
+          '[PERSIST] _loadConversationMessages: foundConv=${conv != null} convMsgCount=${conv?.messages.length ?? -1}');
       if (conv == null) {
         await AppLogService.warning(
             'ChatPage', '未找到 activeConversationId=$activeId 对应的对话');
@@ -564,7 +543,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
       _history.clear();
       _chatSegments.clear();
       _reasoningContents.clear();
-      _streamingRenderedLengths.clear();
       _streamingMsgId = null;
       _controller?.dispose();
       _messageKeys.clear();
@@ -605,21 +583,20 @@ class _ChatPageState extends ConsumerState<ChatPage>
             msg.reasoningContent!.isNotEmpty) {
           _reasoningContents[msg.id] = [msg.reasoningContent!];
         }
-        // Restore tool call segments from persisted ChatMessage.
-        // Convert each persisted ToolCallData back into a ToolCallSegment
-        // so the UI renders tool call cards alongside the text content.
-        if (msg.toolCalls != null && msg.toolCalls!.isNotEmpty) {
-          final segments = <MessageSegment>[];
-          // Prepend a TextSegment with the message content so the assistant's
-          // reply text is rendered before the tool call cards. Without this,
-          // the segments list would only contain ToolCallSegment entries and
-          // the text message.content would never be displayed.
-          if (msg.content.isNotEmpty) {
-            segments.add(TextSegment(msg.content));
-          }
-          for (final tc in msg.toolCalls!) {
-            segments.add(ToolCallSegment(tc));
-          }
+
+        // Build unified segments for the full Agent chain.
+        final segments = buildAgentChainSegments(
+          reasoningSections: msg.reasoningSections ?? [],
+          textChunks: msg.textSections ?? [],
+          toolCalls: msg.toolCalls ?? [],
+        );
+        // Fallback: no textSections, use content as single trailing block
+        if (segments.isEmpty && msg.content.isNotEmpty) {
+          segments.add(TextSegment(msg.content));
+        } else if (msg.textSections == null && msg.content.isNotEmpty) {
+          segments.add(TextSegment(msg.content));
+        }
+        if (segments.isNotEmpty) {
           _chatSegments[msg.id] = segments;
         }
       }
@@ -677,10 +654,19 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Future<void> _saveMessages({String? capturedConvId}) async {
     try {
       final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
-      if (convId == null) return;
+      await AppLogService.debug('ChatPage',
+          '[PERSIST] _saveMessages: convId=$convId capturedConvId=$capturedConvId historyLen=${_history.length}');
+      if (convId == null) {
+        await AppLogService.debug(
+            'ChatPage', '[PERSIST] _saveMessages: ABORT convId is null');
+        return;
+      }
+      final msgCount = _history.length;
       await ref.read(conversationsProvider.notifier).updateMessages(convId, [
         ..._history,
       ]);
+      await AppLogService.debug('ChatPage',
+          '[PERSIST] _saveMessages: OK convId=$convId msgCount=$msgCount');
     } catch (e, s) {
       // Fallback: save directly to SharedPreferences if the notifier is
       // unavailable (e.g. during background streaming after page disposal).
@@ -858,7 +844,33 @@ class _ChatPageState extends ConsumerState<ChatPage>
       ),
     );
 
+    try {
+      await AppLogService.debug('ChatPage',
+          '[DEBUG-HIST] _onMessageSend: BEFORE stream, _history.length=${_history.length}');
+    } catch (_) {}
     await _startStreaming(text, capturedConvId: convId);
+
+    // Reload _history from conversation provider to ensure it reflects the
+    // manager's persisted messages. Post-stream code in _startStreaming may
+    // not execute reliably if the widget was disposed or an async error
+    // occurred during background streaming.
+    await _syncHistoryFromProvider(capturedConvId: convId);
+
+    try {
+      await AppLogService.debug('ChatPage',
+          '[DEBUG-HIST] _onMessageSend: AFTER sync, _history.length=${_history.length}');
+    } catch (_) {}
+  }
+
+  Future<void> _syncHistoryFromProvider({String? capturedConvId}) async {
+    final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
+    if (convId == null || convId.isEmpty) return;
+    final convs = ref.read(conversationsProvider);
+    final conv = convs.where((c) => c.id == convId).firstOrNull;
+    if (conv != null) {
+      _history.clear();
+      _history.addAll(conv.messages);
+    }
   }
 
   Future<void> _startStreaming(String text, {String? capturedConvId}) async {
@@ -869,19 +881,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
     ref.read(isStreamingProvider.notifier).state = true;
     _isStreamingActive = true;
     if (mounted) setState(() {});
-    _cancelledByUser = false;
 
     final aiMsgId = 'a${DateTime.now().millisecondsSinceEpoch}';
     _streamingMsgId = aiMsgId;
     _chatSegments[aiMsgId] = [];
-    _streamingRenderedLengths[aiMsgId] = 0;
-    // Initialize reasoning sections as empty list, only populated when
-    // actual reasoning events arrive. This prevents showing an empty
-    // "推理过程" button when no reasoning content exists.
     _reasoningContents[aiMsgId] = [];
-    // Persist streaming message ID in provider so it survives page disposal
-    ref.read(streamingMsgIdProvider.notifier).state = aiMsgId;
 
+    // 1. Insert streaming placeholder message into the controller
     final placeholder = Message.textStream(
       id: aiMsgId,
       authorId: _aiUser.id,
@@ -892,479 +898,138 @@ class _ChatPageState extends ConsumerState<ChatPage>
       await _controller?.insertMessage(placeholder);
     }
 
-    String fullReply = '';
-    String reasoningBuffer = '';
-    DateTime lastUpdate = DateTime.now();
-    DateTime lastReasoningUpdate = DateTime.now();
-    const minInterval = Duration(milliseconds: 50);
-    const reasoningMinInterval = Duration(milliseconds: 100);
-
-    /// Whether the first reasoning update has been applied to the UI.
-    /// Used to ensure the reasoning button appears on the very first
-    /// ReasoningEvent even when throttled by [reasoningMinInterval].
-    bool hasShownFirstReasoning = false;
-
-    /// Tracks the index of the currently active (in-progress) reasoning
-    /// segment in [_chatSegments[aiMsgId]]. When a new reasoning section
-    /// starts (first ReasoningEvent after ReasoningSectionEndEvent or at
-    /// stream start), a [ReasoningSegment] is appended to the segments list
-    /// and its index is stored here so it can be updated when the section
-    /// completes (isStreaming → false).
-    int? activeReasoningSegIndex;
-    // Reset reasoning providers at start of new streaming session.
-    // Initialize sections as empty list — they are populated on first
-    // ReasoningEvent (not with a placeholder empty string).
-    ref.read(streamingReasoningProvider.notifier).state = '';
-    ref.read(streamingReasoningSectionsProvider.notifier).state = [];
-    bool hasReceivedFirstToken = false;
-    Map<String, dynamic>? rawRequestCapture;
-    Map<String, dynamic>? rawResponseCapture;
-
-    void updateMessage(String content) {
-      // Skip UI update if the page was disposed (user navigated away during
-      // streaming). The streaming continues in the background and will save
-      // the completed result via _saveMessages() when it finishes.
-      if (!mounted) return;
-      _controller?.updateMessage(
-        placeholder,
-        Message.text(
-          id: aiMsgId,
-          authorId: _aiUser.id,
-          text: content,
-          createdAt: DateTime.now(),
-        ),
+    // 2. Configure the assistant prompt/settings on the adapter
+    final selectedAssistant = ref.read(selectedAssistantProvider);
+    if (selectedAssistant != null) {
+      _adapter.setAssistantPrompt(selectedAssistant.prompt);
+      _adapter.setAssistantSettings(selectedAssistant.settings);
+      _adapter.setAssistantCustomParams(
+        selectedAssistant.settings.customParameters,
       );
+    } else {
+      _adapter.setAssistantPrompt(null);
+      _adapter.setAssistantSettings(null);
+      _adapter.setAssistantCustomParams(null);
     }
 
-    Object? streamError;
+    // 3. Gather enabled tools
+    final allTools = _adapter.getAllToolDefinitions();
+    final enabledTools = ref.read(enabledToolNamesProvider);
+    final filteredTools =
+        allTools.where((t) => enabledTools.contains(t.name)).toList();
+
+    // 4. Delegate streaming to ChatStreamManager (runs background loop)
+    // Use captured convId (from _onMessageSend) or fall back to active ID
+    // (for retry/edit which don't capture convId).
+    final effectiveConvId =
+        capturedConvId ?? ref.read(activeConversationIdProvider) ?? '';
+    final histBefore = List<ChatMessage>.from(_history);
     try {
-      // Merge built-in tools with MCP tools
-      final allTools = _adapter.getAllToolDefinitions();
-      final enabledTools = ref.read(enabledToolNamesProvider);
-      // All tools uniformly respect the user's toggle state from the settings panel.
-      final filteredTools =
-          allTools.where((t) => enabledTools.contains(t.name)).toList();
-
-      // Pass assistant prompt and settings to adapter
-      final selectedAssistant = ref.read(selectedAssistantProvider);
-      if (selectedAssistant != null) {
-        _adapter.setAssistantPrompt(selectedAssistant.prompt);
-        _adapter.setAssistantSettings(selectedAssistant.settings);
-        _adapter.setAssistantCustomParams(
-          selectedAssistant.settings.customParameters,
-        );
-      } else {
-        _adapter.setAssistantPrompt(null);
-        _adapter.setAssistantSettings(null);
-        _adapter.setAssistantCustomParams(null);
-      }
-
-      final stream = _adapter.sendStreamWithTools(
-        text,
-        history: _history,
-        reasoning: ref.read(reasoningEnabledProvider),
-        reasoningEffort: ref.read(reasoningEffortProvider),
-        reasoningParamValues: ref.read(reasoningParamValuesProvider),
-        tools: filteredTools,
-      );
-
-      await for (final event in stream) {
-        if (_cancelledByUser) break;
-
-        switch (event) {
-          case TextEvent e:
-            if (!hasReceivedFirstToken) {
-              hasReceivedFirstToken = true;
-              ref.read(streamingHasFirstTokenProvider.notifier).state = true;
-              if (mounted) setState(() {});
-            }
-            // Mark reasoning as completed when text content starts arriving
-            // after reasoning content has been received. This changes the
-            // reasoning button label from "推理中" to "推理过程" during
-            // streaming (Issue 1 fix).
-            if (reasoningBuffer.isNotEmpty &&
-                _isReasoningCompletedForMsg[aiMsgId] != true) {
-              _isReasoningCompletedForMsg[aiMsgId] = true;
-            }
-            fullReply += e.text;
-            final now = DateTime.now();
-            if (now.difference(lastUpdate) >= minInterval) {
-              lastUpdate = now;
-              // Update provider so streaming state survives page disposal
-              ref.read(streamingFullReplyProvider.notifier).state = fullReply;
-              // Keep the controller updated so the Chat widget re-renders
-              // the streaming message. The textMessageBuilder will read
-              // from _chatSegments (incremental segments) for the actual
-              // markdown rendering, not from message.text directly.
-              if (mounted) {
-                updateMessage(fullReply);
-              }
-              // Incremental rendering: add only the new text chunk as a
-              // TextSegment, so MarkdownWidget only parses new content
-              // instead of re-rendering the entire accumulated text.
-              final renderedLen = _streamingRenderedLengths[aiMsgId]!;
-              if (fullReply.length > renderedLen) {
-                final newChunk = fullReply.substring(renderedLen);
-                final segments = _chatSegments[aiMsgId]!;
-                final lastSeg = segments.isNotEmpty ? segments.last : null;
-                if (lastSeg is TextSegment && _hasUnclosedMath(lastSeg.text)) {
-                  // Merge into the last segment to avoid splitting math
-                  // formulas ($...$ or $$...$$) across segment boundaries.
-                  // The merged segment's MarkdownWidget will re-parse the
-                  // combined text and can render the now-complete formula.
-                  segments[segments.length - 1] = TextSegment(
-                    lastSeg.text + newChunk,
-                  );
-                } else {
-                  segments.add(TextSegment(newChunk));
-                }
-                _streamingRenderedLengths[aiMsgId] = fullReply.length;
-              }
-            }
-
-          case ReasoningEvent e:
-            // Accumulate reasoning text incrementally and update providers
-            // so the reasoning panel can display streaming content in real time.
-            reasoningBuffer += e.text;
-            // Always update _reasoningContents immediately so the button
-            // appears on the very first reasoning event, regardless of
-            // the throttle interval. Previously the throttle could block
-            // the first event, causing the reasoning button to not appear
-            // during streaming (Issue 2 fix).
-            final sections = [...ref.read(streamingReasoningSectionsProvider)];
-            if (sections.isNotEmpty) {
-              sections[sections.length - 1] = reasoningBuffer;
-            } else {
-              sections.add(reasoningBuffer);
-            }
-            _reasoningContents[aiMsgId] = sections;
-
-            // When this ReasoningEvent starts a NEW reasoning section
-            // (not a continuation of an existing one), add a ReasoningSegment
-            // to the segments list at the correct position. This integrates
-            // the reasoning button inline with the message flow instead of
-            // grouping all reasoning sections at the top.
-            if (activeReasoningSegIndex == null) {
-              final segIndex = _chatSegments[aiMsgId]!.length;
-              // Use isStreaming:true because this section is still being
-              // accumulated. It will be set to false when the section ends
-              // (via ReasoningSectionEndEvent or stream completion).
-              _chatSegments[aiMsgId]!.add(
-                ReasoningSegment(
-                  sectionIndex: sections.length - 1,
-                  isStreaming: true,
-                ),
-              );
-              activeReasoningSegIndex = segIndex;
-            }
-
-            final now = DateTime.now();
-            if (now.difference(lastReasoningUpdate) >= reasoningMinInterval) {
-              lastReasoningUpdate = now;
-              hasShownFirstReasoning = true;
-              ref.read(streamingReasoningProvider.notifier).state =
-                  reasoningBuffer;
-              ref.read(streamingReasoningSectionsProvider.notifier).state =
-                  sections;
-              if (mounted) setState(() {});
-            } else if (!hasShownFirstReasoning && mounted) {
-              // First reasoning event(s): ensure the button appears
-              // even if throttled, so the reasoning button is visible
-              // immediately when streaming reasoning content.
-              hasShownFirstReasoning = true;
-              ref.read(streamingReasoningSectionsProvider.notifier).state =
-                  sections;
-              ref.read(streamingReasoningProvider.notifier).state =
-                  reasoningBuffer;
-              if (mounted) setState(() {});
-            }
-
-          case ReasoningSectionEndEvent():
-            // Finalize current reasoning section and start a new empty one
-            // for the next tool call round.
-            // Read from _reasoningContents (not the provider) to get the
-            // latest accumulated content, since the provider is throttled
-            // and may hold stale data between throttle intervals.
-            final sections = List<String>.from(
-              _reasoningContents[aiMsgId] ?? [],
+      await AppLogService.debug('ChatPage',
+          '[DEBUG-HIST] _startStreaming: sending to manager, _history.length=${histBefore.length}');
+    } catch (_) {}
+    final StreamResult result =
+        await ref.read(chatStreamManagerProvider).startStreaming(
+              text: text,
+              convId: effectiveConvId,
+              history: histBefore,
+              tools: filteredTools,
+              reasoning: ref.read(reasoningEnabledProvider),
+              reasoningEffort: ref.read(reasoningEffortProvider),
+              reasoningParamValues: ref.read(reasoningParamValuesProvider),
+              streamingMsgId: aiMsgId,
             );
-            sections.add('');
-            ref.read(streamingReasoningSectionsProvider.notifier).state =
-                sections;
-            _reasoningContents[aiMsgId] = sections;
 
-            // Mark the active reasoning segment as completed (isStreaming → false)
-            // so the button shows "思考完成" instead of "思考中 ›››".
-            // Clear the tracking index so the next ReasoningEvent starts a
-            // new ReasoningSegment for the next round.
-            if (activeReasoningSegIndex != null &&
-                activeReasoningSegIndex! <
-                    (_chatSegments[aiMsgId]?.length ?? 0)) {
-              _chatSegments[aiMsgId]![activeReasoningSegIndex!] =
-                  ReasoningSegment(
-                sectionIndex: sections.length - 2, // the just-finalized section
-                isStreaming: false,
-              );
-            }
-            activeReasoningSegIndex = null;
-            if (mounted) setState(() {});
+    // ── Post-stream completion ──
+    // CRITICAL: Update _history FIRST, before any debug/log calls that
+    // could throw and prevent the update. Without this, the next message
+    // sees stale _history missing previous assistant messages.
+    _history.clear();
+    _history.addAll(result.history);
 
-          case ToolCallStartEvent e:
-            // Flush any text not yet rendered as segments before tool call
-            final renderedLen = _streamingRenderedLengths[aiMsgId]!;
-            if (fullReply.length > renderedLen) {
-              _chatSegments[aiMsgId]!.add(
-                TextSegment(fullReply.substring(renderedLen)),
-              );
-              _streamingRenderedLengths[aiMsgId] = fullReply.length;
-            }
-            _chatSegments[aiMsgId]!.add(
-              ToolCallSegment(
-                e.toolCall.copyWith(status: ToolCallStatus.running),
-              ),
-            );
-            if (mounted) setState(() {});
-
-          case ToolCallCompleteEvent e:
-            final segs = _chatSegments[aiMsgId] ?? [];
-            for (var i = segs.length - 1; i >= 0; i--) {
-              final seg = segs[i];
-              if (seg is ToolCallSegment && seg.data.id == e.toolCallId) {
-                segs[i] = ToolCallSegment(
-                  seg.data.copyWith(
-                    status: ToolCallStatus.completed,
-                    result: e.result,
-                  ),
-                );
-                break;
-              }
-            }
-            if (mounted) setState(() {});
-        }
-      }
-    } catch (e, s) {
-      streamError = e;
-      if (!_cancelledByUser) {
-        debugPrint('[ChatPage] streaming error: $e\n$s');
-        await AppLogService.error('ChatPage', '流式请求异常', e, s);
-        final errorMsg = _formatErrorMessage(e);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(errorMsg.replaceAll('错误: ', '').split('\n')[0]),
-              duration: const Duration(seconds: 3),
-            ),
-          );
-        }
-        fullReply = errorMsg;
-        // Clear segments since error overrides the accumulated content.
-        // The error path in textMessageBuilder reads message.text directly,
-        // not _chatSegments, so segments are not used for error display.
-        _chatSegments[aiMsgId]?.clear();
-        _streamingRenderedLengths[aiMsgId] = 0;
-      }
-    } finally {
-      // Always capture request/response raw data for ALL messages
-      // (not just errors), so the "view raw data" button works.
-      // This runs regardless of _cancelledByUser or error vs. success.
-      try {
-        final reqBody = _adapter.lastRequestBody;
-        final headers = _adapter.lastRequestHeaders;
-        final url = _adapter.lastRequestUrl;
-        if (reqBody != null || headers != null || url != null) {
-          rawRequestCapture = {};
-          if (url != null) rawRequestCapture['url'] = url;
-          if (headers != null) rawRequestCapture['headers'] = headers;
-          if (reqBody != null) rawRequestCapture['body'] = reqBody;
-        }
-        final respData = _adapter.lastResponseData;
-        final statusCode = _adapter.lastResponseStatusCode;
-        final respHeaders = _adapter.lastResponseHeaders;
-        if (respData != null || statusCode != null || respHeaders != null) {
-          rawResponseCapture = {};
-          if (statusCode != null) rawResponseCapture['statusCode'] = statusCode;
-          if (respHeaders != null) rawResponseCapture['headers'] = respHeaders;
-          if (respData != null) rawResponseCapture['data'] = respData;
-        } else if (streamError is Exception) {
-          // For network errors with no HTTP response, capture error string
-          rawResponseCapture = {'error': streamError.toString()};
-        }
-      } catch (_) {}
-      // Flush any remaining text not yet rendered as segments
-      final renderedLen = _streamingRenderedLengths[aiMsgId]!;
-      if (fullReply.length > renderedLen) {
-        _chatSegments[aiMsgId]!.add(
-          TextSegment(fullReply.substring(renderedLen)),
-        );
-        _streamingRenderedLengths[aiMsgId] = fullReply.length;
-      }
-      // Mark any still-running tool calls as cancelled
-      for (var i = 0; i < (_chatSegments[aiMsgId]?.length ?? 0); i++) {
-        final seg = _chatSegments[aiMsgId]![i];
-        if (seg is ToolCallSegment &&
-            seg.data.status == ToolCallStatus.running) {
-          _chatSegments[aiMsgId]![i] = ToolCallSegment(
-            seg.data.copyWith(
-              status: ToolCallStatus.error,
-              result: 'Cancelled',
-            ),
-          );
-        }
-      }
-      // Final update — ensure last chunk is shown.
-      // Also update when user cancelled (stopped) with no content, to
-      // replace the streaming placeholder with a regular message so the
-      // CircularProgressIndicator in textStreamMessageBuilder is removed.
-      if (fullReply.isNotEmpty ||
-          (_cancelledByUser && _streamingMsgId != null)) {
-        updateMessage(fullReply);
-      }
-      // NOTE: We intentionally do NOT clear _chatSegments here.
-      // mergeConsecutiveTextSegments (used in textMessageBuilder) already
-      // merges consecutive TextSegments during rendering, so there are no
-      // visual artifacts from split-throttle-boundary segments. Clearing
-      // would cause MarkdownWidget to re-parse the ENTIRE long message at
-      // once, risking OOM/flash-crash with long responses.
-      // _chatSegments is eventually cleaned up when the message is deleted,
-      // edited, or retried (see _deleteMessage, _editUserMessageWithText,
-      // _retryAssistantMessage).
-      // Always capture reasoning content from the response.
-      // The SSE parser now yields reasoning_content unconditionally;
-      // the reasoning toggle only controls whether the params are SENT.
-      reasoningBuffer = _adapter.reasoningContent;
-      ref.read(streamingReasoningProvider.notifier).state = reasoningBuffer;
-      // Update the last reasoning section with final content.
-      // Only add a new section if reasoning content exists, to avoid
-      // creating an empty [''] placeholder that shows a blank button.
-      final finalSections = [...ref.read(streamingReasoningSectionsProvider)];
-      if (finalSections.isNotEmpty) {
-        finalSections[finalSections.length - 1] = reasoningBuffer;
-      } else if (reasoningBuffer.isNotEmpty) {
-        finalSections.add(reasoningBuffer);
-      }
-      ref.read(streamingReasoningSectionsProvider.notifier).state =
-          finalSections;
-      _reasoningContents[aiMsgId] = finalSections;
-      // Mark reasoning as completed at stream end in case it wasn't
-      // already marked (e.g., if only reasoning was received with no
-      // text content, or the stream was cancelled mid-reasoning).
-      if (reasoningBuffer.isNotEmpty) {
-        _isReasoningCompletedForMsg[aiMsgId] = true;
-      }
-
-      // Finalize any remaining active reasoning segment (the last in-progress
-      // section that never received a ReasoningSectionEndEvent). This updates
-      // the segment's isStreaming flag from true to false so the button shows
-      // "思考完成" instead of "思考中 ›››" after streaming completes.
-      if (activeReasoningSegIndex != null &&
-          activeReasoningSegIndex! < (_chatSegments[aiMsgId]?.length ?? 0) &&
-          finalSections.isNotEmpty) {
-        _chatSegments[aiMsgId]![activeReasoningSegIndex!] = ReasoningSegment(
-          sectionIndex: finalSections.length - 1,
-          isStreaming: false,
-        );
-      }
-      activeReasoningSegIndex = null;
-    }
-
-    // Wrap post-stream processing in try-catch so that isStreamingProvider
-    // is ALWAYS reset to false, even if an unexpected error occurs here.
-    // Without this, a stuck streaming flag would permanently block new messages.
+    // Best-effort debug logging (must not block history update above)
     try {
-      // Extract tool calls from _chatSegments for persistence.
-      // Convert ToolCallSegment entries into their underlying ToolCallData.
-      final toolCallsFromSegments = <ToolCallData>[];
-      final segments = _chatSegments[aiMsgId];
-      if (segments != null) {
-        for (final seg in segments) {
-          if (seg is ToolCallSegment) {
-            toolCallsFromSegments.add(seg.data);
-          }
-        }
-      }
+      await AppLogService.debug('ChatPage',
+          '[DEBUG-HIST] _startStreaming: manager returned, result.history.length=${result.history.length}');
+      await AppLogService.debug('ChatPage',
+          '[DEBUG-HIST] _startStreaming: after result apply, _history.length=${_history.length}');
+    } catch (_) {}
 
-      // Extract reasoning sections from _reasoningContents for persistence.
-      final reasoningSectionsFromContent = _reasoningContents[aiMsgId];
-      final hasReasoningSections = reasoningSectionsFromContent != null &&
-          reasoningSectionsFromContent.isNotEmpty;
-
-      if (fullReply.isNotEmpty) {
-        final isError = fullReply.startsWith('错误:');
-        final msg = ChatMessage(
-          role: 'assistant',
-          content: fullReply,
-          id: aiMsgId,
-          isError: isError,
-          reasoningContent: reasoningBuffer.isNotEmpty ? reasoningBuffer : null,
-          rawRequest: rawRequestCapture,
-          rawResponse: rawResponseCapture,
-          toolCalls:
-              toolCallsFromSegments.isNotEmpty ? toolCallsFromSegments : null,
-          reasoningSections:
-              hasReasoningSections ? reasoningSectionsFromContent : null,
-        );
-        _history.add(msg);
-      }
-      if (reasoningBuffer.isNotEmpty) {
-        // Reasoning sections already updated above via provider.
-        // Ensure _reasoningContents has the latest sections.
-        final sections = List<String>.from(
-          ref.read(streamingReasoningSectionsProvider),
-        );
-        _reasoningContents[aiMsgId] = sections;
-      }
-    } catch (e, s) {
-      debugPrint('[ChatPage] post-stream error: $e\n$s');
-    } finally {
+    // Clean up local streaming state and providers. Wrap in try-catch
+    // because ref.read() may fail if the widget was disposed while the
+    // manager was streaming in the background.
+    try {
       _streamingMsgId = null;
       _isStreamingActive = false;
       ref.read(isStreamingProvider.notifier).state = false;
       ref.read(streamingMsgIdProvider.notifier).state = null;
       ref.read(streamingFullReplyProvider.notifier).state = '';
       ref.read(streamingHasFirstTokenProvider.notifier).state = false;
-      // NOTE: streamingReasoningProvider and streamingReasoningSectionsProvider
-      // are deliberately NOT reset here. The dialog panels watch these
-      // providers, and clearing them would cause open dialogs to lose their
-      // content. These providers are reset at the START of a new streaming
-      // session instead (see _startStreaming), preserving the final reasoning
-      // content from the completed stream.
-      _cancelledByUser = false;
-      // NOTE: _streamingRenderedLengths.remove(aiMsgId) is intentionally
-      // deferred to after _saveMessages() (below). Removing it here would
-      // trigger a null-assert crash on the `!` operator at lines 727/865
-      // if any code path accesses it during the save/rebuild window.
-      // Eventual cleanup happens after _saveMessages() returns.
-      if (mounted) setState(() {});
+    } catch (e) {
+      debugPrint('[ChatPage] post-stream provider cleanup failed: $e');
     }
 
-    // Save messages even if page was disposed — this persists the completed
-    // streaming result to SharedPreferences so it shows up when the user
-    // navigates back to the chat page. Uses ref.read which works at the
-    // ProviderScope level and does not require mounted to be true.
-    // Use capturedConvId (set at stream start) to avoid saving to the wrong
-    // conversation if the user switched conversations during background
-    // streaming (e.g. navigated back and selected a different topic).
-    await AppLogService.info(
-        'ChatPage',
-        '保存流式结果: convId=$capturedConvId, '
-            'fullReply长度=${fullReply.length}, '
-            '历史消息数=${_history.length}');
-    await _saveMessages(capturedConvId: capturedConvId);
+    // Update the controller: replace streaming placeholder with final message
+    if (mounted) {
+      final finalMsg = result.assistantMessage;
+      if (finalMsg != null) {
+        // Update the streaming placeholder to show the final text
+        _controller?.updateMessage(
+          placeholder,
+          Message.text(
+            id: finalMsg.id,
+            authorId: _aiUser.id,
+            text: finalMsg.content,
+            createdAt: finalMsg.createdAt,
+          ),
+        );
 
-    // Eventual cleanup: remove streaming-only map entries now that the
-    // save is complete. Deferred from the inner finally block to prevent
-    // null-assert crashes (lines 727/865 use `!` on map lookups) and to
-    // ensure segments are still available for any mid-save UI rebuilds.
-    _streamingRenderedLengths.remove(aiMsgId);
+        // Build a unified segments list representing the full Agent chain:
+        // Reasoning → ToolCall → Reasoning → ... → Text (answer)
+        // This preserves reasoning visibility alongside tool calls and text.
+        _buildFinalSegments(finalMsg);
 
-    // Clean up the adapter after background streaming completes. If the page
-    // was disposed while streaming, dispose() skipped adapter cleanup, so we
-    // must do it here to prevent resource leaks.
-    if (!mounted) {
-      try {
-        _adapter.dispose();
-      } catch (_) {}
+        // Also store in _reasoningContents for backward compatibility
+        // with any code paths that read that map directly.
+        if (finalMsg.reasoningSections != null &&
+            finalMsg.reasoningSections!.isNotEmpty) {
+          _reasoningContents[finalMsg.id] = finalMsg.reasoningSections!;
+        }
+      }
+      setState(() {});
     }
+  }
+
+  /// Builds the final [_chatSegments] entry for a completed assistant message.
+  void _buildFinalSegments(ChatMessage msg) {
+    final segments = buildAgentChainSegments(
+      reasoningSections: msg.reasoningSections ?? [],
+      textChunks: msg.textSections ?? [],
+      toolCalls: msg.toolCalls ?? [],
+    );
+
+    // Fallback: no textSections at all, put content at the end
+    if (segments.isEmpty && msg.content.isNotEmpty) {
+      segments.add(TextSegment(msg.content));
+    }
+
+    if (segments.isNotEmpty) {
+      _chatSegments[msg.id] = segments;
+    }
+  }
+
+  /// Rebuilds the live [_chatSegments] for [msgId] by reading current
+  /// provider state and using the same interleaving logic as post-stream.
+  void _rebuildLiveSegments(String msgId) {
+    final segments = buildAgentChainSegments(
+      reasoningSections:
+          List<String>.from(ref.read(streamingReasoningSectionsProvider)),
+      textChunks: List<String>.from(ref.read(streamingTextSectionsProvider)),
+      toolCalls: List<ToolCallData>.from(ref.read(streamingToolCallsProvider)),
+      isLastReasoningStreaming: _isReasoningCompletedForMsg[msgId] != true,
+    );
+
+    _chatSegments[msgId] = segments;
   }
 
   void _confirmRetryOrEdit(String messageId) {
@@ -1432,75 +1097,98 @@ class _ChatPageState extends ConsumerState<ChatPage>
     String newText,
     List<Attachment> newAttachments,
   ) async {
-    final index = _history.indexWhere((m) => m.id == messageId);
-    if (index == -1 || index >= _history.length) return;
-
-    // Remove this message and all after from history
+    _isModifyingHistory = true;
     try {
-      if (index < _history.length) {
-        final removed = _history.sublist(index);
-        _history.removeRange(index, _history.length);
-        for (final r in removed) {
-          final ctrlMsg =
-              _controller?.messages.where((m) => m.id == r.id).firstOrNull;
-          if (ctrlMsg != null) {
-            await _controller?.removeMessage(ctrlMsg);
-          }
-          // Clean up cached maps for removed messages to prevent memory leaks.
-          _chatSegments.remove(r.id);
-          _reasoningContents.remove(r.id);
-          _isReasoningCompletedForMsg.remove(r.id);
-          _streamingRenderedLengths.remove(r.id);
-          _messageKeys.remove(r.id);
-        }
-        // Safety: keep pagination index within bounds
-        _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
-      }
-    } catch (e) {
-      debugPrint('[ChatPage] _editUserMessageWithText remove failed: $e');
-    }
+      final index = _history.indexWhere((m) => m.id == messageId);
+      if (index == -1 || index >= _history.length) return;
 
-    // Send with edited text and the combined attachments (original + new)
-    await _onMessageSend(newText, newAttachments);
+      // Remove this message and all after from history and controller.
+      try {
+        if (index < _history.length) {
+          final removed = _history.sublist(index);
+          _history.removeRange(index, _history.length);
+          for (final r in removed) {
+            final ctrlMsg =
+                _controller?.messages.where((m) => m.id == r.id).firstOrNull;
+            if (ctrlMsg != null) {
+              await _controller?.removeMessage(ctrlMsg);
+            }
+            // Clean up cached maps for removed messages to prevent memory leaks.
+            _chatSegments.remove(r.id);
+            _reasoningContents.remove(r.id);
+            _isReasoningCompletedForMsg.remove(r.id);
+            _messageKeys.remove(r.id);
+          }
+          // Safety: keep pagination index within bounds
+          _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
+        }
+      } catch (e) {
+        debugPrint('[ChatPage] _editUserMessageWithText remove failed: $e');
+      }
+
+      // Force the UI to reflect the truncated history BEFORE any provider
+      // listener fires _loadConversationMessages (which would reload old
+      // messages from the provider before _saveMessages below runs).
+      if (mounted) setState(() {});
+
+      // Now persist the truncated history. This must happen before
+      // _onMessageSend calls _saveEnabledToolsToConversation which
+      // triggers the conversationsProvider listener.
+      await _saveMessages();
+
+      // Send with edited text and the combined attachments (original + new)
+      await _onMessageSend(newText, newAttachments);
+    } finally {
+      _isModifyingHistory = false;
+    }
   }
 
   Future<void> _retryAssistantMessage(String messageId) async {
-    final index = _history.indexWhere((m) => m.id == messageId);
-    if (index == -1 || index == 0 || index >= _history.length) return;
-
-    // Remove this assistant message and all after from history
+    _isModifyingHistory = true;
     try {
-      if (index < _history.length) {
-        final removed = _history.sublist(index);
-        _history.removeRange(index, _history.length);
-        for (final r in removed) {
-          final ctrlMsg =
-              _controller?.messages.where((m) => m.id == r.id).firstOrNull;
-          if (ctrlMsg != null) {
-            await _controller?.removeMessage(ctrlMsg);
-          }
-          // Clean up cached maps for removed messages to prevent memory leaks.
-          _chatSegments.remove(r.id);
-          _reasoningContents.remove(r.id);
-          _isReasoningCompletedForMsg.remove(r.id);
-          _streamingRenderedLengths.remove(r.id);
-          _messageKeys.remove(r.id);
-        }
-        // Safety: keep pagination index within bounds
-        _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
-      }
-    } catch (e) {
-      debugPrint('[ChatPage] _retryAssistantMessage remove failed: $e');
-    }
+      final index = _history.indexWhere((m) => m.id == messageId);
+      if (index == -1 || index == 0 || index >= _history.length) return;
 
-    // Re-generate using the preceding user message
-    final userMsg = _history[index - 1];
-    await _startStreaming(userMsg.content);
+      // Remove this assistant message and all after from history
+      try {
+        if (index < _history.length) {
+          final removed = _history.sublist(index);
+          _history.removeRange(index, _history.length);
+          for (final r in removed) {
+            final ctrlMsg =
+                _controller?.messages.where((m) => m.id == r.id).firstOrNull;
+            if (ctrlMsg != null) {
+              await _controller?.removeMessage(ctrlMsg);
+            }
+            // Clean up cached maps for removed messages to prevent memory leaks.
+            _chatSegments.remove(r.id);
+            _reasoningContents.remove(r.id);
+            _isReasoningCompletedForMsg.remove(r.id);
+            _messageKeys.remove(r.id);
+          }
+          // Safety: keep pagination index within bounds
+          _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
+        }
+      } catch (e) {
+        debugPrint('[ChatPage] _retryAssistantMessage remove failed: $e');
+      }
+
+      // Force UI rebuild and sync provider before re-streaming
+      if (mounted) setState(() {});
+      await _saveMessages();
+
+      // Re-generate using the preceding user message
+      final userMsg = _history[index - 1];
+      await _startStreaming(userMsg.content);
+      await _syncHistoryFromProvider();
+    } finally {
+      _isModifyingHistory = false;
+    }
   }
 
   Future<void> _deleteMessage(String messageId) async {
     // Prevent deleting the currently streaming message — the streaming loop
-    // relies on _chatSegments and _streamingRenderedLengths entries for this
+    // relies on _chatSegments entries for this
     // message, and removing them mid-stream would cause null-assert crashes.
     if (messageId == _streamingMsgId) return;
     if (ref.read(isStreamingProvider)) return;
@@ -1527,7 +1215,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
       _chatSegments.remove(messageId);
       _reasoningContents.remove(messageId);
       _isReasoningCompletedForMsg.remove(messageId);
-      _streamingRenderedLengths.remove(messageId);
       _messageKeys.remove(messageId);
       // Adjust pagination state: if the deleted message was before the loaded
       // region, shift _loadedUpToIndex to keep it pointing at the same messages.
@@ -1806,19 +1493,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   void _stopStreaming() {
-    _cancelledByUser = true;
     _isStreamingActive = false;
     try {
-      _adapter.cancel();
+      final convId = ref.read(activeConversationIdProvider);
+      ref.read(chatStreamManagerProvider).cancel(convId);
     } catch (e) {
       debugPrint('[ChatPage] cancel error: $e');
     }
     ref.read(isStreamingProvider.notifier).state = false;
-  }
-
-  /// 格式化错误信息，分类显示友好的提示并保留原始错误
-  String _formatErrorMessage(Object error) {
-    return formatChatErrorMessage(error);
   }
 
   void _performSearch(String query) {
@@ -2017,20 +1699,124 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
   }
 
+  /// Updates the streaming message placeholder in the controller with the
+  /// latest accumulated text from [streamingFullReplyProvider].
+  /// Called by [build]'s listener on provider changes.
+  void _updateStreamingMessage(String msgId, String content) {
+    if (!mounted || content.isEmpty) return;
+    final placeholder = _controller?.messages
+        .where(
+          (m) => m.id == msgId,
+        )
+        .firstOrNull;
+    if (placeholder == null) return;
+    _controller?.updateMessage(
+      placeholder,
+      Message.text(
+        id: msgId,
+        authorId: _aiUser.id,
+        text: content,
+        createdAt: DateTime.now(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isStreaming = ref.watch(isStreamingProvider);
+    final streamingFullReply = ref.watch(streamingFullReplyProvider);
+    final streamingMsgId = ref.watch(streamingMsgIdProvider);
     final markdownConfig = buildMarkdownConfig(
       isDark: isDark,
       isStreaming: isStreaming,
     );
+
+    // Helper: checks if an active streaming session belongs to the current
+    // conversation. This prevents provider updates from a different
+    // conversation's stream from affecting this page.
+    bool _isStreamingForCurrentConv() {
+      if (!ref.read(isStreamingProvider)) return false;
+      final manager = ref.read(chatStreamManagerProvider);
+      final activeConvId = ref.read(activeConversationIdProvider);
+      final streamConvId = manager.streamingConvId;
+      if (streamConvId != null &&
+          activeConvId != null &&
+          streamConvId != activeConvId) {
+        return false;
+      }
+      return true;
+    }
+
+    // Keep the controller and rendering segments in sync with provider
+    // updates during background streaming (e.g., when re-entering the page
+    // while the ChatStreamManager is still processing in the background).
+    ref.listen(streamingFullReplyProvider, (String? prev, String next) {
+      if (!mounted || next.isEmpty || next == prev) return;
+      if (!_isStreamingForCurrentConv()) return;
+      final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider);
+      if (msgId == null) return;
+      _updateStreamingMessage(msgId, next);
+      // Rebuild all segments from live provider data to maintain
+      // correct per-round interleaving (reasoning → text → toolCall).
+      _rebuildLiveSegments(msgId);
+    });
+
+    // Keep reasoning sections in sync: the manager updates
+    // streamingReasoningSectionsProvider on each ReasoningEvent.
+    // _rebuildLiveSegments handles the per-round interleaving with
+    // text and tool calls.
+    ref.listen(streamingReasoningSectionsProvider,
+        (List<String>? prev, List<String> next) {
+      if (!mounted || next.isEmpty || identical(prev, next)) return;
+      if (!_isStreamingForCurrentConv()) return;
+      final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider);
+      if (msgId == null) return;
+      _reasoningContents[msgId] = List<String>.from(next);
+
+      _rebuildLiveSegments(msgId);
+
+      final hasFirstToken = ref.read(streamingHasFirstTokenProvider);
+      if (hasFirstToken && next.isNotEmpty) {
+        _isReasoningCompletedForMsg[msgId] = true;
+      }
+      if (mounted) setState(() {});
+    });
+
+    // When the first text token arrives after reasoning, mark reasoning
+    // as "completed" so the button label changes from "推理中" to "推理过程".
+    ref.listen(streamingHasFirstTokenProvider, (bool? prev, bool next) {
+      if (!mounted || !next) return;
+      if (!_isStreamingForCurrentConv()) return;
+      final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider);
+      if (msgId == null) return;
+      if ((_reasoningContents[msgId]?.length ?? 0) > 0) {
+        _isReasoningCompletedForMsg[msgId] = true;
+        if (mounted) setState(() {});
+      }
+    });
+
+    // Keep tool call segments in sync: the manager accumulates
+    // ToolCallData in streamingToolCallsProvider. _rebuildLiveSegments
+    // handles the per-round interleaving.
+    ref.listen(streamingToolCallsProvider,
+        (List<ToolCallData>? prev, List<ToolCallData> next) {
+      if (!mounted || next.isEmpty || identical(prev, next)) return;
+      if (!_isStreamingForCurrentConv()) return;
+      final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider);
+      if (msgId == null) return;
+      _rebuildLiveSegments(msgId);
+      if (mounted) setState(() {});
+    });
     final adapterConfigured = _adapter.isConfigured;
     final controller = _controller;
 
-    // Reactively load messages when the active conversation changes
+    // Reactively load messages when the active conversation changes.
+    // Also activate the conversation in the streaming manager so the
+    // global providers reflect this conversation's streaming state.
     ref.listen(activeConversationIdProvider, (prev, next) {
       if (next != null && next != prev) {
+        ref.read(chatStreamManagerProvider).activateConversation(next);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _loadConversationMessages();
         });
@@ -2063,7 +1849,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
             if (_history.isEmpty ||
                 (_history.length < activeConv.messages.length &&
                     !_isStreamingActive &&
-                    !_isLoadingMessages)) {
+                    !_isLoadingMessages &&
+                    !_isModifyingHistory)) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (mounted) _loadConversationMessages();
               });
@@ -2989,16 +2776,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                 // If the message has accumulated content (e.g.,
                                 // after page restoration from background streaming),
                                 // render it as regular text instead of a spinner.
-                                final accumulated = ref.read(
-                                  streamingFullReplyProvider,
-                                );
-                                if (accumulated.isNotEmpty &&
-                                    message.id ==
-                                        ref.read(streamingMsgIdProvider)) {
+                                // Uses captured [streamingFullReply] from build()
+                                // which is updated reactively via ref.watch.
+                                if (streamingFullReply.isNotEmpty &&
+                                    message.id == streamingMsgId) {
                                   return Padding(
                                     padding: const EdgeInsets.all(12),
                                     child: MarkdownWidget(
-                                      data: accumulated,
+                                      data: streamingFullReply,
                                       selectable: true,
                                       shrinkWrap: true,
                                       physics:

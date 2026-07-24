@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/legacy.dart';
+import '../models/tool_call.dart';
 
 /// The ID of the message currently being streamed. Survives page disposal
 /// so the page can reconnect to the active stream when navigated back to.
@@ -23,3 +24,19 @@ final streamingReasoningProvider = StateProvider<String>((ref) => '');
 /// The last entry is the currently active section (if streaming).
 final streamingReasoningSectionsProvider =
     StateProvider<List<String>>((ref) => []);
+
+/// Tool call data for the currently streaming message. Each entry is a
+/// [ToolCallData] with its current status (running, completed, or error).
+/// Persists across page lifecycle so tool call cards are visible when
+/// returning to the page.
+final streamingToolCallsProvider =
+    StateProvider<List<ToolCallData>>((ref) => []);
+
+/// Per-round text chunks for the currently streaming message.
+/// Mirrors [ChatMessage.textSections]: each entry is the assistant's
+/// speech for one tool-call round. New chunks are started at tool call
+/// boundaries so the UI can interleave text between reasoning and tool
+/// blocks during live streaming. The last entry is the currently growing
+/// chunk.
+final streamingTextSectionsProvider =
+    StateProvider<List<String>>((ref) => ['']);
