@@ -1011,6 +1011,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // Fallback: no textSections at all, put content at the end
     if (segments.isEmpty && msg.content.isNotEmpty) {
       segments.add(TextSegment(msg.content));
+    } else if (msg.textSections == null && msg.content.isNotEmpty) {
+      segments.add(TextSegment(msg.content));
     }
 
     if (segments.isNotEmpty) {

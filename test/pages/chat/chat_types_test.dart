@@ -355,11 +355,13 @@ expect((segments[2] as ToolCallSegment).data.name, 's1');
         textChunks: ['orphan text', 'visible text'],
         toolCalls: [],
       );
-      expect(segments.length, 2);
-      expect(segments[0], isA<ReasoningSegment>());
-      expect((segments[0] as ReasoningSegment).sectionIndex, 1);
-      expect(segments[1], isA<TextSegment>());
-      expect((segments[1] as TextSegment).text, 'visible text');
+      expect(segments.length, 3);
+      expect(segments[0], isA<TextSegment>());
+      expect((segments[0] as TextSegment).text, 'orphan text');
+      expect(segments[1], isA<ReasoningSegment>());
+      expect((segments[1] as ReasoningSegment).sectionIndex, 1);
+      expect(segments[2], isA<TextSegment>());
+      expect((segments[2] as TextSegment).text, 'visible text');
     });
 
     test('isLastReasoningStreaming marks last section', () {
@@ -382,6 +384,34 @@ expect((segments[2] as ToolCallSegment).data.name, 's1');
       expect(segments.length, 1);
       expect(segments[0], isA<TextSegment>());
       expect((segments[0] as TextSegment).text, 'simple text');
+    });
+
+    test('trailing empty reasoning does not lose trailing text chunk', () {
+      // Simulates a 3-round Agent chain where the final ReasoningSectionEndEvent
+      // adds an empty section, and the final answer is in textChunks[2].
+      // Regression test for Bug 1: empty reasoning skipping text/tool calls.
+      final segments = buildAgentChainSegments(
+        reasoningSections: ['think1', 'think2', 'think3', ''],
+        textChunks: ['text1', 'text2', 'final answer'],
+        toolCalls: [_tc('1', 'tc1'), _tc('2', 'tc2')],
+      );
+      // R0 T0 TC0 R1 T1 TC1 R2 T2 (+R3 empty skipped but T2 still shows)
+      // 7 segments: R, T, TC, R, T, TC, R, T
+      expect(segments.length, 8);
+      expect(segments[0], isA<ReasoningSegment>());
+      expect((segments[0] as ReasoningSegment).sectionIndex, 0);
+      expect(segments[1], isA<TextSegment>());
+      expect((segments[1] as TextSegment).text, 'text1');
+      expect(segments[2], isA<ToolCallSegment>());
+      expect(segments[3], isA<ReasoningSegment>());
+      expect((segments[3] as ReasoningSegment).sectionIndex, 1);
+      expect(segments[4], isA<TextSegment>());
+      expect((segments[4] as TextSegment).text, 'text2');
+      expect(segments[5], isA<ToolCallSegment>());
+      expect(segments[6], isA<ReasoningSegment>());
+      expect((segments[6] as ReasoningSegment).sectionIndex, 2);
+      expect(segments[7], isA<TextSegment>());
+      expect((segments[7] as TextSegment).text, 'final answer');
     });
   });
 }

@@ -76,8 +76,8 @@ List<MessageSegment> mergeConsecutiveTextSegments(
 /// chain. Each round i consists of:
 ///   Reasoning[i] → Text[i] → ToolCall[i]
 ///
-/// Rounds without matching reasoning sections are interleaved starting with
-/// text: Text[i] → ToolCall[i] → Text[i+1] → ...
+/// Empty reasoning sections are skipped but their corresponding text chunks
+/// and tool calls are still emitted at the right position.
 ///
 /// [reasoningSections] — may contain empty strings (filtered out).
 /// [textChunks] — per-round text; chunks[i] is text before toolCalls[i].
@@ -90,32 +90,25 @@ List<MessageSegment> buildAgentChainSegments({
   bool isLastReasoningStreaming = false,
 }) {
   final segments = <MessageSegment>[];
+  final maxRounds = [
+    reasoningSections.length,
+    textChunks.length,
+    toolCalls.length,
+  ].fold(0, (a, b) => a > b ? a : b);
 
-  for (var i = 0; i < reasoningSections.length; i++) {
-    if (reasoningSections[i].isEmpty) continue;
-
-    segments.add(ReasoningSegment(
-      sectionIndex: i,
-      isStreaming:
-          isLastReasoningStreaming && i == reasoningSections.length - 1,
-    ));
+  for (var i = 0; i < maxRounds; i++) {
+    if (i < reasoningSections.length && reasoningSections[i].isNotEmpty) {
+      segments.add(ReasoningSegment(
+        sectionIndex: i,
+        isStreaming:
+            isLastReasoningStreaming && i == reasoningSections.length - 1,
+      ));
+    }
 
     if (i < textChunks.length && textChunks[i].isNotEmpty) {
       segments.add(TextSegment(textChunks[i]));
     }
 
-    if (i < toolCalls.length) {
-      segments.add(ToolCallSegment(toolCalls[i]));
-    }
-  }
-
-  // Remaining rounds (no reasoning). Interleave text before tool call.
-  for (var i = reasoningSections.length;
-      i < toolCalls.length || i < textChunks.length;
-      i++) {
-    if (i < textChunks.length && textChunks[i].isNotEmpty) {
-      segments.add(TextSegment(textChunks[i]));
-    }
     if (i < toolCalls.length) {
       segments.add(ToolCallSegment(toolCalls[i]));
     }
