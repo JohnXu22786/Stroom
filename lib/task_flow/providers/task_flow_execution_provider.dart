@@ -37,9 +37,11 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>> {
 
   /// Update a sub-task's status.
   ///
-  /// If the execution is still "running" and all sub-tasks have reached a
-  /// terminal state (completed or failed), this method will automatically
-  /// mark the execution as completed/failed.
+  /// Recomputes the execution status from the current sub-task states
+  /// whenever a sub-task changes. This allows the flow to recover from
+  /// "failed" to "completed" if a failed CatCatch task is retried and
+  /// succeeds, or to move from "completed" to "failed" if a sub-task
+  /// fails after the flow was already marked complete.
   void updateSubTaskStatus(
       String executionId, String subTaskId, TaskStatus status) {
     state = state.map((e) {
@@ -49,25 +51,31 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>> {
         return st.copyWithStatus(status);
       }).toList();
       e = e.copyWith(subTasks: updated);
-      // Auto-complete/auto-fail if all sub-tasks reached terminal state.
-      // This handles the case where the execution page was disposed mid-flow
-      // and the underlying tasks continued running in the background.
-      if (e.status == FlowExecutionStatus.running) {
-        final allTerminal = updated.every(
-          (st) =>
-              st.status == TaskStatus.completed ||
-              st.status == TaskStatus.failed,
+
+      // Always recompute execution status from sub-task states.
+      // This handles live status transitions (e.g., failed→completed on retry).
+      if (updated.isEmpty) return e;
+
+      final anyRunning = updated.any((st) =>
+          st.status == TaskStatus.running ||
+          st.status == TaskStatus.waiting ||
+          st.status == TaskStatus.paused);
+      final allCompleted =
+          updated.every((st) => st.status == TaskStatus.completed);
+      final anyFailed = updated.any((st) => st.status == TaskStatus.failed);
+
+      if (anyRunning) {
+        return e.copyWith(status: FlowExecutionStatus.running);
+      } else if (allCompleted) {
+        return e.copyWith(
+          status: FlowExecutionStatus.completed,
+          completedAt: DateTime.now(),
         );
-        if (allTerminal && updated.isNotEmpty) {
-          final allCompleted =
-              updated.every((st) => st.status == TaskStatus.completed);
-          return e.copyWith(
-            status: allCompleted
-                ? FlowExecutionStatus.completed
-                : FlowExecutionStatus.failed,
-            completedAt: DateTime.now(),
-          );
-        }
+      } else if (anyFailed) {
+        return e.copyWith(
+          status: FlowExecutionStatus.failed,
+          completedAt: updated.isNotEmpty ? DateTime.now() : null,
+        );
       }
       return e;
     }).toList();
