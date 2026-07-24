@@ -250,6 +250,7 @@ class ChatStreamManager {
     bool reasoning = false,
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
+    String? streamingMsgId,
   }) async {
     // If this conversation already has a stream running, return the
     // pending future so the caller awaits the same result.
@@ -268,7 +269,8 @@ class ChatStreamManager {
     state.lastTextUpdate = DateTime.now();
     state.lastReasoningUpdate = DateTime.now();
 
-    final aiMsgId = 'a${DateTime.now().millisecondsSinceEpoch}';
+    final aiMsgId =
+        streamingMsgId ?? 'a${DateTime.now().millisecondsSinceEpoch}';
     state.streamingMsgId = aiMsgId;
 
     _streams[convId] = state;
@@ -347,6 +349,7 @@ class ChatStreamManager {
             final sections = List<String>.from(state.reasoningSections);
             sections.add('');
             state.reasoningSections = sections;
+            state.reasoningBuffer = ''; // Reset for new reasoning section
             _maybeSetProvider(
                 convId, streamingReasoningSectionsProvider, sections);
 
@@ -436,25 +439,12 @@ class ChatStreamManager {
         }
       } catch (_) {}
 
-      // Capture reasoning content (safe: getter returns a String, should never throw)
-      try {
-        final finalReasoning = _adapter.reasoningContent;
-        if (finalReasoning.isNotEmpty) {
-          state.reasoningBuffer = finalReasoning;
-          final sections = List<String>.from(state.reasoningSections);
-          if (sections.isNotEmpty) {
-            sections[sections.length - 1] = finalReasoning;
-          } else {
-            sections.add(finalReasoning);
-          }
-          state.reasoningSections = sections;
-          _maybeSetProvider(convId, streamingReasoningProvider, finalReasoning);
-          _maybeSetProvider(
-              convId, streamingReasoningSectionsProvider, sections);
-        }
-      } catch (_) {
-        // Best effort: reasoning capture failure should not crash the stream
-      }
+      // Do NOT overwrite state.reasoningSections or state.reasoningBuffer
+      // from _adapter.reasoningContent. The manager already correctly
+      // accumulates reasoning sections event-by-event (ReasoningEvent +
+      // ReasoningSectionEndEvent), and _adapter.reasoningContent is a
+      // cumulative buffer from the ChatService that is never reset per-round.
+      // Overwriting would merge all reasoning into the last section.
     }
 
     // ── Post-stream processing ──

@@ -616,23 +616,24 @@ class _ChatPageState extends ConsumerState<ChatPage>
         }
 
         // Build unified segments for the full Agent chain.
-        // This ensures reasoning, tool calls, and text are all rendered
-        // in the correct order when the message has multiple components.
+        // Interleave: Reasoning(i) → ToolCall(i) → Reasoning(i+1) → ...
         final segments = <MessageSegment>[];
         final sections = msg.reasoningSections;
-        if (sections != null && sections.isNotEmpty) {
-          for (var i = 0; i < sections.length; i++) {
-            segments.add(ReasoningSegment(
-              sectionIndex: i,
-              isStreaming: false,
-            ));
+        final toolCalls = msg.toolCalls;
+        final sLen = sections?.length ?? 0;
+        final tLen = toolCalls?.length ?? 0;
+        for (var i = 0; i < sLen; i++) {
+          segments.add(ReasoningSegment(
+            sectionIndex: i,
+            isStreaming: false,
+          ));
+          if (i < tLen) {
+            segments.add(ToolCallSegment(toolCalls![i]));
           }
         }
-        final toolCalls = msg.toolCalls;
-        if (toolCalls != null && toolCalls.isNotEmpty) {
-          for (final tc in toolCalls) {
-            segments.add(ToolCallSegment(tc));
-          }
+        // Any remaining tool calls without matching reasoning
+        for (var i = sLen; i < tLen; i++) {
+          segments.add(ToolCallSegment(toolCalls![i]));
         }
         if (msg.content.isNotEmpty) {
           segments.add(TextSegment(msg.content));
@@ -979,6 +980,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
               reasoning: ref.read(reasoningEnabledProvider),
               reasoningEffort: ref.read(reasoningEffortProvider),
               reasoningParamValues: ref.read(reasoningParamValuesProvider),
+              streamingMsgId: aiMsgId,
             );
 
     // ── Post-stream completion ──
@@ -1043,36 +1045,34 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   /// Builds the final [_chatSegments] entry for a completed assistant message,
-  /// preserving the full Agent chain: reasoning sections, tool calls, and text.
+  /// preserving the full Agent chain: reasoning → toolCall → reasoning → ...
+  /// Each reasoning section is paired with its corresponding tool call (the one
+  /// immediately following it in the stream), reflecting the natural Agent loop:
+  /// "think → act → think → act → ... → answer".
   void _buildFinalSegments(ChatMessage msg) {
     final segments = <MessageSegment>[];
+    final sections = msg.reasoningSections ?? [];
+    final toolCalls = msg.toolCalls ?? [];
 
-    // 1. Reasoning sections (thinking blocks) — prepended so they appear first
-    final sections = msg.reasoningSections;
-    if (sections != null && sections.isNotEmpty) {
-      for (var i = 0; i < sections.length; i++) {
-        segments.add(ReasoningSegment(
-          sectionIndex: i,
-          isStreaming: false,
-        ));
+    // Interleave: Reasoning(i) → ToolCall(i) for each pair
+    for (var i = 0; i < sections.length; i++) {
+      segments.add(ReasoningSegment(
+        sectionIndex: i,
+        isStreaming: false,
+      ));
+      if (i < toolCalls.length) {
+        segments.add(ToolCallSegment(toolCalls[i]));
       }
     }
-
-    // 2. Tool calls — each as a ToolCallSegment
-    final toolCalls = msg.toolCalls;
-    if (toolCalls != null && toolCalls.isNotEmpty) {
-      for (final tc in toolCalls) {
-        segments.add(ToolCallSegment(tc));
-      }
+    // Any remaining tool calls without matching reasoning
+    for (var i = sections.length; i < toolCalls.length; i++) {
+      segments.add(ToolCallSegment(toolCalls[i]));
     }
-
-    // 3. Text content (the answer) — only if non-empty
+    // Text content (the final answer) at the end
     if (msg.content.isNotEmpty) {
       segments.add(TextSegment(msg.content));
     }
 
-    // Only set if we built segments; otherwise let the fallback rendering
-    // (reasoning-only or plain text) handle it via the existing code paths.
     if (segments.isNotEmpty) {
       _chatSegments[msg.id] = segments;
     }
@@ -1819,6 +1819,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // Keep reasoning sections in sync: the manager updates
     // streamingReasoningSectionsProvider on each ReasoningEvent. Update
     // _reasoningContents so textStreamMessageBuilder shows the button.
+    // Also add ReasoningSegments to _chatSegments so they survive the
+    // textStream→text message type transition when the first text token
+    // arrives (textMessageBuilder reads _chatSegments, not _reasoningContents
+    // when segments are non-empty).
     ref.listen(streamingReasoningSectionsProvider,
         (List<String>? prev, List<String> next) {
       if (!mounted || next.isEmpty || identical(prev, next)) return;
@@ -1826,6 +1830,25 @@ class _ChatPageState extends ConsumerState<ChatPage>
       final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider);
       if (msgId == null) return;
       _reasoningContents[msgId] = List<String>.from(next);
+
+      // Inject ReasoningSegments into _chatSegments at the front so
+      // they appear before any text or tool call segments. Remove any
+      // existing ReasoningSegments first (they're rebuilt each update).
+      final segments =
+          _chatSegments.putIfAbsent(msgId, () => <MessageSegment>[]);
+      segments.removeWhere((s) => s is ReasoningSegment);
+      final lastIdx = next.length - 1;
+      for (var i = 0; i < next.length; i++) {
+        segments.insert(
+          i,
+          ReasoningSegment(
+            sectionIndex: i,
+            // Only the last section is still streaming; previous are done
+            isStreaming: i == lastIdx,
+          ),
+        );
+      }
+
       final hasFirstToken = ref.read(streamingHasFirstTokenProvider);
       if (hasFirstToken && next.isNotEmpty) {
         _isReasoningCompletedForMsg[msgId] = true;
