@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -9,20 +11,20 @@ import 'package:path/path.dart' as p;
 import '../../catcatch/models/catcatch_task.dart' as catcatch;
 import '../../catcatch/providers/catcatch_provider.dart';
 import '../../providers/background_task_provider.dart';
+import '../../providers/provider_config.dart';
 import '../../providers/task_provider_shared.dart';
+import '../../providers/task_provider.dart';
 import '../../utils/audio_separation.dart';
 import '../../utils/audio_utils.dart';
 import '../../utils/file_manifest.dart';
-import '../models/task_flow_definition.dart';
-import '../models/task_flow_execution.dart';
 import '../models/block_type_definition.dart';
 import '../models/io_type.dart';
-import '../providers/task_flow_provider.dart';
+import '../models/task_flow_definition.dart';
+import '../models/task_flow_execution.dart';
 import '../providers/task_flow_execution_provider.dart';
+import '../providers/task_flow_provider.dart';
 
 /// Top-level helper: runs extractAudioSync inside Isolate.run.
-/// Must be a top-level function (not a method) so the closure does NOT
-/// capture `this` (which would fail sendability check for Isolate.run).
 Future<Uint8List> _extractAudioIsolate(
     Uint8List videoBytes, String videoFormat) {
   return Isolate.run(
@@ -31,9 +33,9 @@ Future<Uint8List> _extractAudioIsolate(
 
 /// Page for executing a task flow.
 ///
-/// The user provides the initial input (based on the first block's input type),
-/// then starts the flow. Each block runs in sequence, with progress shown.
-/// The final output is displayed.
+/// Shows the flow overview and input field. When the user starts the flow,
+/// the page pops back to the main page immediately and the flow runs in the
+/// background — just like individual CatCatch / ASR / OCR tasks.
 class TaskFlowExecutionPage extends ConsumerStatefulWidget {
   final String flowId;
 
@@ -46,14 +48,10 @@ class TaskFlowExecutionPage extends ConsumerStatefulWidget {
 
 class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
   final _inputController = TextEditingController();
-  bool _isRunning = false;
-  int _currentStep = -1;
-  final List<String> _stepResults = [];
 
   @override
   void initState() {
     super.initState();
-    // Listen for text changes to rebuild the UI and enable/disable start button
     _inputController.addListener(() {
       if (mounted) setState(() {});
     });
@@ -86,53 +84,25 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
       appBar: AppBar(
         title: Text(flow.name),
         centerTitle: true,
-        actions: [
-          if (!_isRunning && flow.blocks.isNotEmpty)
-            TextButton.icon(
-              onPressed:
-                  _inputController.text.trim().isNotEmpty ? _startFlow : null,
-              icon: const Icon(Icons.play_arrow, size: 18),
-              label: const Text('开始任务流'),
-            ),
-        ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Flow overview card
-          _buildFlowOverviewCard(flow, cs),
-
-          const SizedBox(height: 20),
-
-          // Input section
-          _buildInputSection(inputType, flow, cs),
-
-          // Block list with status
-          const SizedBox(height: 16),
-          ...flow.blocks.asMap().entries.map((entry) {
-            final i = entry.key;
-            final block = entry.value;
-            final def = block.getDefinition();
-            final isActive = _isRunning && i == _currentStep;
-            final isDone = _currentStep > i;
-            final isFailed = _isRunning &&
-                _currentStep == i &&
-                _stepResults.length > i &&
-                _stepResults[i].startsWith('❌');
-
-            return _buildBlockWithStatus(
-              block: block,
-              def: def,
-              index: i,
-              isActive: isActive,
-              isDone: isDone,
-              isFailed: isFailed,
-              result: _stepResults.length > i ? _stepResults[i] : null,
-              total: flow.blocks.length,
-              cs: cs,
-            );
-          }),
-        ],
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            _buildFlowOverviewCard(flow, cs),
+            const SizedBox(height: 20),
+            _buildInputSection(inputType, flow, cs),
+            const SizedBox(height: 16),
+            ...flow.blocks.asMap().entries.map((entry) {
+              return _buildStepCard(
+                block: entry.value,
+                index: entry.key,
+                cs: cs,
+              );
+            }),
+          ],
+        ),
       ),
     );
   }
@@ -151,57 +121,48 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
             children: [
               Icon(Icons.account_tree, size: 20, color: cs.primary),
               const SizedBox(width: 8),
-              Text(
-                flow.name,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: cs.onSurface,
-                ),
-              ),
+              Text(flow.name,
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: cs.onSurface)),
             ],
           ),
           if (flow.description.isNotEmpty) ...[
             const SizedBox(height: 4),
-            Text(
-              flow.description,
-              style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
-            ),
+            Text(flow.description,
+                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
           ],
           const SizedBox(height: 12),
-          // Flow chain summary
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: flow.blocks.asMap().entries.map((entry) {
                 final def = entry.value.getDefinition();
-                return Row(
-                  children: [
-                    if (entry.key > 0)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: Icon(Icons.arrow_forward,
-                            size: 14, color: cs.onSurfaceVariant),
-                      ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: def?.color.withValues(alpha: 0.12) ??
-                            Colors.grey.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        def?.label ?? entry.value.typeKey,
-                        style: TextStyle(
+                return Row(children: [
+                  if (entry.key > 0)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Icon(Icons.arrow_forward,
+                          size: 14, color: cs.onSurfaceVariant),
+                    ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: def?.color.withValues(alpha: 0.12) ??
+                          Colors.grey.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      def?.label ?? entry.value.typeKey,
+                      style: TextStyle(
                           fontSize: 11,
                           color: def?.color ?? Colors.grey,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
+                          fontWeight: FontWeight.w500),
                     ),
-                  ],
-                );
+                  ),
+                ]);
               }).toList(),
             ),
           ),
@@ -223,20 +184,15 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(Icons.input, size: 18, color: cs.primary),
-                const SizedBox(width: 8),
-                Text(
-                  '输入（${inputType.label}）',
+            Row(children: [
+              Icon(Icons.input, size: 18, color: cs.primary),
+              const SizedBox(width: 8),
+              Text('输入（${inputType.label}）',
                   style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: cs.onSurface,
-                  ),
-                ),
-              ],
-            ),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface)),
+            ]),
             const SizedBox(height: 8),
             if (inputType == IOType.url)
               TextField(
@@ -244,8 +200,7 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
                 decoration: InputDecoration(
                   hintText: '输入网页链接',
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                      borderRadius: BorderRadius.circular(10)),
                   prefixIcon: const Icon(Icons.link, size: 18),
                   filled: true,
                   fillColor: cs.surface,
@@ -259,8 +214,7 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
                 decoration: InputDecoration(
                   hintText: '输入文本',
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                      borderRadius: BorderRadius.circular(10)),
                   prefixIcon: const Icon(Icons.text_fields, size: 18),
                   filled: true,
                   fillColor: cs.surface,
@@ -274,154 +228,84 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
                 decoration: InputDecoration(
                   hintText: '输入 ${inputType.label} 路径或标识',
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                      borderRadius: BorderRadius.circular(10)),
                   filled: true,
                   fillColor: cs.surface,
                 ),
                 style: const TextStyle(fontSize: 14),
               ),
-            if (!_isRunning)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 44,
-                  child: FilledButton.icon(
-                    onPressed: _inputController.text.trim().isNotEmpty
-                        ? _startFlow
-                        : null,
-                    icon: const Icon(Icons.play_arrow, size: 18),
-                    label: const Text('开始任务流'),
-                  ),
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: SizedBox(
+                width: double.infinity,
+                height: 44,
+                child: FilledButton.icon(
+                  onPressed: _inputController.text.trim().isNotEmpty
+                      ? _startFlow
+                      : null,
+                  icon: const Icon(Icons.play_arrow, size: 18),
+                  label: const Text('开始任务流'),
                 ),
               ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildBlockWithStatus({
+  /// Simple step card — icon + label + index, no status tracking.
+  Widget _buildStepCard({
     required TaskFlowBlock block,
-    required BlockTypeDefinition? def,
     required int index,
-    required bool isActive,
-    required bool isDone,
-    required bool isFailed,
-    required String? result,
-    required int total,
     required ColorScheme cs,
   }) {
+    final def = block.getDefinition();
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (index > 0)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Icon(
-                isDone
-                    ? Icons.check_circle
-                    : (isActive ? Icons.play_circle : Icons.arrow_downward),
-                size: 18,
-                color: isDone
-                    ? Colors.green
-                    : (isActive ? cs.primary : cs.onSurfaceVariant),
-              ),
-            ),
-          Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(
-                color: isActive
-                    ? cs.primary
-                    : (isFailed ? cs.error : cs.outlineVariant),
-                width: isActive || isFailed ? 1.5 : 0.5,
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          color: isDone
-                              ? Colors.green.withValues(alpha: 0.15)
-                              : (isActive
-                                  ? cs.primary.withValues(alpha: 0.15)
-                                  : cs.surfaceContainerLow),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          isDone
-                              ? Icons.check_circle
-                              : (isActive
-                                  ? Icons.sync
-                                  : (def?.icon ?? Icons.extension)),
-                          size: 16,
-                          color: isDone
-                              ? Colors.green
-                              : (isActive ? cs.primary : cs.onSurfaceVariant),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          '${index + 1}. ${def?.label ?? block.typeKey}',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: cs.onSurface,
-                          ),
-                        ),
-                      ),
-                      if (isActive)
-                        const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                    ],
-                  ),
-                  if (result != null) ...[
-                    const SizedBox(height: 6),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: cs.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        result,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: cs.onSurfaceVariant,
-                        ),
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        if (index > 0)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Icon(Icons.arrow_downward,
+                size: 18, color: cs.onSurfaceVariant),
           ),
-        ],
-      ),
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: cs.outlineVariant, width: 0.5),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(def?.icon ?? Icons.extension,
+                    size: 16, color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('${index + 1}. ${def?.label ?? block.typeKey}',
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: cs.onSurface)),
+              ),
+            ]),
+          ),
+        ),
+      ]),
     );
   }
 
   // ========================================================================
-  // Flow Execution — creates real tasks using existing providers
+  // Flow Execution — pop immediately, run in background
   // ========================================================================
 
   Future<void> _startFlow() async {
@@ -431,67 +315,40 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
         );
     if (flow.blocks.isEmpty) return;
 
-    setState(() {
-      _isRunning = true;
-      _currentStep = 0;
-      _stepResults.clear();
-    });
-
-    // Create execution tracking entry
     final execNotifier = ref.read(taskFlowExecutionsProvider.notifier);
     final execId = execNotifier.addExecution(
       flowId: flow.id,
       flowName: flow.name,
     );
 
-    String currentData = _inputController.text.trim();
-    bool allSucceeded = true;
+    final inputText = _inputController.text.trim();
+
+    if (mounted) {
+      Navigator.pop(context);
+    }
+    await Future<void>.delayed(Duration.zero);
+
+    String currentData = inputText;
 
     for (int i = 0; i < flow.blocks.length; i++) {
-      if (!mounted) {
-        allSucceeded = false;
-        break;
-      }
-      setState(() => _currentStep = i);
-
       final block = flow.blocks[i];
       final def = block.getDefinition();
       if (def == null) {
-        _stepResults.add('❌ 未知功能块类型');
         execNotifier.failExecution(execId, error: '未知功能块类型');
-        allSucceeded = false;
-        break;
+        return;
       }
 
-      try {
-        final result =
-            await _executeBlock(def, block, currentData, execId, execNotifier);
-        _stepResults.add('✅ ${def.label} 完成');
-        currentData = result;
+      final result =
+          await _executeBlock(def, block, currentData, execId, execNotifier);
 
-        await Future.delayed(const Duration(milliseconds: 300));
-      } catch (e) {
-        _stepResults.add('❌ ${def.label} 失败: $e');
-        execNotifier.failExecution(execId, error: '$e');
-        allSucceeded = false;
-        break;
+      if (result.startsWith('[')) {
+        execNotifier.failExecution(execId, error: result);
+        return;
       }
+      currentData = result;
     }
 
-    if (!mounted) {
-      // Widget disposed — still mark execution as completed/failed so the
-      // task list shows the correct status.
-      if (allSucceeded) {
-        execNotifier.completeExecution(execId);
-      }
-      return;
-    }
-
-    setState(() => _currentStep = flow.blocks.length - 1);
-
-    if (allSucceeded) {
-      execNotifier.completeExecution(execId);
-    }
+    execNotifier.completeExecution(execId);
   }
 
   Future<String> _executeBlock(
@@ -504,89 +361,31 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     switch (def.typeKey) {
       case 'catcatch':
         return await _executeCatCatchBlock(def, input, execId, execNotifier);
-
       case 'audioSeparation':
         return await _executeAudioSeparationBlock(
             def, input, execId, execNotifier);
-
       case 'asr':
-        // Create a real background ASR task
-        final bgNotifier = ref.read(backgroundTasksProvider.notifier);
-        final taskId = bgNotifier.addTask(
-          type: BackgroundTaskType.asr,
-          title: '语音识别: $input',
-        );
-        final subTask = FlowSubTask(
-          blockTypeKey: 'asr',
-          blockLabel: def.label,
-          subTaskId: taskId,
-          subTaskType: 'background',
-        );
-        execNotifier.addSubTask(execId, subTask);
-
-        await Future.delayed(const Duration(seconds: 2));
-        bgNotifier.setResult(taskId, '识别结果文本...');
-        bgNotifier.completeTask(taskId);
-        execNotifier.updateSubTaskStatus(
-            execId, subTask.id, TaskStatus.completed);
-        return '识别文本结果';
-
+        return await _executeAsrBlock(block, def, input, execId, execNotifier);
       case 'ocr':
-        final bgNotifier = ref.read(backgroundTasksProvider.notifier);
-        final taskId = bgNotifier.addTask(
-          type: BackgroundTaskType.ocr,
-          title: '文字识别: $input',
-        );
-        final subTask = FlowSubTask(
-          blockTypeKey: 'ocr',
-          blockLabel: def.label,
-          subTaskId: taskId,
-          subTaskType: 'background',
-        );
-        execNotifier.addSubTask(execId, subTask);
-
-        await Future.delayed(const Duration(seconds: 2));
-        bgNotifier.completeTask(taskId);
-        execNotifier.updateSubTaskStatus(
-            execId, subTask.id, TaskStatus.completed);
-        return 'OCR文本结果';
-
+        return await _executeOcrBlock(block, def, input, execId, execNotifier);
       case 'tts':
-        // For TTS (synthesis), use taskListProvider
-        // (TTS tasks are SynthesisTask, but creating one requires ProviderConfig etc.)
-        // For simplicity, simulate and track as sub-task
-        final subTask = FlowSubTask(
-          blockTypeKey: 'tts',
-          blockLabel: def.label,
-          subTaskId: 'tts_${DateTime.now().millisecondsSinceEpoch}',
-          subTaskType: 'synthesis',
-        );
-        execNotifier.addSubTask(execId, subTask);
-
-        await Future.delayed(const Duration(seconds: 2));
-        execNotifier.updateSubTaskStatus(
-            execId, subTask.id, TaskStatus.completed);
-        return '音频文件: tts_output.mp3';
-
+        return await _executeTtsBlock(block, def, input, execId, execNotifier);
       default:
-        throw Exception('不支持的功能块: ${def.typeKey}');
+        execNotifier.failExecution(execId, error: '不支持的功能块: ${def.typeKey}');
+        return '[${def.typeKey}] 不支持的功能块';
     }
   }
 
-  /// Execute a CatCatch block by creating a real CatCatch task, waiting for
-  /// completion, and returning the downloaded file path.
-  ///
-  /// This method NEVER throws — all errors are handled by updating the sub-task
-  /// status and returning an error string. The flow execution stays "running"
-  /// and the TaskFlowCard's [_syncSubTaskStatuses] plus [updateSubTaskStatus]
-  /// auto-completion logic handle the final flow status transition.
+  // ========================================================================
+  // CatCatch
+  // ========================================================================
+
   Future<String> _executeCatCatchBlock(
     BlockTypeDefinition def,
     String input,
     String execId,
     TaskFlowExecutionNotifier execNotifier,
   ) async {
-    // Create a real CatCatch task and start the download pipeline
     final catcatchNotifier = ref.read(catcatchTasksProvider.notifier);
     final taskId = catcatchNotifier.addTask(input, 0);
 
@@ -598,13 +397,12 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     );
     execNotifier.addSubTask(execId, subTask);
 
-    // Poll until the CatCatch task reaches a terminal state or the widget
-    // is disposed. Never throw — update sub-task status and return gracefully.
     final startTime = DateTime.now();
     const maxWait = Duration(minutes: 10);
-    bool _autoSelected = false;
+    bool autoSelected = false;
 
-    while (mounted) {
+    // ignore: literal_only_boolean_expressions
+    while (true) {
       await Future.delayed(const Duration(milliseconds: 500));
 
       final task = ref
@@ -612,34 +410,25 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
           .where((t) => t.id == taskId)
           .firstOrNull;
 
-      // Task not found in provider — mark sub-task as failed
       if (task == null) {
         execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
         return '[CatCatch] 任务丢失';
       }
-
-      // Completed
       if (task.status == TaskStatus.completed) {
         execNotifier.updateSubTaskStatus(
             execId, subTask.id, TaskStatus.completed);
         return task.downloadedFilePath ?? '下载完成（无文件路径）';
       }
-
-      // Failed
       if (task.status == TaskStatus.failed) {
         execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
         return '[CatCatch] ${task.error ?? '任务失败'}';
       }
 
-      // Auto-select: pipeline paused at userSelecting step (multiple media).
-      if (!_autoSelected) {
-        final userSelectStep = task.steps.where(
-          (s) => s.type == catcatch.StepType.userSelecting,
-        );
-        if (userSelectStep.isNotEmpty &&
-            !userSelectStep.first.completed &&
-            !userSelectStep.first.skipped) {
-          _autoSelected = true;
+      if (!autoSelected) {
+        final us =
+            task.steps.where((s) => s.type == catcatch.StepType.userSelecting);
+        if (us.isNotEmpty && !us.first.completed && !us.first.skipped) {
+          autoSelected = true;
           if (task.detectedMedia.isNotEmpty) {
             catcatchNotifier.selectMedia(taskId, task.detectedMedia.first);
             execNotifier.updateSubTaskStatus(
@@ -652,30 +441,21 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
         }
       }
 
-      // Generic paused (user manually paused outside the flow)
       if (task.status == TaskStatus.paused) {
         execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.paused);
-        return '[CatCatch] 任务已暂停（需要在任务列表中手动继续）';
+        return '[CatCatch] 任务已暂停';
       }
-
-      // Timeout
       if (DateTime.now().difference(startTime) > maxWait) {
         execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
         return '[CatCatch] 下载超时';
       }
     }
-
-    // Widget disposed while CatCatch task is still running.
-    // The task continues in the background — don't mark anything as failed.
-    return '[CatCatch] 后台运行中';
   }
 
-  /// Execute an AudioSeparation block: read the file produced by the previous
-  /// block, run the real Dart MP4 demuxer in an isolate, save the extracted
-  /// audio via FileManifest, and return the output file path.
-  ///
-  /// The [input] is expected to be a file path from the previous block
-  /// (e.g., a downloaded video from CatCatch).
+  // ========================================================================
+  // AudioSeparation
+  // ========================================================================
+
   Future<String> _executeAudioSeparationBlock(
     BlockTypeDefinition def,
     String input,
@@ -684,34 +464,12 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
   ) async {
     final bgNotifier = ref.read(backgroundTasksProvider.notifier);
 
-    // Extract the basename from input (FileManifest stores by basename).
     final inputBasename = p.basename(input);
     final inputFormat = p.extension(input).replaceFirst('.', '').toLowerCase();
-
-    // Read the file bytes directly from the file system.
-    // CatCatch saves files to {appDir}/catcatch/completed/ (not FileManifest).
-    Uint8List videoBytes;
-    try {
-      final file = File(input);
-      if (!await file.exists()) {
-        execNotifier.failExecution(execId, error: '输入文件不存在: $input');
-        return '[AudioSeparation] 输入文件不存在';
-      }
-      videoBytes = await file.readAsBytes();
-      if (videoBytes.isEmpty) {
-        execNotifier.failExecution(execId, error: '输入文件为空: $input');
-        return '[AudioSeparation] 输入文件为空';
-      }
-    } catch (e) {
-      execNotifier.failExecution(execId, error: '无法读取输入文件: $input ($e)');
-      return '[AudioSeparation] 无法读取输入文件';
-    }
-
     final title = '音频分离_${p.basenameWithoutExtension(inputBasename)}';
+
     final taskId = bgNotifier.addTask(
-      type: BackgroundTaskType.audioSeparation,
-      title: title,
-    );
+        type: BackgroundTaskType.audioSeparation, title: title);
     final subTask = FlowSubTask(
       blockTypeKey: 'audioSeparation',
       blockLabel: def.label,
@@ -720,25 +478,40 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     );
     execNotifier.addSubTask(execId, subTask);
 
+    Uint8List videoBytes;
     try {
-      // Step 0: 分离音频
+      final file = File(input);
+      if (!await file.exists()) {
+        bgNotifier.failTask(taskId, error: '输入文件不存在: $input');
+        execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
+        return '[AudioSeparation] 输入文件不存在';
+      }
+      videoBytes = await file.readAsBytes();
+      if (videoBytes.isEmpty) {
+        bgNotifier.failTask(taskId, error: '输入文件为空: $input');
+        execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
+        return '[AudioSeparation] 输入文件为空';
+      }
+    } catch (e) {
+      bgNotifier.failTask(taskId, error: '无法读取输入文件: $e');
+      execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
+      return '[AudioSeparation] 无法读取输入文件';
+    }
+
+    try {
       bgNotifier.updateStep(taskId, 0, running: true);
       execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.running);
 
       final audioBytes = await _extractAudioIsolate(videoBytes, inputFormat);
-
       bgNotifier.updateStep(taskId, 0, completed: true);
 
-      // Step 1: 保存到文件
       bgNotifier.updateStep(taskId, 1, running: true);
-
       final filePath = await _saveAudioForFlow(audioBytes);
-
       bgNotifier.updateStep(taskId, 1, completed: true);
+
       bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
       execNotifier.updateSubTaskStatus(
           execId, subTask.id, TaskStatus.completed);
-
       return filePath ?? title;
     } catch (e) {
       bgNotifier.failTask(taskId, error: '音频提取失败: $e');
@@ -747,19 +520,393 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     }
   }
 
-  /// Save extracted audio bytes to the audio library via FileManifest,
-  /// following the same pattern as [AudioSeparationPage].
   Future<String?> _saveAudioForFlow(Uint8List audioBytes) async {
-    if (audioBytes.isEmpty) {
-      throw Exception('提取的音频数据为空');
-    }
-
+    if (audioBytes.isEmpty) throw Exception('提取的音频数据为空');
     final hash = computeAudioHash(audioBytes);
     final detectedFormat = detectAudioFormat(audioBytes);
     final format = normalizeAudioFormat(detectedFormat);
-
     await FileManifest.writeFile('$hash.$format', audioBytes);
-
     return await FileManifest.readFilePath('$hash.$format');
+  }
+
+  // ========================================================================
+  // ASR — real speech-to-text
+  // ========================================================================
+
+  Future<String> _executeAsrBlock(
+    TaskFlowBlock block,
+    BlockTypeDefinition def,
+    String input,
+    String execId,
+    TaskFlowExecutionNotifier execNotifier,
+  ) async {
+    final bgNotifier = ref.read(backgroundTasksProvider.notifier);
+    final inputBasename = p.basename(input);
+    final title = '语音识别_${p.basenameWithoutExtension(inputBasename)}';
+
+    final taskId =
+        bgNotifier.addTask(type: BackgroundTaskType.asr, title: title);
+    final subTask = FlowSubTask(
+      blockTypeKey: 'asr',
+      blockLabel: def.label,
+      subTaskId: taskId,
+      subTaskType: 'background',
+    );
+    execNotifier.addSubTask(execId, subTask);
+
+    // Read audio file
+    Uint8List audioBytes;
+    String audioFormat;
+    try {
+      final file = File(input);
+      if (!await file.exists()) {
+        _failSubTask(bgNotifier, taskId, execNotifier, execId, subTask.id,
+            '输入文件不存在: $input');
+        return '[ASR] 输入文件不存在';
+      }
+      audioBytes = await file.readAsBytes();
+      audioFormat = p.extension(input).replaceFirst('.', '').toLowerCase();
+      if (audioBytes.isEmpty) {
+        _failSubTask(
+            bgNotifier, taskId, execNotifier, execId, subTask.id, '输入文件为空');
+        return '[ASR] 输入文件为空';
+      }
+    } catch (e) {
+      _failSubTask(
+          bgNotifier, taskId, execNotifier, execId, subTask.id, '读取文件失败: $e');
+      return '[ASR] 读取文件失败';
+    }
+
+    // Get ASR config
+    final modelIndex = int.tryParse(block.params['modelIndex'] ?? '0') ?? 0;
+    final entries = ref.read(providerEntriesProvider).entries;
+    final configs =
+        entries.where((e) => e.type == 'asr').expand((e) => e.configs).toList();
+
+    if (configs.isEmpty || modelIndex >= configs.length) {
+      _failSubTask(bgNotifier, taskId, execNotifier, execId, subTask.id,
+          '未配置ASR模型或索引越界');
+      return '[ASR] 未配置ASR模型';
+    }
+
+    final config = configs[modelIndex];
+    final model = config.models.isNotEmpty ? config.models.first : null;
+    if (model == null) {
+      _failSubTask(
+          bgNotifier, taskId, execNotifier, execId, subTask.id, 'ASR模型配置为空');
+      return '[ASR] 模型配置为空';
+    }
+
+    try {
+      bgNotifier.updateStep(taskId, 0, running: true);
+      execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.running);
+
+      final result = await _callAsrApi(
+          audioBytes: audioBytes,
+          audioFormat: audioFormat,
+          host: config.host,
+          apiKey: config.key,
+          modelId: model.modelId,
+          typeConfig: model.typeConfig,
+          customParams: model.customParams);
+
+      bgNotifier.updateStep(taskId, 0, completed: true);
+      bgNotifier.setResult(taskId, result);
+
+      final textPath = await _saveTextForFlow(result, title);
+      bgNotifier.completeTask(taskId, downloadedFilePath: textPath);
+      execNotifier.updateSubTaskStatus(
+          execId, subTask.id, TaskStatus.completed);
+      return result;
+    } catch (e) {
+      _failSubTask(
+          bgNotifier, taskId, execNotifier, execId, subTask.id, '识别失败: $e');
+      return '[ASR] $e';
+    }
+  }
+
+  /// Call the OpenAI-compatible Whisper API.
+  Future<String> _callAsrApi({
+    required Uint8List audioBytes,
+    required String audioFormat,
+    required String host,
+    required String apiKey,
+    required String modelId,
+    Map<String, dynamic> typeConfig = const {},
+    List<dynamic> customParams = const [],
+  }) async {
+    final dio = Dio();
+    final mimeStr = audioFormat == 'wav' ? 'audio/wav' : 'audio/$audioFormat';
+    final formData = FormData.fromMap({
+      'file': MultipartFile.fromBytes(audioBytes,
+          filename: 'audio.$audioFormat',
+          contentType: DioMediaType.parse(mimeStr)),
+      'model': modelId,
+      'response_format': 'json',
+      ...typeConfig,
+    });
+
+    final response = await dio.post(host,
+        data: formData,
+        options: Options(headers: {'Authorization': 'Bearer $apiKey'}));
+
+    if (response.data is Map) {
+      return (response.data['text'] as String?) ?? '';
+    }
+    return response.data.toString();
+  }
+
+  // ========================================================================
+  // OCR — real image-to-text
+  // ========================================================================
+
+  Future<String> _executeOcrBlock(
+    TaskFlowBlock block,
+    BlockTypeDefinition def,
+    String input,
+    String execId,
+    TaskFlowExecutionNotifier execNotifier,
+  ) async {
+    final bgNotifier = ref.read(backgroundTasksProvider.notifier);
+    final inputBasename = p.basename(input);
+    final title = '文字识别_${p.basenameWithoutExtension(inputBasename)}';
+
+    final taskId =
+        bgNotifier.addTask(type: BackgroundTaskType.ocr, title: title);
+    final subTask = FlowSubTask(
+      blockTypeKey: 'ocr',
+      blockLabel: def.label,
+      subTaskId: taskId,
+      subTaskType: 'background',
+    );
+    execNotifier.addSubTask(execId, subTask);
+
+    Uint8List imageBytes;
+    String imageFormat;
+    try {
+      final file = File(input);
+      if (!await file.exists()) {
+        _failSubTask(bgNotifier, taskId, execNotifier, execId, subTask.id,
+            '输入文件不存在: $input');
+        return '[OCR] 输入文件不存在';
+      }
+      imageBytes = await file.readAsBytes();
+      imageFormat = p.extension(input).replaceFirst('.', '').toLowerCase();
+      if (imageBytes.isEmpty) {
+        _failSubTask(
+            bgNotifier, taskId, execNotifier, execId, subTask.id, '输入文件为空');
+        return '[OCR] 输入文件为空';
+      }
+    } catch (e) {
+      _failSubTask(
+          bgNotifier, taskId, execNotifier, execId, subTask.id, '读取文件失败: $e');
+      return '[OCR] 读取文件失败';
+    }
+
+    // Get OCR config
+    final entries = ref.read(providerEntriesProvider).entries;
+    final configs =
+        entries.where((e) => e.type == 'ocr').expand((e) => e.configs).toList();
+
+    if (configs.isEmpty) {
+      _failSubTask(
+          bgNotifier, taskId, execNotifier, execId, subTask.id, '未配置OCR模型');
+      return '[OCR] 未配置OCR模型';
+    }
+
+    final config = configs.first;
+    final model = config.models.isNotEmpty ? config.models.first : null;
+    if (model == null) {
+      _failSubTask(
+          bgNotifier, taskId, execNotifier, execId, subTask.id, 'OCR模型配置为空');
+      return '[OCR] 模型配置为空';
+    }
+
+    try {
+      bgNotifier.updateStep(taskId, 0, running: true);
+      execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.running);
+
+      final result = await _callOcrApi(
+          imageBytes: imageBytes,
+          imageFormat: imageFormat,
+          host: config.host,
+          apiKey: config.key,
+          modelId: model.modelId);
+
+      bgNotifier.updateStep(taskId, 0, completed: true);
+      bgNotifier.setResult(taskId, result);
+
+      final textPath = await _saveTextForFlow(result, title);
+      bgNotifier.completeTask(taskId, downloadedFilePath: textPath);
+      execNotifier.updateSubTaskStatus(
+          execId, subTask.id, TaskStatus.completed);
+      return result;
+    } catch (e) {
+      _failSubTask(
+          bgNotifier, taskId, execNotifier, execId, subTask.id, '识别失败: $e');
+      return '[OCR] $e';
+    }
+  }
+
+  /// Call the OpenAI-compatible Chat Completions API with image input.
+  Future<String> _callOcrApi({
+    required Uint8List imageBytes,
+    required String imageFormat,
+    required String host,
+    required String apiKey,
+    required String modelId,
+  }) async {
+    final dio = Dio();
+    final base64Image = base64Encode(imageBytes);
+    final dataUri = 'data:image/$imageFormat;base64,$base64Image';
+
+    final body = {
+      'model': modelId,
+      'max_tokens': 4096,
+      'temperature': 0.0,
+      'messages': [
+        {'role': 'system', 'content': '请提取图片中的所有文字内容。只返回文字，不要添加任何解释。'},
+        {
+          'role': 'user',
+          'content': [
+            {
+              'type': 'image_url',
+              'image_url': {'url': dataUri, 'detail': 'high'}
+            }
+          ]
+        }
+      ]
+    };
+
+    final response = await dio.post(host,
+        data: body,
+        options: Options(headers: {
+          'Authorization': 'Bearer $apiKey',
+          'Content-Type': 'application/json',
+        }));
+
+    if (response.data is Map) {
+      final choices = response.data['choices'] as List<dynamic>?;
+      if (choices != null && choices.isNotEmpty) {
+        final msg = choices.first['message'] as Map<String, dynamic>?;
+        return msg?['content'] as String? ?? '';
+      }
+    }
+    return '';
+  }
+
+  // ========================================================================
+  // TTS — real text-to-speech via taskListProvider
+  // ========================================================================
+
+  Future<String> _executeTtsBlock(
+    TaskFlowBlock block,
+    BlockTypeDefinition def,
+    String input,
+    String execId,
+    TaskFlowExecutionNotifier execNotifier,
+  ) async {
+    final taskListNotifier = ref.read(taskListProvider.notifier);
+
+    final entries = ref.read(providerEntriesProvider).entries;
+    final configs =
+        entries.where((e) => e.type == 'tts').expand((e) => e.configs).toList();
+
+    if (configs.isEmpty) {
+      execNotifier.failExecution(execId, error: '未配置TTS模型');
+      return '[TTS] 未配置TTS模型';
+    }
+
+    final config = configs.first;
+    final model = config.models.isNotEmpty ? config.models.first : null;
+    if (model == null) {
+      execNotifier.failExecution(execId, error: 'TTS模型配置为空');
+      return '[TTS] 模型配置为空';
+    }
+
+    final title = input.length > 20 ? input.substring(0, 20) : input;
+    final voice = block.params['voice'] ?? '';
+    final speed = block.params['speed'] ?? '1.0';
+
+    try {
+      final taskId = taskListNotifier.addTask(
+        title: title,
+        text: input,
+        providerConfig: config,
+        modelConfig: model,
+        customParams: {
+          if (voice.isNotEmpty) 'voice': voice,
+          'speed': speed,
+        },
+      );
+
+      final subTask = FlowSubTask(
+        blockTypeKey: 'tts',
+        blockLabel: def.label,
+        subTaskId: taskId,
+        subTaskType: 'synthesis',
+      );
+      execNotifier.addSubTask(execId, subTask);
+
+      // Poll until synthesis completes
+      final startTime = DateTime.now();
+      const maxWait = Duration(minutes: 5);
+
+      // ignore: literal_only_boolean_expressions
+      while (true) {
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        final task =
+            ref.read(taskListProvider).where((t) => t.id == taskId).firstOrNull;
+
+        if (task == null) {
+          execNotifier.updateSubTaskStatus(
+              execId, subTask.id, TaskStatus.failed);
+          return '[TTS] 任务丢失';
+        }
+        if (task.status == TaskStatus.completed) {
+          execNotifier.updateSubTaskStatus(
+              execId, subTask.id, TaskStatus.completed);
+          return task.downloadedFilePath ?? 'tts_${task.id}.wav';
+        }
+        if (task.status == TaskStatus.failed) {
+          execNotifier.updateSubTaskStatus(
+              execId, subTask.id, TaskStatus.failed);
+          return '[TTS] ${task.error ?? '任务失败'}';
+        }
+        if (DateTime.now().difference(startTime) > maxWait) {
+          execNotifier.updateSubTaskStatus(
+              execId, subTask.id, TaskStatus.failed);
+          return '[TTS] 合成超时';
+        }
+      }
+    } catch (e) {
+      execNotifier.failExecution(execId, error: 'TTS失败: $e');
+      return '[TTS] $e';
+    }
+  }
+
+  // ========================================================================
+  // Helpers
+  // ========================================================================
+
+  void _failSubTask(
+    BackgroundTaskNotifier bgNotifier,
+    String taskId,
+    TaskFlowExecutionNotifier execNotifier,
+    String execId,
+    String subTaskId,
+    String error,
+  ) {
+    bgNotifier.failTask(taskId, error: error);
+    execNotifier.updateSubTaskStatus(execId, subTaskId, TaskStatus.failed);
+  }
+
+  Future<String?> _saveTextForFlow(String text, String title) async {
+    if (text.isEmpty) return null;
+    final hash = computeAudioHash(Uint8List.fromList(text.codeUnits));
+    final path = '$hash.txt';
+    await FileManifest.writeFile(path, Uint8List.fromList(text.codeUnits));
+    return await FileManifest.readFilePath(path);
   }
 }
