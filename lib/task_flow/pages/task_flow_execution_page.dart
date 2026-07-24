@@ -676,27 +676,21 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
         throw Exception('CatCatch 任务丢失');
       }
 
-      // Completed
+      // Check CatCatch task status in polling loop
       if (task.status == TaskStatus.completed) {
         execNotifier.updateSubTaskStatus(
             execId, subTask.id, TaskStatus.completed);
         return task.downloadedFilePath ?? '下载完成（无文件路径）';
       }
 
-      // Failed
       if (task.status == TaskStatus.failed) {
         execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.failed);
         throw Exception(task.error ?? 'CatCatch 任务失败');
       }
 
-      // Paused (user likely paused it outside the flow)
-      if (task.status == TaskStatus.paused) {
-        execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.paused);
-        throw Exception('CatCatch 任务已暂停（可能需要在任务列表中手动继续）');
-      }
-
-      // Waiting for user to select media — auto-select first and continue
-      // Guarded by _autoSelected to prevent repeated calls
+      // Auto-select: pipeline paused at userSelecting step (multiple media found).
+      // Must check BEFORE the generic "paused" check, because the pipeline sets
+      // status to paused when waiting for user selection.
       if (!_autoSelected) {
         final userSelectStep = task.steps.where(
           (s) => s.type == catcatch.StepType.userSelecting,
@@ -707,7 +701,6 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
           _autoSelected = true;
           if (task.detectedMedia.isNotEmpty) {
             catcatchNotifier.selectMedia(taskId, task.detectedMedia.first);
-            // Mark sub-task as running and continue polling
             execNotifier.updateSubTaskStatus(
                 execId, subTask.id, TaskStatus.running);
           } else {
@@ -716,6 +709,12 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
             throw Exception('未检测到可用媒体资源');
           }
         }
+      }
+
+      // Generic paused (user manually paused outside the flow)
+      if (task.status == TaskStatus.paused) {
+        execNotifier.updateSubTaskStatus(execId, subTask.id, TaskStatus.paused);
+        throw Exception('CatCatch 任务已暂停（可能需要在任务列表中手动继续）');
       }
 
       // Timeout
