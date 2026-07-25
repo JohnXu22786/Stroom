@@ -335,10 +335,13 @@ class ChatStreamManager {
             final now = DateTime.now();
             if (now.difference(state.lastTextUpdate) >= _textThrottle) {
               state.lastTextUpdate = now;
-              _maybeSetProvider(
-                  convId, streamingFullReplyProvider, state.fullReply);
+              // Set textSections first (no listener) so that when
+              // fullReply fires its listener and reads streamingTextSectionsProvider
+              // inside _rebuildLiveSegments, it sees the already-updated value.
               _maybeSetProvider(convId, streamingTextSectionsProvider,
                   List<String>.from(state.textChunks));
+              _maybeSetProvider(
+                  convId, streamingFullReplyProvider, state.fullReply);
             }
 
           case ReasoningEvent e:
@@ -385,10 +388,12 @@ class ChatStreamManager {
                 state.textChunks.length == 1) {
               state.textChunks.add('');
             }
-            _maybeSetProvider(convId, streamingToolCallsProvider,
-                List<ToolCallData>.from(state.toolCalls));
+            // Set textSections first (no listener) so that when
+            // toolCalls fires its listener, it reads the updated value.
             _maybeSetProvider(convId, streamingTextSectionsProvider,
                 List<String>.from(state.textChunks));
+            _maybeSetProvider(convId, streamingToolCallsProvider,
+                List<ToolCallData>.from(state.toolCalls));
 
           case ToolCallCompleteEvent e:
             for (var i = 0; i < state.toolCalls.length; i++) {
@@ -424,9 +429,9 @@ class ChatStreamManager {
           // Best effort: logging failure should not prevent cleanup
         }
         state.fullReply = '错误: ${e.toString()}';
-        _maybeSetProvider(convId, streamingFullReplyProvider, state.fullReply);
         _maybeSetProvider(convId, streamingTextSectionsProvider,
             List<String>.from(state.textChunks));
+        _maybeSetProvider(convId, streamingFullReplyProvider, state.fullReply);
         state.toolCalls.clear();
         _maybeSetProvider(convId, streamingToolCallsProvider, []);
       }
@@ -435,10 +440,13 @@ class ChatStreamManager {
       state.persistTimer?.cancel();
       state.persistTimer = null;
 
-      // Final throttle flush: push the last text to the UI
-      _maybeSetProvider(convId, streamingFullReplyProvider, state.fullReply);
+      // Final throttle flush: push the last text to the UI.
+      // Set textSections first (no listener) so that when
+      // fullReply fires its listener and reads streamingTextSectionsProvider
+      // inside _rebuildLiveSegments, it sees the already-updated value.
       _maybeSetProvider(convId, streamingTextSectionsProvider,
           List<String>.from(state.textChunks));
+      _maybeSetProvider(convId, streamingFullReplyProvider, state.fullReply);
 
       // Capture request/response raw data
       try {
