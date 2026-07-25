@@ -14,12 +14,8 @@ import 'synthesis_task_card.dart';
 
 /// Card for a task flow execution in the unified task list.
 ///
-/// Layout:
-///   Header: "任务流" tag, flow name, progress, status icon
-///   Expanded: Direct nested real task cards (CatCatch / Background / Synthesis)
-///
-/// No more _syncSubTaskStatuses — the execution service updates sub-task
-/// statuses directly via the provider. This card just watches and renders.
+/// Watches the execution provider DIRECTLY (not via parent prop) so
+/// subTaskId updates from the execution service are always reflected.
 class TaskFlowCard extends ConsumerStatefulWidget {
   final TaskFlowExecution execution;
   final bool isUnread;
@@ -40,7 +36,20 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final exec = widget.execution;
+
+    // ── Watch providers DIRECTLY, NOT from parent props ──
+    final catcatchTasks = ref.watch(catcatchTasksProvider);
+    final backgroundTasks = ref.watch(backgroundTasksProvider);
+    final synthesisTasks = ref.watch(taskListProvider);
+
+    // Watch execution directly for real-time subTaskId/subTask status
+    final execution = ref
+        .watch(taskFlowExecutionsProvider)
+        .where((e) => e.id == widget.execution.id)
+        .firstOrNull;
+    if (execution == null) return const SizedBox.shrink();
+
+    final subTasks = execution.subTasks;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -62,7 +71,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
               padding: const EdgeInsets.all(12),
               child: Row(
                 children: [
-                  _flowStatusIcon(exec.subTasks, cs),
+                  _flowStatusIcon(subTasks, cs),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -89,7 +98,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
                             ),
                             Flexible(
                               child: Text(
-                                exec.flowName,
+                                execution.flowName,
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
@@ -103,7 +112,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          _progressText(exec.subTasks, cs),
+                          _progressText(subTasks),
                           style: TextStyle(
                             fontSize: 11,
                             color: cs.onSurfaceVariant,
@@ -122,17 +131,18 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
             ),
           ),
 
-          // ── Expanded: nested sub-task cards ──
+          // ── Expanded: nested real task cards ──
           if (_expanded) ...[
-            for (int i = 0; i < exec.subTasks.length; i++)
-              _buildSubTaskCard(exec.subTasks[i], cs),
+            for (int i = 0; i < subTasks.length; i++)
+              _buildSubTaskCard(subTasks[i], catcatchTasks, backgroundTasks,
+                  synthesisTasks, cs),
             Align(
               alignment: Alignment.centerRight,
               child: Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 child: TextButton.icon(
-                  onPressed: () => _confirmDelete(context, cs),
+                  onPressed: () => _confirmDelete(context, execution.id),
                   icon: Icon(Icons.delete_outline, size: 16, color: cs.error),
                   label: Text('删除',
                       style: TextStyle(fontSize: 13, color: cs.error)),
@@ -146,14 +156,13 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
   }
 
   // ===========================================================================
-  // Flow status icon — computed from sub-task statuses
+  // Flow status icon
   // ===========================================================================
 
   Widget _flowStatusIcon(List<FlowSubTask> subTasks, ColorScheme cs) {
     if (subTasks.isEmpty) {
       return Icon(Icons.hourglass_empty, size: 20, color: cs.onSurfaceVariant);
     }
-
     final anyFailed = subTasks.any((s) => s.status == TaskStatus.failed);
     final anyActive = subTasks.any(
         (s) => s.status == TaskStatus.running || s.status == TaskStatus.paused);
@@ -185,7 +194,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
   // Progress text
   // ===========================================================================
 
-  String _progressText(List<FlowSubTask> subTasks, ColorScheme cs) {
+  String _progressText(List<FlowSubTask> subTasks) {
     if (subTasks.isEmpty) return '0 个步骤';
     final total = subTasks.length;
     final done =
@@ -200,12 +209,12 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
   // Delete
   // ===========================================================================
 
-  void _confirmDelete(BuildContext context, ColorScheme cs) {
+  void _confirmDelete(BuildContext context, String execId) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('删除任务流记录'),
-        content: Text('确定删除「${widget.execution.flowName}」？'),
+        content: Text('确定删除此任务流记录？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -215,7 +224,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
             onPressed: () {
               ref
                   .read(taskFlowExecutionsProvider.notifier)
-                  .removeExecution(widget.execution.id);
+                  .removeExecution(execId);
               Navigator.pop(ctx);
             },
             child: const Text('确定', style: TextStyle(color: Colors.red)),
@@ -229,23 +238,28 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
   // Sub-task → real task card mapping
   // ===========================================================================
 
-  Widget _buildSubTaskCard(FlowSubTask subTask, ColorScheme cs) {
+  Widget _buildSubTaskCard(
+    FlowSubTask subTask,
+    List<catcatch.CatCatchTask> catcatchTasks,
+    List<BackgroundTask> backgroundTasks,
+    List<SynthesisTask> synthesisTasks,
+    ColorScheme cs,
+  ) {
     switch (subTask.subTaskType) {
       case 'catcatch':
-        return _buildCatCatchCard(subTask, cs);
+        return _buildCatCatchCard(subTask, catcatchTasks, cs);
       case 'background':
-        return _buildBackgroundCard(subTask, cs);
+        return _buildBackgroundCard(subTask, backgroundTasks, cs);
       case 'synthesis':
-        return _buildSynthesisCard(subTask, cs);
+        return _buildSynthesisCard(subTask, synthesisTasks, cs);
       default:
         return _buildFallbackCard(subTask, cs);
     }
   }
 
-  Widget _buildCatCatchCard(FlowSubTask subTask, ColorScheme cs) {
-    final tasks = ref.watch(catcatchTasksProvider);
+  Widget _buildCatCatchCard(
+      FlowSubTask subTask, List<catcatch.CatCatchTask> tasks, ColorScheme cs) {
     final task = tasks.where((t) => t.id == subTask.subTaskId).firstOrNull;
-
     if (task != null) {
       return CatCatchTaskCard(
         key: ValueKey('catcatch_${task.id}'),
@@ -256,10 +270,9 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
     return _buildFallbackCard(subTask, cs);
   }
 
-  Widget _buildBackgroundCard(FlowSubTask subTask, ColorScheme cs) {
-    final tasks = ref.watch(backgroundTasksProvider);
+  Widget _buildBackgroundCard(
+      FlowSubTask subTask, List<BackgroundTask> tasks, ColorScheme cs) {
     final task = tasks.where((t) => t.id == subTask.subTaskId).firstOrNull;
-
     if (task != null) {
       return BackgroundTaskCard(
         key: ValueKey('bg_${task.id}'),
@@ -270,10 +283,9 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
     return _buildFallbackCard(subTask, cs);
   }
 
-  Widget _buildSynthesisCard(FlowSubTask subTask, ColorScheme cs) {
-    final tasks = ref.watch(taskListProvider);
+  Widget _buildSynthesisCard(
+      FlowSubTask subTask, List<SynthesisTask> tasks, ColorScheme cs) {
     final task = tasks.where((t) => t.id == subTask.subTaskId).firstOrNull;
-
     if (task != null) {
       return SynthesisTaskCard(
         key: ValueKey('synth_${task.id}'),
@@ -309,7 +321,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
             ),
             const Spacer(),
             Text(
-              _statusText(subTask.status),
+              _statusLabel(subTask.status),
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
           ],
@@ -319,7 +331,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
   }
 
   // ===========================================================================
-  // Status helpers (for fallback card)
+  // Status helpers
   // ===========================================================================
 
   Widget _statusIcon(TaskStatus status, ColorScheme cs) {
@@ -342,7 +354,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
     }
   }
 
-  String _statusText(TaskStatus status) {
+  String _statusLabel(TaskStatus status) {
     switch (status) {
       case TaskStatus.running:
         return '执行中...';
