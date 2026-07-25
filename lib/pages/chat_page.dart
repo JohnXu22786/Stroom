@@ -1023,6 +1023,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Rebuilds the live [_chatSegments] for [msgId] by reading current
   /// provider state and using the same interleaving logic as post-stream.
   void _rebuildLiveSegments(String msgId) {
+    // Only rebuild while streaming is active. After the stream ends,
+    // _buildFinalSegments handles the final state. Skipping here prevents
+    // a late-arriving listener from overwriting the completed segments
+    // with live streaming=true data.
+    if (!_isStreamingActive) return;
+
     final segments = buildAgentChainSegments(
       reasoningSections:
           List<String>.from(ref.read(streamingReasoningSectionsProvider)),
