@@ -415,15 +415,15 @@ void main() {
     });
 
     test('multiple tool calls in one round are grouped together', () {
-      // Simulates: assistant outputs "step1", then calls tools A,B,C,
-      // then outputs "step2". Tools should be grouped, not spread across
-      // phantom empty rounds.
+      // Manager output: text "step1" → TC(A), TC(B), TC(C) → text "step2"
+      // All 3 tools in one round (only the first TC creates a new chunk).
       final segments = buildAgentChainSegments(
         reasoningSections: ['think'],
-        textChunks: ['step1', '', '', 'step2'],
+        textChunks: ['step1', 'step2'],
         toolCalls: [_tc('1', 'A'), _tc('2', 'B'), _tc('3', 'C')],
+        toolCallRoundStarts: [0],
       );
-      // R0, T0, TC0(A), TC1(B), TC2(C), T3(step2)
+      // R0, T0(step1), TC0(A), TC1(B), TC2(C), T1(step2)
       expect(segments.length, 6);
       expect(segments[0], isA<ReasoningSegment>());
       expect(segments[1], isA<TextSegment>());
@@ -440,12 +440,12 @@ void main() {
 
     test('two rounds each with multiple tool calls are interleaved correctly',
         () {
-      // Round 1: think1, text1, tools A1,B1
-      // Round 2: think2, text2, tools A2,C2,D2
-      // Tools in each round should be grouped, not separated into phantom rounds.
+      // Manager output: think1, text1 → TC(A1), TC(B1) → response1 →
+      //   TC(A2), TC(C2), TC(D2) → response2
+      // Round 0 starts at TC(0), round 1 starts at TC(2).
       final segments = buildAgentChainSegments(
         reasoningSections: ['think1', 'think2'],
-        textChunks: ['text1', '', 'text2', '', ''],
+        textChunks: ['text1', 'response1', 'response2'],
         toolCalls: [
           _tc('1', 'A1'),
           _tc('2', 'B1'),
@@ -453,12 +453,13 @@ void main() {
           _tc('4', 'C2'),
           _tc('5', 'D2'),
         ],
+        toolCallRoundStarts: [0, 2],
       );
       // R0, T0(text1), TC0(A1), TC1(B1),
-      // R1(think2), T2(text2), TC2(A2), TC3(C2), TC4(D2)
-      expect(segments.length, 9);
+      // R1(think2), T1(response1), TC2(A2), TC3(C2), TC4(D2), T2(response2)
+      expect(segments.length, 10);
 
-      // Round 1
+      // Round 0
       expect(segments[0], isA<ReasoningSegment>());
       expect((segments[0] as ReasoningSegment).sectionIndex, 0);
       expect(segments[1], isA<TextSegment>());
@@ -468,27 +469,30 @@ void main() {
       expect(segments[3], isA<ToolCallSegment>());
       expect((segments[3] as ToolCallSegment).data.name, 'B1');
 
-      // Round 2
+      // Round 1
       expect(segments[4], isA<ReasoningSegment>());
       expect((segments[4] as ReasoningSegment).sectionIndex, 1);
       expect(segments[5], isA<TextSegment>());
-      expect((segments[5] as TextSegment).text, 'text2');
+      expect((segments[5] as TextSegment).text, 'response1');
       expect(segments[6], isA<ToolCallSegment>());
       expect((segments[6] as ToolCallSegment).data.name, 'A2');
       expect(segments[7], isA<ToolCallSegment>());
       expect((segments[7] as ToolCallSegment).data.name, 'C2');
       expect(segments[8], isA<ToolCallSegment>());
       expect((segments[8] as ToolCallSegment).data.name, 'D2');
+      expect(segments[9], isA<TextSegment>());
+      expect((segments[9] as TextSegment).text, 'response2');
     });
 
     test('tool calls adjacent without text between them all grouped', () {
-      // No non-empty text between any tool calls → all grouped together.
+      // Manager output: text "before" → TC(X), TC(Y), TC(Z) → text "after"
       final segments = buildAgentChainSegments(
         reasoningSections: [],
-        textChunks: ['before', '', '', '', 'after'],
+        textChunks: ['before', 'after'],
         toolCalls: [_tc('1', 'X'), _tc('2', 'Y'), _tc('3', 'Z')],
+        toolCallRoundStarts: [0],
       );
-      // T0(before), TC0(X), TC1(Y), TC2(Z), T4(after)
+      // T0(before), TC0(X), TC1(Y), TC2(Z), T1(after)
       expect(segments.length, 5);
       expect(segments[0], isA<TextSegment>());
       expect((segments[0] as TextSegment).text, 'before');
@@ -503,10 +507,13 @@ void main() {
     });
 
     test('multiple tool calls with no text or reasoning at all', () {
+      // Manager output: TC(A), TC(B), TC(C) with no text events.
+      // textChunks = ['', ''] (initial + first TC created new chunk).
       final segments = buildAgentChainSegments(
         reasoningSections: [],
-        textChunks: [''],
+        textChunks: ['', ''],
         toolCalls: [_tc('1', 'A'), _tc('2', 'B'), _tc('3', 'C')],
+        toolCallRoundStarts: [0],
       );
       expect(segments.length, 3);
       expect(segments[0], isA<ToolCallSegment>());
@@ -515,6 +522,24 @@ void main() {
       expect((segments[1] as ToolCallSegment).data.name, 'B');
       expect(segments[2], isA<ToolCallSegment>());
       expect((segments[2] as ToolCallSegment).data.name, 'C');
+    });
+
+    test('legacy algorithm without toolCallRoundStarts still works', () {
+      // Historical data: no round boundary info → uses 1:1 pairing.
+      final segments = buildAgentChainSegments(
+        reasoningSections: ['think1', 'think2'],
+        textChunks: ['text1', 'text2'],
+        toolCalls: [_tc('1', 'tc1'), _tc('2', 'tc2')],
+      );
+      expect(segments.length, 6);
+      expect(segments[0], isA<ReasoningSegment>());
+      expect(segments[1], isA<TextSegment>());
+      expect((segments[1] as TextSegment).text, 'text1');
+      expect(segments[2], isA<ToolCallSegment>());
+      expect(segments[3], isA<ReasoningSegment>());
+      expect(segments[4], isA<TextSegment>());
+      expect((segments[4] as TextSegment).text, 'text2');
+      expect(segments[5], isA<ToolCallSegment>());
     });
   });
 }

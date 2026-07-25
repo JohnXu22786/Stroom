@@ -64,6 +64,11 @@ class StreamResult {
   /// Tool calls accumulated during the stream.
   final List<ToolCallData> toolCalls;
 
+  /// Indices into [toolCalls] where each new tool-call round begins.
+  /// Used by [buildAgentChainSegments] to group consecutive tool calls
+  /// that belong to the same assistant step (separated by non-empty text).
+  final List<int> toolCallRoundStarts;
+
   /// Whether the stream was cancelled by the user.
   final bool cancelled;
 
@@ -75,6 +80,7 @@ class StreamResult {
     this.reasoningSections = const [],
     this.textSections = const [],
     this.toolCalls = const [],
+    this.toolCallRoundStarts = const [0],
     this.cancelled = false,
   });
 
@@ -110,6 +116,11 @@ class _ConversationStreamState {
 
   /// Accumulator for tool calls across streaming rounds (used for history).
   final List<ToolCallData> accumulatedToolCalls = [];
+
+  /// Indices into [toolCalls] where each new tool-call round begins.
+  /// Used by buildAgentChainSegments to correctly group consecutive
+  /// tool calls that belong to the same assistant "step".
+  List<int> toolCallRoundStarts = [0];
 
   /// Throttle timers
   DateTime lastTextUpdate = DateTime.now();
@@ -387,6 +398,10 @@ class ChatStreamManager {
             if (state.textChunks.last.isNotEmpty ||
                 state.textChunks.length == 1) {
               state.textChunks.add('');
+              // Record that this tool call starts a new round.
+              // Consecutive tool calls that don't create new text chunks
+              // are grouped together in the same round.
+              state.toolCallRoundStarts.add(state.toolCalls.length - 1);
             }
             // Set textSections first (no listener) so that when
             // toolCalls fires its listener, it reads the updated value.
@@ -394,6 +409,8 @@ class ChatStreamManager {
                 List<String>.from(state.textChunks));
             _maybeSetProvider(convId, streamingToolCallsProvider,
                 List<ToolCallData>.from(state.toolCalls));
+            _maybeSetProvider(convId, streamingToolCallRoundStartsProvider,
+                List<int>.from(state.toolCallRoundStarts));
 
           case ToolCallCompleteEvent e:
             for (var i = 0; i < state.toolCalls.length; i++) {
@@ -542,6 +559,7 @@ class ChatStreamManager {
       reasoningSections: List.from(state.reasoningSections),
       textSections: List.from(state.textChunks),
       toolCalls: List.from(state.accumulatedToolCalls),
+      toolCallRoundStarts: List.from(state.toolCallRoundStarts),
       cancelled: wasCancelled,
     );
 
@@ -609,6 +627,8 @@ class ChatStreamManager {
         streamingToolCallsProvider, List<ToolCallData>.from(s.toolCalls));
     _setProvider(
         streamingTextSectionsProvider, List<String>.from(s.textChunks));
+    _setProvider(streamingToolCallRoundStartsProvider,
+        List<int>.from(s.toolCallRoundStarts));
   }
 
   /// Clears all global streaming providers.
@@ -621,6 +641,7 @@ class ChatStreamManager {
     _setProvider(streamingReasoningSectionsProvider, []);
     _setProvider(streamingToolCallsProvider, []);
     _setProvider(streamingTextSectionsProvider, ['']);
+    _setProvider(streamingToolCallRoundStartsProvider, []);
   }
 
   /// Only pushes a provider update if [convId] matches the active conversation.
