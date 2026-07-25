@@ -9,13 +9,17 @@ import '../chat_types.dart';
 /// Data model for the reasoning sections to display.
 /// [texts] is a list of reasoning chain texts, one per reasoning round.
 /// [streaming] indicates whether the last section is still being streamed.
+/// [sectionIndices] maps each text to its section index for the panel
+/// dialog. Must have same length as [texts]. Defaults to [0,1,2,...].
 class ReasoningSectionData {
   final List<String> texts;
   final bool streaming;
+  final List<int> sectionIndices;
 
   const ReasoningSectionData({
     required this.texts,
     this.streaming = false,
+    this.sectionIndices = const [],
   });
 
   bool get isEmpty => texts.isEmpty;
@@ -44,25 +48,30 @@ class ReasoningSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (sections.isEmpty) return const SizedBox.shrink();
 
+    final children = <Widget>[];
+    for (int i = 0; i < sections.texts.length; i++) {
+      final sectionIdx = sections.sectionIndices.length == sections.texts.length
+          ? sections.sectionIndices[i]
+          : i;
+      children.add(Padding(
+        padding: EdgeInsets.only(
+          bottom: i < sections.texts.length - 1 ? 4 : 0,
+        ),
+        child: _ReasoningButton(
+          reasoningText: sections.texts[i],
+          isStreaming: sections.streaming && i == sections.texts.length - 1,
+          isMulti: sections.hasMultiple,
+          index: sectionIdx,
+          messageId: messageId,
+        ),
+      ));
+    }
+
     // If multiple sections, show them in a column
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
-      children: [
-        for (int i = 0; i < sections.texts.length; i++)
-          Padding(
-            padding: EdgeInsets.only(
-              bottom: i < sections.texts.length - 1 ? 4 : 0,
-            ),
-            child: _ReasoningButton(
-              reasoningText: sections.texts[i],
-              isStreaming: sections.streaming && i == sections.texts.length - 1,
-              isMulti: sections.hasMultiple,
-              index: i,
-              messageId: messageId,
-            ),
-          ),
-      ],
+      children: children,
     );
   }
 }
