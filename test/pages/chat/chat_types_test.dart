@@ -307,8 +307,8 @@ void main() {
       expect(segments[0], isA<ReasoningSegment>());
       expect(segments[1], isA<TextSegment>());
       expect((segments[1] as TextSegment).text, 'text1');
-expect(segments[2], isA<ToolCallSegment>());
-expect((segments[2] as ToolCallSegment).data.name, 's1');
+      expect(segments[2], isA<ToolCallSegment>());
+      expect((segments[2] as ToolCallSegment).data.name, 's1');
       expect(segments[3], isA<TextSegment>());
       expect((segments[3] as TextSegment).text, 'text2');
       expect(segments[4], isA<ToolCallSegment>());
@@ -412,6 +412,109 @@ expect((segments[2] as ToolCallSegment).data.name, 's1');
       expect((segments[6] as ReasoningSegment).sectionIndex, 2);
       expect(segments[7], isA<TextSegment>());
       expect((segments[7] as TextSegment).text, 'final answer');
+    });
+
+    test('multiple tool calls in one round are grouped together', () {
+      // Simulates: assistant outputs "step1", then calls tools A,B,C,
+      // then outputs "step2". Tools should be grouped, not spread across
+      // phantom empty rounds.
+      final segments = buildAgentChainSegments(
+        reasoningSections: ['think'],
+        textChunks: ['step1', '', '', 'step2'],
+        toolCalls: [_tc('1', 'A'), _tc('2', 'B'), _tc('3', 'C')],
+      );
+      // R0, T0, TC0(A), TC1(B), TC2(C), T3(step2)
+      expect(segments.length, 6);
+      expect(segments[0], isA<ReasoningSegment>());
+      expect(segments[1], isA<TextSegment>());
+      expect((segments[1] as TextSegment).text, 'step1');
+      expect(segments[2], isA<ToolCallSegment>());
+      expect((segments[2] as ToolCallSegment).data.name, 'A');
+      expect(segments[3], isA<ToolCallSegment>());
+      expect((segments[3] as ToolCallSegment).data.name, 'B');
+      expect(segments[4], isA<ToolCallSegment>());
+      expect((segments[4] as ToolCallSegment).data.name, 'C');
+      expect(segments[5], isA<TextSegment>());
+      expect((segments[5] as TextSegment).text, 'step2');
+    });
+
+    test('two rounds each with multiple tool calls are interleaved correctly',
+        () {
+      // Round 1: think1, text1, tools A1,B1
+      // Round 2: think2, text2, tools A2,C2,D2
+      // Tools in each round should be grouped, not separated into phantom rounds.
+      final segments = buildAgentChainSegments(
+        reasoningSections: ['think1', 'think2'],
+        textChunks: ['text1', '', 'text2', '', ''],
+        toolCalls: [
+          _tc('1', 'A1'),
+          _tc('2', 'B1'),
+          _tc('3', 'A2'),
+          _tc('4', 'C2'),
+          _tc('5', 'D2'),
+        ],
+      );
+      // R0, T0(text1), TC0(A1), TC1(B1),
+      // R1(think2), T2(text2), TC2(A2), TC3(C2), TC4(D2)
+      expect(segments.length, 9);
+
+      // Round 1
+      expect(segments[0], isA<ReasoningSegment>());
+      expect((segments[0] as ReasoningSegment).sectionIndex, 0);
+      expect(segments[1], isA<TextSegment>());
+      expect((segments[1] as TextSegment).text, 'text1');
+      expect(segments[2], isA<ToolCallSegment>());
+      expect((segments[2] as ToolCallSegment).data.name, 'A1');
+      expect(segments[3], isA<ToolCallSegment>());
+      expect((segments[3] as ToolCallSegment).data.name, 'B1');
+
+      // Round 2
+      expect(segments[4], isA<ReasoningSegment>());
+      expect((segments[4] as ReasoningSegment).sectionIndex, 1);
+      expect(segments[5], isA<TextSegment>());
+      expect((segments[5] as TextSegment).text, 'text2');
+      expect(segments[6], isA<ToolCallSegment>());
+      expect((segments[6] as ToolCallSegment).data.name, 'A2');
+      expect(segments[7], isA<ToolCallSegment>());
+      expect((segments[7] as ToolCallSegment).data.name, 'C2');
+      expect(segments[8], isA<ToolCallSegment>());
+      expect((segments[8] as ToolCallSegment).data.name, 'D2');
+    });
+
+    test('tool calls adjacent without text between them all grouped', () {
+      // No non-empty text between any tool calls → all grouped together.
+      final segments = buildAgentChainSegments(
+        reasoningSections: [],
+        textChunks: ['before', '', '', '', 'after'],
+        toolCalls: [_tc('1', 'X'), _tc('2', 'Y'), _tc('3', 'Z')],
+      );
+      // T0(before), TC0(X), TC1(Y), TC2(Z), T4(after)
+      expect(segments.length, 5);
+      expect(segments[0], isA<TextSegment>());
+      expect((segments[0] as TextSegment).text, 'before');
+      expect(segments[1], isA<ToolCallSegment>());
+      expect((segments[1] as ToolCallSegment).data.name, 'X');
+      expect(segments[2], isA<ToolCallSegment>());
+      expect((segments[2] as ToolCallSegment).data.name, 'Y');
+      expect(segments[3], isA<ToolCallSegment>());
+      expect((segments[3] as ToolCallSegment).data.name, 'Z');
+      expect(segments[4], isA<TextSegment>());
+      expect((segments[4] as TextSegment).text, 'after');
+    });
+
+    test('multiple tool calls with no text or reasoning at all', () {
+      final segments = buildAgentChainSegments(
+        reasoningSections: [],
+        textChunks: [''],
+        toolCalls: [_tc('1', 'A'), _tc('2', 'B'), _tc('3', 'C')],
+      );
+      expect(segments.length, 3);
+      expect(segments[0], isA<ToolCallSegment>());
+      expect((segments[0] as ToolCallSegment).data.name, 'A');
+      expect(segments[1], isA<ToolCallSegment>());
+      expect((segments[1] as ToolCallSegment).data.name, 'B');
+      expect(segments[2], isA<ToolCallSegment>());
+      expect((segments[2] as ToolCallSegment).data.name, 'C');
     });
   });
 }
