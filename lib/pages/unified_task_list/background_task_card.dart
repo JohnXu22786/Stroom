@@ -33,6 +33,12 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
   bool _expanded = false;
 
   @override
+  void initState() {
+    super.initState();
+    _expanded = widget.task.status == TaskStatus.running;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final hasRawData =

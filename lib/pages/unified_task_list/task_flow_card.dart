@@ -159,14 +159,17 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
   Widget _computedStatusIcon(ColorScheme cs) {
     final exec = widget.execution;
     final anyActive = exec.subTasks.any((st) =>
-        st.status == TaskStatus.running ||
-        st.status == TaskStatus.waiting ||
-        st.status == TaskStatus.paused);
+        st.status == TaskStatus.running || st.status == TaskStatus.paused);
     final anyFailed = exec.subTasks.any((st) => st.status == TaskStatus.failed);
-    final allCompleted =
+    final allCompleted = exec.subTasks.isNotEmpty &&
         exec.subTasks.every((st) => st.status == TaskStatus.completed);
+    final allWaiting = exec.subTasks.isNotEmpty &&
+        exec.subTasks.every((st) => st.status == TaskStatus.waiting);
 
-    if (exec.subTasks.isEmpty || anyActive) {
+    if (anyFailed) {
+      return Icon(Icons.error, size: 20, color: cs.error);
+    }
+    if (anyActive) {
       return SizedBox(
         width: 20,
         height: 20,
@@ -176,11 +179,11 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
         ),
       );
     }
+    if (allWaiting) {
+      return Icon(Icons.hourglass_empty, size: 20, color: cs.onSurfaceVariant);
+    }
     if (allCompleted) {
       return Icon(Icons.check_circle, size: 20, color: Colors.green);
-    }
-    if (anyFailed) {
-      return Icon(Icons.error, size: 20, color: cs.error);
     }
     return Icon(Icons.hourglass_empty, size: 20, color: cs.onSurfaceVariant);
   }
@@ -251,7 +254,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
 
     if (task != null) {
       return CatCatchTaskCard(
-        key: ValueKey('catcatch_${task.id}_${task.status.name}'),
+        key: ValueKey('catcatch_${task.id}'),
         task: task,
         isUnread: false,
       );
@@ -265,7 +268,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
 
     if (task != null) {
       return BackgroundTaskCard(
-        key: ValueKey('bg_${task.id}_${task.status.name}'),
+        key: ValueKey('bg_${task.id}'),
         task: task,
         isUnread: false,
       );
@@ -279,7 +282,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
 
     if (task != null) {
       return SynthesisTaskCard(
-        key: ValueKey('synth_${task.id}_${task.status.name}'),
+        key: ValueKey('synth_${task.id}'),
         task: task,
         isUnread: false,
       );
@@ -341,28 +344,28 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
     final synthTasks = ref.read(taskListProvider);
 
     for (final st in exec.subTasks) {
-      final ccTask =
-          catcatchTasks.where((t) => t.id == st.subTaskId).firstOrNull;
-      if (ccTask != null) {
-        final newStatus = _convertCatCatchStatus(ccTask.status);
-        if (_statusPriority(newStatus) > _statusPriority(st.status)) {
-          execNotifier.updateSubTaskStatus(exec.id, st.id, newStatus);
+      if (st.subTaskType == 'catcatch') {
+        final ccTask =
+            catcatchTasks.where((t) => t.id == st.subTaskId).firstOrNull;
+        if (ccTask != null) {
+          final newStatus = _convertCatCatchStatus(ccTask.status);
+          if (_statusPriority(newStatus) > _statusPriority(st.status)) {
+            execNotifier.updateSubTaskStatus(exec.id, st.id, newStatus);
+          }
         }
-        continue;
-      }
-
-      final bgTask = bgTasks.where((t) => t.id == st.subTaskId).firstOrNull;
-      if (bgTask != null &&
-          _statusPriority(bgTask.status) > _statusPriority(st.status)) {
-        execNotifier.updateSubTaskStatus(exec.id, st.id, bgTask.status);
-        continue;
-      }
-
-      final synthTask =
-          synthTasks.where((t) => t.id == st.subTaskId).firstOrNull;
-      if (synthTask != null &&
-          _statusPriority(synthTask.status) > _statusPriority(st.status)) {
-        execNotifier.updateSubTaskStatus(exec.id, st.id, synthTask.status);
+      } else if (st.subTaskType == 'background') {
+        final bgTask = bgTasks.where((t) => t.id == st.subTaskId).firstOrNull;
+        if (bgTask != null &&
+            _statusPriority(bgTask.status) > _statusPriority(st.status)) {
+          execNotifier.updateSubTaskStatus(exec.id, st.id, bgTask.status);
+        }
+      } else if (st.subTaskType == 'synthesis') {
+        final synthTask =
+            synthTasks.where((t) => t.id == st.subTaskId).firstOrNull;
+        if (synthTask != null &&
+            _statusPriority(synthTask.status) > _statusPriority(st.status)) {
+          execNotifier.updateSubTaskStatus(exec.id, st.id, synthTask.status);
+        }
       }
     }
   }
