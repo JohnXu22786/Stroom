@@ -98,6 +98,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   final Map<String, List<MessageSegment>> _chatSegments = {};
 
+  /// Round boundary indices for tool calls, keyed by message ID.
+  /// Populated from StreamResult during streaming; used by
+  /// _buildFinalSegments to pass to buildAgentChainSegments.
+  final Map<String, List<int>> _toolCallRoundStarts = {};
+
   String? _streamingMsgId;
 
   // ── Auto-scroll / scroll-to-bottom state ──
@@ -551,6 +556,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       _chatSegments.clear();
       _reasoningContents.clear();
       _finalizedMessages.clear();
+      _toolCallRoundStarts.clear();
       _streamingMsgId = null;
       _controller?.dispose();
       _messageKeys.clear();
@@ -981,6 +987,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (mounted) {
       final finalMsg = result.assistantMessage;
       if (finalMsg != null) {
+        // Store round boundaries so _buildFinalSegments can group
+        // consecutive tool calls that belong to the same assistant step.
+        _toolCallRoundStarts[finalMsg.id] =
+            List<int>.from(result.toolCallRoundStarts);
+
         // Update the streaming placeholder to show the final text
         _controller?.updateMessage(
           placeholder,
@@ -1017,6 +1028,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // Explicitly false: streaming is done. All reasoning sections should
       // show "思考完成" (thinking complete), not "思考中" (thinking in progress).
       isLastReasoningStreaming: false,
+      // Use round boundaries tracked during streaming so that consecutive
+      // tool calls in the same assistant step are grouped together.
+      toolCallRoundStarts: _toolCallRoundStarts[msg.id],
     );
 
     // Fallback: no textSections at all, put content at the end
@@ -1057,6 +1071,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // the previous one automatically transitions to "thinking complete".
       // After the stream ends, _buildFinalSegments replaces with isStreaming=false.
       isLastReasoningStreaming: true,
+      toolCallRoundStarts:
+          List<int>.from(ref.read(streamingToolCallRoundStartsProvider)),
     );
 
     _chatSegments[msgId] = segments;
@@ -1147,6 +1163,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             _chatSegments.remove(r.id);
             _reasoningContents.remove(r.id);
             _finalizedMessages.remove(r.id);
+            _toolCallRoundStarts.remove(r.id);
             _isReasoningCompletedForMsg.remove(r.id);
             _messageKeys.remove(r.id);
           }
@@ -1195,6 +1212,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             _chatSegments.remove(r.id);
             _reasoningContents.remove(r.id);
             _finalizedMessages.remove(r.id);
+            _toolCallRoundStarts.remove(r.id);
             _isReasoningCompletedForMsg.remove(r.id);
             _messageKeys.remove(r.id);
           }
@@ -1247,6 +1265,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       _chatSegments.remove(messageId);
       _reasoningContents.remove(messageId);
       _finalizedMessages.remove(messageId);
+      _toolCallRoundStarts.remove(messageId);
       _isReasoningCompletedForMsg.remove(messageId);
       _messageKeys.remove(messageId);
       // Adjust pagination state: if the deleted message was before the loaded
