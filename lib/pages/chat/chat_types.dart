@@ -90,27 +90,55 @@ List<MessageSegment> buildAgentChainSegments({
   bool isLastReasoningStreaming = false,
 }) {
   final segments = <MessageSegment>[];
-  final maxRounds = [
-    reasoningSections.length,
-    textChunks.length,
-    toolCalls.length,
-  ].fold(0, (a, b) => a > b ? a : b);
 
-  for (var i = 0; i < maxRounds; i++) {
-    if (i < reasoningSections.length && reasoningSections[i].isNotEmpty) {
-      segments.add(ReasoningSegment(
-        sectionIndex: i,
-        isStreaming:
-            isLastReasoningStreaming && i == reasoningSections.length - 1,
-      ));
-    }
+  int ri = 0; // reasoning index
+  int ti = 0; // text chunk index
+  int tci = 0; // tool call index
 
-    if (i < textChunks.length && textChunks[i].isNotEmpty) {
-      segments.add(TextSegment(textChunks[i]));
-    }
+  while (ri < reasoningSections.length ||
+      ti < textChunks.length ||
+      tci < toolCalls.length) {
+    // Each item has a temporal position:
+    // - reasoningSections[ri] → position ri
+    // - textChunks[ti] → position ti
+    // - toolCalls[tci] → position tci (between textChunks[tci] and [tci+1])
+    //
+    // The item with the smallest position is output next.
+    // Equal positions: reasoning first, then text, then tool calls.
 
-    if (i < toolCalls.length) {
-      segments.add(ToolCallSegment(toolCalls[i]));
+    final nextReasoning = ri < reasoningSections.length ? ri : double.infinity;
+    final nextText = ti < textChunks.length ? ti.toDouble() : double.infinity;
+    final nextTool = tci < toolCalls.length ? tci.toDouble() : double.infinity;
+
+    if (nextReasoning <= nextText && nextReasoning <= nextTool) {
+      // ── Reasoning ──
+      if (reasoningSections[ri].isNotEmpty) {
+        segments.add(ReasoningSegment(
+          sectionIndex: ri,
+          isStreaming:
+              isLastReasoningStreaming && ri == reasoningSections.length - 1,
+        ));
+      }
+      ri++;
+    } else if (nextText <= nextReasoning && nextText <= nextTool) {
+      // ── Text ──
+      if (textChunks[ti].isNotEmpty) {
+        segments.add(TextSegment(textChunks[ti]));
+      }
+      ti++;
+    } else {
+      // ── Tool call(s) ──
+      // Group consecutive tool calls where the intervening text chunks
+      // are empty (i.e., no user-visible text separates them).
+      segments.add(ToolCallSegment(toolCalls[tci]));
+      tci++;
+      while (tci < toolCalls.length) {
+        // If the text chunk at position tci is non-empty, it means
+        // there's visible text between tool tci-1 and tci. Don't group.
+        if (tci < textChunks.length && textChunks[tci].isNotEmpty) break;
+        segments.add(ToolCallSegment(toolCalls[tci]));
+        tci++;
+      }
     }
   }
 
