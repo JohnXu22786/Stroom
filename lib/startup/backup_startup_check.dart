@@ -58,6 +58,20 @@ class BackupStartupCheck {
   /// 用于防止 [HomePage] 等后续触发重复执行自动备份。
   static bool startupBackupPerformed = false;
 
+  /// 授权重试次数计数器（防止无限循环弹窗）。
+  ///
+  /// 每次 [runCheck] 中授权失败时递增。超过 [maxAuthRetries] 后
+  /// 强制跳过授权循环，让用户进入应用而非卡在启动阶段。
+  static int authRetryCount = 0;
+
+  /// 单次启动中最多授权重试次数。
+  static const int maxAuthRetries = 3;
+
+  /// 重置授权重试计数器（仅用于测试）。
+  static void resetRetryCounter() {
+    authRetryCount = 0;
+  }
+
   /// 执行启动时的备份存储检查和自动备份。
   ///
   /// 此方法会阻塞直到：
@@ -70,6 +84,9 @@ class BackupStartupCheck {
     if (kIsWeb) {
       return const BackupStartupResult(storageReady: false);
     }
+
+    // 每次启动时重置授权重试计数器
+    authRetryCount = 0;
 
     bool needReAuth = false;
     bool backupSuccess = false;
@@ -85,6 +102,20 @@ class BackupStartupCheck {
           await BackupLocationManager.isStorageAccessible();
 
       while (!storageAccessible && context.mounted) {
+        // 检查重试次数，防止无限循环弹窗
+        if (authRetryCount >= maxAuthRetries) {
+          debugPrint('[BackupStartupCheck] 授权重试次数超限'
+              ' ($authRetryCount/$maxAuthRetries)，跳过授权');
+          await AppLogService.warning('BackupStartupCheck',
+              '授权重试次数超限 ($authRetryCount/$maxAuthRetries)，'
+              '将跳过备份存储检查继续启动');
+          // 超限后退出循环，允许用户使用应用但跳过备份功能
+          return BackupStartupResult(
+            storageReady: false,
+            autoBackupPerformed: false,
+          );
+        }
+
         // 显示引导对话框
         final shouldProceed = await _showStorageAccessDialog(context);
         if (!shouldProceed || !context.mounted) {
@@ -99,6 +130,7 @@ class BackupStartupCheck {
         }
 
         if (!storageAccessible && context.mounted) {
+          authRetryCount++;
           // 授权失败，提示用户重试
           await _showAccessFailedDialog(context);
         }

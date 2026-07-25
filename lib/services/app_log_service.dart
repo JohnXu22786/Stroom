@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../utils/web_file_store.dart';
+import 'backup_location_manager.dart';
 
 // ====================================================================
 // AppLogService — 应用日志服务
@@ -19,7 +20,9 @@ import '../utils/web_file_store.dart';
 // - Windows: %USERPROFILE%\Documents\Stroom\Logs\
 // - macOS:   ~/Documents/Stroom/Logs/
 // - Linux:   ~/Documents/Stroom/Logs/
-// - Android: <app_documents>/Stroom/Logs/
+// - Android: 通过 SAF 选择 Documents 目录（与备份相同的 Documents 目录）下的
+//            Stroom/Logs/ 子目录。不使用应用私有数据目录，确保用户可以直接访问。
+//            SAF 未配置时回退到应用 Documents 目录的 Stroom/Logs/。
 // - iOS:     <app_documents>/Stroom/Logs/
 //
 // 日志保留策略：保留最近 3 天（按文件日期计）。超过 3 天的日志文件
@@ -210,35 +213,15 @@ class AppLogService {
     _buffer.clear();
 
     try {
-      final logDir = await getLogDir();
-      if (!await logDir.exists()) {
-        await logDir.create(recursive: true);
-      }
+      // 检查是否使用 SAF 模式（Android）
+      final bool useSaf = await _isSafMode();
 
-      // 按小时分组 (YYYY-MM-DD-HH)
-      final byHour = <String, List<_LogEntry>>{};
-      for (final entry in entries) {
-        final hourStr =
-            '${entry.timestamp.year}-${_pad(entry.timestamp.month)}-${_pad(entry.timestamp.day)}-${_pad(entry.timestamp.hour)}';
-        byHour.putIfAbsent(hourStr, () => []).add(entry);
-      }
-
-      // 逐小时写入
-      for (final group in byHour.entries) {
-        final hourStr = group.key;
-        final hourEntries = group.value;
-        final logFile = File(p.join(logDir.path, 'app_$hourStr.log'));
-
-        final sb = StringBuffer();
-        for (final e in hourEntries) {
-          final ts = e.timestamp;
-          final timestamp = '${ts.year}-${_pad(ts.month)}-${_pad(ts.day)} '
-              '${_pad(ts.hour)}:${_pad(ts.minute)}:${_pad(ts.second)}';
-          sb.writeln(
-              '[$timestamp] [${e.level.label}] [${e.source}] ${e.message}');
-        }
-
-        await logFile.writeAsString(sb.toString(), mode: FileMode.append);
+      if (useSaf) {
+        // SAF 模式：通过 BackupLocationManager 写入日志
+        await _flushViaSaf(entries);
+      } else {
+        // 标准模式：直接使用 dart:io
+        await _flushViaDartIO(entries);
       }
       // 写入成功：entries 已从 _buffer 清除，无需额外操作
     } catch (e) {
@@ -247,6 +230,78 @@ class AppLogService {
       _buffer.insertAll(0, entries);
     } finally {
       _isFlushing = false;
+    }
+  }
+
+  /// 检查是否使用 SAF 模式（Android）。
+  static Future<bool> _isSafMode() async {
+    try {
+      return await BackupLocationManager.isUsingSafMode();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// SAF 模式刷入：通过 BackupLocationManager 写入日志到 SAF 目录。
+  static Future<void> _flushViaSaf(List<_LogEntry> entries) async {
+    // 按小时分组 (YYYY-MM-DD-HH)
+    final byHour = <String, List<_LogEntry>>{};
+    for (final entry in entries) {
+      final hourStr =
+          '${entry.timestamp.year}-${_pad(entry.timestamp.month)}-${_pad(entry.timestamp.day)}-${_pad(entry.timestamp.hour)}';
+      byHour.putIfAbsent(hourStr, () => []).add(entry);
+    }
+
+    // 逐小时写入
+    for (final group in byHour.entries) {
+      final hourStr = group.key;
+      final hourEntries = group.value;
+      final fileName = 'app_$hourStr.log';
+
+      final sb = StringBuffer();
+      for (final e in hourEntries) {
+        final ts = e.timestamp;
+        final timestamp = '${ts.year}-${_pad(ts.month)}-${_pad(ts.day)} '
+            '${_pad(ts.hour)}:${_pad(ts.minute)}:${_pad(ts.second)}';
+        sb.writeln(
+            '[$timestamp] [${e.level.label}] [${e.source}] ${e.message}');
+      }
+
+      await BackupLocationManager.writeLogContent(fileName, sb.toString());
+    }
+  }
+
+  /// dart:io 模式刷入：标准文件 I/O。
+  static Future<void> _flushViaDartIO(List<_LogEntry> entries) async {
+    final logDir = await getLogDir();
+    if (!await logDir.exists()) {
+      await logDir.create(recursive: true);
+    }
+
+    // 按小时分组 (YYYY-MM-DD-HH)
+    final byHour = <String, List<_LogEntry>>{};
+    for (final entry in entries) {
+      final hourStr =
+          '${entry.timestamp.year}-${_pad(entry.timestamp.month)}-${_pad(entry.timestamp.day)}-${_pad(entry.timestamp.hour)}';
+      byHour.putIfAbsent(hourStr, () => []).add(entry);
+    }
+
+    // 逐小时写入
+    for (final group in byHour.entries) {
+      final hourStr = group.key;
+      final hourEntries = group.value;
+      final logFile = File(p.join(logDir.path, 'app_$hourStr.log'));
+
+      final sb = StringBuffer();
+      for (final e in hourEntries) {
+        final ts = e.timestamp;
+        final timestamp = '${ts.year}-${_pad(ts.month)}-${_pad(ts.day)} '
+            '${_pad(ts.hour)}:${_pad(ts.minute)}:${_pad(ts.second)}';
+        sb.writeln(
+            '[$timestamp] [${e.level.label}] [${e.source}] ${e.message}');
+      }
+
+      await logFile.writeAsString(sb.toString(), mode: FileMode.append);
     }
   }
 
@@ -292,13 +347,16 @@ class AppLogService {
   ///
   /// 路径策略：与自动备份共享 Documents/Stroom 父目录，日志位于 Logs 子目录。
   /// - Windows: %USERPROFILE%\Documents\Stroom\Logs
-  /// - macOS:   `~/Documents/Stroom/Logs`
-  /// - Linux:   `~/Documents/Stroom/Logs`
-  /// - Android: `<app_documents>/Stroom/Logs`
-  /// - iOS:     `<app_documents>/Stroom/Logs`
+  /// - macOS:   ~/Documents/Stroom/Logs
+  /// - Linux:   ~/Documents/Stroom/Logs
+  /// - Android: 通过 SAF 选择 Documents 目录下的 Stroom/Logs
+  /// - iOS:     <app_documents>/Stroom/Logs
   ///
   /// 注意：父目录 Stroom/ 与自动备份目录 (Stroom/AutoBackups) 保持一致，
   /// 方便用户在同一处查看所有 Stroom 数据。
+  ///
+  /// Android 上优先使用 SAF 路径（与备份相同），如果 SAF 未配置则
+  /// 回退到应用外部存储目录，确保日志不在应用私有数据目录内。
   static Future<String> _getLogsRootPath() async {
     // 测试环境
     try {
@@ -306,6 +364,16 @@ class AppLogService {
         return '${Directory.systemTemp.path}/stroom_log_test';
       }
     } catch (_) {}
+
+    // 尝试使用 BackupLocationManager 的统一路径解析
+    try {
+      final path = await BackupLocationManager.getLogsRootPath();
+      if (path != null && path.isNotEmpty) {
+        return path;
+      }
+    } catch (_) {
+      // BackupLocationManager 不可用时回退到平台相关路径
+    }
 
     // Windows: %USERPROFILE%\Documents\Stroom\Logs
     try {
@@ -327,7 +395,7 @@ class AppLogService {
       }
     } catch (_) {}
 
-    // 移动平台：应用 Documents 目录
+    // 移动平台：应用 Documents 目录（仅在 SAF 不可用时回退）
     try {
       if (Platform.isAndroid || Platform.isIOS) {
         final docsDir = await getApplicationDocumentsDirectory();
@@ -353,6 +421,13 @@ class AppLogService {
   /// 返回按文件名（即日期）排序的日志文件名列表。
   static Future<List<String>> listLogFiles() async {
     try {
+      // SAF 模式通过 BackupLocationManager
+      if (await _isSafMode()) {
+        final files = await BackupLocationManager.listLogFiles();
+        files.sort();
+        return files;
+      }
+
       final logDir = await getLogDir();
       if (!await logDir.exists()) return [];
 
@@ -377,6 +452,11 @@ class AppLogService {
   /// 但会记录更详细的错误信息到控制台。
   static Future<String?> readLogFile(String fileName) async {
     try {
+      // SAF 模式通过 BackupLocationManager
+      if (await _isSafMode()) {
+        return await BackupLocationManager.readLogContent(fileName);
+      }
+
       final logDir = await getLogDir();
       final filePath = p.join(logDir.path, fileName);
       final file = File(filePath);
@@ -389,12 +469,15 @@ class AppLogService {
       debugPrint('[AppLogService] 读取日志文件失败 ($fileName): $e');
       // 如果是因为文件损坏或其他 I/O 错误，记录更详细的信息
       try {
-        final logDir = await getLogDir();
-        final filePath = p.join(logDir.path, fileName);
-        final file = File(filePath);
-        if (await file.exists()) {
-          final fileSize = await file.length();
-          debugPrint('[AppLogService] 文件存在，大小: $fileSize 字节, 路径: $filePath');
+        if (!await _isSafMode()) {
+          final logDir = await getLogDir();
+          final filePath = p.join(logDir.path, fileName);
+          final file = File(filePath);
+          if (await file.exists()) {
+            final fileSize = await file.length();
+            debugPrint('[AppLogService] 文件存在，大小: $fileSize 字节,'
+                ' 路径: $filePath');
+          }
         }
       } catch (_) {
         // 静默处理诊断失败的情况
@@ -426,6 +509,32 @@ class AppLogService {
     if (kIsWeb) return;
 
     try {
+      final bool useSaf = await _isSafMode();
+
+      if (useSaf) {
+        // SAF 模式：通过 BackupLocationManager 列出和删除
+        final files = await BackupLocationManager.listLogFiles();
+        final cutoff = DateTime.now()
+            .subtract(Duration(days: _retentionDays));
+        final dateOnlyMatch = RegExp(r'app_(\d{4}-\d{2}-\d{2})');
+
+        for (final fileName in files) {
+          final m = dateOnlyMatch.firstMatch(fileName);
+          if (m == null) continue;
+          try {
+            final fileDate = DateTime.parse(m.group(1)!);
+            if (fileDate.isBefore(cutoff)) {
+              await BackupLocationManager.deleteLogFile(fileName);
+              debugPrint('[AppLogService] 清理旧日志(SAF): $fileName');
+            }
+          } catch (_) {
+            // 日期解析失败，跳过
+          }
+        }
+        return;
+      }
+
+      // 非 SAF 模式：直接文件系统操作
       final logDir = await getLogDir();
       if (!await logDir.exists()) return;
 

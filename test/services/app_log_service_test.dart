@@ -203,6 +203,25 @@ void main() {
       // Cleanup
       if (await logDir.exists()) await logDir.delete(recursive: true);
     });
+
+    test('log path uses Logs subdirectory (not app data root)', () async {
+      final logDir = await AppLogService.getLogDir();
+      // Production path always ends with Stroom/Logs
+      // Test path ends with stroom_log_test
+      final pathLower = logDir.path.toLowerCase();
+      final hasLogsOrTest = pathLower.contains('logs') ||
+          pathLower.contains('stroom_log_test');
+      expect(hasLogsOrTest, isTrue,
+          reason: 'Log directory should contain Logs subdirectory. '
+              'Production: Documents/Stroom/Logs. Tests: stroom_log_test.');
+
+      // Should NOT be in app-packages data directory
+      expect(pathLower, isNot(contains('com.johntsui.stroom')),
+          reason: 'Log directory should NOT be in Android app data directory');
+
+      // Cleanup
+      if (await logDir.exists()) await logDir.delete(recursive: true);
+    });
   });
 
   // ==================================================================

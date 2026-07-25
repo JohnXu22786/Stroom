@@ -283,4 +283,60 @@ void main() {
       expect(await prefs.getString('backup_saf_uri'), isNull);
     });
   });
+
+  // ==================================================================
+  // getLogsRootPath — log storage path next to AutoBackups
+  // ==================================================================
+
+  group('getLogsRootPath', () {
+    test('returns a non-empty path under Documents/Stroom/Logs', () async {
+      final path = await BackupLocationManager.getLogsRootPath();
+      expect(path, isNotNull);
+      expect(path, isNotEmpty,
+          reason: 'Logs root path must be non-empty');
+
+      // Should contain Stroom/Logs structure
+      expect(path!.contains('Stroom'), isTrue,
+          reason: 'Log path must be under Stroom parent directory');
+      expect(path.contains('Logs'), isTrue,
+          reason: 'Log path must point to Logs subdirectory');
+    });
+
+    test('log path and backup path share the same parent directory', () async {
+      final logsPath = await BackupLocationManager.getLogsRootPath();
+      final backupPath = await BackupLocationManager.getBackupRootPath();
+
+      // Strip the last component (Logs vs AutoBackups)
+      final lastSep = logsPath!.lastIndexOf(RegExp(r'[/\\]'));
+      final logsParent = logsPath.substring(0, lastSep);
+
+      // Backup returns .../Stroom/AutoBackups. Strip AutoBackups to get parent.
+      if (backupPath != null) {
+        final backupLastSep = backupPath.lastIndexOf(RegExp(r'[/\\]'));
+        final backupParent = backupPath.substring(0, backupLastSep);
+        expect(logsParent, backupParent,
+          reason: 'Logs and AutoBackups must share the same Stroom parent');
+      }
+    });
+  });
+
+  // ==================================================================
+  // isValidBackupPath — additional edge cases
+  // ==================================================================
+
+  group('isValidBackupPath edge cases', () {
+    test('rejects URI with malformed tree prefix', () {
+      final valid = BackupLocationManager.isValidBackupPath(
+        'content://some.provider/path/data',
+      );
+      expect(valid, isFalse);
+    });
+
+    test('rejects URI with empty tree segment', () {
+      final valid = BackupLocationManager.isValidBackupPath(
+        'content://provider/tree/',
+      );
+      expect(valid, isFalse);
+    });
+  });
 }
