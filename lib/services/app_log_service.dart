@@ -514,8 +514,7 @@ class AppLogService {
       if (useSaf) {
         // SAF 模式：通过 BackupLocationManager 列出和删除
         final files = await BackupLocationManager.listLogFiles();
-        final cutoff = DateTime.now()
-            .subtract(Duration(days: _retentionDays));
+        final cutoff = DateTime.now().subtract(Duration(days: _retentionDays));
         final dateOnlyMatch = RegExp(r'app_(\d{4}-\d{2}-\d{2})');
 
         for (final fileName in files) {

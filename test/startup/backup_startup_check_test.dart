@@ -243,7 +243,8 @@ void main() {
     test('static retry counter defaults to 0 before runCheck', () {
       // The retry counter should be accessible for testing
       expect(BackupStartupCheck.authRetryCount, equals(0),
-          reason: 'Retry counter starts at 0 before any authorization attempts');
+          reason:
+              'Retry counter starts at 0 before any authorization attempts');
     });
 
     test('resetRetryCounter resets the counter to 0', () {

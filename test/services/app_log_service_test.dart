@@ -209,8 +209,8 @@ void main() {
       // Production path always ends with Stroom/Logs
       // Test path ends with stroom_log_test
       final pathLower = logDir.path.toLowerCase();
-      final hasLogsOrTest = pathLower.contains('logs') ||
-          pathLower.contains('stroom_log_test');
+      final hasLogsOrTest =
+          pathLower.contains('logs') || pathLower.contains('stroom_log_test');
       expect(hasLogsOrTest, isTrue,
           reason: 'Log directory should contain Logs subdirectory. '
               'Production: Documents/Stroom/Logs. Tests: stroom_log_test.');

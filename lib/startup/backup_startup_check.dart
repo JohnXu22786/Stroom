@@ -106,9 +106,10 @@ class BackupStartupCheck {
         if (authRetryCount >= maxAuthRetries) {
           debugPrint('[BackupStartupCheck] 授权重试次数超限'
               ' ($authRetryCount/$maxAuthRetries)，跳过授权');
-          await AppLogService.warning('BackupStartupCheck',
+          await AppLogService.warning(
+              'BackupStartupCheck',
               '授权重试次数超限 ($authRetryCount/$maxAuthRetries)，'
-              '将跳过备份存储检查继续启动');
+                  '将跳过备份存储检查继续启动');
           // 超限后退出循环，允许用户使用应用但跳过备份功能
           return BackupStartupResult(
             storageReady: false,

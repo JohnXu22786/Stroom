@@ -292,8 +292,7 @@ void main() {
     test('returns a non-empty path under Documents/Stroom/Logs', () async {
       final path = await BackupLocationManager.getLogsRootPath();
       expect(path, isNotNull);
-      expect(path, isNotEmpty,
-          reason: 'Logs root path must be non-empty');
+      expect(path, isNotEmpty, reason: 'Logs root path must be non-empty');
 
       // Should contain Stroom/Logs structure
       expect(path!.contains('Stroom'), isTrue,
@@ -315,7 +314,7 @@ void main() {
         final backupLastSep = backupPath.lastIndexOf(RegExp(r'[/\\]'));
         final backupParent = backupPath.substring(0, backupLastSep);
         expect(logsParent, backupParent,
-          reason: 'Logs and AutoBackups must share the same Stroom parent');
+            reason: 'Logs and AutoBackups must share the same Stroom parent');
       }
     });
   });
