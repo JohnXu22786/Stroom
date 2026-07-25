@@ -25,8 +25,7 @@ class TodoToolService {
   static final List<ToolDefinition> toolDefinitions = [
     ToolDefinition(
       name: 'todowrite',
-      description:
-          '创建并管理待办事项列表。每次调用时需提供完整的待办事项列表，'
+      description: '创建并管理待办事项列表。每次调用时需提供完整的待办事项列表，'
           '系统将替换所有现有事项。各事项包含：'
           'content（任务描述）、status（状态: pending/in_progress/completed/cancelled）、'
           'priority（优先级: high/medium/low）。'
@@ -46,7 +45,8 @@ class TodoToolService {
                 },
                 'status': {
                   'type': 'string',
-                  'description': '任务状态: pending（待处理）, in_progress（进行中）, completed（已完成）, cancelled（已取消）',
+                  'description':
+                      '任务状态: pending（待处理）, in_progress（进行中）, completed（已完成）, cancelled（已取消）',
                   'enum': ['pending', 'in_progress', 'completed', 'cancelled'],
                 },
                 'priority': {
@@ -99,7 +99,9 @@ class TodoToolService {
       }
     }
 
-    final activeCount = _todos.where((t) => t.status != 'completed' && t.status != 'cancelled').length;
+    final activeCount = _todos
+        .where((t) => t.status != 'completed' && t.status != 'cancelled')
+        .length;
     final jsonStr = jsonEncode(_todos.map((t) => t.toJson()).toList());
 
     return '$activeCount todos\n\n```json\n$jsonStr\n```';
@@ -111,12 +113,13 @@ class TodoToolService {
       return '当前没有待办事项。';
     }
 
-    final activeCount = _todos.where((t) => t.status != 'completed' && t.status != 'cancelled').length;
+    final activeCount = _todos
+        .where((t) => t.status != 'completed' && t.status != 'cancelled')
+        .length;
     final jsonStr = jsonEncode(_todos.map((t) => t.toJson()).toList());
 
     return '$activeCount todos\n\n```json\n$jsonStr\n```';
   }
-
 }
 
 /// Todo 事项数据模型

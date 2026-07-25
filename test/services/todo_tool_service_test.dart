@@ -64,7 +64,9 @@ void main() {
       expect(readResult, isNot(contains('Task 1')));
     });
 
-    test('returns formatted response with active count excluding completed and cancelled', () async {
+    test(
+        'returns formatted response with active count excluding completed and cancelled',
+        () async {
       final result = await TodoToolService.handleTodoWrite({
         'todos': [
           {
@@ -163,8 +165,8 @@ void main() {
 
     test('todowrite definition accepts todo items with content/status/priority',
         () {
-      final writeDef =
-          TodoToolService.toolDefinitions.firstWhere((d) => d.name == 'todowrite');
+      final writeDef = TodoToolService.toolDefinitions
+          .firstWhere((d) => d.name == 'todowrite');
       final todoProperty = (writeDef.parameters['properties'] as Map)['todos'];
       expect(todoProperty, isNotNull);
 

@@ -326,6 +326,7 @@ class ChatAdapter {
             return '错误: 未知的 Todo 工具 "${def.name}"';
         }
       }
+
       ChatService.registerTool(def, handler);
     }
     debugPrint(
@@ -341,6 +342,7 @@ class ChatAdapter {
             return '错误: 未知的搜索工具 "${def.name}"';
         }
       }
+
       ChatService.registerTool(def, handler);
     }
     debugPrint(

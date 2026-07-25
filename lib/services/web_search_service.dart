@@ -28,7 +28,7 @@ class WebSearchService {
     headers: {
       'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-          '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Accept':
           'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
@@ -42,8 +42,7 @@ class WebSearchService {
   static final List<ToolDefinition> toolDefinitions = [
     ToolDefinition(
       name: 'web_search',
-      description:
-          '通过网络搜索获取实时信息。支持 Google、Bing、百度三个搜索引擎，'
+      description: '通过网络搜索获取实时信息。支持 Google、Bing、百度三个搜索引擎，'
           '通过 source 参数选择（默认 google）。无需 API Key，免费使用。'
           '每个结果包含标题、链接和内容摘要。',
       parameters: {
@@ -118,7 +117,8 @@ class WebSearchService {
     final maxResults = count.clamp(1, 10);
     final url = buildSearchUrl(query, source);
 
-    debugPrint('WebSearch: source=$effectiveSource, query=$query, count=$maxResults');
+    debugPrint(
+        'WebSearch: source=$effectiveSource, query=$query, count=$maxResults');
 
     try {
       final response = await _dio.get(
@@ -381,15 +381,17 @@ class WebSearchService {
 
   /// 去除 HTML 标签
   static String _stripHtmlTags(String html) {
-    return html.replaceAll(RegExp(r'<[^>]*>'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+    return html
+        .replaceAll(RegExp(r'<[^>]*>'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
 
   /// 提取匹配位置附近的摘要文本（用于 Google）
   ///
   /// 先尝试在匹配之前找特定 class 的 div 摘要，
   /// 再尝试在匹配之后的同一父级中找文本内容。
-  static String _extractSnippetNearResult(
-      String html, RegExpMatch match) {
+  static String _extractSnippetNearResult(String html, RegExpMatch match) {
     final beforeText = html.substring(0, match.start);
 
     // 先尝试在匹配之前找特定 class 的 div 摘要
@@ -410,9 +412,8 @@ class WebSearchService {
     if (afterTextIdx < html.length) {
       final afterText = html.substring(afterTextIdx);
       // 在接下来 500 个字符内找非空文本
-      final nearText = afterText.length > 500
-          ? afterText.substring(0, 500)
-          : afterText;
+      final nearText =
+          afterText.length > 500 ? afterText.substring(0, 500) : afterText;
       final spanRegex = RegExp(
         r'<span[^>]*>(.*?)</span>',
         dotAll: true,
@@ -435,7 +436,8 @@ class WebSearchService {
 
     final afterText = fullHtml.substring(afterIdx + matchBlock.length);
     // 在之后找 <p> 标签
-    final pRegex = RegExp(r'<p[^>]*>(.*?)</p>', dotAll: true, caseSensitive: false);
+    final pRegex =
+        RegExp(r'<p[^>]*>(.*?)</p>', dotAll: true, caseSensitive: false);
     final pMatch = pRegex.firstMatch(afterText);
     if (pMatch != null) {
       return _stripHtmlTags(pMatch.group(1) ?? '');

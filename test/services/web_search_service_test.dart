@@ -32,7 +32,8 @@ void main() {
     test('source parameter has enum values for google/bing/baidu', () {
       final defs = WebSearchService.toolDefinitions;
       final webSearchDef = defs.first;
-      final properties = webSearchDef.parameters['properties'] as Map<String, dynamic>;
+      final properties =
+          webSearchDef.parameters['properties'] as Map<String, dynamic>;
       final sourceProperty = properties['source'] as Map<String, dynamic>;
 
       expect(sourceProperty['type'], equals('string'));
@@ -107,7 +108,8 @@ void main() {
 
   group('WebSearchService - URL cleaning', () {
     test('cleanUrlForTest passes through direct https URL unchanged', () {
-      final cleaned = WebSearchService.cleanUrlForTest('https://example.com/page');
+      final cleaned =
+          WebSearchService.cleanUrlForTest('https://example.com/page');
       expect(cleaned, equals('https://example.com/page'));
     });
 
@@ -137,7 +139,9 @@ void main() {
   });
 
   group('WebSearchService - HTML parsing', () {
-    test('parseGoogleResults extracts results from HTML (with /url?q= redirects)', () {
+    test(
+        'parseGoogleResults extracts results from HTML (with /url?q= redirects)',
+        () {
       final html = '''
 <html>
 <body>
