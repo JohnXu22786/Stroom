@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:uuid/uuid.dart';
 
 import '../../catcatch/models/catcatch_task.dart' as catcatch;
 import '../../catcatch/providers/catcatch_provider.dart';
@@ -231,10 +232,14 @@ class TaskFlowExecutionService {
     required FlowSubTask flowSubTask,
     required CatCatchNotifier catcatchNotifier,
   }) async {
-    final taskId = catcatchNotifier.addTask(input, 0);
+    // Generate ID first, update execution, THEN add task to provider.
+    // This ensures the card sees the real task ID when it rebuilds from
+    // the provider notification.
+    final taskId = const Uuid().v4();
     execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
     execNotifier.updateSubTaskStatus(
         execId, flowSubTask.id, TaskStatus.running);
+    catcatchNotifier.addTask(input, 0, taskId: taskId);
 
     final startTime = DateTime.now();
     const maxWait = Duration(minutes: 10);
@@ -331,11 +336,13 @@ class TaskFlowExecutionService {
     final inputFormat = p.extension(input).replaceFirst('.', '').toLowerCase();
     final title = '音频分离_${p.basenameWithoutExtension(inputBasename)}';
 
-    final taskId = bgNotifier.addTask(
-        type: BackgroundTaskType.audioSeparation, title: title);
+    // Generate ID first, update execution, THEN add task to provider.
+    final taskId = const Uuid().v4();
     execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
     execNotifier.updateSubTaskStatus(
         execId, flowSubTask.id, TaskStatus.running);
+    bgNotifier.addTask(
+        type: BackgroundTaskType.audioSeparation, title: title, taskId: taskId);
 
     Uint8List videoBytes;
     try {
@@ -402,11 +409,13 @@ class TaskFlowExecutionService {
     final inputBasename = p.basename(input);
     final title = '语音识别_${p.basenameWithoutExtension(inputBasename)}';
 
-    final taskId =
-        bgNotifier.addTask(type: BackgroundTaskType.asr, title: title);
+    // Generate ID first, update execution, THEN add task to provider.
+    final taskId = const Uuid().v4();
     execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
     execNotifier.updateSubTaskStatus(
         execId, flowSubTask.id, TaskStatus.running);
+    bgNotifier.addTask(
+        type: BackgroundTaskType.asr, title: title, taskId: taskId);
 
     Uint8List audioBytes;
     String audioFormat;
@@ -519,11 +528,13 @@ class TaskFlowExecutionService {
     final inputBasename = p.basename(input);
     final title = '文字识别_${p.basenameWithoutExtension(inputBasename)}';
 
-    final taskId =
-        bgNotifier.addTask(type: BackgroundTaskType.ocr, title: title);
+    // Generate ID first, update execution, THEN add task to provider.
+    final taskId = const Uuid().v4();
     execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
     execNotifier.updateSubTaskStatus(
         execId, flowSubTask.id, TaskStatus.running);
+    bgNotifier.addTask(
+        type: BackgroundTaskType.ocr, title: title, taskId: taskId);
 
     Uint8List imageBytes;
     String imageFormat;
@@ -669,7 +680,12 @@ class TaskFlowExecutionService {
     final speed = block.params['speed'] ?? '1.0';
 
     try {
-      final taskId = taskListNotifier.addTask(
+      // Generate ID first, update execution, THEN add task to provider.
+      final taskId = const Uuid().v4();
+      execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
+      execNotifier.updateSubTaskStatus(
+          execId, flowSubTask.id, TaskStatus.running);
+      taskListNotifier.addTask(
         title: title,
         text: input,
         providerConfig: config,
@@ -678,10 +694,8 @@ class TaskFlowExecutionService {
           if (voice.isNotEmpty) 'voice': voice,
           'speed': speed,
         },
+        taskId: taskId,
       );
-      execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
-      execNotifier.updateSubTaskStatus(
-          execId, flowSubTask.id, TaskStatus.running);
 
       final startTime = DateTime.now();
       const maxWait = Duration(minutes: 5);

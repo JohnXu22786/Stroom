@@ -45,8 +45,9 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     required ModelConfig modelConfig,
     Map<String, String>? customParams,
     Map<String, dynamic>? trimPreset,
+    String? taskId,
   }) {
-    final id = _uuid.v4();
+    final id = taskId ?? _uuid.v4();
     final task = SynthesisTask(
       id: id,
       title: title,
