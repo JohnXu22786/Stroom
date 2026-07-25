@@ -15,11 +15,11 @@ import 'synthesis_task_card.dart';
 /// Card for a task flow execution in the unified task list.
 ///
 /// Layout:
-///   Level 0: Flow header — "任务流" tag, flow name, progress, status icon
-///   Level 1 (expanded): Directly shows the real task cards for each sub-task
-///     (CatCatchTaskCard / BackgroundTaskCard / SynthesisTaskCard).
-///     Width alignment: nested cards use their own built-in Card margin (12px),
-///     matching the header's inner Padding(12). No extra wrapper padding.
+///   Header: "任务流" tag, flow name, progress, status icon
+///   Expanded: Direct nested real task cards (CatCatch / Background / Synthesis)
+///
+/// No more _syncSubTaskStatuses — the execution service updates sub-task
+/// statuses directly via the provider. This card just watches and renders.
 class TaskFlowCard extends ConsumerStatefulWidget {
   final TaskFlowExecution execution;
   final bool isUnread;
@@ -42,9 +42,6 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
     final cs = Theme.of(context).colorScheme;
     final exec = widget.execution;
 
-    // Sync sub-task statuses with underlying real tasks
-    _syncSubTaskStatuses();
-
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       elevation: 0,
@@ -57,7 +54,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
       ),
       child: Column(
         children: [
-          // === Level 0: Flow summary (always visible) ===
+          // ── Header (always visible) ──
           InkWell(
             borderRadius: BorderRadius.circular(12),
             onTap: () => setState(() => _expanded = !_expanded),
@@ -65,17 +62,14 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
               padding: const EdgeInsets.all(12),
               child: Row(
                 children: [
-                  // Status icon (based on sub-task states, not exec.status)
-                  _computedStatusIcon(cs),
+                  _flowStatusIcon(exec.subTasks, cs),
                   const SizedBox(width: 10),
-                  // Flow name + tag
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
-                            // "任务流" tag
                             Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 4, vertical: 1),
@@ -93,7 +87,6 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
                                 ),
                               ),
                             ),
-                            // Flow name
                             Flexible(
                               child: Text(
                                 exec.flowName,
@@ -109,9 +102,8 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
                           ],
                         ),
                         const SizedBox(height: 2),
-                        // Progress line
                         Text(
-                          _progressText(exec),
+                          _progressText(exec.subTasks, cs),
                           style: TextStyle(
                             fontSize: 11,
                             color: cs.onSurfaceVariant,
@@ -120,7 +112,6 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
                       ],
                     ),
                   ),
-                  // Expand arrow
                   Icon(
                     _expanded ? Icons.expand_less : Icons.expand_more,
                     color: cs.onSurfaceVariant,
@@ -131,11 +122,10 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
             ),
           ),
 
-          // === Level 1: Direct sub-task cards (when flow is expanded) ===
+          // ── Expanded: nested sub-task cards ──
           if (_expanded) ...[
             for (int i = 0; i < exec.subTasks.length; i++)
               _buildSubTaskCard(exec.subTasks[i], cs),
-            // Delete button at the bottom of expanded view
             Align(
               alignment: Alignment.centerRight,
               child: Padding(
@@ -155,20 +145,23 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
     );
   }
 
-  /// Build the status icon based on sub-task states.
-  Widget _computedStatusIcon(ColorScheme cs) {
-    final exec = widget.execution;
-    final anyActive = exec.subTasks.any((st) =>
-        st.status == TaskStatus.running || st.status == TaskStatus.paused);
-    final anyFailed = exec.subTasks.any((st) => st.status == TaskStatus.failed);
-    final allCompleted = exec.subTasks.isNotEmpty &&
-        exec.subTasks.every((st) => st.status == TaskStatus.completed);
-    final allWaiting = exec.subTasks.isNotEmpty &&
-        exec.subTasks.every((st) => st.status == TaskStatus.waiting);
+  // ===========================================================================
+  // Flow status icon — computed from sub-task statuses
+  // ===========================================================================
 
-    if (anyFailed) {
-      return Icon(Icons.error, size: 20, color: cs.error);
+  Widget _flowStatusIcon(List<FlowSubTask> subTasks, ColorScheme cs) {
+    if (subTasks.isEmpty) {
+      return Icon(Icons.hourglass_empty, size: 20, color: cs.onSurfaceVariant);
     }
+
+    final anyFailed = subTasks.any((s) => s.status == TaskStatus.failed);
+    final anyActive = subTasks.any(
+        (s) => s.status == TaskStatus.running || s.status == TaskStatus.paused);
+    final allWaiting = subTasks.every((s) => s.status == TaskStatus.waiting);
+    final allCompleted =
+        subTasks.every((s) => s.status == TaskStatus.completed);
+
+    if (anyFailed) return Icon(Icons.error, size: 20, color: cs.error);
     if (anyActive) {
       return SizedBox(
         width: 20,
@@ -188,19 +181,24 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
     return Icon(Icons.hourglass_empty, size: 20, color: cs.onSurfaceVariant);
   }
 
-  /// Progress text: "2/3 已完成" or "2 个步骤"
-  String _progressText(TaskFlowExecution exec) {
-    final total = exec.subTasks.length;
-    if (total == 0) return '0 个步骤';
+  // ===========================================================================
+  // Progress text
+  // ===========================================================================
+
+  String _progressText(List<FlowSubTask> subTasks, ColorScheme cs) {
+    if (subTasks.isEmpty) return '0 个步骤';
+    final total = subTasks.length;
     final done =
-        exec.subTasks.where((st) => st.status == TaskStatus.completed).length;
+        subTasks.where((st) => st.status == TaskStatus.completed).length;
     final failed =
-        exec.subTasks.where((st) => st.status == TaskStatus.failed).length;
-    if (failed > 0) {
-      return '$done/$total 已完成 · $failed 个失败';
-    }
+        subTasks.where((st) => st.status == TaskStatus.failed).length;
+    if (failed > 0) return '$done/$total 已完成 · $failed 个失败';
     return '$done/$total 已完成';
   }
+
+  // ===========================================================================
+  // Delete
+  // ===========================================================================
 
   void _confirmDelete(BuildContext context, ColorScheme cs) {
     showDialog(
@@ -227,14 +225,10 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
     );
   }
 
-  // =========================================================================
+  // ===========================================================================
   // Sub-task → real task card mapping
-  // =========================================================================
+  // ===========================================================================
 
-  /// Build the card for a single sub-task.
-  ///
-  /// No extra wrapper padding — each real task card uses its own built-in Card
-  /// margin (12 px), which matches the header's inner Padding(12).
   Widget _buildSubTaskCard(FlowSubTask subTask, ColorScheme cs) {
     switch (subTask.subTaskType) {
       case 'catcatch':
@@ -290,7 +284,6 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
     return _buildFallbackCard(subTask, cs);
   }
 
-  /// Fallback card when the real task is not found in the provider.
   Widget _buildFallbackCard(FlowSubTask subTask, ColorScheme cs) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
@@ -325,85 +318,9 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
     );
   }
 
-  // =========================================================================
-  // Status sync between flow sub-tasks and real provider tasks
-  // =========================================================================
-
-  /// Sync sub-task statuses with the underlying real tasks.
-  ///
-  /// Only advances status — never regresses. If the flow execution already
-  /// set a sub-task to running, a real task that is waiting will NOT
-  /// overwrite it. This prevents the execution block's running status from
-  /// being immediately reverted by sync running inside build().
-  void _syncSubTaskStatuses() {
-    final exec = widget.execution;
-
-    final execNotifier = ref.read(taskFlowExecutionsProvider.notifier);
-    final catcatchTasks = ref.read(catcatchTasksProvider);
-    final bgTasks = ref.read(backgroundTasksProvider);
-    final synthTasks = ref.read(taskListProvider);
-
-    for (final st in exec.subTasks) {
-      if (st.subTaskType == 'catcatch') {
-        final ccTask =
-            catcatchTasks.where((t) => t.id == st.subTaskId).firstOrNull;
-        if (ccTask != null) {
-          final newStatus = _convertCatCatchStatus(ccTask.status);
-          if (_statusPriority(newStatus) > _statusPriority(st.status)) {
-            execNotifier.updateSubTaskStatus(exec.id, st.id, newStatus);
-          }
-        }
-      } else if (st.subTaskType == 'background') {
-        final bgTask = bgTasks.where((t) => t.id == st.subTaskId).firstOrNull;
-        if (bgTask != null &&
-            _statusPriority(bgTask.status) > _statusPriority(st.status)) {
-          execNotifier.updateSubTaskStatus(exec.id, st.id, bgTask.status);
-        }
-      } else if (st.subTaskType == 'synthesis') {
-        final synthTask =
-            synthTasks.where((t) => t.id == st.subTaskId).firstOrNull;
-        if (synthTask != null &&
-            _statusPriority(synthTask.status) > _statusPriority(st.status)) {
-          execNotifier.updateSubTaskStatus(exec.id, st.id, synthTask.status);
-        }
-      }
-    }
-  }
-
-  /// Priority: waiting(0) < running(1) < paused(2) < completed(3) / failed(3).
-  /// Syncing only when new status has higher priority prevents regression.
-  int _statusPriority(TaskStatus status) {
-    switch (status) {
-      case TaskStatus.waiting:
-        return 0;
-      case TaskStatus.running:
-        return 1;
-      case TaskStatus.paused:
-        return 2;
-      case TaskStatus.completed:
-      case TaskStatus.failed:
-        return 3;
-    }
-  }
-
-  TaskStatus _convertCatCatchStatus(catcatch.TaskStatus status) {
-    switch (status) {
-      case catcatch.TaskStatus.waiting:
-        return TaskStatus.waiting;
-      case catcatch.TaskStatus.running:
-        return TaskStatus.running;
-      case catcatch.TaskStatus.completed:
-        return TaskStatus.completed;
-      case catcatch.TaskStatus.failed:
-        return TaskStatus.failed;
-      case catcatch.TaskStatus.paused:
-        return TaskStatus.paused;
-    }
-  }
-
-  // =========================================================================
-  // Status helpers
-  // =========================================================================
+  // ===========================================================================
+  // Status helpers (for fallback card)
+  // ===========================================================================
 
   Widget _statusIcon(TaskStatus status, ColorScheme cs) {
     switch (status) {
@@ -411,10 +328,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
         return SizedBox(
           width: 16,
           height: 16,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: cs.primary,
-          ),
+          child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
         );
       case TaskStatus.completed:
         return Icon(Icons.check_circle, size: 16, color: Colors.green);
