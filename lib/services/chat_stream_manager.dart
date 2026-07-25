@@ -556,17 +556,14 @@ class ChatStreamManager {
     state.resultCompleter = null;
     _streams.remove(convId);
 
-    // If this was the active conversation, clear or switch providers
-    if (_activeConvId == convId) {
-      _activeConvId = null;
-      // Try to switch to another active stream
-      if (_streams.isNotEmpty) {
-        _activeConvId = _streams.keys.first;
-        _pushStateToProviders(_streams[_activeConvId]!);
-      } else {
-        _clearProviders();
-      }
-    }
+    // Do NOT clear providers here. The chat_page's post-stream code in
+    // _startStreaming handles provider cleanup AFTER updating _history
+    // and calling _buildFinalSegments. Clearing providers prematurely
+    // triggers _rebuildLiveSegments with empty data, overwriting the
+    // correct segments (including reasoning with isStreaming=true that
+    // should have been replaced by _buildFinalSegments with
+    // isStreaming=false).
+    _activeConvId = null;
 
     return result;
   }

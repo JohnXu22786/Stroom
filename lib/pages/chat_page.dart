@@ -89,6 +89,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// - false + streaming = "推理中" (reasoning still in progress)
   /// - true + streaming = "推理过程" (reasoning done, text being streamed)
   final Map<String, bool> _isReasoningCompletedForMsg = {};
+
+  /// Tracks message IDs for which _buildFinalSegments has already run.
+  /// Prevents _rebuildLiveSegments from overwriting finalized non-streaming
+  /// segments with live streaming=true data, even if a late-arriving
+  /// listener fires.
+  final Set<String> _finalizedMessages = {};
+
   final Map<String, List<MessageSegment>> _chatSegments = {};
 
   String? _streamingMsgId;
@@ -543,6 +550,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       _history.clear();
       _chatSegments.clear();
       _reasoningContents.clear();
+      _finalizedMessages.clear();
       _streamingMsgId = null;
       _controller?.dispose();
       _messageKeys.clear();
@@ -1006,6 +1014,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
       reasoningSections: msg.reasoningSections ?? [],
       textChunks: msg.textSections ?? [],
       toolCalls: msg.toolCalls ?? [],
+      // Explicitly false: streaming is done. All reasoning sections should
+      // show "思考完成" (thinking complete), not "思考中" (thinking in progress).
+      isLastReasoningStreaming: false,
     );
 
     // Fallback: no textSections at all, put content at the end
@@ -1015,9 +1026,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
       segments.add(TextSegment(msg.content));
     }
 
-    if (segments.isNotEmpty) {
-      _chatSegments[msg.id] = segments;
-    }
+    // Always update, even if empty, so that stale live segments
+    // (which have isStreaming=true on reasoning) don't persist.
+    _chatSegments[msg.id] = segments;
+    _finalizedMessages.add(msg.id);
+    _isReasoningCompletedForMsg[msg.id] = true;
   }
 
   /// Rebuilds the live [_chatSegments] for [msgId] by reading current
@@ -1028,6 +1041,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // a late-arriving listener from overwriting the completed segments
     // with live streaming=true data.
     if (!_isStreamingActive) return;
+
+    // Prevent overwriting segments that _buildFinalSegments has already
+    // set for this message (e.g., when the manager's _clearProviders
+    // fires after the stream ends but before chat_page cleanup).
+    if (_finalizedMessages.contains(msgId)) return;
 
     final segments = buildAgentChainSegments(
       reasoningSections:
@@ -1128,6 +1146,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             // Clean up cached maps for removed messages to prevent memory leaks.
             _chatSegments.remove(r.id);
             _reasoningContents.remove(r.id);
+            _finalizedMessages.remove(r.id);
             _isReasoningCompletedForMsg.remove(r.id);
             _messageKeys.remove(r.id);
           }
@@ -1175,6 +1194,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             // Clean up cached maps for removed messages to prevent memory leaks.
             _chatSegments.remove(r.id);
             _reasoningContents.remove(r.id);
+            _finalizedMessages.remove(r.id);
             _isReasoningCompletedForMsg.remove(r.id);
             _messageKeys.remove(r.id);
           }
@@ -1226,6 +1246,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // Clean up cached maps for the deleted message to prevent memory leaks.
       _chatSegments.remove(messageId);
       _reasoningContents.remove(messageId);
+      _finalizedMessages.remove(messageId);
       _isReasoningCompletedForMsg.remove(messageId);
       _messageKeys.remove(messageId);
       // Adjust pagination state: if the deleted message was before the loaded
