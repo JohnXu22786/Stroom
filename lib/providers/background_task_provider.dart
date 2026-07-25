@@ -254,8 +254,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     required String title,
     Map<String, dynamic>? retryData,
     bool startImmediately = true,
+    String? taskId,
   }) {
-    final id = _uuid.v4();
+    final id = taskId ?? _uuid.v4();
     final steps = type.stepLabels
         .map((label) => BgTaskStep(label: label, status: BgStepStatus.pending))
         .toList();

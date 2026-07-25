@@ -297,6 +297,8 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
   }
 
   Widget _buildFallbackCard(FlowSubTask subTask, ColorScheme cs) {
+    // Show loading state while the real task is being created
+    final isInitializing = subTask.subTaskId.startsWith('pending_');
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       child: Container(
@@ -309,21 +311,42 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
         ),
         child: Row(
           children: [
-            _statusIcon(subTask.status, cs),
+            if (isInitializing)
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: cs.primary),
+              )
+            else
+              _statusIcon(subTask.status, cs),
             const SizedBox(width: 8),
-            Text(
-              subTask.blockLabel,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: cs.onSurface,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    subTask.blockLabel,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                  if (isInitializing)
+                    Text(
+                      '正在初始化...',
+                      style:
+                          TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                    ),
+                ],
               ),
             ),
-            const Spacer(),
-            Text(
-              _statusLabel(subTask.status),
-              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-            ),
+            if (!isInitializing)
+              Text(
+                _statusLabel(subTask.status),
+                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+              ),
           ],
         ),
       ),
