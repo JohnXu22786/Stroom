@@ -1884,6 +1884,23 @@ class _ChatPageState extends ConsumerState<ChatPage>
       _rebuildLiveSegments(msgId);
       if (mounted) setState(() {});
     });
+
+    // Keep text sections in sync: when streamingTextSectionsProvider
+    // changes (new chunk added, more text in the last chunk), rebuild
+    // segments so the interleaved text content stays current.
+    // This listener covers the case where textSections is updated in the
+    // same synchronous block as another provider but after it — the
+    // "host" listener fires with stale textSections, and this listener
+    // immediately corrects the segments on the next provider update.
+    ref.listen(streamingTextSectionsProvider,
+        (List<String>? prev, List<String> next) {
+      if (!mounted || next.isEmpty || identical(prev, next)) return;
+      if (!_isStreamingForCurrentConv()) return;
+      final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider);
+      if (msgId == null) return;
+      _rebuildLiveSegments(msgId);
+      if (mounted) setState(() {});
+    });
     final adapterConfigured = _adapter.isConfigured;
     final controller = _controller;
 
