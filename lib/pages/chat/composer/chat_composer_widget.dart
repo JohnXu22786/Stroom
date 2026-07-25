@@ -11,6 +11,7 @@ import 'package:mime/mime.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
+import 'package:stroom/models/tts_models.dart' show CustomParam;
 import 'package:stroom/providers/provider_config.dart' show ReasoningParam;
 import 'package:stroom/services/attachment_storage.dart';
 import 'package:stroom/widgets/file_preview.dart';
@@ -38,6 +39,10 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   final String initialDraftText;
   final ValueChanged<List<String>>? onModelsReordered;
   final List<ReasoningParam> reasoningParams;
+
+  /// Model-level custom parameters (模型页自定义参数) used for the badge
+  /// count on the "自定义参数" chip. Distinct from reasoning/inference params.
+  final List<CustomParam> customParams;
 
   // ── Edit mode support ──
   /// When non-null, the composer enters edit mode for the given message.
@@ -74,6 +79,7 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     this.initialDraftText = '',
     this.onModelsReordered,
     this.reasoningParams = const [],
+    this.customParams = const [],
     this.editingMessageId,
     this.editingMessageText,
     this.editingMessageAttachments,
@@ -930,28 +936,26 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     final reasoningColor = reasoningEnabled ? Colors.purple : Colors.grey;
 
     // ═══════════════════════════════════════════════════════════
-    // Tool chip & custom params chip: unified accent color
+    // Tool chip: accent color (indigo) when tools enabled, grey when disabled
     // ═══════════════════════════════════════════════════════════
-    // When no tools are enabled ("零个工具"), both chips turn grey
-    // and hide their badge (matching the reasoning disabled state).
     const Color toolAccentColor = Color(0xFF6366F1);
     final bool noToolsEnabled = widget.enabledTools.isEmpty;
-
-    // Tool chip
     final Color toolColor = noToolsEnabled ? Colors.grey : toolAccentColor;
     final int? toolBadgeCount =
         noToolsEnabled ? null : widget.enabledTools.length;
 
-    // Custom params chip — count non-toggle, non-effort params with values
-    final int customParamsBadgeCount = widget.reasoningParams
-        .where((p) => !p.isReasoningToggle && !p.isEffortParam)
-        .where((p) => reasoningParamValues.containsKey(p.paramName))
-        .length;
+    // ═══════════════════════════════════════════════════════════
+    // Custom params chip: independent of tool state
+    // Count model-level custom params with non-empty names.
+    // Shows accent color + badge when count > 0, grey when 0.
+    // ═══════════════════════════════════════════════════════════
+    final int customParamsBadgeCount =
+        widget.customParams.where((p) => p.paramName.trim().isNotEmpty).length;
+    final bool hasCustomParams = customParamsBadgeCount > 0;
     final Color customParamsColor =
-        noToolsEnabled ? Colors.grey : toolAccentColor;
-    final int? customParamsBadgeCountOrNull = noToolsEnabled
-        ? null
-        : (customParamsBadgeCount > 0 ? customParamsBadgeCount : null);
+        hasCustomParams ? toolAccentColor : Colors.grey;
+    final int? customParamsBadgeCountOrNull =
+        hasCustomParams ? customParamsBadgeCount : null;
 
     return Material(
       type: MaterialType.transparency,
