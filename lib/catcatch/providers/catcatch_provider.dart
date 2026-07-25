@@ -1,6 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:path/path.dart' as p;
@@ -12,6 +13,8 @@ import '../models/catcatch_task.dart';
 import 'catcatch_provider_shared.dart';
 import '../models/media_resource.dart';
 import '../engine/task_executor.dart';
+import '../config/default_rules.dart';
+import '../engine/executor_save.dart';
 
 // =============================================================================
 // Provider 定义
@@ -211,8 +214,101 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       cancelToken.cancel();
     }
 
+    // 查找被删除的任务，用于清理文件
+    final task = state.where((t) => t.id == id).firstOrNull;
+    unawaited(_cleanupTaskFiles(task));
+
     state = state.where((t) => t.id != id).toList();
     _persistTasks();
+  }
+
+  /// 清理任务关联的临时文件
+  Future<void> _cleanupTaskFiles(CatCatchTask? task) async {
+    if (task == null) return;
+    try {
+      final appDirPath = await AppStorage.directory;
+      await cleanupTaskFiles(task, appDirPath: appDirPath);
+    } catch (e) {
+      debugPrint('[CatCatchNotifier] Failed to clean up task files: $e');
+    }
+  }
+
+  /// 清理任务关联的临时文件（静态方法，可用于测试）
+  ///
+  /// 删除任务相关的临时下载文件、分段目录、转换文件、进度跟踪等。
+  /// 对于已完成的任务，不会删除最终保存的文件（[downloadedFilePath]）。
+  /// [appDirPath] 可选，指定应用目录路径；未指定时使用 [AppStorage.directory]。
+  @visibleForTesting
+  static Future<void> cleanupTaskFiles(CatCatchTask task,
+      {String? appDirPath}) async {
+    final appDir = appDirPath ?? await AppStorage.directory;
+
+    // 1. 删除分段下载进度跟踪
+    final progressPath =
+        p.join(appDir, 'catcatch', '.progress', '${task.id}_dl_progress.json');
+    try {
+      final pf = File(progressPath);
+      if (await pf.exists()) await pf.delete();
+    } catch (_) {}
+
+    // 2. 对于未完成的任务，删除它已记录的 downloadedFilePath
+    // （放在前面处理，与 selectedMedia 无关）
+    if (task.downloadedFilePath != null &&
+        task.status != TaskStatus.completed) {
+      try {
+        final f = File(task.downloadedFilePath!);
+        if (await f.exists()) await f.delete();
+      } catch (_) {}
+    }
+
+    // 3. 如果没有已选媒体资源，说明还没开始下载，无需进一步清理
+    if (task.selectedMedia == null) return;
+
+    final fileName = buildDownloadFileName(task.selectedMedia!, task.metadata);
+    final downloadDir = p.join(appDir, 'catcatch', 'downloads');
+    final convertDir = p.join(appDir, 'catcatch', 'converted');
+
+    // 4. 临时下载文件 (.filename.catcatch_tmp, filename.catcatch_tmp)
+    // DownloadManager.downloadFile 实际写入的是无前导点的文件名，
+    // 但 task_executor 也传入了带前导点的路径用于断点续传检测，两者都清理。
+    for (final prefix in ['', '.']) {
+      final tempFilePath =
+          p.join(downloadDir, '$prefix$fileName${DefaultRules.tempFileSuffix}');
+      try {
+        final f = File(tempFilePath);
+        if (await f.exists()) await f.delete();
+      } catch (_) {}
+    }
+
+    // 5. 下载目录中的源文件（尚未保存到 completed 目录）
+    final downloadFilePath = p.join(downloadDir, fileName);
+    try {
+      final f = File(downloadFilePath);
+      if (await f.exists()) await f.delete();
+    } catch (_) {}
+
+    // 6. 播放列表合并后的文件 (playlist_merged.ts)
+    final mergedName = '${p.basenameWithoutExtension(fileName)}_merged.ts';
+    final mergedPath = p.join(downloadDir, mergedName);
+    try {
+      final f = File(mergedPath);
+      if (await f.exists()) await f.delete();
+    } catch (_) {}
+
+    // 7. 分段下载的临时目录 (.playlist_merged.ts_parts/)
+    final partsDirName = '.${mergedName}_parts';
+    final partsDir = Directory(p.join(downloadDir, partsDirName));
+    try {
+      if (await partsDir.exists()) await partsDir.delete(recursive: true);
+    } catch (_) {}
+
+    // 8. 转换后的文件 (converted/ 目录)
+    final convertName = '${p.basenameWithoutExtension(fileName)}.mp4';
+    final convertPath = p.join(convertDir, convertName);
+    try {
+      final f = File(convertPath);
+      if (await f.exists()) await f.delete();
+    } catch (_) {}
   }
 
   /// 用户确认继续处理特殊格式（在 converting 步骤前调用）
