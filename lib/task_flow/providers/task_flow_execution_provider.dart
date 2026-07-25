@@ -70,25 +70,27 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>> {
       // This handles live status transitions (e.g., failed→completed on retry).
       if (updated.isEmpty) return e;
 
+      final anyFailed = updated.any((st) => st.status == TaskStatus.failed);
       final anyRunning = updated.any((st) =>
           st.status == TaskStatus.running ||
           st.status == TaskStatus.waiting ||
           st.status == TaskStatus.paused);
       final allCompleted =
           updated.every((st) => st.status == TaskStatus.completed);
-      final anyFailed = updated.any((st) => st.status == TaskStatus.failed);
 
-      if (anyRunning) {
+      // Failed takes priority over running — if any sub-task has failed
+      // (even if others are still waiting), mark the flow as failed.
+      if (anyFailed) {
+        return e.copyWith(
+          status: FlowExecutionStatus.failed,
+          completedAt: updated.isNotEmpty ? DateTime.now() : null,
+        );
+      } else if (anyRunning) {
         return e.copyWith(status: FlowExecutionStatus.running);
       } else if (allCompleted) {
         return e.copyWith(
           status: FlowExecutionStatus.completed,
           completedAt: DateTime.now(),
-        );
-      } else if (anyFailed) {
-        return e.copyWith(
-          status: FlowExecutionStatus.failed,
-          completedAt: updated.isNotEmpty ? DateTime.now() : null,
         );
       }
       return e;
