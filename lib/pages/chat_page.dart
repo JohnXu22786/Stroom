@@ -1028,7 +1028,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
           List<String>.from(ref.read(streamingReasoningSectionsProvider)),
       textChunks: List<String>.from(ref.read(streamingTextSectionsProvider)),
       toolCalls: List<ToolCallData>.from(ref.read(streamingToolCallsProvider)),
-      isLastReasoningStreaming: _isReasoningCompletedForMsg[msgId] != true,
+      // Always true during live streaming: the last reasoning section shows
+      // "thinking..." while active. When a new section becomes the last,
+      // the previous one automatically transitions to "thinking complete".
+      // After the stream ends, _buildFinalSegments replaces with isStreaming=false.
+      isLastReasoningStreaming: true,
     );
 
     _chatSegments[msgId] = segments;
@@ -2533,6 +2537,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                                             : [''],
                                                         streaming:
                                                             s.isStreaming,
+                                                        sectionIndices: [
+                                                          s.sectionIndex
+                                                        ],
                                                       ),
                                                       messageId: message.id,
                                                     ),
