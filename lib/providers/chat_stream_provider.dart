@@ -40,3 +40,10 @@ final streamingToolCallsProvider =
 /// chunk.
 final streamingTextSectionsProvider =
     StateProvider<List<String>>((ref) => ['']);
+
+/// Round boundary indices for tool calls during streaming.
+/// Each entry is an index into [streamingToolCallsProvider] where a new
+/// assistant step begins. Used by [buildAgentChainSegments] to correctly
+/// group consecutive tool calls that belong to the same step.
+final streamingToolCallRoundStartsProvider =
+    StateProvider<List<int>>((ref) => []);

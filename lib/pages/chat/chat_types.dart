@@ -88,57 +88,119 @@ List<MessageSegment> buildAgentChainSegments({
   required List<String> textChunks,
   required List<ToolCallData> toolCalls,
   bool isLastReasoningStreaming = false,
+  List<int>? toolCallRoundStarts,
 }) {
+  // When round boundaries are known (from live streaming), use the
+  // round-based algorithm that correctly groups consecutive tool calls.
+  // When not known (historical data), fall back to the legacy 1:1 pairing.
+  if (toolCallRoundStarts != null && toolCallRoundStarts.isNotEmpty) {
+    return _buildWithRounds(
+      reasoningSections,
+      textChunks,
+      toolCalls,
+      isLastReasoningStreaming,
+      toolCallRoundStarts,
+    );
+  }
+  return _buildLegacy(
+    reasoningSections,
+    textChunks,
+    toolCalls,
+    isLastReasoningStreaming,
+  );
+}
+
+/// Round-based interleaving for live streaming data.
+///
+/// Uses [roundStarts] — indices into [toolCalls] where each assistant
+/// "step" begins — to group consecutive tool calls that belong to the
+/// same round (e.g. multiple tools called simultaneously).
+List<MessageSegment> _buildWithRounds(
+  List<String> reasoningSections,
+  List<String> textChunks,
+  List<ToolCallData> toolCalls,
+  bool isLastReasoningStreaming,
+  List<int> roundStarts,
+) {
   final segments = <MessageSegment>[];
+  final numRounds = roundStarts.length;
 
-  int ri = 0; // reasoning index
-  int ti = 0; // text chunk index
-  int tci = 0; // tool call index
+  for (int i = 0; i < numRounds; i++) {
+    // Reasoning for this round
+    if (i < reasoningSections.length && reasoningSections[i].isNotEmpty) {
+      segments.add(ReasoningSegment(
+        sectionIndex: i,
+        isStreaming:
+            isLastReasoningStreaming && i == reasoningSections.length - 1,
+      ));
+    }
 
-  while (ri < reasoningSections.length ||
-      ti < textChunks.length ||
-      tci < toolCalls.length) {
-    // Each item has a temporal position:
-    // - reasoningSections[ri] → position ri
-    // - textChunks[ti] → position ti
-    // - toolCalls[tci] → position tci (between textChunks[tci] and [tci+1])
-    //
-    // The item with the smallest position is output next.
-    // Equal positions: reasoning first, then text, then tool calls.
+    // Text before this round's tool calls
+    if (i < textChunks.length && textChunks[i].isNotEmpty) {
+      segments.add(TextSegment(textChunks[i]));
+    }
 
-    final nextReasoning = ri < reasoningSections.length ? ri : double.infinity;
-    final nextText = ti < textChunks.length ? ti.toDouble() : double.infinity;
-    final nextTool = tci < toolCalls.length ? tci.toDouble() : double.infinity;
+    // All tool calls in this round (grouped together)
+    final start = roundStarts[i];
+    final end = i + 1 < numRounds ? roundStarts[i + 1] : toolCalls.length;
+    for (int j = start; j < end && j < toolCalls.length; j++) {
+      segments.add(ToolCallSegment(toolCalls[j]));
+    }
+  }
 
-    if (nextReasoning <= nextText && nextReasoning <= nextTool) {
-      // ── Reasoning ──
-      if (reasoningSections[ri].isNotEmpty) {
-        segments.add(ReasoningSegment(
-          sectionIndex: ri,
-          isStreaming:
-              isLastReasoningStreaming && ri == reasoningSections.length - 1,
-        ));
-      }
-      ri++;
-    } else if (nextText <= nextReasoning && nextText <= nextTool) {
-      // ── Text ──
-      if (textChunks[ti].isNotEmpty) {
-        segments.add(TextSegment(textChunks[ti]));
-      }
-      ti++;
-    } else {
-      // ── Tool call(s) ──
-      // Group consecutive tool calls where the intervening text chunks
-      // are empty (i.e., no user-visible text separates them).
-      segments.add(ToolCallSegment(toolCalls[tci]));
-      tci++;
-      while (tci < toolCalls.length) {
-        // If the text chunk at position tci is non-empty, it means
-        // there's visible text between tool tci-1 and tci. Don't group.
-        if (tci < textChunks.length && textChunks[tci].isNotEmpty) break;
-        segments.add(ToolCallSegment(toolCalls[tci]));
-        tci++;
-      }
+  // Remaining reasoning and text after all tool rounds
+  for (int i = numRounds;
+      i < reasoningSections.length || i < textChunks.length;
+      i++) {
+    if (i < reasoningSections.length && reasoningSections[i].isNotEmpty) {
+      segments.add(ReasoningSegment(
+        sectionIndex: i,
+        isStreaming:
+            isLastReasoningStreaming && i == reasoningSections.length - 1,
+      ));
+    }
+    if (i < textChunks.length && textChunks[i].isNotEmpty) {
+      segments.add(TextSegment(textChunks[i]));
+    }
+  }
+
+  return segments;
+}
+
+/// Legacy 1:1 interleaving for historical data (no round boundary info).
+///
+/// Each tool call is placed at the same round index as its corresponding
+/// reasoning section and text chunk. When multiple tool calls exist per
+/// round, they may appear in the wrong visual position — this is the
+/// known limitation that [toolCallRoundStarts] resolves.
+List<MessageSegment> _buildLegacy(
+  List<String> reasoningSections,
+  List<String> textChunks,
+  List<ToolCallData> toolCalls,
+  bool isLastReasoningStreaming,
+) {
+  final segments = <MessageSegment>[];
+  final maxRounds = [
+    reasoningSections.length,
+    textChunks.length,
+    toolCalls.length,
+  ].fold(0, (a, b) => a > b ? a : b);
+
+  for (var i = 0; i < maxRounds; i++) {
+    if (i < reasoningSections.length && reasoningSections[i].isNotEmpty) {
+      segments.add(ReasoningSegment(
+        sectionIndex: i,
+        isStreaming:
+            isLastReasoningStreaming && i == reasoningSections.length - 1,
+      ));
+    }
+
+    if (i < textChunks.length && textChunks[i].isNotEmpty) {
+      segments.add(TextSegment(textChunks[i]));
+    }
+
+    if (i < toolCalls.length) {
+      segments.add(ToolCallSegment(toolCalls[i]));
     }
   }
 
