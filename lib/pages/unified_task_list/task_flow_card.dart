@@ -328,9 +328,10 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
 
   /// Sync sub-task statuses with the underlying real tasks.
   ///
-  /// ALWAYS syncs, even when the execution is not "running". This allows
-  /// the flow to reflect the current state of its sub-tasks (e.g., if a
-  /// CatCatch task was retried and succeeded after the flow failed).
+  /// Only advances status — never regresses. If the flow execution already
+  /// set a sub-task to running, a real task that is waiting will NOT
+  /// overwrite it. This prevents the execution block's running status from
+  /// being immediately reverted by sync running inside build().
   void _syncSubTaskStatuses() {
     final exec = widget.execution;
 
@@ -344,23 +345,41 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
           catcatchTasks.where((t) => t.id == st.subTaskId).firstOrNull;
       if (ccTask != null) {
         final newStatus = _convertCatCatchStatus(ccTask.status);
-        if (newStatus != st.status) {
+        if (_statusPriority(newStatus) > _statusPriority(st.status)) {
           execNotifier.updateSubTaskStatus(exec.id, st.id, newStatus);
         }
         continue;
       }
 
       final bgTask = bgTasks.where((t) => t.id == st.subTaskId).firstOrNull;
-      if (bgTask != null && bgTask.status != st.status) {
+      if (bgTask != null &&
+          _statusPriority(bgTask.status) > _statusPriority(st.status)) {
         execNotifier.updateSubTaskStatus(exec.id, st.id, bgTask.status);
         continue;
       }
 
       final synthTask =
           synthTasks.where((t) => t.id == st.subTaskId).firstOrNull;
-      if (synthTask != null && synthTask.status != st.status) {
+      if (synthTask != null &&
+          _statusPriority(synthTask.status) > _statusPriority(st.status)) {
         execNotifier.updateSubTaskStatus(exec.id, st.id, synthTask.status);
       }
+    }
+  }
+
+  /// Priority: waiting(0) < running(1) < paused(2) < completed(3) / failed(3).
+  /// Syncing only when new status has higher priority prevents regression.
+  int _statusPriority(TaskStatus status) {
+    switch (status) {
+      case TaskStatus.waiting:
+        return 0;
+      case TaskStatus.running:
+        return 1;
+      case TaskStatus.paused:
+        return 2;
+      case TaskStatus.completed:
+      case TaskStatus.failed:
+        return 3;
     }
   }
 

@@ -319,35 +319,39 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     // ── Now use captured notifiers, NEVER ref.read() ──
     String currentData = inputText;
 
-    for (int i = 0; i < flow.blocks.length; i++) {
-      final block = flow.blocks[i];
-      final def = block.getDefinition();
-      if (def == null) {
-        execNotifier.failExecution(execId, error: '未知功能块类型');
-        return;
+    try {
+      for (int i = 0; i < flow.blocks.length; i++) {
+        final block = flow.blocks[i];
+        final def = block.getDefinition();
+        if (def == null) {
+          execNotifier.failExecution(execId, error: '未知功能块类型');
+          return;
+        }
+
+        final result = await _executeBlock(
+          def,
+          block,
+          currentData,
+          execId,
+          execNotifier,
+          flowSubTask: placeholders[i]!,
+          catcatchNotifier: catcatchNotifier,
+          bgNotifier: bgNotifier,
+          taskListNotifier: taskListNotifier,
+          providerEntries: providerState,
+        );
+
+        if (result.startsWith('[')) {
+          execNotifier.failExecution(execId, error: result);
+          return;
+        }
+        currentData = result;
       }
 
-      final result = await _executeBlock(
-        def,
-        block,
-        currentData,
-        execId,
-        execNotifier,
-        flowSubTask: placeholders[i]!,
-        catcatchNotifier: catcatchNotifier,
-        bgNotifier: bgNotifier,
-        taskListNotifier: taskListNotifier,
-        providerEntries: providerState,
-      );
-
-      if (result.startsWith('[')) {
-        execNotifier.failExecution(execId, error: result);
-        return;
-      }
-      currentData = result;
+      execNotifier.completeExecution(execId);
+    } catch (e) {
+      execNotifier.failExecution(execId, error: '未预期的错误: $e');
     }
-
-    execNotifier.completeExecution(execId);
   }
 
   String _subTaskType(String? typeKey) {
@@ -435,12 +439,12 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
             execId, flowSubTask.id, TaskStatus.failed);
         return '[CatCatch] 任务丢失';
       }
-      if (task.status == TaskStatus.completed) {
+      if (task.status == catcatch.TaskStatus.completed) {
         execNotifier.updateSubTaskStatus(
             execId, flowSubTask.id, TaskStatus.completed);
         return task.downloadedFilePath ?? '下载完成（无文件路径）';
       }
-      if (task.status == TaskStatus.failed) {
+      if (task.status == catcatch.TaskStatus.failed) {
         execNotifier.updateSubTaskStatus(
             execId, flowSubTask.id, TaskStatus.failed);
         return '[CatCatch] ${task.error ?? '任务失败'}';
@@ -463,7 +467,7 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
         }
       }
 
-      if (task.status == TaskStatus.paused) {
+      if (task.status == catcatch.TaskStatus.paused) {
         execNotifier.updateSubTaskStatus(
             execId, flowSubTask.id, TaskStatus.paused);
         return '[CatCatch] 任务已暂停';
