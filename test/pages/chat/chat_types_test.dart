@@ -541,5 +541,85 @@ void main() {
       expect((segments[4] as TextSegment).text, 'text2');
       expect(segments[5], isA<ToolCallSegment>());
     });
+
+    // ── Edge cases for re-entry / persisted data alignment ──
+
+    test('round 0 with empty leading text: tools still grouped correctly', () {
+      // Manager scenario: TC(A), TC(B) immediately (no text before),
+      // then text "result". textChunks = ['', 'result'], roundStarts = [0].
+      // The leading '' is round 0's empty text.
+      final segments = buildAgentChainSegments(
+        reasoningSections: [],
+        textChunks: ['', 'result'],
+        toolCalls: [_tc('1', 'A'), _tc('2', 'B')],
+        toolCallRoundStarts: [0],
+      );
+      // Round 0: T('') skipped, TC(A), TC(B). Trailing: T('result').
+      expect(segments.length, 3);
+      expect(segments[0], isA<ToolCallSegment>());
+      expect((segments[0] as ToolCallSegment).data.name, 'A');
+      expect(segments[1], isA<ToolCallSegment>());
+      expect((segments[1] as ToolCallSegment).data.name, 'B');
+      expect(segments[2], isA<TextSegment>());
+      expect((segments[2] as TextSegment).text, 'result');
+    });
+
+    test('persisted data with empty entries: indices align to rounds', () {
+      // After reload from DB (with roundStarts preserved), textSections
+      // may include empty entries (e.g. ['', 'text2', 'final']).
+      // _buildWithRounds must skip empties but preserve index alignment.
+      final segments = buildAgentChainSegments(
+        reasoningSections: ['r1', '', 'r3'],
+        textChunks: ['', 'text2', 'final'],
+        toolCalls: [
+          _tc('1', 'A'),
+          _tc('2', 'B'),
+          _tc('3', 'C'),
+          _tc('4', 'D'),
+        ],
+        toolCallRoundStarts: [0, 2],
+      );
+      // Round 0: R('r1'), T('') skip, TC(A), TC(B)
+      // Round 1: R('') skip, T('text2'), TC(C), TC(D)
+      // Trailing (i=2): R('r3'), T('final')
+      expect(segments.length, 8);
+      expect(segments[0], isA<ReasoningSegment>());
+      expect((segments[0] as ReasoningSegment).sectionIndex, 0);
+      expect(segments[1], isA<ToolCallSegment>());
+      expect((segments[1] as ToolCallSegment).data.name, 'A');
+      expect(segments[2], isA<ToolCallSegment>());
+      expect((segments[2] as ToolCallSegment).data.name, 'B');
+      expect(segments[3], isA<TextSegment>());
+      expect((segments[3] as TextSegment).text, 'text2');
+      expect(segments[4], isA<ToolCallSegment>());
+      expect((segments[4] as ToolCallSegment).data.name, 'C');
+      expect(segments[5], isA<ToolCallSegment>());
+      expect((segments[5] as ToolCallSegment).data.name, 'D');
+      expect(segments[6], isA<ReasoningSegment>());
+      expect((segments[6] as ReasoningSegment).sectionIndex, 2);
+      expect(segments[7], isA<TextSegment>());
+      expect((segments[7] as TextSegment).text, 'final');
+    });
+
+    test('no tool calls: roundStarts empty uses legacy and works', () {
+      // During early streaming (reasoning + text, no tools yet),
+      // roundStarts = [] → falls to legacy algorithm.
+      final segments = buildAgentChainSegments(
+        reasoningSections: ['think1', 'think2'],
+        textChunks: ['text1', 'text2'],
+        toolCalls: [],
+        toolCallRoundStarts: [],
+      );
+      // Legacy: 2 rounds, each R + T.
+      expect(segments.length, 4);
+      expect(segments[0], isA<ReasoningSegment>());
+      expect((segments[0] as ReasoningSegment).sectionIndex, 0);
+      expect(segments[1], isA<TextSegment>());
+      expect((segments[1] as TextSegment).text, 'text1');
+      expect(segments[2], isA<ReasoningSegment>());
+      expect((segments[2] as ReasoningSegment).sectionIndex, 1);
+      expect(segments[3], isA<TextSegment>());
+      expect((segments[3] as TextSegment).text, 'text2');
+    });
   });
 }
