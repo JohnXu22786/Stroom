@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../utils/file_manifest.dart';
+import '../../utils/video_manifest.dart';
 import '../../widgets/folder_picker_dialog.dart';
 import '../models/task_flow_definition.dart';
 import '../models/block_type_definition.dart';
@@ -320,10 +321,13 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
 
   Future<void> _pickFolder(String key) async {
     final currentValue = _params[key]?.toString() ?? '';
+    final folders = key == 'videoFolder'
+        ? await VideoManifest.getAllFolders()
+        : await FileManifest.getAllFolders();
     final result = await FolderPickerDialog.show(
       context,
       currentFolder: currentValue,
-      availableFolders: await FileManifest.getAllFolders(),
+      availableFolders: folders,
       title: '选择保存文件夹',
     );
     if (result != null && mounted) {

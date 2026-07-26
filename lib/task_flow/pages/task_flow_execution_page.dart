@@ -45,7 +45,7 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     final service = ref.read(taskFlowExecutionServiceProvider);
 
     if (mounted) {
-      Navigator.pop(context);
+      Navigator.popUntil(context, (r) => r.isFirst);
     }
 
     // Fire-and-forget: the service runs independently of widget lifecycle

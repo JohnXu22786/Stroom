@@ -177,6 +177,13 @@ class BlockTypeDefinition {
           key: 'videoFolder', label: '视频保存文件夹', type: BlockParamType.filePath),
       BlockParamDefinition(
           key: 'audioFolder', label: '音频保存文件夹', type: BlockParamType.filePath),
+      BlockParamDefinition(
+        key: 'durationSec',
+        label: '预期时长(秒)',
+        type: BlockParamType.number,
+        defaultValue: 0,
+        hintText: '0 表示不筛选时长',
+      ),
     ],
   );
 
@@ -199,6 +206,11 @@ class BlockTypeDefinition {
         label: '语速',
         type: BlockParamType.number,
         defaultValue: 1.0,
+      ),
+      BlockParamDefinition(
+        key: 'saveFolder',
+        label: '保存文件夹',
+        type: BlockParamType.filePath,
       ),
     ],
   );

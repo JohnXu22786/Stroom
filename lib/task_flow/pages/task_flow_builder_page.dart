@@ -542,6 +542,6 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       );
     }
 
-    Navigator.pop(context, true);
+    Navigator.popUntil(context, (r) => r.isFirst);
   }
 }
