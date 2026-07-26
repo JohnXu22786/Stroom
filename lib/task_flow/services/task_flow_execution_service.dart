@@ -279,20 +279,22 @@ class TaskFlowExecutionService {
         final us =
             task.steps.where((s) => s.type == catcatch.StepType.userSelecting);
         if (us.isNotEmpty && !us.first.completed && !us.first.skipped) {
-          autoSelected = true;
-          if (task.detectedMedia.isEmpty) {
-            execNotifier.updateSubTaskStatus(
-                execId, flowSubTask.id, TaskStatus.failed);
-            throw 'CatCatch: 未检测到可用媒体资源';
-          }
-          try {
-            catcatchNotifier.selectMedia(taskId, task.detectedMedia.first);
-            execNotifier.updateSubTaskStatus(
-                execId, flowSubTask.id, TaskStatus.running);
-          } catch (e) {
-            execNotifier.updateSubTaskStatus(
-                execId, flowSubTask.id, TaskStatus.failed);
-            throw 'CatCatch: 自动选择媒体失败: $e';
+          // Wait until detectedMedia is populated by the executor before
+          // attempting auto-select.  The userSelecting step may become
+          // active before the page analysis finishes populating
+          // detectedMedia.  Throwing here would terminate the flow
+          // prematurely — instead, keep polling.
+          if (task.detectedMedia.isNotEmpty) {
+            try {
+              catcatchNotifier.selectMedia(taskId, task.detectedMedia.first);
+              autoSelected = true; // only latch after success
+              execNotifier.updateSubTaskStatus(
+                  execId, flowSubTask.id, TaskStatus.running);
+            } catch (e) {
+              execNotifier.updateSubTaskStatus(
+                  execId, flowSubTask.id, TaskStatus.failed);
+              throw 'CatCatch: 自动选择媒体失败: $e';
+            }
           }
         }
       }

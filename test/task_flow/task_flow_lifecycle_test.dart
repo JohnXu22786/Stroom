@@ -520,6 +520,13 @@ void main() {
       );
       notifier.addSubTask(execId, p2);
 
+      // addSubTask does not auto-recompute flow status; trigger
+      // recomputation so the failed priority logic is exercised.
+      notifier.updateSubTaskStatus(
+          execId, notifier.state[0].subTasks[0].id, TaskStatus.failed);
+      notifier.updateSubTaskStatus(
+          execId, notifier.state[0].subTasks[1].id, TaskStatus.running);
+
       expect(notifier.state[0].status, FlowExecutionStatus.failed);
     });
 
@@ -547,6 +554,13 @@ void main() {
             subTaskType: 'background',
             status: TaskStatus.waiting,
           ));
+
+      // addSubTask does not auto-recompute flow status; trigger
+      // recomputation so the failed priority logic is exercised.
+      notifier.updateSubTaskStatus(
+          execId, notifier.state[0].subTasks[0].id, TaskStatus.failed);
+      notifier.updateSubTaskStatus(
+          execId, notifier.state[0].subTasks[1].id, TaskStatus.waiting);
 
       expect(notifier.state[0].status, FlowExecutionStatus.failed);
     });
