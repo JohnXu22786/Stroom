@@ -37,7 +37,7 @@ void main() {
   }
 
   group('MathCanvas3D - gesture direction fixes', () {
-    testWidgets('dragging right rotates scene right (theta increases)',
+    testWidgets('dragging right rotates scene LEFT (theta decreases)',
         (tester) async {
       final state = await setupCanvas(tester);
       final initialTheta = state.camera.theta;
@@ -46,11 +46,12 @@ void main() {
       await tester.drag(find.byType(MathCanvas3D), const Offset(100, 0));
       await tester.pump();
 
-      // Theta should INCREASE when dragging right (camera orbits right)
-      expect(state.camera.theta, greaterThan(initialTheta));
+      // Theta should DECREASE when dragging right (scene rotates left)
+      expect(state.camera.theta, lessThan(initialTheta));
     });
 
-    testWidgets('dragging up rotates scene up (phi decreases)', (tester) async {
+    testWidgets('dragging up rotates scene DOWN (phi increases)',
+        (tester) async {
       final state = await setupCanvas(tester);
       final initialPhi = state.camera.phi;
 
@@ -58,11 +59,11 @@ void main() {
       await tester.drag(find.byType(MathCanvas3D), const Offset(0, -100));
       await tester.pump();
 
-      // When dragging UP, phi should DECREASE (camera goes down to look up)
-      expect(state.camera.phi, lessThan(initialPhi));
+      // When dragging UP, phi should INCREASE (camera moves up, scene tilts down)
+      expect(state.camera.phi, greaterThan(initialPhi));
     });
 
-    testWidgets('dragging down rotates scene down (phi increases)',
+    testWidgets('dragging down rotates scene UP (phi decreases)',
         (tester) async {
       final state = await setupCanvas(tester);
       final initialPhi = state.camera.phi;
@@ -71,11 +72,11 @@ void main() {
       await tester.drag(find.byType(MathCanvas3D), const Offset(0, 100));
       await tester.pump();
 
-      // When dragging DOWN, phi should INCREASE (camera goes up to look down)
-      expect(state.camera.phi, greaterThan(initialPhi));
+      // When dragging DOWN, phi should DECREASE (camera moves down, scene tilts up)
+      expect(state.camera.phi, lessThan(initialPhi));
     });
 
-    testWidgets('dragging left rotates scene left (theta decreases)',
+    testWidgets('dragging left rotates scene RIGHT (theta increases)',
         (tester) async {
       final state = await setupCanvas(tester);
       final initialTheta = state.camera.theta;
@@ -83,8 +84,8 @@ void main() {
       await tester.drag(find.byType(MathCanvas3D), const Offset(-100, 0));
       await tester.pump();
 
-      // Theta should DECREASE when dragging left (camera orbits left)
-      expect(state.camera.theta, lessThan(initialTheta));
+      // Theta should INCREASE when dragging left (scene rotates right)
+      expect(state.camera.theta, greaterThan(initialTheta));
     });
 
     testWidgets('resetView restores default camera after orbit',
@@ -112,7 +113,7 @@ void main() {
   });
 
   group('MathCanvas3D - pinch zoom', () {
-    testWidgets('pinch in (scale<1) zooms out (distance increases)',
+    testWidgets('pinch in (scale<1) zooms IN (distance decreases)',
         (tester) async {
       final state = await setupCanvas(tester);
       final initialDistance = state.camera.distance;
@@ -140,11 +141,11 @@ void main() {
       await pointer2.up();
       await tester.pump();
 
-      // Pinch in (scale < 1) should increase distance (zoom out)
-      expect(state.camera.distance, greaterThan(initialDistance));
+      // Pinch in (scale < 1) should decrease distance (zoom in)
+      expect(state.camera.distance, lessThan(initialDistance));
     });
 
-    testWidgets('pinch out (scale>1) zooms in (distance decreases)',
+    testWidgets('pinch out (scale>1) zooms OUT (distance increases)',
         (tester) async {
       final state = await setupCanvas(tester);
       final initialDistance = state.camera.distance;
@@ -172,8 +173,8 @@ void main() {
       await pointer2.up();
       await tester.pump();
 
-      // Pinch out (scale > 1) should decrease distance (zoom in)
-      expect(state.camera.distance, lessThan(initialDistance));
+      // Pinch out (scale > 1) should increase distance (zoom out)
+      expect(state.camera.distance, greaterThan(initialDistance));
     });
   });
 
