@@ -5,6 +5,7 @@ import '../models/chat_event.dart';
 import '../models/chat_message.dart';
 import '../models/mcp.dart';
 import '../models/tool_call.dart';
+import '../models/tts_models.dart' show CustomParam;
 import '../providers/provider_config.dart';
 import 'chat_service.dart';
 import 'http_tool_service.dart';
@@ -81,6 +82,13 @@ class ChatAdapter {
   /// Gets the reasoning parameters from the current model config.
   List<ReasoningParam> get reasoningParams {
     return _chatService?.modelConfig?.reasoningParams ?? [];
+  }
+
+  /// Gets the model-level custom parameters (模型页自定义参数)
+  /// from the current model config.
+  /// These are distinct from reasoning/inference parameters.
+  List<CustomParam> get customParams {
+    return _chatService?.modelConfig?.customParams ?? [];
   }
 
   /// 获取当前 MCP 工具定义列表
