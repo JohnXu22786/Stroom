@@ -297,8 +297,12 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
   }
 
   Widget _buildFallbackCard(FlowSubTask subTask, ColorScheme cs) {
-    // Show loading state while the real task is being created
-    final isInitializing = subTask.subTaskId.startsWith('pending_');
+    // Show loading spinner ONLY while the real task is being created AND
+    // the sub-task is still waiting.  Once the flow has failed (cascade
+    // marks remaining placeholder sub-tasks as `failed`) we must show the
+    // failure state, not a misleading spinner.
+    final isInitializing = subTask.subTaskId.startsWith('pending_') &&
+        subTask.status == TaskStatus.waiting;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       child: Container(
@@ -344,7 +348,10 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
             ),
             if (!isInitializing)
               Text(
-                _statusLabel(subTask.status),
+                subTask.status == TaskStatus.failed &&
+                        subTask.subTaskId.startsWith('pending_')
+                    ? '未执行'
+                    : _statusLabel(subTask.status),
                 style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
               ),
           ],

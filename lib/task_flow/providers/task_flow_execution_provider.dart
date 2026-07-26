@@ -133,13 +133,27 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>> {
   }
 
   /// Mark execution as failed.
+  ///
+  /// Also cascade-fails any sub-tasks that are not yet `completed` or
+  /// `failed` (i.e., `waiting`, `running`, or `paused`).  When the flow
+  /// terminates, those blocks will never execute (or continue), so marking
+  /// them `failed` keeps the progress text consistent and prevents the
+  /// UI from showing a spinner for a dead flow.
   void failExecution(String executionId, {String? error}) {
     state = state.map((e) {
       if (e.id != executionId) return e;
+      final cascaded = e.subTasks.map((st) {
+        if (st.status != TaskStatus.completed &&
+            st.status != TaskStatus.failed) {
+          return st.copyWithStatus(TaskStatus.failed);
+        }
+        return st;
+      }).toList();
       return e.copyWith(
         status: FlowExecutionStatus.failed,
         completedAt: DateTime.now(),
         error: error,
+        subTasks: cascaded,
       );
     }).toList();
   }

@@ -39,6 +39,19 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
   }
 
   @override
+  void didUpdateWidget(covariant BackgroundTaskCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Auto-expand when the task transitions into running so the step
+    // timeline is visible while the task executes.  Keeps behaviour
+    // consistent with CatCatchTaskCard and SynthesisTaskCard which
+    // also auto-expand on the waiting→running transition.
+    if (widget.task.status == TaskStatus.running &&
+        oldWidget.task.status != TaskStatus.running) {
+      setState(() => _expanded = true);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final hasRawData =

@@ -335,6 +335,215 @@ void main() {
         expect(notifier.state[0].error, '连接超时');
         expect(notifier.state[0].completedAt, isNotNull);
       });
+
+      test('cascade-fails remaining waiting subTasks when a block fails', () {
+        // Regression: a 2-block flow (catcatch → audioSeparation) where
+        // block 0 fails.  Before the fix block 1 stayed `waiting` forever,
+        // so the progress text froze at "0/2已完成 · 1个失败" and the
+        // audioSeparation fallback card showed "正在初始化..." indefinitely.
+        final execId = notifier.addExecution(
+          flowId: 'flow-1',
+          flowName: '下载→音频分离',
+        );
+        // Block 0: catcatch (will fail)
+        notifier.addSubTask(
+          execId,
+          FlowSubTask(
+            blockTypeKey: 'catcatch',
+            blockLabel: '获取网页资源',
+            subTaskId: 'pending_catcatch_0',
+            subTaskType: 'catcatch',
+            status: TaskStatus.waiting,
+          ),
+        );
+        // Block 1: audioSeparation (should be cascade-failed)
+        notifier.addSubTask(
+          execId,
+          FlowSubTask(
+            blockTypeKey: 'audioSeparation',
+            blockLabel: '音频分离',
+            subTaskId: 'pending_audioSeparation_1',
+            subTaskType: 'background',
+            status: TaskStatus.waiting,
+          ),
+        );
+
+        final stId0 = notifier.state[0].subTasks[0].id;
+
+        // Block 0 fails first (the executor sets subTask status before throwing)
+        notifier.updateSubTaskStatus(execId, stId0, TaskStatus.failed);
+        // Then startFlow catch calls failExecution
+        notifier.failExecution(execId, error: '步骤 1 失败: CatCatch');
+
+        // Both subTasks should now be failed
+        expect(notifier.state[0].subTasks[0].status, TaskStatus.failed);
+        expect(notifier.state[0].subTasks[1].status, TaskStatus.failed,
+            reason: 'cascade-fail should mark remaining waiting subTasks '
+                'as failed so the progress text reflects the true state');
+        expect(notifier.state[0].status, FlowExecutionStatus.failed);
+        expect(notifier.state[0].error, '步骤 1 失败: CatCatch');
+      });
+
+      test('does NOT overwrite already-completed subTasks on cascade', () {
+        // A 3-block flow where block 0 completed, block 1 fails, block 2 is
+        // still waiting.  Block 0 should stay completed; block 2 should be
+        // cascade-failed.
+        final execId = notifier.addExecution(
+          flowId: 'flow-1',
+          flowName: '三块流程',
+        );
+        notifier.addSubTask(
+          execId,
+          FlowSubTask(
+            blockTypeKey: 'catcatch',
+            blockLabel: '获取网页资源',
+            subTaskId: 'task-0',
+            subTaskType: 'catcatch',
+            status: TaskStatus.waiting,
+          ),
+        );
+        notifier.addSubTask(
+          execId,
+          FlowSubTask(
+            blockTypeKey: 'audioSeparation',
+            blockLabel: '音频分离',
+            subTaskId: 'task-1',
+            subTaskType: 'background',
+            status: TaskStatus.waiting,
+          ),
+        );
+        notifier.addSubTask(
+          execId,
+          FlowSubTask(
+            blockTypeKey: 'asr',
+            blockLabel: '语音识别',
+            subTaskId: 'pending_asr_2',
+            subTaskType: 'background',
+            status: TaskStatus.waiting,
+          ),
+        );
+
+        notifier.updateSubTaskStatus(
+            execId, notifier.state[0].subTasks[0].id, TaskStatus.completed);
+        notifier.updateSubTaskStatus(
+            execId, notifier.state[0].subTasks[1].id, TaskStatus.failed);
+        notifier.failExecution(execId, error: '步骤 2 失败');
+
+        expect(notifier.state[0].subTasks[0].status, TaskStatus.completed,
+            reason: 'already-completed subTask must not be overwritten');
+        expect(notifier.state[0].subTasks[1].status, TaskStatus.failed);
+        expect(notifier.state[0].subTasks[2].status, TaskStatus.failed,
+            reason:
+                'waiting subTask after failure point must be cascade-failed');
+      });
+
+      test('cascade is idempotent for already-failed subTasks', () {
+        // Calling failExecution when all subTasks are already failed should
+        // not throw and should leave them failed.
+        final execId = notifier.addExecution(
+          flowId: 'flow-1',
+          flowName: '测试',
+        );
+        notifier.addSubTask(
+          execId,
+          FlowSubTask(
+            blockTypeKey: 'catcatch',
+            blockLabel: '获取网页资源',
+            subTaskId: 'pending_catcatch_0',
+            subTaskType: 'catcatch',
+            status: TaskStatus.waiting,
+          ),
+        );
+        notifier.updateSubTaskStatus(
+            execId, notifier.state[0].subTasks[0].id, TaskStatus.failed);
+        notifier.failExecution(execId);
+        // Calling again should be harmless
+        notifier.failExecution(execId, error: 'second call');
+        expect(notifier.state[0].subTasks[0].status, TaskStatus.failed);
+        expect(notifier.state[0].status, FlowExecutionStatus.failed);
+      });
+
+      test('cascade-fails a running sub-task (concurrent block interrupted)',
+          () {
+        // Regression: when block 0 is running and block 1 fails, the
+        // running block should also be cascade-failed so it doesn't
+        // hang forever as "running" inside a failed flow.
+        final execId = notifier.addExecution(
+          flowId: 'flow-1',
+          flowName: '并发流程',
+        );
+        notifier.addSubTask(
+          execId,
+          FlowSubTask(
+            blockTypeKey: 'catcatch',
+            blockLabel: '获取网页资源',
+            subTaskId: 'task-0',
+            subTaskType: 'catcatch',
+            status: TaskStatus.waiting,
+          ),
+        );
+        notifier.addSubTask(
+          execId,
+          FlowSubTask(
+            blockTypeKey: 'audioSeparation',
+            blockLabel: '音频分离',
+            subTaskId: 'task-1',
+            subTaskType: 'background',
+            status: TaskStatus.waiting,
+          ),
+        );
+        // Block 0 is running, block 1 fails
+        notifier.updateSubTaskStatus(
+            execId, notifier.state[0].subTasks[0].id, TaskStatus.running);
+        notifier.updateSubTaskStatus(
+            execId, notifier.state[0].subTasks[1].id, TaskStatus.failed);
+        notifier.failExecution(execId, error: '步骤 2 失败');
+        // The running block should now be failed (cascade)
+        expect(notifier.state[0].subTasks[0].status, TaskStatus.failed,
+            reason: 'running subTask must be cascade-failed when the '
+                'flow terminates');
+        expect(notifier.state[0].subTasks[1].status, TaskStatus.failed);
+      });
+
+      test('cascade-fails a paused sub-task (CatCatch paused → flow fails)',
+          () {
+        // Regression: CatCatch paused sets subTask to `paused` then throws.
+        // failExecution cascade must also mark `paused` as `failed`,
+        // otherwise the UI would show a spinner for a dead flow.
+        final execId = notifier.addExecution(
+          flowId: 'flow-1',
+          flowName: '下载流程',
+        );
+        notifier.addSubTask(
+          execId,
+          FlowSubTask(
+            blockTypeKey: 'catcatch',
+            blockLabel: '获取网页资源',
+            subTaskId: 'task-0',
+            subTaskType: 'catcatch',
+            status: TaskStatus.waiting,
+          ),
+        );
+        notifier.addSubTask(
+          execId,
+          FlowSubTask(
+            blockTypeKey: 'audioSeparation',
+            blockLabel: '音频分离',
+            subTaskId: 'pending_audioSeparation_1',
+            subTaskType: 'background',
+            status: TaskStatus.waiting,
+          ),
+        );
+        // Block 0 paused, then failExecution simulates the throw path
+        notifier.updateSubTaskStatus(
+            execId, notifier.state[0].subTasks[0].id, TaskStatus.paused);
+        notifier.failExecution(execId, error: 'CatCatch: 任务已暂停');
+        expect(notifier.state[0].subTasks[0].status, TaskStatus.failed,
+            reason: 'paused subTask must be cascade-failed so the UI '
+                'does not show a spinner for a dead flow');
+        expect(notifier.state[0].subTasks[1].status, TaskStatus.failed);
+        expect(notifier.state[0].status, FlowExecutionStatus.failed);
+      });
     });
 
     test('removeExecution removes the execution by id', () {
