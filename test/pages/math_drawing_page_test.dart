@@ -186,17 +186,55 @@ void main() {
   });
 
   group('MathDrawingPage - UI spacing', () {
-    testWidgets('formula row left side has adequate spacing', (tester) async {
+    testWidgets('formula rows render with color circle and visibility icon',
+        (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
-      // Color circle and eye icon should both be present
+      // Color circle and visibility icon should both be present
       expect(find.byIcon(Icons.visibility), findsOneWidget);
+      expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
 
-      // The color indicator is a Container with circle shape
-      // Check that the Row has appropriate spacing
-      // (verified indirectly by layout not crashing)
+      // No layout exceptions
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('eye icon is positioned after the text field (outside input)',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      final textField = find.byType(TextField);
+      final eyeIcon = find.byIcon(Icons.visibility);
+
+      // Eye icon's left edge must be to the right of the TextField's right edge
+      final textFieldRect = tester.getRect(textField);
+      final eyeRect = tester.getRect(eyeIcon);
+
+      expect(eyeRect.left, greaterThan(textFieldRect.right - 1),
+          reason:
+              'Eye icon should be positioned to the right of the text field (outside the input)');
+    });
+
+    testWidgets('color circle has left padding from the row edge',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      // Find the Container with BoxShape.circle (the color indicator)
+      final colorCircle = find.byWidgetPredicate(
+        (w) =>
+            w is Container &&
+            w.decoration is BoxDecoration &&
+            (w.decoration as BoxDecoration).shape == BoxShape.circle,
+      );
+      expect(colorCircle, findsOneWidget);
+
+      // The left edge of the color circle should have padding (the 4px
+      // SizedBox) before it, plus the 8px ListView padding
+      final circleRect = tester.getRect(colorCircle);
+      expect(circleRect.left, greaterThan(2),
+          reason: 'Color circle should have left padding from the row edge');
     });
 
     testWidgets(
