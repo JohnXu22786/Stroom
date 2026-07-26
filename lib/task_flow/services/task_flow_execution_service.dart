@@ -204,8 +204,8 @@ class TaskFlowExecutionService {
         return await _executeCatCatchBlock(def, input, execId, execNotifier,
             flowSubTask: flowSubTask,
             catcatchNotifier: catcatchNotifier,
-            videoFolder: block.params['videoFolder'],
-            audioFolder: block.params['audioFolder']);
+            videoFolder: block.params['videoFolder'] ?? '',
+            audioFolder: block.params['audioFolder'] ?? '');
       case 'audioSeparation':
         return await _executeAudioSeparationBlock(
             def, input, execId, execNotifier,

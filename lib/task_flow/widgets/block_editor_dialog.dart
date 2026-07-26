@@ -324,8 +324,6 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
       context,
       currentFolder: currentValue,
       availableFolders: await FileManifest.getAllFolders(),
-      onCreateFolder: (name) => FileManifest.createFolder(name),
-      onRefreshFolders: () => FileManifest.getAllFolders(),
       title: '选择保存文件夹',
     );
     if (result != null && mounted) {
