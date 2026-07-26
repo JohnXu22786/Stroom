@@ -38,6 +38,9 @@ class BackupLocationManager {
   /// 使用 Stroom/AutoBackups 两级目录结构，便于用户识别和管理。
   static const String _backupDirName = 'Stroom/AutoBackups';
 
+  /// 日志目录路径（与备份同级，便于用户在 Documents/Stroom 统一查看）。
+  static const String _logDirName = 'Stroom/Logs';
+
   // ================================================================
   // 路径解析
   // ================================================================
@@ -176,6 +179,89 @@ class BackupLocationManager {
   }
 
   // ================================================================
+  // 日志路径解析
+  // ================================================================
+
+  /// 获取日志根目录路径（用于非 Android SAF 平台）。
+  ///
+  /// 返回格式化的路径字符串，供 dart:io 直接使用。
+  /// Android 上如果已配置 SAF URI，返回的是虚拟路径用于 UI 显示。
+  /// Web 上返回 null。
+  ///
+  /// 日志目录位于 Documents/Stroom/Logs，与自动备份目录
+  /// (Documents/Stroom/AutoBackups) 同级。
+  static Future<String?> getLogsRootPath() async {
+    if (kIsWeb) return null;
+
+    // 测试环境
+    try {
+      if (Platform.environment['FLUTTER_TEST'] == 'true') {
+        return '${Directory.systemTemp.path}/stroom_log_test';
+      }
+    } catch (e) {
+      debugPrint('[BackupLocationManager] 检查测试环境失败: $e');
+    }
+
+    // Android: 使用 SAF URI（如果已配置）
+    if (!kIsWeb) {
+      try {
+        if (Platform.isAndroid) {
+          final uri = await _getSavedSafUri();
+          if (uri != null) {
+            // 返回虚拟路径，用于 Dart 侧区分 SAF 模式
+            return 'saf://$uri/$_logDirName';
+          }
+          // SAF URI 未配置，返回 null 表示需要用户授权
+          return null;
+        }
+      } catch (e) {
+        debugPrint('[BackupLocationManager] 检查 Android SAF 平台失败: $e');
+      }
+    }
+
+    // Desktop: ~/Documents/Stroom/Logs
+    try {
+      if (Platform.isWindows) {
+        final userProfile = Platform.environment['USERPROFILE'];
+        if (userProfile != null && userProfile.isNotEmpty) {
+          return p.join(userProfile, 'Documents', _logDirName);
+        }
+      }
+    } catch (e) {
+      debugPrint('[BackupLocationManager] 获取 Windows 日志路径失败: $e');
+    }
+
+    try {
+      if (Platform.isMacOS || Platform.isLinux) {
+        final home = Platform.environment['HOME'];
+        if (home != null && home.isNotEmpty) {
+          return p.join(home, 'Documents', _logDirName);
+        }
+      }
+    } catch (e) {
+      debugPrint('[BackupLocationManager] 获取 macOS/Linux 日志路径失败: $e');
+    }
+
+    // iOS: 应用 Documents 目录（通过文件 App 可访问）
+    try {
+      if (Platform.isIOS) {
+        final docsDir = await getApplicationDocumentsDirectory();
+        return p.join(docsDir.path, _logDirName);
+      }
+    } catch (e) {
+      debugPrint('[BackupLocationManager] 获取 iOS 日志路径失败: $e');
+    }
+
+    // 兜底：系统临时目录
+    try {
+      return '${Directory.systemTemp.path}/$_logDirName';
+    } catch (e) {
+      debugPrint('[BackupLocationManager] 获取系统临时目录失败: $e');
+      return '/tmp/$_logDirName';
+    }
+  }
+
+  // ================================================================
   // 存储访问检查与授权
   // ================================================================
 
@@ -302,10 +388,11 @@ class BackupLocationManager {
             if (accessible) {
               debugPrint('[BackupLocationManager] SAF 授权成功: $uri');
             } else {
-              debugPrint('[BackupLocationManager] SAF URI 无法访问，'
-                  '需要重新授权');
-              await _clearSafUri();
-              return false;
+              debugPrint('[BackupLocationManager] SAF URI 已保存但 test check 失败，'
+                  '不清理 URI（可能是暂时性问题）');
+              // URI 已通过 SAF 选择器合法获得并固化，不应因暂时性
+              // test check 失败而清除。"反复弹窗" 的根本原因就在这里：
+              // 之前会 clearSafUri()，导致用户授权后又被要求重新授权。
             }
             return accessible;
           } catch (e) {
@@ -536,6 +623,219 @@ class BackupLocationManager {
       return [];
     }
   }
+
+  // ================================================================
+  // 日志文件操作（跨平台抽象）
+  // ================================================================
+
+  /// 写入日志内容到文件（SAF 模式：追加写入，非 SAF 模式：直接文件 I/O）。
+  ///
+  /// [relativePath] 是相对于日志根目录的路径（如 app_2024-01-01-12.log）。
+  /// [content] 是要追加的日志文本内容。
+  ///
+  /// Android SAF 模式会通过 MethodChannel 操作 Stroom/Logs 目录；
+  /// 其他平台直接使用 dart:io 写入。
+  static Future<void> writeLogContent(
+      String relativePath, String content) async {
+    if (kIsWeb) return;
+
+    // Android SAF
+    if (!kIsWeb) {
+      try {
+        if (Platform.isAndroid) {
+          final uri = await _getSavedSafUri();
+          if (uri == null) {
+            // SAF 未配置，尝试使用 dart:io fallback
+            debugPrint('[BackupLocationManager] SAF URI 未配置，'
+                '日志将写入临时目录');
+            await _writeLogToFile(relativePath, content);
+            return;
+          }
+          await _safChannel.invokeMethod<void>('writeLog', {
+            'uri': uri,
+            'fileName': relativePath,
+            'content': content,
+          });
+          return;
+        }
+      } catch (e) {
+        debugPrint('[BackupLocationManager] SAF 写入日志失败: $e');
+        // Fallback: 尝试直接文件 I/O
+        try {
+          await _writeLogToFile(relativePath, content);
+        } catch (_) {
+          // 静默失败，日志写入不应阻塞应用
+        }
+        return;
+      }
+    }
+
+    // 非 Android 平台：直接使用 dart:io
+    await _writeLogToFile(relativePath, content);
+  }
+
+  /// 读取日志文件内容。
+  ///
+  /// [relativePath] 是相对于日志根目录的路径。
+  /// 返回文件内容字符串，如果文件不存在或读取失败返回 null。
+  static Future<String?> readLogContent(String relativePath) async {
+    if (kIsWeb) return null;
+
+    // Android SAF
+    if (!kIsWeb) {
+      try {
+        if (Platform.isAndroid) {
+          final uri = await _getSavedSafUri();
+          if (uri == null) {
+            return await _readLogFromFile(relativePath);
+          }
+          final result = await _safChannel.invokeMethod<String>('readLog', {
+            'uri': uri,
+            'fileName': relativePath,
+          });
+          return result;
+        }
+      } catch (e) {
+        debugPrint('[BackupLocationManager] SAF 读取日志失败: $e');
+        return await _readLogFromFile(relativePath);
+      }
+    }
+
+    // 非 Android 平台
+    return await _readLogFromFile(relativePath);
+  }
+
+  /// 列出日志目录中的所有日志文件。
+  ///
+  /// 返回日志文件名列表（仅 .log 文件）。
+  static Future<List<String>> listLogFiles() async {
+    if (kIsWeb) return [];
+
+    // Android SAF
+    if (!kIsWeb) {
+      try {
+        if (Platform.isAndroid) {
+          final uri = await _getSavedSafUri();
+          if (uri == null) {
+            return await _listLogFilesFromDir();
+          }
+          final result = await _safChannel
+              .invokeMethod<List<dynamic>>('listLogs', {'uri': uri});
+          if (result != null) {
+            return result.cast<String>();
+          }
+          return [];
+        }
+      } catch (e) {
+        debugPrint('[BackupLocationManager] SAF 列出日志文件失败: $e');
+        return await _listLogFilesFromDir();
+      }
+    }
+
+    // 非 Android 平台
+    return await _listLogFilesFromDir();
+  }
+
+  /// 删除日志文件。
+  ///
+  /// [relativePath] 是相对于日志根目录的路径。
+  static Future<void> deleteLogFile(String relativePath) async {
+    if (kIsWeb) return;
+
+    // Android SAF
+    if (!kIsWeb) {
+      try {
+        if (Platform.isAndroid) {
+          final uri = await _getSavedSafUri();
+          if (uri == null) {
+            await _deleteLogFromFile(relativePath);
+            return;
+          }
+          await _safChannel.invokeMethod<void>('deleteLog', {
+            'uri': uri,
+            'fileName': relativePath,
+          });
+          return;
+        }
+      } catch (e) {
+        debugPrint('[BackupLocationManager] SAF 删除日志失败: $e');
+        await _deleteLogFromFile(relativePath);
+        return;
+      }
+    }
+
+    // 非 Android 平台
+    await _deleteLogFromFile(relativePath);
+  }
+
+  /// dart:io 日志写入（非 SAF 模式）。
+  static Future<void> _writeLogToFile(
+      String relativePath, String content) async {
+    try {
+      final logsPath = await getLogsRootPath();
+      if (logsPath == null) return;
+      final dir = Directory(logsPath);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      final file = File(p.join(logsPath, relativePath));
+      // 追加模式写入
+      await file.writeAsString(content, mode: FileMode.append);
+    } catch (e) {
+      debugPrint('[BackupLocationManager] 写入日志文件失败: $relativePath: $e');
+    }
+  }
+
+  /// dart:io 日志读取（非 SAF 模式）。
+  static Future<String?> _readLogFromFile(String relativePath) async {
+    try {
+      final logsPath = await getLogsRootPath();
+      if (logsPath == null) return null;
+      final file = File(p.join(logsPath, relativePath));
+      if (!await file.exists()) return null;
+      return await file.readAsString();
+    } catch (e) {
+      debugPrint('[BackupLocationManager] 读取日志文件失败: $relativePath: $e');
+      return null;
+    }
+  }
+
+  /// dart:io 日志文件列表（非 SAF 模式）。
+  static Future<List<String>> _listLogFilesFromDir() async {
+    try {
+      final logsPath = await getLogsRootPath();
+      if (logsPath == null) return [];
+      final dir = Directory(logsPath);
+      if (!await dir.exists()) return [];
+      final entries = await dir.list().toList();
+      return entries
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.log') && f.path.contains('app_'))
+          .map((f) => p.basename(f.path))
+          .toList();
+    } catch (e) {
+      debugPrint('[BackupLocationManager] 列出日志文件失败: $e');
+      return [];
+    }
+  }
+
+  /// dart:io 日志文件删除（非 SAF 模式）。
+  static Future<void> _deleteLogFromFile(String relativePath) async {
+    try {
+      final logsPath = await getLogsRootPath();
+      if (logsPath == null) return;
+      final file = File(p.join(logsPath, relativePath));
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (e) {
+      debugPrint('[BackupLocationManager] 删除日志文件失败: $relativePath: $e');
+    }
+  }
+
+  // ================================================================
+  // 存储空间检查
+  // ================================================================
 
   /// 检查是否有足够的可用空间。
   ///
