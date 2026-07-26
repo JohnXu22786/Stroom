@@ -129,11 +129,13 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       if (cancelToken.isCancelled) return;
 
       // 保存音频文件
+      final saveFolder = task.customParams?['saveFolder'] as String? ?? '';
       final filePath = await _saveAudioFile(
         audioData,
         actualFormat,
         task.text,
         name: task.title,
+        folder: saveFolder,
       );
 
       // 更新任务为完成
@@ -356,6 +358,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     String format,
     String text, {
     String name = '',
+    String folder = '',
   }) async {
     final hash = computeAudioHash(audioData);
     // 如果未提供标题，使用文本的前几个字
@@ -379,6 +382,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       createdAt: DateTime.now(),
       size: audioData.length,
       sourceText: text,
+      folder: folder,
     );
 
     await FileManifest.addRecord(record);

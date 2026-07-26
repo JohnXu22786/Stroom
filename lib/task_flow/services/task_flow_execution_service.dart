@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
+import '../../catcatch/engine/executor_save.dart'
+    show registerCompletedVideo, registerCompletedAudio;
 import '../../catcatch/models/catcatch_task.dart' as catcatch;
 import '../../catcatch/providers/catcatch_provider.dart';
 import '../../providers/background_task_provider.dart';
@@ -17,6 +19,7 @@ import '../../providers/task_provider_shared.dart';
 import '../../utils/audio_separation.dart';
 import '../../utils/audio_utils.dart';
 import '../../utils/file_manifest.dart';
+import '../../utils/text_manifest.dart';
 import '../models/block_type_definition.dart';
 import '../models/task_flow_definition.dart';
 import '../models/task_flow_execution.dart';
@@ -159,28 +162,47 @@ class TaskFlowExecutionService {
     execNotifier.updateSubTaskStatus(execId, flowSubTaskId, TaskStatus.failed);
   }
 
-  Future<String?> _saveTextForFlow(String text) async {
+  Future<String?> _saveTextForFlow(String text,
+      {String saveFolder = '', String? title}) async {
     if (text.isEmpty) return null;
-    final hash = computeAudioHash(Uint8List.fromList(text.codeUnits));
-    final path = '$hash.txt';
-    await FileManifest.writeFile(path, Uint8List.fromList(text.codeUnits));
-    return await FileManifest.readFilePath(path);
+    final bytes = Uint8List.fromList(utf8.encode(text));
+    final hash = computeTextHash(bytes);
+    final storageFileName = '$hash.txt';
+    final filePath = await TextManifest.writeText(storageFileName, text);
+    await TextManifest.addRecord(TextRecord(
+      name: title ?? 'FLOW_${DateTime.now().millisecondsSinceEpoch}',
+      hash: hash,
+      format: 'txt',
+      createdAt: DateTime.now(),
+      size: bytes.length,
+      folder: saveFolder,
+      textLength: text.length,
+    ));
+    return filePath;
   }
 
   Future<String?> _saveAudioForFlow(
-      Uint8List audioBytes, String inputFilePath) async {
+    Uint8List audioBytes, {
+    String saveFolder = '',
+    String? title,
+  }) async {
     if (audioBytes.isEmpty) throw Exception('提取的音频数据为空');
+    final hash = computeAudioHash(audioBytes);
     final format = normalizeAudioFormat(detectAudioFormat(audioBytes));
 
-    // Save to the same directory as the input video so the user can find
-    // the file.  Use a readable name derived from the video filename.
-    final inputDir = p.dirname(inputFilePath);
-    final inputBaseName = p.basenameWithoutExtension(inputFilePath);
-    final outputFileName = '${inputBaseName}_audio.$format';
-    final outputPath = p.join(inputDir, outputFileName);
+    await FileManifest.writeFile('$hash.$format', audioBytes);
 
-    await File(outputPath).writeAsBytes(audioBytes);
-    return outputPath;
+    final record = AudioRecord(
+      name: title ?? '音频分离_${DateTime.now().millisecondsSinceEpoch}',
+      hash: hash,
+      format: format,
+      createdAt: DateTime.now(),
+      size: audioBytes.length,
+      folder: saveFolder,
+    );
+    await FileManifest.addRecord(record);
+
+    return await FileManifest.readFilePath('$hash.$format');
   }
 
   // ===========================================================================
@@ -201,14 +223,15 @@ class TaskFlowExecutionService {
   }) async {
     switch (def.typeKey) {
       case 'catcatch':
-        return await _executeCatCatchBlock(def, input, execId, execNotifier,
+        return await _executeCatCatchBlock(
+            def, block, input, execId, execNotifier,
             flowSubTask: flowSubTask,
             catcatchNotifier: catcatchNotifier,
             videoFolder: block.params['videoFolder'] ?? '',
             audioFolder: block.params['audioFolder'] ?? '');
       case 'audioSeparation':
         return await _executeAudioSeparationBlock(
-            def, input, execId, execNotifier,
+            def, block, input, execId, execNotifier,
             flowSubTask: flowSubTask, bgNotifier: bgNotifier);
       case 'asr':
         return await _executeAsrBlock(block, def, input, execId, execNotifier,
@@ -237,6 +260,7 @@ class TaskFlowExecutionService {
 
   Future<String> _executeCatCatchBlock(
     BlockTypeDefinition def,
+    TaskFlowBlock block,
     String input,
     String execId,
     TaskFlowExecutionNotifier execNotifier, {
@@ -252,7 +276,8 @@ class TaskFlowExecutionService {
     execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
     execNotifier.updateSubTaskStatus(
         execId, flowSubTask.id, TaskStatus.running);
-    catcatchNotifier.addTask(input, 0,
+    final durationSec = (block.params['durationSec'] ?? 0) as num;
+    catcatchNotifier.addTask(input, durationSec.toInt(),
         taskId: taskId, videoFolder: videoFolder, audioFolder: audioFolder);
 
     final startTime = DateTime.now();
@@ -274,7 +299,24 @@ class TaskFlowExecutionService {
       if (task.status == catcatch.TaskStatus.completed) {
         execNotifier.updateSubTaskStatus(
             execId, flowSubTask.id, TaskStatus.completed);
-        if (task.downloadedFilePath != null) return task.downloadedFilePath!;
+        if (task.downloadedFilePath != null) {
+          // Belt-and-suspenders: explicitly register the file to the
+          // manifest library. The executor's internal registration
+          // (executor_save.dart) may have already done this, but if it
+          // silently failed, our call ensures the file appears in the
+          // gallery.  Hash deduplication prevents duplicate records.
+          try {
+            await registerCompletedVideo(task.downloadedFilePath!, task);
+          } catch (e) {
+            debugPrint('[TaskFlow] CatCatch register video failed: $e');
+          }
+          try {
+            await registerCompletedAudio(task.downloadedFilePath!, task);
+          } catch (e) {
+            debugPrint('[TaskFlow] CatCatch register audio failed: $e');
+          }
+          return task.downloadedFilePath!;
+        }
         throw 'CatCatch: 下载完成但无文件路径';
       }
       if (task.status == catcatch.TaskStatus.failed) {
@@ -342,6 +384,7 @@ class TaskFlowExecutionService {
 
   Future<String> _executeAudioSeparationBlock(
     BlockTypeDefinition def,
+    TaskFlowBlock block,
     String input,
     String execId,
     TaskFlowExecutionNotifier execNotifier, {
@@ -387,7 +430,9 @@ class TaskFlowExecutionService {
       bgNotifier.updateStep(taskId, 0, completed: true);
 
       bgNotifier.updateStep(taskId, 1, running: true);
-      final filePath = await _saveAudioForFlow(audioBytes, input);
+      final saveFolder = block.params['saveFolder'] ?? '';
+      final filePath = await _saveAudioForFlow(audioBytes,
+          saveFolder: saveFolder, title: title);
       bgNotifier.updateStep(taskId, 1, completed: true);
 
       if (filePath == null) {
@@ -457,6 +502,7 @@ class TaskFlowExecutionService {
     }
 
     final modelIndex = int.tryParse(block.params['modelIndex'] ?? '0') ?? 0;
+    final saveFolder = block.params['saveFolder'] ?? '';
     final configs = providerEntries.entries
         .where((e) => e.type == 'asr')
         .expand((e) => e.configs)
@@ -489,7 +535,8 @@ class TaskFlowExecutionService {
       bgNotifier.updateStep(taskId, 0, completed: true);
       bgNotifier.setResult(taskId, result);
 
-      final textPath = await _saveTextForFlow(result);
+      final textPath =
+          await _saveTextForFlow(result, saveFolder: saveFolder, title: title);
       bgNotifier.completeTask(taskId, downloadedFilePath: textPath);
       execNotifier.updateSubTaskStatus(
           execId, flowSubTask.id, TaskStatus.completed);
@@ -543,6 +590,7 @@ class TaskFlowExecutionService {
   }) async {
     final inputBasename = p.basename(input);
     final title = '文字识别_${p.basenameWithoutExtension(inputBasename)}';
+    final saveFolder = block.params['saveFolder'] ?? '';
 
     // Generate ID first, update execution, THEN add task to provider.
     final taskId = const Uuid().v4();
@@ -605,7 +653,8 @@ class TaskFlowExecutionService {
       bgNotifier.updateStep(taskId, 0, completed: true);
       bgNotifier.setResult(taskId, result);
 
-      final textPath = await _saveTextForFlow(result);
+      final textPath =
+          await _saveTextForFlow(result, saveFolder: saveFolder, title: title);
       bgNotifier.completeTask(taskId, downloadedFilePath: textPath);
       execNotifier.updateSubTaskStatus(
           execId, flowSubTask.id, TaskStatus.completed);
@@ -694,6 +743,7 @@ class TaskFlowExecutionService {
     final title = input.length > 20 ? input.substring(0, 20) : input;
     final voice = block.params['voice'] ?? '';
     final speed = block.params['speed'] ?? '1.0';
+    final saveFolder = block.params['saveFolder'] ?? '';
 
     try {
       // Generate ID first, update execution, THEN add task to provider.
@@ -709,6 +759,7 @@ class TaskFlowExecutionService {
         customParams: {
           if (voice.isNotEmpty) 'voice': voice,
           'speed': speed,
+          if (saveFolder.isNotEmpty) 'saveFolder': saveFolder,
         },
         taskId: taskId,
       );
