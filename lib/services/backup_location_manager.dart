@@ -388,10 +388,11 @@ class BackupLocationManager {
             if (accessible) {
               debugPrint('[BackupLocationManager] SAF 授权成功: $uri');
             } else {
-              debugPrint('[BackupLocationManager] SAF URI 无法访问，'
-                  '需要重新授权');
-              await _clearSafUri();
-              return false;
+              debugPrint('[BackupLocationManager] SAF URI 已保存但 test check 失败，'
+                  '不清理 URI（可能是暂时性问题）');
+              // URI 已通过 SAF 选择器合法获得并固化，不应因暂时性
+              // test check 失败而清除。"反复弹窗" 的根本原因就在这里：
+              // 之前会 clearSafUri()，导致用户授权后又被要求重新授权。
             }
             return accessible;
           } catch (e) {

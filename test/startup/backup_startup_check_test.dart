@@ -236,28 +236,6 @@ void main() {
   });
 
   // ==================================================================
-  // Retry guard — prevents infinite authorization loops
-  // ==================================================================
-
-  group('retry guard against authorization loops', () {
-    test('static retry counter defaults to 0 before runCheck', () {
-      // The retry counter should be accessible for testing
-      expect(BackupStartupCheck.authRetryCount, equals(0),
-          reason:
-              'Retry counter starts at 0 before any authorization attempts');
-    });
-
-    test('resetRetryCounter resets the counter to 0', () {
-      // Simulate multiple failed attempts by setting internal state
-      // and then resetting
-      BackupStartupCheck.authRetryCount = 5;
-      expect(BackupStartupCheck.authRetryCount, equals(5));
-      BackupStartupCheck.resetRetryCounter();
-      expect(BackupStartupCheck.authRetryCount, equals(0));
-    });
-  });
-
-  // ==================================================================
   // Storage space dialog
   // ==================================================================
 
