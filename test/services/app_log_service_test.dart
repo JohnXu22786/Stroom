@@ -203,6 +203,25 @@ void main() {
       // Cleanup
       if (await logDir.exists()) await logDir.delete(recursive: true);
     });
+
+    test('log path uses Logs subdirectory (not app data root)', () async {
+      final logDir = await AppLogService.getLogDir();
+      // Production path always ends with Stroom/Logs
+      // Test path ends with stroom_log_test
+      final pathLower = logDir.path.toLowerCase();
+      final hasLogsOrTest =
+          pathLower.contains('logs') || pathLower.contains('stroom_log_test');
+      expect(hasLogsOrTest, isTrue,
+          reason: 'Log directory should contain Logs subdirectory. '
+              'Production: Documents/Stroom/Logs. Tests: stroom_log_test.');
+
+      // Should NOT be in app-packages data directory
+      expect(pathLower, isNot(contains('com.johntsui.stroom')),
+          reason: 'Log directory should NOT be in Android app data directory');
+
+      // Cleanup
+      if (await logDir.exists()) await logDir.delete(recursive: true);
+    });
   });
 
   // ==================================================================
@@ -277,13 +296,16 @@ void main() {
       await AppLogService.flush();
       // Entries should still be in buffer (re-added on failure)
 
-      // Restore the real directory
+      // Restore the real directory.
+      // Delete the backup directory and recreate from scratch — avoids
+      // rename race conditions on some file systems (Linux/Windows).
       await badFile.delete();
       if (await Directory(backupDirPath).exists()) {
-        await Directory(backupDirPath).rename(logDir.path);
-      } else {
-        await logDir.create(recursive: true);
+        await Directory(backupDirPath).delete(recursive: true);
       }
+      // Brief yield to let the filesystem release the path
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await logDir.create(recursive: true);
       AppLogService.clearLogDirCache();
 
       // Second flush should succeed and write the entries
