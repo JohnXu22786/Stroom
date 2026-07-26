@@ -589,6 +589,14 @@ class ChatStreamManager {
     state.resultCompleter = null;
     _streams.remove(convId);
 
+    // Always reset isStreamingProvider when the stream ends. The chat_page's
+    // _startStreaming post-stream also clears it, but when the page is
+    // disposed (user left during streaming), the page's ref.read() throws
+    // in a disposed widget and the clearing doesn't happen — leaving the
+    // send/stop button stuck on "Stop" after re-entry. Clearing here is a
+    // safety net that doesn't affect segment data.
+    _setProvider(isStreamingProvider, false);
+
     // Remove this conversation from the streaming set. The page watches
     // this provider to detect completion and run cleanup + DB reload.
     final activeSet = <String>{
@@ -597,13 +605,13 @@ class ChatStreamManager {
     activeSet.remove(convId);
     _setProvider(streamingConversationsProvider, activeSet);
 
-    // Do NOT clear providers here. The chat_page's post-stream code in
-    // _startStreaming handles provider cleanup AFTER updating _history
-    // and calling _buildFinalSegments. Clearing providers prematurely
-    // triggers _rebuildLiveSegments with empty data, overwriting the
-    // correct segments (including reasoning with isStreaming=true that
-    // should have been replaced by _buildFinalSegments with
-    // isStreaming=false).
+    // Do NOT clear segment-related providers here. The chat_page's
+    // post-stream code in _startStreaming handles provider cleanup AFTER
+    // updating _history and calling _buildFinalSegments. Clearing segment
+    // providers prematurely triggers _rebuildLiveSegments with empty data,
+    // overwriting the correct segments (including reasoning with
+    // isStreaming=true that should have been replaced by _buildFinalSegments
+    // with isStreaming=false).
     _activeConvId = null;
 
     return result;

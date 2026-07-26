@@ -321,6 +321,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final fullReply = manager.fullReplyFor(activeConvId);
     final reasoningSections = manager.reasoningSectionsFor(activeConvId);
 
+    AppLogService.info(
+        'ChatPage',
+        '[STREAM-RESTORE] _restoreStreamingState: conv=$activeConvId msgId=$msgId '
+            'fullReplyLen=${fullReply.length} reasoningSectionsLen=${reasoningSections.length}');
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       // Also activate the conversation in the manager so provider updates
@@ -334,38 +339,50 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // instead of live-updating segments.
       _isStreamingActive = true;
       _streamingMsgId = msgId;
-      _chatSegments[msgId] = [];
+
+      // Check if _loadConversationMessages already inserted this message
+      // (from a periodic persist saved to DB while the user was away).
+      // If so, keep the DB-loaded segments as fallback and skip inserting
+      // a duplicate placeholder — which would create two Message widgets
+      // with the same id, doubling the streaming bubble.
+      final alreadyInController =
+          _controller?.messages.any((m) => m.id == msgId) ?? false;
+
+      if (!alreadyInController) {
+        _chatSegments[msgId] = [];
+        final placeholder = Message.textStream(
+          id: msgId,
+          authorId: _aiUser.id,
+          createdAt: DateTime.now(),
+          streamId: msgId,
+        );
+        _controller?.insertMessage(placeholder).then((_) {
+          if (!mounted) return;
+          if (fullReply.isNotEmpty) {
+            _controller?.updateMessage(
+              placeholder,
+              Message.text(
+                id: msgId,
+                authorId: _aiUser.id,
+                text: fullReply,
+                createdAt: DateTime.now(),
+              ),
+            );
+          }
+          _rebuildLiveSegments(msgId);
+          setState(() {});
+        });
+      } else {
+        AppLogService.info('ChatPage',
+            '[STREAM-RESTORE] msgId=$msgId already in controller (loaded from DB by _loadConversationMessages), skipping duplicate insert');
+        _rebuildLiveSegments(msgId);
+        setState(() {});
+      }
+
       // Restore reasoning sections from provider/manager so the buttons show up
       if (reasoningSections.isNotEmpty) {
         _reasoningContents[msgId] = List.of(reasoningSections);
       }
-
-      final placeholder = Message.textStream(
-        id: msgId,
-        authorId: _aiUser.id,
-        createdAt: DateTime.now(),
-        streamId: msgId,
-      );
-      _controller?.insertMessage(placeholder).then((_) {
-        if (!mounted) return;
-        // If we already have content, update the message to show it
-        if (fullReply.isNotEmpty) {
-          _controller?.updateMessage(
-            placeholder,
-            Message.text(
-              id: msgId,
-              authorId: _aiUser.id,
-              text: fullReply,
-              createdAt: DateTime.now(),
-            ),
-          );
-        }
-        // Build live segments immediately from the current provider state
-        // so the re-entered page shows reasoning/text/tool-call segments
-        // right away, not just the raw fullReply text.
-        _rebuildLiveSegments(msgId);
-        setState(() {});
-      });
     });
   }
 
@@ -390,6 +407,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // true and we run the cleanup here.
     if (!_isStreamingActive) return;
     final msgId = _streamingMsgId;
+    AppLogService.info('ChatPage',
+        '[STREAM-COMPLETION] _handleStreamCompletion: detected background stream completion for msgId=$msgId');
+
     _isStreamingActive = false;
     _streamingMsgId = null;
     try {
@@ -1083,23 +1103,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // so the streamingConversationsProvider listener's post-frame callback
     // (_handleStreamCompletion, guard: `if (!_isStreamingActive) return;`)
     // sees false and skips — avoiding a wasteful DB reload + visual flicker
-    // in the normal (non-re-entry) completion path. Doing this before the
-    // debug-log awaits removes a fragile dependency on those awaits not
-    // yielding to the event loop.
+    // in the normal (non-re-entry) completion path.
     _streamingMsgId = null;
     _isStreamingActive = false;
 
-    // Best-effort debug logging (must not block history update above)
-    try {
-      await AppLogService.debug('ChatPage',
-          '[DEBUG-HIST] _startStreaming: manager returned, result.history.length=${result.history.length}');
-      await AppLogService.debug('ChatPage',
-          '[DEBUG-HIST] _startStreaming: after result apply, _history.length=${_history.length}');
-    } catch (_) {}
-
-    // Clean up local streaming state and providers. Wrap in try-catch
-    // because ref.read() may fail if the widget was disposed while the
-    // manager was streaming in the background.
+    // Clean up local streaming state and providers.
     try {
       ref.read(isStreamingProvider.notifier).state = false;
       ref.read(streamingMsgIdProvider.notifier).state = null;
@@ -1108,6 +1116,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
     } catch (e) {
       debugPrint('[ChatPage] post-stream provider cleanup failed: $e');
     }
+
+    // Log stream completion for diagnostics
+    try {
+      await AppLogService.info(
+          'ChatPage',
+          '[STREAM-END] _startStreaming completed: result.history.length=${result.history.length}, '
+              'toolCalls=${result.toolCalls.length}, roundStarts=${result.toolCallRoundStarts}');
+    } catch (_) {}
 
     // Update the controller: replace streaming placeholder with final message
     if (mounted) {
