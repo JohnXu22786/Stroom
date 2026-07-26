@@ -296,13 +296,16 @@ void main() {
       await AppLogService.flush();
       // Entries should still be in buffer (re-added on failure)
 
-      // Restore the real directory
+      // Restore the real directory.
+      // Delete the backup directory and recreate from scratch — avoids
+      // rename race conditions on some file systems (Linux/Windows).
       await badFile.delete();
       if (await Directory(backupDirPath).exists()) {
-        await Directory(backupDirPath).rename(logDir.path);
-      } else {
-        await logDir.create(recursive: true);
+        await Directory(backupDirPath).delete(recursive: true);
       }
+      // Brief yield to let the filesystem release the path
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await logDir.create(recursive: true);
       AppLogService.clearLogDirCache();
 
       // Second flush should succeed and write the entries
