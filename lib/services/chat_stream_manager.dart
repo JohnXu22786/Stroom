@@ -252,12 +252,20 @@ class ChatStreamManager {
   /// ensure the global providers reflect the newly selected conversation's
   /// streaming state (if any).
   void activateConversation(String convId) {
-    if (_activeConvId == convId) return;
+    if (_activeConvId == convId) {
+      debugPrint(
+          '[ChatStreamManager] activateConversation: early-return, _activeConvId=$convId already active');
+      return;
+    }
     _activeConvId = convId;
     final state = _streams[convId];
     if (state != null) {
+      debugPrint(
+          '[ChatStreamManager] activateConversation: set _activeConvId=$convId, pushing state to providers');
       _pushStateToProviders(state);
     } else {
+      debugPrint(
+          '[ChatStreamManager] activateConversation: convId=$convId has no active stream, clearing providers');
       _clearProviders();
     }
   }
@@ -323,11 +331,8 @@ class ChatStreamManager {
     });
 
     // Now safe to yield to event loop — all state is established.
-    try {
-      await AppLogService.debug('ChatStreamManager',
-          '[DEBUG-HIST-MGR] startStreaming: received historyLen=${history.length}, convId=$convId');
-    } catch (_) {}
-    await AppLogService.info('ChatStreamManager', '开始流式请求, convId=$convId');
+    await AppLogService.info('ChatStreamManager',
+        '[STREAM-MGR] startStreaming: begin, convId=$convId, historyLen=${history.length}');
 
     Object? streamError;
     Map<String, dynamic>? rawRequestCapture;
@@ -554,15 +559,13 @@ class ChatStreamManager {
     // It's the single persistence path for all streaming results.
     try {
       if (state.history.isNotEmpty) {
-        await AppLogService.debug('ChatStreamManager',
-            '[DEBUG-HIST-MGR] about to save: state.history.length=${state.history.length}, fullReply.isNotEmpty=${state.fullReply.isNotEmpty}');
+        await AppLogService.info('ChatStreamManager',
+            '[STREAM-MGR] startStreaming: persisting historyLen=${state.history.length}');
         await _saveMessages(convId: convId, history: state.history);
-        await AppLogService.debug('ChatStreamManager',
-            '[DEBUG-HIST-MGR] save completed: state.history.length=${state.history.length}');
       }
     } catch (_) {
-      await AppLogService.debug(
-          'ChatStreamManager', '[DEBUG-HIST-MGR] save failed');
+      await AppLogService.error(
+          'ChatStreamManager', '[STREAM-MGR] save failed', _);
     }
 
     // Build the result and complete the resultCompleter AFTER save
@@ -596,6 +599,11 @@ class ChatStreamManager {
     // send/stop button stuck on "Stop" after re-entry. Clearing here is a
     // safety net that doesn't affect segment data.
     _setProvider(isStreamingProvider, false);
+    // Also clear these non-segment-affecting providers to prevent stale
+    // references after page disposal.
+    _setProvider(streamingMsgIdProvider, null);
+    _setProvider(streamingHasFirstTokenProvider, false);
+    _setProvider(streamingReasoningProvider, '');
 
     // Remove this conversation from the streaming set. The page watches
     // this provider to detect completion and run cleanup + DB reload.
@@ -605,13 +613,15 @@ class ChatStreamManager {
     activeSet.remove(convId);
     _setProvider(streamingConversationsProvider, activeSet);
 
-    // Do NOT clear segment-related providers here. The chat_page's
-    // post-stream code in _startStreaming handles provider cleanup AFTER
-    // updating _history and calling _buildFinalSegments. Clearing segment
-    // providers prematurely triggers _rebuildLiveSegments with empty data,
-    // overwriting the correct segments (including reasoning with
-    // isStreaming=true that should have been replaced by _buildFinalSegments
-    // with isStreaming=false).
+    // Do NOT clear segment-related providers here (streamingFullReplyProvider,
+    // streamingTextSectionsProvider, streamingReasoningSectionsProvider,
+    // streamingToolCallsProvider, streamingToolCallRoundStartsProvider).
+    // The chat_page's post-stream code in _startStreaming handles provider
+    // cleanup AFTER updating _history and calling _buildFinalSegments.
+    // Clearing segment providers prematurely triggers _rebuildLiveSegments
+    // with empty data, overwriting the correct segments (including reasoning
+    // with isStreaming=true that should have been replaced by
+    // _buildFinalSegments with isStreaming=false).
     _activeConvId = null;
 
     return result;
