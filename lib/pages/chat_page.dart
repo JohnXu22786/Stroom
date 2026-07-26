@@ -98,11 +98,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   final Map<String, List<MessageSegment>> _chatSegments = {};
 
-  /// Round boundary indices for tool calls, keyed by message ID.
-  /// Populated from StreamResult during streaming; used by
-  /// _buildFinalSegments to pass to buildAgentChainSegments.
-  final Map<String, List<int>> _toolCallRoundStarts = {};
-
   String? _streamingMsgId;
 
   // ── Auto-scroll / scroll-to-bottom state ──
@@ -332,6 +327,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // from the manager's throttle loop reach this page's listeners.
       manager.activateConversation(activeConvId);
 
+      // Mark streaming as active so _rebuildLiveSegments (called by the
+      // provider listeners below) does not bail out via its
+      // `if (!_isStreamingActive) return;` guard. Without this, re-entering
+      // the page during a background stream would show a frozen snapshot
+      // instead of live-updating segments.
+      _isStreamingActive = true;
       _streamingMsgId = msgId;
       _chatSegments[msgId] = [];
       // Restore reasoning sections from provider/manager so the buttons show up
@@ -359,9 +360,60 @@ class _ChatPageState extends ConsumerState<ChatPage>
             ),
           );
         }
+        // Build live segments immediately from the current provider state
+        // so the re-entered page shows reasoning/text/tool-call segments
+        // right away, not just the raw fullReply text.
+        _rebuildLiveSegments(msgId);
         setState(() {});
       });
     });
+  }
+
+  /// Handles the case where a background stream completes while this page
+  /// instance is showing it (e.g. the user navigated away during streaming
+  /// and came back — the original [_startStreaming] future belongs to the
+  /// disposed page instance and never runs its post-stream cleanup here).
+  ///
+  /// Detected via [streamingConversationsProvider]: when the current
+  /// conversation leaves the streaming set, the stream is done. This method
+  /// clears local streaming state + providers and reloads the finalized
+  /// message from the DB (which now carries [toolCallRoundStarts] for
+  /// correct multi-tool grouping).
+  void _handleStreamCompletion() {
+    if (!mounted) return;
+    // Guard: in the NORMAL (non-re-entry) case, _startStreaming's post-stream
+    // code runs synchronously after the manager returns and sets
+    // _isStreamingActive = false BEFORE this post-frame callback fires. So if
+    // it's already false, the normal path handled cleanup — skip to avoid a
+    // wasteful DB reload + visual flicker. In the RE-ENTRY case, no
+    // _startStreaming ran for this page instance, so _isStreamingActive stays
+    // true and we run the cleanup here.
+    if (!_isStreamingActive) return;
+    final msgId = _streamingMsgId;
+    _isStreamingActive = false;
+    _streamingMsgId = null;
+    try {
+      ref.read(isStreamingProvider.notifier).state = false;
+      ref.read(streamingMsgIdProvider.notifier).state = null;
+      ref.read(streamingFullReplyProvider.notifier).state = '';
+      ref.read(streamingHasFirstTokenProvider.notifier).state = false;
+      ref.read(streamingReasoningProvider.notifier).state = '';
+      ref.read(streamingReasoningSectionsProvider.notifier).state = [];
+      ref.read(streamingToolCallsProvider.notifier).state = [];
+      ref.read(streamingTextSectionsProvider.notifier).state = [''];
+      ref.read(streamingToolCallRoundStartsProvider.notifier).state = [];
+    } catch (e) {
+      debugPrint('[ChatPage] _handleStreamCompletion provider cleanup: $e');
+    }
+    // Keep the finalized message visible while the reload happens; the
+    // reload will replace _chatSegments from the persisted message (which
+    // carries toolCallRoundStarts, so multi-tool grouping is correct).
+    if (msgId != null) _finalizedMessages.add(msgId);
+    // Reload from DB. _loadConversationMessages is now unguarded because
+    // _isStreamingActive is false. It clears _chatSegments / _finalizedMessages
+    // and rebuilds from the persisted message (including toolCallRoundStarts).
+    _loadConversationMessages();
+    if (mounted) setState(() {});
   }
 
   Future<void> _initialize() async {
@@ -556,7 +608,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
       _chatSegments.clear();
       _reasoningContents.clear();
       _finalizedMessages.clear();
-      _toolCallRoundStarts.clear();
       _streamingMsgId = null;
       _controller?.dispose();
       _messageKeys.clear();
@@ -603,6 +654,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
           reasoningSections: msg.reasoningSections ?? [],
           textChunks: msg.textSections ?? [],
           toolCalls: msg.toolCalls ?? [],
+          // Use persisted round boundaries for correct multi-tool grouping.
+          // Null for old data → falls back to legacy 1:1 algorithm.
+          toolCallRoundStarts: msg.toolCallRoundStarts,
         );
         // Fallback: no textSections, use content as single trailing block
         if (segments.isEmpty && msg.content.isNotEmpty) {
@@ -961,6 +1015,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _history.clear();
     _history.addAll(result.history);
 
+    // Clear the local streaming flag IMMEDIATELY (before any await below)
+    // so the streamingConversationsProvider listener's post-frame callback
+    // (_handleStreamCompletion, guard: `if (!_isStreamingActive) return;`)
+    // sees false and skips — avoiding a wasteful DB reload + visual flicker
+    // in the normal (non-re-entry) completion path. Doing this before the
+    // debug-log awaits removes a fragile dependency on those awaits not
+    // yielding to the event loop.
+    _streamingMsgId = null;
+    _isStreamingActive = false;
+
     // Best-effort debug logging (must not block history update above)
     try {
       await AppLogService.debug('ChatPage',
@@ -973,8 +1037,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // because ref.read() may fail if the widget was disposed while the
     // manager was streaming in the background.
     try {
-      _streamingMsgId = null;
-      _isStreamingActive = false;
       ref.read(isStreamingProvider.notifier).state = false;
       ref.read(streamingMsgIdProvider.notifier).state = null;
       ref.read(streamingFullReplyProvider.notifier).state = '';
@@ -987,10 +1049,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (mounted) {
       final finalMsg = result.assistantMessage;
       if (finalMsg != null) {
-        // Store round boundaries so _buildFinalSegments can group
-        // consecutive tool calls that belong to the same assistant step.
-        _toolCallRoundStarts[finalMsg.id] =
-            List<int>.from(result.toolCallRoundStarts);
+        // Round boundaries are persisted on finalMsg.toolCallRoundStarts
+        // (set by the manager during streaming). _buildFinalSegments reads
+        // them from the message directly — no local map needed.
 
         // Update the streaming placeholder to show the final text
         _controller?.updateMessage(
@@ -1028,9 +1089,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // Explicitly false: streaming is done. All reasoning sections should
       // show "思考完成" (thinking complete), not "思考中" (thinking in progress).
       isLastReasoningStreaming: false,
-      // Use round boundaries tracked during streaming so that consecutive
-      // tool calls in the same assistant step are grouped together.
-      toolCallRoundStarts: _toolCallRoundStarts[msg.id],
+      // Use round boundaries persisted on the message (tracked during
+      // streaming) so that consecutive tool calls in the same assistant
+      // step are grouped together. Null for old data → legacy algorithm.
+      toolCallRoundStarts: msg.toolCallRoundStarts,
     );
 
     // Fallback: no textSections at all, put content at the end
@@ -1163,7 +1225,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
             _chatSegments.remove(r.id);
             _reasoningContents.remove(r.id);
             _finalizedMessages.remove(r.id);
-            _toolCallRoundStarts.remove(r.id);
             _isReasoningCompletedForMsg.remove(r.id);
             _messageKeys.remove(r.id);
           }
@@ -1212,7 +1273,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
             _chatSegments.remove(r.id);
             _reasoningContents.remove(r.id);
             _finalizedMessages.remove(r.id);
-            _toolCallRoundStarts.remove(r.id);
             _isReasoningCompletedForMsg.remove(r.id);
             _messageKeys.remove(r.id);
           }
@@ -1265,7 +1325,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
       _chatSegments.remove(messageId);
       _reasoningContents.remove(messageId);
       _finalizedMessages.remove(messageId);
-      _toolCallRoundStarts.remove(messageId);
       _isReasoningCompletedForMsg.remove(messageId);
       _messageKeys.remove(messageId);
       // Adjust pagination state: if the deleted message was before the loaded
@@ -1877,6 +1936,26 @@ class _ChatPageState extends ConsumerState<ChatPage>
       _rebuildLiveSegments(msgId);
       if (mounted) setState(() {});
     });
+
+    // Detect background stream completion. When the current conversation
+    // leaves the streaming set, the stream is done — run cleanup + reload
+    // the finalized message from DB. This covers the re-entry case where
+    // the original _startStreaming future belongs to a disposed page
+    // instance and never runs its post-stream code here.
+    ref.listen(streamingConversationsProvider,
+        (Set<String>? prev, Set<String> next) {
+      if (!mounted) return;
+      final activeId = ref.read(activeConversationIdProvider);
+      if (activeId == null) return;
+      final wasStreaming = prev?.contains(activeId) ?? false;
+      final isStreaming = next.contains(activeId);
+      if (wasStreaming && !isStreaming && _isStreamingActive) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _handleStreamCompletion();
+        });
+      }
+    });
+
     final adapterConfigured = _adapter.isConfigured;
     final controller = _controller;
 

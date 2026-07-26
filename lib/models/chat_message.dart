@@ -139,6 +139,16 @@ class ChatMessage {
   /// When null or empty, fall back to [content] as a single block.
   final List<String>? textSections;
 
+  /// Indices into [toolCalls] where each new tool-call round begins.
+  /// Round 0 always starts at index 0 (when [toolCalls] is non-empty).
+  /// Each subsequent entry is the index of the first tool call in that
+  /// round (separated from the previous round by non-empty text).
+  ///
+  /// Persisted so that reloaded messages render multi-tool rounds
+  /// correctly via [buildAgentChainSegments]'s round-based algorithm.
+  /// When null (old data), the legacy 1:1 pairing algorithm is used.
+  final List<int>? toolCallRoundStarts;
+
   ChatMessage({
     String? id,
     required this.role,
@@ -153,6 +163,7 @@ class ChatMessage {
     this.toolCalls,
     this.reasoningSections,
     this.textSections,
+    this.toolCallRoundStarts,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
         attachments = attachments ?? [];
@@ -270,6 +281,9 @@ class ChatMessage {
         // Persist per-round text sections if present and non-empty.
         if (textSections != null && textSections!.isNotEmpty)
           'textSections': textSections!.toList(),
+        // Persist round boundary indices for multi-tool grouping.
+        if (toolCallRoundStarts != null && toolCallRoundStarts!.isNotEmpty)
+          'toolCallRoundStarts': toolCallRoundStarts!.toList(),
       };
 
   factory ChatMessage.fromMap(Map<String, dynamic> map) {
@@ -324,25 +338,38 @@ class ChatMessage {
       if (toolCalls!.isEmpty) toolCalls = null;
     }
 
-    // Defensive reasoningSections parsing: skip non-List entries and filter
-    // out non-string values so corrupt data doesn't skip the entire message.
+    // Defensive reasoningSections parsing. When toolCallRoundStarts is
+    // present (new format), empty entries are preserved so indices align
+    // with round boundaries. When absent (old data), empty entries are
+    // filtered to match the old behavior (backward compatibility).
+    List<int>? toolCallRoundStarts;
+    final roundStartsRaw = map['toolCallRoundStarts'];
+    if (roundStartsRaw is List) {
+      toolCallRoundStarts = roundStartsRaw.whereType<int>().toList();
+      if (toolCallRoundStarts.isEmpty) toolCallRoundStarts = null;
+    }
+    final keepEmptySections = toolCallRoundStarts != null;
+
     List<String>? reasoningSections;
     final sectionsRaw = map['reasoningSections'];
     if (sectionsRaw is List) {
-      reasoningSections =
-          sectionsRaw.whereType<String>().where((s) => s.isNotEmpty).toList();
-      if (reasoningSections!.isEmpty) reasoningSections = null;
+      reasoningSections = sectionsRaw.whereType<String>().toList();
+      if (!keepEmptySections) {
+        reasoningSections =
+            reasoningSections.where((s) => s.isNotEmpty).toList();
+      }
+      if (reasoningSections.isEmpty) reasoningSections = null;
     }
 
-    // Defensive textSections parsing: same as reasoningSections.
+    // Defensive textSections parsing: same conditional logic as above.
     List<String>? textSections;
     final textSectionsRaw = map['textSections'];
     if (textSectionsRaw is List) {
-      textSections = textSectionsRaw
-          .whereType<String>()
-          .where((s) => s.isNotEmpty)
-          .toList();
-      if (textSections!.isEmpty) textSections = null;
+      textSections = textSectionsRaw.whereType<String>().toList();
+      if (!keepEmptySections) {
+        textSections = textSections.where((s) => s.isNotEmpty).toList();
+      }
+      if (textSections.isEmpty) textSections = null;
     }
 
     return ChatMessage(
@@ -361,6 +388,7 @@ class ChatMessage {
       toolCalls: toolCalls,
       reasoningSections: reasoningSections,
       textSections: textSections,
+      toolCallRoundStarts: toolCallRoundStarts,
     );
   }
 
