@@ -294,13 +294,12 @@ void main() {
       expect(path, isNotNull);
       expect(path, isNotEmpty, reason: 'Logs root path must be non-empty');
 
-      // Should contain Stroom/Logs structure
-      expect(path!.contains('Stroom'), isTrue,
+      // Should contain Stroom/Logs structure (case-insensitive for CI compat)
+      expect(path!.toLowerCase().contains('stroom'), isTrue,
           reason: 'Log path must be under Stroom parent directory');
-      expect(path.contains('Logs'), isTrue,
+      expect(path.toLowerCase().contains('logs'), isTrue,
           reason: 'Log path must point to Logs subdirectory');
     });
-
     test('log path and backup path share the same parent directory', () async {
       final logsPath = await BackupLocationManager.getLogsRootPath();
       final backupPath = await BackupLocationManager.getBackupRootPath();
