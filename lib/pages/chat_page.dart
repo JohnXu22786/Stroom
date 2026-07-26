@@ -326,19 +326,34 @@ class _ChatPageState extends ConsumerState<ChatPage>
         '[STREAM-RESTORE] _restoreStreamingState: conv=$activeConvId msgId=$msgId '
             'fullReplyLen=${fullReply.length} reasoningSectionsLen=${reasoningSections.length}');
 
+    // ── SYNCHRONOUS: immediately set streaming state so that any
+    // provider listeners firing during pending async work (e.g. MCP
+    // init) do NOT bail out via _rebuildLiveSegments' guard or
+    // _isStreamingForCurrentConv's isStreamingProvider check. This
+    // prevents the "one-frame render then freeze" re-entry bug.
+    _isStreamingActive = true;
+    _streamingMsgId = msgId;
+    try {
+      ref.read(isStreamingProvider.notifier).state = true;
+      ref.read(streamingMsgIdProvider.notifier).state = msgId;
+      ref.read(streamingFullReplyProvider.notifier).state = fullReply;
+      ref.read(streamingReasoningSectionsProvider.notifier).state =
+          List<String>.from(reasoningSections);
+    } catch (e) {
+      debugPrint('[ChatPage] _restoreStreamingState provider set failed: $e');
+    }
+
+    // Restore reasoning sections map for backward compatibility
+    if (reasoningSections.isNotEmpty) {
+      _reasoningContents[msgId] = List.of(reasoningSections);
+    }
+
+    // ── POST-FRAME: deferred controller + UI work
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       // Also activate the conversation in the manager so provider updates
       // from the manager's throttle loop reach this page's listeners.
       manager.activateConversation(activeConvId);
-
-      // Mark streaming as active so _rebuildLiveSegments (called by the
-      // provider listeners below) does not bail out via its
-      // `if (!_isStreamingActive) return;` guard. Without this, re-entering
-      // the page during a background stream would show a frozen snapshot
-      // instead of live-updating segments.
-      _isStreamingActive = true;
-      _streamingMsgId = msgId;
 
       // Check if _loadConversationMessages already inserted this message
       // (from a periodic persist saved to DB while the user was away).
@@ -377,11 +392,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
             '[STREAM-RESTORE] msgId=$msgId already in controller (loaded from DB by _loadConversationMessages), skipping duplicate insert');
         _rebuildLiveSegments(msgId);
         setState(() {});
-      }
-
-      // Restore reasoning sections from provider/manager so the buttons show up
-      if (reasoningSections.isNotEmpty) {
-        _reasoningContents[msgId] = List.of(reasoningSections);
       }
     });
   }
@@ -458,6 +468,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // slow MCP discovery. Messages will still show even if MCP servers
     // are unreachable.
     await _loadConversationMessages();
+
+    // ── Restore streaming state BEFORE MCP server init ──
+    // The synchronous part of _restoreStreamingState sets
+    // _isStreamingActive=true and streaming providers immediately so
+    // that throttled provider updates from the manager (every 200ms)
+    // continue to render live segments during the 1–2 s MCP discovery
+    // await below. Without this, _rebuildLiveSegments bails out via
+    // `if (!_isStreamingActive) return;` and the UI freezes.
+    _restoreStreamingState();
+    await AppLogService.info('ChatPage',
+        '[STREAM-INIT] _initialize: _restoreStreamingState called, _isStreamingActive=$_isStreamingActive _streamingMsgId=$_streamingMsgId');
 
     // Then discover MCP server tools (SSE / stdio) dynamically.
     // MCP discovery failures don't affect already-registered built-in tools.
@@ -569,8 +590,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // and without this guard they race — one call might dispose the
     // controller while another is using it, causing null errors.
     if (_isLoadingMessages) {
-      await AppLogService.debug(
-          'ChatPage', '_loadConversationMessages: 已有加载进行中，跳过');
+      await AppLogService.info('ChatPage',
+          '[STREAM-LOAD] _loadConversationMessages: already loading, skip');
       return;
     }
 
@@ -578,8 +599,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // streaming loop relies on _chatSegments and other per-message
     // state that would be cleared by a reload.
     if (_isStreamingActive) {
-      await AppLogService.debug(
-          'ChatPage', '_loadConversationMessages: 流式传输进行中，跳过');
+      await AppLogService.info('ChatPage',
+          '[STREAM-LOAD] _loadConversationMessages: streaming active, skip');
       return;
     }
 
@@ -587,21 +608,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
     try {
       final activeId = ref.read(activeConversationIdProvider);
       final convs = ref.read(conversationsProvider);
-      await AppLogService.debug('ChatPage',
-          '[PERSIST] _loadConversationMessages: activeId=$activeId allConvCount=${convs.length}');
-      await AppLogService.info(
-          'ChatPage', '开始加载对话消息, activeConversationId=$activeId');
+      await AppLogService.info('ChatPage',
+          '[STREAM-LOAD] _loadConversationMessages: activeId=$activeId convCount=${convs.length}');
       if (activeId == null) {
-        await AppLogService.debug('ChatPage',
-            '[PERSIST] _loadConversationMessages: ABORT activeId null');
         await AppLogService.warning(
-            'ChatPage', 'activeConversationId 为 null，跳过加载对话消息');
+            'ChatPage', '[STREAM-LOAD] activeConversationId is null, skip');
         return;
       }
-      await AppLogService.info('ChatPage', '当前共有 ${convs.length} 个对话');
       final conv = convs.where((c) => c.id == activeId).firstOrNull;
-      await AppLogService.debug('ChatPage',
-          '[PERSIST] _loadConversationMessages: foundConv=${conv != null} convMsgCount=${conv?.messages.length ?? -1}');
       if (conv == null) {
         await AppLogService.warning(
             'ChatPage', '未找到 activeConversationId=$activeId 对应的对话');
@@ -788,19 +802,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Future<void> _saveMessages({String? capturedConvId}) async {
     try {
       final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
-      await AppLogService.debug('ChatPage',
-          '[PERSIST] _saveMessages: convId=$convId capturedConvId=$capturedConvId historyLen=${_history.length}');
-      if (convId == null) {
-        await AppLogService.debug(
-            'ChatPage', '[PERSIST] _saveMessages: ABORT convId is null');
-        return;
-      }
-      final msgCount = _history.length;
+      if (convId == null) return;
       await ref.read(conversationsProvider.notifier).updateMessages(convId, [
         ..._history,
       ]);
-      await AppLogService.debug('ChatPage',
-          '[PERSIST] _saveMessages: OK convId=$convId msgCount=$msgCount');
     } catch (e, s) {
       // Fallback: save directly to SharedPreferences if the notifier is
       // unavailable (e.g. during background streaming after page disposal).
@@ -996,10 +1001,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
       ),
     );
 
-    try {
-      await AppLogService.debug('ChatPage',
-          '[DEBUG-HIST] _onMessageSend: BEFORE stream, _history.length=${_history.length}');
-    } catch (_) {}
     await _startStreaming(text, capturedConvId: convId);
 
     // Reload _history from conversation provider to ensure it reflects the
@@ -1009,8 +1010,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     await _syncHistoryFromProvider(capturedConvId: convId);
 
     try {
-      await AppLogService.debug('ChatPage',
-          '[DEBUG-HIST] _onMessageSend: AFTER sync, _history.length=${_history.length}');
+      await AppLogService.info('ChatPage',
+          '[STREAM-SEND] _onMessageSend: after sync, _history.length=${_history.length}');
     } catch (_) {}
   }
 
@@ -1076,10 +1077,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final effectiveConvId =
         capturedConvId ?? ref.read(activeConversationIdProvider) ?? '';
     final histBefore = List<ChatMessage>.from(_history);
-    try {
-      await AppLogService.debug('ChatPage',
-          '[DEBUG-HIST] _startStreaming: sending to manager, _history.length=${histBefore.length}');
-    } catch (_) {}
+    await AppLogService.info('ChatPage',
+        '[STREAM-SEND] _startStreaming: sending to manager, historyLen=${histBefore.length}, convId=$effectiveConvId');
     final StreamResult result =
         await ref.read(chatStreamManagerProvider).startStreaming(
               text: text,
@@ -1196,12 +1195,20 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // _buildFinalSegments handles the final state. Skipping here prevents
     // a late-arriving listener from overwriting the completed segments
     // with live streaming=true data.
-    if (!_isStreamingActive) return;
+    if (!_isStreamingActive) {
+      AppLogService.info('ChatPage',
+          '[STREAM-REBUILD] _rebuildLiveSegments: bail — _isStreamingActive=false, msgId=$msgId');
+      return;
+    }
 
     // Prevent overwriting segments that _buildFinalSegments has already
     // set for this message (e.g., when the manager's _clearProviders
     // fires after the stream ends but before chat_page cleanup).
-    if (_finalizedMessages.contains(msgId)) return;
+    if (_finalizedMessages.contains(msgId)) {
+      AppLogService.info('ChatPage',
+          '[STREAM-REBUILD] _rebuildLiveSegments: bail — _finalizedMessages contains $msgId');
+      return;
+    }
 
     final segments = buildAgentChainSegments(
       reasoningSections:
@@ -1685,13 +1692,21 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   void _stopStreaming() {
     _isStreamingActive = false;
+    _streamingMsgId = null;
     try {
       final convId = ref.read(activeConversationIdProvider);
       ref.read(chatStreamManagerProvider).cancel(convId);
     } catch (e) {
-      debugPrint('[ChatPage] cancel error: $e');
+      debugPrint('[ChatPage] _stopStreaming cancel error: $e');
     }
-    ref.read(isStreamingProvider.notifier).state = false;
+    try {
+      ref.read(isStreamingProvider.notifier).state = false;
+      ref.read(streamingMsgIdProvider.notifier).state = null;
+      ref.read(streamingFullReplyProvider.notifier).state = '';
+      ref.read(streamingHasFirstTokenProvider.notifier).state = false;
+    } catch (e) {
+      debugPrint('[ChatPage] _stopStreaming provider cleanup error: $e');
+    }
   }
 
   void _performSearch(String query) {
@@ -1951,6 +1966,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // Rebuild all segments from live provider data to maintain
       // correct per-round interleaving (reasoning → text → toolCall).
       _rebuildLiveSegments(msgId);
+      // setState needed because _rebuildLiveSegments only updates
+      // _chatSegments[msgId] without triggering a UI rebuild. The other
+      // listeners (textSections/toolCalls/reasoning) call setState, but
+      // this listener is the primary text-content pusher and must ensure
+      // the updated segments are reflected in the chat UI.
+      if (mounted) setState(() {});
     });
 
     // Keep reasoning sections in sync: the manager updates
@@ -2033,6 +2054,28 @@ class _ChatPageState extends ConsumerState<ChatPage>
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _handleStreamCompletion();
         });
+      } else if (prev == null && !isStreaming && !_isStreamingActive) {
+        // Initial subscription: the stream may have completed before
+        // this page was built (e.g. user returns after stream already
+        // finished). The manager has already cleared _streams, so the
+        // transition is invisible. We must still clean up any stale
+        // providers (isStreamingProvider, etc.).
+        // _handleStreamCompletion would no-op because its guard
+        // `if (!_isStreamingActive) return;` would short-circuit,
+        // so clear the stale providers directly here.
+        final manager = ref.read(chatStreamManagerProvider);
+        if (!manager.isStreamingFor(activeId)) {
+          AppLogService.info('ChatPage',
+              '[STREAM-COMPLETION] initial detection: activeId=$activeId already completed, clearing stale providers');
+          try {
+            ref.read(isStreamingProvider.notifier).state = false;
+            ref.read(streamingMsgIdProvider.notifier).state = null;
+            ref.read(streamingFullReplyProvider.notifier).state = '';
+            ref.read(streamingHasFirstTokenProvider.notifier).state = false;
+          } catch (e) {
+            debugPrint('[ChatPage] initial-detection provider cleanup: $e');
+          }
+        }
       }
     });
 
