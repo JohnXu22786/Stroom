@@ -46,6 +46,33 @@ class FlowSubTask {
         subTaskType: subTaskType,
         status: status,
       );
+
+  /// Serialize to a map for JSON persistence.
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'blockTypeKey': blockTypeKey,
+        'blockLabel': blockLabel,
+        'subTaskId': subTaskId,
+        'subTaskType': subTaskType,
+        'status': status.name,
+      };
+
+  factory FlowSubTask.fromMap(Map<String, dynamic> map) => FlowSubTask(
+        id: map['id'] as String?,
+        blockTypeKey: map['blockTypeKey'] as String? ?? '',
+        blockLabel: map['blockLabel'] as String? ?? '',
+        subTaskId: map['subTaskId'] as String? ?? '',
+        subTaskType: map['subTaskType'] as String? ?? '',
+        status: _parseStatus(map['status'] as String?),
+      );
+
+  static TaskStatus _parseStatus(String? name) {
+    if (name == null) return TaskStatus.running;
+    return TaskStatus.values.firstWhere(
+      (s) => s.name == name,
+      orElse: () => TaskStatus.running,
+    );
+  }
 }
 
 /// Tracks a running/completed task flow execution.
@@ -104,5 +131,45 @@ class TaskFlowExecution {
       case FlowExecutionStatus.failed:
         return TaskStatus.failed;
     }
+  }
+
+  /// Serialize to a map for JSON persistence.
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'flowId': flowId,
+        'flowName': flowName,
+        'status': status.name,
+        'createdAt': createdAt.toIso8601String(),
+        if (completedAt != null) 'completedAt': completedAt!.toIso8601String(),
+        'subTasks': subTasks.map((s) => s.toMap()).toList(),
+        if (error != null) 'error': error,
+      };
+
+  factory TaskFlowExecution.fromMap(Map<String, dynamic> map) =>
+      TaskFlowExecution(
+        id: map['id'] as String?,
+        flowId: map['flowId'] as String? ?? '',
+        flowName: map['flowName'] as String? ?? '',
+        status: _parseExecStatus(map['status'] as String?),
+        createdAt: map['createdAt'] != null
+            ? DateTime.parse(map['createdAt'] as String)
+            : DateTime.now(),
+        completedAt: map['completedAt'] != null
+            ? DateTime.parse(map['completedAt'] as String)
+            : null,
+        subTasks: (map['subTasks'] as List<dynamic>?)
+                ?.map((s) =>
+                    FlowSubTask.fromMap(Map<String, dynamic>.from(s as Map)))
+                .toList() ??
+            [],
+        error: map['error'] as String?,
+      );
+
+  static FlowExecutionStatus _parseExecStatus(String? name) {
+    if (name == null) return FlowExecutionStatus.running;
+    return FlowExecutionStatus.values.firstWhere(
+      (s) => s.name == name,
+      orElse: () => FlowExecutionStatus.running,
+    );
   }
 }

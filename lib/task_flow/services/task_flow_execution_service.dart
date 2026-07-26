@@ -167,12 +167,20 @@ class TaskFlowExecutionService {
     return await FileManifest.readFilePath(path);
   }
 
-  Future<String?> _saveAudioForFlow(Uint8List audioBytes) async {
+  Future<String?> _saveAudioForFlow(
+      Uint8List audioBytes, String inputFilePath) async {
     if (audioBytes.isEmpty) throw Exception('提取的音频数据为空');
-    final hash = computeAudioHash(audioBytes);
     final format = normalizeAudioFormat(detectAudioFormat(audioBytes));
-    await FileManifest.writeFile('$hash.$format', audioBytes);
-    return await FileManifest.readFilePath('$hash.$format');
+
+    // Save to the same directory as the input video so the user can find
+    // the file.  Use a readable name derived from the video filename.
+    final inputDir = p.dirname(inputFilePath);
+    final inputBaseName = p.basenameWithoutExtension(inputFilePath);
+    final outputFileName = '${inputBaseName}_audio.$format';
+    final outputPath = p.join(inputDir, outputFileName);
+
+    await File(outputPath).writeAsBytes(audioBytes);
+    return outputPath;
   }
 
   // ===========================================================================
@@ -373,7 +381,7 @@ class TaskFlowExecutionService {
       bgNotifier.updateStep(taskId, 0, completed: true);
 
       bgNotifier.updateStep(taskId, 1, running: true);
-      final filePath = await _saveAudioForFlow(audioBytes);
+      final filePath = await _saveAudioForFlow(audioBytes, input);
       bgNotifier.updateStep(taskId, 1, completed: true);
 
       if (filePath == null) {

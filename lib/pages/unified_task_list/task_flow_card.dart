@@ -339,7 +339,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
                   ),
                   if (isInitializing)
                     Text(
-                      '正在初始化...',
+                      '等待中',
                       style:
                           TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
                     ),
