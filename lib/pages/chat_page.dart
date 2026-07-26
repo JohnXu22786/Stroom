@@ -3113,6 +3113,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 onModelSelected: _onModelSelected,
                 onModelsReordered: _onModelsReordered,
                 reasoningParams: _adapter.reasoningParams,
+                customParams: _adapter.customParams,
                 editingMessageId: _editingMessageId,
                 editingMessageText: _editingMessageText,
                 editingMessageAttachments: _editingMessageAttachments,
