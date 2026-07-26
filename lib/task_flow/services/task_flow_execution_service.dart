@@ -308,12 +308,12 @@ class TaskFlowExecutionService {
           try {
             await registerCompletedVideo(task.downloadedFilePath!, task);
           } catch (e) {
-            debugPrint('[TaskFlow] CatCatch register video failed: $e');
+            print('[TaskFlow] CatCatch register video failed: $e');
           }
           try {
             await registerCompletedAudio(task.downloadedFilePath!, task);
           } catch (e) {
-            debugPrint('[TaskFlow] CatCatch register audio failed: $e');
+            print('[TaskFlow] CatCatch register audio failed: $e');
           }
           return task.downloadedFilePath!;
         }
