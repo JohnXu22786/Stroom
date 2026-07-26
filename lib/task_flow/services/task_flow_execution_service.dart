@@ -242,8 +242,8 @@ class TaskFlowExecutionService {
     TaskFlowExecutionNotifier execNotifier, {
     required FlowSubTask flowSubTask,
     required CatCatchNotifier catcatchNotifier,
-    String? videoFolder,
-    String? audioFolder,
+    String videoFolder = '',
+    String audioFolder = '',
   }) async {
     // Generate ID first, update execution, THEN add task to provider.
     // This ensures the card sees the real task ID when it rebuilds from
