@@ -14,7 +14,7 @@ import '../models/tool_call.dart';
 //
 // 三个搜索引擎合并在一个工具中，通过 source 参数选择：
 // - google: https://www.google.com/search?q=%s
-// - bing:   https://cn.bing.com/search?q=%s
+// - bing:   https://www.bing.com/search?q=%s
 // - baidu:  https://www.baidu.com/s?wd=%s
 // ============================================================================
 
@@ -83,7 +83,7 @@ class WebSearchService {
 
     switch (effectiveSource) {
       case 'bing':
-        return 'https://cn.bing.com/search?q=$encodedQuery&ensearch=1';
+        return 'https://www.bing.com/search?q=$encodedQuery';
       case 'baidu':
         return 'https://www.baidu.com/s?wd=$encodedQuery';
       case 'google':

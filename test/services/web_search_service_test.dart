@@ -80,13 +80,13 @@ void main() {
       expect(url, contains('q='));
       expect(url, contains('test'));
       expect(url, contains('query'));
-      expect(url, isNot(contains('cn.bing')));
+      expect(url, isNot(contains('bing')));
       expect(url, isNot(contains('baidu')));
     });
 
     test('bing URL is constructed correctly', () {
       final url = WebSearchService.buildSearchUrl('test query', 'bing');
-      expect(url, contains('cn.bing.com/search'));
+      expect(url, contains('www.bing.com/search'));
       expect(url, contains('q='));
       expect(url, contains('test'));
       expect(url, contains('query'));
