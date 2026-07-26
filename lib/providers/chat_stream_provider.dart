@@ -47,3 +47,20 @@ final streamingTextSectionsProvider =
 /// group consecutive tool calls that belong to the same step.
 final streamingToolCallRoundStartsProvider =
     StateProvider<List<int>>((ref) => []);
+
+/// The set of conversation IDs that currently have an active stream.
+///
+/// Updated by [ChatStreamManager] when a stream starts and finishes. The
+/// chat page watches this to:
+/// 1. Detect when a background stream completes (so it can clean up +
+///    reload from DB even if the original `_startStreaming` future belongs
+///    to a now-disposed page instance — e.g. user navigated away and
+///    came back).
+/// 2. Drive the send/stop button state per-conversation (the button shows
+///    "stop" only when the current conversation is in this set).
+///
+/// This is decoupled from [isStreamingProvider] (which reflects only the
+/// single active conversation's state) so that completion detection works
+/// even when the active conversation has changed.
+final streamingConversationsProvider =
+    StateProvider<Set<String>>((ref) => <String>{});

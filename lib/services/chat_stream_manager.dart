@@ -80,7 +80,7 @@ class StreamResult {
     this.reasoningSections = const [],
     this.textSections = const [],
     this.toolCalls = const [],
-    this.toolCallRoundStarts = const [0],
+    this.toolCallRoundStarts = const [],
     this.cancelled = false,
   });
 
@@ -120,7 +120,12 @@ class _ConversationStreamState {
   /// Indices into [toolCalls] where each new tool-call round begins.
   /// Used by buildAgentChainSegments to correctly group consecutive
   /// tool calls that belong to the same assistant "step".
-  List<int> toolCallRoundStarts = [0];
+  ///
+  /// Initialized empty (NOT [0]) — the first ToolCallStartEvent adds
+  /// index 0 when it creates the first new text chunk. Pre-seeding [0]
+  /// would cause a duplicate [0, 0], splitting round 0's tools across
+  /// phantom rounds.
+  List<int> toolCallRoundStarts = [];
 
   /// Throttle timers
   DateTime lastTextUpdate = DateTime.now();
@@ -298,6 +303,13 @@ class ChatStreamManager {
     state.streamingMsgId = aiMsgId;
 
     _streams[convId] = state;
+
+    // Track this conversation in the streaming set so the page can detect
+    // completion (see streamingConversationsProvider docs).
+    _setProvider(streamingConversationsProvider, <String>{
+      ..._ref?.read(streamingConversationsProvider) ?? const {},
+      convId
+    });
 
     // If no active conversation yet, set this one as active
     if (_activeConvId == null || _activeConvId == convId) {
@@ -526,6 +538,9 @@ class ChatStreamManager {
           textSections: state.textChunks.isNotEmpty
               ? List<String>.from(state.textChunks)
               : null,
+          toolCallRoundStarts: state.toolCallRoundStarts.isNotEmpty
+              ? List<int>.from(state.toolCallRoundStarts)
+              : null,
         );
         state.history.add(msg);
         assistantMessage = msg;
@@ -574,6 +589,14 @@ class ChatStreamManager {
     state.resultCompleter = null;
     _streams.remove(convId);
 
+    // Remove this conversation from the streaming set. The page watches
+    // this provider to detect completion and run cleanup + DB reload.
+    final activeSet = <String>{
+      ..._ref?.read(streamingConversationsProvider) ?? const {}
+    };
+    activeSet.remove(convId);
+    _setProvider(streamingConversationsProvider, activeSet);
+
     // Do NOT clear providers here. The chat_page's post-stream code in
     // _startStreaming handles provider cleanup AFTER updating _history
     // and calling _buildFinalSegments. Clearing providers prematurely
@@ -609,6 +632,7 @@ class ChatStreamManager {
     }
     _streams.clear();
     _activeConvId = null;
+    _setProvider(streamingConversationsProvider, <String>{});
     _adapter.dispose();
   }
 
@@ -682,6 +706,9 @@ class ChatStreamManager {
                 : null,
             textSections: s.textChunks.any((c) => c.isNotEmpty)
                 ? List<String>.from(s.textChunks)
+                : null,
+            toolCallRoundStarts: s.toolCallRoundStarts.isNotEmpty
+                ? List<int>.from(s.toolCallRoundStarts)
                 : null,
           ));
         }
