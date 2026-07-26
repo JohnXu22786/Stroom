@@ -212,7 +212,7 @@ void showToolsPanel({
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisSize: MainAxisSize.max,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Drag handle
@@ -266,51 +266,58 @@ void showToolsPanel({
                       ),
                     )
                   else
-                    ...tools.map((tool) {
-                      final isEnabled = localEnabledTools.contains(tool.name);
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Material(
-                          color:
-                              cs.surfaceContainerHighest.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(10),
-                          child: SwitchListTile(
-                            dense: true,
-                            value: isEnabled,
-                            onChanged: (enabled) {
-                              setState(() {
-                                if (enabled) {
-                                  localEnabledTools.add(tool.name);
-                                } else {
-                                  localEnabledTools.remove(tool.name);
-                                }
-                              });
-                              onToolToggle(tool.name, enabled);
-                            },
-                            activeThumbColor: cs.primary,
-                            title: Text(
-                              tool.name,
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: cs.onSurface,
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: tools.length,
+                        itemBuilder: (context, index) {
+                          final tool = tools[index];
+                          final isEnabled =
+                              localEnabledTools.contains(tool.name);
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Material(
+                              color: cs.surfaceContainerHighest
+                                  .withValues(alpha: 0.3),
+                              borderRadius: BorderRadius.circular(10),
+                              child: SwitchListTile(
+                                dense: true,
+                                value: isEnabled,
+                                onChanged: (enabled) {
+                                  setState(() {
+                                    if (enabled) {
+                                      localEnabledTools.add(tool.name);
+                                    } else {
+                                      localEnabledTools.remove(tool.name);
+                                    }
+                                  });
+                                  onToolToggle(tool.name, enabled);
+                                },
+                                activeThumbColor: cs.primary,
+                                title: Text(
+                                  tool.name,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: cs.onSurface,
+                                  ),
+                                ),
+                                subtitle: tool.description.isNotEmpty
+                                    ? Text(
+                                        tool.description,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: cs.onSurfaceVariant,
+                                        ),
+                                      )
+                                    : null,
                               ),
                             ),
-                            subtitle: tool.description.isNotEmpty
-                                ? Text(
-                                    tool.description,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: cs.onSurfaceVariant,
-                                    ),
-                                  )
-                                : null,
-                          ),
-                        ),
-                      );
-                    }),
+                          );
+                        },
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -381,7 +388,7 @@ void showReasoningPanel({
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisSize: MainAxisSize.max,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Drag handle
@@ -421,145 +428,160 @@ void showReasoningPanel({
                     ],
                   ),
                   const SizedBox(height: 16),
-                  // ── Section 1: Reasoning toggle ──
-                  Container(
-                    decoration: BoxDecoration(
-                      color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '推理',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                              color: cs.onSurface,
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // ── Section 1: Reasoning toggle ──
+                          Container(
+                            decoration: BoxDecoration(
+                              color: cs.surfaceContainerHighest
+                                  .withValues(alpha: 0.5),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 4),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '推理',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                      color: cs.onSurface,
+                                    ),
+                                  ),
+                                ),
+                                Switch(
+                                  value: localEnabled,
+                                  activeThumbColor: cs.primary,
+                                  onChanged: hasParams
+                                      ? (value) {
+                                          setState(() => localEnabled = value);
+                                          onReasoningToggle(value);
+                                        }
+                                      : null,
+                                ),
+                              ],
                             ),
                           ),
-                        ),
-                        Switch(
-                          value: localEnabled,
-                          activeThumbColor: cs.primary,
-                          onChanged: hasParams
-                              ? (value) {
-                                  setState(() => localEnabled = value);
-                                  onReasoningToggle(value);
-                                }
-                              : null,
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Hint when no params configured
-                  if (!hasParams)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8, left: 4),
-                      child: Text(
-                        '当前模型未配置推理参数，请在模型设置中添加',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: cs.onSurfaceVariant.withValues(alpha: 0.6),
-                        ),
-                      ),
-                    ),
-                  // ── Section 2: Reasoning effort (力度) ──
-                  if (showEffortSection) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      decoration: BoxDecoration(
-                        color:
-                            cs.surfaceContainerHighest.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 4),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '推理力度',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
-                                color: cs.onSurface,
+                          // Hint when no params configured
+                          if (!hasParams)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8, left: 4),
+                              child: Text(
+                                '当前模型未配置推理参数，请在模型设置中添加',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: cs.onSurfaceVariant
+                                      .withValues(alpha: 0.6),
+                                ),
                               ),
                             ),
-                          ),
-                          Switch(
-                            value: localEffortEnabled && hasEffortParam,
-                            activeThumbColor: cs.primary,
-                            onChanged: hasEffortParam
-                                ? (value) {
-                                    setState(() => localEffortEnabled = value);
-                                    onReasoningEffortToggle(value);
-                                  }
-                                : null,
-                          ),
+                          // ── Section 2: Reasoning effort (力度) ──
+                          if (showEffortSection) ...[
+                            const SizedBox(height: 12),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: cs.surfaceContainerHighest
+                                    .withValues(alpha: 0.5),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 4),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      '推理力度',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w500,
+                                        color: cs.onSurface,
+                                      ),
+                                    ),
+                                  ),
+                                  Switch(
+                                    value: localEffortEnabled && hasEffortParam,
+                                    activeThumbColor: cs.primary,
+                                    onChanged: hasEffortParam
+                                        ? (value) {
+                                            setState(() =>
+                                                localEffortEnabled = value);
+                                            onReasoningEffortToggle(value);
+                                          }
+                                        : null,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (!hasEffortParam)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8, left: 4),
+                                child: Text(
+                                  '当前模型未配置推理力度参数，请在模型设置中添加',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: cs.onSurfaceVariant
+                                        .withValues(alpha: 0.6),
+                                  ),
+                                ),
+                              ),
+                            if (hasEffortParam && localEffortEnabled) ...[
+                              const SizedBox(height: 12),
+                              // Effort param options
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: effortParam.options.map((option) {
+                                  final currentValue =
+                                      localSelections[effortParam.paramName] ??
+                                          (effortParam.options.isNotEmpty
+                                              ? effortParam.options.first
+                                              : '');
+                                  final isSelected = currentValue == option;
+                                  return _OptionChip(
+                                    label: option,
+                                    selected: isSelected,
+                                    onTap: () {
+                                      setState(() {
+                                        localSelections[effortParam.paramName] =
+                                            option;
+                                      });
+                                      onReasoningParamChanged(
+                                          effortParam.paramName, option);
+                                    },
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                          ],
+                          // No non-toggle params state (when reasoning is enabled
+                          // but there are no additional params configured)
+                          if (localEnabled &&
+                              hasParams &&
+                              !hasNonToggleParams &&
+                              !hasEffortParam)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 16),
+                              child: Center(
+                                child: Text(
+                                  '当前模型未配置其他推理参数\n请在模型设置中添加',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: cs.onSurfaceVariant
+                                        .withValues(alpha: 0.6),
+                                  ),
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),
-                    if (!hasEffortParam)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8, left: 4),
-                        child: Text(
-                          '当前模型未配置推理力度参数，请在模型设置中添加',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: cs.onSurfaceVariant.withValues(alpha: 0.6),
-                          ),
-                        ),
-                      ),
-                    if (hasEffortParam && localEffortEnabled) ...[
-                      const SizedBox(height: 12),
-                      // Effort param options
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: effortParam.options.map((option) {
-                          final currentValue =
-                              localSelections[effortParam.paramName] ??
-                                  (effortParam.options.isNotEmpty
-                                      ? effortParam.options.first
-                                      : '');
-                          final isSelected = currentValue == option;
-                          return _OptionChip(
-                            label: option,
-                            selected: isSelected,
-                            onTap: () {
-                              setState(() {
-                                localSelections[effortParam.paramName] = option;
-                              });
-                              onReasoningParamChanged(
-                                  effortParam.paramName, option);
-                            },
-                          );
-                        }).toList(),
-                      ),
-                    ],
-                  ],
-                  // No non-toggle params state (when reasoning is enabled
-                  // but there are no additional params configured)
-                  if (localEnabled &&
-                      hasParams &&
-                      !hasNonToggleParams &&
-                      !hasEffortParam)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 16),
-                      child: Center(
-                        child: Text(
-                          '当前模型未配置其他推理参数\n请在模型设置中添加',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: cs.onSurfaceVariant.withValues(alpha: 0.6),
-                          ),
-                        ),
-                      ),
-                    ),
+                  ),
                 ],
               ),
             ),
@@ -607,7 +629,7 @@ void showCustomReasoningParamsPanel({
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisSize: MainAxisSize.max,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Drag handle
@@ -662,77 +684,86 @@ void showCustomReasoningParamsPanel({
                       ),
                     )
                   else
-                    ...displayParams.map((param) {
-                      final currentValue = localSelections[param.paramName] ??
-                          (param.options.isNotEmpty ? param.options.first : '');
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Switch row (like effort section)
-                            Container(
-                              decoration: BoxDecoration(
-                                color: cs.surfaceContainerHighest
-                                    .withValues(alpha: 0.5),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 4),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      param.paramName,
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w500,
-                                        color: cs.onSurface,
-                                      ),
-                                    ),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: displayParams.length,
+                        itemBuilder: (context, index) {
+                          final param = displayParams[index];
+                          final currentValue =
+                              localSelections[param.paramName] ??
+                                  (param.options.isNotEmpty
+                                      ? param.options.first
+                                      : '');
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Switch row (like effort section)
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: cs.surfaceContainerHighest
+                                        .withValues(alpha: 0.5),
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
-                                  Switch(
-                                    value:
-                                        param.enabled && localReasoningEnabled,
-                                    activeThumbColor: cs.primary,
-                                    onChanged: localReasoningEnabled
-                                        ? (value) {
-                                            setState(() {
-                                              param.enabled = value;
-                                            });
-                                          }
-                                        : null,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 4),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          param.paramName,
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w500,
+                                            color: cs.onSurface,
+                                          ),
+                                        ),
+                                      ),
+                                      Switch(
+                                        value: param.enabled &&
+                                            localReasoningEnabled,
+                                        activeThumbColor: cs.primary,
+                                        onChanged: localReasoningEnabled
+                                            ? (value) {
+                                                setState(() {
+                                                  param.enabled = value;
+                                                });
+                                              }
+                                            : null,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // Options (only shown when enabled)
+                                if (param.enabled && localReasoningEnabled) ...[
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: param.options.map((option) {
+                                      final isSelected = currentValue == option;
+                                      return _OptionChip(
+                                        label: option,
+                                        selected: isSelected,
+                                        onTap: () {
+                                          setState(() {
+                                            localSelections[param.paramName] =
+                                                option;
+                                          });
+                                          onReasoningParamChanged(
+                                              param.paramName, option);
+                                        },
+                                      );
+                                    }).toList(),
                                   ),
                                 ],
-                              ),
+                              ],
                             ),
-                            // Options (only shown when enabled)
-                            if (param.enabled && localReasoningEnabled) ...[
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: param.options.map((option) {
-                                  final isSelected = currentValue == option;
-                                  return _OptionChip(
-                                    label: option,
-                                    selected: isSelected,
-                                    onTap: () {
-                                      setState(() {
-                                        localSelections[param.paramName] =
-                                            option;
-                                      });
-                                      onReasoningParamChanged(
-                                          param.paramName, option);
-                                    },
-                                  );
-                                }).toList(),
-                              ),
-                            ],
-                          ],
-                        ),
-                      );
-                    }),
+                          );
+                        },
+                      ),
+                    ),
                 ],
               ),
             ),
