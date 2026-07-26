@@ -136,7 +136,7 @@ class BlockTypeDefinition {
       BlockParamDefinition(
         key: 'modelIndex',
         label: '识别模型',
-        type: BlockParamType.number,
+        type: BlockParamType.modelSelector,
         defaultValue: 0,
       ),
       BlockParamDefinition(

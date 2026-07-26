@@ -202,7 +202,10 @@ class TaskFlowExecutionService {
     switch (def.typeKey) {
       case 'catcatch':
         return await _executeCatCatchBlock(def, input, execId, execNotifier,
-            flowSubTask: flowSubTask, catcatchNotifier: catcatchNotifier);
+            flowSubTask: flowSubTask,
+            catcatchNotifier: catcatchNotifier,
+            videoFolder: block.params['videoFolder'],
+            audioFolder: block.params['audioFolder']);
       case 'audioSeparation':
         return await _executeAudioSeparationBlock(
             def, input, execId, execNotifier,
@@ -239,6 +242,8 @@ class TaskFlowExecutionService {
     TaskFlowExecutionNotifier execNotifier, {
     required FlowSubTask flowSubTask,
     required CatCatchNotifier catcatchNotifier,
+    String? videoFolder,
+    String? audioFolder,
   }) async {
     // Generate ID first, update execution, THEN add task to provider.
     // This ensures the card sees the real task ID when it rebuilds from
@@ -247,7 +252,8 @@ class TaskFlowExecutionService {
     execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
     execNotifier.updateSubTaskStatus(
         execId, flowSubTask.id, TaskStatus.running);
-    catcatchNotifier.addTask(input, 0, taskId: taskId);
+    catcatchNotifier.addTask(input, 0,
+        taskId: taskId, videoFolder: videoFolder, audioFolder: audioFolder);
 
     final startTime = DateTime.now();
     const maxWait = Duration(minutes: 10);

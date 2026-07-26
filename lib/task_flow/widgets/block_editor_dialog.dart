@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../utils/file_manifest.dart';
+import '../../widgets/folder_picker_dialog.dart';
 import '../models/task_flow_definition.dart';
 import '../models/block_type_definition.dart';
 
@@ -41,7 +43,6 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
     if (_definition != null) {
       for (final p in _definition!.params) {
         if (p.type == BlockParamType.string ||
-            p.type == BlockParamType.modelSelector ||
             p.type == BlockParamType.secret) {
           _controllers[p.key] = TextEditingController(
             text: _params[p.key]?.toString() ?? '',
@@ -188,7 +189,6 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
       BlockParamDefinition param, dynamic value, ColorScheme cs) {
     switch (param.type) {
       case BlockParamType.string:
-      case BlockParamType.modelSelector:
       case BlockParamType.secret:
         final controller = _controllers[param.key] ??
             TextEditingController(text: value?.toString() ?? '');
@@ -211,6 +211,36 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
           obscureText: param.type == BlockParamType.secret,
           style: const TextStyle(fontSize: 13),
           onChanged: (v) => _params[param.key] = v,
+        );
+
+      case BlockParamType.modelSelector:
+        final currentIndex =
+            value is int ? value : (int.tryParse('$value') ?? 0);
+        return DropdownButtonFormField<int>(
+          value: currentIndex.clamp(0, 9),
+          isDense: true,
+          decoration: InputDecoration(
+            isDense: true,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 8,
+            ),
+          ),
+          style: TextStyle(fontSize: 13, color: cs.onSurface),
+          items: List.generate(10, (i) {
+            return DropdownMenuItem<int>(
+              value: i,
+              child: Text('模型 $i'),
+            );
+          }),
+          onChanged: (v) {
+            if (v != null) {
+              setState(() => _params[param.key] = v);
+            }
+          },
         );
 
       case BlockParamType.number:
@@ -290,30 +320,13 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
 
   Future<void> _pickFolder(String key) async {
     final currentValue = _params[key]?.toString() ?? '';
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) {
-        final textController = TextEditingController(text: currentValue);
-        return AlertDialog(
-          title: const Text('输入文件夹名称'),
-          content: TextField(
-            controller: textController,
-            decoration: const InputDecoration(
-              hintText: '例如: audio_output',
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, textController.text),
-              child: const Text('确认'),
-            ),
-          ],
-        );
-      },
+    final result = await FolderPickerDialog.show(
+      context,
+      currentFolder: currentValue,
+      availableFolders: await FileManifest.getAllFolders(),
+      onCreateFolder: (name) => FileManifest.createFolder(name),
+      onRefreshFolders: () => FileManifest.getAllFolders(),
+      title: '选择保存文件夹',
     );
     if (result != null && mounted) {
       setState(() => _params[key] = result);
