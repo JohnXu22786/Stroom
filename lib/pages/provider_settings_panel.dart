@@ -98,6 +98,11 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   double _maxFileSizeMb = 25.0;
   late final TextEditingController _maxFileSizeController;
 
+  // ASR preprocessing & chunking
+  String _preprocessing = 'none'; // 'none' | 'resampleMono'
+  String _chunking =
+      'none'; // 'none' | 'silence' | 'fixedDuration' | 'fixedSize'
+
   bool get _isLlmType => widget.providerType == 'llm';
   bool get _isAsrType => widget.providerType == 'asr';
 
@@ -155,6 +160,8 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
       _maxFileSizeController = TextEditingController(
         text: _maxFileSizeMb.toStringAsFixed(1),
       );
+      _preprocessing = c.typeConfig['preprocessing'] as String? ?? 'none';
+      _chunking = c.typeConfig['chunking'] as String? ?? 'none';
     } else {
       _maxFileSizeController = TextEditingController(text: '25.0');
     }
@@ -668,6 +675,8 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
     if (_isAsrType) {
       typeConfig['uploadMethod'] = _uploadMethod.name;
       typeConfig['maxFileSizeMb'] = _maxFileSizeMb;
+      typeConfig['preprocessing'] = _preprocessing;
+      typeConfig['chunking'] = _chunking;
     }
 
     return ProviderConfigItem(
@@ -876,6 +885,125 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                   ),
                 ],
               ),
+            const SizedBox(height: 24),
+
+            // Preprocessing
+            Text(
+              '音频预处理',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+                color: cs.primary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '降低音频文件大小，不影响转写准确率',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Text('预处理方式'),
+                const Spacer(),
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade400),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _preprocessing,
+                      isDense: true,
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'none',
+                          child: Text('无', style: TextStyle(fontSize: 13)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'resampleMono',
+                          child: Text('WAV 优化 (16kHz Mono)',
+                              style: TextStyle(fontSize: 13)),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setState(() => _preprocessing = v);
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _preprocessing == 'resampleMono'
+                  ? '重采样到 16kHz + 单声道混音。体积缩小约 4-6x，语音转写准确率几乎不变。'
+                  : '不进行预处理，原样发送。',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 16),
+
+            // Chunking
+            Text(
+              '音频切块',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+                color: cs.primary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '超过大小限制时自动切片后分别转写',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Text('切块方式'),
+                const Spacer(),
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade400),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _chunking,
+                      isDense: true,
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'none',
+                          child: Text('不切块', style: TextStyle(fontSize: 13)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'silence',
+                          child: Text('静音检测切块', style: TextStyle(fontSize: 13)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'fixedDuration',
+                          child: Text('固定时长切块', style: TextStyle(fontSize: 13)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'fixedSize',
+                          child: Text('固定大小切块', style: TextStyle(fontSize: 13)),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setState(() => _chunking = v);
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _chunkingDescription(),
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
             const SizedBox(height: 24),
           ],
 
@@ -1561,5 +1689,18 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
         ),
       ),
     );
+  }
+
+  String _chunkingDescription() {
+    switch (_chunking) {
+      case 'silence':
+        return 'RMS 能量检测静音区间，在静音中点切块。最智能，不截断语句。';
+      case 'fixedDuration':
+        return '每 N 秒切一块（默认 60 秒）。简单直接，可能截断语句。';
+      case 'fixedSize':
+        return '按字节大小切块，确保不超限制。最机械，可能截断语句。';
+      default:
+        return '不切块。超过限制的文件将被拒绝。';
+    }
   }
 }

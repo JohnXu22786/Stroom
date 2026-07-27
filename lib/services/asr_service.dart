@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
+import '../utils/audio_chunker.dart';
 import '../utils/audio_utils.dart';
 import '../utils/format_file_size.dart';
 import 'app_log_service.dart';
@@ -84,6 +85,13 @@ class AsrConfig {
   /// Does NOT apply to [AudioUploadMethod.url].
   final int maxFileSizeBytes;
 
+  /// Preprocessing method: 'none' or 'resampleMono'.
+  /// 'resampleMono' resamples to 16kHz and mixes to mono for size reduction.
+  final String preprocessing;
+
+  /// Chunking method: 'none', 'silence', 'fixedDuration', or 'fixedSize'.
+  final String chunking;
+
   /// Default max file size for OpenAI-compatible audio APIs.
   static const int defaultMaxAudioFileSizeBytes = 25 * 1024 * 1024;
 
@@ -96,6 +104,8 @@ class AsrConfig {
     this.customParams = const [],
     this.uploadMethod = AudioUploadMethod.multipart,
     this.maxFileSizeBytes = defaultMaxAudioFileSizeBytes,
+    this.preprocessing = 'none',
+    this.chunking = 'none',
   });
 
   /// Returns the host without a trailing slash.
@@ -130,6 +140,8 @@ class AsrConfig {
     List<CustomParam>? customParams,
     AudioUploadMethod? uploadMethod,
     int? maxFileSizeBytes,
+    String? preprocessing,
+    String? chunking,
   }) =>
       AsrConfig(
         model: model ?? this.model,
@@ -140,6 +152,8 @@ class AsrConfig {
         customParams: customParams ?? this.customParams,
         uploadMethod: uploadMethod ?? this.uploadMethod,
         maxFileSizeBytes: maxFileSizeBytes ?? this.maxFileSizeBytes,
+        preprocessing: preprocessing ?? this.preprocessing,
+        chunking: chunking ?? this.chunking,
       );
 }
 
@@ -247,28 +261,49 @@ class AsrService {
       throw Exception('音频数据为空');
     }
 
-    // ── File size validation (file-based methods only) ──────────────
-    if (config.uploadMethod != AudioUploadMethod.url &&
-        audioBytes.length > config.maxFileSizeBytes) {
-      final isOpenAiDefault =
-          config.maxFileSizeBytes == AsrConfig.defaultMaxAudioFileSizeBytes;
-      final guidance = isOpenAiDefault
-          ? 'OpenAI 音频 API 最大支持 25 MB。请压缩音频、使用音频链接、或调大限制。'
-          : '请降低文件大小后重试。';
-      throw Exception(
-        '文件大小超过限制: '
-        '${formatFileSize(audioBytes.length)} > '
-        '${formatFileSize(config.maxFileSizeBytes)}。'
-        '$guidance',
-      );
-    }
-
     final fmt = audioFormat.toLowerCase();
     if (!_asrSupportedFormats.contains(fmt)) {
       throw Exception(
         '不支持的音频格式: $fmt。'
         'Whisper API 支持的格式: ${_asrSupportedFormats.join(", ")}。'
         '请将音频转换为 WAV/MP3 格式后重试。',
+      );
+    }
+
+    var workingBytes = audioBytes;
+
+    // ── Preprocessing (resample + mono) ─────────────────────────────
+    if (config.preprocessing == 'resampleMono' && fmt == 'wav') {
+      try {
+        final preprocessor = WavPreprocessor();
+        workingBytes = preprocessor.process(workingBytes);
+        await AppLogService.info('AsrService',
+            '预处理完成: ${audioBytes.length} → ${workingBytes.length} 字节');
+      } catch (e) {
+        await AppLogService.warning('AsrService', '预处理失败: $e');
+      }
+    }
+
+    // ── Chunking ────────────────────────────────────────────────────
+    if (config.chunking != 'none' &&
+        workingBytes.length > config.maxFileSizeBytes &&
+        fmt == 'wav') {
+      return _transcribeChunked(workingBytes, fmt);
+    }
+
+    // ── File size validation (file-based methods only) ──────────────
+    if (config.uploadMethod != AudioUploadMethod.url &&
+        workingBytes.length > config.maxFileSizeBytes) {
+      final isOpenAiDefault =
+          config.maxFileSizeBytes == AsrConfig.defaultMaxAudioFileSizeBytes;
+      final guidance = isOpenAiDefault
+          ? 'OpenAI 音频 API 最大支持 25 MB。请启用音频切块或调大限制。'
+          : '请降低文件大小后重试。';
+      throw Exception(
+        '文件大小超过限制: '
+        '${formatFileSize(workingBytes.length)} > '
+        '${formatFileSize(config.maxFileSizeBytes)}。'
+        '$guidance',
       );
     }
 
@@ -286,7 +321,7 @@ class AsrService {
     try {
       final response = await _sendTranscriptionRequest(
         sharedParams: sharedParams,
-        audioBytes: audioBytes,
+        audioBytes: workingBytes,
         fileName: fileName,
         mimeType: mimeType,
       );
@@ -422,6 +457,63 @@ class AsrService {
     }
 
     return params;
+  }
+
+  /// Transcribe a large WAV file by chunking, transcribing each chunk,
+  /// and concatenating results.
+  Future<AsrResult> _transcribeChunked(
+      Uint8List wavBytes, String audioFormat) async {
+    // Map chunking config string to enum
+    final chunkMethod = switch (config.chunking) {
+      'silence' => AudioChunkMethod.silence,
+      'fixedDuration' => AudioChunkMethod.fixedDuration,
+      'fixedSize' => AudioChunkMethod.fixedSize,
+      _ => throw Exception('未知的切块方式: ${config.chunking}'),
+    };
+
+    final chunker = AudioChunker(
+      config: AudioChunkConfig(
+        maxChunkBytes: config.maxFileSizeBytes,
+      ),
+    );
+    final chunks = chunker.chunk(wavBytes, chunkMethod);
+
+    await AppLogService.info(
+        'AsrService', '切块完成: ${chunks.length} 个片段 (共 ${wavBytes.length} 字节)');
+
+    final texts = <String>[];
+    final fmt = audioFormat; // 'wav'
+    final mimeTypeString = getMimeType(fmt);
+    final mimeType = mimeTypeString.contains('/')
+        ? DioMediaType.parse(mimeTypeString)
+        : null;
+    final fileName = 'audio.$fmt';
+    final sharedParams = _buildSharedParams();
+
+    for (int i = 0; i < chunks.length; i++) {
+      final chunk = chunks[i];
+      try {
+        final response = await _sendTranscriptionRequest(
+          sharedParams: Map<String, dynamic>.from(sharedParams),
+          audioBytes: chunk,
+          fileName: fileName,
+          mimeType: mimeType,
+        );
+        final text = _extractText(response.data);
+        if (text.isNotEmpty) {
+          texts.add(text);
+        }
+        await AppLogService.info('AsrService', '切块 $i/${chunks.length} 转写完成');
+      } on Exception catch (e) {
+        await AppLogService.warning(
+            'AsrService', '切块 $i/${chunks.length} 转写失败: $e');
+      }
+    }
+
+    return AsrResult(
+      text: texts.join(' '),
+      processingTimeMs: 0,
+    );
   }
 
   /// Send the transcription request using the configured [uploadMethod].

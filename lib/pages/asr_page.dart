@@ -1040,6 +1040,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     final maxFileSizeBytes = maxFileSizeMb != null
         ? (maxFileSizeMb * 1024 * 1024).toInt()
         : AsrConfig.defaultMaxAudioFileSizeBytes;
+    final preprocessing = ptc['preprocessing'] as String? ?? 'none';
+    final chunking = ptc['chunking'] as String? ?? 'none';
 
     final effectiveConfig = AsrConfig(
       host: selectedOption.host,
@@ -1050,6 +1052,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           selectedOption.model.customParams.map((p) => p.copy()).toList(),
       uploadMethod: uploadMethod,
       maxFileSizeBytes: maxFileSizeBytes,
+      preprocessing: preprocessing,
+      chunking: chunking,
     );
 
     // Capture the list before pop

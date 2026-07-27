@@ -138,8 +138,7 @@ void main() {
       expect(gaps.length, greaterThanOrEqualTo(1));
       // Gap should be roughly in the middle (between 1s and 3s)
       final gap = gaps.first;
-      expect(gap.startSample / info.sampleRate,
-          greaterThanOrEqualTo(0.5));
+      expect(gap.startSample / info.sampleRate, greaterThanOrEqualTo(0.5));
       expect(gap.startSample / info.sampleRate, lessThan(2.0));
       expect(gap.durationSeconds, greaterThanOrEqualTo(1.0));
     });
@@ -315,6 +314,110 @@ void main() {
       final chunker = AudioChunker();
       final chunks = chunker.split(wav);
       expect(chunks.isNotEmpty, true);
+    });
+  });
+
+  group('AudioChunker - fixed duration', () {
+    test('splits audio into fixed-duration chunks', () {
+      final wav = _buildTestWav(
+        sampleRate: 8000,
+        segments: [(5.0, 0.5)], // 5 seconds
+      );
+
+      final chunker = AudioChunker(
+        config: AudioChunkConfig(fixedDurationSeconds: 2.0),
+      );
+      final chunks = chunker.chunk(wav, AudioChunkMethod.fixedDuration);
+
+      // 5s / 2s per chunk = ~3 chunks (with overlap)
+      expect(chunks.length, greaterThanOrEqualTo(2));
+      for (final c in chunks) {
+        final info = parseWavHeader(c);
+        expect(info.sampleRate, 8000);
+      }
+    });
+  });
+
+  group('AudioChunker - fixed size', () {
+    test('splits audio into byte-sized chunks', () {
+      final wav = _buildTestWav(
+        sampleRate: 8000,
+        segments: [(5.0, 0.5)],
+      );
+      final wavSize = wav.length;
+
+      final chunker = AudioChunker(
+        config: AudioChunkConfig(maxChunkBytes: wavSize ~/ 3),
+      );
+      final chunks = chunker.chunk(wav, AudioChunkMethod.fixedSize);
+
+      expect(chunks.length, greaterThanOrEqualTo(2));
+    });
+  });
+
+  group('AudioChunker - none', () {
+    test('returns original file unchanged', () {
+      final wav = _buildTestWav(segments: [(2.0, 0.5)]);
+      final chunks = AudioChunker().chunk(wav, AudioChunkMethod.none);
+      expect(chunks.length, 1);
+    });
+  });
+
+  group('WavPreprocessor', () {
+    test('resamples to target sample rate', () {
+      final wav = _buildTestWav(
+        sampleRate: 48000,
+        segments: [(1.0, 0.5)],
+      );
+
+      final preprocessor = WavPreprocessor(
+        config:
+            AudioPreprocessConfig(targetSampleRate: 16000, forceMono: false),
+      );
+      final processed = preprocessor.process(wav);
+
+      final info = parseWavHeader(processed);
+      expect(info.sampleRate, 16000);
+      expect(info.dataSize, lessThan(wav.length));
+    });
+
+    test('converts stereo to mono', () {
+      final wav = _buildTestWav(
+        numChannels: 2,
+        segments: [(1.0, 0.5)],
+      );
+
+      final preprocessor = WavPreprocessor(
+        config: AudioPreprocessConfig(targetSampleRate: null, forceMono: true),
+      );
+      final processed = preprocessor.process(wav);
+
+      final info = parseWavHeader(processed);
+      expect(info.numChannels, 1);
+    });
+
+    test('does both resample and mono', () {
+      final wav = _buildTestWav(
+        sampleRate: 44100,
+        numChannels: 2,
+        segments: [(2.0, 0.5)],
+      );
+
+      final processed = WavPreprocessor().process(wav);
+
+      final info = parseWavHeader(processed);
+      expect(info.sampleRate, 16000);
+      expect(info.numChannels, 1);
+      // Should be significantly smaller
+      expect(processed.length, lessThan(wav.length));
+    });
+
+    test('AudioPreprocessConfig.none returns original', () {
+      final wav = _buildTestWav(segments: [(1.0, 0.5)]);
+      final processed = WavPreprocessor(
+        config: AudioPreprocessConfig.none,
+      ).process(wav);
+      expect(processed.length, wav.length);
     });
   });
 }
