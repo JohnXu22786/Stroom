@@ -163,8 +163,15 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
           // Shift+Enter: let default behavior insert newline
           return KeyEventResult.ignored;
         } else {
-          // Enter without Shift: send the message
-          _handleSubmitted(_textController.text);
+          // Enter without Shift: send the message.
+          // Guard against streaming — the send IconButton is hidden
+          // during streaming, but the keyboard Enter path has no
+          // such guard and could double-append user messages if the
+          // user presses Enter rapidly in the brief window between
+          // _onMessageSend's guard and isStreamingProvider == true.
+          if (!ref.read(isStreamingProvider)) {
+            _handleSubmitted(_textController.text);
+          }
           return KeyEventResult.handled;
         }
       }
