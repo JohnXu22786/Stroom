@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tts_models.dart' show CustomParam;
 import 'package:stroom/providers/provider_config.dart' show ReasoningParam;
+import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/services/attachment_storage.dart';
 import 'package:stroom/widgets/file_preview.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
@@ -169,7 +170,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
           // such guard and could double-append user messages if the
           // user presses Enter rapidly in the brief window between
           // _onMessageSend's guard and isStreamingProvider == true.
-          if (!ref.read(isStreamingProvider)) {
+          final streamingConvs = ref.read(streamingConversationsProvider);
+          if (widget.conversationId == null ||
+              !streamingConvs.contains(widget.conversationId)) {
             _handleSubmitted(_textController.text);
           }
           return KeyEventResult.handled;
@@ -912,7 +915,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
 
   @override
   Widget build(BuildContext context) {
-    final isStreaming = ref.watch(isStreamingProvider);
+    final streamingConvs = ref.watch(streamingConversationsProvider);
+    final isStreaming = widget.conversationId != null &&
+        streamingConvs.contains(widget.conversationId);
     final hasText = _textController.text.trim().isNotEmpty;
     final hasAttachments = _pendingAttachments.isNotEmpty;
     final cs = Theme.of(context).colorScheme;

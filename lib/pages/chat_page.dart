@@ -582,12 +582,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
       return;
     }
 
-    // Guard: do NOT reload messages while streaming is active. The
-    // streaming loop relies on _chatSegments and other per-message
-    // state that would be cleared by a reload.
-    if (_isStreamingActive) {
+    // Guard: do NOT reload messages while streaming is active AND history
+    // is already populated. The streaming loop relies on _chatSegments and
+    // other per-message state that would be cleared by a reload.
+    //
+    // HOWEVER: if history is empty, the initial load never completed
+    // (e.g. conversation data wasn't ready when _initialize ran). In that
+    // case we MUST load history now, preserving the streaming state so
+    // live segments continue to render while historical messages fill in.
+    if (_isStreamingActive && _history.isNotEmpty) {
       await AppLogService.info('ChatPage',
-          '[STREAM-LOAD] _loadConversationMessages: streaming active, skip');
+          '[STREAM-LOAD] _loadConversationMessages: streaming active + history has ${_history.length} msgs, skip');
       return;
     }
 
@@ -632,12 +637,20 @@ class _ChatPageState extends ConsumerState<ChatPage>
         return;
       }
 
+      // Save streaming state before clearing, in case we're loading
+      // history while a stream is active (_isStreamingActive && _history.isEmpty).
+      final savedStreamingMsgId = _isStreamingActive ? _streamingMsgId : null;
+      final savedChatSegments = _isStreamingActive
+          ? Map<String, List<MessageSegment>>.from(_chatSegments)
+          : null;
+      final savedFinalizedMessages =
+          _isStreamingActive ? Set<String>.from(_finalizedMessages) : null;
+
       _history.clear();
       _chatSegments.clear();
       _reasoningContents.clear();
       _finalizedMessages.clear();
       _streamingMsgId = null;
-      _controller?.dispose();
       _messageKeys.clear();
       _expandedErrors.clear();
       _searchTextController.clear();
@@ -656,8 +669,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // let the loop below set the correct loaded index.
       _isLoadingMore = false;
 
+      // ── Build new controller before swapping to avoid visual flash ──
+      // Populate a local controller FIRST with all messages, then atomically
+      // swap _controller. The old controller stays alive (and visible) during
+      // the entire populate step; the widget only sees the new controller
+      // after the final setState() call.
       final newCtrl = InMemoryChatController();
-      _controller = newCtrl;
+      // Keep oldCtrl for deferred disposal below.
+      final oldCtrl = _controller;
       // Load all messages into _history (needed for full context in API calls
       // and search), but only insert the last _pageSize messages into the
       // controller for display (lazy loading).
@@ -704,7 +723,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
               'loadedUpToIndex=$_loadedUpToIndex');
       for (var i = _loadedUpToIndex; i < _history.length; i++) {
         final msg = _history[i];
-        await _controller?.insertMessage(
+        // When loading during an active stream, skip the streaming
+        // message — _restoreStreamingState already inserted it into
+        // the controller as a live Message.textStream.
+        if (msg.id == savedStreamingMsgId) continue;
+        await newCtrl.insertMessage(
           Message.text(
             id: msg.id,
             authorId: msg.role == 'user' ? _currentUser.id : _aiUser.id,
@@ -714,7 +737,38 @@ class _ChatPageState extends ConsumerState<ChatPage>
         );
       }
       await AppLogService.info(
-          'ChatPage', '控制器消息插入完成，共 ${_controller?.messages.length ?? 0} 条');
+          'ChatPage', '控制器消息插入完成，共 ${newCtrl.messages.length} 条');
+      // ── Atomically swap controllers ──
+      // The widget now references _controller; oldCtrl stays visible
+      // through the frame before setState().
+      _controller = newCtrl;
+      oldCtrl?.dispose();
+      // Restore streaming state that we saved before the clear,
+      // so the live streaming UI continues to work while we
+      // display the now-loaded historical messages.
+      if (savedStreamingMsgId != null) {
+        _streamingMsgId = savedStreamingMsgId;
+        _chatSegments.addAll(savedChatSegments!);
+        _finalizedMessages.addAll(savedFinalizedMessages!);
+
+        // Re-insert the streaming placeholder into the new controller.
+        // We skipped it during the load loop above (it may not be in DB
+        // yet if periodic persist hasn't run), so restore it now as a
+        // live Message.textStream that streaming listeners can update.
+        final inCtrl = _controller?.messages
+                .any((m) => m.id == savedStreamingMsgId) ??
+            false;
+        if (!inCtrl) {
+          _controller?.insertMessage(
+            Message.textStream(
+              id: savedStreamingMsgId,
+              authorId: _aiUser.id,
+              createdAt: DateTime.now(),
+              streamId: savedStreamingMsgId,
+            ),
+          );
+        }
+      }
       if (mounted) setState(() {});
     } catch (e, s) {
       debugPrint('[ChatPage] _loadConversationMessages error: $e\n$s');
@@ -893,9 +947,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   Future<void> _onMessageSend(String text, List<Attachment> attachments) async {
-    if (ref.read(isStreamingProvider)) return;
-
+    // Guard: only block sending if THIS conversation is streaming,
+    // not if another conversation happens to be streaming elsewhere.
     String? convId = ref.read(activeConversationIdProvider);
+    if (convId != null &&
+        ref.read(streamingConversationsProvider).contains(convId)) {
+      return;
+    }
     await AppLogService.info(
         'ChatPage',
         '用户发送消息, convId=$convId, text长度=${text.length}, '
@@ -957,7 +1015,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   Future<void> _startStreaming(String text, {String? capturedConvId}) async {
-    if (ref.read(isStreamingProvider)) return;
+    final effectiveConvId =
+        capturedConvId ?? ref.read(activeConversationIdProvider) ?? '';
+    // Guard: only block if THIS conversation is streaming, not another.
+    if (ref.read(streamingConversationsProvider).contains(effectiveConvId)) {
+      return;
+    }
 
     await AppLogService.info(
         'ChatPage', '开始流式请求, capturedConvId=$capturedConvId');
@@ -1002,10 +1065,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
         allTools.where((t) => enabledTools.contains(t.name)).toList();
 
     // 4. Delegate streaming to ChatStreamManager (runs background loop)
-    // Use captured convId (from _onMessageSend) or fall back to active ID
-    // (for retry/edit which don't capture convId).
-    final effectiveConvId =
-        capturedConvId ?? ref.read(activeConversationIdProvider) ?? '';
+    // Uses effectiveConvId (declared above) for the guard + manager call.
     final histBefore = List<ChatMessage>.from(_history);
     await AppLogService.info('ChatPage',
         '[STREAM-SEND] _startStreaming: sending to manager, historyLen=${histBefore.length}, convId=$effectiveConvId');
@@ -1160,7 +1220,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
   void _confirmRetryOrEdit(String messageId) {
     final index = _history.indexWhere((m) => m.id == messageId);
     if (index == -1) return;
-    if (ref.read(isStreamingProvider)) return;
+    final activeId = ref.read(activeConversationIdProvider);
+    if (activeId != null &&
+        ref.read(streamingConversationsProvider).contains(activeId)) {
+      return;
+    }
 
     final msg = _history[index];
     final isUser = msg.role == 'user';
@@ -1178,7 +1242,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
   void _startEditMessage(String messageId) {
     final index = _history.indexWhere((m) => m.id == messageId);
     if (index == -1) return;
-    if (ref.read(isStreamingProvider)) return;
+    final activeId = ref.read(activeConversationIdProvider);
+    if (activeId != null &&
+        ref.read(streamingConversationsProvider).contains(activeId)) {
+      return;
+    }
     final msg = _history[index];
 
     // Instead of showing a separate dialog, enter edit mode in the composer.
@@ -1318,7 +1386,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // relies on _chatSegments entries for this
     // message, and removing them mid-stream would cause null-assert crashes.
     if (messageId == _streamingMsgId) return;
-    if (ref.read(isStreamingProvider)) return;
+    final activeId = ref.read(activeConversationIdProvider);
+    if (activeId != null &&
+        ref.read(streamingConversationsProvider).contains(activeId)) {
+      return;
+    }
     final index = _history.indexWhere((m) => m.id == messageId);
     if (index == -1) return;
     final msg = _history[index];
@@ -1860,7 +1932,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isStreaming = ref.watch(isStreamingProvider);
+    final activeId = ref.watch(activeConversationIdProvider);
+    final streamingConvs = ref.watch(streamingConversationsProvider);
+    final isStreaming = activeId != null && streamingConvs.contains(activeId);
     final streamingFullReply = ref.watch(streamingFullReplyProvider);
     final streamingMsgId = ref.watch(streamingMsgIdProvider);
     final markdownConfig = buildMarkdownConfig(
@@ -1872,16 +1946,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // conversation. This prevents provider updates from a different
     // conversation's stream from affecting this page.
     bool _isStreamingForCurrentConv() {
-      if (!ref.read(isStreamingProvider)) return false;
-      final manager = ref.read(chatStreamManagerProvider);
-      final activeConvId = ref.read(activeConversationIdProvider);
-      final streamConvId = manager.streamingConvId;
-      if (streamConvId != null &&
-          activeConvId != null &&
-          streamConvId != activeConvId) {
-        return false;
-      }
-      return true;
+      final convId = ref.read(activeConversationIdProvider);
+      if (convId == null) return false;
+      return ref.read(streamingConversationsProvider).contains(convId);
     }
 
     // Keep the controller and rendering segments in sync with provider
@@ -2097,7 +2164,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
 
     // Get conversation title
-    final activeId = ref.watch(activeConversationIdProvider);
     final conversations = ref.watch(conversationsProvider);
     String title = '新对话';
     String currentDraftText = '';
